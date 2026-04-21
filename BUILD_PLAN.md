@@ -76,7 +76,10 @@
 | A.5 D1 binding（production） | ✅ 完成 | 2026-04-22 | chiyigo_db 綁定，/api/portfolio 線上測試通過 |
 | A.6 自訂網域 chiyigo.com | ✅ Active | 2026-04-22 | SSL enabled |
 | A.7 自訂網域 www.chiyigo.com | 🔄 驗證中 | 2026-04-22 | pending，稍後自動 active |
-| 7.6 GitHub Actions CI/CD | ✅ 完成 | 2026-04-22 | .github/workflows/deploy.yml，需設定 CLOUDFLARE_API_TOKEN secret |
+| 7.6 GitHub Actions CI/CD | ✅ 完成 | 2026-04-22 | deploy.yml + CLOUDFLARE_API_TOKEN secret 已設定 |
+| 7.3 Cloudflare Web Analytics | ⏳ 待執行 | — | 需取得 token 填入三個頁面 |
+| 7.4 OG 封面圖 | ⏳ 待執行 | — | 製作 1200x630 封面圖上傳至 /images/og-cover.jpg |
+| 7.5 Google Search Console | ⏳ 待執行 | — | 提交 sitemap.xml |
 
 ---
 
