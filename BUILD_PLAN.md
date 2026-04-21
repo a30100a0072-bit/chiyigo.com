@@ -61,6 +61,9 @@
 | 6.2 sitemap.xml | ✅ 完成 | 2026-04-22 | 含 / 和 /portfolio |
 | 6.3 robots.txt | ✅ 完成 | 2026-04-22 | 禁止索引 requisition & api |
 | 6.4 Cloudflare Analytics | ⏳ 待填入 | — | 部署後在 Dashboard 取得 token 填入三頁面 |
+| A.1 GitHub repo 建立 | ✅ 完成 | 2026-04-22 | github.com/a30100a0072-bit/chiyigo.com |
+| A.2 推送至 GitHub | ✅ 完成 | 2026-04-22 | branch: main，2 commits |
+| A.3 Cloudflare Pages 部署 | ⏳ 待執行 | — | 需連接 GitHub repo，設定環境變數 |
 
 ---
 
@@ -88,10 +91,19 @@
    - 原因：`pages dev` 與 `d1 execute` 使用不同 SQLite hash 檔
    - 解法：建立 `scripts/seed-local.mjs`，重啟 dev server 後執行一次即可
 
-6. **部署** ⏳ 待執行
-   ```bash
-   npx wrangler pages deploy public
-   ```
-   需先在 Cloudflare Pages Dashboard 設定環境變數：
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_CHAT_ID`
+6. **GitHub 推送** ✅ 已完成（2026-04-22）
+   - Repo：https://github.com/a30100a0072-bit/chiyigo.com
+   - Branch：main
+
+7. **部署至 Cloudflare Pages** ⏳ 待執行
+   步驟：
+   1. Cloudflare Dashboard → Pages → Create a project → Connect to Git
+   2. 選擇 `a30100a0072-bit/chiyigo.com`
+   3. Build settings：Framework = None，Build output = `public`
+   4. 設定環境變數：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`
+   5. Deploy
+
+8. **部署後待辦** ⏳
+   - 填入 Cloudflare Web Analytics token（三個 HTML 頁面）
+   - 確認線上版表單送出與 Telegram 通知正常
+   - 上傳 OG 封面圖 `/images/og-cover.jpg`
