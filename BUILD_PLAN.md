@@ -80,6 +80,8 @@
 | 7.3 Cloudflare Web Analytics | ✅ 完成 | 2026-04-22 | token be8c93... 已填入三個頁面 |
 | 7.4 OG 封面圖 | ✅ 完成 | 2026-04-22 | public/images/chiyigo.jpg 24KB |
 | 7.5 Google Search Console | ✅ 完成 | 2026-04-22 | 驗證網域 + 提交 sitemap，2 頁已收錄 |
+| Z.1 www.chiyigo.com 自動 active | 🔄 等待中 | — | Cloudflare DNS 驗證完成後自動重導向至 chiyigo.com |
+| Z.2 Google Search Console 收錄 | 🔄 等待中 | — | 約 1–3 天後出現流量與點擊數據 |
 
 ---
 
