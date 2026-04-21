@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CHIYIGO — 讓品牌說話的力量</title>
+  <meta name="description" content="CHIYIGO 提供品牌識別、網站開發與數位行銷整合服務，助你從概念到落地。" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: "#4f6ef7", 600: "#3b55e6", 700: "#2d42cc" },
+            surface: { DEFAULT: "#0e0e12", card: "#16161d", border: "#2a2a35" },
+          },
+          fontFamily: { sans: ["Inter", "Noto Sans TC", "sans-serif"] },
+          keyframes: {
+            fadeUp: { "0%": { opacity: "0", transform: "translateY(24px)" }, "100%": { opacity: "1", transform: "translateY(0)" } },
+          },
+          animation: { "fade-up": "fadeUp 0.6s ease forwards" },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    body { background-color: #0e0e12; color: #e4e4ef; }
+    .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body class="font-sans antialiased">
+
+  <!-- Nav -->
+  <nav class="fixed top-0 inset-x-0 z-50 border-b border-[#2a2a35] bg-[#0e0e12]/80 backdrop-blur-md">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="/" class="text-xl font-bold tracking-tight text-white">CHIYIGO</a>
+      <div class="hidden md:flex items-center gap-8 text-sm text-gray-400">
+        <a href="#services" class="hover:text-white transition-colors">服務</a>
+        <a href="portfolio.html" class="hover:text-white transition-colors">作品集</a>
+        <a href="requisition.html" class="ml-4 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium transition-colors">開始合作</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="relative min-h-screen flex items-center justify-center px-6 pt-16">
+    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#4f6ef720_0%,_transparent_60%)] pointer-events-none"></div>
+    <div class="relative text-center max-w-4xl mx-auto">
+      <span class="inline-block mb-6 px-3 py-1 rounded-full border border-brand-500/40 bg-brand-500/10 text-brand-500 text-xs font-medium tracking-widest uppercase">品牌 · 設計 · 數位</span>
+      <h1 class="text-5xl md:text-7xl font-bold text-white leading-tight mb-6">
+        讓品牌說話<br />
+        <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 to-purple-400">的力量</span>
+      </h1>
+      <p class="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+        CHIYIGO 整合品牌識別、網站開發與數位行銷，<br class="hidden md:block" />
+        從策略到執行，為你打造有靈魂的商業存在。
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <a href="requisition.html" class="px-8 py-4 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-lg transition-all hover:scale-105 active:scale-95">
+          提交需求 →
+        </a>
+        <a href="portfolio.html" class="px-8 py-4 rounded-xl border border-[#2a2a35] hover:border-brand-500/50 text-gray-300 hover:text-white font-semibold text-lg transition-all">
+          查看作品集
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Services -->
+  <section id="services" class="py-32 px-6">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-16 reveal">
+        <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">我們提供什麼</h2>
+        <p class="text-gray-400 max-w-xl mx-auto">每個服務都以商業結果為目標，而非單純的美觀。</p>
+      </div>
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Card -->
+        <div class="reveal p-8 rounded-2xl bg-[#16161d] border border-[#2a2a35] hover:border-brand-500/30 transition-colors group">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center mb-6 group-hover:bg-brand-500/20 transition-colors">
+            <svg class="w-6 h-6 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>
+          </div>
+          <h3 class="text-xl font-semibold text-white mb-3">品牌識別</h3>
+          <p class="text-gray-400 leading-relaxed">Logo 設計、品牌色系、視覺規範手冊。讓第一印象成為持久印象。</p>
+        </div>
+        <div class="reveal p-8 rounded-2xl bg-[#16161d] border border-[#2a2a35] hover:border-brand-500/30 transition-colors group" style="transition-delay:0.1s">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center mb-6 group-hover:bg-brand-500/20 transition-colors">
+            <svg class="w-6 h-6 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2h-2" /></svg>
+          </div>
+          <h3 class="text-xl font-semibold text-white mb-3">網站開發</h3>
+          <p class="text-gray-400 leading-relaxed">高效能靜態網站與 Serverless 後端。快速、安全、易於維護。</p>
+        </div>
+        <div class="reveal p-8 rounded-2xl bg-[#16161d] border border-[#2a2a35] hover:border-brand-500/30 transition-colors group" style="transition-delay:0.2s">
+          <div class="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center mb-6 group-hover:bg-brand-500/20 transition-colors">
+            <svg class="w-6 h-6 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+          </div>
+          <h3 class="text-xl font-semibold text-white mb-3">數位行銷</h3>
+          <p class="text-gray-400 leading-relaxed">社群策略、內容規劃、廣告投放。以數據驅動，以創意說服。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="py-32 px-6">
+    <div class="max-w-3xl mx-auto text-center reveal">
+      <h2 class="text-3xl md:text-5xl font-bold text-white mb-6">準備好開始了嗎？</h2>
+      <p class="text-gray-400 text-lg mb-10">告訴我們你的需求，我們在 24 小時內回覆。</p>
+      <a href="requisition.html" class="inline-block px-10 py-5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xl transition-all hover:scale-105 active:scale-95">
+        立即提交需求
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-[#2a2a35] py-8 px-6 text-center text-gray-500 text-sm">
+    © 2025 CHIYIGO. All rights reserved.
+  </footer>
+
+  <script>
+    // IntersectionObserver 捲動漸顯
+    const observer = new IntersectionObserver(
+      (entries) => entries.forEach(e => e.isIntersecting && e.target.classList.add('visible')),
+      { threshold: 0.15 }
+    );
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>

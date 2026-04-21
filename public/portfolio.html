@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>作品集 — CHIYIGO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: "#4f6ef7", 600: "#3b55e6" },
+            surface: { DEFAULT: "#0e0e12", card: "#16161d", border: "#2a2a35" },
+          },
+          fontFamily: { sans: ["Inter", "Noto Sans TC", "sans-serif"] },
+        },
+      },
+    };
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    body { background-color: #0e0e12; color: #e4e4ef; }
+    .card-reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease, transform 0.5s ease; }
+    .card-reveal.visible { opacity: 1; transform: translateY(0); }
+    .skeleton { background: linear-gradient(90deg, #16161d 25%, #1e1e28 50%, #16161d 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  </style>
+</head>
+<body class="font-sans antialiased">
+
+  <!-- Nav -->
+  <nav class="fixed top-0 inset-x-0 z-50 border-b border-[#2a2a35] bg-[#0e0e12]/80 backdrop-blur-md">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="index.html" class="text-xl font-bold tracking-tight text-white">CHIYIGO</a>
+      <div class="hidden md:flex items-center gap-8 text-sm text-gray-400">
+        <a href="index.html#services" class="hover:text-white transition-colors">服務</a>
+        <a href="portfolio.html" class="text-white font-medium">作品集</a>
+        <a href="requisition.html" class="ml-4 px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-medium transition-colors">開始合作</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <section class="pt-32 pb-16 px-6 text-center">
+    <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">作品集</h1>
+    <p class="text-gray-400 text-lg max-w-xl mx-auto">每個專案背後都是一個真實的商業目標。</p>
+  </section>
+
+  <!-- Filter -->
+  <div class="px-6 mb-12">
+    <div class="max-w-6xl mx-auto flex flex-wrap gap-3 justify-center" id="filter-bar">
+      <button data-filter="all" class="filter-btn active px-5 py-2 rounded-full text-sm font-medium border border-brand-500 bg-brand-500/10 text-brand-500 transition-all">全部</button>
+    </div>
+  </div>
+
+  <!-- Grid -->
+  <main class="px-6 pb-32">
+    <div class="max-w-6xl mx-auto">
+      <!-- Skeleton placeholders -->
+      <div id="skeleton-grid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="skeleton h-72 rounded-2xl"></div>
+        <div class="skeleton h-72 rounded-2xl"></div>
+        <div class="skeleton h-72 rounded-2xl"></div>
+      </div>
+      <!-- Actual grid -->
+      <div id="portfolio-grid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 hidden"></div>
+      <!-- Error state -->
+      <div id="error-state" class="hidden text-center py-24 text-gray-500">
+        <p class="text-5xl mb-4">⚠️</p>
+        <p class="text-lg">載入失敗，請稍後再試。</p>
+      </div>
+      <!-- Empty state -->
+      <div id="empty-state" class="hidden text-center py-24 text-gray-500">
+        <p class="text-5xl mb-4">📂</p>
+        <p class="text-lg">此分類尚無作品。</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-[#2a2a35] py-8 px-6 text-center text-gray-500 text-sm">
+    © 2025 CHIYIGO. All rights reserved.
+  </footer>
+
+  <script>
+    const GRID = document.getElementById('portfolio-grid');
+    const SKELETON = document.getElementById('skeleton-grid');
+    const ERROR = document.getElementById('error-state');
+    const EMPTY = document.getElementById('empty-state');
+    const FILTER_BAR = document.getElementById('filter-bar');
+
+    let allItems = [];
+    let activeFilter = 'all';
+
+    const cardTemplate = (item) => `
+      <article class="card-reveal group rounded-2xl bg-[#16161d] border border-[#2a2a35] overflow-hidden hover:border-brand-500/30 transition-colors">
+        <div class="h-48 bg-[#0e0e12] overflow-hidden">
+          ${item.image_url
+            ? `<img src="${item.image_url}" alt="${item.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />`
+            : `<div class="w-full h-full flex items-center justify-center text-gray-600 text-4xl font-bold">${item.category?.[0] ?? '?'}</div>`
+          }
+        </div>
+        <div class="p-6">
+          <span class="inline-block mb-2 px-2 py-0.5 rounded text-xs font-medium bg-brand-500/10 text-brand-500">${item.category}</span>
+          <h3 class="text-lg font-semibold text-white mb-2">${item.title}</h3>
+          <p class="text-gray-400 text-sm leading-relaxed mb-4">${item.description ?? ''}</p>
+          ${item.tags ? `<div class="flex flex-wrap gap-2">${item.tags.split(',').map(t => `<span class="px-2 py-0.5 rounded text-xs bg-[#0e0e12] text-gray-500">${t.trim()}</span>`).join('')}</div>` : ''}
+          ${item.link_url ? `<a href="${item.link_url}" target="_blank" rel="noopener" class="mt-4 inline-flex items-center gap-1 text-sm text-brand-500 hover:text-brand-600 font-medium">查看專案 →</a>` : ''}
+        </div>
+      </article>
+    `;
+
+    function renderGrid(items) {
+      GRID.innerHTML = items.map(cardTemplate).join('');
+      GRID.querySelectorAll('.card-reveal').forEach((el, i) => {
+        el.style.transitionDelay = `${i * 0.05}s`;
+        requestAnimationFrame(() => el.classList.add('visible'));
+      });
+      EMPTY.classList.toggle('hidden', items.length > 0);
+      GRID.classList.toggle('hidden', items.length === 0);
+    }
+
+    function buildFilters(items) {
+      const categories = [...new Set(items.map(i => i.category))];
+      categories.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.dataset.filter = cat;
+        btn.textContent = cat;
+        btn.className = 'filter-btn px-5 py-2 rounded-full text-sm font-medium border border-[#2a2a35] text-gray-400 hover:border-brand-500/50 hover:text-white transition-all';
+        FILTER_BAR.appendChild(btn);
+      });
+    }
+
+    FILTER_BAR.addEventListener('click', e => {
+      const btn = e.target.closest('.filter-btn');
+      if (!btn) return;
+      activeFilter = btn.dataset.filter;
+      FILTER_BAR.querySelectorAll('.filter-btn').forEach(b => {
+        const active = b === btn;
+        b.className = active
+          ? 'filter-btn active px-5 py-2 rounded-full text-sm font-medium border border-brand-500 bg-brand-500/10 text-brand-500 transition-all'
+          : 'filter-btn px-5 py-2 rounded-full text-sm font-medium border border-[#2a2a35] text-gray-400 hover:border-brand-500/50 hover:text-white transition-all';
+      });
+      const filtered = activeFilter === 'all' ? allItems : allItems.filter(i => i.category === activeFilter);
+      renderGrid(filtered);
+    });
+
+    async function loadPortfolio() {
+      try {
+        const res = await fetch('/api/portfolio');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        allItems = data.items ?? [];
+        SKELETON.classList.add('hidden');
+        buildFilters(allItems);
+        renderGrid(allItems);
+      } catch (err) {
+        console.error(err);
+        SKELETON.classList.add('hidden');
+        ERROR.classList.remove('hidden');
+      }
+    }
+
+    loadPortfolio();
+  </script>
+</body>
+</html>

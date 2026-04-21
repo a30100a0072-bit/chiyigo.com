@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>提交需求 — CHIYIGO</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: "#4f6ef7", 600: "#3b55e6" },
+            surface: { DEFAULT: "#0e0e12", card: "#16161d", border: "#2a2a35" },
+          },
+          fontFamily: { sans: ["Inter", "Noto Sans TC", "sans-serif"] },
+        },
+      },
+    };
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    body { background-color: #0e0e12; color: #e4e4ef; }
+    .field { display: flex; flex-direction: column; gap: 0.375rem; }
+    .field label { font-size: 0.875rem; font-weight: 500; color: #9ca3af; }
+    .field input, .field textarea, .field select {
+      background: #16161d; border: 1px solid #2a2a35; border-radius: 0.75rem;
+      padding: 0.75rem 1rem; color: #e4e4ef; font-size: 0.9375rem;
+      transition: border-color 0.2s; outline: none; width: 100%;
+    }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color: #4f6ef7; }
+    .field input::placeholder, .field textarea::placeholder { color: #4b5563; }
+    .error-msg { font-size: 0.8rem; color: #f87171; margin-top: 0.25rem; }
+    .service-card { cursor: pointer; border: 2px solid #2a2a35; border-radius: 1rem; padding: 1rem; transition: all 0.2s; }
+    .service-card:hover { border-color: #4f6ef7; }
+    .service-card.selected { border-color: #4f6ef7; background: #4f6ef710; }
+    .service-card input[type="radio"] { display: none; }
+  </style>
+</head>
+<body class="font-sans antialiased">
+
+  <!-- Nav -->
+  <nav class="fixed top-0 inset-x-0 z-50 border-b border-[#2a2a35] bg-[#0e0e12]/80 backdrop-blur-md">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="index.html" class="text-xl font-bold tracking-tight text-white">CHIYIGO</a>
+      <div class="hidden md:flex items-center gap-8 text-sm text-gray-400">
+        <a href="index.html#services" class="hover:text-white transition-colors">服務</a>
+        <a href="portfolio.html" class="hover:text-white transition-colors">作品集</a>
+        <a href="requisition.html" class="text-white font-medium">開始合作</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Page Header -->
+  <section class="pt-32 pb-12 px-6 text-center">
+    <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">提交需求</h1>
+    <p class="text-gray-400 text-lg max-w-xl mx-auto">填寫以下表單，我們將在 24 小時內與你聯繫。</p>
+  </section>
+
+  <!-- Form -->
+  <main class="px-6 pb-32">
+    <div class="max-w-2xl mx-auto">
+      <form id="requisition-form" novalidate class="space-y-8">
+
+        <!-- 基本資訊 -->
+        <fieldset class="space-y-5">
+          <legend class="text-xs uppercase tracking-widest text-gray-500 mb-4">基本資訊</legend>
+          <div class="grid sm:grid-cols-2 gap-5">
+            <div class="field">
+              <label for="name">姓名 <span class="text-red-400">*</span></label>
+              <input type="text" id="name" name="name" placeholder="王小明" autocomplete="name" />
+              <span class="error-msg hidden" data-for="name"></span>
+            </div>
+            <div class="field">
+              <label for="email">電子郵件 <span class="text-red-400">*</span></label>
+              <input type="email" id="email" name="email" placeholder="hello@example.com" autocomplete="email" />
+              <span class="error-msg hidden" data-for="email"></span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="company">公司 / 品牌名稱</label>
+            <input type="text" id="company" name="company" placeholder="選填" />
+          </div>
+        </fieldset>
+
+        <!-- 服務類型 -->
+        <fieldset>
+          <legend class="text-xs uppercase tracking-widest text-gray-500 mb-4">需要哪項服務？ <span class="text-red-400">*</span></legend>
+          <div class="grid sm:grid-cols-3 gap-4" id="service-cards">
+            <label class="service-card">
+              <input type="radio" name="service" value="品牌識別" />
+              <div class="text-2xl mb-2">🎨</div>
+              <div class="font-semibold text-white text-sm">品牌識別</div>
+              <div class="text-gray-500 text-xs mt-1">Logo · 視覺規範</div>
+            </label>
+            <label class="service-card">
+              <input type="radio" name="service" value="網站開發" />
+              <div class="text-2xl mb-2">💻</div>
+              <div class="font-semibold text-white text-sm">網站開發</div>
+              <div class="text-gray-500 text-xs mt-1">靜態 · Serverless</div>
+            </label>
+            <label class="service-card">
+              <input type="radio" name="service" value="數位行銷" />
+              <div class="text-2xl mb-2">📈</div>
+              <div class="font-semibold text-white text-sm">數位行銷</div>
+              <div class="text-gray-500 text-xs mt-1">社群 · 廣告 · 內容</div>
+            </label>
+          </div>
+          <span class="error-msg hidden" data-for="service"></span>
+        </fieldset>
+
+        <!-- 預算與描述 -->
+        <fieldset class="space-y-5">
+          <legend class="text-xs uppercase tracking-widest text-gray-500 mb-4">專案細節</legend>
+          <div class="field">
+            <label for="budget">預算範圍</label>
+            <select id="budget" name="budget">
+              <option value="" disabled selected>請選擇預算範圍</option>
+              <option value="5萬以下">5 萬以下</option>
+              <option value="5-15萬">5 ~ 15 萬</option>
+              <option value="15-30萬">15 ~ 30 萬</option>
+              <option value="30萬以上">30 萬以上</option>
+              <option value="待討論">待討論</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="description">需求描述 <span class="text-red-400">*</span></label>
+            <textarea id="description" name="description" rows="5" placeholder="請描述你的專案目標、現況與期望..."></textarea>
+            <span class="error-msg hidden" data-for="description"></span>
+            <span class="text-xs text-gray-600 mt-1" id="char-count">0 / 500</span>
+          </div>
+        </fieldset>
+
+        <!-- Submit -->
+        <button type="submit" id="submit-btn"
+          class="w-full py-4 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-lg transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+          <span id="btn-text">提交需求</span>
+        </button>
+
+      </form>
+
+      <!-- Success State -->
+      <div id="success-state" class="hidden text-center py-16">
+        <div class="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-6">
+          <svg class="w-10 h-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+        </div>
+        <h2 class="text-2xl font-bold text-white mb-3">需求已送出！</h2>
+        <p class="text-gray-400 mb-8">我們將在 24 小時內以電子郵件與你聯繫。</p>
+        <a href="index.html" class="px-8 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-medium transition-colors">返回首頁</a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-[#2a2a35] py-8 px-6 text-center text-gray-500 text-sm">
+    © 2025 CHIYIGO. All rights reserved.
+  </footer>
+
+  <script>
+    // Service card 選取互動
+    document.querySelectorAll('.service-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.service-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+      });
+    });
+
+    // 字數計數
+    const desc = document.getElementById('description');
+    const charCount = document.getElementById('char-count');
+    desc.addEventListener('input', () => {
+      const len = desc.value.length;
+      charCount.textContent = `${len} / 500`;
+      charCount.className = `text-xs mt-1 ${len > 500 ? 'text-red-400' : 'text-gray-600'}`;
+    });
+
+    // 驗證
+    function validate(data) {
+      const errors = {};
+      if (!data.name.trim()) errors.name = '請填寫姓名';
+      if (!data.email.trim()) errors.email = '請填寫電子郵件';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = '電子郵件格式不正確';
+      if (!data.service) errors.service = '請選擇服務類型';
+      if (!data.description.trim()) errors.description = '請填寫需求描述';
+      else if (data.description.length > 500) errors.description = '描述不得超過 500 字';
+      return errors;
+    }
+
+    function showErrors(errors) {
+      document.querySelectorAll('.error-msg').forEach(el => {
+        const field = el.dataset.for;
+        if (errors[field]) {
+          el.textContent = errors[field];
+          el.classList.remove('hidden');
+        } else {
+          el.textContent = '';
+          el.classList.add('hidden');
+        }
+      });
+    }
+
+    // 表單提交
+    const form = document.getElementById('requisition-form');
+    const btn = document.getElementById('submit-btn');
+    const btnText = document.getElementById('btn-text');
+    const successState = document.getElementById('success-state');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const data = {
+        name:        document.getElementById('name').value,
+        email:       document.getElementById('email').value,
+        company:     document.getElementById('company').value,
+        service:     document.querySelector('input[name="service"]:checked')?.value ?? '',
+        budget:      document.getElementById('budget').value,
+        description: document.getElementById('description').value,
+      };
+
+      const errors = validate(data);
+      showErrors(errors);
+      if (Object.keys(errors).length > 0) return;
+
+      // 送出中狀態
+      btn.disabled = true;
+      btnText.textContent = '送出中…';
+
+      try {
+        const res = await fetch('/api/requisition', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+
+        form.classList.add('hidden');
+        successState.classList.remove('hidden');
+      } catch (err) {
+        console.error(err);
+        btnText.textContent = `送出失敗：${err.message}，請重試`;
+        btn.disabled = false;
+        setTimeout(() => { btnText.textContent = '提交需求'; }, 4000);
+      }
+    });
+  </script>
+</body>
+</html>
