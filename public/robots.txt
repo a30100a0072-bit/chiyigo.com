@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /requisition
+Disallow: /api/
+
+Sitemap: https://chiyigo.com/sitemap.xml

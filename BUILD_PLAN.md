@@ -18,6 +18,17 @@
 - [ ] 2.2 `portfolio.html` — 動態作品集（fetch GET /api/portfolio）
 - [ ] 2.3 `requisition.html` — 需求表單（POST /api/requisition）
 
+### 階段五：內容管理工具（B）
+- [ ] 5.1 `scripts/portfolio-add.mjs` — 互動式新增作品集（Node CLI）
+- [ ] 5.2 `scripts/portfolio-list.mjs` — 列出 / 刪除作品（Node CLI）
+- [ ] 5.3 `scripts/portfolio-remote.sql` — 遠端 D1 管理 SQL 範本
+
+### 階段六：SEO 與效能（C）
+- [ ] 6.1 Open Graph / Twitter Card meta — 三頁面
+- [ ] 6.2 `sitemap.xml`
+- [ ] 6.3 `robots.txt`（requisition & api 禁止索引）
+- [ ] 6.4 Cloudflare Web Analytics（部署後填入 token）
+
 ### 階段三：後端 API（Cloudflare Pages Functions）
 - [ ] 3.1 `functions/api/portfolio.js` — GET，查詢 D1
 - [ ] 3.2 `functions/api/requisition.js` — POST，寫入 D1 + Telegram 警報
@@ -42,7 +53,14 @@
 | 2.3 requisition.html | ✅ 完成 | 2026-04-22 | POST `/api/requisition`，表單驗證 + 成功畫面 |
 | 3.1 portfolio.js | ✅ 完成 | 2026-04-22 | GET D1，60s Cache-Control |
 | 3.2 requisition.js | ✅ 完成 | 2026-04-22 | POST D1 + Telegram `waitUntil` 非阻塞通知 |
-| 4.1 .gitignore | ✅ 完成 | 2026-04-22 | 排除 node_modules, .wrangler, .dev.vars |
+| 4.1 .gitignore | ✅ 完成 | 2026-04-22 | 排除 node_modules, .wrangler, .dev.vars, .claude |
+| 5.1 portfolio-add.mjs | ✅ 完成 | 2026-04-22 | 互動式 CLI 新增作品集 |
+| 5.2 portfolio-list.mjs | ✅ 完成 | 2026-04-22 | 列出 / 刪除作品集，支援 `delete <id>` |
+| 5.3 portfolio-remote.sql | ✅ 完成 | 2026-04-22 | 遠端 D1 CRUD SQL 範本 |
+| 6.1 OG / Twitter Card | ✅ 完成 | 2026-04-22 | 三頁面，requisition 設 noindex |
+| 6.2 sitemap.xml | ✅ 完成 | 2026-04-22 | 含 / 和 /portfolio |
+| 6.3 robots.txt | ✅ 完成 | 2026-04-22 | 禁止索引 requisition & api |
+| 6.4 Cloudflare Analytics | ⏳ 待填入 | — | 部署後在 Dashboard 取得 token 填入三頁面 |
 
 ---
 
