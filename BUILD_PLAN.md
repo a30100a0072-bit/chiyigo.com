@@ -79,7 +79,7 @@
 | 7.6 GitHub Actions CI/CD | ✅ 完成 | 2026-04-22 | deploy.yml + CLOUDFLARE_API_TOKEN secret 已設定 |
 | 7.3 Cloudflare Web Analytics | ✅ 完成 | 2026-04-22 | token be8c93... 已填入三個頁面 |
 | 7.4 OG 封面圖 | ✅ 完成 | 2026-04-22 | public/images/chiyigo.jpg 24KB |
-| 7.5 Google Search Console | ⏳ 執行中 | 2026-04-22 | 驗證網域 + 提交 sitemap |
+| 7.5 Google Search Console | ✅ 完成 | 2026-04-22 | 驗證網域 + 提交 sitemap，2 頁已收錄 |
 
 ---
 
