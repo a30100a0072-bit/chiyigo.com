@@ -63,7 +63,10 @@
 | 6.4 Cloudflare Analytics | ⏳ 待填入 | — | 部署後在 Dashboard 取得 token 填入三頁面 |
 | A.1 GitHub repo 建立 | ✅ 完成 | 2026-04-22 | github.com/a30100a0072-bit/chiyigo.com |
 | A.2 推送至 GitHub | ✅ 完成 | 2026-04-22 | branch: main，2 commits |
-| A.3 Cloudflare Pages 部署 | ⏳ 待執行 | — | 需連接 GitHub repo，設定環境變數 |
+| A.3 Cloudflare Pages 部署 | ✅ 完成 | 2026-04-22 | wrangler CLI 直接部署，跳過 GitHub 整合 bug |
+| A.4 Telegram secrets 設定 | ✅ 完成 | 2026-04-22 | TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID 已上傳 |
+| A.5 D1 binding（production） | ✅ 完成 | 2026-04-22 | chiyigo_db 綁定，/api/portfolio 線上測試通過 |
+| A.6 自訂網域綁定 | ⏳ 待執行 | — | 在 Pages 設定頁加入 chiyigo.com |
 
 ---
 
