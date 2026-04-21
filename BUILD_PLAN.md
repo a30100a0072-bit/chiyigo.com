@@ -38,6 +38,14 @@
 - [ ] 4.2 驗證 wrangler 設定
 - [ ] 4.3 部署指令說明
 
+### 階段七：上線後收尾
+- [ ] 7.1 等待 chiyigo.com DNS 驗證完成（最多 48h）
+- [ ] 7.2 設定 www.chiyigo.com 重導向至 chiyigo.com
+- [ ] 7.3 填入 Cloudflare Web Analytics token（三個 HTML 頁面）
+- [ ] 7.4 製作並上傳 OG 封面圖（/images/og-cover.jpg）
+- [ ] 7.5 提交 sitemap 至 Google Search Console
+- [ ] 7.6 設定 GitHub → Cloudflare Pages 自動部署（CI/CD）
+
 ---
 
 ## 進度記錄
@@ -66,7 +74,7 @@
 | A.3 Cloudflare Pages 部署 | ✅ 完成 | 2026-04-22 | wrangler CLI 直接部署，跳過 GitHub 整合 bug |
 | A.4 Telegram secrets 設定 | ✅ 完成 | 2026-04-22 | TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID 已上傳 |
 | A.5 D1 binding（production） | ✅ 完成 | 2026-04-22 | chiyigo_db 綁定，/api/portfolio 線上測試通過 |
-| A.6 自訂網域綁定 | ⏳ 待執行 | — | 在 Pages 設定頁加入 chiyigo.com |
+| A.6 自訂網域綁定 | 🔄 驗證中 | 2026-04-22 | chiyigo.com 已加入，DNS Verifying（最多 48h） |
 
 ---
 
