@@ -109,8 +109,9 @@
 - [x] 8.4.3 建立 `/functions/api/auth/delete.js`（驗密碼 + Soft/Hard Delete Transaction）
 
 ### Step 5：前端獨立登入視圖
-- [ ] 8.5.1 建立 `/public/login.html`（全螢幕 Arshire 風格，含返回首頁連結）
-- [ ] 8.5.2 建立 `/public/js/auth-ui.js`（密碼 10 秒自動隱藏、guest_id LocalStorage、JWT 存儲與跳轉）
+- [x] 8.5.1 建立 `/public/login.html`（全螢幕 Arshire 風格，含返回首頁連結）
+- [x] 8.5.2 建立 `/public/js/auth-ui.js`（密碼 10 秒自動隱藏、guest_id LocalStorage、JWT 存儲與跳轉）
+- [x] 8.5.3 補建 `/functions/api/auth/2fa/verify.js`（登入時 TOTP + 備用碼核銷）
 
 ---
 
@@ -126,8 +127,9 @@
 | 8.4.1 2fa/setup.js | ✅ 完成 | 2026-04-23 | TOTP Secret 生成 |
 | 8.4.2 2fa/activate.js | ✅ 完成 | 2026-04-23 | 驗 OTP + 備用碼 |
 | 8.4.3 delete.js | ✅ 完成 | 2026-04-23 | 合規 Soft/Hard Delete |
-| 8.5.1 login.html | ⬜ 待執行 | — | Arshire 全螢幕視圖 |
-| 8.5.2 auth-ui.js | ⬜ 待執行 | — | 密碼隱藏 + JWT 流程 |
+| 8.5.1 login.html | ✅ 完成 | 2026-04-23 | Arshire 全螢幕視圖 |
+| 8.5.2 auth-ui.js | ✅ 完成 | 2026-04-23 | 密碼隱藏 + JWT 流程 |
+| 8.5.3 2fa/verify.js | ✅ 完成 | 2026-04-23 | TOTP + 備用碼原子核銷 |
 
 ---
 
