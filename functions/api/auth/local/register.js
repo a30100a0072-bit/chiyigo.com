@@ -13,8 +13,9 @@ import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../.
 import { signJwt } from '../../../utils/jwt.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const ACCESS_TOKEN_TTL  = '15m'
+const ACCESS_TOKEN_TTL   = '15m'
 const VERIFY_TOKEN_HOURS = 24
+const REFRESH_TOKEN_DAYS = 7
 
 export async function onRequestPost({ request, env }) {
   // ── 1. 解析 Body ────────────────────────────────────────────
@@ -22,7 +23,7 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { email, password, guest_id } = body ?? {}
+  const { email, password, guest_id, device_uuid } = body ?? {}
 
   if (!email || !password)
     return res({ error: 'email and password are required' }, 400)
@@ -92,7 +93,18 @@ export async function onRequestPost({ request, env }) {
     .bind(emailLower)
     .first()
 
-  // ── 8. 簽發 Access Token（ES256）────────────────────────────
+  // ── 8. 簽發 Refresh Token ────────────────────────────────────
+  const refreshToken     = generateSecureToken()
+  const refreshTokenHash = await hashToken(refreshToken)
+  const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19)
+
+  await db
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at) VALUES (?, ?, ?, ?)`)
+    .bind(user.id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt)
+    .run()
+
+  // ── 9. 簽發 Access Token（ES256）────────────────────────────
   const accessToken = await signJwt({
     sub:            String(user.id),
     email:          emailLower,
@@ -106,6 +118,7 @@ export async function onRequestPost({ request, env }) {
 
   return res({
     access_token:   accessToken,
+    refresh_token:  refreshToken,
     user_id:        user.id,
     email:          emailLower,
     email_verified: false,

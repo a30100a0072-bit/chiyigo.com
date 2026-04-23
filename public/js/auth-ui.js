@@ -5,7 +5,8 @@
  *  - guest_id 的生成與 LocalStorage 讀寫
  *  - 密碼顯示切換，10 秒後自動回隱藏
  *  - 登入 / 註冊 / 2FA 表單提交與後端溝通
- *  - JWT 儲存（sessionStorage）與成功後頁面跳轉
+ *  - JWT + Refresh Token 儲存（sessionStorage）與成功後頁面跳轉
+ *  - logout()：撤銷 refresh_token + 清除 session
  */
 
 'use strict';
@@ -15,12 +16,14 @@ const API = {
   login:    '/api/auth/local/login',
   register: '/api/auth/local/register',
   totp:     '/api/auth/2fa/verify',
+  logout:   '/api/auth/logout',
 };
 
-const REDIRECT_KEY  = 'auth_redirect';
-const TOKEN_KEY     = 'access_token';
-const GUEST_ID_KEY  = 'chiyigo_guest_id';
-const PWD_HIDE_MS   = 10_000; // 10 秒後自動隱藏密碼
+const REDIRECT_KEY       = 'auth_redirect';
+const TOKEN_KEY          = 'access_token';
+const REFRESH_TOKEN_KEY  = 'refresh_token';
+const GUEST_ID_KEY       = 'chiyigo_guest_id';
+const PWD_HIDE_MS        = 10_000;
 
 // ── guest_id 管理 ────────────────────────────────────────────────
 
@@ -39,15 +42,48 @@ function clearGuestId() {
   localStorage.removeItem(GUEST_ID_KEY);
 }
 
-// ── JWT 儲存 ─────────────────────────────────────────────────────
+// ── JWT + Refresh Token 儲存 ─────────────────────────────────────
 
 function saveToken(token) {
-  // sessionStorage：關閉瀏覽器分頁後自動失效，比 localStorage 更安全
   sessionStorage.setItem(TOKEN_KEY, token);
 }
 
 function getToken() {
   return sessionStorage.getItem(TOKEN_KEY);
+}
+
+function saveRefreshToken(token) {
+  sessionStorage.setItem(REFRESH_TOKEN_KEY, token);
+}
+
+function getRefreshToken() {
+  return sessionStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+// ── 登出 ──────────────────────────────────────────────────────────
+
+async function logout() {
+  const refreshToken = getRefreshToken();
+
+  // 先清除本地 session（無論 API 是否成功）
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+  clearGuestId();
+
+  // 通知伺服器撤銷 refresh_token（fire-and-forget）
+  if (refreshToken) {
+    try {
+      await fetch(API.logout, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch {
+      // 網路失敗不阻擋登出流程
+    }
+  }
+
+  window.location.href = '/login.html';
 }
 
 // ── 成功後跳轉 ───────────────────────────────────────────────────
@@ -210,6 +246,7 @@ async function handleLogin(event) {
     }
 
     saveToken(data.access_token);
+    if (data.refresh_token) saveRefreshToken(data.refresh_token);
     redirectAfterAuth();
 
   } catch {
@@ -260,7 +297,8 @@ async function handleRegister(event) {
     }
 
     saveToken(data.access_token);
-    clearGuestId(); // 訪客 ID 已完成綁定，清除
+    if (data.refresh_token) saveRefreshToken(data.refresh_token);
+    clearGuestId();
     showMsg('帳號建立成功！正在跳轉…', 'success');
     setTimeout(redirectAfterAuth, 800);
 
@@ -312,6 +350,7 @@ async function handleTotp(event) {
 
     _preAuthToken = null;
     saveToken(data.access_token);
+    if (data.refresh_token) saveRefreshToken(data.refresh_token);
     redirectAfterAuth();
 
   } catch {
