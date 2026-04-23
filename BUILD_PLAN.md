@@ -18,7 +18,7 @@
 | Discord OAuth | ✅ 完成 |
 | CORS 防禦層 | ✅ 完成 |
 | Admin API（封禁/解封/列表） | ✅ 完成 |
-| **Logout / Revoke Token** | ❌ 待實作 |
+| **Logout / Revoke Token** | ✅ 完成 |
 | **PKCE 跨平台 OAuth** | ❌ 待實作（Stage 13）|
 | Universal Link / App Link | 🔒 待辦（需 Apple Developer $99/yr）|
 
@@ -168,13 +168,12 @@
 
 ---
 
-## 階段十四：Logout（待實作）
+## 階段十四：Logout（已完成）
 
-> **動機**：目前用戶只能清除 sessionStorage（本地登出），refresh_token 在伺服器端仍有效。
-> 真正的登出需要撤銷 refresh_token。
-
-- [ ] 14.1 `POST /api/auth/logout`（撤銷指定 refresh_token，等同伺服器端登出）
-- [ ] 14.2 `auth-ui.js` 新增登出按鈕（清除 sessionStorage + 呼叫 logout API）
+- [x] 14.1 `POST /api/auth/logout`（撤銷 refresh_token，冪等設計，無需 access_token）
+- [x] 14.2 `auth-ui.js` — 存 refresh_token 到 sessionStorage；`logout()` 函數撤銷後清除本地 session
+- [x] 14.3 `register.js` — 補上 refresh_token 回傳（與 login.js 對齊）
+- [ ] 14.4 登出按鈕（待有受保護頁面後整合至 UI）
 
 ---
 
@@ -182,7 +181,7 @@
 
 | 項目 | 說明 | 優先度 |
 |------|------|--------|
-| register.js 未回傳 refresh_token | 註冊後只有 access_token（15分鐘後到期需重登入）；login.js 有回傳 | 低 |
+| ~~register.js 未回傳 refresh_token~~ | ✅ 已修復（2026-04-23） | — |
 | chiyigo-db（13ecc734...） | 誤建的第二個 D1 實例，可至 Cloudflare Dashboard 刪除 | 低 |
 | www.chiyigo.com 重導向 | 等待 Cloudflare DNS 驗證通過後自動生效 | 自動 |
 
