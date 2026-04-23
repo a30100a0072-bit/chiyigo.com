@@ -15,7 +15,7 @@
 | Auth 核心（註冊/登入/2FA） | ✅ 完成，遠端 DB 驗證通過 2026-04-23 |
 | ES256 JWT + JWKS | ✅ 完成 |
 | Refresh Token 輪換 | ✅ 完成，Replay 防護通過 |
-| Discord OAuth | ⚠️ 程式碼完成，env var 空格問題已修復，待 T7 最終驗證 |
+| Discord OAuth | ✅ 完成，線上測試通過 2026-04-23 |
 | CORS 防禦層 | ✅ 完成 |
 | Admin API（封禁/解封/列表） | ✅ 完成，線上測試通過 2026-04-23 |
 | Logout / Revoke Token | ✅ 完成 |
@@ -218,7 +218,7 @@
 | T4 | 帳號登入 | ✅ 通過 | 200 + access_token + refresh_token，遠端 DB 驗證 2026-04-23 |
 | T5 | /me 即時狀態 | ✅ 通過 | 回傳 role/status/identities |
 | T6 | Refresh Token 輪換 | ✅ 通過 | 輪換成功，舊 token 重放回 401 |
-| T7 | Discord OAuth（瀏覽器） | ⬜ 待測 | env var 名稱空格已修復（API 直接更正），待重新部署後驗證 |
+| T7 | Discord OAuth（瀏覽器） | ✅ 通過 | client_id 正確，授權後 JWT 回傳至 login.html，2026-04-23 |
 | T8 | Admin API | ✅ 通過 | 列表/ban/unban 邏輯全通過，自封禁與角色保護正常 2026-04-23 |
 | T9 | PKCE 完整流程 | ✅ 通過 | authorize→code→token，重放攻擊防護通過 |
 | T10 | Logout 撤銷 | ✅ 通過 | 撤銷後 refresh 回 401，冪等 200 |
@@ -245,8 +245,8 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | 優先度 | 項目 | 說明 |
 |--------|------|------|
 | 高 | T2 — 遊戲端 SSO 測試 | `GET /api/auth/game/login?platform=pc&port=12345` |
-| 高 | T7 — Discord OAuth 測試 | 瀏覽器手動測試 `GET /api/auth/discord/init?platform=web` |
-| 高 | T8 — Admin API 測試 | 升 role='admin' 後測 ban/unban/list |
+| ~~高~~ | ~~T7 — Discord OAuth 測試~~ | ✅ 通過 2026-04-23 |
+| ~~高~~ | ~~T8 — Admin API 測試~~ | ✅ 通過 2026-04-23 |
 | 中 | 13.9 Android App Link | `/.well-known/assetlinks.json`（不需 Apple Developer）|
 | 中 | 受保護頁面 / 使用者儀表板 | 登入後的首頁，含登出按鈕 |
 | 低 | schema_iam_fresh.sql 同步 | 補上 pkce_sessions + auth_codes |
