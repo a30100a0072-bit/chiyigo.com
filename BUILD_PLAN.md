@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-23 深夜更新）
+## 整體進度快照（2026-04-23 深夜更新，CI #24 全綠）
 
 | 模組 | 狀態 |
 |------|------|
@@ -22,9 +22,9 @@
 | PKCE 跨平台 OAuth（authorize/code/token） | ✅ 完成 |
 | Android App Link（assetlinks.json） | ✅ 完成，package_name 佔位符待 App 建立後更新 |
 | 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
+| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ✅ 完成，CI #24 部署通過 2026-04-23 ⬅ 待瀏覽器驗證 |
+| D1 垃圾回收 Cron Trigger | ✅ 完成（GitHub Actions `cleanup.yml`，每日 UTC 03:00）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
-| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ✅ 完成 2026-04-23（Stage 16 Step 1）|
-| D1 垃圾回收 Cron Trigger | ✅ 完成 2026-04-23（workers/cleanup/ 獨立 Worker）|
 
 ---
 
