@@ -18,10 +18,12 @@
  */
 
 import { signJwt } from '../../../utils/jwt.js'
+import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 
 const DISCORD_TOKEN_URL   = 'https://discord.com/api/oauth2/token'
 const DISCORD_PROFILE_URL = 'https://discord.com/api/users/@me'
 const ACCESS_TOKEN_TTL    = '15m'
+const REFRESH_TOKEN_DAYS  = 7
 
 // ── Discord API ──────────────────────────────────────────────────
 
@@ -213,34 +215,51 @@ export async function onRequestGet({ request, env }) {
   // ── 7. 依 platform 重導向 ────────────────────────────────────
   const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
 
-  let finalUrl
   switch (platform) {
     case 'pc': {
       // PC: Loopback — client_callback 格式：http://127.0.0.1:PORT/callback
       const dest = new URL(client_callback)
       dest.searchParams.set('access_token', accessToken)
       dest.searchParams.set('provider', 'discord')
-      finalUrl = dest.toString()
-      break
+      return Response.redirect(dest.toString(), 302)
     }
     case 'mobile': {
       // Mobile: Custom URI Scheme — chiyigo://auth/callback
-      finalUrl = `chiyigo://auth/callback?access_token=${encodeURIComponent(accessToken)}&provider=discord`
-      break
+      const url = `chiyigo://auth/callback?access_token=${encodeURIComponent(accessToken)}&provider=discord`
+      return Response.redirect(url, 302)
     }
     default: {
-      // Web: 直接帶 token 回到 IAM 登入頁，由 auth-ui.js 接管
+      // Web: 建立 refresh_token 並以 HttpOnly Cookie 送出，只帶 access_token 回 login 頁
+      const refreshToken     = generateSecureToken()
+      const refreshTokenHash = await hashToken(refreshToken)
+      const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
+        .toISOString().replace('T', ' ').slice(0, 19)
+
+      await db.prepare(`
+        INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at)
+        VALUES (?, ?, NULL, ?)
+      `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
+
       const dest = new URL('/login', baseUrl)
       dest.searchParams.set('access_token', accessToken)
       dest.searchParams.set('provider', 'discord')
-      finalUrl = dest.toString()
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location':   dest.toString(),
+          'Set-Cookie': refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400),
+        },
+      })
     }
   }
-
-  return Response.redirect(finalUrl, 302)
 }
 
 // ── 工具 ─────────────────────────────────────────────────────────
+
+function refreshCookie(token, maxAge) {
+  return `chiyigo_refresh=${token}; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=${maxAge}`
+}
 
 function htmlError(message, status = 400) {
   return new Response(

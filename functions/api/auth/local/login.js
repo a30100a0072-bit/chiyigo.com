@@ -25,7 +25,7 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { email, password, device_uuid } = body ?? {}
+  const { email, password, device_uuid, platform } = body ?? {}
 
   if (!email || !password)
     return res({ error: 'email and password are required' }, 400)
@@ -102,15 +102,29 @@ export async function onRequestPost({ request, env }) {
     VALUES (?, ?, ?, ?)
   `).bind(record.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt).run()
 
-  return res({
+  const payload = {
     access_token:   accessToken,
-    refresh_token:  refreshToken,
     user_id:        record.user_id,
     email:          record.email,
     email_verified: record.email_verified === 1,
     role:           record.role,
     status:         record.status,
-  })
+  }
+
+  // Web 瀏覽器（無 device_uuid 且非明確 App 平台）→ Cookie
+  const isWeb = !device_uuid && (!platform || platform === 'web')
+  if (isWeb) {
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie': refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400),
+      },
+    })
+  }
+
+  // App / Unity / Unreal → JSON body
+  return res({ ...payload, refresh_token: refreshToken })
 }
 
 /**
@@ -134,4 +148,8 @@ function res(data, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' },
   })
+}
+
+function refreshCookie(token, maxAge) {
+  return `chiyigo_refresh=${token}; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=${maxAge}`
 }

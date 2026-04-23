@@ -23,7 +23,7 @@
 | Android App Link（assetlinks.json） | ✅ 完成，package_name 佔位符待 App 建立後更新 |
 | 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
-| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ⚠️ 待實作（階段十六 Step 1）|
+| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ✅ 完成 2026-04-23（Stage 16 Step 1）|
 | D1 垃圾回收 Cron Trigger | ✅ 完成 2026-04-23（workers/cleanup/ 獨立 Worker）|
 
 ---
@@ -262,15 +262,17 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 
 > **動機**：Web 端 Refresh Token 存於 sessionStorage 有 XSS 竊取風險；D1 狀態表無限膨脹需自動清理。
 
-### Step 1：Web 端 HttpOnly Cookie 雙軌制（⚠️ 未實作）
+### Step 1：Web 端 HttpOnly Cookie 雙軌制（✅ 完成 2026-04-23）
+
+> **偵測邏輯**：`!device_uuid && (!platform || platform==='web')` → Web 模式；App 傳入 `device_uuid` 則走 JSON 模式。
 
 | 子項目 | 說明 |
 |--------|------|
-| 16.1 | `login.js` — 偵測 Web 請求（`platform` 參數或 User-Agent），Web 端改用 `Set-Cookie: chiyigo_refresh=…; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=604800`，JSON 不再回傳 refresh_token |
-| 16.2 | `discord/callback.js` — 同上，Web 平台改用 Cookie，App/遊戲端保持 JSON |
-| 16.3 | `refresh.js` — 優先讀取 `Cookie: chiyigo_refresh`，其次讀 JSON body（相容 App 端） |
-| 16.4 | `auth-ui.js` — 移除 sessionStorage 對 refresh_token 的讀寫；`fetch /api/auth/refresh` 加上 `credentials: 'include'`；`logout()` 保持 fire-and-forget（Cookie 由 Server 端 `Set-Cookie: Max-Age=0` 清除）|
-| 16.5 | `logout.js` — 回傳時加上 `Set-Cookie: chiyigo_refresh=; Max-Age=0; Path=/api/auth` 清除 Cookie |
+| 16.1 | ✅ `login.js` — Web 端回傳 `Set-Cookie: chiyigo_refresh; HttpOnly; Secure; SameSite=Strict; Path=/api/auth`，JSON 不含 refresh_token |
+| 16.2 | ✅ `discord/callback.js` — Web 平台建立 refresh_token 並 Cookie，302 僅帶 access_token |
+| 16.3 | ✅ `refresh.js` — 優先讀 Cookie，其次讀 body；回傳時同步輪換 Cookie 或 JSON |
+| 16.4 | ✅ `auth-ui.js` — 移除 REFRESH_TOKEN_KEY / saveRefreshToken / getRefreshToken；logout 改用 `credentials: 'include'`，無需手動帶 token |
+| 16.5 | ✅ `logout.js` — 讀 Cookie 或 body；回傳 `Set-Cookie: Max-Age=0` 清除 Cookie；無 token 時冪等 200 |
 
 **架構備忘**
 ```
@@ -353,7 +355,7 @@ git push origin main
 ### Token 儲存規範（客戶端責任）
 | 平台 | Access Token | Refresh Token |
 |------|-------------|---------------|
-| Web | `sessionStorage` | `sessionStorage` |
+| Web | `sessionStorage` | HttpOnly Cookie（`chiyigo_refresh`，由 Server 管理）|
 | iOS | Keychain（`kSecClassGenericPassword`） | Keychain |
 | Android | EncryptedSharedPreferences / Keystore | Keystore |
 | Unity | PlayerPrefs 加密 / 平台 Keychain plugin | 同左 |

@@ -26,11 +26,16 @@ const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
 
 export async function onRequestPost({ request, env }) {
+  // Cookie 優先（Web），其次 JSON body（App）
+  const cookieToken = parseCookieHeader(request.headers.get('Cookie'), 'chiyigo_refresh')
+
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { body = {} }
 
-  const { refresh_token, device_uuid } = body ?? {}
+  const { device_uuid } = body ?? {}
+  const refresh_token   = cookieToken ?? body?.refresh_token
+  const isWeb           = !!cookieToken
 
   if (!refresh_token || typeof refresh_token !== 'string')
     return res({ error: 'refresh_token is required' }, 400)
@@ -97,10 +102,31 @@ export async function onRequestPost({ request, env }) {
     status:         user.status,
   }, ACCESS_TOKEN_TTL, env)
 
+  // Web → 新 Cookie；App → JSON body
+  if (isWeb) {
+    return new Response(JSON.stringify({ access_token: accessToken }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie': refreshCookie(newPlainToken, REFRESH_TOKEN_DAYS * 86400),
+      },
+    })
+  }
+
   return res({
     access_token:  accessToken,
     refresh_token: newPlainToken,
   })
+}
+
+function parseCookieHeader(header, name) {
+  if (!header) return null
+  const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
+  return match ? match[1] : null
+}
+
+function refreshCookie(token, maxAge) {
+  return `chiyigo_refresh=${token}; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=${maxAge}`
 }
 
 function res(data, status = 200) {

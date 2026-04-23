@@ -20,11 +20,10 @@ const API = {
   oauthCode: '/api/auth/oauth/code',
 };
 
-const REDIRECT_KEY       = 'auth_redirect';
-const TOKEN_KEY          = 'access_token';
-const REFRESH_TOKEN_KEY  = 'refresh_token';
-const GUEST_ID_KEY       = 'chiyigo_guest_id';
-const PWD_HIDE_MS        = 10_000;
+const REDIRECT_KEY = 'auth_redirect';
+const TOKEN_KEY    = 'access_token';
+const GUEST_ID_KEY = 'chiyigo_guest_id';
+const PWD_HIDE_MS  = 10_000;
 
 // ── PKCE 模式偵測 ─────────────────────────────────────────────────
 // pkce_key 由 GET /api/auth/oauth/authorize 產生，存在 URL ?pkce_key=...
@@ -47,7 +46,7 @@ function clearGuestId() {
   localStorage.removeItem(GUEST_ID_KEY);
 }
 
-// ── JWT + Refresh Token 儲存 ─────────────────────────────────────
+// ── JWT 儲存（Refresh Token 改由後端 HttpOnly Cookie 管理）────────
 
 function saveToken(token) {
   sessionStorage.setItem(TOKEN_KEY, token);
@@ -57,35 +56,21 @@ function getToken() {
   return sessionStorage.getItem(TOKEN_KEY);
 }
 
-function saveRefreshToken(token) {
-  sessionStorage.setItem(REFRESH_TOKEN_KEY, token);
-}
-
-function getRefreshToken() {
-  return sessionStorage.getItem(REFRESH_TOKEN_KEY);
-}
-
 // ── 登出 ──────────────────────────────────────────────────────────
 
 async function logout() {
-  const refreshToken = getRefreshToken();
-
   // 先清除本地 session（無論 API 是否成功）
   sessionStorage.removeItem(TOKEN_KEY);
-  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   clearGuestId();
 
-  // 通知伺服器撤銷 refresh_token（fire-and-forget）
-  if (refreshToken) {
-    try {
-      await fetch(API.logout, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ refresh_token: refreshToken }),
-      });
-    } catch {
-      // 網路失敗不阻擋登出流程
-    }
+  // 通知伺服器撤銷 refresh_token（Cookie 由 Server 端 Set-Cookie Max-Age=0 清除）
+  try {
+    await fetch(API.logout, {
+      method:      'POST',
+      credentials: 'include',
+    });
+  } catch {
+    // 網路失敗不阻擋登出流程
   }
 
   window.location.href = '/login.html';
@@ -274,7 +259,6 @@ async function handleLogin(event) {
     }
 
     saveToken(data.access_token);
-    if (data.refresh_token) saveRefreshToken(data.refresh_token);
     if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
     redirectAfterAuth();
 
@@ -326,7 +310,6 @@ async function handleRegister(event) {
     }
 
     saveToken(data.access_token);
-    if (data.refresh_token) saveRefreshToken(data.refresh_token);
     clearGuestId();
     if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
     showMsg('帳號建立成功！正在跳轉…', 'success');
@@ -380,7 +363,6 @@ async function handleTotp(event) {
 
     _preAuthToken = null;
     saveToken(data.access_token);
-    if (data.refresh_token) saveRefreshToken(data.refresh_token);
     if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
     redirectAfterAuth();
 
