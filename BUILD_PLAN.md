@@ -1,7 +1,8 @@
 # CHIYIGO.COM 建構計畫
 
 **架構**：MPA + Cloudflare Pages Functions + D1 SQLite  
-**風格**：Arshire Style — Tailwind CSS + Vanilla JS，零框架
+**風格**：Arshire Style — Tailwind CSS + Vanilla JS，零框架  
+**IAM 定位**：全端跨平台統一身份中心（Web / Unity / Unreal / iOS / Android）
 
 ---
 
@@ -82,6 +83,20 @@
 | 7.4 OG 封面圖 | ✅ 完成 | 2026-04-22 | public/images/chiyigo.jpg 24KB |
 | 7.5 Google Search Console | ✅ 完成 | 2026-04-22 | 驗證網域 + 提交 sitemap，2 頁已收錄 |
 | 7.7 Search Console 流量數據 | 🔄 等待中 | — | 約 1–3 天後出現，確認後打勾 |
+| **階段九：ES256 安全升級（已完成）** | | | |
+| 9.1.1 jwt.js（ES256 模組） | ✅ 完成 | 2026-04-23 | 模組級金鑰快取 |
+| 9.1.2 generate-jwt-keys.mjs | ✅ 完成 | 2026-04-23 | 一次性金鑰對生成腳本 |
+| 9.2.x 所有端點改用 ES256 | ✅ 完成 | 2026-04-23 | register / login / verify |
+| 9.3.1 .well-known/jwks.json.js | ✅ 完成 | 2026-04-23 | RFC 7517，CORS 全開 |
+| **階段十：遊戲平台擴充（已完成）** | | | |
+| 10.1 schema role/status | ✅ 完成 | 2026-04-23 | user_identities 含遊戲平台欄位 |
+| 10.2-5 JWT payload 擴充 | ✅ 完成 | 2026-04-23 | role + status 全端點 |
+| 10.6 /api/auth/me.js | ✅ 完成 | 2026-04-23 | 即時 DB 封禁查詢 |
+| **階段十一～十四：跨平台（待執行）** | | | |
+| 11.x CORS 防禦層 | ⬜ 待執行 | — | 所有 auth 端點 |
+| 12.x Refresh Token API | ⬜ 待執行 | — | Mobile 長效 Session |
+| 13.x PKCE OAuth 流程 | ⬜ 待執行 | — | Unity / iOS / Android |
+| 14.x 管理員 API | ⬜ 待執行 | — | ban / unban / 角色驗證 |
 
 ---
 
@@ -150,10 +165,102 @@
 
 ---
 
+## 階段十一：跨平台 CORS 防禦層（Web / Mobile / Game Client）
+
+> **動機**：iOS / Android / Unity / Unreal 客戶端發出的 HTTP 請求會觸發跨域限制。  
+> 目前只有 JWKS 端點有 CORS，所有 `/api/auth/*` 端點均缺少必要標頭。
+
+### 待執行
+- [ ] 11.1 建立 `/functions/utils/cors.js` — 統一 CORS helper，支援 env.ALLOWED_ORIGINS 白名單
+- [ ] 11.2 全部 auth 端點加入 OPTIONS preflight handler + CORS headers
+- [ ] 11.3 `.dev.vars` 新增 `ALLOWED_ORIGINS` 環境變數
+
+---
+
+## 階段十二：Refresh Token API（長效 Session，Mobile 必需）
+
+> **動機**：Access token TTL=15m 對 Web 可接受，但行動 / 遊戲客戶端需要長效 session，  
+> 不可要求用戶每 15 分鐘重新登入。`refresh_tokens` 表已存在，缺少操作端點。
+
+### TTL 建議策略
+| 客戶端類型 | Access Token | Refresh Token |
+|-----------|-------------|---------------|
+| Web 瀏覽器 | 15 分鐘 | 7 天 |
+| iOS / Android | 15 分鐘 | 30 天 |
+| Unity / Unreal | 15 分鐘 | 90 天 |
+
+### 待執行
+- [ ] 12.1 修改 `login.js` + `2fa/verify.js`：登入成功時同步簽發並儲存 refresh_token（附 device_info）
+- [ ] 12.2 建立 `POST /api/auth/token/refresh`：以 refresh_token 換發新 access_token（自動輪換 token）
+- [ ] 12.3 建立 `POST /api/auth/token/revoke`：撤銷 refresh_token（等同登出）
+- [ ] 12.4 `schema_auth.sql` 確認 `refresh_tokens` 表含 `device_info` 欄位（已存在，確認即可）
+
+---
+
+## 階段十三：PKCE 跨平台 OAuth 授權流程
+
+> **動機**：Unity / Unreal / iOS / Android 原生 App 需透過 PKCE 授權碼流程喚起 IAM 登入頁，  
+> 登入後將 code 透過 Custom URI Scheme (`chiyigo://`) 回傳 App，換取 token。  
+> 純公開客戶端（無 Client Secret），安全性由 PKCE code_verifier 保證。
+
+### 跨平台 redirect_uri 支援矩陣
+| 客戶端 | redirect_uri 格式 | 說明 |
+|--------|-----------------|------|
+| Web SPA | `https://chiyigo.com/callback` | 標準 HTTPS |
+| iOS (Universal Link) | `https://chiyigo.com/app/callback` | Apple 驗證域 |
+| Android (App Link) | `https://chiyigo.com/app/callback` | Google 驗證域 |
+| Unity / Unreal | `chiyigo://auth/callback` | Custom URI Scheme |
+| Desktop Launcher | `http://127.0.0.1:PORT/callback` | Loopback |
+
+### 待執行
+- [ ] 13.1 建立 `GET /api/auth/oauth/authorize`：生成 state + PKCE challenge，儲存 `oauth_states`，重導至 login.html
+- [ ] 13.2 建立 `POST /api/auth/oauth/token`：以 `code` + `code_verifier` 換發 access_token + refresh_token（`DELETE ... RETURNING` 防重放）
+- [ ] 13.3 `redirect_uri` 白名單驗證：允許 `https://` 與 `chiyigo://` 與 loopback，拒絕其他 scheme
+- [ ] 13.4 `login.html` 支援 PKCE 模式：偵測 `?response_type=code` 參數，登入後重導 + 附上 code
+- [ ] 13.5 建立 `/.well-known/apple-app-site-association`（iOS Universal Link）
+- [ ] 13.6 建立 `/.well-known/assetlinks.json`（Android App Link）
+
+---
+
+## 階段十四：管理員 API（封禁管理 + 角色授權）
+
+> **動機**：role='admin' 的管理員需要能即時封禁 / 解封玩家，並且端點需要有 role 驗證中介軟體。
+
+### 待執行
+- [ ] 14.1 建立 `functions/utils/requireRole.js`：requireRole('admin') 中介軟體
+- [ ] 14.2 建立 `POST /api/admin/users/[id]/ban`：封禁帳號 + 撤銷所有 refresh_token
+- [ ] 14.3 建立 `POST /api/admin/users/[id]/unban`：解封帳號
+- [ ] 14.4 建立 `GET /api/admin/users`：查詢用戶列表（分頁 + 狀態篩選）
+
+---
+
+## 架構對齊備忘（iOS / Android 接入注意事項）
+
+### Token 儲存規範（客戶端責任）
+| 平台 | Access Token | Refresh Token |
+|------|-------------|---------------|
+| Web | `sessionStorage`（已實作） | `sessionStorage` |
+| iOS | Keychain（`kSecClassGenericPassword`） | Keychain |
+| Android | EncryptedSharedPreferences / Keystore | Keystore |
+| Unity | PlayerPrefs 加密 / 平台 Keychain plugin | 同左 |
+
+### Schema 對齊說明
+- 現有 `database/schema_auth.sql`：含累積 ALTER TABLE 遷移，適用於**既有 D1 實例**
+- 待建 `database/schema_iam.sql`：乾淨的全量建表 SQL，適用於**新環境初始化**（將於階段十五整理）
+
+### 待釐清事項（對齊後執行）
+- [ ] Q1：Unity / Unreal 是否使用 Custom URI `chiyigo://` 或改用 Loopback？
+- [ ] Q2：iOS / Android 是否需要 Universal Link / App Link（需設定 Apple Developer / Google Play）？
+- [ ] Q3：Refresh token 裝置綁定策略：是否需要 device fingerprint 防止 token 被盜用？
+- [ ] Q4：是否計畫接入 Steam / Discord / Epic 的 OAuth（需向各平台申請 Client ID）？
+
+---
+
 ## 認證系統進度記錄
 
 | 步驟 | 狀態 | 完成時間 | 備註 |
 |------|------|----------|------|
+| **階段八～十：IAM 核心（已完成）** | | | |
 | 8.1.1 package.json + npm install | ✅ 完成 | 2026-04-23 | jose + otpauth |
 | 8.1.2 schema_auth.sql | ✅ 完成 | 2026-04-23 | 8 張資安合規表 |
 | 8.2.1-3 crypto.js | ✅ 完成 | 2026-04-23 | PBKDF2 + 救援碼 |
