@@ -239,9 +239,10 @@ async function handleLogin(event) {
 
   try {
     const res = await fetch(API.login, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, password }),
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify({ email, password }),
     });
 
     const data = await res.json();
@@ -297,8 +298,9 @@ async function handleRegister(event) {
 
   try {
     const res = await fetch(API.register, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ email, password, guest_id }),
     });
 
@@ -346,7 +348,8 @@ async function handleTotp(event) {
 
   try {
     const res = await fetch(API.totp, {
-      method:  'POST',
+      method:      'POST',
+      credentials: 'include',
       headers: {
         'Content-Type':  'application/json',
         'Authorization': 'Bearer ' + _preAuthToken,
