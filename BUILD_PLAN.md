@@ -92,8 +92,8 @@
 | 10.1 schema role/status | ✅ 完成 | 2026-04-23 | user_identities 含遊戲平台欄位 |
 | 10.2-5 JWT payload 擴充 | ✅ 完成 | 2026-04-23 | role + status 全端點 |
 | 10.6 /api/auth/me.js | ✅ 完成 | 2026-04-23 | 即時 DB 封禁查詢 |
-| **階段十一～十四：跨平台（待執行）** | | | |
-| 11.1.1 Schema 遷移 | ✅ 完成 | 2026-04-23 | device_uuid / platform / client_callback |
+| **階段十一～十四：跨平台** | | | |
+| 11.1.1 Schema 遷移（程式碼） | ✅ 完成 | 2026-04-23 | device_uuid / platform / client_callback |
 | 11.1.2 discord/init.js | ✅ 完成 | 2026-04-23 | PKCE + platform routing + Discord 重導向 |
 | 11.1.3 discord/callback.js | ✅ 完成 | 2026-04-23 | 原子 state 核銷 + Upsert + JWT + 三平台分流 |
 | 11.1.4 Discord Dev Portal 設定 | ✅ 完成 | 2026-04-23 | Redirect URI + Client ID/Secret 已配置 |
@@ -101,9 +101,13 @@
 | 11.2.1 login.js refresh_token | ✅ 完成 | 2026-04-23 | login + 2fa/verify 同步簽發 refresh_token |
 | 11.2.2 auth/refresh.js | ✅ 完成 | 2026-04-23 | device_uuid 驗證 + Rotation 原子輪換 |
 | 11.3.1 game/login.js | ✅ 完成 | 2026-04-23 | JSON 回傳 SSO URL，遊戲端開系統瀏覽器用 |
-| 12.x CORS 防禦層 | ⬜ 待執行 | — | 所有 auth 端點 |
-| 13.x PKCE 完整 OAuth | ⬜ 待執行 | — | Universal Link / App Link |
-| 14.x 管理員 API | ⬜ 待執行 | — | ban / unban / 角色驗證 |
+| 12.1 cors.js + _middleware.js | ✅ 完成 | 2026-04-23 | /api/auth/* + /api/admin/* 全路由 CORS |
+| 13.x Universal Link / App Link | 🔒 待辦 | — | 需 Apple Developer 帳號（$99/yr）|
+| 14.1 requireRole.js | ✅ 完成 | 2026-04-23 | 角色層級中介軟體 |
+| 14.2 admin/users/[id]/ban.js | ✅ 完成 | 2026-04-23 | 封禁 + 原子撤銷 refresh_token |
+| 14.3 admin/users/[id]/unban.js | ✅ 完成 | 2026-04-23 | 解封帳號 |
+| 14.4 admin/users.js | ✅ 完成 | 2026-04-23 | 分頁用戶列表 + 多條件篩選 |
+| **⚠️ 待執行：D1 遷移** | ❗ 未套用 | — | 見下方「D1 部署清單」|
 
 ---
 
@@ -204,11 +208,11 @@ npx wrangler d1 execute chiyigo_db --remote --command \
 - [x] 11.1.3 建立 `/functions/api/auth/discord/callback.js`（換 token、Upsert 用戶、簽發 JWT）
 
 ### Step 2：硬體綁定 Refresh Token
-- [ ] 11.2.1 更新 `login.js` + `2fa/verify.js`：登入成功時同步簽發 refresh_token（含 device_uuid）
-- [ ] 11.2.2 建立 `/functions/api/auth/refresh.js`：device_uuid 驗證 + token 輪換
+- [x] 11.2.1 更新 `login.js` + `2fa/verify.js`：登入成功時同步簽發 refresh_token（含 device_uuid）
+- [x] 11.2.2 建立 `/functions/api/auth/refresh.js`：device_uuid 驗證 + token 輪換
 
 ### Step 3：遊戲端 PKCE 統整入口
-- [ ] 11.3.1 建立 `/functions/api/auth/game/login.js`：依平台回傳正確 SSO URL
+- [x] 11.3.1 建立 `/functions/api/auth/game/login.js`：依平台回傳正確 SSO URL
 
 ---
 
@@ -363,3 +367,114 @@ git push origin main
 | Cloudflare Pages project | `chiyigo-com` |
 | GitHub repo | https://github.com/a30100a0072-bit/chiyigo.com |
 | Cloudflare Analytics token | `be8c93305dda4f16b57c925bc681b2f6` |
+
+---
+
+## ⚠️ D1 部署清單（生產環境必須執行一次）
+
+> **說明**：`schema_auth.sql` 下半段的 ALTER TABLE 是為「既有部署」設計的遷移腳本。
+> 若 D1 上尚未建立 Auth 相關資料表，需先執行 CREATE TABLE 部分，再執行遷移段。
+
+### 步驟一：建立 Auth 核心資料表（若尚未建立）
+```bash
+npx wrangler d1 execute chiyigo_db --remote --file database/schema_auth.sql
+```
+> ⚠️ 若資料表已存在（`IF NOT EXISTS` 跳過），但 role/status/display_name 等欄位的
+> ALTER TABLE 會報錯，請改用步驟二逐條執行遷移。
+
+### 步驟二：遷移腳本（既有部署 / ALTER TABLE 報錯時）
+```bash
+# 遊戲平台擴充欄位
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'player';"
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active';"
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE user_identities ADD COLUMN display_name TEXT;"
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE user_identities ADD COLUMN avatar_url TEXT;"
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE user_identities ADD COLUMN metadata TEXT;"
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE user_identities ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'));"
+
+# 遊戲端登入擴充欄位
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE refresh_tokens ADD COLUMN device_uuid TEXT;"
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE oauth_states ADD COLUMN platform TEXT NOT NULL DEFAULT 'web';"
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE oauth_states ADD COLUMN client_callback TEXT;"
+
+# 訪客綁定欄位（requisition 必須已存在）
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE requisition ADD COLUMN owner_guest_id TEXT;"
+npx wrangler d1 execute chiyigo_db --remote --command "ALTER TABLE requisition ADD COLUMN owner_user_id INTEGER REFERENCES users(id);"
+```
+
+### 步驟三：確認資料表結構
+```bash
+npx wrangler d1 execute chiyigo_db --remote --command "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+npx wrangler d1 execute chiyigo_db --remote --command "PRAGMA table_info(users);"
+npx wrangler d1 execute chiyigo_db --remote --command "PRAGMA table_info(refresh_tokens);"
+npx wrangler d1 execute chiyigo_db --remote --command "PRAGMA table_info(oauth_states);"
+```
+
+---
+
+## 測試清單（部署後驗證）
+
+### 前置：推送部署
+```bash
+git push origin main   # 觸發 Cloudflare Pages CI/CD
+```
+
+### T1 — 公鑰端點
+```bash
+curl https://chiyigo.com/.well-known/jwks.json
+# 預期：{"keys":[{"kty":"EC","crv":"P-256","x":"...","kid":"...","use":"sig","alg":"ES256"}]}
+```
+
+### T2 — 遊戲端 SSO URL
+```bash
+curl "https://chiyigo.com/api/auth/game/login?platform=pc&port=12345"
+# 預期：{"provider":"discord","platform":"pc","url":"https://chiyigo.com/api/auth/discord/init?platform=pc&port=12345"}
+```
+
+### T3 — 帳號註冊
+```bash
+curl -X POST https://chiyigo.com/api/auth/local/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"Test1234!"}'
+# 預期 201：{ access_token, refresh_token, user_id, role:"player", status:"active" }
+```
+
+### T4 — 帳號登入
+```bash
+curl -X POST https://chiyigo.com/api/auth/local/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"Test1234!"}'
+# 預期 200：{ access_token, refresh_token, ... }
+```
+
+### T5 — 查詢自身資訊
+```bash
+curl https://chiyigo.com/api/auth/me \
+  -H "Authorization: Bearer <access_token>"
+# 預期 200：{ user_id, email, role, status, identities:[] }
+```
+
+### T6 — Refresh Token 輪換
+```bash
+curl -X POST https://chiyigo.com/api/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"<refresh_token>"}'
+# 預期 200：{ access_token, refresh_token }（新 token）
+# 再用舊 refresh_token 呼叫一次 → 預期 401 revoked
+```
+
+### T7 — Discord OAuth（瀏覽器）
+1. 開啟 `https://chiyigo.com/api/auth/discord/init?platform=web`
+2. 預期跳至 Discord 授權頁
+3. 授權後預期跳回 `https://chiyigo.com/login?access_token=...&provider=discord`
+
+### T8 — 管理員 API（需先手動升級帳號角色）
+```bash
+# 先手動將測試帳號升為 admin
+npx wrangler d1 execute chiyigo_db --remote --command "UPDATE users SET role='admin' WHERE email='test@example.com';"
+
+# 重新登入取得含 role=admin 的 JWT，再測試
+curl https://chiyigo.com/api/admin/users \
+  -H "Authorization: Bearer <admin_jwt>"
+# 預期 200：{ users:[...], total, page, limit }
+```
