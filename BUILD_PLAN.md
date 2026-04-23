@@ -24,7 +24,7 @@
 | 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 | HttpOnly Cookie 雙軌制（Web XSS 防禦） | ⚠️ 待實作（階段十六 Step 1）|
-| D1 垃圾回收 Cron Trigger | ⚠️ 待實作（階段十六 Step 2）|
+| D1 垃圾回收 Cron Trigger | ✅ 完成 2026-04-23（workers/cleanup/ 獨立 Worker）|
 
 ---
 
@@ -284,12 +284,15 @@ App/遊戲端（保持 JSON）：
   - User-Agent 無 Mozilla/
 ```
 
-### Step 2：D1 垃圾回收排程（⚠️ 未實作）
+### Step 2：D1 垃圾回收排程（✅ 完成 2026-04-23）
+
+> **架構備忘**：Cloudflare Pages Functions 不支援 cron triggers，改為獨立 Worker（`workers/cleanup/`）掛相同 D1。
 
 | 子項目 | 說明 |
 |--------|------|
-| 16.6 | 建立 `functions/scheduled.js` — Cloudflare Pages Scheduled Worker，清理四張表過期資料 |
-| 16.7 | `wrangler.toml` — 加入 `[triggers] crons = ["0 3 * * *"]`（每日 UTC 03:00 觸發）|
+| 16.6 | ✅ `workers/cleanup/index.js` — 獨立 Worker，清理四張表（auth_codes / pkce_sessions / refresh_tokens / email_verifications）|
+| 16.7 | ✅ `workers/cleanup/wrangler.toml` — `[triggers] crons = ["0 3 * * *"]`（每日 UTC 03:00）|
+| 16.8 | ✅ `.github/workflows/deploy.yml` — 新增 "Deploy Cleanup Worker" step，Pages 部署後自動部署 Worker |
 
 **清理 SQL**
 ```sql
