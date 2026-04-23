@@ -141,11 +141,24 @@
       if (!token) { window.location.href = '/login.html'; return; }
 
       try {
-        const res = await fetch('/api/auth/me', {
+        let res = await fetch('/api/auth/me', {
           headers: { 'Authorization': 'Bearer ' + token },
         });
 
-        if (res.status === 401 || res.status === 403) {
+        // access_token 過期 → 嘗試靜默刷新一次，成功後重試
+        if (res.status === 401) {
+          const ok = await refreshAccessToken();
+          if (!ok) {
+            sessionStorage.removeItem('access_token');
+            window.location.href = '/login.html';
+            return;
+          }
+          res = await fetch('/api/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('access_token') },
+          });
+        }
+
+        if (res.status === 403) {
           sessionStorage.removeItem('access_token');
           window.location.href = '/login.html';
           return;

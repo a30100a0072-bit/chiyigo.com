@@ -56,6 +56,24 @@ function getToken() {
   return sessionStorage.getItem(TOKEN_KEY);
 }
 
+// 以 HttpOnly Cookie 靜默換取新 access_token，成功回傳 true
+async function refreshAccessToken() {
+  try {
+    const res = await fetch('/api/auth/refresh', {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        '{}',
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data.access_token) { saveToken(data.access_token); return true; }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // ── 登出 ──────────────────────────────────────────────────────────
 
 async function logout() {
