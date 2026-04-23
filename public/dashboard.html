@@ -146,6 +146,7 @@
         });
 
         if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('access_token');
           window.location.href = '/login.html';
           return;
         }
