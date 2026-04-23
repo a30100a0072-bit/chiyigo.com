@@ -14,9 +14,14 @@ export async function onRequest({ request, env, next }) {
 
   const response = await next()
 
-  const modified = new Response(response.body, response)
-  for (const [k, v] of Object.entries(corsHeaders)) {
-    modified.headers.set(k, v)
-  }
-  return modified
+  const newHeaders = new Headers(response.headers)
+  const cookies = response.headers.getAll('set-cookie')
+  for (const c of cookies) newHeaders.append('set-cookie', c)
+  for (const [k, v] of Object.entries(corsHeaders)) newHeaders.set(k, v)
+
+  return new Response(response.body, {
+    status:     response.status,
+    statusText: response.statusText,
+    headers:    newHeaders,
+  })
 }
