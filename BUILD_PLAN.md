@@ -104,9 +104,9 @@
 - [x] 8.3.2 建立 `/functions/api/auth/local/login.js`（密碼驗證 + totp_enabled 分支 + JWT 簽發）
 
 ### Step 4：後端 API 擴充（2FA 與合規刪除）
-- [ ] 8.4.1 建立 `/functions/api/auth/2fa/setup.js`（產生 TOTP Secret）
-- [ ] 8.4.2 建立 `/functions/api/auth/2fa/activate.js`（驗證首發 OTP + 啟用 + 生成備用碼）
-- [ ] 8.4.3 建立 `/functions/api/auth/delete.js`（驗密碼 + Soft/Hard Delete Transaction）
+- [x] 8.4.1 建立 `/functions/api/auth/2fa/setup.js`（產生 TOTP Secret）
+- [x] 8.4.2 建立 `/functions/api/auth/2fa/activate.js`（驗證首發 OTP + 啟用 + 生成備用碼）
+- [x] 8.4.3 建立 `/functions/api/auth/delete.js`（驗密碼 + Soft/Hard Delete Transaction）
 
 ### Step 5：前端獨立登入視圖
 - [ ] 8.5.1 建立 `/public/login.html`（全螢幕 Arshire 風格，含返回首頁連結）
@@ -123,9 +123,9 @@
 | 8.2.1-3 crypto.js | ✅ 完成 | 2026-04-23 | PBKDF2 + 救援碼 |
 | 8.3.1 register.js | ✅ 完成 | 2026-04-23 | 含 guest_id Transaction |
 | 8.3.2 login.js | ✅ 完成 | 2026-04-23 | 密碼 + 2FA 分支 + fakeHashDelay |
-| 8.4.1 2fa/setup.js | ⬜ 待執行 | — | TOTP Secret 生成 |
-| 8.4.2 2fa/activate.js | ⬜ 待執行 | — | 驗 OTP + 備用碼 |
-| 8.4.3 delete.js | ⬜ 待執行 | — | 合規 Soft/Hard Delete |
+| 8.4.1 2fa/setup.js | ✅ 完成 | 2026-04-23 | TOTP Secret 生成 |
+| 8.4.2 2fa/activate.js | ✅ 完成 | 2026-04-23 | 驗 OTP + 備用碼 |
+| 8.4.3 delete.js | ✅ 完成 | 2026-04-23 | 合規 Soft/Hard Delete |
 | 8.5.1 login.html | ⬜ 待執行 | — | Arshire 全螢幕視圖 |
 | 8.5.2 auth-ui.js | ⬜ 待執行 | — | 密碼隱藏 + JWT 流程 |
 
