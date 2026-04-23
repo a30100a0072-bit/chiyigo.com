@@ -93,9 +93,14 @@
 | 10.2-5 JWT payload 擴充 | ✅ 完成 | 2026-04-23 | role + status 全端點 |
 | 10.6 /api/auth/me.js | ✅ 完成 | 2026-04-23 | 即時 DB 封禁查詢 |
 | **階段十一～十四：跨平台（待執行）** | | | |
-| 11.x CORS 防禦層 | ⬜ 待執行 | — | 所有 auth 端點 |
-| 12.x Refresh Token API | ⬜ 待執行 | — | Mobile 長效 Session |
-| 13.x PKCE OAuth 流程 | ⬜ 待執行 | — | Unity / iOS / Android |
+| 11.1.1 Schema 遷移 | ✅ 完成 | 2026-04-23 | device_uuid / platform / client_callback |
+| 11.1.2 discord/init.js | ✅ 完成 | 2026-04-23 | PKCE + platform routing + Discord 重導向 |
+| 11.1.3 discord/callback.js | ✅ 完成 | 2026-04-23 | 原子 state 核銷 + Upsert + JWT + 三平台分流 |
+| 11.2.1 login.js refresh_token | ⬜ 待執行 | — | 登入時同步發 refresh_token |
+| 11.2.2 auth/refresh.js | ⬜ 待執行 | — | device_uuid 驗證 + 輪換 |
+| 11.3.1 game/login.js | ⬜ 待執行 | — | 遊戲端 PKCE 統整入口 |
+| 12.x CORS 防禦層 | ⬜ 待執行 | — | 所有 auth 端點 |
+| 13.x PKCE 完整 OAuth | ⬜ 待執行 | — | Universal Link / App Link |
 | 14.x 管理員 API | ⬜ 待執行 | — | ban / unban / 角色驗證 |
 
 ---
@@ -165,7 +170,47 @@
 
 ---
 
-## 階段十一：跨平台 CORS 防禦層（Web / Mobile / Game Client）
+## 階段十一：遊戲端登入與裝置綁定擴充（Game Auth Expansion）
+
+> **目標**：Discord OAuth MVP + 硬體裝置 UUID 綁定 Refresh Token + 遊戲端 PKCE 統整入口
+
+### 對齊決策記錄
+| 問題 | 決策 |
+|------|------|
+| PC/Desktop 喚醒方式 | Loopback `http://127.0.0.1:PORT/callback`（RFC 8252 推薦）|
+| Mobile 喚醒方式 | Custom URI Scheme `chiyigo://auth/callback` |
+| 裝置綁定欄位 | `device_uuid`（取代 `device_info`），由遊戲引擎傳入 |
+| Discord redirect_uri | 永遠指向 IAM 伺服器端點，平台差異在最終 client_callback 處理 |
+| 第三方平台優先順序 | Discord MVP 實作；Steam / Epic 僅預留 DB 欄位 |
+
+### Schema 遷移（執行前先套用）
+```bash
+# device_uuid 綁定
+npx wrangler d1 execute chiyigo_db --remote --command \
+  "ALTER TABLE refresh_tokens ADD COLUMN device_uuid TEXT;"
+
+# oauth_states 新增 platform 與 client_callback
+npx wrangler d1 execute chiyigo_db --remote --command \
+  "ALTER TABLE oauth_states ADD COLUMN platform TEXT NOT NULL DEFAULT 'web';"
+npx wrangler d1 execute chiyigo_db --remote --command \
+  "ALTER TABLE oauth_states ADD COLUMN client_callback TEXT;"
+```
+
+### Step 1：Discord 登入 MVP
+- [x] 11.1.1 Schema 遷移：oauth_states + refresh_tokens 新欄位
+- [x] 11.1.2 建立 `/functions/api/auth/discord/init.js`（生成 PKCE + 重導向至 Discord）
+- [x] 11.1.3 建立 `/functions/api/auth/discord/callback.js`（換 token、Upsert 用戶、簽發 JWT）
+
+### Step 2：硬體綁定 Refresh Token
+- [ ] 11.2.1 更新 `login.js` + `2fa/verify.js`：登入成功時同步簽發 refresh_token（含 device_uuid）
+- [ ] 11.2.2 建立 `/functions/api/auth/refresh.js`：device_uuid 驗證 + token 輪換
+
+### Step 3：遊戲端 PKCE 統整入口
+- [ ] 11.3.1 建立 `/functions/api/auth/game/login.js`：依平台回傳正確 SSO URL
+
+---
+
+## 階段十二：跨平台 CORS 防禦層（Web / Mobile / Game Client）
 
 > **動機**：iOS / Android / Unity / Unreal 客戶端發出的 HTTP 請求會觸發跨域限制。  
 > 目前只有 JWKS 端點有 CORS，所有 `/api/auth/*` 端點均缺少必要標頭。

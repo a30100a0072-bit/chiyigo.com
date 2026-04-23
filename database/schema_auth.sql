@@ -123,3 +123,16 @@ ALTER TABLE user_identities ADD COLUMN updated_at   TEXT NOT NULL DEFAULT (datet
 
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_role   ON users(role);
+
+-- =============================================
+-- 遊戲端登入擴充遷移（既有部署執行一次）
+-- =============================================
+
+-- refresh_tokens: 以 device_uuid 取代 device_info 進行硬體綁定
+ALTER TABLE refresh_tokens ADD COLUMN device_uuid TEXT;
+
+-- oauth_states: 儲存平台類型與最終客戶端回呼 URI
+ALTER TABLE oauth_states ADD COLUMN platform        TEXT NOT NULL DEFAULT 'web';
+ALTER TABLE oauth_states ADD COLUMN client_callback TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_device ON refresh_tokens(device_uuid);
