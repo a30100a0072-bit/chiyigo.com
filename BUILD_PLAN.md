@@ -100,7 +100,7 @@
 | 11.1.5 Cloudflare env vars | ✅ 完成 | 2026-04-23 | DISCORD_CLIENT_ID/SECRET + IAM_BASE_URL |
 | 11.2.1 login.js refresh_token | ✅ 完成 | 2026-04-23 | login + 2fa/verify 同步簽發 refresh_token |
 | 11.2.2 auth/refresh.js | ✅ 完成 | 2026-04-23 | device_uuid 驗證 + Rotation 原子輪換 |
-| 11.3.1 game/login.js | ⬜ 待執行 | — | 遊戲端 PKCE 統整入口 |
+| 11.3.1 game/login.js | ✅ 完成 | 2026-04-23 | JSON 回傳 SSO URL，遊戲端開系統瀏覽器用 |
 | 12.x CORS 防禦層 | ⬜ 待執行 | — | 所有 auth 端點 |
 | 13.x PKCE 完整 OAuth | ⬜ 待執行 | — | Universal Link / App Link |
 | 14.x 管理員 API | ⬜ 待執行 | — | ban / unban / 角色驗證 |
