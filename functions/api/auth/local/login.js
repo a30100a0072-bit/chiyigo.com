@@ -38,6 +38,8 @@ export async function onRequestPost({ request, env }) {
         u.id            AS user_id,
         u.email         AS email,
         u.email_verified,
+        u.role,
+        u.status,
         u.deleted_at,
         la.password_hash,
         la.password_salt,
@@ -60,11 +62,18 @@ export async function onRequestPost({ request, env }) {
   const valid = await verifyPassword(password, record.password_salt, record.password_hash)
   if (!valid) return res({ error: 'Invalid credentials' }, 401)
 
+  // ── 4.5 封禁帳號：密碼正確但帳號已被封禁，禁止取得新 token ──
+  if (record.status === 'banned') {
+    return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
+  }
+
   // ── 5a. 需要 2FA → 回傳受限 pre_auth_token（ES256）───────────
   if (record.totp_enabled) {
     const preAuthToken = await signJwt({
-      sub:   String(record.user_id),
-      scope: 'pre_auth',
+      sub:    String(record.user_id),
+      scope:  'pre_auth',
+      role:   record.role,
+      status: record.status,
     }, PRE_AUTH_TOKEN_TTL, env)
 
     return res({
@@ -78,6 +87,8 @@ export async function onRequestPost({ request, env }) {
     sub:            String(record.user_id),
     email:          record.email,
     email_verified: record.email_verified === 1,
+    role:           record.role,
+    status:         record.status,
   }, ACCESS_TOKEN_TTL, env)
 
   return res({
@@ -85,6 +96,8 @@ export async function onRequestPost({ request, env }) {
     user_id:        record.user_id,
     email:          record.email,
     email_verified: record.email_verified === 1,
+    role:           record.role,
+    status:         record.status,
   })
 }
 

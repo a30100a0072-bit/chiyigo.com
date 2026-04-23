@@ -136,6 +136,20 @@
 
 ---
 
+## 階段十：遊戲平台擴充（Game Auth Extension）
+
+> **目標**：IAM 升級為全平台統一身份中心，支援遊戲伺服器無狀態鑑權與即時封禁。
+
+### 變更清單
+- [x] 10.1 `schema_auth.sql` — users 新增 `role` / `status`；user_identities 新增 `display_name` / `avatar_url` / `metadata`（支援 Steam / Discord / Epic）
+- [x] 10.2 `utils/auth.js` — requireAuth 新增 banned 攔截（403 ACCOUNT_BANNED）
+- [x] 10.3 `auth/local/login.js` — 封禁帳號拒絕簽發 token；JWT payload 加入 role / status
+- [x] 10.4 `auth/local/register.js` — JWT payload 加入 role / status（預設 player / active）
+- [x] 10.5 `auth/2fa/verify.js` — JWT payload 加入 role / status
+- [x] 10.6 建立 `/api/auth/me.js` — 即時 DB 狀態查詢，提供即時封禁可觀察點
+
+---
+
 ## 認證系統進度記錄
 
 | 步驟 | 狀態 | 完成時間 | 備註 |

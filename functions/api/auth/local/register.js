@@ -86,9 +86,9 @@ export async function onRequestPost({ request, env }) {
     }
   }
 
-  // ── 7. 取得新建 user_id ──────────────────────────────────────
+  // ── 7. 取得新建 user 資料（含 role / status 預設值）──────────
   const user = await db
-    .prepare('SELECT id FROM users WHERE email = ?')
+    .prepare('SELECT id, role, status FROM users WHERE email = ?')
     .bind(emailLower)
     .first()
 
@@ -97,16 +97,20 @@ export async function onRequestPost({ request, env }) {
     sub:            String(user.id),
     email:          emailLower,
     email_verified: false,
+    role:           user.role,
+    status:         user.status,
   }, ACCESS_TOKEN_TTL, env)
 
   // 生產環境應在此發送驗證信（TODO: Cloudflare Email Worker / SendGrid）
   // verifyToken 僅此處出現，請在發信後丟棄
 
   return res({
-    access_token: accessToken,
-    user_id: user.id,
-    email: emailLower,
+    access_token:   accessToken,
+    user_id:        user.id,
+    email:          emailLower,
     email_verified: false,
+    role:           user.role,
+    status:         user.status,
   }, 201)
 }
 

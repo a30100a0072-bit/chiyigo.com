@@ -34,6 +34,11 @@ export async function requireAuth(request, env, requiredScope = null) {
     return { user: null, error: res({ error: 'Unauthorized' }, 401) }
   }
 
+  // 封禁帳號：無論任何 scope，一律阻斷
+  if (payload.status === 'banned') {
+    return { user: null, error: res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403) }
+  }
+
   // scope 檢查：若要求特定 scope 但 JWT 不符，拒絕存取
   if (requiredScope !== null && payload.scope !== requiredScope) {
     return { user: null, error: res({ error: 'Forbidden: wrong token scope' }, 403) }

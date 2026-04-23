@@ -7,10 +7,14 @@
 -- =============================================
 
 -- 主用戶表（不含密碼，支援 OAuth 擴充）
+-- role   : 'player' | 'moderator' | 'admin' | 'developer'
+-- status : 'active' | 'banned' | 'suspended'
 CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   email           TEXT    NOT NULL UNIQUE,
-  email_verified  INTEGER NOT NULL DEFAULT 0, -- BOOL: 0=false, 1=true
+  email_verified  INTEGER NOT NULL DEFAULT 0,     -- BOOL: 0=false, 1=true
+  role            TEXT    NOT NULL DEFAULT 'player',
+  status          TEXT    NOT NULL DEFAULT 'active',
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   deleted_at      TEXT    -- Soft delete 標記
 );
@@ -32,13 +36,21 @@ CREATE TABLE IF NOT EXISTS backup_codes (
   used_at   TEXT    -- NULL = 未使用
 );
 
--- 預留 OAuth 身分表（未來擴充 Google / Apple 登入）
+-- OAuth / 第三方平台身分表
+-- provider 支援：'google' | 'apple' | 'github' | 'steam' | 'discord' | 'epic'
+-- display_name : 該平台的顯示名稱（Steam 暱稱、Discord Tag 等）
+-- avatar_url   : 該平台的頭像 URL
+-- metadata     : JSON 字串，存放平台特定資料（Steam 等級、Discord guild 等）
 CREATE TABLE IF NOT EXISTS user_identities (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider    TEXT    NOT NULL, -- 'google', 'apple', 'github' ...
-  provider_id TEXT    NOT NULL,
-  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider     TEXT    NOT NULL,
+  provider_id  TEXT    NOT NULL,
+  display_name TEXT,
+  avatar_url   TEXT,
+  metadata     TEXT,            -- JSON string
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(provider, provider_id)
 );
 
@@ -96,3 +108,18 @@ ALTER TABLE requisition ADD COLUMN owner_guest_id TEXT;
 ALTER TABLE requisition ADD COLUMN owner_user_id  INTEGER REFERENCES users(id);
 
 CREATE INDEX IF NOT EXISTS idx_requisition_guest_id ON requisition(owner_guest_id);
+
+-- =============================================
+-- 遊戲平台擴充遷移（既有部署執行一次）
+-- =============================================
+
+ALTER TABLE users ADD COLUMN role   TEXT NOT NULL DEFAULT 'player';
+ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
+
+ALTER TABLE user_identities ADD COLUMN display_name TEXT;
+ALTER TABLE user_identities ADD COLUMN avatar_url   TEXT;
+ALTER TABLE user_identities ADD COLUMN metadata     TEXT;
+ALTER TABLE user_identities ADD COLUMN updated_at   TEXT NOT NULL DEFAULT (datetime('now'));
+
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+CREATE INDEX IF NOT EXISTS idx_users_role   ON users(role);

@@ -44,7 +44,8 @@ export async function onRequestPost({ request, env }) {
   // ── 3. 取得帳號資料 ──────────────────────────────────────────
   const record = await db
     .prepare(`
-      SELECT u.email, u.email_verified, la.totp_secret, la.totp_enabled
+      SELECT u.email, u.email_verified, u.role, u.status,
+             la.totp_secret, la.totp_enabled
       FROM users u
       JOIN local_accounts la ON la.user_id = u.id
       WHERE u.id = ? AND u.deleted_at IS NULL
@@ -104,6 +105,8 @@ async function issueToken(userId, record, env) {
     sub:            String(userId),
     email:          record.email,
     email_verified: record.email_verified === 1,
+    role:           record.role,
+    status:         record.status,
   }, ACCESS_TOKEN_TTL, env)
 
   return {
@@ -111,5 +114,7 @@ async function issueToken(userId, record, env) {
     user_id:        userId,
     email:          record.email,
     email_verified: record.email_verified === 1,
+    role:           record.role,
+    status:         record.status,
   }
 }
