@@ -83,9 +83,10 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_device   ON refresh_tokens(device_
 CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_id);
 CREATE INDEX IF NOT EXISTS idx_users_status            ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_role              ON users(role);
-CREATE INDEX IF NOT EXISTS idx_requisition_guest_id    ON requisition(owner_guest_id);
 
 -- ── 訪客綁定欄位（requisition 已存在，補加兩個欄位）────────────
 
 ALTER TABLE requisition ADD COLUMN owner_guest_id TEXT;
 ALTER TABLE requisition ADD COLUMN owner_user_id  INTEGER REFERENCES users(id);
+
+CREATE INDEX IF NOT EXISTS idx_requisition_guest_id ON requisition(owner_guest_id);
