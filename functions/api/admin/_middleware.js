@@ -3,7 +3,7 @@
  * 與 /api/auth/_middleware.js 相同策略，供未來 Admin Panel 跨域存取使用。
  */
 
-import { getCorsHeaders } from '../../../utils/cors.js'
+import { getCorsHeaders } from '../../utils/cors.js'
 
 export async function onRequest({ request, env, next }) {
   const corsHeaders = getCorsHeaders(request, env)

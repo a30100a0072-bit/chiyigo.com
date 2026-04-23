@@ -18,7 +18,7 @@
  *  - 金鑰輪換時建議同步更新 kid，子系統可依 kid 快取選鍵。
  */
 
-import { getPublicJwk } from '../../utils/jwt.js'
+import { getPublicJwk } from '../utils/jwt.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',

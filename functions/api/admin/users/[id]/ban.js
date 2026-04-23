@@ -17,7 +17,7 @@
  *  404 → 用戶不存在
  */
 
-import { requireRole } from '../../../../../utils/requireRole.js'
+import { requireRole } from '../../../../utils/requireRole.js'
 
 const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 

@@ -16,7 +16,7 @@
  *  401 / 403 → 未授權或角色不足
  */
 
-import { requireRole, res } from '../../../utils/requireRole.js'
+import { requireRole, res } from '../../utils/requireRole.js'
 
 export async function onRequestGet({ request, env }) {
   const { user, error } = await requireRole(request, env, 'admin')
@@ -66,12 +66,5 @@ export async function onRequestGet({ request, env }) {
     total: countRow?.total ?? 0,
     page,
     limit,
-  })
-}
-
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
   })
 }
