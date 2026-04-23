@@ -220,7 +220,7 @@
 | 編號 | 測試項目 | 狀態 | 備註 |
 |------|---------|------|------|
 | T1 | JWKS 公鑰端點 | ✅ 通過 | `/.well-known/jwks.json` |
-| T2 | 遊戲端 SSO URL | ✅ 通過 | `GET /api/auth/game/login?platform=pc&port=12345` |
+| T2 | 遊戲端 SSO URL | ✅ 通過 | pc/mobile/web 正常；port 缺失/provider 不支援/平台無效均正確回 400，2026-04-23 |
 | T3 | 帳號註冊 | ✅ 通過 | 201 + access_token + refresh_token，遠端 DB 驗證 2026-04-23 |
 | T4 | 帳號登入 | ✅ 通過 | 200 + access_token + refresh_token，遠端 DB 驗證 2026-04-23 |
 | T5 | /me 即時狀態 | ✅ 通過 | 回傳 role/status/identities |
@@ -251,7 +251,7 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 
 | 優先度 | 項目 | 說明 |
 |--------|------|------|
-| 高 | T2 — 遊戲端 SSO 測試 | `GET /api/auth/game/login?platform=pc&port=12345` |
+| ~~高~~ | ~~T2 — 遊戲端 SSO 測試~~ | ✅ 通過 2026-04-23（pc/mobile/web + 錯誤情境全通過）|
 | ~~高~~ | ~~T7 — Discord OAuth 測試~~ | ✅ 通過 2026-04-23 |
 | ~~高~~ | ~~T8 — Admin API 測試~~ | ✅ 通過 2026-04-23 |
 | ~~中~~ | ~~13.9 Android App Link~~ | ✅ 完成 2026-04-23（SHA-256 待 App 建立後更新）|
