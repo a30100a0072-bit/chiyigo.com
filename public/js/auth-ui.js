@@ -94,7 +94,7 @@ async function logout() {
 // ── 成功後跳轉 ───────────────────────────────────────────────────
 
 function redirectAfterAuth() {
-  const target = sessionStorage.getItem(REDIRECT_KEY) || '/index.html';
+  const target = sessionStorage.getItem(REDIRECT_KEY) || '/dashboard.html';
   sessionStorage.removeItem(REDIRECT_KEY);
   window.location.href = target;
 }
@@ -394,7 +394,17 @@ async function handleTotp(event) {
 // ── 初始化 ───────────────────────────────────────────────────────
 
 (function init() {
-  // 已登入時：PKCE 模式繼續換碼，普通模式跳轉首頁
+  // Discord OAuth 回傳：URL 帶有 ?access_token=...
+  const _urlToken = new URLSearchParams(location.search).get('access_token');
+  if (_urlToken) {
+    saveToken(_urlToken);
+    // 清除 URL 參數（避免 token 留在瀏覽器歷史）
+    history.replaceState(null, '', location.pathname);
+    redirectAfterAuth();
+    return;
+  }
+
+  // 已登入時：PKCE 模式繼續換碼，普通模式跳轉儀表板
   if (getToken()) {
     if (_pkceKey) { handlePkceRedirect(getToken()); return; }
     redirectAfterAuth();

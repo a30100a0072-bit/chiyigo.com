@@ -20,7 +20,7 @@
 | Admin API（封禁/解封/列表） | ✅ 完成，線上測試通過 2026-04-23 |
 | Logout / Revoke Token | ✅ 完成 |
 | PKCE 跨平台 OAuth（authorize/code/token） | ✅ 完成 |
-| Android App Link（assetlinks.json） | ❌ 待實作（Stage 13.9）|
+| Android App Link（assetlinks.json） | ✅ 完成，package_name 佔位符待 App 建立後更新 |
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -168,7 +168,7 @@
 - [x] 13.6 `utils/crypto.js` 新增 `pkceVerify()`（BASE64URL SHA-256 驗證）
 - [x] 13.7 DB 新增 `pkce_sessions` + `auth_codes` 兩張表，已部署至 chiyigo_db
 - [ ] 13.8 `/.well-known/apple-app-site-association`（iOS Universal Link）🔒 需 Apple Developer
-- [ ] 13.9 `/.well-known/assetlinks.json`（Android App Link，不需 Apple Developer，可現在做）
+- [x] 13.9 `/.well-known/assetlinks.json`（Android App Link，佔位符已建立，待填入真實 SHA-256）
 
 ### Unity / Unreal 接入步驟（SDK 文件）
 ```
@@ -191,7 +191,7 @@
 - [x] 14.1 `POST /api/auth/logout`（撤銷 refresh_token，冪等設計，無需 access_token）
 - [x] 14.2 `auth-ui.js` — 存 refresh_token 到 sessionStorage；`logout()` 函數撤銷後清除本地 session
 - [x] 14.3 `register.js` — 補上 refresh_token 回傳（與 login.js 對齊）
-- [ ] 14.4 登出按鈕整合至受保護頁面 UI（待 Stage 15 使用者頁面完成後加入）
+- [x] 14.4 登出按鈕整合至 dashboard.html（Stage 15 已完成）
 
 ---
 
@@ -247,9 +247,9 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | 高 | T2 — 遊戲端 SSO 測試 | `GET /api/auth/game/login?platform=pc&port=12345` |
 | ~~高~~ | ~~T7 — Discord OAuth 測試~~ | ✅ 通過 2026-04-23 |
 | ~~高~~ | ~~T8 — Admin API 測試~~ | ✅ 通過 2026-04-23 |
-| 中 | 13.9 Android App Link | `/.well-known/assetlinks.json`（不需 Apple Developer）|
-| 中 | 受保護頁面 / 使用者儀表板 | 登入後的首頁，含登出按鈕 |
-| 低 | schema_iam_fresh.sql 同步 | 補上 pkce_sessions + auth_codes |
+| ~~中~~ | ~~13.9 Android App Link~~ | ✅ 完成 2026-04-23（SHA-256 待 App 建立後更新）|
+| ~~中~~ | ~~受保護頁面 / 使用者儀表板~~ | ✅ dashboard.html 完成 2026-04-23 |
+| ~~低~~ | ~~schema_iam_fresh.sql 同步~~ | ✅ 已完成 2026-04-23 |
 | ~~低~~ | ~~刪除 chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 |
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 
