@@ -102,6 +102,23 @@ export async function hashToken(token) {
   return bufferToHex(digest);
 }
 
+// ─── PKCE 驗證 ───────────────────────────────────────────────────
+// RFC 7636：S256 方法，code_challenge = BASE64URL(SHA-256(code_verifier))
+
+/**
+ * 驗證 PKCE code_verifier 是否對應 code_challenge。
+ * @param {string} codeVerifier   原始 verifier（客戶端傳入）
+ * @param {string} codeChallenge  BASE64URL(SHA-256(verifier))（authorize 時儲存）
+ * @returns {Promise<boolean>}
+ */
+export async function pkceVerify(codeVerifier, codeChallenge) {
+  const enc    = new TextEncoder();
+  const digest = await crypto.subtle.digest('SHA-256', enc.encode(codeVerifier));
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  return base64 === codeChallenge;
+}
+
 // ─── 備用救援碼 ───────────────────────────────────────────────
 
 const BACKUP_CODE_COUNT = 10;

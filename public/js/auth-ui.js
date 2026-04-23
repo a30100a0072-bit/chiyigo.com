@@ -13,10 +13,11 @@
 
 // ── 常數 ────────────────────────────────────────────────────────
 const API = {
-  login:    '/api/auth/local/login',
-  register: '/api/auth/local/register',
-  totp:     '/api/auth/2fa/verify',
-  logout:   '/api/auth/logout',
+  login:     '/api/auth/local/login',
+  register:  '/api/auth/local/register',
+  totp:      '/api/auth/2fa/verify',
+  logout:    '/api/auth/logout',
+  oauthCode: '/api/auth/oauth/code',
 };
 
 const REDIRECT_KEY       = 'auth_redirect';
@@ -24,6 +25,10 @@ const TOKEN_KEY          = 'access_token';
 const REFRESH_TOKEN_KEY  = 'refresh_token';
 const GUEST_ID_KEY       = 'chiyigo_guest_id';
 const PWD_HIDE_MS        = 10_000;
+
+// ── PKCE 模式偵測 ─────────────────────────────────────────────────
+// pkce_key 由 GET /api/auth/oauth/authorize 產生，存在 URL ?pkce_key=...
+const _pkceKey = new URLSearchParams(location.search).get('pkce_key');
 
 // ── guest_id 管理 ────────────────────────────────────────────────
 
@@ -92,6 +97,29 @@ function redirectAfterAuth() {
   const target = sessionStorage.getItem(REDIRECT_KEY) || '/index.html';
   sessionStorage.removeItem(REDIRECT_KEY);
   window.location.href = target;
+}
+
+// ── PKCE 模式：登入後換取授權碼並跳回 App ──────────────────────
+async function handlePkceRedirect(accessToken) {
+  try {
+    const res = await fetch(API.oauthCode, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + accessToken,
+      },
+      body: JSON.stringify({ pkce_key: _pkceKey }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showMsg(data.error || 'PKCE 授權失敗，請重試');
+      return;
+    }
+    // 跳轉至 App（chiyigo:// 或 loopback 或 https://）
+    window.location.href = data.redirect_url;
+  } catch {
+    showMsg('網路錯誤，請檢查連線後重試');
+  }
 }
 
 // ── 密碼顯示 / 隱藏（10 秒自動回隱藏）──────────────────────────
@@ -247,6 +275,7 @@ async function handleLogin(event) {
 
     saveToken(data.access_token);
     if (data.refresh_token) saveRefreshToken(data.refresh_token);
+    if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
     redirectAfterAuth();
 
   } catch {
@@ -299,6 +328,7 @@ async function handleRegister(event) {
     saveToken(data.access_token);
     if (data.refresh_token) saveRefreshToken(data.refresh_token);
     clearGuestId();
+    if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
     showMsg('帳號建立成功！正在跳轉…', 'success');
     setTimeout(redirectAfterAuth, 800);
 
@@ -351,6 +381,7 @@ async function handleTotp(event) {
     _preAuthToken = null;
     saveToken(data.access_token);
     if (data.refresh_token) saveRefreshToken(data.refresh_token);
+    if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
     redirectAfterAuth();
 
   } catch {
@@ -363,13 +394,18 @@ async function handleTotp(event) {
 // ── 初始化 ───────────────────────────────────────────────────────
 
 (function init() {
-  // 已登入則直接跳轉
+  // 已登入時：PKCE 模式繼續換碼，普通模式跳轉首頁
   if (getToken()) {
+    if (_pkceKey) { handlePkceRedirect(getToken()); return; }
     redirectAfterAuth();
     return;
   }
-  // 預先建立 guest_id
   getOrCreateGuestId();
+  // PKCE 模式顯示提示
+  if (_pkceKey) {
+    const notice = document.getElementById('pkce-notice');
+    if (notice) notice.classList.remove('hidden');
+  }
 })();
 
 // 瀏覽器上一頁復原表單時，強制重置所有密碼欄位為隱藏狀態，避免明文外洩
