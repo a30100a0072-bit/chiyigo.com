@@ -190,6 +190,14 @@
     }
 
     loadProfile();
+
+    // bfcache guard：登出後按瀏覽器上一頁，瀏覽器從記憶體還原頁面時 JS 不重跑。
+    // event.persisted === true 代表從 bfcache 還原，此時重新檢查 token。
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted && !sessionStorage.getItem('access_token')) {
+        window.location.replace('/login.html');
+      }
+    });
   </script>
 </body>
 </html>
