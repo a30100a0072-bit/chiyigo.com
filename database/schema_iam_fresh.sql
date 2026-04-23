@@ -84,6 +84,28 @@ CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_i
 CREATE INDEX IF NOT EXISTS idx_users_status            ON users(status);
 CREATE INDEX IF NOT EXISTS idx_users_role              ON users(role);
 
+-- ── PKCE OAuth 表 ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS pkce_sessions (
+  session_key    TEXT PRIMARY KEY,
+  state          TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  redirect_uri   TEXT NOT NULL,
+  expires_at     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS auth_codes (
+  code_hash      TEXT PRIMARY KEY,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_challenge TEXT NOT NULL,
+  redirect_uri   TEXT NOT NULL,
+  state          TEXT NOT NULL,
+  expires_at     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pkce_sessions_expires  ON pkce_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_auth_codes_expires     ON auth_codes(expires_at);
+
 -- ── 訪客綁定欄位（requisition 已存在，補加兩個欄位）────────────
 
 ALTER TABLE requisition ADD COLUMN owner_guest_id TEXT;

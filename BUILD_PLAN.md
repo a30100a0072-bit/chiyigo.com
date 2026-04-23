@@ -6,21 +6,21 @@
 
 ---
 
-## 整體進度快照（2026-04-23 更新）
+## 整體進度快照（2026-04-23 晚更新）
 
 | 模組 | 狀態 |
 |------|------|
 | 靜態站 + SEO | ✅ 完成 |
-| D1 Schema（全量） | ✅ 已部署至 `chiyigo_db` |
-| Auth 核心（註冊/登入/2FA） | ✅ 完成，線上測試通過 |
+| D1 Schema（全量） | ✅ 已部署至 `chiyigo_db`（含 pkce_sessions + auth_codes）|
+| Auth 核心（註冊/登入/2FA） | ✅ 完成，遠端 DB 驗證通過 2026-04-23 |
 | ES256 JWT + JWKS | ✅ 完成 |
 | Refresh Token 輪換 | ✅ 完成，Replay 防護通過 |
-| Discord OAuth | ✅ 完成 |
+| Discord OAuth | ⚠️ 程式碼完成，env var 空格問題已修復，待 T7 最終驗證 |
 | CORS 防禦層 | ✅ 完成 |
-| Admin API（封禁/解封/列表） | ✅ 完成 |
+| Admin API（封禁/解封/列表） | ✅ 完成，線上測試通過 2026-04-23 |
 | Logout / Revoke Token | ✅ 完成 |
 | PKCE 跨平台 OAuth（authorize/code/token） | ✅ 完成 |
-| Android App Link（assetlinks.json） | ❌ 待實作（Stage 13.6）|
+| Android App Link（assetlinks.json） | ❌ 待實作（Stage 13.9）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -200,9 +200,10 @@
 | 項目 | 說明 | 優先度 |
 |------|------|--------|
 | ~~register.js 未回傳 refresh_token~~ | ✅ 已修復 2026-04-23 | — |
-| chiyigo-db（13ecc734...） | 誤建的第二個 D1，至 Cloudflare Dashboard → D1 刪除 | 低 |
+| ~~chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 | — |
 | www.chiyigo.com 重導向 | 等待 Cloudflare DNS 驗證通過後自動生效 | 自動 |
-| schema_iam_fresh.sql 未同步 | pkce_sessions + auth_codes 尚未加入 fresh schema | 低 |
+| ~~遠端 DB 缺少 Auth schema~~ | ✅ 已部署 2026-04-23，14 張資料表全部到位 | — |
+| ~~schema_iam_fresh.sql 未同步~~ | ✅ pkce_sessions + auth_codes 已加入 2026-04-23 | — |
 | 登出按鈕 UI | logout() 已實作，尚未整合至受保護頁面 | 待受保護頁面完成後加 |
 
 ---
@@ -212,13 +213,13 @@
 | 編號 | 測試項目 | 狀態 | 備註 |
 |------|---------|------|------|
 | T1 | JWKS 公鑰端點 | ✅ 通過 | `/.well-known/jwks.json` |
-| T2 | 遊戲端 SSO URL | ⬜ 待測 | `GET /api/auth/game/login?platform=pc&port=12345` |
-| T3 | 帳號註冊 | ✅ 通過 | 201 + access_token + refresh_token |
-| T4 | 帳號登入 | ✅ 通過 | 200 + access_token + refresh_token |
+| T2 | 遊戲端 SSO URL | ✅ 通過 | `GET /api/auth/game/login?platform=pc&port=12345` |
+| T3 | 帳號註冊 | ✅ 通過 | 201 + access_token + refresh_token，遠端 DB 驗證 2026-04-23 |
+| T4 | 帳號登入 | ✅ 通過 | 200 + access_token + refresh_token，遠端 DB 驗證 2026-04-23 |
 | T5 | /me 即時狀態 | ✅ 通過 | 回傳 role/status/identities |
 | T6 | Refresh Token 輪換 | ✅ 通過 | 輪換成功，舊 token 重放回 401 |
-| T7 | Discord OAuth（瀏覽器） | ⬜ 待測 | 需手動開瀏覽器測試 |
-| T8 | Admin API | ⬜ 待測 | 需先手動升 role='admin' |
+| T7 | Discord OAuth（瀏覽器） | ⬜ 待測 | env var 名稱空格已修復（API 直接更正），待重新部署後驗證 |
+| T8 | Admin API | ✅ 通過 | 列表/ban/unban 邏輯全通過，自封禁與角色保護正常 2026-04-23 |
 | T9 | PKCE 完整流程 | ✅ 通過 | authorize→code→token，重放攻擊防護通過 |
 | T10 | Logout 撤銷 | ✅ 通過 | 撤銷後 refresh 回 401，冪等 200 |
 
@@ -249,7 +250,7 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | 中 | 13.9 Android App Link | `/.well-known/assetlinks.json`（不需 Apple Developer）|
 | 中 | 受保護頁面 / 使用者儀表板 | 登入後的首頁，含登出按鈕 |
 | 低 | schema_iam_fresh.sql 同步 | 補上 pkce_sessions + auth_codes |
-| 低 | 刪除 chiyigo-db（13ecc734...） | Cloudflare Dashboard 手動刪除 |
+| ~~低~~ | ~~刪除 chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 |
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 
 ---
