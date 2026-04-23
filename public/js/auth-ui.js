@@ -142,6 +142,7 @@ function switchTab(tab) {
   clearMsg();
   hidePassword('login-password', 'login-eye');
   hidePassword('reg-password',   'reg-eye');
+  hidePassword('reg-confirm',    'reg-confirm-eye');
 }
 
 // ── 訊息顯示 ─────────────────────────────────────────────────────
@@ -226,12 +227,19 @@ async function handleRegister(event) {
 
   const email    = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-password').value;
+  const confirm  = document.getElementById('reg-confirm').value;
   const guest_id = getOrCreateGuestId();
   const btn      = document.getElementById('reg-btn');
   btn.dataset.label = '建立帳號';
 
   if (password.length < 8) {
     showMsg('密碼至少需要 8 個字元');
+    return;
+  }
+
+  if (password !== confirm) {
+    showMsg('兩次輸入的密碼不一致，請重新確認');
+    document.getElementById('reg-confirm').focus();
     return;
   }
 
