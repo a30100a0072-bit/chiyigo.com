@@ -18,9 +18,10 @@
 | Discord OAuth | ✅ 完成 |
 | CORS 防禦層 | ✅ 完成 |
 | Admin API（封禁/解封/列表） | ✅ 完成 |
-| **Logout / Revoke Token** | ✅ 完成 |
-| **PKCE 跨平台 OAuth** | ❌ 待實作（Stage 13）|
-| Universal Link / App Link | 🔒 待辦（需 Apple Developer $99/yr）|
+| Logout / Revoke Token | ✅ 完成 |
+| PKCE 跨平台 OAuth（authorize/code/token） | ✅ 完成 |
+| Android App Link（assetlinks.json） | ❌ 待實作（Stage 13.6）|
+| iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
 
@@ -145,7 +146,7 @@
 
 ---
 
-## 階段十三：PKCE 跨平台 OAuth（待實作）
+## 階段十三：PKCE 跨平台 OAuth
 
 > **動機**：Unity / Unreal / iOS / Android 原生 App 透過 PKCE 授權碼流程喚起 IAM 登入頁，
 > 登入後將 code 透過 Custom URI Scheme 回傳 App 換取 token。
@@ -159,12 +160,29 @@
 | Unity / Unreal | `chiyigo://auth/callback` | Custom URI Scheme |
 | Desktop Launcher | `http://127.0.0.1:PORT/callback` | Loopback |
 
-- [ ] 13.1 `GET /api/auth/oauth/authorize`（生成 state + PKCE challenge → 重導至 login.html）
-- [ ] 13.2 `POST /api/auth/oauth/token`（code + code_verifier 換發 token，DELETE RETURNING 防重放）
-- [ ] 13.3 `redirect_uri` 白名單驗證（允許 https:// + chiyigo:// + loopback）
-- [ ] 13.4 `login.html` 支援 PKCE 模式（偵測 `?response_type=code`，登入後附 code 重導）
-- [ ] 13.5 `/.well-known/apple-app-site-association`（iOS Universal Link）🔒 需 Apple Developer
-- [ ] 13.6 `/.well-known/assetlinks.json`（Android App Link）
+- [x] 13.1 `GET /api/auth/oauth/authorize`（驗參數 → 存 pkce_session → 302 login.html?pkce_key=）
+- [x] 13.2 `POST /api/auth/oauth/code`（登入後由 login.html 呼叫，生成一次性 auth code）
+- [x] 13.3 `POST /api/auth/oauth/token`（code + code_verifier → token，DELETE RETURNING 防重放）
+- [x] 13.4 `redirect_uri` 白名單（https://chiyigo.com/ + chiyigo:// + loopback）
+- [x] 13.5 `login.html` PKCE 模式（偵測 ?pkce_key=，顯示 App 授權提示，登入後跳回 App）
+- [x] 13.6 `utils/crypto.js` 新增 `pkceVerify()`（BASE64URL SHA-256 驗證）
+- [x] 13.7 DB 新增 `pkce_sessions` + `auth_codes` 兩張表，已部署至 chiyigo_db
+- [ ] 13.8 `/.well-known/apple-app-site-association`（iOS Universal Link）🔒 需 Apple Developer
+- [ ] 13.9 `/.well-known/assetlinks.json`（Android App Link，不需 Apple Developer，可現在做）
+
+### Unity / Unreal 接入步驟（SDK 文件）
+```
+1. 生成 code_verifier（32 bytes random hex）
+2. code_challenge = BASE64URL(SHA256(code_verifier))
+3. GET /api/auth/oauth/authorize?response_type=code
+       &redirect_uri=chiyigo://auth/callback
+       &code_challenge=<challenge>
+       &code_challenge_method=S256
+       &state=<random>
+4. 監聽 chiyigo://auth/callback?code=...&state=... 回傳
+5. POST /api/auth/oauth/token { code, code_verifier, redirect_uri }
+6. 取得 access_token + refresh_token（30 天）
+```
 
 ---
 
@@ -173,7 +191,7 @@
 - [x] 14.1 `POST /api/auth/logout`（撤銷 refresh_token，冪等設計，無需 access_token）
 - [x] 14.2 `auth-ui.js` — 存 refresh_token 到 sessionStorage；`logout()` 函數撤銷後清除本地 session
 - [x] 14.3 `register.js` — 補上 refresh_token 回傳（與 login.js 對齊）
-- [ ] 14.4 登出按鈕（待有受保護頁面後整合至 UI）
+- [ ] 14.4 登出按鈕整合至受保護頁面 UI（待 Stage 15 使用者頁面完成後加入）
 
 ---
 
@@ -181,9 +199,11 @@
 
 | 項目 | 說明 | 優先度 |
 |------|------|--------|
-| ~~register.js 未回傳 refresh_token~~ | ✅ 已修復（2026-04-23） | — |
-| chiyigo-db（13ecc734...） | 誤建的第二個 D1 實例，可至 Cloudflare Dashboard 刪除 | 低 |
+| ~~register.js 未回傳 refresh_token~~ | ✅ 已修復 2026-04-23 | — |
+| chiyigo-db（13ecc734...） | 誤建的第二個 D1，至 Cloudflare Dashboard → D1 刪除 | 低 |
 | www.chiyigo.com 重導向 | 等待 Cloudflare DNS 驗證通過後自動生效 | 自動 |
+| schema_iam_fresh.sql 未同步 | pkce_sessions + auth_codes 尚未加入 fresh schema | 低 |
+| 登出按鈕 UI | logout() 已實作，尚未整合至受保護頁面 | 待受保護頁面完成後加 |
 
 ---
 
@@ -193,12 +213,14 @@
 |------|---------|------|------|
 | T1 | JWKS 公鑰端點 | ✅ 通過 | `/.well-known/jwks.json` |
 | T2 | 遊戲端 SSO URL | ⬜ 待測 | `GET /api/auth/game/login?platform=pc&port=12345` |
-| T3 | 帳號註冊 | ✅ 通過 | 201 + access_token，Replay 回 409 |
+| T3 | 帳號註冊 | ✅ 通過 | 201 + access_token + refresh_token |
 | T4 | 帳號登入 | ✅ 通過 | 200 + access_token + refresh_token |
 | T5 | /me 即時狀態 | ✅ 通過 | 回傳 role/status/identities |
 | T6 | Refresh Token 輪換 | ✅ 通過 | 輪換成功，舊 token 重放回 401 |
 | T7 | Discord OAuth（瀏覽器） | ⬜ 待測 | 需手動開瀏覽器測試 |
 | T8 | Admin API | ⬜ 待測 | 需先手動升 role='admin' |
+| T9 | PKCE 完整流程 | ✅ 通過 | authorize→code→token，重放攻擊防護通過 |
+| T10 | Logout 撤銷 | ✅ 通過 | 撤銷後 refresh 回 401，冪等 200 |
 
 ### T2 測試指令
 ```bash
@@ -214,6 +236,21 @@ npx wrangler d1 execute chiyigo_db --remote --command "UPDATE users SET role='ad
 # 3. 登入取得 JWT 後測試
 curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 ```
+
+---
+
+## 階段十五：待辦（優先序）
+
+| 優先度 | 項目 | 說明 |
+|--------|------|------|
+| 高 | T2 — 遊戲端 SSO 測試 | `GET /api/auth/game/login?platform=pc&port=12345` |
+| 高 | T7 — Discord OAuth 測試 | 瀏覽器手動測試 `GET /api/auth/discord/init?platform=web` |
+| 高 | T8 — Admin API 測試 | 升 role='admin' 後測 ban/unban/list |
+| 中 | 13.9 Android App Link | `/.well-known/assetlinks.json`（不需 Apple Developer）|
+| 中 | 受保護頁面 / 使用者儀表板 | 登入後的首頁，含登出按鈕 |
+| 低 | schema_iam_fresh.sql 同步 | 補上 pkce_sessions + auth_codes |
+| 低 | 刪除 chiyigo-db（13ecc734...） | Cloudflare Dashboard 手動刪除 |
+| 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 
 ---
 
