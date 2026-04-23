@@ -332,3 +332,13 @@ async function handleTotp(event) {
   // 預先建立 guest_id
   getOrCreateGuestId();
 })();
+
+// 瀏覽器上一頁復原表單時，強制重置所有密碼欄位為隱藏狀態，避免明文外洩
+window.addEventListener('pageshow', () => {
+  hidePassword('login-password', 'login-eye');
+  hidePassword('reg-password',   'reg-eye');
+  hidePassword('reg-confirm',    'reg-confirm-eye');
+  clearTimeout(_pwdTimers['login-password']);
+  clearTimeout(_pwdTimers['reg-password']);
+  clearTimeout(_pwdTimers['reg-confirm']);
+});
