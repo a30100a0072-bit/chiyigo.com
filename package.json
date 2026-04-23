@@ -1,0 +1,10 @@
+{
+  "name": "chiyigo-com",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "jose": "^5.9.6",
+    "otpauth": "^9.3.6"
+  }
+}
