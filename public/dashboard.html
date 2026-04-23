@@ -204,11 +204,20 @@
 
     loadProfile();
 
-    // bfcache guard：登出後按瀏覽器上一頁，瀏覽器從記憶體還原頁面時 JS 不重跑。
-    // event.persisted === true 代表從 bfcache 還原，此時重新檢查 token。
+    // pagehide：頁面進入 bfcache 前重置 UI，確保還原時顯示 spinner 而非舊資料。
+    window.addEventListener('pagehide', () => {
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('user-card').classList.add('hidden');
+      document.getElementById('error-card').classList.add('hidden');
+    });
+
+    // pageshow：bfcache 還原後重新驗證；pagehide 已重置 UI 所以無閃爍。
     window.addEventListener('pageshow', (event) => {
-      if (event.persisted && !sessionStorage.getItem('access_token')) {
+      if (!event.persisted) return;
+      if (!sessionStorage.getItem('access_token')) {
         window.location.replace('/login.html');
+      } else {
+        loadProfile();
       }
     });
   </script>
