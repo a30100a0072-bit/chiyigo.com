@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-23 深夜更新，CI #24 全綠）
+## 整體進度快照（2026-04-23 更新，HttpOnly Cookie debug 進行中）
 
 | 模組 | 狀態 |
 |------|------|
@@ -22,7 +22,7 @@
 | PKCE 跨平台 OAuth（authorize/code/token） | ✅ 完成 |
 | Android App Link（assetlinks.json） | ✅ 完成，package_name 佔位符待 App 建立後更新 |
 | 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
-| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ✅ 完成，瀏覽器驗證通過 2026-04-23（A 登入設 Cookie ✅ B 登出清 Cookie ✅）|
+| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ⚠️ Debug 中（見下方 Stage 16）|
 | D1 垃圾回收 Cron Trigger | ✅ 完成（GitHub Actions `cleanup.yml`，每日 UTC 03:00）|
 | Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
@@ -203,6 +203,8 @@
 
 | 項目 | 說明 | 優先度 |
 |------|------|--------|
+| **HttpOnly Cookie 密碼登入回歸** | commit `4cd7511` 引入：CF Workers `for...of` 包含 set-cookie，與 `getAll()` 重複添加，Chrome 拒絕儲存。修復 commit `a2ac5a1`（明確 skip set-cookie in loop）**尚未推送**，push 後需重新驗證 Test A/B | 🔴 高 |
+| **Discord OAuth HttpOnly Cookie 未儲存** | Set-Cookie header 正常出現於 response（SameSite=Lax，格式正確），但 Chrome Application→Cookies 無顯示。密碼登入回歸修復後需再確認，若仍無效則排查 CDN/Chrome cross-site navigation cookie 限制 | 🔴 高 |
 | ~~register.js 未回傳 refresh_token~~ | ✅ 已修復 2026-04-23 | — |
 | ~~chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 | — |
 | www.chiyigo.com 重導向 | 等待 Cloudflare DNS 驗證通過後自動生效 | 自動 |
@@ -263,29 +265,43 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 
 > **動機**：Web 端 Refresh Token 存於 sessionStorage 有 XSS 竊取風險；D1 狀態表無限膨脹需自動清理。
 
-### Step 1：Web 端 HttpOnly Cookie 雙軌制（✅ 完成 2026-04-23）
+### Step 1：Web 端 HttpOnly Cookie 雙軌制（⚠️ Debug 中）
 
 > **偵測邏輯**：`!device_uuid && (!platform || platform==='web')` → Web 模式；App 傳入 `device_uuid` 則走 JSON 模式。
 
 | 子項目 | 說明 |
 |--------|------|
-| 16.1 | ✅ `login.js` — Web 端回傳 `Set-Cookie: chiyigo_refresh; HttpOnly; Secure; SameSite=Strict; Path=/api/auth`，JSON 不含 refresh_token |
-| 16.2 | ✅ `discord/callback.js` — Web 平台建立 refresh_token 並 Cookie，302 僅帶 access_token |
+| 16.1 | ✅ `login.js` — Web 端回傳 `Set-Cookie: chiyigo_refresh; HttpOnly; Secure; Path=/api/auth`，JSON 不含 refresh_token |
+| 16.2 | ✅ `discord/callback.js` — Web 平台建立 refresh_token，回傳 200 HTML + Set-Cookie（改 302 以繞過 CDN 過濾），JS 寫 sessionStorage 後跳轉 dashboard |
 | 16.3 | ✅ `refresh.js` — 優先讀 Cookie，其次讀 body；回傳時同步輪換 Cookie 或 JSON |
-| 16.4 | ✅ `auth-ui.js` — 移除 REFRESH_TOKEN_KEY / saveRefreshToken / getRefreshToken；logout 改用 `credentials: 'include'`，無需手動帶 token |
-| 16.5 | ✅ `logout.js` — 讀 Cookie 或 body；回傳 `Set-Cookie: Max-Age=0` 清除 Cookie；無 token 時冪等 200 |
+| 16.4 | ✅ `auth-ui.js` v6 — 移除 REFRESH_TOKEN_KEY / saveRefreshToken / getRefreshToken；logout 改用 `credentials: 'include'` |
+| 16.5 | ✅ `logout.js` — 讀 Cookie 或 body；回傳 `Set-Cookie: Max-Age=0` 清除 Cookie；冪等 200 |
 | 16.9 | ✅ `login.html` 補上 Discord 登入 / 繼續按鈕（登入 + 註冊兩個分頁均已加入）|
+
+**SameSite 變更（2026-04-23）**
+> 所有 `refreshCookie()` helper 從 `SameSite=Strict` 改為 `SameSite=Lax`。
+> 原因：Discord OAuth 為跨站頂層導航（discord.com → chiyigo.com），Strict 在部分 Chrome 版本可能阻擋 cookie 儲存。
+
+**_middleware.js Set-Cookie 重複 Debug 歷程**
+
+| commit | 內容 | 結果 |
+|--------|------|------|
+| `466d0f5` | `new Headers(response.headers)` + `getAll()` append — 有重複但密碼登入 cookie ✅ | 密碼登入 ✅，Discord ❌ |
+| `4cd7511` | 改為 `new Headers()` + `for...of` + `getAll()` — **CF Workers for...of 迭代會包含 set-cookie**，造成雙重添加 | 密碼登入 ❌（回歸），Discord ❌ |
+| `a2ac5a1` | 在 `for...of` 中明確 skip `set-cookie`，僅靠 `getAll()` 添加 — 每個 cookie 精確一份 | ⏳ 尚未推送驗證 |
+
+**待驗證（`git push` 後）**
+- [ ] Test A：密碼登入後 Application → Cookies 顯示 `chiyigo_refresh`（回歸修復確認）
+- [ ] Test B：登出後 Cookie 清除
+- [ ] Test C：Discord 登入後 Application → Cookies 顯示 `chiyigo_refresh`
 
 **架構備忘**
 ```
-Web 請求判斷條件（滿足任一）：
-  - URL 無 platform 參數，或 platform = 'web'
-  - User-Agent 包含 Mozilla/（瀏覽器特徵）
-  - Header 有 Origin 或 Referer 指向 chiyigo.com
+Web 請求判斷條件：
+  - 無 device_uuid，且（無 platform 或 platform = 'web'）
 
-App/遊戲端（保持 JSON）：
-  - platform = 'unity' / 'unreal' / 'ios' / 'android'
-  - User-Agent 無 Mozilla/
+App/遊戲端（保持 JSON body）：
+  - 傳入 device_uuid（遊戲引擎綁定硬體識別碼）
 ```
 
 ### Step 2：D1 垃圾回收排程（✅ 完成 2026-04-23）
