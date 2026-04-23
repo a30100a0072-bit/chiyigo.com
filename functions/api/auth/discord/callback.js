@@ -229,7 +229,8 @@ export async function onRequestGet({ request, env }) {
       return Response.redirect(url, 302)
     }
     default: {
-      // Web: 建立 refresh_token 並以 HttpOnly Cookie 送出，只帶 access_token 回 login 頁
+      // Web: 建立 refresh_token，回傳 200 HTML 帶 Set-Cookie
+      // 不用 302 redirect，因為 Cloudflare CDN 可能過濾 redirect response 的 Set-Cookie
       const refreshToken     = generateSecureToken()
       const refreshTokenHash = await hashToken(refreshToken)
       const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
@@ -240,15 +241,20 @@ export async function onRequestGet({ request, env }) {
         VALUES (?, ?, NULL, ?)
       `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
 
-      const dest = new URL('/login', baseUrl)
-      dest.searchParams.set('access_token', accessToken)
-      dest.searchParams.set('provider', 'discord')
+      // JSON.stringify 確保 JWT 字串安全嵌入 JS（防 XSS）
+      const safeToken = JSON.stringify(accessToken)
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<script>
+try{sessionStorage.setItem('access_token',${safeToken});}catch(e){}
+location.replace('/dashboard.html');
+</script></head><body></body></html>`
 
-      return new Response(null, {
-        status: 302,
+      return new Response(html, {
+        status: 200,
         headers: {
-          'Location':   dest.toString(),
-          'Set-Cookie': refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400),
+          'Content-Type':  'text/html;charset=UTF-8',
+          'Cache-Control': 'no-store',
+          'Set-Cookie':    refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400),
         },
       })
     }
