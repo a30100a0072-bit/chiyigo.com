@@ -394,11 +394,13 @@ async function handleTotp(event) {
 // ── 初始化 ───────────────────────────────────────────────────────
 
 (function init() {
+  // 只在登入頁執行重導向邏輯（dashboard 等頁面載入此 js 只需 logout()）
+  if (!document.getElementById('form-login')) return;
+
   // Discord OAuth 回傳：URL 帶有 ?access_token=...
   const _urlToken = new URLSearchParams(location.search).get('access_token');
   if (_urlToken) {
     saveToken(_urlToken);
-    // 清除 URL 參數（避免 token 留在瀏覽器歷史）
     history.replaceState(null, '', location.pathname);
     redirectAfterAuth();
     return;
@@ -411,7 +413,6 @@ async function handleTotp(event) {
     return;
   }
   getOrCreateGuestId();
-  // PKCE 模式顯示提示
   if (_pkceKey) {
     const notice = document.getElementById('pkce-notice');
     if (notice) notice.classList.remove('hidden');

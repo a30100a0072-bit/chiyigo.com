@@ -248,7 +248,7 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | ~~高~~ | ~~T7 — Discord OAuth 測試~~ | ✅ 通過 2026-04-23 |
 | ~~高~~ | ~~T8 — Admin API 測試~~ | ✅ 通過 2026-04-23 |
 | ~~中~~ | ~~13.9 Android App Link~~ | ✅ 完成 2026-04-23（SHA-256 待 App 建立後更新）|
-| ~~中~~ | ~~受保護頁面 / 使用者儀表板~~ | ✅ dashboard.html 完成 2026-04-23 |
+| ~~中~~ | ~~受保護頁面 / 使用者儀表板~~ | ✅ dashboard.html 完成，無限重導向 bug 已修 2026-04-23 |
 | ~~低~~ | ~~schema_iam_fresh.sql 同步~~ | ✅ 已完成 2026-04-23 |
 | ~~低~~ | ~~刪除 chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 |
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
