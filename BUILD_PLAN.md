@@ -273,11 +273,11 @@ npx wrangler d1 execute chiyigo_db --remote --command \
 
 > **動機**：role='admin' 的管理員需要能即時封禁 / 解封玩家，並且端點需要有 role 驗證中介軟體。
 
-### 待執行
-- [ ] 14.1 建立 `functions/utils/requireRole.js`：requireRole('admin') 中介軟體
-- [ ] 14.2 建立 `POST /api/admin/users/[id]/ban`：封禁帳號 + 撤銷所有 refresh_token
-- [ ] 14.3 建立 `POST /api/admin/users/[id]/unban`：解封帳號
-- [ ] 14.4 建立 `GET /api/admin/users`：查詢用戶列表（分頁 + 狀態篩選）
+### 已完成
+- [x] 14.1 建立 `functions/utils/requireRole.js`：角色層級中介軟體（player<moderator<admin<developer）
+- [x] 14.2 建立 `POST /api/admin/users/[id]/ban`：封禁 + 原子撤銷所有 refresh_token + 角色保護
+- [x] 14.3 建立 `POST /api/admin/users/[id]/unban`：解封帳號 + 角色保護
+- [x] 14.4 建立 `GET /api/admin/users`：分頁查詢 + status / role / email 篩選
 
 ---
 
