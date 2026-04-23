@@ -23,6 +23,8 @@
 | Android App Link（assetlinks.json） | ✅ 完成，package_name 佔位符待 App 建立後更新 |
 | 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
+| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ⚠️ 待實作（階段十六 Step 1）|
+| D1 垃圾回收 Cron Trigger | ⚠️ 待實作（階段十六 Step 2）|
 
 ---
 
@@ -253,6 +255,51 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | ~~低~~ | ~~schema_iam_fresh.sql 同步~~ | ✅ 已完成 2026-04-23 |
 | ~~低~~ | ~~刪除 chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 |
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
+
+---
+
+## 階段十六：安全防禦補強（Security & DevOps Patch）
+
+> **動機**：Web 端 Refresh Token 存於 sessionStorage 有 XSS 竊取風險；D1 狀態表無限膨脹需自動清理。
+
+### Step 1：Web 端 HttpOnly Cookie 雙軌制（⚠️ 未實作）
+
+| 子項目 | 說明 |
+|--------|------|
+| 16.1 | `login.js` — 偵測 Web 請求（`platform` 參數或 User-Agent），Web 端改用 `Set-Cookie: chiyigo_refresh=…; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=604800`，JSON 不再回傳 refresh_token |
+| 16.2 | `discord/callback.js` — 同上，Web 平台改用 Cookie，App/遊戲端保持 JSON |
+| 16.3 | `refresh.js` — 優先讀取 `Cookie: chiyigo_refresh`，其次讀 JSON body（相容 App 端） |
+| 16.4 | `auth-ui.js` — 移除 sessionStorage 對 refresh_token 的讀寫；`fetch /api/auth/refresh` 加上 `credentials: 'include'`；`logout()` 保持 fire-and-forget（Cookie 由 Server 端 `Set-Cookie: Max-Age=0` 清除）|
+| 16.5 | `logout.js` — 回傳時加上 `Set-Cookie: chiyigo_refresh=; Max-Age=0; Path=/api/auth` 清除 Cookie |
+
+**架構備忘**
+```
+Web 請求判斷條件（滿足任一）：
+  - URL 無 platform 參數，或 platform = 'web'
+  - User-Agent 包含 Mozilla/（瀏覽器特徵）
+  - Header 有 Origin 或 Referer 指向 chiyigo.com
+
+App/遊戲端（保持 JSON）：
+  - platform = 'unity' / 'unreal' / 'ios' / 'android'
+  - User-Agent 無 Mozilla/
+```
+
+### Step 2：D1 垃圾回收排程（⚠️ 未實作）
+
+| 子項目 | 說明 |
+|--------|------|
+| 16.6 | 建立 `functions/scheduled.js` — Cloudflare Pages Scheduled Worker，清理四張表過期資料 |
+| 16.7 | `wrangler.toml` — 加入 `[triggers] crons = ["0 3 * * *"]`（每日 UTC 03:00 觸發）|
+
+**清理 SQL**
+```sql
+DELETE FROM auth_codes        WHERE expires_at < datetime('now');
+DELETE FROM pkce_sessions     WHERE expires_at < datetime('now');
+DELETE FROM email_verifications WHERE expires_at < datetime('now');
+DELETE FROM refresh_tokens    WHERE expires_at < datetime('now');
+```
+
+> **注意**：`email_verifications` 表目前尚未建立（Email 驗證流程未實作），排程函式需用 `IF EXISTS` 或 try/catch 保護。
 
 ---
 
