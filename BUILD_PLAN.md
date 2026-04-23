@@ -286,13 +286,13 @@ App/遊戲端（保持 JSON）：
 
 ### Step 2：D1 垃圾回收排程（✅ 完成 2026-04-23）
 
-> **架構備忘**：Cloudflare Pages Functions 不支援 cron triggers，改為獨立 Worker（`workers/cleanup/`）掛相同 D1。
+> **架構備忘**：Cloudflare Pages Functions 不支援 cron triggers；獨立 Worker 需要 Workers Scripts Write 權限（現有 token 無此權限）。
+> 改採 GitHub Actions `schedule` cron，直接跑 `wrangler d1 execute --remote` — 完全相容現有 D1 Write token。
 
 | 子項目 | 說明 |
 |--------|------|
-| 16.6 | ✅ `workers/cleanup/index.js` — 獨立 Worker，清理四張表（auth_codes / pkce_sessions / refresh_tokens / email_verifications）|
-| 16.7 | ✅ `workers/cleanup/wrangler.toml` — `[triggers] crons = ["0 3 * * *"]`（每日 UTC 03:00）|
-| 16.8 | ✅ `.github/workflows/deploy.yml` — 新增 "Deploy Cleanup Worker" step，Pages 部署後自動部署 Worker |
+| 16.6 | ✅ `.github/workflows/cleanup.yml` — 每日 UTC 03:00 觸發，清理三張表（auth_codes / pkce_sessions / refresh_tokens）|
+| 16.7 | ✅ 支援 `workflow_dispatch` 手動觸發，方便臨時清理 |
 
 **清理 SQL**
 ```sql

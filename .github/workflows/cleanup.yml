@@ -1,0 +1,31 @@
+name: D1 Garbage Collection
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 每日 UTC 03:00 (台灣時間 11:00)
+  workflow_dispatch:        # 允許手動觸發
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Delete expired auth_codes
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: d1 execute chiyigo_db --remote --command "DELETE FROM auth_codes WHERE expires_at < datetime('now');"
+
+      - name: Delete expired pkce_sessions
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: d1 execute chiyigo_db --remote --command "DELETE FROM pkce_sessions WHERE expires_at < datetime('now');"
+
+      - name: Delete expired refresh_tokens
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: d1 execute chiyigo_db --remote --command "DELETE FROM refresh_tokens WHERE expires_at < datetime('now');"
