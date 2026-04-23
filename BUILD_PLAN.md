@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-23 更新，HttpOnly Cookie debug 進行中）
+## 整體進度快照（2026-04-23 更新）
 
 | 模組 | 狀態 |
 |------|------|
@@ -22,7 +22,7 @@
 | PKCE 跨平台 OAuth（authorize/code/token） | ✅ 完成 |
 | Android App Link（assetlinks.json） | ✅ 完成，package_name 佔位符待 App 建立後更新 |
 | 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
-| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ⚠️ Debug 中（見下方 Stage 16）|
+| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ✅ 完成，密碼 + Discord 登入均驗證通過 2026-04-23 |
 | D1 垃圾回收 Cron Trigger | ✅ 完成（GitHub Actions `cleanup.yml`，每日 UTC 03:00）|
 | Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
@@ -203,8 +203,9 @@
 
 | 項目 | 說明 | 優先度 |
 |------|------|--------|
-| **HttpOnly Cookie 密碼登入回歸** | commit `4cd7511` 引入：CF Workers `for...of` 包含 set-cookie，與 `getAll()` 重複添加，Chrome 拒絕儲存。修復 commit `a2ac5a1`（明確 skip set-cookie in loop）**尚未推送**，push 後需重新驗證 Test A/B | 🔴 高 |
-| **Discord OAuth HttpOnly Cookie 未儲存** | Set-Cookie header 正常出現於 response（SameSite=Lax，格式正確），但 Chrome Application→Cookies 無顯示。密碼登入回歸修復後需再確認，若仍無效則排查 CDN/Chrome cross-site navigation cookie 限制 | 🔴 高 |
+| **登出後按瀏覽器上一頁顯示 dashboard** | bfcache（Back/Forward Cache）問題：登出後按上一頁，瀏覽器從記憶體恢復 dashboard 頁面，JS 不重跑，sessionStorage 雖已清除但畫面仍顯示。需在 dashboard.html 加入 `pageshow` 事件監聽，在 `event.persisted === true` 時重新驗證 token | 🔴 高 |
+| ~~HttpOnly Cookie 密碼登入回歸~~ | ✅ 已修復 2026-04-23（commit `63b2dfe`：`new Response(body, response)` 還原法，消除 getAll 相容性風險）| — |
+| ~~Discord OAuth HttpOnly Cookie 未儲存~~ | ✅ 已修復 2026-04-23，與密碼登入同一根因 | — |
 | ~~register.js 未回傳 refresh_token~~ | ✅ 已修復 2026-04-23 | — |
 | ~~chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 | — |
 | www.chiyigo.com 重導向 | 等待 Cloudflare DNS 驗證通過後自動生效 | 自動 |
@@ -282,18 +283,22 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 > 所有 `refreshCookie()` helper 從 `SameSite=Strict` 改為 `SameSite=Lax`。
 > 原因：Discord OAuth 為跨站頂層導航（discord.com → chiyigo.com），Strict 在部分 Chrome 版本可能阻擋 cookie 儲存。
 
-**_middleware.js Set-Cookie 重複 Debug 歷程**
+**_middleware.js Set-Cookie 根因分析與修復歷程**
 
 | commit | 內容 | 結果 |
 |--------|------|------|
-| `466d0f5` | `new Headers(response.headers)` + `getAll()` append — 有重複但密碼登入 cookie ✅ | 密碼登入 ✅，Discord ❌ |
-| `4cd7511` | 改為 `new Headers()` + `for...of` + `getAll()` — **CF Workers for...of 迭代會包含 set-cookie**，造成雙重添加 | 密碼登入 ❌（回歸），Discord ❌ |
-| `a2ac5a1` | 在 `for...of` 中明確 skip `set-cookie`，僅靠 `getAll()` 添加 — 每個 cookie 精確一份 | ⏳ 尚未推送驗證 |
+| `e7d0a44` | 初始實作：`new Response(response.body, response)` — 直接複製 Response 繼承原生 Set-Cookie | ✅ 正常（22bdecd 驗證）|
+| `466d0f5` | 改為 `new Headers(response.headers)` + `getAll()` — 根本不需要改，反而引入 `getAll` 相容性風險 | 密碼 ✅，Discord ❌ |
+| `4cd7511` | `for...of` + `getAll()` — CF Workers `for...of` 包含 set-cookie，造成雙重添加 | 密碼 ❌（回歸），Discord ❌ |
+| `a2ac5a1` | 明確 skip set-cookie + 僅靠 `getAll()` 添加 | 密碼 ❌，Discord ❌ |
+| `63b2dfe` | **✅ 最終修復**：還原至 `new Response(body, response)` 原始做法，消除所有 Header 手動解構 | 密碼 ✅，Discord ✅ |
 
-**待驗證（`git push` 後）**
-- [ ] Test A：密碼登入後 Application → Cookies 顯示 `chiyigo_refresh`（回歸修復確認）
-- [ ] Test B：登出後 Cookie 清除
-- [ ] Test C：Discord 登入後 Application → Cookies 顯示 `chiyigo_refresh`
+**根本原因**：`getAll('set-cookie')` 在部分 CF Workers Pages Functions 環境回傳空陣列，導致 Set-Cookie 被靜默丟棄。`new Response(body, response)` 在 CF Workers runtime 層正確繼承 Set-Cookie，是 W3C 對齊的最小干涉解法。
+
+**測試結果（2026-04-23 線上驗證通過）**
+- [x] Test A：密碼登入後 Application → Cookies 顯示 `chiyigo_refresh` ✅
+- [x] Test B：登出後 Cookie 清除 ✅
+- [x] Test C：Discord 登入後 Application → Cookies 顯示 `chiyigo_refresh` ✅
 
 **架構備忘**
 ```
