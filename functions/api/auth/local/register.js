@@ -10,7 +10,7 @@
  */
 
 import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../../../utils/crypto.js'
-import { SignJWT } from 'jose'
+import { signJwt } from '../../../utils/jwt.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL  = '15m'
@@ -92,17 +92,12 @@ export async function onRequestPost({ request, env }) {
     .bind(emailLower)
     .first()
 
-  // ── 8. 簽發 Access Token ─────────────────────────────────────
-  const secret = new TextEncoder().encode(env.JWT_SECRET)
-  const accessToken = await new SignJWT({
+  // ── 8. 簽發 Access Token（ES256）────────────────────────────
+  const accessToken = await signJwt({
     sub:            String(user.id),
     email:          emailLower,
     email_verified: false,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(ACCESS_TOKEN_TTL)
-    .sign(secret)
+  }, ACCESS_TOKEN_TTL, env)
 
   // 生產環境應在此發送驗證信（TODO: Cloudflare Email Worker / SendGrid）
   // verifyToken 僅此處出現，請在發信後丟棄

@@ -18,7 +18,7 @@
 import { TOTP, Secret } from 'otpauth'
 import { verifyBackupCode } from '../../../utils/crypto.js'
 import { requireAuth, res } from '../../../utils/auth.js'
-import { SignJWT } from 'jose'
+import { signJwt } from '../../../utils/jwt.js'
 
 const ACCESS_TOKEN_TTL = '15m'
 
@@ -100,16 +100,11 @@ export async function onRequestPost({ request, env }) {
 }
 
 async function issueToken(userId, record, env) {
-  const secret = new TextEncoder().encode(env.JWT_SECRET)
-  const accessToken = await new SignJWT({
+  const accessToken = await signJwt({
     sub:            String(userId),
     email:          record.email,
     email_verified: record.email_verified === 1,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(ACCESS_TOKEN_TTL)
-    .sign(secret)
+  }, ACCESS_TOKEN_TTL, env)
 
   return {
     access_token:   accessToken,

@@ -13,7 +13,7 @@
  */
 
 import { verifyPassword } from '../../../utils/crypto.js'
-import { SignJWT } from 'jose'
+import { signJwt } from '../../../utils/jwt.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const PRE_AUTH_TOKEN_TTL = '5m'
@@ -60,35 +60,25 @@ export async function onRequestPost({ request, env }) {
   const valid = await verifyPassword(password, record.password_salt, record.password_hash)
   if (!valid) return res({ error: 'Invalid credentials' }, 401)
 
-  const secret = new TextEncoder().encode(env.JWT_SECRET)
-
-  // ── 5a. 需要 2FA → 回傳受限 pre_auth_token ───────────────────
+  // ── 5a. 需要 2FA → 回傳受限 pre_auth_token（ES256）───────────
   if (record.totp_enabled) {
-    const preAuthToken = await new SignJWT({
+    const preAuthToken = await signJwt({
       sub:   String(record.user_id),
       scope: 'pre_auth',
-    })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt()
-      .setExpirationTime(PRE_AUTH_TOKEN_TTL)
-      .sign(secret)
+    }, PRE_AUTH_TOKEN_TTL, env)
 
     return res({
-      code:            'TOTP_REQUIRED',
-      pre_auth_token:  preAuthToken,
+      code:           'TOTP_REQUIRED',
+      pre_auth_token: preAuthToken,
     }, 403)
   }
 
-  // ── 5b. 無 2FA → 簽發完整 Access Token ──────────────────────
-  const accessToken = await new SignJWT({
+  // ── 5b. 無 2FA → 簽發完整 Access Token（ES256）──────────────
+  const accessToken = await signJwt({
     sub:            String(record.user_id),
     email:          record.email,
     email_verified: record.email_verified === 1,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(ACCESS_TOKEN_TTL)
-    .sign(secret)
+  }, ACCESS_TOKEN_TTL, env)
 
   return res({
     access_token:   accessToken,

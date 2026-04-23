@@ -115,6 +115,27 @@
 
 ---
 
+## 階段九：零信任微服務安全升級（ES256 + JWKS）
+
+> **目標**：禁用 HS256 共用密鑰，改採 ES256 非對稱加密。  
+> IAM 作為公鑰分發中心，內部子系統透過 Service Bindings 取得公鑰自行驗證 JWT，  
+> 無需任何私鑰外流。
+
+### Step 1：升級 Crypto 模組
+- [x] 9.1.1 建立 `/functions/utils/jwt.js`（ES256 簽發 / 驗證，模組級金鑰快取）
+- [x] 9.1.2 建立 `/scripts/generate-jwt-keys.mjs`（一次性金鑰對生成輔助腳本）
+
+### Step 2：更新所有 JWT 簽發端點
+- [x] 9.2.1 `functions/utils/auth.js` — 改用 ES256 公鑰驗證
+- [x] 9.2.2 `functions/api/auth/local/register.js` — 改用 signJwt()
+- [x] 9.2.3 `functions/api/auth/local/login.js` — 改用 signJwt()
+- [x] 9.2.4 `functions/api/auth/2fa/verify.js` — 改用 signJwt()
+
+### Step 3：建立 JWKS 公鑰分發端點
+- [x] 9.3.1 建立 `/functions/.well-known/jwks.json.js`（RFC 7517，CORS 允許跨域讀取）
+
+---
+
 ## 認證系統進度記錄
 
 | 步驟 | 狀態 | 完成時間 | 備註 |
