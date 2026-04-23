@@ -24,7 +24,7 @@
 | 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
 | HttpOnly Cookie 雙軌制（Web XSS 防禦） | ✅ 完成，瀏覽器驗證通過 2026-04-23（A 登入設 Cookie ✅ B 登出清 Cookie ✅）|
 | D1 垃圾回收 Cron Trigger | ✅ 完成（GitHub Actions `cleanup.yml`，每日 UTC 03:00）|
-| Discord 登入按鈕（login.html UI） | ⚠️ 待補（後端已完整，前端入口缺失）|
+| Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -274,7 +274,7 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | 16.3 | ✅ `refresh.js` — 優先讀 Cookie，其次讀 body；回傳時同步輪換 Cookie 或 JSON |
 | 16.4 | ✅ `auth-ui.js` — 移除 REFRESH_TOKEN_KEY / saveRefreshToken / getRefreshToken；logout 改用 `credentials: 'include'`，無需手動帶 token |
 | 16.5 | ✅ `logout.js` — 讀 Cookie 或 body；回傳 `Set-Cookie: Max-Age=0` 清除 Cookie；無 token 時冪等 200 |
-| 16.9 | ⚠️ `login.html` 缺少 Discord 登入按鈕（後端 `/api/auth/discord/init` 已完整，UI 入口待補）|
+| 16.9 | ✅ `login.html` 補上 Discord 登入 / 繼續按鈕（登入 + 註冊兩個分頁均已加入）|
 
 **架構備忘**
 ```
