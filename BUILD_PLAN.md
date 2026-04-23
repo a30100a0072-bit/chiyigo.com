@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-23 晚更新）
+## 整體進度快照（2026-04-23 深夜更新）
 
 | 模組 | 狀態 |
 |------|------|
@@ -21,6 +21,7 @@
 | Logout / Revoke Token | ✅ 完成 |
 | PKCE 跨平台 OAuth（authorize/code/token） | ✅ 完成 |
 | Android App Link（assetlinks.json） | ✅ 完成，package_name 佔位符待 App 建立後更新 |
+| 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -204,7 +205,7 @@
 | www.chiyigo.com 重導向 | 等待 Cloudflare DNS 驗證通過後自動生效 | 自動 |
 | ~~遠端 DB 缺少 Auth schema~~ | ✅ 已部署 2026-04-23，14 張資料表全部到位 | — |
 | ~~schema_iam_fresh.sql 未同步~~ | ✅ pkce_sessions + auth_codes 已加入 2026-04-23 | — |
-| 登出按鈕 UI | logout() 已實作，尚未整合至受保護頁面 | 待受保護頁面完成後加 |
+| ~~登出按鈕 UI~~ | ✅ 已整合至 dashboard.html，Header + 底部按鈕均已完成 2026-04-23 | — |
 
 ---
 
