@@ -22,10 +22,10 @@ export async function onRequest({ request, env, next }) {
 
   if (response.status >= 300 && response.status < 400) return response
 
-  // Cloudflare Workers 迭代 Headers 時不暴露 Set-Cookie，必須用 getAll() 手動保留
-  const newHeaders = new Headers(response.headers)
-  const cookies = response.headers.getAll('set-cookie')
-  for (const c of cookies) newHeaders.append('set-cookie', c)
+  // CF Workers iteration excludes Set-Cookie; use getAll() to preserve them without duplicates
+  const newHeaders = new Headers()
+  for (const [k, v] of response.headers) newHeaders.append(k, v)
+  for (const c of response.headers.getAll('set-cookie')) newHeaders.append('set-cookie', c)
   for (const [k, v] of Object.entries(corsHeaders)) newHeaders.set(k, v)
 
   return new Response(response.body, {

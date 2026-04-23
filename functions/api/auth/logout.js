@@ -16,7 +16,7 @@
 
 import { hashToken } from '../../utils/crypto.js'
 
-const CLEAR_COOKIE = 'chiyigo_refresh=; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=0'
+const CLEAR_COOKIE = 'chiyigo_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=0'
 
 export async function onRequestPost({ request, env }) {
   // Cookie 優先（Web），其次 JSON body（App）

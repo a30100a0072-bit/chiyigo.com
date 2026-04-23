@@ -126,7 +126,7 @@ function parseCookieHeader(header, name) {
 }
 
 function refreshCookie(token, maxAge) {
-  return `chiyigo_refresh=${token}; HttpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=${maxAge}`
+  return `chiyigo_refresh=${token}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
 }
 
 function res(data, status = 200) {
