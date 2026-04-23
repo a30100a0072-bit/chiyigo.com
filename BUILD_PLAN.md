@@ -25,6 +25,8 @@
 | HttpOnly Cookie 雙軌制（Web XSS 防禦） | ✅ 完成，密碼 + Discord 登入均驗證通過 2026-04-23 |
 | D1 垃圾回收 Cron Trigger | ✅ 完成（GitHub Actions `cleanup.yml`，每日 UTC 03:00）|
 | Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
+| Dashboard UX 強化（bfcache 防禦 + 靜默刷新） | ✅ 完成 2026-04-23 |
+| Email 驗證 + 忘記密碼 | 🔲 待規劃（Stage 17）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -203,7 +205,7 @@
 
 | 項目 | 說明 | 優先度 |
 |------|------|--------|
-| **登出後按瀏覽器上一頁顯示 dashboard** | bfcache（Back/Forward Cache）問題：登出後按上一頁，瀏覽器從記憶體恢復 dashboard 頁面，JS 不重跑，sessionStorage 雖已清除但畫面仍顯示。需在 dashboard.html 加入 `pageshow` 事件監聽，在 `event.persisted === true` 時重新驗證 token | 🔴 高 |
+| ~~登出後按瀏覽器上一頁顯示 dashboard~~ | ✅ 已修復 2026-04-23（`pagehide` 重置 UI 至 spinner，`pageshow` 重驗證；消除 bfcache 閃爍與靜默刷新）| — |
 | ~~HttpOnly Cookie 密碼登入回歸~~ | ✅ 已修復 2026-04-23（commit `63b2dfe`：`new Response(body, response)` 還原法，消除 getAll 相容性風險）| — |
 | ~~Discord OAuth HttpOnly Cookie 未儲存~~ | ✅ 已修復 2026-04-23，與密碼登入同一根因 | — |
 | ~~register.js 未回傳 refresh_token~~ | ✅ 已修復 2026-04-23 | — |
@@ -259,6 +261,8 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | ~~低~~ | ~~schema_iam_fresh.sql 同步~~ | ✅ 已完成 2026-04-23 |
 | ~~低~~ | ~~刪除 chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 |
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
+| 中 | Stage 17 — Email 驗證 | 需串接 Email 發送服務（Resend / Cloudflare Email Workers）|
+| 中 | Stage 17 — 忘記密碼 | 同上，依賴 Email 服務 |
 
 ---
 
@@ -266,7 +270,7 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 
 > **動機**：Web 端 Refresh Token 存於 sessionStorage 有 XSS 竊取風險；D1 狀態表無限膨脹需自動清理。
 
-### Step 1：Web 端 HttpOnly Cookie 雙軌制（⚠️ Debug 中）
+### Step 1：Web 端 HttpOnly Cookie 雙軌制（✅ 完成 2026-04-23）
 
 > **偵測邏輯**：`!device_uuid && (!platform || platform==='web')` → Web 模式；App 傳入 `device_uuid` 則走 JSON 模式。
 
@@ -328,6 +332,52 @@ DELETE FROM refresh_tokens    WHERE expires_at < datetime('now');
 ```
 
 > **注意**：`email_verifications` 表目前尚未建立（Email 驗證流程未實作），排程函式需用 `IF EXISTS` 或 try/catch 保護。
+
+---
+
+## 階段十七：Email 驗證 + 忘記密碼
+
+> **前置條件**：需串接 Email 發送服務。推薦 **Resend**（免費層 100 封/天，CF Workers 相容）或 Cloudflare Email Workers（Routing → Worker，需自有 MX 記錄）。
+
+### 架構設計
+
+| 功能 | 端點 | 說明 |
+|------|------|------|
+| 發送驗證信 | `POST /api/auth/email/send-verification` | 生成 token → 存 D1 → 發信（1hr TTL）|
+| 確認驗證 | `GET /api/auth/email/verify?token=` | 核銷 token → 更新 `email_verified=1` |
+| 忘記密碼 | `POST /api/auth/local/forgot-password` | 生成 reset token → 發信（1hr TTL）|
+| 重設密碼 | `POST /api/auth/local/reset-password` | 核銷 token → PBKDF2 雜湊 → 更新密碼 |
+
+### D1 Schema（email_verifications）
+```sql
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT    NOT NULL UNIQUE,
+  type        TEXT    NOT NULL CHECK(type IN ('verify_email','reset_password')),
+  expires_at  TEXT    NOT NULL,
+  used_at     TEXT,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
+```
+
+### 安全規範
+- token = 32 bytes `crypto.getRandomValues` → hex；只存 SHA-256 hash（與 refresh_token 同模式）
+- 每次請求前先刪除同 user_id + type 的未用舊 token（防止無限發信）
+- 核銷用 `UPDATE ... SET used_at WHERE token_hash AND used_at IS NULL AND expires_at > now RETURNING id`（原子核銷防重放）
+- 重設密碼成功後，同步撤銷所有 refresh_token（強制重新登入）
+
+### 待辦子項目
+- [ ] 17.1 建立 `email_verifications` 資料表（`schema_email.sql`），部署至 D1
+- [ ] 17.2 選定 Email 服務（Resend 建議）並設定 `RESEND_API_KEY` 環境變數
+- [ ] 17.3 `functions/utils/email.js` — 封裝 Resend API 呼叫（`sendVerificationEmail` / `sendPasswordResetEmail`）
+- [ ] 17.4 `POST /api/auth/email/send-verification` — 生成 token、發信、防重複發送
+- [ ] 17.5 `GET /api/auth/email/verify` — 核銷 token、更新 email_verified
+- [ ] 17.6 `POST /api/auth/local/forgot-password` — 查找帳號、發送重設連結（帳號不存在時仍回 200，防帳號枚舉）
+- [ ] 17.7 `POST /api/auth/local/reset-password` — 驗證 token、PBKDF2 更新密碼、撤銷所有 refresh_token
+- [ ] 17.8 更新 dashboard.html — 顯示 Email 驗證狀態，提供「重發驗證信」按鈕（`email_verified === false` 時顯示）
+- [ ] 17.9 `cleanup.yml` 中 `email_verifications` 已有清理 SQL，確認部署後正常執行
 
 ---
 
