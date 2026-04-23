@@ -95,9 +95,9 @@
 - [x] 8.1.2 建立 `/database/schema_auth.sql`（users, local_accounts, backup_codes, user_identities, email_verifications, password_resets, refresh_tokens, oauth_states）
 
 ### Step 2：密碼與資安引擎 (Utils)
-- [ ] 8.2.1 建立 `/functions/utils/crypto.js`
-- [ ] 8.2.2 實作 PBKDF2 `hashPassword()` / `verifyPassword()`（10 萬次迭代 + Salt）
-- [ ] 8.2.3 實作一次性救援碼強亂數生成邏輯
+- [x] 8.2.1 建立 `/functions/utils/crypto.js`
+- [x] 8.2.2 實作 PBKDF2 `hashPassword()` / `verifyPassword()`（10 萬次迭代 + Salt）
+- [x] 8.2.3 實作一次性救援碼強亂數生成邏輯
 
 ### Step 3：後端 API 核心（註冊 / 訪客綁定 / 登入）
 - [ ] 8.3.1 建立 `/functions/api/auth/local/register.js`（email + password + guest_id 綁定 Transaction）
@@ -120,7 +120,7 @@
 |------|------|----------|------|
 | 8.1.1 package.json + npm install | ✅ 完成 | 2026-04-23 | jose + otpauth |
 | 8.1.2 schema_auth.sql | ✅ 完成 | 2026-04-23 | 8 張資安合規表 |
-| 8.2.1-3 crypto.js | ⬜ 待執行 | — | PBKDF2 + 救援碼 |
+| 8.2.1-3 crypto.js | ✅ 完成 | 2026-04-23 | PBKDF2 + 救援碼 |
 | 8.3.1 register.js | ⬜ 待執行 | — | 含 guest_id Transaction |
 | 8.3.2 login.js | ⬜ 待執行 | — | 密碼 + 2FA 分支 |
 | 8.4.1 2fa/setup.js | ⬜ 待執行 | — | TOTP Secret 生成 |
