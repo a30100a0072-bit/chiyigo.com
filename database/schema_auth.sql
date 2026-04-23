@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS oauth_states (
 -- 索引（效能優化）
 -- =============================================
 
-CREATE INDEX IF NOT EXISTS idx_backup_codes_user_id   ON backup_codes(user_id);
-CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_backup_codes_user_id    ON backup_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id  ON refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_id);
+
+-- =============================================
+-- 訪客綁定遷移（Lazy Registration）
+-- 為現有業務表新增 guest 欄位，支援訪客轉正流程。
+-- ALTER TABLE 在欄位已存在時會報錯，首次部署前執行一次即可。
+-- =============================================
+
+ALTER TABLE requisition ADD COLUMN owner_guest_id TEXT;
+ALTER TABLE requisition ADD COLUMN owner_user_id  INTEGER REFERENCES users(id);
+
+CREATE INDEX IF NOT EXISTS idx_requisition_guest_id ON requisition(owner_guest_id);

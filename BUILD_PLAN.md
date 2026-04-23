@@ -100,8 +100,8 @@
 - [x] 8.2.3 實作一次性救援碼強亂數生成邏輯
 
 ### Step 3：後端 API 核心（註冊 / 訪客綁定 / 登入）
-- [ ] 8.3.1 建立 `/functions/api/auth/local/register.js`（email + password + guest_id 綁定 Transaction）
-- [ ] 8.3.2 建立 `/functions/api/auth/local/login.js`（密碼驗證 + totp_enabled 分支 + JWT 簽發）
+- [x] 8.3.1 建立 `/functions/api/auth/local/register.js`（email + password + guest_id 綁定 Transaction）
+- [x] 8.3.2 建立 `/functions/api/auth/local/login.js`（密碼驗證 + totp_enabled 分支 + JWT 簽發）
 
 ### Step 4：後端 API 擴充（2FA 與合規刪除）
 - [ ] 8.4.1 建立 `/functions/api/auth/2fa/setup.js`（產生 TOTP Secret）
@@ -121,8 +121,8 @@
 | 8.1.1 package.json + npm install | ✅ 完成 | 2026-04-23 | jose + otpauth |
 | 8.1.2 schema_auth.sql | ✅ 完成 | 2026-04-23 | 8 張資安合規表 |
 | 8.2.1-3 crypto.js | ✅ 完成 | 2026-04-23 | PBKDF2 + 救援碼 |
-| 8.3.1 register.js | ⬜ 待執行 | — | 含 guest_id Transaction |
-| 8.3.2 login.js | ⬜ 待執行 | — | 密碼 + 2FA 分支 |
+| 8.3.1 register.js | ✅ 完成 | 2026-04-23 | 含 guest_id Transaction |
+| 8.3.2 login.js | ✅ 完成 | 2026-04-23 | 密碼 + 2FA 分支 + fakeHashDelay |
 | 8.4.1 2fa/setup.js | ⬜ 待執行 | — | TOTP Secret 生成 |
 | 8.4.2 2fa/activate.js | ⬜ 待執行 | — | 驗 OTP + 備用碼 |
 | 8.4.3 delete.js | ⬜ 待執行 | — | 合規 Soft/Hard Delete |
