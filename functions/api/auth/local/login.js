@@ -12,11 +12,12 @@
  * 僅供 /api/auth/2fa/verify 端點使用。
  */
 
-import { verifyPassword } from '../../../utils/crypto.js'
+import { verifyPassword, generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
 
-const ACCESS_TOKEN_TTL   = '15m'
-const PRE_AUTH_TOKEN_TTL = '5m'
+const ACCESS_TOKEN_TTL    = '15m'
+const PRE_AUTH_TOKEN_TTL  = '5m'
+const REFRESH_TOKEN_DAYS  = 7
 
 export async function onRequestPost({ request, env }) {
   // ── 1. 解析 Body ────────────────────────────────────────────
@@ -24,7 +25,7 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { email, password } = body ?? {}
+  const { email, password, device_uuid } = body ?? {}
 
   if (!email || !password)
     return res({ error: 'email and password are required' }, 400)
@@ -82,7 +83,7 @@ export async function onRequestPost({ request, env }) {
     }, 403)
   }
 
-  // ── 5b. 無 2FA → 簽發完整 Access Token（ES256）──────────────
+  // ── 5b. 無 2FA → 簽發完整 Access Token + Refresh Token ──────
   const accessToken = await signJwt({
     sub:            String(record.user_id),
     email:          record.email,
@@ -91,8 +92,19 @@ export async function onRequestPost({ request, env }) {
     status:         record.status,
   }, ACCESS_TOKEN_TTL, env)
 
+  const refreshToken    = generateSecureToken()
+  const refreshTokenHash = await hashToken(refreshToken)
+  const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19)
+
+  await db.prepare(`
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at)
+    VALUES (?, ?, ?, ?)
+  `).bind(record.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt).run()
+
   return res({
     access_token:   accessToken,
+    refresh_token:  refreshToken,
     user_id:        record.user_id,
     email:          record.email,
     email_verified: record.email_verified === 1,

@@ -96,8 +96,10 @@
 | 11.1.1 Schema 遷移 | ✅ 完成 | 2026-04-23 | device_uuid / platform / client_callback |
 | 11.1.2 discord/init.js | ✅ 完成 | 2026-04-23 | PKCE + platform routing + Discord 重導向 |
 | 11.1.3 discord/callback.js | ✅ 完成 | 2026-04-23 | 原子 state 核銷 + Upsert + JWT + 三平台分流 |
-| 11.2.1 login.js refresh_token | ⬜ 待執行 | — | 登入時同步發 refresh_token |
-| 11.2.2 auth/refresh.js | ⬜ 待執行 | — | device_uuid 驗證 + 輪換 |
+| 11.1.4 Discord Dev Portal 設定 | ✅ 完成 | 2026-04-23 | Redirect URI + Client ID/Secret 已配置 |
+| 11.1.5 Cloudflare env vars | ✅ 完成 | 2026-04-23 | DISCORD_CLIENT_ID/SECRET + IAM_BASE_URL |
+| 11.2.1 login.js refresh_token | ✅ 完成 | 2026-04-23 | login + 2fa/verify 同步簽發 refresh_token |
+| 11.2.2 auth/refresh.js | ✅ 完成 | 2026-04-23 | device_uuid 驗證 + Rotation 原子輪換 |
 | 11.3.1 game/login.js | ⬜ 待執行 | — | 遊戲端 PKCE 統整入口 |
 | 12.x CORS 防禦層 | ⬜ 待執行 | — | 所有 auth 端點 |
 | 13.x PKCE 完整 OAuth | ⬜ 待執行 | — | Universal Link / App Link |

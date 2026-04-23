@@ -1,0 +1,111 @@
+/**
+ * POST /api/auth/refresh
+ * Body: { refresh_token, device_uuid? }
+ *
+ * 以有效的 refresh_token 換取新的 access_token，並輪換 refresh_token。
+ *
+ * 輪換策略（Refresh Token Rotation）：
+ *  - 舊 token 立即標記為 revoked（revoked_at），不可再次使用
+ *  - 同時簽發新 refresh_token（TTL 重置），返回給客戶端
+ *  - 若舊 token 已被 revoked → 可能為重放攻擊，回傳 401
+ *
+ * device_uuid 驗證：
+ *  - 若 DB 中該 token 綁定了 device_uuid，請求中的值必須完全相符
+ *  - Web 端（device_uuid=null）的 token 不做裝置驗證
+ *
+ * 回傳：
+ *  200 → { access_token, refresh_token }
+ *  401 → token 無效 / 已過期 / 已撤銷 / device_uuid 不符
+ *  403 → 帳號已封禁
+ */
+
+import { generateSecureToken, hashToken } from '../../utils/crypto.js'
+import { signJwt } from '../../utils/jwt.js'
+
+const ACCESS_TOKEN_TTL   = '15m'
+const REFRESH_TOKEN_DAYS = 7
+
+export async function onRequestPost({ request, env }) {
+  let body
+  try { body = await request.json() }
+  catch { return res({ error: 'Invalid JSON' }, 400) }
+
+  const { refresh_token, device_uuid } = body ?? {}
+
+  if (!refresh_token || typeof refresh_token !== 'string')
+    return res({ error: 'refresh_token is required' }, 400)
+
+  const db = env.chiyigo_db
+
+  // ── 1. 查找 token（含過期與撤銷過濾）────────────────────────
+  const tokenHash = await hashToken(refresh_token)
+  const tokenRow  = await db
+    .prepare(`
+      SELECT id, user_id, device_uuid, revoked_at
+      FROM refresh_tokens
+      WHERE token_hash = ? AND expires_at > datetime('now')
+    `)
+    .bind(tokenHash)
+    .first()
+
+  if (!tokenRow)
+    return res({ error: 'Invalid or expired refresh token' }, 401)
+
+  if (tokenRow.revoked_at)
+    return res({ error: 'Refresh token has been revoked' }, 401)
+
+  // ── 2. device_uuid 驗證 ──────────────────────────────────────
+  if (tokenRow.device_uuid !== null && tokenRow.device_uuid !== '') {
+    if (tokenRow.device_uuid !== (device_uuid ?? ''))
+      return res({ error: 'Device mismatch' }, 401)
+  }
+
+  // ── 3. 取得用戶最新狀態 ──────────────────────────────────────
+  const user = await db
+    .prepare(`
+      SELECT id, email, email_verified, role, status
+      FROM users
+      WHERE id = ? AND deleted_at IS NULL
+    `)
+    .bind(tokenRow.user_id)
+    .first()
+
+  if (!user) return res({ error: 'User not found' }, 401)
+  if (user.status === 'banned') return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
+
+  // ── 4. Refresh Token Rotation（原子輪換）─────────────────────
+  const newPlainToken    = generateSecureToken()
+  const newTokenHash     = await hashToken(newPlainToken)
+  const newExpiresAt     = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19)
+
+  await db.batch([
+    db.prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE id = ?`)
+      .bind(tokenRow.id),
+    db.prepare(`
+      INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at)
+      VALUES (?, ?, ?, ?)
+    `).bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt),
+  ])
+
+  // ── 5. 簽發新 Access Token ───────────────────────────────────
+  const accessToken = await signJwt({
+    sub:            String(user.id),
+    email:          user.email,
+    email_verified: user.email_verified === 1,
+    role:           user.role,
+    status:         user.status,
+  }, ACCESS_TOKEN_TTL, env)
+
+  return res({
+    access_token:  accessToken,
+    refresh_token: newPlainToken,
+  })
+}
+
+function res(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}

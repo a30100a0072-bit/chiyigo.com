@@ -16,11 +16,12 @@
  */
 
 import { TOTP, Secret } from 'otpauth'
-import { verifyBackupCode } from '../../../utils/crypto.js'
+import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { requireAuth, res } from '../../../utils/auth.js'
 import { signJwt } from '../../../utils/jwt.js'
 
-const ACCESS_TOKEN_TTL = '15m'
+const ACCESS_TOKEN_TTL   = '15m'
+const REFRESH_TOKEN_DAYS = 7
 
 export async function onRequestPost({ request, env }) {
   // ── 1. 驗證 pre_auth_token（scope 必須為 'pre_auth'）──────────
@@ -32,7 +33,7 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { otp_code } = body ?? {}
+  const { otp_code, device_uuid } = body ?? {}
   if (!otp_code || typeof otp_code !== 'string')
     return res({ error: 'otp_code is required' }, 400)
 
@@ -66,7 +67,7 @@ export async function onRequestPost({ request, env }) {
     })
     const delta = totp.validate({ token: sanitized, window: 1 })
     if (delta !== null) {
-      return res(await issueToken(userId, record, env))
+      return res(await issueToken(userId, record, db, device_uuid, env))
     }
   }
 
@@ -91,7 +92,7 @@ export async function onRequestPost({ request, env }) {
           .run()
 
         if (revoked.meta?.changes > 0) {
-          return res(await issueToken(userId, record, env))
+          return res(await issueToken(userId, record, db, device_uuid, env))
         }
       }
     }
@@ -100,7 +101,7 @@ export async function onRequestPost({ request, env }) {
   return res({ error: 'Invalid OTP or backup code' }, 401)
 }
 
-async function issueToken(userId, record, env) {
+async function issueToken(userId, record, db, deviceUuid, env) {
   const accessToken = await signJwt({
     sub:            String(userId),
     email:          record.email,
@@ -109,8 +110,19 @@ async function issueToken(userId, record, env) {
     status:         record.status,
   }, ACCESS_TOKEN_TTL, env)
 
+  const refreshToken     = generateSecureToken()
+  const refreshTokenHash = await hashToken(refreshToken)
+  const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19)
+
+  await db.prepare(`
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at)
+    VALUES (?, ?, ?, ?)
+  `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt).run()
+
   return {
     access_token:   accessToken,
+    refresh_token:  refreshToken,
     user_id:        userId,
     email:          record.email,
     email_verified: record.email_verified === 1,
