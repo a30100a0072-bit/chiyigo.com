@@ -217,10 +217,10 @@ npx wrangler d1 execute chiyigo_db --remote --command \
 > **動機**：iOS / Android / Unity / Unreal 客戶端發出的 HTTP 請求會觸發跨域限制。  
 > 目前只有 JWKS 端點有 CORS，所有 `/api/auth/*` 端點均缺少必要標頭。
 
-### 待執行
-- [ ] 11.1 建立 `/functions/utils/cors.js` — 統一 CORS helper，支援 env.ALLOWED_ORIGINS 白名單
-- [ ] 11.2 全部 auth 端點加入 OPTIONS preflight handler + CORS headers
-- [ ] 11.3 `.dev.vars` 新增 `ALLOWED_ORIGINS` 環境變數
+### 已完成
+- [x] 12.1 建立 `/functions/utils/cors.js` — 統一 CORS helper，支援 env.ALLOWED_ORIGINS 白名單
+- [x] 12.2 建立 `/functions/api/auth/_middleware.js` — 自動攔截 /api/auth/* 全路由，OPTIONS preflight + CORS 標頭附加
+- [x] 12.3 `.dev.vars` 新增 `ALLOWED_ORIGINS=http://localhost:8788,...`
 
 ---
 
