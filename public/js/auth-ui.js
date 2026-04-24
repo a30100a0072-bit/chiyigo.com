@@ -422,9 +422,17 @@ async function handleTotp(event) {
   }
 })();
 
-// 瀏覽器上一頁復原表單時，強制重置所有密碼欄位為隱藏狀態，避免明文外洩
-window.addEventListener('pageshow', () => {
+// 瀏覽器上一頁復原表單時，清空所有欄位並重置密碼顯示狀態，防止帳密洩漏
+window.addEventListener('pageshow', (event) => {
   if (!document.getElementById('login-password')) return;
+  // bfcache 還原時清空欄位值，避免帳號密碼被看到
+  if (event.persisted) {
+    ['login-email', 'login-password',
+     'reg-email', 'reg-password', 'reg-confirm'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+  }
   hidePassword('login-password', 'login-eye');
   hidePassword('reg-password',   'reg-eye');
   hidePassword('reg-confirm',    'reg-confirm-eye');

@@ -65,8 +65,8 @@ export async function onRequestPost({ request, env }) {
       SELECT id, ?, ? FROM users WHERE email = ?
     `).bind(hash, salt, emailLower),
     db.prepare(`
-      INSERT INTO email_verifications (token_hash, user_id, expires_at)
-      SELECT ?, id, ? FROM users WHERE email = ?
+      INSERT INTO email_verifications (token_hash, user_id, token_type, expires_at)
+      SELECT ?, id, 'verify_email', ? FROM users WHERE email = ?
     `).bind(verifyTokenHash, verifyExpiry, emailLower),
   ])
 
