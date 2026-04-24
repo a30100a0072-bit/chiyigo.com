@@ -280,7 +280,7 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | 中 | Dashboard 2FA 管理 UI | 啟用 / 停用 2FA 的前端介面，目前只有 API |
 | ~~低~~ | ~~login.html 忘記密碼入口~~ | ✅ 完成 2026-04-24（登入按鈕右下角加「忘記密碼？」連結）|
 | 高 | Stage 19 — 首頁重設計 | 套用新設計系統（CSS Variables、SaaS Dashboard 版面、Neural Canvas、亮暗主題）|
-| 待考慮 | 首頁統計數字區塊 | 50+ 專案、98% 滿意度、5+ 年經驗、24/7 支援（數字待確認後加入）|
+| ~~待考慮~~ | ~~首頁統計數字區塊~~ | ✅ 完成 2026-04-24（50+ 完成專案 / 98% 客戶滿意度 / 5yr+ 開發經驗 / 24/7 技術支援，數字 count-up 動畫）|
 | 待討論 | 會員頁面重設計 | login.html / dashboard.html 等頁面套用新設計系統，討論後再動 |
 | 🔒 | Apple Sign In | 需 Apple Developer 帳號（$99/yr），Stage 18 預留架構 |
 
@@ -481,7 +481,7 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 - [x] 19.5 桌面版：左側 Sidebar 導覽 + IntersectionObserver 自動 highlight active section
 - [x] 19.6 行動版：固定 TopBar + 底部 BottomSheet 導覽
 - [ ] 19.7 Logo 圖片接入（`public/images/logo-light.png` + `logo-dark.png`，亮暗自動切換）
-- [ ] 待考慮 — 統計數字區塊（50+ 專案、98% 滿意度等，數字確認後加入）
+- [x] 統計數字區塊（50+ 完成專案、98% 客戶滿意度、5yr+ 開發經驗、24/7 技術支援服務，count-up 動畫）
 
 ---
 

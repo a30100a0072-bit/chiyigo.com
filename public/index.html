@@ -451,6 +451,70 @@
     .cta-card h2 { margin-bottom: 0.75rem; }
     .cta-card p  { color: var(--text-muted); margin-bottom: 2rem; }
 
+    /* ── Stats ─────────────────────────────────────────────────── */
+    .stats-section { padding: 0 var(--pad-x) var(--section-y); }
+
+    .stats-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      overflow: hidden;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.25rem;
+      text-align: center;
+      position: relative;
+      transition: background-color 0.2s ease;
+    }
+
+    .stat-item:hover { background: var(--hover-overlay); }
+
+    .stat-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      right: 0; top: 18%; bottom: 18%;
+      width: 1px;
+      background: var(--border);
+    }
+
+    .stat-number {
+      font-size: clamp(1.875rem, 3.5vw, 2.625rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #7370EC, #5B8BF5, #4DA8DA);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat-label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.01em;
+    }
+
+    @media (max-width: 640px) {
+      .stats-card { grid-template-columns: repeat(2, 1fr); }
+      .stat-item:not(:last-child)::after { display: none; }
+      .stat-item { border-right: none !important; }
+      .stat-item:nth-child(1),
+      .stat-item:nth-child(2) { border-bottom: 1px solid var(--border); }
+      .stat-item:nth-child(odd) { border-right: 1px solid var(--border) !important; }
+    }
+
     /* ── Footer ────────────────────────────────────────────────── */
     .site-footer {
       padding: 1.5rem var(--pad-x);
@@ -569,6 +633,30 @@
           <div class="hero-actions" data-reveal data-reveal-delay="3">
             <a href="requisition.html" class="btn-primary">提交需求 →</a>
             <a href="portfolio.html"   class="btn-secondary">查看作品集</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Stats -->
+      <section class="stats-section">
+        <div class="container">
+          <div class="stats-card" data-reveal>
+            <div class="stat-item">
+              <span class="stat-number" data-count="50" data-suffix="+">50+</span>
+              <span class="stat-label">完成專案</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number" data-count="98" data-suffix="%">98%</span>
+              <span class="stat-label">客戶滿意度</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number" data-count="5" data-suffix="yr+">5yr+</span>
+              <span class="stat-label">開發經驗</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">24/7</span>
+              <span class="stat-label">技術支援服務</span>
+            </div>
           </div>
         </div>
       </section>
@@ -791,6 +879,32 @@
     initPts()
     draw()
     window.addEventListener('resize', resizeCvs)
+
+    // ── Stats count-up animation ───────────────────────────────
+    function countUp(el, target, suffix, duration) {
+      const start = performance.now()
+      const update = (now) => {
+        const t = Math.min((now - start) / duration, 1)
+        const ease = 1 - Math.pow(1 - t, 3)
+        el.textContent = Math.floor(ease * target) + suffix
+        if (t < 1) requestAnimationFrame(update)
+        else el.textContent = target + suffix
+      }
+      requestAnimationFrame(update)
+    }
+
+    const statsObs = new IntersectionObserver(es => {
+      es.forEach(e => {
+        if (!e.isIntersecting) return
+        e.currentTarget.querySelectorAll('[data-count]').forEach(el => {
+          countUp(el, +el.dataset.count, el.dataset.suffix || '', 1600)
+        })
+        statsObs.unobserve(e.target)
+      })
+    }, { threshold: 0.5 })
+
+    const statsCard = document.querySelector('.stats-card')
+    if (statsCard) statsObs.observe(statsCard)
   </script>
 </body>
 </html>
