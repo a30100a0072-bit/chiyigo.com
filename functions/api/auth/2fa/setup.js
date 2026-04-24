@@ -14,6 +14,22 @@ import { TOTP, Secret } from 'otpauth'
 import { requireAuth, res } from '../../../utils/auth.js'
 
 const TOTP_ISSUER = 'CHIYIGO'
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+
+function generateBase32Secret(byteLength = 20) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength))
+  let result = '', buffer = 0, bitsLeft = 0
+  for (const byte of bytes) {
+    buffer = (buffer << 8) | byte
+    bitsLeft += 8
+    while (bitsLeft >= 5) {
+      bitsLeft -= 5
+      result += BASE32_ALPHABET[(buffer >> bitsLeft) & 31]
+    }
+  }
+  if (bitsLeft > 0) result += BASE32_ALPHABET[(buffer << (5 - bitsLeft)) & 31]
+  return result
+}
 
 export async function onRequestPost({ request, env }) {
   // ── 1. 驗證 JWT ──────────────────────────────────────────────
@@ -39,7 +55,8 @@ export async function onRequestPost({ request, env }) {
     .first()
 
   // ── 4. 產生 TOTP Secret（160 bits / 20 bytes）────────────────
-  const secret = Secret.generate(20)
+  // Secret.generate() 在 CF Workers 有相容性問題，改用 Web Crypto 自行生成
+  const secret = Secret.fromBase32(generateBase32Secret(20))
 
   const totp = new TOTP({
     issuer:    env.TOTP_ISSUER ?? TOTP_ISSUER,
