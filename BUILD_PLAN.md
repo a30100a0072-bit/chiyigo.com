@@ -27,6 +27,7 @@
 | Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
 | Dashboard UX 強化（bfcache 防禦 + 靜默刷新） | ✅ 完成 2026-04-23 |
 | Email 驗證 + 忘記密碼 | ✅ 完成（Stage 17，2026-04-24）|
+| 動態 OAuth 路由（Google/LINE/FB） | 🔲 待實作（Stage 18）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -273,6 +274,11 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 | ~~中~~ | ~~Stage 17 — Email 驗證~~ | ✅ 完成 2026-04-24（Resend，send-verification + verify 端點）|
 | ~~中~~ | ~~Stage 17 — 忘記密碼~~ | ✅ 完成 2026-04-24（forgot-password + reset-password + 2FA 閉環）|
+| 高 | Stage 18 — 動態 OAuth 路由 | Google/LINE/FB 登入；信箱碰撞防禦；無信箱補填；Apple 架構預留 |
+| 中 | T14/T15 — 重設密碼完整測試 | 需收信走完 reset token 流程（T14 無 2FA、T15 有 2FA）|
+| 中 | Dashboard 2FA 管理 UI | 啟用 / 停用 2FA 的前端介面，目前只有 API |
+| 低 | login.html 忘記密碼入口 | 登入表單下加「忘記密碼？」連結 → forgot-password.html |
+| 🔒 | Apple Sign In | 需 Apple Developer 帳號（$99/yr），Stage 18 預留架構 |
 
 ---
 
@@ -424,6 +430,34 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 - [x] 17.9 `public/reset-password.html` + JS — 讀 `?token=`、攔截 403 動態顯示 2FA 輸入框
 - [x] 17.10 更新 `dashboard.html` — 顯示 email_verified 狀態，提供「重發驗證信」按鈕
 - [x] 17.11 `cleanup.yml` 新增 `email_verifications` 清理步驟（每日 UTC 03:00 自動執行）
+
+---
+
+## 階段十八：動態 OAuth 路由與第三方平台大一統
+
+> **架構**：Cloudflare Pages Functions + 策略模式（Strategy Pattern）
+> **目標**：將硬編碼的 Discord OAuth 升級為動態參數路由 `[provider]`，
+> 依序實作 Google、LINE、Facebook，並為 Apple 預留底層架構。
+
+### 安全規範
+
+| 規則 | 說明 |
+|------|------|
+| 信箱碰撞（Email Collision） | Google `trustEmail: true` → 靜默綁定；FB/LINE `trustEmail: false` → 403 阻擋，提示改用密碼登入後綁定 |
+| 無信箱防禦（Missing Email） | FB/LINE 可能不回傳 email → 生成短效 `temp_bind_token` → 302 跳轉 `/bind-email.html?token=` → 手動填信箱驗證後才建立帳號 |
+| Apple form_post | callback 同時 export `onRequestGet` + `onRequestPost`，支援 URL Params 與 FormData 提取 code/state |
+
+### 待辦子項目
+
+- [ ] 18.1 `functions/utils/oauth-providers.js` — Provider 設定檔（discord/google/line/facebook/apple，含 trustEmail、env key 對應）
+- [ ] 18.2 `functions/api/auth/oauth/[provider]/init.js` — 動態授權網址生成（保留 PKCE + State HttpOnly Cookie）
+- [ ] 18.3 `functions/api/auth/oauth/[provider]/callback.js` — 動態 callback（同時 export GET/POST；token 換取；統一 profile 格式）
+- [ ] 18.4 信箱碰撞 + 無信箱安防邏輯（DB 寫入 / 綁定 / 403 阻擋 / temp_bind_token）
+- [ ] 18.5 刪除舊的 `functions/api/auth/discord/init.js` 與 `callback.js`（整合進動態路由後移除）
+- [ ] 18.6 `public/bind-email.html` — 無信箱補填頁（表單 + 提交驗證 token）
+- [ ] 18.7 更新 `login.html` — 新增 Google、LINE、Facebook 登入按鈕，指向 `/api/auth/oauth/{provider}/init`
+- [ ] 18.8 Cloudflare Pages 設定 `GOOGLE_CLIENT_ID/SECRET`、`LINE_CLIENT_ID/SECRET`、`FACEBOOK_CLIENT_ID/SECRET`
+- [ ] 18.9 各平台 OAuth App 設定 redirect_uri → `https://chiyigo.com/api/auth/oauth/{provider}/callback`
 
 ---
 
