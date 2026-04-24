@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-23 更新）
+## 整體進度快照（2026-04-24 更新）
 
 | 模組 | 狀態 |
 |------|------|
@@ -26,7 +26,7 @@
 | D1 垃圾回收 Cron Trigger | ✅ 完成（GitHub Actions `cleanup.yml`，每日 UTC 03:00）|
 | Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
 | Dashboard UX 強化（bfcache 防禦 + 靜默刷新） | ✅ 完成 2026-04-23 |
-| Email 驗證 + 忘記密碼 | 🔲 待規劃（Stage 17）|
+| Email 驗證 + 忘記密碼 | ✅ 完成（Stage 17，2026-04-24）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -261,8 +261,8 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | ~~低~~ | ~~schema_iam_fresh.sql 同步~~ | ✅ 已完成 2026-04-23 |
 | ~~低~~ | ~~刪除 chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 |
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
-| 中 | Stage 17 — Email 驗證 | 需串接 Email 發送服務（Resend / Cloudflare Email Workers）|
-| 中 | Stage 17 — 忘記密碼 | 同上，依賴 Email 服務 |
+| ~~中~~ | ~~Stage 17 — Email 驗證~~ | ✅ 完成 2026-04-24（Resend，send-verification + verify 端點）|
+| ~~中~~ | ~~Stage 17 — 忘記密碼~~ | ✅ 完成 2026-04-24（forgot-password + reset-password + 2FA 閉環）|
 
 ---
 
