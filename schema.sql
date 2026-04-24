@@ -13,14 +13,15 @@ CREATE TABLE IF NOT EXISTS portfolio (
 );
 
 CREATE TABLE IF NOT EXISTS requisition (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  name        TEXT NOT NULL,
-  email       TEXT NOT NULL,
-  company     TEXT,
-  service     TEXT NOT NULL,
-  budget      TEXT,
-  description TEXT NOT NULL,
-  created_at  TEXT DEFAULT (datetime('now'))
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  company      TEXT,
+  contact      TEXT NOT NULL,
+  service_type TEXT NOT NULL,
+  budget       TEXT,
+  timeline     TEXT,
+  message      TEXT NOT NULL,
+  created_at   TEXT DEFAULT (datetime('now'))
 );
 
 -- 範例資料
