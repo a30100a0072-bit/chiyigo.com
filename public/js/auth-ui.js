@@ -422,16 +422,22 @@ async function handleTotp(event) {
   }
 })();
 
-// 瀏覽器上一頁復原表單時，清空所有欄位並重置密碼顯示狀態，防止帳密洩漏
+// bfcache 還原時：已登入 → 直接跳回 dashboard；未登入 → 清空欄位並重置到登入分頁
 window.addEventListener('pageshow', (event) => {
   if (!document.getElementById('login-password')) return;
-  // bfcache 還原時清空欄位值，避免帳號密碼被看到
   if (event.persisted) {
+    if (getToken()) {
+      window.location.replace('/dashboard.html');
+      return;
+    }
+    // 清空所有欄位，防止帳號密碼殘留
     ['login-email', 'login-password',
-     'reg-email', 'reg-password', 'reg-confirm'].forEach(id => {
+     'reg-email', 'reg-password', 'reg-confirm', 'totp-code'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
+    // 重置回登入分頁（不殘留 2FA 面板）
+    switchTab('login');
   }
   hidePassword('login-password', 'login-eye');
   hidePassword('reg-password',   'reg-eye');
