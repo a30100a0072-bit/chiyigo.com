@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>關於我們 | CHIYIGO</title>
-  <meta name="description" content="CHIYIGO — 不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。了解我們的理念與技術專長。" />
+  <title>關於我 | CHIYIGO</title>
+  <meta name="description" content="CHIYIGO — 全端獨立開發者，專注於系統設計、客製化開發與 AI 整合。把需求變成真正能用的系統。" />
   <meta property="og:type"        content="website" />
   <meta property="og:url"         content="https://chiyigo.com/about" />
-  <meta property="og:title"       content="關於我們 | CHIYIGO" />
+  <meta property="og:title"       content="關於我 | CHIYIGO" />
   <meta property="og:description" content="CHIYIGO — 不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。" />
   <meta property="og:image"       content="https://chiyigo.com/images/chiyigo.jpg" />
   <meta name="twitter:card"       content="summary_large_image" />
@@ -60,8 +60,8 @@
 
     [data-reveal]{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
     [data-reveal].revealed{opacity:1;transform:translateY(0)}
-    [data-reveal-delay="1"]{transition-delay:.07s}
-    [data-reveal-delay="2"]{transition-delay:.14s}
+    [data-reveal-delay="1"]{transition-delay:.08s}
+    [data-reveal-delay="2"]{transition-delay:.16s}
 
     #neural-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
 
@@ -167,40 +167,72 @@
     .footer-links a:hover{color:var(--text-muted)}
     .copy{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);width:100%;opacity:.6}
 
-    /* ── About page styles ── */
-    .about-section{padding:clamp(3rem,6vw,5rem) var(--pad-x) clamp(2rem,4vw,3rem);max-width:var(--max-w);margin:0 auto}
-    .about-header{margin-bottom:clamp(2.5rem,5vw,4rem);border-bottom:1px solid var(--border-dim);padding-bottom:clamp(2rem,4vw,3rem)}
-    .eyebrow{font-family:var(--font-mono);font-size:.82rem;letter-spacing:.12em;color:var(--accent);opacity:.7;margin-bottom:1.1rem}
-    .page-title{font-family:var(--font-sans);font-size:clamp(1.8rem,4vw,2.5rem);font-weight:700;line-height:1.2;color:var(--text);margin-bottom:1.1rem;letter-spacing:-.01em}
-    .pt-dim{display:block;color:var(--text-muted)}
-    .pt-grad{display:block;background:linear-gradient(135deg,#7370ec,#5b8bf5 60%,#4da8da);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-    .page-sub{font-family:var(--font-sans);font-size:clamp(1rem,2vw,1.15rem);color:var(--text-muted);line-height:1.7}
+    /* ══════════════════════════════════════════════════
+       ABOUT PAGE STYLES
+       ══════════════════════════════════════════════════ */
 
-    /* Stats row */
-    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:clamp(2.5rem,5vw,4rem)}
-    @media(max-width:640px){.stats-row{grid-template-columns:repeat(2,1fr)}}
-    .stat-card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;padding:1.2rem 1rem;text-align:center}
-    .stat-num{font-family:var(--font-sans);font-size:clamp(1.5rem,3vw,2rem);font-weight:700;color:var(--accent);line-height:1;margin-bottom:.3rem;letter-spacing:-.02em}
-    .stat-label{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase}
+    .about-wrap{padding:clamp(2.5rem,5vw,4rem) 2rem;max-width:var(--max-w);margin:0 auto}
 
-    /* Content grid */
-    .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,4vw,3.5rem);margin-bottom:clamp(2.5rem,5vw,4rem)}
-    @media(max-width:768px){.about-grid{grid-template-columns:1fr}}
-    .about-block-label{font-family:var(--font-mono);font-size:.75rem;letter-spacing:.12em;color:var(--text-dim);text-transform:uppercase;margin-bottom:1rem}
-    .about-block-title{font-size:1.2rem;font-weight:600;color:var(--text);margin-bottom:.75rem;line-height:1.3}
-    .about-block-body{font-size:.95rem;color:var(--text-muted);line-height:1.8}
+    /* Hero: 2-column */
+    .about-hero{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2.5rem,5vw,5rem);margin-bottom:clamp(3rem,6vw,5rem);align-items:start}
+    @media(max-width:768px){.about-hero{grid-template-columns:1fr}}
 
-    /* Tech tags */
-    .tech-grid{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.1rem}
-    .tech-tag{font-family:var(--font-mono);font-size:.7rem;padding:.3rem .75rem;border:1px solid var(--border-mid);border-radius:100px;color:var(--text-muted);background:var(--bg-surface);transition:border-color .18s,color .18s}
-    .tech-tag:hover{border-color:var(--accent);color:var(--accent)}
+    /* Identity card */
+    .ab-identity{display:flex;align-items:center;gap:.85rem;margin-bottom:1.5rem}
+    .ab-avatar{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#7370EC,#5B8BF5);display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:1.3rem;font-weight:700;color:#fff;flex-shrink:0}
+    .ab-name{font-size:1rem;font-weight:600;color:var(--text);line-height:1.2}
+    .ab-role{font-size:.78rem;color:var(--text-muted);margin-top:.15rem}
 
-    /* CTA block */
-    .about-cta{background:linear-gradient(140deg,rgba(108,110,229,.08) 0%,rgba(91,139,245,.05) 100%);border:1px solid rgba(108,110,229,.14);border-radius:20px;padding:clamp(2rem,4vw,3rem) var(--pad-x);text-align:center;margin-bottom:3rem}
-    .about-cta-title{font-size:clamp(1.3rem,3vw,1.8rem);font-weight:700;color:var(--text);margin-bottom:.75rem}
-    .about-cta-sub{color:var(--text-muted);font-size:.95rem;line-height:1.7;margin-bottom:1.5rem}
-    .about-cta-btn{display:inline-flex;align-items:center;gap:.6rem;padding:.75rem 1.75rem;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:.9rem;font-weight:600;border-radius:10px;text-decoration:none;transition:filter .18s,transform .18s}
-    .about-cta-btn:hover{filter:brightness(1.1);transform:translateY(-2px)}
+    /* Headline */
+    .ab-headline{font-family:var(--font-sans);font-size:clamp(1.9rem,4.5vw,3.2rem);font-weight:700;line-height:1.15;color:var(--text);margin-bottom:1.1rem;letter-spacing:-.02em}
+    .ab-headline-grad{display:block;background:linear-gradient(135deg,#7370EC 0%,#5B8BF5 60%,#4DA8DA 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+    /* Description */
+    .ab-desc{font-size:.95rem;color:var(--text-muted);line-height:1.8;margin-bottom:1.5rem}
+
+    /* Stats */
+    .ab-stats{display:flex;gap:2rem;margin-bottom:1.75rem;flex-wrap:wrap}
+    .ab-stat{display:flex;flex-direction:column;gap:.2rem}
+    .ab-stat-n{font-family:var(--font-sans);font-size:1.5rem;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-.02em}
+    .ab-stat-l{font-family:var(--font-mono);font-size:.63rem;color:var(--text-dim);letter-spacing:.06em}
+
+    /* CTA button */
+    .ab-cta{display:inline-flex;align-items:center;padding:.7rem 1.6rem;background:linear-gradient(135deg,#7370EC,#5B8BF5);color:#fff;font-family:var(--font-sans);font-size:.9rem;font-weight:600;border-radius:10px;text-decoration:none;box-shadow:0 4px 14px rgba(108,110,229,.28);transition:filter .18s ease,transform .18s ease}
+    .ab-cta:hover{filter:brightness(1.08);transform:translateY(-1px)}
+
+    /* Section labels */
+    .ab-section-label{font-family:var(--font-mono);font-size:.82rem;letter-spacing:.12em;color:var(--accent);opacity:.75;margin-bottom:.75rem}
+    .ab-section-sub{font-size:.95rem;color:var(--text-muted);margin-bottom:1.5rem}
+
+    /* Timeline */
+    .about-right{padding-top:.25rem}
+    .ab-timeline{display:flex;flex-direction:column}
+    .tl-row{display:grid;grid-template-columns:3.2rem 18px 1fr;gap:.65rem;align-items:start;padding:.65rem 0;border-bottom:1px solid var(--border-dim);opacity:0;transform:translateX(14px);transition:opacity .5s ease,transform .5s ease}
+    .tl-row.revealed{opacity:1;transform:translateX(0)}
+    .tl-row:last-child{border-bottom:none}
+    .tl-year{font-family:var(--font-mono);font-size:.78rem;font-weight:500;color:var(--accent);padding-top:.15rem;text-align:right;white-space:nowrap}
+    .tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);outline:2px solid var(--accent-dim);outline-offset:2px;flex-shrink:0;margin-top:.3rem;justify-self:center}
+    .tl-text{font-size:.875rem;color:var(--text-muted);line-height:1.65}
+
+    /* Values section */
+    .ab-values-section{border-top:1px solid var(--border-dim);padding-top:clamp(2rem,4vw,3rem);margin-bottom:clamp(2rem,4vw,3rem)}
+    .ab-values-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.1rem;margin-top:.25rem}
+    @media(max-width:900px){.ab-values-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:480px){.ab-values-grid{grid-template-columns:1fr}}
+    .ab-value-card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;padding:1.25rem;transition:border-color .2s ease}
+    .ab-value-card:hover{border-color:var(--border-bright)}
+    .ab-value-title{font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:.5rem}
+    .ab-value-text{font-size:.8rem;color:var(--text-muted);line-height:1.75}
+
+    /* Skills section */
+    .ab-skills-section{border-top:1px solid var(--border-dim);padding-top:clamp(2rem,4vw,3rem);margin-bottom:clamp(2rem,4vw,3rem)}
+    .ab-skills-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;margin-top:.25rem}
+    @media(max-width:1000px){.ab-skills-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:600px){.ab-skills-grid{grid-template-columns:repeat(2,1fr)}}
+    .ab-skill-cat{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:10px;padding:1rem;transition:border-color .2s ease}
+    .ab-skill-cat:hover{border-color:var(--accent-dim)}
+    .ab-skill-name{font-family:var(--font-mono);font-size:.7rem;color:var(--accent);margin-bottom:.5rem;letter-spacing:.04em;opacity:.85}
+    .ab-skill-tags{font-size:.78rem;color:var(--text-muted);line-height:1.8}
   </style>
 </head>
 <body>
@@ -217,14 +249,6 @@
       </div>
 
       <nav class="sb-nav" aria-label="主要導覽">
-        <a href="index.html" class="sb-item" aria-label="首頁">
-          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
-          <span class="sb-label">首頁</span>
-        </a>
-        <a href="index.html#services" class="sb-item" aria-label="服務項目">
-          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
-          <span class="sb-label">服務項目</span>
-        </a>
         <a href="portfolio.html" class="sb-item" aria-label="案例作品">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
           <span class="sb-label">案例作品</span>
@@ -237,9 +261,9 @@
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
           <span class="sb-label">關於我們</span>
         </a>
-        <a href="requisition.html" class="sb-item" aria-label="接案諮詢">
+        <a href="requisition.html" class="sb-item" aria-label="聯絡我們">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          <span class="sb-label">接案諮詢</span>
+          <span class="sb-label">聯絡我們</span>
         </a>
       </nav>
 
@@ -259,7 +283,7 @@
               <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
             </button>
           </div>
-          <span class="sb-copyright">© 2025 CHIYIGO</span>
+          <span class="sb-copyright">© 2024 chiyigo</span>
         </div>
       </div>
     </aside>
@@ -268,109 +292,117 @@
     <div class="dash-main">
       <main class="dash-content" id="os-content">
 
-        <section class="about-section">
+        <div class="about-wrap">
 
-          <div class="about-header" data-reveal>
-            <p class="eyebrow">// 關於 CHIYIGO</p>
-            <h1 class="page-title">
-              <span class="pt-dim">不只是做一個</span>
-              <span class="pt-grad">漂亮的網站</span>
-            </h1>
-            <p class="page-sub">把你的需求、痛點、目標變成真正能跑的系統。<br>從策略規劃到落地執行，一個人搞定。</p>
-          </div>
+          <!-- ── Hero: 2-column ── -->
+          <div class="about-hero" data-reveal>
 
-          <!-- Stats -->
-          <div class="stats-row" data-reveal data-reveal-delay="1">
-            <div class="stat-card">
-              <div class="stat-num">50+</div>
-              <div class="stat-label">完成專案</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-num">98%</div>
-              <div class="stat-label">客戶滿意度</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-num">5yr+</div>
-              <div class="stat-label">開發經驗</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-num">24/7</div>
-              <div class="stat-label">技術支援</div>
-            </div>
-          </div>
+            <!-- Left column -->
+            <div class="about-left">
+              <div class="ab-identity">
+                <div class="ab-avatar">C</div>
+                <div>
+                  <p class="ab-name">chiyigo</p>
+                  <p class="ab-role">獨立系統開發者</p>
+                </div>
+              </div>
 
-          <!-- About grid -->
-          <div class="about-grid">
+              <h1 class="ab-headline">
+                把需求變成
+                <span class="ab-headline-grad">真正能用的系統</span>
+              </h1>
 
-            <div data-reveal>
-              <p class="about-block-label">// 我是誰</p>
-              <h2 class="about-block-title">全端獨立開發者</h2>
-              <p class="about-block-body">
-                CHIYIGO 是一名獨立全端開發者，專注於幫助中小企業與品牌把「想要的功能」變成「真的能用的系統」。
-                不只是外包寫 code，而是從需求分析、系統設計到實作落地，全程參與。
+              <p class="ab-desc">
+                我是一位全端獨立開發者，專注於系統設計、客製化開發與 AI 整合。
+                從需求釐清、架構規劃到系統上線，提供一站式的數位解決方案。
               </p>
-              <div class="tech-grid">
-                <span class="tech-tag">TypeScript</span>
-                <span class="tech-tag">React</span>
-                <span class="tech-tag">Node.js</span>
-                <span class="tech-tag">Cloudflare Workers</span>
-                <span class="tech-tag">D1 / SQLite</span>
-                <span class="tech-tag">Astro</span>
-                <span class="tech-tag">Python</span>
-                <span class="tech-tag">AI / LLM 整合</span>
+
+              <div class="ab-stats">
+                <div class="ab-stat">
+                  <span class="ab-stat-n">50+</span>
+                  <span class="ab-stat-l">完成專案</span>
+                </div>
+                <div class="ab-stat">
+                  <span class="ab-stat-n">5yr+</span>
+                  <span class="ab-stat-l">開發經驗</span>
+                </div>
+                <div class="ab-stat">
+                  <span class="ab-stat-n">98%</span>
+                  <span class="ab-stat-l">客戶滿意度</span>
+                </div>
+              </div>
+
+              <a href="requisition.html" class="ab-cta">開始合作 →</a>
+            </div>
+
+            <!-- Right column: Timeline -->
+            <div class="about-right">
+              <p class="ab-section-label">// 經歷</p>
+              <div class="ab-timeline" id="ab-timeline">
+                <div class="tl-row"><span class="tl-year">2019</span><span class="tl-dot"></span><span class="tl-text">開始接案，主要以網站設計與前端開發為主</span></div>
+                <div class="tl-row"><span class="tl-year">2020</span><span class="tl-dot"></span><span class="tl-text">擴展至後端系統開發，首個企業後台管理系統上線</span></div>
+                <div class="tl-row"><span class="tl-year">2021</span><span class="tl-dot"></span><span class="tl-text">導入 React Native，開始承接 iOS/Android 雙平台開發</span></div>
+                <div class="tl-row"><span class="tl-year">2022</span><span class="tl-dot"></span><span class="tl-text">整合 AI 技術，完成多個 ChatGPT 商業應用專案</span></div>
+                <div class="tl-row"><span class="tl-year">2023</span><span class="tl-dot"></span><span class="tl-text">累積超過 50 個完成專案，專注於系統整合與自動化流程</span></div>
+                <div class="tl-row"><span class="tl-year">2024</span><span class="tl-dot"></span><span class="tl-text">持續精進，專注打造能真正解決業務問題的數位系統</span></div>
               </div>
             </div>
 
-            <div data-reveal data-reveal-delay="1">
-              <p class="about-block-label">// 我的做法</p>
-              <h2 class="about-block-title">需求優先，技術服務業務</h2>
-              <p class="about-block-body">
-                很多開發案最後都走歪了，因為技術跟業務目標脫節。
-                我的做法是先把你的目標、使用者、關鍵流程搞清楚，再選最適合的技術方案——
-                而不是先選技術再硬塞需求進去。
-              </p>
-              <div class="tech-grid">
-                <span class="tech-tag">系統設計</span>
-                <span class="tech-tag">API 架構</span>
-                <span class="tech-tag">DB Schema</span>
-                <span class="tech-tag">效能優化</span>
-                <span class="tech-tag">CI/CD</span>
+          </div>
+
+          <!-- ── Values ── -->
+          <div class="ab-values-section" data-reveal>
+            <p class="ab-section-label">// 工作理念</p>
+            <p class="ab-section-sub">我怎麼看待每一個專案</p>
+            <div class="ab-values-grid">
+              <div class="ab-value-card">
+                <h3 class="ab-value-title">需求優先</h3>
+                <p class="ab-value-text">不賣技術，賣解法。每個功能都對應真實的業務需求，沒有多餘的複雜度。</p>
+              </div>
+              <div class="ab-value-card">
+                <h3 class="ab-value-title">可維護性</h3>
+                <p class="ab-value-text">交付的程式碼必須易於理解、擴展與維護，不製造技術債。</p>
+              </div>
+              <div class="ab-value-card">
+                <h3 class="ab-value-title">準時交付</h3>
+                <p class="ab-value-text">時程透明、進度即時同步，不讓客戶在等待中產生焦慮。</p>
+              </div>
+              <div class="ab-value-card">
+                <h3 class="ab-value-title">長期關係</h3>
+                <p class="ab-value-text">不是做完就消失。上線後的問題同樣重要，維護與迭代才是真正的服務。</p>
               </div>
             </div>
-
-            <div data-reveal>
-              <p class="about-block-label">// 擅長領域</p>
-              <h2 class="about-block-title">從後端到前端，從想法到上線</h2>
-              <p class="about-block-body">
-                內部管理系統、客戶入口網站、Landing Page、第三方 API 串接、自動化流程——
-                這些都是日常接案範圍。如果你不確定自己的需求是否適合，歡迎直接來聊。
-              </p>
-            </div>
-
-            <div data-reveal data-reveal-delay="1">
-              <p class="about-block-label">// 合作方式</p>
-              <h2 class="about-block-title">直接溝通，沒有中間商</h2>
-              <p class="about-block-body">
-                你的需求直接對到執行的人，沒有層層轉達。
-                每個專案都有清楚的里程碑與驗收標準，讓你知道錢花到哪裡、進度在哪裡。
-              </p>
-            </div>
-
           </div>
 
-          <!-- CTA -->
-          <div class="about-cta" data-reveal>
-            <h2 class="about-cta-title">有個專案想聊聊？</h2>
-            <p class="about-cta-sub">填寫表單說明你的需求，我會在 1–2 個工作天內回覆。<br>初步諮詢免費，沒有壓力。</p>
-            <a href="requisition.html" class="about-cta-btn">
-              開始諮詢
-              <svg viewBox="0 0 16 16" fill="none" width="14" height="14" aria-hidden="true">
-                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </a>
+          <!-- ── Skills ── -->
+          <div class="ab-skills-section" data-reveal>
+            <p class="ab-section-label">// 技術堆疊</p>
+            <p class="ab-section-sub">使用的工具與技術</p>
+            <div class="ab-skills-grid">
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name">前端開發</h4>
+                <p class="ab-skill-tags">React, Vue, Astro, TypeScript, Tailwind CSS</p>
+              </div>
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name">後端開發</h4>
+                <p class="ab-skill-tags">Node.js, Python, FastAPI, PostgreSQL, Redis</p>
+              </div>
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name">行動應用</h4>
+                <p class="ab-skill-tags">React Native, Flutter, iOS, Android</p>
+              </div>
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name">AI / 整合</h4>
+                <p class="ab-skill-tags">OpenAI API, LangChain, LINE Bot, Webhook, n8n</p>
+              </div>
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name">雲端 / DevOps</h4>
+                <p class="ab-skill-tags">AWS, GCP, Docker, CI/CD, Nginx</p>
+              </div>
+            </div>
           </div>
 
-        </section>
+        </div>
 
         <footer class="footer">
           <div class="footer-inner">
@@ -384,7 +416,7 @@
               <a href="about.html">關於我們</a>
               <a href="requisition.html">接案諮詢</a>
             </nav>
-            <p class="copy">© 2025 CHIYIGO</p>
+            <p class="copy">© 2024 chiyigo</p>
           </div>
         </footer>
 
@@ -427,34 +459,24 @@
         </div>
       </div>
       <nav class="m-ov-nav" aria-label="主導覽">
-        <a href="index.html" class="m-ov-item" style="--i:0" data-close-overlay>
-          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></span>
-          <span class="m-ov-label">首頁</span>
-          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-        </a>
-        <a href="index.html#services" class="m-ov-item" style="--i:1" data-close-overlay>
-          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
-          <span class="m-ov-label">服務項目</span>
-          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-        </a>
-        <a href="portfolio.html" class="m-ov-item" style="--i:2" data-close-overlay>
+        <a href="portfolio.html" class="m-ov-item" style="--i:0" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
           <span class="m-ov-label">案例作品</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="index.html#process" class="m-ov-item" style="--i:3" data-close-overlay>
+        <a href="index.html#process" class="m-ov-item" style="--i:1" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></span>
           <span class="m-ov-label">服務流程</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="about.html" class="m-ov-item active" style="--i:4" data-close-overlay>
+        <a href="about.html" class="m-ov-item active" style="--i:2" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
           <span class="m-ov-label">關於我們</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="requisition.html" class="m-ov-item" style="--i:5" data-close-overlay>
+        <a href="requisition.html" class="m-ov-item" style="--i:3" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
-          <span class="m-ov-label">接案諮詢</span>
+          <span class="m-ov-label">聯絡我們</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
       </nav>
@@ -465,126 +487,91 @@
   </div>
 
   <script>
-    // ── Mobile overlay ────────────────────────────────────────────
-    const hamBtn  = document.getElementById('m-ham-btn')
-    const overlay = document.getElementById('m-overlay')
-    const topbar  = document.getElementById('m-topbar')
+    // ── Mobile overlay ──────────────────────────────────────────
+    const hamBtn  = document.getElementById('m-ham-btn');
+    const overlay = document.getElementById('m-overlay');
+    const topbar  = document.getElementById('m-topbar');
 
     function openMenu() {
-      hamBtn?.setAttribute('aria-expanded', 'true');
-      hamBtn?.classList.add('is-open');
-      overlay?.classList.add('is-open');
-      overlay?.removeAttribute('aria-hidden');
-      topbar?.classList.add('menu-open');
-      document.body.style.overflow = 'hidden';
+      hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open');
+      overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden');
+      topbar?.classList.add('menu-open'); document.body.style.overflow='hidden';
     }
     function closeMenu() {
-      hamBtn?.setAttribute('aria-expanded', 'false');
-      hamBtn?.classList.remove('is-open');
-      overlay?.classList.remove('is-open');
-      overlay?.setAttribute('aria-hidden', 'true');
-      topbar?.classList.remove('menu-open');
-      document.body.style.overflow = '';
+      hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open');
+      overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true');
+      topbar?.classList.remove('menu-open'); document.body.style.overflow='';
     }
-    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu())
-    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)))
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay?.classList.contains('is-open')) closeMenu() })
+    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
+    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
+    document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
 
-    // ── Theme toggle ──────────────────────────────────────────────
-    const themeBtn  = document.getElementById('theme-toggle-btn')
-    const mThemeBtn = document.getElementById('m-theme-btn')
+    // ── Theme toggle ──────────────────────────────────────────
+    const themeBtn  = document.getElementById('theme-toggle-btn');
+    const mThemeBtn = document.getElementById('m-theme-btn');
 
     function applyTheme(dark) {
       document.documentElement.classList.toggle('theme-dark', dark);
       document.documentElement.classList.toggle('theme-light', !dark);
       [themeBtn, mThemeBtn].forEach(btn => {
         if (!btn) return;
-        const sun  = btn.querySelector('.icon-sun');
-        const moon = btn.querySelector('.icon-moon');
+        const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
         if (sun)  sun.style.display  = dark ? 'none' : '';
         if (moon) moon.style.display = dark ? ''     : 'none';
       });
     }
-    applyTheme(localStorage.getItem('theme') === 'dark')
+    applyTheme(localStorage.getItem('theme') === 'dark');
     const doToggle = () => {
-      const isDark = !document.documentElement.classList.contains('theme-dark');
-      localStorage.setItem('theme', isDark ? 'dark' : 'light');
-      applyTheme(isDark);
-    }
-    themeBtn?.addEventListener('click', doToggle)
-    mThemeBtn?.addEventListener('click', doToggle)
+      const d = !document.documentElement.classList.contains('theme-dark');
+      localStorage.setItem('theme', d ? 'dark' : 'light');
+      applyTheme(d);
+    };
+    themeBtn?.addEventListener('click', doToggle);
+    mThemeBtn?.addEventListener('click', doToggle);
 
-    // ── Reveal animation ──────────────────────────────────────────
-    const osContent = document.getElementById('os-content')
-    const revRoot   = window.innerWidth > 768 ? osContent : null
+    // ── Reveal animation ──────────────────────────────────────
+    const osContent = document.getElementById('os-content');
+    const revRoot   = window.innerWidth > 768 ? osContent : null;
     const revObs    = new IntersectionObserver(entries => {
-      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); revObs.unobserve(e.target) } })
-    }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' })
-    document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el))
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); revObs.unobserve(e.target); } });
+    }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
+    document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
+
+    // ── Timeline staggered reveal ──────────────────────────────
+    const tlWrap = document.getElementById('ab-timeline');
+    if (tlWrap) {
+      const tlRoot = window.innerWidth > 768 ? osContent : null;
+      const tlObs = new IntersectionObserver(entries => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            tlWrap.querySelectorAll('.tl-row').forEach((row, i) => {
+              setTimeout(() => row.classList.add('revealed'), i * 80);
+            });
+            tlObs.unobserve(e.target);
+          }
+        });
+      }, { root: tlRoot, threshold: 0.1 });
+      tlObs.observe(tlWrap);
+    }
   </script>
 
   <!-- Neural canvas -->
   <script>
-    (function () {
-      const canvas = document.getElementById('neural-canvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      let W = 0, H = 0, nodes = [];
-      const DIST = 155;
-      function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
-      function initNodes() {
-        const n = W < 768 ? 48 : 115;
-        nodes = Array.from({ length: n }, () => ({
-          x: Math.random() * W, y: Math.random() * H,
-          vx: (Math.random() - .5) * .28, vy: (Math.random() - .5) * .28,
-          r: Math.random() * 1.1 + .4, pulse: Math.random() * Math.PI * 2,
-        }));
-      }
-      const mouse = { x: -9999, y: -9999 };
-      document.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-      let cfg = { r: '108', g: '110', b: '229', no: .22, lo: .09 };
-      function syncCfg() {
-        const s = getComputedStyle(document.documentElement);
-        cfg = {
-          r:  s.getPropertyValue('--neural-r').trim()  || '108',
-          g:  s.getPropertyValue('--neural-g').trim()  || '110',
-          b:  s.getPropertyValue('--neural-b').trim()  || '229',
-          no: parseFloat(s.getPropertyValue('--neural-node-opacity').trim() || '.22'),
-          lo: parseFloat(s.getPropertyValue('--neural-line-opacity').trim() || '.09'),
-        };
-      }
-      syncCfg();
-      new MutationObserver(syncCfg).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-      function draw() {
-        ctx.clearRect(0, 0, W, H);
-        const { r, g, b, no, lo } = cfg;
-        for (const n of nodes) {
-          const dx = n.x - mouse.x, dy = n.y - mouse.y, d2 = dx * dx + dy * dy;
-          if (d2 < 16900) { const d = Math.sqrt(d2); n.vx += dx / d * .055; n.vy += dy / d * .055; }
-          n.vx *= .982; n.vy *= .982;
-          n.x += n.vx; n.y += n.vy;
-          if (n.x < -12) n.x = W + 12; else if (n.x > W + 12) n.x = -12;
-          if (n.y < -12) n.y = H + 12; else if (n.y > H + 12) n.y = -12;
-          n.pulse += .011;
-          const p = Math.sin(n.pulse) * .25 + .75;
-          ctx.beginPath(); ctx.arc(n.x, n.y, n.r * p, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${r},${g},${b},${no * p})`; ctx.fill();
-        }
-        for (let i = 0; i < nodes.length; i++) {
-          for (let j = i + 1; j < nodes.length; j++) {
-            const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y, d2 = dx * dx + dy * dy;
-            if (d2 < DIST * DIST) {
-              const a = (1 - Math.sqrt(d2) / DIST) * lo;
-              ctx.beginPath(); ctx.moveTo(nodes[i].x, nodes[i].y); ctx.lineTo(nodes[j].x, nodes[j].y);
-              ctx.strokeStyle = `rgba(${r},${g},${b},${a})`; ctx.lineWidth = .5; ctx.stroke();
-            }
-          }
-        }
-        requestAnimationFrame(draw);
-      }
-      resize(); initNodes(); draw();
-      window.addEventListener('resize', () => { resize(); initNodes(); });
+    (function(){
+      const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+      const ctx=canvas.getContext('2d');if(!ctx)return;
+      let W=0,H=0,nodes=[];const DIST=155;
+      function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+      function initNodes(){const n=W<768?48:115;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
+      const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+      let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
+      function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--neural-r').trim()||'108',g:s.getPropertyValue('--neural-g').trim()||'110',b:s.getPropertyValue('--neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--neural-line-opacity').trim()||'.09')}}
+      syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+      function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
+        for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
+        for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
+        requestAnimationFrame(draw)}
+      resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
     })();
   </script>
 
