@@ -157,7 +157,7 @@ function togglePassword(inputId, btnId) {
   if (isHidden) {
     // 顯示密碼
     input.type = 'text';
-    btn.classList.replace('text-gray-500', 'text-brand-500');
+    btn.classList.add('eye-active');
     if (icon) {
       icon.innerHTML = `
         <path stroke-linecap="round" stroke-linejoin="round"
@@ -178,7 +178,7 @@ function hidePassword(inputId, btnId) {
   const icon  = document.getElementById(btnId + '-icon');
 
   input.type = 'password';
-  if (btn) btn.classList.replace('text-brand-500', 'text-gray-500');
+  if (btn) btn.classList.remove('eye-active');
   if (icon) {
     icon.innerHTML = `
       <path stroke-linecap="round" stroke-linejoin="round"
@@ -213,14 +213,7 @@ function switchTab(tab) {
   } else {
     tabBar.style.display = '';
     ['login', 'register'].forEach(t => {
-      const btn = document.getElementById('tab-' + t);
-      if (t === tab) {
-        btn.classList.add('bg-brand-500', 'text-white', 'shadow');
-        btn.classList.remove('text-gray-400');
-      } else {
-        btn.classList.remove('bg-brand-500', 'text-white', 'shadow');
-        btn.classList.add('text-gray-400');
-      }
+      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
     });
   }
 
@@ -235,18 +228,13 @@ function switchTab(tab) {
 function showMsg(text, type = 'error') {
   const box = document.getElementById('msg-box');
   box.textContent = text;
-  box.className = [
-    'mb-5 px-4 py-3 rounded-lg text-sm font-medium',
-    type === 'error'
-      ? 'bg-red-500/10 border border-red-500/30 text-red-400'
-      : 'bg-green-500/10 border border-green-500/30 text-green-400',
-  ].join(' ');
-  box.classList.remove('hidden');
+  box.className = 'msg-box ' + (type === 'error' ? 'msg-error' : 'msg-success');
+  box.style.display = 'block';
 }
 
 function clearMsg() {
   const box = document.getElementById('msg-box');
-  box.classList.add('hidden');
+  box.style.display = 'none';
   box.textContent = '';
 }
 

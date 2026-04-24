@@ -28,7 +28,8 @@
 | Dashboard UX 強化（bfcache 防禦 + 靜默刷新） | ✅ 完成 2026-04-23 |
 | Email 驗證 + 忘記密碼 | ✅ 完成（Stage 17，2026-04-24）|
 | 動態 OAuth 路由（Google/LINE/FB） | 🔄 進行中（Stage 18，程式完成；待填 Cloudflare 憑證 + LINE/FB OAuth App）|
-| 首頁重設計（新設計系統） | 🔲 待實作（Stage 19）|
+| 首頁重設計（新設計系統） | ✅ 完成（Stage 19，2026-04-25）|
+| login.html / portfolio.html 風格同步 | ✅ 完成（2026-04-25；mobile overlay 統一 is-open、6 項導覽、接案中徽章）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -294,9 +295,9 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 | ~~中~~ | ~~Stage 17 — Email 驗證~~ | ✅ 完成 2026-04-24（Resend，send-verification + verify 端點）|
 | ~~中~~ | ~~Stage 17 — 忘記密碼~~ | ✅ 完成 2026-04-24（forgot-password + reset-password + 2FA 閉環）|
-| 🔄 | Stage 18 — 動態 OAuth 路由 | 程式完成（18.1–18.7 ✅）；待補：18.8 Cloudflare 環境變數（GOOGLE/LINE/FB）、Google Client Secret 尚未填入、LINE/FB OAuth App 尚未建立 |
+| 🔄 | Stage 18 — 動態 OAuth 路由 | Google：18.8 完成、T18 等待 Google 傳播（⏳ 建立於 2026-04-25 06:24，傳播中）；LINE/FB：OAuth App 尚未建立 |
 | ~~中~~ | ~~T14/T15 — 重設密碼完整測試~~ | ✅ 通過 2026-04-24（T14 無 2FA + T15 有 2FA 閉環均驗證通過）|
-| 中 | Dashboard 2FA 管理 UI | 啟用 / 停用 2FA 的前端介面，目前只有 API |
+| ~~中~~ | ~~Dashboard 2FA 管理 UI~~ | ✅ 完成 2026-04-25（setup QR flow + backup codes + disable with OTP）|
 | ~~低~~ | ~~login.html 忘記密碼入口~~ | ✅ 完成 2026-04-24（登入按鈕右下角加「忘記密碼？」連結）|
 | 高 | Stage 19 — 首頁重設計 | 套用新設計系統（CSS Variables、SaaS Dashboard 版面、Neural Canvas、亮暗主題）|
 | ~~待考慮~~ | ~~首頁統計數字區塊~~ | ✅ 完成 2026-04-24（50+ 完成專案 / 98% 客戶滿意度 / 5yr+ 開發經驗 / 24/7 技術支援，數字 count-up 動畫）|
@@ -501,6 +502,8 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 - [x] 19.6 行動版：固定 TopBar + 底部 BottomSheet 導覽
 - [x] 19.7 Logo 圖片接入（`public/images/logo-light.png` + `logo-dark.png`，亮暗自動切換）
 - [x] 統計數字區塊（50+ 完成專案、98% 客戶滿意度、5yr+ 開發經驗、24/7 技術支援服務，count-up 動畫）
+- [x] 19.8 `login.html` 套用新設計系統（sidebar、CSS 變數、mobile overlay 同步為 is-open pattern、接案中徽章、Escape 鍵關閉、backdrop 點擊關閉）
+- [x] 19.9 `portfolio.html` mobile overlay 補齊 6 項導覽（首頁、服務項目、案例作品、服務流程、關於我們、接案諮詢）並修正「聯絡我們」→「接案諮詢」標籤
 
 ---
 
