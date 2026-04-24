@@ -1,0 +1,70 @@
+/**
+ * POST /api/auth/2fa/disable
+ * Header: Authorization: Bearer <access_token>
+ * Body:   { otp_code } 或 { backup_code }
+ *
+ * 停用 2FA：驗證當前 OTP 或備用碼後，清除 totp_secret、totp_enabled，
+ * 並刪除所有備用碼。
+ */
+
+import { TOTP, Secret } from 'otpauth'
+import { requireAuth, res } from '../../../utils/auth.js'
+
+export async function onRequestPost({ request, env }) {
+  const { user, error } = await requireAuth(request, env)
+  if (error) return error
+
+  let body
+  try { body = await request.json() }
+  catch { return res({ error: 'Invalid JSON' }, 400) }
+
+  const { otp_code, backup_code } = body ?? {}
+  if (!otp_code && !backup_code)
+    return res({ error: 'otp_code or backup_code is required' }, 400)
+
+  const userId = Number(user.sub)
+  const db     = env.chiyigo_db
+
+  const account = await db
+    .prepare('SELECT totp_secret, totp_enabled FROM local_accounts WHERE user_id = ?')
+    .bind(userId)
+    .first()
+
+  if (!account)              return res({ error: 'Local account not found' }, 404)
+  if (!account.totp_enabled) return res({ error: '2FA is not enabled' }, 409)
+
+  // ── 驗證 OTP ──────────────────────────────────────────────────
+  if (otp_code) {
+    const sanitized = String(otp_code).replace(/\s/g, '')
+    if (!/^\d{6}$/.test(sanitized))
+      return res({ error: 'otp_code must be 6 digits' }, 400)
+
+    const totp = new TOTP({
+      algorithm: 'SHA1', digits: 6, period: 30,
+      secret: Secret.fromBase32(account.totp_secret),
+    })
+    if (totp.validate({ token: sanitized, window: 1 }) === null)
+      return res({ error: 'Invalid OTP code' }, 401)
+  }
+
+  // ── 驗證備用碼 ────────────────────────────────────────────────
+  if (backup_code) {
+    const normalized = String(backup_code).replace(/[-\s]/g, '').toUpperCase()
+    const hashBuf    = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
+    const hash       = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+    const row = await db
+      .prepare('SELECT id FROM backup_codes WHERE user_id = ? AND code_hash = ? AND used_at IS NULL')
+      .bind(userId, hash)
+      .first()
+    if (!row) return res({ error: 'Invalid or already used backup code' }, 401)
+  }
+
+  // ── 停用 2FA，清除所有備用碼 ──────────────────────────────────
+  await db.batch([
+    db.prepare('UPDATE local_accounts SET totp_enabled = 0, totp_secret = NULL WHERE user_id = ?').bind(userId),
+    db.prepare('DELETE FROM backup_codes WHERE user_id = ?').bind(userId),
+  ])
+
+  return res({ message: '2FA disabled successfully' })
+}

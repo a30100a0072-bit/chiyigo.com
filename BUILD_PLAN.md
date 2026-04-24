@@ -10,7 +10,7 @@
 
 | 模組 | 狀態 |
 |------|------|
-| 靜態站 + SEO | ✅ 完成（含 about.html、全站 nav 同步 2026-04-25）|
+| 靜態站 + SEO | ✅ 完成（全站 Sidebar 統一 6 項、預設深色主題、2026-04-25）|
 | D1 Schema（全量） | ✅ 已部署至 `chiyigo_db`（含 pkce_sessions + auth_codes）|
 | Auth 核心（註冊/登入/2FA） | ✅ 完成，遠端 DB 驗證通過 2026-04-23 |
 | ES256 JWT + JWKS | ✅ 完成 |
@@ -443,7 +443,7 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 
 ### 待辦子項目
 - [x] 17.1 建立 `database/schema_email.sql`，部署至 D1 本地與遠端（2026-04-23，舊版 3 欄位表已替換為 8 欄位完整 schema）
-- [x] 17.2 設定 `RESEND_API_KEY` 環境變數（Cloudflare Pages 後台 + .dev.vars）⚠️ 金鑰已暴露於對話紀錄，Stage 17 完成後需到 Resend 後台刪除並重新產生
+- [x] 17.2 設定 `RESEND_API_KEY` 環境變數（Cloudflare Pages 後台 + .dev.vars）✅ 金鑰已於 2026-04-25 輪換（舊：re_MqU7...，新：re_5uYc...）
 - [x] 17.3 `functions/utils/email.js` — `sendVerificationEmail` / `sendPasswordResetEmail`（原生 fetch，無 SDK）
 - [x] 17.4 `POST /api/auth/email/send-verification` — 60 秒冷卻 + 生成 token + 發信
 - [x] 17.5 `GET /api/auth/email/verify` — 原子核銷 + 更新 email_verified
@@ -499,7 +499,7 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 - [x] 19.4 流程區塊（需求溝通 → 策略規劃 → 落地執行 三步驟）
 - [x] 19.5 桌面版：左側 Sidebar 導覽 + IntersectionObserver 自動 highlight active section
 - [x] 19.6 行動版：固定 TopBar + 底部 BottomSheet 導覽
-- [ ] 19.7 Logo 圖片接入（`public/images/logo-light.png` + `logo-dark.png`，亮暗自動切換）
+- [x] 19.7 Logo 圖片接入（`public/images/logo-light.png` + `logo-dark.png`，亮暗自動切換）
 - [x] 統計數字區塊（50+ 完成專案、98% 客戶滿意度、5yr+ 開發經驗、24/7 技術支援服務，count-up 動畫）
 
 ---

@@ -29,9 +29,11 @@ export async function onRequestGet({ request, env }) {
   // ── 2. 即時查詢 DB 取得最新用戶狀態 ─────────────────────────
   const userRow = await db
     .prepare(`
-      SELECT id, email, email_verified, role, status, created_at
-      FROM users
-      WHERE id = ? AND deleted_at IS NULL
+      SELECT u.id, u.email, u.email_verified, u.role, u.status, u.created_at,
+             COALESCE(la.totp_enabled, 0) AS totp_enabled
+      FROM users u
+      LEFT JOIN local_accounts la ON la.user_id = u.id
+      WHERE u.id = ? AND u.deleted_at IS NULL
     `)
     .bind(userId)
     .first()
@@ -58,6 +60,7 @@ export async function onRequestGet({ request, env }) {
     user_id:        userRow.id,
     email:          userRow.email,
     email_verified: userRow.email_verified === 1,
+    totp_enabled:   userRow.totp_enabled === 1,
     role:           userRow.role,
     status:         userRow.status,
     created_at:     userRow.created_at,

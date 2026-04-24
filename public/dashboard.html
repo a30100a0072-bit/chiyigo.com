@@ -99,6 +99,82 @@
           </div>
         </div>
 
+        <!-- 2FA 管理區塊 -->
+        <div id="tfa-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-4">
+            <div class="flex items-center gap-3">
+              <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+              <div>
+                <p class="text-sm font-semibold text-white">雙重驗證（2FA）</p>
+                <p id="tfa-status-text" class="text-xs text-gray-500 mt-0.5">載入中…</p>
+              </div>
+            </div>
+            <span id="tfa-badge" class="px-2.5 py-1 rounded-full text-xs font-semibold"></span>
+          </div>
+
+          <!-- 啟用 / 停用按鈕 -->
+          <div class="border-t border-[#2a2a35] px-5 py-3 flex gap-2">
+            <button id="tfa-enable-btn" onclick="startSetup2FA()"
+              class="hidden px-4 py-2 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
+              啟用 2FA
+            </button>
+            <button id="tfa-disable-btn" onclick="showDisablePanel()"
+              class="hidden px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
+              停用 2FA
+            </button>
+          </div>
+
+          <!-- Setup 面板（啟用流程）-->
+          <div id="tfa-setup-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-4">
+            <p class="text-xs text-gray-400">用 Google Authenticator 或任何 TOTP App 掃描 QR Code，然後輸入 6 位數驗證碼完成啟用。</p>
+            <div class="flex flex-col items-center gap-3">
+              <canvas id="tfa-qr" class="rounded-xl bg-white p-3"></canvas>
+              <div class="text-center">
+                <p class="text-xs text-gray-500 mb-1">或手動輸入金鑰：</p>
+                <code id="tfa-secret" class="text-xs text-brand-400 bg-brand-500/10 px-2 py-1 rounded select-all break-all"></code>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <input id="tfa-otp-input" type="text" inputmode="numeric" maxlength="6" placeholder="輸入 6 位數驗證碼"
+                class="flex-1 bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-500/50 tracking-widest text-center" />
+              <button onclick="confirmEnable2FA()"
+                class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all">
+                確認啟用
+              </button>
+            </div>
+            <p id="tfa-setup-msg" class="hidden text-xs"></p>
+          </div>
+
+          <!-- Disable 面板（停用流程）-->
+          <div id="tfa-disable-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-3">
+            <p class="text-xs text-amber-400">停用後需重新設定才能再次啟用。請輸入 Authenticator App 的驗證碼確認。</p>
+            <div class="flex gap-2">
+              <input id="tfa-disable-input" type="text" inputmode="numeric" maxlength="6" placeholder="輸入 6 位數驗證碼"
+                class="flex-1 bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/50 tracking-widest text-center" />
+              <button onclick="confirmDisable2FA()"
+                class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-all">
+                確認停用
+              </button>
+            </div>
+            <p id="tfa-disable-msg" class="hidden text-xs"></p>
+          </div>
+
+          <!-- 備用碼顯示（啟用成功後）-->
+          <div id="tfa-backup-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-3">
+            <div class="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 p-3">
+              <svg class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+              <p class="text-xs text-amber-300">請立即抄下這 10 組備用碼，之後<strong>無法再次查看</strong>。每組只能使用一次。</p>
+            </div>
+            <div id="tfa-backup-codes" class="grid grid-cols-2 gap-1.5"></div>
+            <button onclick="closeTfaBackup()"
+              class="w-full py-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-400 text-xs font-semibold transition-all">
+              我已抄寫完畢
+            </button>
+          </div>
+        </div>
+
         <!-- Email 未驗證提示 -->
         <div id="email-banner" class="hidden mb-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-5 py-4">
           <div class="flex items-center justify-between gap-4">
@@ -131,6 +207,7 @@
     </div>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
   <script src="/js/auth-ui.js?v=6"></script>
   <script>
     const ROLE_STYLE = {
@@ -209,6 +286,9 @@
         if (icons.length === 0) icons.push(PROVIDER_ICON.local);
         providersEl.innerHTML = icons.join('');
 
+        // 2FA 區塊
+        render2FASection(data.totp_enabled ?? false);
+
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('user-card').classList.remove('hidden');
 
@@ -220,6 +300,102 @@
     }
 
     loadProfile();
+
+    // ── 2FA 管理 ─────────────────────────────────────────────────
+
+    function render2FASection(enabled) {
+      document.getElementById('tfa-section').classList.remove('hidden');
+      const badge = document.getElementById('tfa-badge');
+      const text  = document.getElementById('tfa-status-text');
+      if (enabled) {
+        badge.textContent  = '已啟用';
+        badge.className    = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-green-500/15 text-green-300 border border-green-500/20';
+        text.textContent   = '帳號已受雙重驗證保護';
+        document.getElementById('tfa-enable-btn').classList.add('hidden');
+        document.getElementById('tfa-disable-btn').classList.remove('hidden');
+      } else {
+        badge.textContent  = '未啟用';
+        badge.className    = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-500/15 text-gray-400 border border-gray-500/20';
+        text.textContent   = '建議啟用以提升帳號安全性';
+        document.getElementById('tfa-enable-btn').classList.remove('hidden');
+        document.getElementById('tfa-disable-btn').classList.add('hidden');
+      }
+      document.getElementById('tfa-setup-panel').classList.add('hidden');
+      document.getElementById('tfa-disable-panel').classList.add('hidden');
+      document.getElementById('tfa-backup-panel').classList.add('hidden');
+    }
+
+    async function startSetup2FA() {
+      const token = sessionStorage.getItem('access_token');
+      const btn   = document.getElementById('tfa-enable-btn');
+      btn.disabled = true; btn.textContent = '請稍候…';
+      try {
+        const res  = await fetch('/api/auth/2fa/setup', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error ?? '設定失敗'); btn.disabled = false; btn.textContent = '啟用 2FA'; return; }
+        document.getElementById('tfa-secret').textContent = data.secret;
+        await QRCode.toCanvas(document.getElementById('tfa-qr'), data.otpauth_uri, { width: 180, margin: 1 });
+        document.getElementById('tfa-setup-panel').classList.remove('hidden');
+        document.getElementById('tfa-otp-input').value = '';
+        document.getElementById('tfa-setup-msg').classList.add('hidden');
+      } catch { alert('網路錯誤，請稍後再試'); }
+      btn.disabled = false; btn.textContent = '啟用 2FA';
+    }
+
+    async function confirmEnable2FA() {
+      const token = sessionStorage.getItem('access_token');
+      const otp   = document.getElementById('tfa-otp-input').value.trim();
+      const msg   = document.getElementById('tfa-setup-msg');
+      if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, '請輸入 6 位數驗證碼', 'err'); return; }
+      try {
+        const res  = await fetch('/api/auth/2fa/activate', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otp_code: otp }),
+        });
+        const data = await res.json();
+        if (!res.ok) { showTfaMsg(msg, data.error ?? '啟用失敗', 'err'); return; }
+        // 顯示備用碼
+        const codesEl = document.getElementById('tfa-backup-codes');
+        codesEl.innerHTML = data.backup_codes.map(c =>
+          `<code class="block text-center text-xs font-mono bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-2 py-1.5 text-gray-300 select-all">${c}</code>`
+        ).join('');
+        document.getElementById('tfa-setup-panel').classList.add('hidden');
+        document.getElementById('tfa-backup-panel').classList.remove('hidden');
+        render2FASection(true);
+      } catch { showTfaMsg(msg, '網路錯誤，請稍後再試', 'err'); }
+    }
+
+    function closeTfaBackup() {
+      document.getElementById('tfa-backup-panel').classList.add('hidden');
+    }
+
+    function showDisablePanel() {
+      document.getElementById('tfa-setup-panel').classList.add('hidden');
+      document.getElementById('tfa-disable-panel').classList.toggle('hidden');
+      document.getElementById('tfa-disable-input').value = '';
+      document.getElementById('tfa-disable-msg').classList.add('hidden');
+    }
+
+    async function confirmDisable2FA() {
+      const token = sessionStorage.getItem('access_token');
+      const otp   = document.getElementById('tfa-disable-input').value.trim();
+      const msg   = document.getElementById('tfa-disable-msg');
+      if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, '請輸入 6 位數驗證碼', 'err'); return; }
+      try {
+        const res  = await fetch('/api/auth/2fa/disable', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otp_code: otp }),
+        });
+        const data = await res.json();
+        if (!res.ok) { showTfaMsg(msg, data.error ?? '停用失敗', 'err'); return; }
+        render2FASection(false);
+      } catch { showTfaMsg(msg, '網路錯誤，請稍後再試', 'err'); }
+    }
+
+    function showTfaMsg(el, text, type) {
+      el.textContent = text;
+      el.className   = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-green-400');
+    }
 
     async function sendVerification() {
       const btn = document.getElementById('resend-btn');
