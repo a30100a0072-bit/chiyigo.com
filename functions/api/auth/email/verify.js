@@ -32,7 +32,9 @@ export async function onRequestGet({ request, env }) {
     .bind(tokenHash)
     .first()
 
-  if (!row) return res({ error: 'Token is invalid or has expired' }, 400)
+  if (!row) {
+    return Response.redirect(new URL('/login.html?verify_error=1', request.url).href, 302)
+  }
 
   // ── 更新 email_verified ──────────────────────────────────────
   await db
@@ -40,12 +42,5 @@ export async function onRequestGet({ request, env }) {
     .bind(row.user_id)
     .run()
 
-  return res({ message: 'Email verified successfully' })
-}
-
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return Response.redirect(new URL('/login.html?verified=1', request.url).href, 302)
 }

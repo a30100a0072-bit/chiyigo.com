@@ -237,5 +237,39 @@
   </main>
 
   <script src="/js/auth-ui.js?v=6"></script>
+  <script>
+    // 從 verify / reset-password 跳轉回來時顯示提示
+    (function () {
+      const p = new URLSearchParams(location.search)
+      if (p.has('verified')) {
+        showNotice(
+          '✓ Email 驗證成功！請登入你的帳號。',
+          'bg-green-500/10 border-green-500/20 text-green-400'
+        )
+        history.replaceState(null, '', '/login.html')
+      } else if (p.has('verify_error')) {
+        showNotice(
+          '驗證連結無效或已過期，請重新申請。',
+          'bg-red-500/10 border-red-500/20 text-red-400'
+        )
+        history.replaceState(null, '', '/login.html')
+      } else if (p.has('password_reset')) {
+        showNotice(
+          '✓ 密碼重設成功！請使用新密碼登入。',
+          'bg-green-500/10 border-green-500/20 text-green-400'
+        )
+        history.replaceState(null, '', '/login.html')
+      }
+
+      function showNotice(text, cls) {
+        const el = document.createElement('div')
+        el.textContent = text
+        el.className = `text-sm font-medium px-4 py-3 rounded-xl border mb-5 ${cls}`
+        // 插入到卡片最上方
+        const card = document.querySelector('.rounded-2xl')
+        if (card) card.insertAdjacentElement('afterbegin', el)
+      }
+    })()
+  </script>
 </body>
 </html>
