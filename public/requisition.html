@@ -200,15 +200,19 @@
     /* Text inputs */
     .field-input{width:100%;background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:8px;padding:.85rem 1rem;font-family:var(--font-sans);font-size:1rem;color:var(--text);outline:none;transition:border-color .2s ease,box-shadow .2s ease,background .2s ease;-webkit-appearance:none;appearance:none}
     .field-input::placeholder{color:var(--text-dim);opacity:.6;font-style:italic}
-    .field-input:hover{border-color:var(--border);background:#080c14b3}
-    .field-input:focus{border-color:#6b9fd473;box-shadow:0 0 0 3px #6b9fd414,inset 0 1px 2px #0000004d;background:#080c14d9}
+    .field-input:hover{border-color:var(--border);background:var(--bg-elevated)}
+    .field-input:focus{border-color:#6b9fd473;box-shadow:0 0 0 3px #6b9fd414,inset 0 1px 2px #00000008;background:var(--bg-elevated)}
+    .theme-dark .field-input:hover{background:#080c14b3}
+    .theme-dark .field-input:focus{background:#080c14d9;box-shadow:0 0 0 3px #6b9fd414,inset 0 1px 2px #0000004d}
     .field-textarea{resize:vertical;min-height:120px;line-height:1.6}
 
     /* Select */
     .select-wrap{position:relative}
     .field-select{width:100%;background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:8px;padding:.85rem 2.5rem .85rem 1rem;font-family:var(--font-sans);font-size:1rem;color:var(--text);outline:none;cursor:pointer;-webkit-appearance:none;appearance:none;transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
-    .field-select:hover{border-color:var(--border);background:#080c14b3}
-    .field-select:focus{border-color:#6b9fd473;box-shadow:0 0 0 3px #6b9fd414,inset 0 1px 2px #0000004d;background:#080c14d9}
+    .field-select:hover{border-color:var(--border);background:var(--bg-elevated)}
+    .field-select:focus{border-color:#6b9fd473;box-shadow:0 0 0 3px #6b9fd414,inset 0 1px 2px #00000008;background:var(--bg-elevated)}
+    .theme-dark .field-select:hover{background:#080c14b3}
+    .theme-dark .field-select:focus{background:#080c14d9;box-shadow:0 0 0 3px #6b9fd414,inset 0 1px 2px #0000004d}
     .field-select option[value=""]{color:var(--text-dim)}
     .field-select option{background:#0d1420;color:var(--text)}
     .select-arrow{position:absolute;right:.85rem;top:50%;transform:translateY(-50%);width:10px;height:6px;color:var(--text-dim);pointer-events:none;transition:color .2s ease}
@@ -336,6 +340,10 @@
         <a href="index.html#process" class="sb-item" data-nav-id="process" aria-label="服務流程">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
           <span class="sb-label">服務流程</span>
+        </a>
+        <a href="about.html" class="sb-item" data-nav-id="about" aria-label="關於我們">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label">關於我們</span>
         </a>
         <a href="requisition.html" class="sb-item active" data-nav-id="contact" aria-label="接案諮詢">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -500,6 +508,8 @@
                             <option value="web">網站建置 / Landing Page</option>
                             <option value="integration">第三方串接 / 自動化流程</option>
                             <option value="interactive">互動體驗 / 品牌活動</option>
+                            <option value="branding">品牌識別 / 視覺設計</option>
+                            <option value="marketing">數位行銷 / SEO</option>
                             <option value="other">其他 / 不確定，想先聊聊</option>
                           </select>
                           <span class="select-arrow" aria-hidden="true">
@@ -674,7 +684,12 @@
           <span class="m-ov-label">服務流程</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="requisition.html" class="m-ov-item active" style="--i:4" data-close-overlay>
+        <a href="about.html" class="m-ov-item" style="--i:4" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span class="m-ov-label">關於我們</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="requisition.html" class="m-ov-item active" style="--i:5" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
           <span class="m-ov-label">接案諮詢</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>

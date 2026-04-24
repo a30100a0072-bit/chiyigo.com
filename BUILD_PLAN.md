@@ -6,11 +6,11 @@
 
 ---
 
-## 整體進度快照（2026-04-24 更新）
+## 整體進度快照（2026-04-25 更新）
 
 | 模組 | 狀態 |
 |------|------|
-| 靜態站 + SEO | ✅ 完成 |
+| 靜態站 + SEO | ✅ 完成（含 about.html、全站 nav 同步 2026-04-25）|
 | D1 Schema（全量） | ✅ 已部署至 `chiyigo_db`（含 pkce_sessions + auth_codes）|
 | Auth 核心（註冊/登入/2FA） | ✅ 完成，遠端 DB 驗證通過 2026-04-23 |
 | ES256 JWT + JWKS | ✅ 完成 |
@@ -74,6 +74,25 @@
 - [x] 7.5 提交 sitemap 至 Google Search Console（已收錄）
 - [x] 7.6 GitHub Actions CI/CD（deploy.yml + CLOUDFLARE_API_TOKEN）
 - [ ] 7.7 Search Console 搜尋流量數據（約 1–3 天後出現，確認後打勾）
+
+---
+
+## 階段二十：網站維護補強（2026-04-25）
+
+### P1 — 功能修正
+
+| 項目 | 狀態 | 說明 |
+|------|------|------|
+| P1.1 nav 標籤同步 | ✅ 完成 | `index.html` sidebar/overlay "聯絡我們"→"接案諮詢"；overlay 狀態文字"接受需求中"→"接案中"；補上缺少的 mobile overlay close handler |
+| P1.2 light mode 輸入框 hover | ✅ 完成 | `requisition.html` field-input/select hover/focus 背景從硬編碼 `#080c14`（dark）改為 `var(--bg-elevated)`；dark mode 以 `.theme-dark` selector 保留原樣 |
+
+### P2 — 功能優化
+
+| 項目 | 狀態 | 說明 |
+|------|------|------|
+| P2.1 service_type 選項 | ✅ 完成 | 新增「品牌識別 / 視覺設計」`branding` 與「數位行銷 / SEO」`marketing` 兩個選項 |
+| P2.2 關於我們頁面 | ✅ 完成 | 建立 `public/about.html`（含簡介、統計數字、技術棧、合作理念、CTA）；全站 sidebar + mobile overlay 新增「關於我們」導覽項 |
+| P2.3 後台諮詢紀錄 | ✅ 完成 | 建立 `GET /api/admin/requisitions`（admin 權限，支援分頁+關鍵字搜尋）；建立 `public/admin-requisitions.html`（JWT auth，表格 + 詳情 Modal） |
 
 ---
 

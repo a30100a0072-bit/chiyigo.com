@@ -3,25 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>案例作品 | CHIYIGO</title>
-  <meta name="description" content="CHIYIGO 案例作品：系統開發、網站建置、品牌活動專案展示。每個專案背後都是真實的商業需求。" />
+  <title>關於我們 | CHIYIGO</title>
+  <meta name="description" content="CHIYIGO — 不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。了解我們的理念與技術專長。" />
   <meta property="og:type"        content="website" />
-  <meta property="og:url"         content="https://chiyigo.com/portfolio" />
-  <meta property="og:title"       content="案例作品 | CHIYIGO" />
-  <meta property="og:description" content="CHIYIGO 案例作品：系統開發、網站建置、品牌活動專案展示。" />
+  <meta property="og:url"         content="https://chiyigo.com/about" />
+  <meta property="og:title"       content="關於我們 | CHIYIGO" />
+  <meta property="og:description" content="CHIYIGO — 不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。" />
   <meta property="og:image"       content="https://chiyigo.com/images/chiyigo.jpg" />
   <meta name="twitter:card"       content="summary_large_image" />
-  <link rel="canonical" href="https://chiyigo.com/portfolio" />
+  <link rel="canonical" href="https://chiyigo.com/about" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>
     (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='dark'?'theme-dark':'theme-light')})();
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    /* ── Reset ──────────────────────────────────────── */
     *,*:before,*:after{box-sizing:border-box;margin:0;padding:0}
 
-    /* ── CSS Variables ──────────────────────────────── */
     :root,.theme-light{
       --bg:#F0F2FA;--bg-surface:#FFFFFF;--bg-elevated:#FAFAFE;
       --bg-sidebar:#EAEBF5;--bg-titlebar:#F4F5FC;
@@ -50,7 +48,6 @@
     }
     @media(max-width:768px){:root{--sidebar-w:0px;--titlebar-h:0px;--pad-x:1.25rem}}
 
-    /* ── Base ───────────────────────────────────────── */
     html{font-family:var(--font-sans);background-color:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background-color .3s ease,color .3s ease}
     body{min-height:100vh;overflow:hidden}
     @media(max-width:768px){body{overflow:auto}}
@@ -58,19 +55,17 @@
     ul{list-style:none}
     img{max-width:100%;height:auto;display:block}
 
-    /* ── Logo theme ─────────────────────────────────── */
     .logo-dark,.theme-dark .logo-light{display:none!important}
     .theme-dark .logo-dark{display:block!important}
 
-    /* ── Reveal ─────────────────────────────────────── */
     [data-reveal]{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
     [data-reveal].revealed{opacity:1;transform:translateY(0)}
     [data-reveal-delay="1"]{transition-delay:.07s}
+    [data-reveal-delay="2"]{transition-delay:.14s}
 
-    /* ── Neural canvas ──────────────────────────────── */
     #neural-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
 
-    /* ── Dashboard layout ───────────────────────────── */
+    /* ── Layout ── */
     .dash-wrap{position:fixed;inset:0;z-index:1;display:grid;grid-template-columns:var(--sidebar-w) 1fr;background:var(--bg);overflow:hidden}
     .dash-sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border-dim);display:flex;flex-direction:column;overflow:hidden;height:100vh}
     .dash-main{display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
@@ -80,11 +75,9 @@
     .dash-content::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px}
     .dash-content::-webkit-scrollbar-thumb:hover{background:var(--border-bright)}
 
-    /* ── Sidebar brand ──────────────────────────────── */
+    /* ── Sidebar ── */
     .sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0}
     .sb-logo-img{height:76px;width:auto;display:block;flex-shrink:0}
-
-    /* ── Sidebar nav ────────────────────────────────── */
     .sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
     .sb-nav::-webkit-scrollbar{display:none}
     .sb-item{display:flex;align-items:center;gap:.7rem;padding:.6rem .85rem;border-radius:10px;font-family:var(--font-body);font-size:.875rem;font-weight:400;color:var(--text-muted);text-decoration:none;transition:background .18s ease,color .18s ease}
@@ -94,8 +87,6 @@
     .sb-icon{width:16px;height:16px;flex-shrink:0;color:var(--text-dim);opacity:.7;transition:color .18s ease,opacity .18s ease}
     .sb-item:hover .sb-icon{color:var(--text-muted);opacity:.9}
     .sb-label{line-height:1;white-space:nowrap}
-
-    /* ── Sidebar bottom ─────────────────────────────── */
     .sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--border-dim)}
     .sb-cta{background:linear-gradient(140deg,#6c6ee51f,#5b8bf514);border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem;position:relative;overflow:hidden}
     .sb-cta:before{content:"";position:absolute;top:-12px;right:-12px;width:60px;height:60px;border-radius:50%;background:#6c6ee514;pointer-events:none}
@@ -112,23 +103,23 @@
     .sb-foot-btn svg{width:14px;height:14px}
     .sb-copyright{font-family:var(--font-mono);font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
 
-    /* ── Mobile topbar ──────────────────────────────── */
-    .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim);transition:background .3s ease}
+    /* ── Mobile topbar ── */
+    .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim);transition:background .3s ease,border-color .3s ease}
     .m-tb-inner{display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:52px}
     .m-tb-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none}
     .m-logo-img{height:68px;width:auto;display:block;flex-shrink:0}
     .m-tb-right{display:flex;align-items:center;gap:.85rem}
-    .m-theme-btn{width:36px;height:36px;border:1px solid rgba(108,110,229,.14);background:#6c6ee512;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6c6ee5;flex-shrink:0;transition:background .2s ease}
+    .m-theme-btn{width:36px;height:36px;border:1px solid rgba(108,110,229,.14);background:#6c6ee512;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6c6ee5;flex-shrink:0;transition:background .2s ease,border-color .2s ease}
     .m-theme-btn svg{width:14px;height:14px;display:block}
     .theme-dark .m-theme-btn{border-color:#ffffff4d;background:#ffffff0f;color:#fff}
-    .m-ham-btn{display:flex;flex-direction:column;justify-content:center;gap:6px;width:36px;height:36px;border:1px solid rgba(108,110,229,.22);background:#6c6ee51a;border-radius:9px;cursor:pointer;padding:0 10px;transition:background .2s ease;flex-shrink:0}
+    .m-ham-btn{display:flex;flex-direction:column;justify-content:center;gap:6px;width:36px;height:36px;border:1px solid rgba(108,110,229,.22);background:#6c6ee51a;border-radius:9px;cursor:pointer;padding:0 10px;transition:background .2s ease,border-color .2s ease;flex-shrink:0}
     .m-ham-line{display:block;width:100%;height:1.5px;background:#6c6ee5;border-radius:2px;transform-origin:center;transition:transform .32s cubic-bezier(.23,1,.32,1)}
     .m-ham-btn.is-open .m-ham-line:nth-child(1){transform:translateY(3.75px) rotate(45deg)}
     .m-ham-btn.is-open .m-ham-line:nth-child(2){transform:translateY(-3.75px) rotate(-45deg)}
     .theme-dark .m-ham-btn{border-color:#ffffff4d;background:#ffffff0f}
     .theme-dark .m-ham-line{background:#fff}
 
-    /* ── Mobile overlay ─────────────────────────────── */
+    /* ── Mobile overlay ── */
     .m-overlay{display:none;position:fixed;inset:0;z-index:49;background:#0a0c1c00;transition:background .35s ease;pointer-events:none}
     .m-overlay.is-open{background:#0a0c1c52;pointer-events:auto}
     .m-ov-wrap{position:absolute;bottom:0;left:0;right:0;background:var(--bg-surface);border-radius:22px 22px 0 0;border:1px solid var(--border);border-bottom:none;box-shadow:0 -4px 24px #6c6ee514;display:flex;flex-direction:column;max-height:88svh;overflow:hidden;transform:translateY(100%);transition:transform .42s cubic-bezier(.22,1,.36,1)}
@@ -166,7 +157,7 @@
       .m-topbar,.m-overlay{display:block}
     }
 
-    /* ── Footer ─────────────────────────────────────── */
+    /* ── Footer ── */
     .footer{border-top:1px solid var(--border-dim);background:var(--bg-titlebar)}
     .footer-inner{max-width:var(--max-w);margin:0 auto;padding:2.5rem var(--pad-x);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2rem}
     .footer .logo{height:72px;width:auto;display:block;margin-bottom:.45rem;opacity:.7}
@@ -176,66 +167,49 @@
     .footer-links a:hover{color:var(--text-muted)}
     .copy{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);width:100%;opacity:.6}
 
-    /* ══════════════════════════════════════════════════
-       PORTFOLIO STYLES
-       ══════════════════════════════════════════════════ */
-
-    /* Section layout */
-    .portfolio-section{padding:clamp(3rem,6vw,5rem) var(--pad-x) clamp(2rem,4vw,3rem);max-width:var(--max-w);margin:0 auto}
-
-    /* Header */
-    .portfolio-header{margin-bottom:clamp(2rem,4vw,3rem);border-bottom:1px solid var(--border-dim);padding-bottom:clamp(1.5rem,3vw,2.5rem)}
+    /* ── About page styles ── */
+    .about-section{padding:clamp(3rem,6vw,5rem) var(--pad-x) clamp(2rem,4vw,3rem);max-width:var(--max-w);margin:0 auto}
+    .about-header{margin-bottom:clamp(2.5rem,5vw,4rem);border-bottom:1px solid var(--border-dim);padding-bottom:clamp(2rem,4vw,3rem)}
     .eyebrow{font-family:var(--font-mono);font-size:.82rem;letter-spacing:.12em;color:var(--accent);opacity:.7;margin-bottom:1.1rem}
     .page-title{font-family:var(--font-sans);font-size:clamp(1.8rem,4vw,2.5rem);font-weight:700;line-height:1.2;color:var(--text);margin-bottom:1.1rem;letter-spacing:-.01em}
     .pt-dim{display:block;color:var(--text-muted)}
     .pt-grad{display:block;background:linear-gradient(135deg,#7370ec,#5b8bf5 60%,#4da8da);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
     .page-sub{font-family:var(--font-sans);font-size:clamp(1rem,2vw,1.15rem);color:var(--text-muted);line-height:1.7}
 
-    /* Filter bar */
-    .filter-bar{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:2.5rem}
-    .filter-btn{padding:.45rem 1rem;border-radius:100px;font-size:.82rem;font-weight:500;border:1px solid var(--border-dim);color:var(--text-muted);background:transparent;cursor:pointer;transition:border-color .18s ease,color .18s ease,background .18s ease;font-family:var(--font-sans)}
-    .filter-btn:hover{border-color:var(--border);color:var(--text)}
-    .filter-btn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    /* Stats row */
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:clamp(2.5rem,5vw,4rem)}
+    @media(max-width:640px){.stats-row{grid-template-columns:repeat(2,1fr)}}
+    .stat-card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;padding:1.2rem 1rem;text-align:center}
+    .stat-num{font-family:var(--font-sans);font-size:clamp(1.5rem,3vw,2rem);font-weight:700;color:var(--accent);line-height:1;margin-bottom:.3rem;letter-spacing:-.02em}
+    .stat-label{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase}
 
-    /* Portfolio grid */
-    .portfolio-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem}
+    /* Content grid */
+    .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,4vw,3.5rem);margin-bottom:clamp(2.5rem,5vw,4rem)}
+    @media(max-width:768px){.about-grid{grid-template-columns:1fr}}
+    .about-block-label{font-family:var(--font-mono);font-size:.75rem;letter-spacing:.12em;color:var(--text-dim);text-transform:uppercase;margin-bottom:1rem}
+    .about-block-title{font-size:1.2rem;font-weight:600;color:var(--text);margin-bottom:.75rem;line-height:1.3}
+    .about-block-body{font-size:.95rem;color:var(--text-muted);line-height:1.8}
 
-    /* Cards */
-    .p-card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;overflow:hidden;opacity:0;transform:translateY(12px);transition:opacity .4s ease,transform .4s ease,border-color .2s ease,box-shadow .2s ease}
-    .p-card.revealed{opacity:1;transform:translateY(0)}
-    .p-card:hover{border-color:var(--border-bright);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
-    .p-card-img{height:180px;background:var(--bg);overflow:hidden;position:relative}
-    .p-card-img img{width:100%;height:100%;object-fit:cover;transition:transform .5s ease;display:block}
-    .p-card:hover .p-card-img img{transform:scale(1.04)}
-    .p-card-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:3rem;font-weight:700;color:var(--accent);opacity:.18;font-family:var(--font-sans)}
-    .p-card-body{padding:1.25rem}
-    .p-card-badge{display:inline-block;padding:.2rem .6rem;border-radius:4px;font-family:var(--font-mono);font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;background:var(--accent-dim);color:var(--accent);margin-bottom:.75rem}
-    .p-card-title{font-size:1rem;font-weight:600;color:var(--text);margin-bottom:.4rem;line-height:1.4}
-    .p-card-desc{font-size:.875rem;color:var(--text-muted);line-height:1.65;margin-bottom:.75rem}
-    .p-card-tags{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.75rem}
-    .p-card-tag{padding:.15rem .5rem;border-radius:4px;font-size:.72rem;background:var(--bg);color:var(--text-dim);border:1px solid var(--border-dim)}
-    .p-card-link{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.04em;color:var(--accent);transition:opacity .18s ease;display:inline-block}
-    .p-card-link:hover{opacity:.7}
+    /* Tech tags */
+    .tech-grid{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.1rem}
+    .tech-tag{font-family:var(--font-mono);font-size:.7rem;padding:.3rem .75rem;border:1px solid var(--border-mid);border-radius:100px;color:var(--text-muted);background:var(--bg-surface);transition:border-color .18s,color .18s}
+    .tech-tag:hover{border-color:var(--accent);color:var(--accent)}
 
-    /* Skeleton */
-    .skeleton{border-radius:12px;height:300px;background:linear-gradient(90deg,var(--bg-surface) 25%,var(--bg-elevated) 50%,var(--bg-surface) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite}
-    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
-    /* State messages */
-    .state-msg{text-align:center;padding:5rem 2rem;display:none}
-    .state-msg.visible{display:block}
-    .state-msg-icon{font-size:2.5rem;margin-bottom:1rem;opacity:.35}
-    .state-msg-text{font-size:.95rem;color:var(--text-dim);font-family:var(--font-mono)}
+    /* CTA block */
+    .about-cta{background:linear-gradient(140deg,rgba(108,110,229,.08) 0%,rgba(91,139,245,.05) 100%);border:1px solid rgba(108,110,229,.14);border-radius:20px;padding:clamp(2rem,4vw,3rem) var(--pad-x);text-align:center;margin-bottom:3rem}
+    .about-cta-title{font-size:clamp(1.3rem,3vw,1.8rem);font-weight:700;color:var(--text);margin-bottom:.75rem}
+    .about-cta-sub{color:var(--text-muted);font-size:.95rem;line-height:1.7;margin-bottom:1.5rem}
+    .about-cta-btn{display:inline-flex;align-items:center;gap:.6rem;padding:.75rem 1.75rem;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:.9rem;font-weight:600;border-radius:10px;text-decoration:none;transition:filter .18s,transform .18s}
+    .about-cta-btn:hover{filter:brightness(1.1);transform:translateY(-2px)}
   </style>
 </head>
 <body>
 
   <canvas id="neural-canvas" aria-hidden="true"></canvas>
 
-  <!-- ══ Desktop: SaaS Dashboard Layout ══ -->
   <div class="dash-wrap" id="dash-wrap">
 
-    <!-- ── Left Sidebar ── -->
+    <!-- ── Sidebar ── -->
     <aside class="dash-sidebar" id="dash-sidebar">
       <div class="sb-brand">
         <img src="images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
@@ -251,7 +225,7 @@
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
           <span class="sb-label">服務項目</span>
         </a>
-        <a href="portfolio.html" class="sb-item active" aria-label="案例作品">
+        <a href="portfolio.html" class="sb-item" aria-label="案例作品">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
           <span class="sb-label">案例作品</span>
         </a>
@@ -259,7 +233,7 @@
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
           <span class="sb-label">服務流程</span>
         </a>
-        <a href="about.html" class="sb-item" aria-label="關於我們">
+        <a href="about.html" class="sb-item active" aria-label="關於我們">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
           <span class="sb-label">關於我們</span>
         </a>
@@ -290,47 +264,110 @@
       </div>
     </aside>
 
-    <!-- ── Right: Main area ── -->
+    <!-- ── Main ── -->
     <div class="dash-main">
       <main class="dash-content" id="os-content">
 
-        <section class="portfolio-section">
+        <section class="about-section">
 
-          <!-- Header -->
-          <div class="portfolio-header" data-reveal>
-            <p class="eyebrow">// 案例作品</p>
+          <div class="about-header" data-reveal>
+            <p class="eyebrow">// 關於 CHIYIGO</p>
             <h1 class="page-title">
-              <span class="pt-dim">每個專案背後</span>
-              <span class="pt-grad">都是真實需求</span>
+              <span class="pt-dim">不只是做一個</span>
+              <span class="pt-grad">漂亮的網站</span>
             </h1>
-            <p class="page-sub">從系統開發到品牌活動，用技術解決真正的商業問題。</p>
+            <p class="page-sub">把你的需求、痛點、目標變成真正能跑的系統。<br>從策略規劃到落地執行，一個人搞定。</p>
           </div>
 
-          <!-- Filter bar -->
-          <div class="filter-bar" id="filter-bar" data-reveal data-reveal-delay="1">
-            <button class="filter-btn active" data-filter="all">全部</button>
+          <!-- Stats -->
+          <div class="stats-row" data-reveal data-reveal-delay="1">
+            <div class="stat-card">
+              <div class="stat-num">50+</div>
+              <div class="stat-label">完成專案</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">98%</div>
+              <div class="stat-label">客戶滿意度</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">5yr+</div>
+              <div class="stat-label">開發經驗</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-num">24/7</div>
+              <div class="stat-label">技術支援</div>
+            </div>
           </div>
 
-          <!-- Skeleton -->
-          <div id="skeleton-grid" class="portfolio-grid">
-            <div class="skeleton"></div>
-            <div class="skeleton"></div>
-            <div class="skeleton"></div>
+          <!-- About grid -->
+          <div class="about-grid">
+
+            <div data-reveal>
+              <p class="about-block-label">// 我是誰</p>
+              <h2 class="about-block-title">全端獨立開發者</h2>
+              <p class="about-block-body">
+                CHIYIGO 是一名獨立全端開發者，專注於幫助中小企業與品牌把「想要的功能」變成「真的能用的系統」。
+                不只是外包寫 code，而是從需求分析、系統設計到實作落地，全程參與。
+              </p>
+              <div class="tech-grid">
+                <span class="tech-tag">TypeScript</span>
+                <span class="tech-tag">React</span>
+                <span class="tech-tag">Node.js</span>
+                <span class="tech-tag">Cloudflare Workers</span>
+                <span class="tech-tag">D1 / SQLite</span>
+                <span class="tech-tag">Astro</span>
+                <span class="tech-tag">Python</span>
+                <span class="tech-tag">AI / LLM 整合</span>
+              </div>
+            </div>
+
+            <div data-reveal data-reveal-delay="1">
+              <p class="about-block-label">// 我的做法</p>
+              <h2 class="about-block-title">需求優先，技術服務業務</h2>
+              <p class="about-block-body">
+                很多開發案最後都走歪了，因為技術跟業務目標脫節。
+                我的做法是先把你的目標、使用者、關鍵流程搞清楚，再選最適合的技術方案——
+                而不是先選技術再硬塞需求進去。
+              </p>
+              <div class="tech-grid">
+                <span class="tech-tag">系統設計</span>
+                <span class="tech-tag">API 架構</span>
+                <span class="tech-tag">DB Schema</span>
+                <span class="tech-tag">效能優化</span>
+                <span class="tech-tag">CI/CD</span>
+              </div>
+            </div>
+
+            <div data-reveal>
+              <p class="about-block-label">// 擅長領域</p>
+              <h2 class="about-block-title">從後端到前端，從想法到上線</h2>
+              <p class="about-block-body">
+                內部管理系統、客戶入口網站、Landing Page、第三方 API 串接、自動化流程——
+                這些都是日常接案範圍。如果你不確定自己的需求是否適合，歡迎直接來聊。
+              </p>
+            </div>
+
+            <div data-reveal data-reveal-delay="1">
+              <p class="about-block-label">// 合作方式</p>
+              <h2 class="about-block-title">直接溝通，沒有中間商</h2>
+              <p class="about-block-body">
+                你的需求直接對到執行的人，沒有層層轉達。
+                每個專案都有清楚的里程碑與驗收標準，讓你知道錢花到哪裡、進度在哪裡。
+              </p>
+            </div>
+
           </div>
 
-          <!-- Actual grid -->
-          <div id="portfolio-grid" class="portfolio-grid" style="display:none"></div>
-
-          <!-- Error state -->
-          <div id="error-state" class="state-msg">
-            <div class="state-msg-icon">⚠</div>
-            <p class="state-msg-text">// error: 載入失敗，請稍後再試</p>
-          </div>
-
-          <!-- Empty state -->
-          <div id="empty-state" class="state-msg">
-            <div class="state-msg-icon">◻</div>
-            <p class="state-msg-text">// empty: 此分類尚無作品</p>
+          <!-- CTA -->
+          <div class="about-cta" data-reveal>
+            <h2 class="about-cta-title">有個專案想聊聊？</h2>
+            <p class="about-cta-sub">填寫表單說明你的需求，我會在 1–2 個工作天內回覆。<br>初步諮詢免費，沒有壓力。</p>
+            <a href="requisition.html" class="about-cta-btn">
+              開始諮詢
+              <svg viewBox="0 0 16 16" fill="none" width="14" height="14" aria-hidden="true">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
           </div>
 
         </section>
@@ -344,6 +381,7 @@
             </div>
             <nav class="footer-links">
               <a href="portfolio.html">作品集</a>
+              <a href="about.html">關於我們</a>
               <a href="requisition.html">接案諮詢</a>
             </nav>
             <p class="copy">© 2025 CHIYIGO</p>
@@ -354,7 +392,7 @@
     </div>
   </div>
 
-  <!-- ══ Mobile: Top Bar ══ -->
+  <!-- Mobile topbar -->
   <div class="m-topbar" id="m-topbar">
     <div class="m-tb-inner">
       <a href="index.html" class="m-tb-brand">
@@ -374,7 +412,7 @@
     </div>
   </div>
 
-  <!-- Mobile bottom-sheet menu -->
+  <!-- Mobile overlay -->
   <div class="m-overlay" id="m-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="主選單">
     <div class="m-ov-wrap">
       <div class="m-ov-handle" aria-hidden="true"></div>
@@ -399,7 +437,7 @@
           <span class="m-ov-label">服務項目</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="portfolio.html" class="m-ov-item active" style="--i:2" data-close-overlay>
+        <a href="portfolio.html" class="m-ov-item" style="--i:2" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
           <span class="m-ov-label">案例作品</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -409,7 +447,7 @@
           <span class="m-ov-label">服務流程</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="about.html" class="m-ov-item" style="--i:4" data-close-overlay>
+        <a href="about.html" class="m-ov-item active" style="--i:4" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
           <span class="m-ov-label">關於我們</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -427,153 +465,126 @@
   </div>
 
   <script>
-    // ── Portfolio data ────────────────────────────────
-    const GRID    = document.getElementById('portfolio-grid');
-    const SKEL    = document.getElementById('skeleton-grid');
-    const ERR     = document.getElementById('error-state');
-    const EMPTY   = document.getElementById('empty-state');
-    const FBAR    = document.getElementById('filter-bar');
-    let allItems  = [];
-    let curFilter = 'all';
-
-    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-    function cardHTML(item) {
-      const img = item.image_url
-        ? `<img src="${esc(item.image_url)}" alt="${esc(item.title)}" loading="lazy">`
-        : `<div class="p-card-placeholder">${esc((item.category||'?')[0])}</div>`;
-      const tags = item.tags
-        ? item.tags.split(',').map(t => `<span class="p-card-tag">${esc(t.trim())}</span>`).join('')
-        : '';
-      const link = item.link_url
-        ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card-link">查看專案 →</a>`
-        : '';
-      return `
-        <article class="p-card">
-          <div class="p-card-img">${img}</div>
-          <div class="p-card-body">
-            <span class="p-card-badge">${esc(item.category)}</span>
-            <h3 class="p-card-title">${esc(item.title)}</h3>
-            ${item.description ? `<p class="p-card-desc">${esc(item.description)}</p>` : ''}
-            ${tags ? `<div class="p-card-tags">${tags}</div>` : ''}
-            ${link}
-          </div>
-        </article>`;
-    }
-
-    function renderGrid(items) {
-      GRID.innerHTML = items.map(cardHTML).join('');
-      GRID.querySelectorAll('.p-card').forEach((el, i) => {
-        el.style.transitionDelay = `${i * 0.045}s`;
-        requestAnimationFrame(() => el.classList.add('revealed'));
-      });
-      EMPTY.classList.toggle('visible', items.length === 0);
-      GRID.style.display = items.length ? 'grid' : 'none';
-    }
-
-    function buildFilters(items) {
-      const cats = [...new Set(items.map(i => i.category).filter(Boolean))];
-      cats.forEach(cat => {
-        const btn = document.createElement('button');
-        btn.className = 'filter-btn';
-        btn.dataset.filter = cat;
-        btn.textContent = cat;
-        FBAR.appendChild(btn);
-      });
-    }
-
-    FBAR.addEventListener('click', e => {
-      const btn = e.target.closest('.filter-btn');
-      if (!btn) return;
-      curFilter = btn.dataset.filter;
-      FBAR.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
-      renderGrid(curFilter === 'all' ? allItems : allItems.filter(i => i.category === curFilter));
-    });
-
-    async function loadPortfolio() {
-      try {
-        const res = await fetch('/api/portfolio');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        allItems = data.items ?? [];
-        SKEL.style.display = 'none';
-        buildFilters(allItems);
-        renderGrid(allItems);
-      } catch {
-        SKEL.style.display = 'none';
-        ERR.classList.add('visible');
-      }
-    }
-    loadPortfolio();
-
-    // ── Mobile overlay ──────────────────────────────────
-    const hamBtn  = document.getElementById('m-ham-btn');
-    const overlay = document.getElementById('m-overlay');
-    const topbar  = document.getElementById('m-topbar');
+    // ── Mobile overlay ────────────────────────────────────────────
+    const hamBtn  = document.getElementById('m-ham-btn')
+    const overlay = document.getElementById('m-overlay')
+    const topbar  = document.getElementById('m-topbar')
 
     function openMenu() {
-      hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open');
-      overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden');
-      topbar?.classList.add('menu-open'); document.body.style.overflow='hidden';
+      hamBtn?.setAttribute('aria-expanded', 'true');
+      hamBtn?.classList.add('is-open');
+      overlay?.classList.add('is-open');
+      overlay?.removeAttribute('aria-hidden');
+      topbar?.classList.add('menu-open');
+      document.body.style.overflow = 'hidden';
     }
     function closeMenu() {
-      hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open');
-      overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true');
-      topbar?.classList.remove('menu-open'); document.body.style.overflow='';
+      hamBtn?.setAttribute('aria-expanded', 'false');
+      hamBtn?.classList.remove('is-open');
+      overlay?.classList.remove('is-open');
+      overlay?.setAttribute('aria-hidden', 'true');
+      topbar?.classList.remove('menu-open');
+      document.body.style.overflow = '';
     }
-    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
-    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
-    document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu())
+    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)))
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay?.classList.contains('is-open')) closeMenu() })
 
-    // ── Theme toggle ──────────────────────────────────
-    const themeBtn  = document.getElementById('theme-toggle-btn');
-    const mThemeBtn = document.getElementById('m-theme-btn');
+    // ── Theme toggle ──────────────────────────────────────────────
+    const themeBtn  = document.getElementById('theme-toggle-btn')
+    const mThemeBtn = document.getElementById('m-theme-btn')
 
     function applyTheme(dark) {
       document.documentElement.classList.toggle('theme-dark', dark);
       document.documentElement.classList.toggle('theme-light', !dark);
       [themeBtn, mThemeBtn].forEach(btn => {
         if (!btn) return;
-        const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+        const sun  = btn.querySelector('.icon-sun');
+        const moon = btn.querySelector('.icon-moon');
         if (sun)  sun.style.display  = dark ? 'none' : '';
         if (moon) moon.style.display = dark ? ''     : 'none';
       });
     }
-    applyTheme(localStorage.getItem('theme') === 'dark');
+    applyTheme(localStorage.getItem('theme') === 'dark')
     const doToggle = () => {
-      const d = !document.documentElement.classList.contains('theme-dark');
-      localStorage.setItem('theme', d ? 'dark' : 'light');
-      applyTheme(d);
-    };
-    themeBtn?.addEventListener('click', doToggle);
-    mThemeBtn?.addEventListener('click', doToggle);
+      const isDark = !document.documentElement.classList.contains('theme-dark');
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      applyTheme(isDark);
+    }
+    themeBtn?.addEventListener('click', doToggle)
+    mThemeBtn?.addEventListener('click', doToggle)
 
-    // ── Reveal animation ──────────────────────────────
-    const osContent = document.getElementById('os-content');
-    const revRoot   = window.innerWidth > 768 ? osContent : null;
+    // ── Reveal animation ──────────────────────────────────────────
+    const osContent = document.getElementById('os-content')
+    const revRoot   = window.innerWidth > 768 ? osContent : null
     const revObs    = new IntersectionObserver(entries => {
-      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); revObs.unobserve(e.target); } });
-    }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
-    document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); revObs.unobserve(e.target) } })
+    }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' })
+    document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el))
   </script>
 
-  <!-- Neural network animation -->
+  <!-- Neural canvas -->
   <script>
-    (function(){
-      const canvas=document.getElementById('neural-canvas');if(!canvas)return;
-      const ctx=canvas.getContext('2d');if(!ctx)return;
-      let W=0,H=0,nodes=[];const DIST=155;
-      function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
-      function initNodes(){const n=W<768?48:115;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
-      const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
-      let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
-      function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--neural-r').trim()||'108',g:s.getPropertyValue('--neural-g').trim()||'110',b:s.getPropertyValue('--neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--neural-line-opacity').trim()||'.09')}}
-      syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
-      function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
-        for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
-        for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
-        requestAnimationFrame(draw)}
-      resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
+    (function () {
+      const canvas = document.getElementById('neural-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      let W = 0, H = 0, nodes = [];
+      const DIST = 155;
+      function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+      function initNodes() {
+        const n = W < 768 ? 48 : 115;
+        nodes = Array.from({ length: n }, () => ({
+          x: Math.random() * W, y: Math.random() * H,
+          vx: (Math.random() - .5) * .28, vy: (Math.random() - .5) * .28,
+          r: Math.random() * 1.1 + .4, pulse: Math.random() * Math.PI * 2,
+        }));
+      }
+      const mouse = { x: -9999, y: -9999 };
+      document.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+      let cfg = { r: '108', g: '110', b: '229', no: .22, lo: .09 };
+      function syncCfg() {
+        const s = getComputedStyle(document.documentElement);
+        cfg = {
+          r:  s.getPropertyValue('--neural-r').trim()  || '108',
+          g:  s.getPropertyValue('--neural-g').trim()  || '110',
+          b:  s.getPropertyValue('--neural-b').trim()  || '229',
+          no: parseFloat(s.getPropertyValue('--neural-node-opacity').trim() || '.22'),
+          lo: parseFloat(s.getPropertyValue('--neural-line-opacity').trim() || '.09'),
+        };
+      }
+      syncCfg();
+      new MutationObserver(syncCfg).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        const { r, g, b, no, lo } = cfg;
+        for (const n of nodes) {
+          const dx = n.x - mouse.x, dy = n.y - mouse.y, d2 = dx * dx + dy * dy;
+          if (d2 < 16900) { const d = Math.sqrt(d2); n.vx += dx / d * .055; n.vy += dy / d * .055; }
+          n.vx *= .982; n.vy *= .982;
+          n.x += n.vx; n.y += n.vy;
+          if (n.x < -12) n.x = W + 12; else if (n.x > W + 12) n.x = -12;
+          if (n.y < -12) n.y = H + 12; else if (n.y > H + 12) n.y = -12;
+          n.pulse += .011;
+          const p = Math.sin(n.pulse) * .25 + .75;
+          ctx.beginPath(); ctx.arc(n.x, n.y, n.r * p, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${r},${g},${b},${no * p})`; ctx.fill();
+        }
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y, d2 = dx * dx + dy * dy;
+            if (d2 < DIST * DIST) {
+              const a = (1 - Math.sqrt(d2) / DIST) * lo;
+              ctx.beginPath(); ctx.moveTo(nodes[i].x, nodes[i].y); ctx.lineTo(nodes[j].x, nodes[j].y);
+              ctx.strokeStyle = `rgba(${r},${g},${b},${a})`; ctx.lineWidth = .5; ctx.stroke();
+            }
+          }
+        }
+        requestAnimationFrame(draw);
+      }
+      resize(); initNodes(); draw();
+      window.addEventListener('resize', () => { resize(); initNodes(); });
     })();
   </script>
 
