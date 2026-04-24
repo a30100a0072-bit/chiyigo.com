@@ -238,8 +238,8 @@
 | T11 | 發送驗證信 | ✅ 通過 | 200 送出成功；60 秒冷卻 429；無 token 401，2026-04-24 |
 | T12 | Email 驗證確認 | ✅ 通過 | 核銷成功跳轉 login.html 綠色 banner；重放回 400，2026-04-24 |
 | T13 | 忘記密碼（防枚舉） | ✅ 通過 | 存在/不存在信箱均回 200 同一訊息，2026-04-24 |
-| T14 | 重設密碼（無 2FA） | 🔲 待測 | 需收信取得 reset token 後測試 |
-| T15 | 重設密碼（有 2FA） | 🔲 待測 | 2FA 啟用完成（2026-04-24），需收信測試 2FA 閉環 |
+| T14 | 重設密碼（無 2FA） | ✅ 通過 | reset token 流程完整，3 秒跳轉 + 綠色 banner，2026-04-24 |
+| T15 | 重設密碼（有 2FA） | ✅ 通過 | 403 動態出現 TOTP 輸入框，通過後撤銷所有 session，2026-04-24 |
 | T16 | Dashboard Email 驗證 UI | ✅ 通過 | amber banner / 重發按鈕 / 60s 倒數正常，2026-04-24 |
 | T17 | 2FA 設定端點 | ✅ 通過 | setup + activate 成功，備用碼產生，2026-04-24 |
 
@@ -275,9 +275,9 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | ~~中~~ | ~~Stage 17 — Email 驗證~~ | ✅ 完成 2026-04-24（Resend，send-verification + verify 端點）|
 | ~~中~~ | ~~Stage 17 — 忘記密碼~~ | ✅ 完成 2026-04-24（forgot-password + reset-password + 2FA 閉環）|
 | 高 | Stage 18 — 動態 OAuth 路由 | Google/LINE/FB 登入；信箱碰撞防禦；無信箱補填；Apple 架構預留 |
-| 中 | T14/T15 — 重設密碼完整測試 | 需收信走完 reset token 流程（T14 無 2FA、T15 有 2FA）|
+| ~~中~~ | ~~T14/T15 — 重設密碼完整測試~~ | ✅ 通過 2026-04-24（T14 無 2FA + T15 有 2FA 閉環均驗證通過）|
 | 中 | Dashboard 2FA 管理 UI | 啟用 / 停用 2FA 的前端介面，目前只有 API |
-| 低 | login.html 忘記密碼入口 | 登入表單下加「忘記密碼？」連結 → forgot-password.html |
+| ~~低~~ | ~~login.html 忘記密碼入口~~ | ✅ 完成 2026-04-24（登入按鈕右下角加「忘記密碼？」連結）|
 | 🔒 | Apple Sign In | 需 Apple Developer 帳號（$99/yr），Stage 18 預留架構 |
 
 ---

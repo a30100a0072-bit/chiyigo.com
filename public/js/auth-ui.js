@@ -11,6 +11,24 @@
 
 'use strict';
 
+// ── 錯誤訊息中文對照 ─────────────────────────────────────────────
+const ERROR_ZH = {
+  'Invalid credentials':                    '帳號或密碼錯誤',
+  'email and password are required':        '請填寫信箱與密碼',
+  'Invalid email format':                   '信箱格式不正確',
+  'Password must be at least 8 characters': '密碼至少需要 8 個字元',
+  'Email already registered':               '此信箱已被註冊，請直接登入',
+  'Account is banned':                      '此帳號已被停用，請聯繫客服',
+  'Invalid OTP or backup code':             '驗證碼錯誤，請重試',
+  'Local account not found':                '此帳號無法使用密碼登入',
+  '2FA is already enabled':                 '雙重驗證已啟用',
+  'Invalid request':                        '請求無效，請重新登入',
+}
+
+function t(msg) {
+  return ERROR_ZH[msg] || msg
+}
+
 // ── 常數 ────────────────────────────────────────────────────────
 const API = {
   login:     '/api/auth/local/login',
@@ -273,7 +291,7 @@ async function handleLogin(event) {
     }
 
     if (!res.ok) {
-      showMsg(data.error || '登入失敗，請重試');
+      showMsg(t(data.error) || '登入失敗，請重試');
       return;
     }
 
@@ -325,7 +343,7 @@ async function handleRegister(event) {
     const data = await res.json();
 
     if (!res.ok) {
-      showMsg(data.error || '註冊失敗，請重試');
+      showMsg(t(data.error) || '註冊失敗，請重試');
       return;
     }
 
@@ -378,7 +396,7 @@ async function handleTotp(event) {
     const data = await res.json();
 
     if (!res.ok) {
-      showMsg(data.error || '驗證碼錯誤，請重試');
+      showMsg(t(data.error) || '驗證碼錯誤，請重試');
       return;
     }
 

@@ -267,10 +267,10 @@
       function showNotice(text, cls) {
         const el = document.createElement('div')
         el.textContent = text
-        el.className = `text-sm font-medium px-4 py-3 rounded-xl border mb-5 ${cls}`
-        // 插入到卡片最上方
+        el.className = `text-sm font-medium px-4 py-3 rounded-xl border mb-4 ${cls}`
+        // 插入到卡片上方（不在卡片內，避免被 p-8 擠壓變窄）
         const card = document.querySelector('.rounded-2xl')
-        if (card) card.insertAdjacentElement('afterbegin', el)
+        if (card) card.insertAdjacentElement('beforebegin', el)
       }
     })()
   </script>
