@@ -159,9 +159,9 @@
 
     /* Logo images — place files at public/images/logo-light.png and logo-dark.png */
     .logo-img  { height: 28px; }
-    .logo-dark { display: none !important; }
-    .theme-dark .logo-light { display: none !important; }
-    .theme-dark .logo-dark  { display: block !important; }
+    .logo-dark { display: none; }
+    .theme-dark .logo-light { display: none; }
+    .theme-dark .logo-dark  { display: block; }
 
     .logo-text {
       font-size: 1.0625rem;
@@ -547,8 +547,8 @@
     <aside class="sidebar">
       <div class="sidebar-logo">
         <!-- Place logo files at public/images/logo-light.png & logo-dark.png to activate -->
-        <img class="logo-img logo-light" src="/images/logo-light.png" alt="CHIYIGO">
-        <img class="logo-img logo-dark"  src="/images/logo-dark.png"  alt="CHIYIGO">
+        <img class="logo-img logo-light" src="/images/logo-light.png" alt="" onerror="this.style.display='none'">
+        <img class="logo-img logo-dark"  src="/images/logo-dark.png"  alt="" onerror="this.style.display='none'">
         <span class="logo-text" id="logo-text-fallback">CHIYIGO</span>
       </div>
 
