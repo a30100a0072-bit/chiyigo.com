@@ -27,7 +27,8 @@
 | Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
 | Dashboard UX 強化（bfcache 防禦 + 靜默刷新） | ✅ 完成 2026-04-23 |
 | Email 驗證 + 忘記密碼 | ✅ 完成（Stage 17，2026-04-24）|
-| 動態 OAuth 路由（Google/LINE/FB） | 🔄 進行中（Stage 18，18.1–18.7 + 18.9(Google) 完成；待設定憑證 + 測試）|
+| 動態 OAuth 路由（Google/LINE/FB） | 🔄 進行中（Stage 18，程式完成；待填 Cloudflare 憑證 + LINE/FB OAuth App）|
+| 首頁重設計（新設計系統） | 🔲 待實作（Stage 19）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -274,10 +275,13 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | 🔒 | 13.8 iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 | ~~中~~ | ~~Stage 17 — Email 驗證~~ | ✅ 完成 2026-04-24（Resend，send-verification + verify 端點）|
 | ~~中~~ | ~~Stage 17 — 忘記密碼~~ | ✅ 完成 2026-04-24（forgot-password + reset-password + 2FA 閉環）|
-| 高 | Stage 18 — 動態 OAuth 路由 | Google/LINE/FB 登入；信箱碰撞防禦；無信箱補填；Apple 架構預留 |
+| 🔄 | Stage 18 — 動態 OAuth 路由 | 程式完成（18.1–18.7 ✅）；待補：18.8 Cloudflare 環境變數（GOOGLE/LINE/FB）、Google Client Secret 尚未填入、LINE/FB OAuth App 尚未建立 |
 | ~~中~~ | ~~T14/T15 — 重設密碼完整測試~~ | ✅ 通過 2026-04-24（T14 無 2FA + T15 有 2FA 閉環均驗證通過）|
 | 中 | Dashboard 2FA 管理 UI | 啟用 / 停用 2FA 的前端介面，目前只有 API |
 | ~~低~~ | ~~login.html 忘記密碼入口~~ | ✅ 完成 2026-04-24（登入按鈕右下角加「忘記密碼？」連結）|
+| 高 | Stage 19 — 首頁重設計 | 套用新設計系統（CSS Variables、SaaS Dashboard 版面、Neural Canvas、亮暗主題）|
+| 待考慮 | 首頁統計數字區塊 | 50+ 專案、98% 滿意度、5+ 年經驗、24/7 支援（數字待確認後加入）|
+| 待討論 | 會員頁面重設計 | login.html / dashboard.html 等頁面套用新設計系統，討論後再動 |
 | 🔒 | Apple Sign In | 需 Apple Developer 帳號（$99/yr），Stage 18 預留架構 |
 
 ---
@@ -459,6 +463,25 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 - [ ] 18.8 Cloudflare Pages 設定 `GOOGLE_CLIENT_ID/SECRET`、`LINE_CLIENT_ID/SECRET`、`FACEBOOK_CLIENT_ID/SECRET`
 - [x] 18.9 各平台 OAuth App 設定 redirect_uri（Google 已完成：`https://chiyigo.com/api/auth/oauth/google/callback`；LINE / Facebook 待辦）
 - [ ] 18.10 T18–T21 線上測試（Google / LINE / Facebook 登入 + 無信箱補填各一輪）
+
+---
+
+## 階段十九：首頁重設計（Homepage Redesign）
+
+> 套用新設計系統，對齊 chiyigo-website.pages.dev 設計稿。
+> 技術棧：Vanilla CSS（CSS Custom Properties）+ Vanilla JS，不使用 Tailwind。
+> 功能邏輯（functions/）完全不動。
+
+### 待辦子項目
+
+- [x] 19.1 `public/index.html` — 套用新設計系統（CSS Variables 亮暗雙主題、SaaS Dashboard 版面）
+- [x] 19.2 神經網路背景動畫（Canvas JS，顏色跟隨主題 CSS 變數自動切換）
+- [x] 19.3 亮色 / 暗色主題切換（`<html>` class 切換，localStorage 記憶，防閃白 inline script）
+- [x] 19.4 流程區塊（需求溝通 → 策略規劃 → 落地執行 三步驟）
+- [x] 19.5 桌面版：左側 Sidebar 導覽 + IntersectionObserver 自動 highlight active section
+- [x] 19.6 行動版：固定 TopBar + 底部 BottomSheet 導覽
+- [ ] 19.7 Logo 圖片接入（`public/images/logo-light.png` + `logo-dark.png`，亮暗自動切換）
+- [ ] 待考慮 — 統計數字區塊（50+ 專案、98% 滿意度等，數字確認後加入）
 
 ---
 
