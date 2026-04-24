@@ -335,18 +335,19 @@ DELETE FROM refresh_tokens    WHERE expires_at < datetime('now');
 
 ---
 
-## 階段十七：Email 驗證 + 忘記密碼
+## 階段十七：Email 驗證與高安規密碼重設（Option B）
 
-> **前置條件**：需串接 Email 發送服務。推薦 **Resend**（免費層 100 封/天，CF Workers 相容）或 Cloudflare Email Workers（Routing → Worker，需自有 MX 記錄）。
+> **前置條件**：串接 **Resend**（免費層 100 封/天，CF Workers 相容，原生 fetch 呼叫，無需 SDK）。
+> **核心目標**：防範信箱遭駭帳號劫持 + 密碼重設端點帳號枚舉 + 2FA 被繞過三大威脅。
 
 ### 架構設計
 
 | 功能 | 端點 | 說明 |
 |------|------|------|
-| 發送驗證信 | `POST /api/auth/email/send-verification` | 生成 token → 存 D1 → 發信（1hr TTL）|
-| 確認驗證 | `GET /api/auth/email/verify?token=` | 核銷 token → 更新 `email_verified=1` |
-| 忘記密碼 | `POST /api/auth/local/forgot-password` | 生成 reset token → 發信（1hr TTL）|
-| 重設密碼 | `POST /api/auth/local/reset-password` | 核銷 token → PBKDF2 雜湊 → 更新密碼 |
+| 發送驗證信 | `POST /api/auth/email/send-verification` | 60 秒冷卻 → 生成 token → 存 D1 Hash → 發信（1hr TTL）|
+| 確認驗證 | `GET /api/auth/email/verify?token=` | 原子核銷 token → 更新 `email_verified=1` |
+| 忘記密碼 | `POST /api/auth/local/forgot-password` | 帳號不存在仍回 200（防枚舉）→ 生成 reset token → 發信 |
+| 重設密碼（Option B） | `POST /api/auth/local/reset-password` | 驗 token → **2FA 閉環** → PBKDF2 更新 → 撤銷所有 refresh_tokens |
 
 ### D1 Schema（email_verifications）
 ```sql
@@ -355,6 +356,7 @@ CREATE TABLE IF NOT EXISTS email_verifications (
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash  TEXT    NOT NULL UNIQUE,
   type        TEXT    NOT NULL CHECK(type IN ('verify_email','reset_password')),
+  ip_address  TEXT,
   expires_at  TEXT    NOT NULL,
   used_at     TEXT,
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -362,22 +364,56 @@ CREATE TABLE IF NOT EXISTS email_verifications (
 CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 ```
 
-### 安全規範
-- token = 32 bytes `crypto.getRandomValues` → hex；只存 SHA-256 hash（與 refresh_token 同模式）
-- 每次請求前先刪除同 user_id + type 的未用舊 token（防止無限發信）
-- 核銷用 `UPDATE ... SET used_at WHERE token_hash AND used_at IS NULL AND expires_at > now RETURNING id`（原子核銷防重放）
-- 重設密碼成功後，同步撤銷所有 refresh_token（強制重新登入）
+### 安全規範（Security Compliance）
+
+| 規則 | 說明 |
+|------|------|
+| Token 強度 | 32 bytes `crypto.getRandomValues` → hex；**DB 只存 SHA-256 hash**（與 refresh_token 同模式）|
+| 發信冷卻 | 每次發信前查詢 60 秒內是否有同 user_id + type 紀錄，有則回 429 |
+| 防帳號枚舉 | `forgot-password` 無論信箱是否存在，一律回 200；使用 `fakeHashDelay` 對齊響應時間 |
+| 2FA 重設閉環 | `reset-password` 若 `totp_enabled=1` 且無 `totp_code`/`backup_code`，回傳 `403 {"requires_2fa": true}` |
+| 重設副作用 | 密碼更新成功後，`DELETE FROM refresh_tokens WHERE user_id=?`（登出所有裝置）|
+| 原子核銷 | `UPDATE ... SET used_at WHERE token_hash AND used_at IS NULL AND expires_at > now RETURNING id`（防重放）|
+
+### Option B 重設密碼流程圖
+```
+[用戶] POST /forgot-password {email}
+  → 找不到帳號 → 靜默回 200（防枚舉）
+  → 找到帳號   → 寫 DB + 寄 Reset Email
+
+[用戶] POST /reset-password {token, new_password}
+  → 查 token（過期/用過 → 400）
+  → 查 user.totp_enabled
+      ├─ totp_enabled=0 → 直接更新密碼
+      └─ totp_enabled=1
+            ├─ 無 totp_code/backup_code → 403 {requires_2fa: true}
+            └─ 有代碼 → 2FA 模組校驗
+                  ├─ 失敗 → 401
+                  └─ 通過 → 更新密碼 + 核銷 token + 撤銷所有 refresh_tokens
+```
+
+### 前端互動（reset-password.html）
+```
+1. 頁面載入讀取 URL ?token=
+2. 提交 → POST /reset-password {token, new_password}
+3. 若收到 403 {requires_2fa: true}
+   → 動態顯示 TOTP 輸入框
+   → 再次提交 {token, new_password, totp_code}
+4. 成功 → 跳轉 login.html
+```
 
 ### 待辦子項目
-- [ ] 17.1 建立 `email_verifications` 資料表（`schema_email.sql`），部署至 D1
-- [ ] 17.2 選定 Email 服務（Resend 建議）並設定 `RESEND_API_KEY` 環境變數
-- [ ] 17.3 `functions/utils/email.js` — 封裝 Resend API 呼叫（`sendVerificationEmail` / `sendPasswordResetEmail`）
-- [ ] 17.4 `POST /api/auth/email/send-verification` — 生成 token、發信、防重複發送
-- [ ] 17.5 `GET /api/auth/email/verify` — 核銷 token、更新 email_verified
-- [ ] 17.6 `POST /api/auth/local/forgot-password` — 查找帳號、發送重設連結（帳號不存在時仍回 200，防帳號枚舉）
-- [ ] 17.7 `POST /api/auth/local/reset-password` — 驗證 token、PBKDF2 更新密碼、撤銷所有 refresh_token
-- [ ] 17.8 更新 dashboard.html — 顯示 Email 驗證狀態，提供「重發驗證信」按鈕（`email_verified === false` 時顯示）
-- [ ] 17.9 `cleanup.yml` 中 `email_verifications` 已有清理 SQL，確認部署後正常執行
+- [x] 17.1 建立 `database/schema_email.sql`，部署至 D1 本地與遠端（2026-04-23，舊版 3 欄位表已替換為 8 欄位完整 schema）
+- [x] 17.2 設定 `RESEND_API_KEY` 環境變數（Cloudflare Pages 後台 + .dev.vars）⚠️ 金鑰已暴露於對話紀錄，Stage 17 完成後需到 Resend 後台刪除並重新產生
+- [x] 17.3 `functions/utils/email.js` — `sendVerificationEmail` / `sendPasswordResetEmail`（原生 fetch，無 SDK）
+- [x] 17.4 `POST /api/auth/email/send-verification` — 60 秒冷卻 + 生成 token + 發信
+- [x] 17.5 `GET /api/auth/email/verify` — 原子核銷 + 更新 email_verified
+- [x] 17.6 `POST /api/auth/local/forgot-password` — 防枚舉設計（無論帳號存在與否回 200）
+- [x] 17.7 `POST /api/auth/local/reset-password` — **2FA 閉環**核心邏輯 + 密碼更新 + 撤銷所有 session
+- [x] 17.8 `public/forgot-password.html` — 信箱輸入頁
+- [x] 17.9 `public/reset-password.html` + JS — 讀 `?token=`、攔截 403 動態顯示 2FA 輸入框
+- [x] 17.10 更新 `dashboard.html` — 顯示 email_verified 狀態，提供「重發驗證信」按鈕
+- [x] 17.11 `cleanup.yml` 新增 `email_verifications` 清理步驟（每日 UTC 03:00 自動執行）
 
 ---
 

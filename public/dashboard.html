@@ -99,6 +99,21 @@
           </div>
         </div>
 
+        <!-- Email 未驗證提示 -->
+        <div id="email-banner" class="hidden mb-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-5 py-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm font-medium text-amber-300">Email 尚未驗證</p>
+              <p class="text-xs text-gray-500 mt-0.5">驗證後可使用完整帳號功能</p>
+            </div>
+            <button id="resend-btn" onclick="sendVerification()"
+              class="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+              重發驗證信
+            </button>
+          </div>
+          <p id="resend-msg" class="hidden text-xs mt-2 text-gray-400"></p>
+        </div>
+
         <!-- 登出按鈕 -->
         <button onclick="logout()"
           class="w-full py-3 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 font-semibold text-sm transition-all hover:scale-[1.01] active:scale-[0.99]">
@@ -185,7 +200,9 @@
 
         const verifiedEl = document.getElementById('info-verified');
         verifiedEl.textContent = data.email_verified ? '已驗證' : '尚未驗證';
-        verifiedEl.className   = 'text-sm font-medium ' + (data.email_verified ? 'text-green-400' : 'text-gray-500');
+        verifiedEl.className   = 'text-sm font-medium ' + (data.email_verified ? 'text-green-400' : 'text-amber-400');
+
+        document.getElementById('email-banner').classList.toggle('hidden', !!data.email_verified);
 
         const providersEl = document.getElementById('info-providers');
         const icons = (data.identities ?? []).map(i => PROVIDER_ICON[i.provider] ?? `<span class="text-xs text-gray-500">${i.provider}</span>`);
@@ -203,6 +220,72 @@
     }
 
     loadProfile();
+
+    async function sendVerification() {
+      const btn = document.getElementById('resend-btn');
+      const msg = document.getElementById('resend-msg');
+      const token = sessionStorage.getItem('access_token');
+      if (!token) { window.location.href = '/login.html'; return; }
+
+      btn.disabled = true;
+      btn.textContent = '送出中…';
+      msg.className = 'hidden text-xs mt-2';
+
+      try {
+        const res  = await fetch('/api/auth/email/send-verification', {
+          method:  'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          showResendMsg('驗證信已送出，請查收信箱（連結 1 小時內有效）。', 'ok');
+          startResendCooldown(60);
+          return;
+        }
+        if (res.status === 400) {
+          // email 已驗證，重新載入資料更新 UI
+          loadProfile();
+          return;
+        }
+        if (res.status === 429) {
+          const wait = data.retry_after ?? 60;
+          showResendMsg(`請稍候再試。`, 'warn');
+          startResendCooldown(wait);
+          return;
+        }
+        showResendMsg(data.error ?? '發送失敗，請稍後再試。', 'err');
+        btn.disabled = false;
+        btn.textContent = '重發驗證信';
+      } catch {
+        showResendMsg('網路錯誤，請稍後再試。', 'err');
+        btn.disabled = false;
+        btn.textContent = '重發驗證信';
+      }
+    }
+
+    function showResendMsg(text, type) {
+      const msg = document.getElementById('resend-msg');
+      msg.textContent = text;
+      msg.className = 'text-xs mt-2 ' + (type === 'ok' ? 'text-green-400' : type === 'warn' ? 'text-amber-400' : 'text-red-400');
+    }
+
+    function startResendCooldown(seconds) {
+      const btn = document.getElementById('resend-btn');
+      let remaining = seconds;
+      btn.disabled = true;
+      btn.textContent = `重發（${remaining}s）`;
+      const iv = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(iv);
+          btn.disabled = false;
+          btn.textContent = '重發驗證信';
+        } else {
+          btn.textContent = `重發（${remaining}s）`;
+        }
+      }, 1000);
+    }
 
     // pagehide：頁面進入 bfcache 前重置 UI，確保還原時顯示 spinner 而非舊資料。
     window.addEventListener('pagehide', () => {
