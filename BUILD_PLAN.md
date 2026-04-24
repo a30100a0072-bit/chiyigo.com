@@ -212,6 +212,8 @@
 | ~~chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 | — |
 | www.chiyigo.com 重導向 | 等待 Cloudflare DNS 驗證通過後自動生效 | 自動 |
 | ~~2FA setup 1101 錯誤~~ | ✅ 已修復 2026-04-24（`Secret.generate()` CF Workers 相容性問題，改用 Web Crypto base32 自生成）| — |
+| ~~註冊失敗~~ | ✅ 已修復 2026-04-24（`register.js` batch INSERT 缺少 `token_type`，Stage 17 schema 加了 NOT NULL 欄位後 constraint violation）| — |
+| ~~登入後按上一頁顯示帳密 / 停在 2FA 面板~~ | ✅ 已修復 2026-04-24（`pageshow` bfcache 還原：有 token → 跳回 dashboard；無 token → 清空欄位並重置至登入分頁）| — |
 | ~~遠端 DB 缺少 Auth schema~~ | ✅ 已部署 2026-04-23，14 張資料表全部到位 | — |
 | ~~schema_iam_fresh.sql 未同步~~ | ✅ pkce_sessions + auth_codes 已加入 2026-04-23 | — |
 | ~~登出按鈕 UI~~ | ✅ 已整合至 dashboard.html，Header + 底部按鈕均已完成 2026-04-23 | — |
