@@ -211,13 +211,14 @@
 | ~~register.js 未回傳 refresh_token~~ | ✅ 已修復 2026-04-23 | — |
 | ~~chiyigo-db（13ecc734...）~~ | ✅ 已刪除 2026-04-23 | — |
 | www.chiyigo.com 重導向 | 等待 Cloudflare DNS 驗證通過後自動生效 | 自動 |
+| ~~2FA setup 1101 錯誤~~ | ✅ 已修復 2026-04-24（`Secret.generate()` CF Workers 相容性問題，改用 Web Crypto base32 自生成）| — |
 | ~~遠端 DB 缺少 Auth schema~~ | ✅ 已部署 2026-04-23，14 張資料表全部到位 | — |
 | ~~schema_iam_fresh.sql 未同步~~ | ✅ pkce_sessions + auth_codes 已加入 2026-04-23 | — |
 | ~~登出按鈕 UI~~ | ✅ 已整合至 dashboard.html，Header + 底部按鈕均已完成 2026-04-23 | — |
 
 ---
 
-## 測試清單 T1–T8（線上驗證）
+## 測試清單 T1–T17（線上驗證）
 
 | 編號 | 測試項目 | 狀態 | 備註 |
 |------|---------|------|------|
@@ -231,6 +232,13 @@
 | T8 | Admin API | ✅ 通過 | 列表/ban/unban 邏輯全通過，自封禁與角色保護正常 2026-04-23 |
 | T9 | PKCE 完整流程 | ✅ 通過 | authorize→code→token，重放攻擊防護通過 |
 | T10 | Logout 撤銷 | ✅ 通過 | 撤銷後 refresh 回 401，冪等 200 |
+| T11 | 發送驗證信 | ✅ 通過 | 200 送出成功；60 秒冷卻 429；無 token 401，2026-04-24 |
+| T12 | Email 驗證確認 | ✅ 通過 | 核銷成功跳轉 login.html 綠色 banner；重放回 400，2026-04-24 |
+| T13 | 忘記密碼（防枚舉） | ✅ 通過 | 存在/不存在信箱均回 200 同一訊息，2026-04-24 |
+| T14 | 重設密碼（無 2FA） | 🔲 待測 | 需收信取得 reset token 後測試 |
+| T15 | 重設密碼（有 2FA） | 🔲 待測 | 2FA 啟用完成（2026-04-24），需收信測試 2FA 閉環 |
+| T16 | Dashboard Email 驗證 UI | ✅ 通過 | amber banner / 重發按鈕 / 60s 倒數正常，2026-04-24 |
+| T17 | 2FA 設定端點 | ✅ 通過 | setup + activate 成功，備用碼產生，2026-04-24 |
 
 ### T2 測試指令
 ```bash
