@@ -1,0 +1,142 @@
+/**
+ * GET /api/auth/oauth/[provider]/init?platform=web|pc|mobile[&port=PORT]
+ *
+ * 動態 OAuth 授權入口，支援 discord / google / line / facebook / apple。
+ *
+ * 流程：
+ *  1. 從 URL 取得 provider，查設定檔確認支援
+ *  2. 生成 state（CSRF 防禦）+ PKCE（支援的 provider）
+ *  3. 寫入 oauth_states（TTL 10 分鐘），帶上 provider 欄位
+ *  4. 302 重導向至第三方授權頁
+ */
+
+import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-providers.js'
+
+const STATE_BYTES       = 16   // 128 bits
+const VERIFIER_BYTES    = 32   // 256 bits
+const STATE_TTL_MINUTES = 10
+
+// Facebook 不支援 PKCE，其餘均支援
+const PKCE_UNSUPPORTED = new Set(['facebook'])
+
+// ── PKCE 工具 ─────────────────────────────────────────────────────
+
+function randomHex(n) {
+  return Array.from(crypto.getRandomValues(new Uint8Array(n)))
+    .map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function toBase64Url(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+async function generatePkce() {
+  const raw       = crypto.getRandomValues(new Uint8Array(VERIFIER_BYTES))
+  const verifier  = toBase64Url(raw)
+  const hashBuf   = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+  return { code_verifier: verifier, code_challenge: toBase64Url(hashBuf) }
+}
+
+// ── 平台回呼 URI ──────────────────────────────────────────────────
+
+function buildClientCallback(platform, port) {
+  switch (platform) {
+    case 'pc':
+      if (!port || !/^\d{4,5}$/.test(String(port)))
+        throw new Error('platform=pc 需要有效的 port 參數（4-5 位數字）')
+      return `http://127.0.0.1:${port}/callback`
+    case 'mobile':
+      return 'chiyigo://auth/callback'
+    default:
+      return null
+  }
+}
+
+// ── 主處理器 ──────────────────────────────────────────────────────
+
+export async function onRequestGet(context) {
+  const { request, env, params } = context
+  const provider = params.provider?.toLowerCase()
+
+  // ── 1. 驗證 provider ────────────────────────────────────────
+  if (!SUPPORTED_PROVIDERS.includes(provider))
+    return res({ error: `不支援的登入方式：${provider}` }, 400)
+
+  const cfg = getProvider(provider, env)
+  if (!cfg?.clientId)
+    return res({ error: `${provider} 尚未設定，請稍後再試` }, 503)
+
+  // Apple 需要特殊處理（form_post + JWT client_secret），目前預留
+  if (provider === 'apple')
+    return res({ error: 'Apple 登入尚未開放' }, 503)
+
+  const url      = new URL(request.url)
+  const platform = url.searchParams.get('platform') ?? 'web'
+  const port     = url.searchParams.get('port')
+
+  if (!['web', 'pc', 'mobile'].includes(platform))
+    return res({ error: 'platform 必須為 web、pc 或 mobile' }, 400)
+
+  // ── 2. State（CSRF）+ PKCE ──────────────────────────────────
+  const state = randomHex(STATE_BYTES)
+  const usePkce = !PKCE_UNSUPPORTED.has(provider)
+  const { code_verifier, code_challenge } = usePkce
+    ? await generatePkce()
+    : { code_verifier: '', code_challenge: '' }
+
+  // ── 3. 平台回呼 URI ─────────────────────────────────────────
+  let client_callback
+  try {
+    client_callback = buildClientCallback(platform, port)
+  } catch (err) {
+    return res({ error: err.message }, 400)
+  }
+
+  // ── 4. Server-side redirect_uri（永遠指向我們的 callback）──
+  const baseUrl      = env.IAM_BASE_URL ?? 'https://chiyigo.com'
+  const redirect_uri = `${baseUrl}/api/auth/oauth/${provider}/callback`
+
+  // ── 5. 寫入 oauth_states ────────────────────────────────────
+  const expires_at = new Date(Date.now() + STATE_TTL_MINUTES * 60_000)
+    .toISOString().replace('T', ' ').slice(0, 19)
+
+  try {
+    await env.chiyigo_db
+      .prepare(`
+        INSERT INTO oauth_states
+          (state_token, code_verifier, redirect_uri, platform, client_callback, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      .bind(state, code_verifier, redirect_uri, platform, client_callback ?? '', expires_at)
+      .run()
+  } catch {
+    return res({ error: 'OAuth 狀態儲存失敗，請重試' }, 500)
+  }
+
+  // ── 6. 建構授權 URL ─────────────────────────────────────────
+  const authUrl = new URL(cfg.authUrl)
+  authUrl.searchParams.set('client_id',     cfg.clientId)
+  authUrl.searchParams.set('redirect_uri',  redirect_uri)
+  authUrl.searchParams.set('response_type', 'code')
+  authUrl.searchParams.set('scope',         cfg.scope)
+  authUrl.searchParams.set('state',         state)
+
+  if (usePkce) {
+    authUrl.searchParams.set('code_challenge',        code_challenge)
+    authUrl.searchParams.set('code_challenge_method', 'S256')
+  }
+
+  // provider 特定參數
+  if (provider === 'discord') authUrl.searchParams.set('prompt', 'none')
+  if (provider === 'google')  authUrl.searchParams.set('access_type', 'online')
+
+  return Response.redirect(authUrl.toString(), 302)
+}
+
+function res(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}

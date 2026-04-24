@@ -450,7 +450,7 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 ### 待辦子項目
 
 - [x] 18.1 `functions/utils/oauth-providers.js` — Provider 設定檔（discord/google/line/facebook/apple，含 trustEmail、env key 對應、normalizeProfile）
-- [ ] 18.2 `functions/api/auth/oauth/[provider]/init.js` — 動態授權網址生成（保留 PKCE + State HttpOnly Cookie）
+- [x] 18.2 `functions/api/auth/oauth/[provider]/init.js` — 動態授權網址生成（PKCE 支援 discord/google/line；Facebook 僅 state；Apple 預留 503）
 - [ ] 18.3 `functions/api/auth/oauth/[provider]/callback.js` — 動態 callback（同時 export GET/POST；token 換取；統一 profile 格式）
 - [ ] 18.4 信箱碰撞 + 無信箱安防邏輯（DB 寫入 / 綁定 / 403 阻擋 / temp_bind_token）
 - [ ] 18.5 刪除舊的 `functions/api/auth/discord/init.js` 與 `callback.js`（整合進動態路由後移除）
