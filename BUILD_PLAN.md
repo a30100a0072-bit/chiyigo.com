@@ -8,6 +8,20 @@
 
 ## 整體進度快照（2026-04-25 最終更新）
 
+### Cross-App SSO（子網域整合）
+
+| 子網域 | 整合狀態 | 說明 |
+|--------|----------|------|
+| mbti.chiyigo.com | ✅ 已整合（2026-04-25）| 共用 chiyigo.com IAM ES256 JWT |
+| talo.chiyigo.com | ✅ 已整合（2026-04-25）| 共用 chiyigo.com IAM ES256 JWT；redirect SSO 模式 |
+
+**SSO 流程**：子網域 → `chiyigo.com/login.html?redirect=ORIGIN` → 登入後帶 `?mbti_token=JWT&mbti_email=...` 跳回  
+**白名單**（`auth-ui.js` `_CROSS_APP_WHITELIST`）：`talo.chiyigo.com`、`mbti.chiyigo.com`  
+**CORS**（`functions/utils/cors.js` `DEFAULT_ORIGINS`）：已加入 `talo.chiyigo.com`
+
+---
+
+
 ### 核心系統
 
 | 模組 | 狀態 |

@@ -7,7 +7,7 @@
  *  - 不在白名單的 Origin：回傳空物件（不加任何 CORS 標頭，瀏覽器會自行攔截）
  */
 
-const DEFAULT_ORIGINS = ['https://chiyigo.com', 'https://mbti.chiyigo.com']
+const DEFAULT_ORIGINS = ['https://chiyigo.com', 'https://mbti.chiyigo.com', 'https://talo.chiyigo.com']
 
 function getAllowedOrigins(env) {
   const extras = env.ALLOWED_ORIGINS

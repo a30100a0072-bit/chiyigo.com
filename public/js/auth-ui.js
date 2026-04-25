@@ -47,6 +47,36 @@ const PWD_HIDE_MS  = 10_000;
 // pkce_key 由 GET /api/auth/oauth/authorize 產生，存在 URL ?pkce_key=...
 const _pkceKey = new URLSearchParams(location.search).get('pkce_key');
 
+// ── Cross-App Redirect 模式（子網域 SSO）────────────────────────────
+// 外部子網域帶 ?redirect=https://talo.chiyigo.com 進入登入頁，
+// 登入後把 access_token 帶回目標 origin。
+const _CROSS_APP_WHITELIST = new Set([
+  'https://talo.chiyigo.com',
+  'https://mbti.chiyigo.com',
+]);
+
+const _crossAppOrigin = (() => {
+  const r = new URLSearchParams(location.search).get('redirect');
+  if (!r) return null;
+  try {
+    const origin = new URL(r).origin;
+    return _CROSS_APP_WHITELIST.has(origin) ? origin : null;
+  } catch { return null; }
+})();
+
+function _decodeJwtPayload(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+  } catch { return {}; }
+}
+
+function handleCrossAppRedirect(accessToken) {
+  const { email } = _decodeJwtPayload(accessToken);
+  const params = new URLSearchParams({ mbti_token: accessToken });
+  if (email) params.set('mbti_email', email);
+  window.location.href = `${_crossAppOrigin}?${params}`;
+}
+
 // ── guest_id 管理 ────────────────────────────────────────────────
 
 function getOrCreateGuestId() {
@@ -285,6 +315,7 @@ async function handleLogin(event) {
 
     saveToken(data.access_token);
     if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
+    if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
     redirectAfterAuth();
 
   } catch {
@@ -338,6 +369,7 @@ async function handleRegister(event) {
     saveToken(data.access_token);
     clearGuestId();
     if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
+    if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
     showMsg('帳號建立成功！正在跳轉…', 'success');
     setTimeout(redirectAfterAuth, 800);
 
@@ -391,6 +423,7 @@ async function handleTotp(event) {
     _preAuthToken = null;
     saveToken(data.access_token);
     if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
+    if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
     redirectAfterAuth();
 
   } catch {
@@ -411,13 +444,15 @@ async function handleTotp(event) {
   if (_urlToken) {
     saveToken(_urlToken);
     history.replaceState(null, '', location.pathname);
+    if (_crossAppOrigin) { handleCrossAppRedirect(_urlToken); return; }
     redirectAfterAuth();
     return;
   }
 
-  // 已登入時：PKCE 模式繼續換碼，普通模式跳轉儀表板
+  // 已登入時：PKCE 模式繼續換碼，Cross-App 繼續跳轉，普通模式跳轉儀表板
   if (getToken()) {
     if (_pkceKey) { handlePkceRedirect(getToken()); return; }
+    if (_crossAppOrigin) { handleCrossAppRedirect(getToken()); return; }
     redirectAfterAuth();
     return;
   }
@@ -441,6 +476,7 @@ window.addEventListener('pageshow', (event) => {
   if (!document.getElementById('login-password')) return;
   if (event.persisted) {
     if (getToken()) {
+      if (_crossAppOrigin) { handleCrossAppRedirect(getToken()); return; }
       window.location.replace('/dashboard.html');
       return;
     }
