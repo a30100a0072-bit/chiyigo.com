@@ -108,7 +108,7 @@
 | 🟡 Medium | Admin ban/unban 無操作稽核日誌 | `functions/api/admin/` | ✅ 已修復 |
 | 🟡 Medium | 2FA 備用碼無 UI 重新生成 | `functions/api/auth/2fa/` | ✅ 已修復 |
 
-> 全部 7 項安全待辦已於 2026-04-25 修復完畢。Admin 稽核日誌需手動執行 `migrations/0003_admin_audit_log.sql`。
+> 全部 7 項安全待辦已於 2026-04-25 修復完畢。`migrations/0003_admin_audit_log.sql` 已於 2026-04-25 套用至正式 D1。
 
 ---
 
