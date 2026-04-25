@@ -64,7 +64,7 @@ export async function onRequestPost({ request, env }) {
 
   const db = env.chiyigo_db
 
-  // ── 2. 限流：登入用戶 3 單/日；訪客全域 20 單/日 ─────────────
+  // ── 2. 限流：登入用戶 10 單/日；訪客全域 5 單/日 ─────────────
   const countRow = userId !== null
     ? await db.prepare(`
         SELECT COUNT(*) AS cnt FROM requisition
@@ -79,7 +79,7 @@ export async function onRequestPost({ request, env }) {
           AND deleted_at IS NULL
       `).first()
 
-  const dayLimit = userId !== null ? 3 : 20
+  const dayLimit = userId !== null ? 10 : 5
   if ((countRow?.cnt ?? 0) >= dayLimit)
     return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們' }, 429)
 
