@@ -1,12 +1,6 @@
-/**
- * API-wide Middleware — /api/* 全路由生效
- *
- * POST 請求強制 Content-Type: application/json，防止跨站 form submit CSRF。
- *
- * 例外：
- *  /api/auth/logout           — Web Cookie 模式不帶 body，無 Content-Type header
- *  /api/auth/oauth/*/callback — Apple Sign In 使用 form_post（application/x-www-form-urlencoded）
- */
+// API-wide Middleware for /api/* routes
+// POST requests require Content-Type: application/json (CSRF form-submit defense)
+// Exempt: /api/auth/logout (cookie-only, no body) and /api/auth/oauth/[provider]/callback (Apple form_post)
 
 import { getCorsHeaders } from '../utils/cors.js'
 
