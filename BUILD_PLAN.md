@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-25 更新 #5）
+## 整體進度快照（2026-04-25 更新 #6）
 
 | 模組 | 狀態 |
 |------|------|
@@ -37,6 +37,7 @@
 | mbti.chiyigo.com IAM 整合 | ✅ 完成（2026-04-25；Method A — 完整 PKCE 替換；chiyigo.com 側 3 個端點更新 + mbti 側 15 個檔案更新）|
 | mbti.chiyigo.com 加入作品集 | ✅ 完成（2026-04-25；D1 portfolio 表 id=7 插入，category=System，sort_order=0，tags: Cloudflare Workers/D1 SQLite/OAuth PKCE/MBTI/認知評估）|
 | 全站 Sidebar 順序重整 + Footer 統一 | ✅ 完成（2026-04-25；Sidebar 順序改為 首頁→服務項目→服務流程→案例作品→關於我們→接案資訊；Footer 統一顯示 首頁/案例作品/關於我們/接案諮詢；5 頁全覆蓋含 mobile overlay）|
+| 接案諮詢新增遊戲開發選項 | ✅ 完成（2026-04-25；service_type 下拉新增「遊戲開發 / Unity・Web Game」，value=game，插入網站建置後、第三方串接前）|
 | Email 按鈕 debug（mailto temp anchor） | ✅ 完成（2026-04-25；window.location.href='mailto:' 在無預設 mail client 環境無聲失敗，改用 createElement('a').click() 臨時錨點方式，跨瀏覽器相容）|
 | 預算下拉選項更新 | ✅ 完成（2026-04-25；「200,000 以上」→「200,000 – 1,000,000」，value 改為 200k-1m）|
 | 關於我們 2025 經歷更新 | ✅ 完成（2026-04-25；新增時間軸條目：「正式推出 CHIYIGO IAM 跨平台身份認證服務，Serverless 架構整合 OAuth 社群登入與多站台授權」）|
