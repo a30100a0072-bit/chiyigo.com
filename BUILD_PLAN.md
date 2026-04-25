@@ -27,7 +27,7 @@
 | Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
 | Dashboard UX 強化（bfcache 防禦 + 靜默刷新） | ✅ 完成 2026-04-23 |
 | Email 驗證 + 忘記密碼 | ✅ 完成（Stage 17，2026-04-24）|
-| 動態 OAuth 路由（Google/LINE/FB） | 🔄 進行中（Stage 18；Google ✅ + LINE ✅ 憑證已上 Cloudflare；待測試 T18–T19；Facebook OAuth App 尚未建立）|
+| 動態 OAuth 路由（Google/LINE/FB） | 🔄 進行中（Stage 18；T18 Google ✅ T19 LINE ✅ T21 碰撞防禦 ✅；Facebook OAuth App 尚未建立，T20 待辦）|
 | 首頁重設計（新設計系統） | ✅ 完成（Stage 19，2026-04-25）|
 | login.html / portfolio.html 風格同步 | ✅ 完成（2026-04-25；mobile overlay 統一 is-open、6 項導覽、接案中徽章）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
@@ -482,7 +482,11 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 - [x] 18.7 更新 `login.html` — 新增 Google、LINE、Facebook 登入按鈕，指向 `/api/auth/oauth/{provider}/init`
 - [x] 18.8 Cloudflare Pages 設定環境變數（`GOOGLE_CLIENT_ID/SECRET` 已完成 2026-04-25；`LINE_CLIENT_ID/SECRET` 已完成 2026-04-25；`FACEBOOK_CLIENT_ID/SECRET` 待辦）
 - [x] 18.9 各平台 OAuth App redirect_uri（Google：`https://chiyigo.com/api/auth/oauth/google/callback` ✅；LINE：`https://chiyigo.com/api/auth/oauth/line/callback` ✅；Facebook 待辦）
-- [ ] 18.10 T18–T21 線上測試（Google / LINE / Facebook 登入 + 無信箱補填各一輪）
+- [x] 18.10 T18–T21 線上測試（部分通過 2026-04-25）
+  - T18 Google 登入：✅ 通過（新帳號建立 + dashboard 跳轉正常）
+  - T19 LINE 登入（無信箱補填）：✅ 通過（跳轉 bind-email.html，temp_bind_token 正確產生）
+  - T20 Facebook 登入：⏳ 待辦（OAuth App 尚未申請）
+  - T21 Email 碰撞防禦：✅ 通過（LINE bind-email 填入已存在信箱 → 403 阻擋 + 正確提示訊息）
 
 ---
 
