@@ -130,7 +130,7 @@
     .sb-brand {
       display: flex; align-items: center; gap: .6rem;
       padding: 1.35rem 1.25rem 1.1rem;
-      flex-shrink: 0;
+      flex-shrink: 0; text-decoration: none;
     }
     .sb-logo-img { height: 76px; width: auto; display: block; flex-shrink: 0; }
     .sb-nav {
@@ -674,10 +674,10 @@
 
     <!-- Sidebar -->
     <aside class="dash-sidebar" id="dash-sidebar">
-      <div class="sb-brand">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
         <img class="sb-logo-img logo-light" src="/images/logo-light.png" alt="chiyigo">
         <img class="sb-logo-img logo-dark"  src="/images/logo-dark.png"  alt="chiyigo">
-      </div>
+      </a>
       <nav class="sb-nav" id="sidebar-nav" aria-label="主要導覽">
         <a href="#hero" class="sb-item active" data-section="hero">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>

@@ -76,7 +76,7 @@
     .dash-content::-webkit-scrollbar-thumb:hover{background:var(--border-bright)}
 
     /* ── Sidebar ── */
-    .sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0}
+    .sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0;text-decoration:none}
     .sb-logo-img{height:76px;width:auto;display:block;flex-shrink:0}
     .sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
     .sb-nav::-webkit-scrollbar{display:none}
@@ -243,10 +243,10 @@
 
     <!-- ── Sidebar ── -->
     <aside class="dash-sidebar" id="dash-sidebar">
-      <div class="sb-brand">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
         <img src="images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
         <img src="images/logo-dark.png"  alt="CHIYIGO" class="sb-logo-img logo-dark">
-      </div>
+      </a>
 
       <nav class="sb-nav" aria-label="主要導覽">
         <a href="index.html" class="sb-item" aria-label="首頁">
