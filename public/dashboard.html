@@ -6,6 +6,7 @@
   <title>我的帳號 — CHIYIGO</title>
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -28,38 +29,63 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
     body { background-color: #0e0e12; color: #e4e4ef; }
-    .lang-bar{display:flex;gap:.375rem;align-items:center}
-    .lang-pill{background:none;border:1px solid #2a2a35;border-radius:6px;padding:.2rem .55rem;font-size:.7rem;color:#6b7280;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}
-    .lang-pill:hover,.lang-pill.active{border-color:#4f6ef7;color:#4f6ef7}
+    /* logo light/dark sync */
+    .db-logo{height:38px;width:auto;display:block}
+    .logo-dark,.theme-dark .logo-light{display:none!important}
+    .theme-dark .logo-dark{display:block!important}
+    /* globe lang button */
+    .globe-wrap{position:relative}
+    .globe-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid #2a2a35;background:none;color:#6b7280;cursor:pointer;transition:border-color .15s,color .15s;flex-shrink:0}
+    .globe-btn:hover{border-color:#4f6ef7;color:#4f6ef7}
+    .globe-btn svg{width:15px;height:15px}
+    .db-lang-drop{display:none;position:absolute;top:calc(100% + .45rem);right:0;background:#16161d;border:1px solid #2a2a35;border-radius:12px;padding:.4rem;min-width:124px;box-shadow:0 4px 24px rgba(0,0,0,.5);z-index:200}
+    .db-lang-drop.open{display:flex;flex-direction:column;gap:.15rem}
+    .db-lang-opt{background:none;border:none;padding:.45rem .85rem;border-radius:8px;font-size:.8rem;cursor:pointer;color:#6b7280;text-align:left;transition:background .15s,color .15s;font-family:inherit;white-space:nowrap;width:100%}
+    .db-lang-opt:hover,.db-lang-opt.active{background:rgba(79,110,247,.12);color:#4f6ef7}
   </style>
 </head>
 <body class="font-sans antialiased min-h-screen flex flex-col">
 
   <!-- 頂部工具列 -->
   <header class="fixed top-0 inset-x-0 z-50 border-b border-[#2a2a35] bg-[#0e0e12]/80 backdrop-blur-md">
-    <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+    <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between relative">
+
+      <!-- 左：返回首頁 -->
       <a href="/index.html" class="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors group">
         <svg class="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
-        <span data-i18n="back_home">返回首頁</span>
+        <span data-i18n="back_home" class="hidden sm:inline">返回首頁</span>
       </a>
-      <div class="flex items-center gap-3">
-        <span class="text-sm font-semibold text-white tracking-tight">CHIYIGO</span>
-        <div class="lang-bar">
-          <button class="lang-pill active" data-lang="zh-TW">繁中</button>
-          <button class="lang-pill" data-lang="en">EN</button>
-          <button class="lang-pill" data-lang="ja">日本語</button>
-          <button class="lang-pill" data-lang="ko">한국어</button>
-        </div>
+
+      <!-- 中央：Logo（絕對置中）-->
+      <div class="absolute left-1/2 -translate-x-1/2">
+        <img src="images/logo-light.png" alt="CHIYIGO" class="db-logo logo-light">
+        <img src="images/logo-dark.png"  alt="CHIYIGO" class="db-logo logo-dark">
       </div>
-      <button onclick="logout()"
-        class="flex items-center gap-1.5 text-sm text-gray-400 hover:text-red-400 transition-colors">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-        </svg>
-        <span data-i18n="logout_header">登出</span>
-      </button>
+
+      <!-- 右：地球語言按鈕 + 登出 -->
+      <div class="flex items-center gap-2">
+        <div class="globe-wrap">
+          <button class="globe-btn" id="db-globe-btn" aria-label="切換語言">
+            <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6M8 2c1.5 2 2.5 3.8 2.5 6S9.5 12 8 14M2 8h12" stroke="currentColor" stroke-width="1.3"/></svg>
+          </button>
+          <div class="db-lang-drop" id="db-lang-drop">
+            <button class="db-lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="db-lang-opt" data-lang="en">English</button>
+            <button class="db-lang-opt" data-lang="ja">日本語</button>
+            <button class="db-lang-opt" data-lang="ko">한국어</button>
+          </div>
+        </div>
+        <button onclick="logout()"
+          class="flex items-center gap-1.5 text-sm text-gray-400 hover:text-red-400 transition-colors">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+          </svg>
+          <span data-i18n="logout_header" class="hidden sm:inline">登出</span>
+        </button>
+      </div>
+
     </div>
   </header>
 
@@ -349,7 +375,7 @@
       document.querySelectorAll('[data-i18n-ph]').forEach(el => {
         const k = el.dataset.i18nPh; if (t[k] !== undefined) el.placeholder = t[k];
       });
-      document.querySelectorAll('.lang-pill').forEach(btn => {
+      document.querySelectorAll('.db-lang-opt').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.lang === lang);
       });
       // re-render any already-rendered dynamic UI
@@ -362,10 +388,19 @@
       }
     }
 
-    // lang switcher
-    document.querySelectorAll('.lang-pill').forEach(btn => {
-      btn.addEventListener('click', () => applyLangD(btn.dataset.lang));
+    // lang switcher — globe dropdown
+    const dbGlobeBtn = document.getElementById('db-globe-btn');
+    const dbLangDrop = document.getElementById('db-lang-drop');
+    dbGlobeBtn?.addEventListener('click', e => {
+      e.stopPropagation();
+      dbLangDrop?.classList.toggle('open');
     });
+    dbLangDrop?.addEventListener('click', e => {
+      const opt = e.target.closest('.db-lang-opt'); if (!opt) return;
+      applyLangD(opt.dataset.lang);
+      dbLangDrop.classList.remove('open');
+    });
+    document.addEventListener('click', () => dbLangDrop?.classList.remove('open'));
     applyLangD(curLangD);
 
     const ROLE_STYLE = {
