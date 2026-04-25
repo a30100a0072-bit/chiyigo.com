@@ -294,7 +294,8 @@
     .info-card-body{display:flex;flex-direction:column;gap:.15rem}
     .info-card-type{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.1em;color:var(--text-dim);text-transform:uppercase}
     .info-card-value{font-family:var(--font-sans);font-size:.95rem;font-weight:500;color:var(--text-muted);transition:color .2s ease}
-    a.info-card-value:hover{color:var(--accent)}
+    a.info-card-value:hover,.info-card-btn:hover{color:var(--accent)}
+    .info-card-btn{background:none;border:none;padding:0;margin:0;cursor:pointer;font-family:var(--font-sans);font-size:.95rem;font-weight:500;color:var(--text-muted);transition:color .2s ease;text-align:left;line-height:inherit}
 
     /* Response stats */
     .response-stats{display:flex;align-items:center;gap:1rem;padding:.85rem .9rem;background:#6b9fd40a;border:1px solid rgba(107,159,212,.12);border-radius:5px}
@@ -413,7 +414,7 @@
                     </div>
                     <div class="info-card-body">
                       <span class="info-card-type">EMAIL</span>
-                      <a href="mailto:hello@chiyigo.com" class="info-card-value">hello@chiyigo.com</a>
+                      <button type="button" id="btn-contact-email" class="info-card-btn">hello@chiyigo.com</button>
                     </div>
                   </li>
                   <li class="info-card">
@@ -422,7 +423,7 @@
                     </div>
                     <div class="info-card-body">
                       <span class="info-card-type">LINE</span>
-                      <span class="info-card-value">@chiyigo</span>
+                      <button type="button" id="btn-contact-line" class="info-card-btn">@chiyigo</button>
                     </div>
                   </li>
                 </ul>
@@ -916,6 +917,18 @@
       entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); revObs.unobserve(e.target); } });
     }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
     document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
+
+    // ── Contact: Email (L2 obfuscation — no plaintext mailto in DOM) ──
+    document.getElementById('btn-contact-email')?.addEventListener('click', function () {
+      var u = ['chiyigo', '20201208'].join('');
+      var d = ['gmail', 'com'].join('.');
+      window.location.href = 'mailto:' + u + '\x40' + d;
+    });
+
+    // ── Contact: LINE (Worker redirect — no raw LINE URL in frontend) ──
+    document.getElementById('btn-contact-line')?.addEventListener('click', function () {
+      window.open('/api/redirect/line', '_blank', 'noopener,noreferrer');
+    });
   </script>
 
   <!-- Neural network animation -->

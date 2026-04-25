@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-25 更新 #3）
+## 整體進度快照（2026-04-25 更新 #4）
 
 | 模組 | 狀態 |
 |------|------|
@@ -37,6 +37,8 @@
 | mbti.chiyigo.com IAM 整合 | ✅ 完成（2026-04-25；Method A — 完整 PKCE 替換；chiyigo.com 側 3 個端點更新 + mbti 側 15 個檔案更新）|
 | mbti.chiyigo.com 加入作品集 | ✅ 完成（2026-04-25；D1 portfolio 表 id=7 插入，category=System，sort_order=0，tags: Cloudflare Workers/D1 SQLite/OAuth PKCE/MBTI/認知評估）|
 | 全站 Sidebar 順序重整 + Footer 統一 | ✅ 完成（2026-04-25；Sidebar 順序改為 首頁→服務項目→服務流程→案例作品→關於我們→接案資訊；Footer 統一顯示 首頁/案例作品/關於我們/接案諮詢；5 頁全覆蓋含 mobile overlay）|
+| 全站回覆時效更新 | ✅ 完成（2026-04-25；「24 小時內回覆」全站改為「48 小時內回覆」，含 index.html CTA 區塊 2 處）|
+| 聯絡按鈕防爬蟲實作（L2-L3） | ✅ 完成（2026-04-25；Email：JS 動態拼接混淆，點擊觸發 mailto:chiyigo20201208@gmail.com，顯示仍為 hello@chiyigo.com；LINE：Worker /api/redirect/line 302 轉址至 LINE deep link，含 IP/UA log 佔位符；前端無明文連結）|
 | 首頁服務區塊標題更新 | ✅ 完成（2026-04-25；「我們提供什麼」→「服務項目」，字體改用與「服務流程」相同的 clamp(1.75rem,3.5vw,2.5rem) font-weight:700 大標題樣式）|
 | Discord OAuth redirect_uri 修復 | ✅ 完成（2026-04-25；prompt=none 改 prompt=consent；Discord Developer Portal 需補登錄 redirect URI：`https://chiyigo.com/api/auth/oauth/discord/callback`）|
 | MBTI 登入後跳回問題修復（PKCE OAuth 流程） | ✅ 完成（2026-04-25；pkce_key 透過 OAuth init→oauth_states→callback 傳遞，社群登入也能正確回到 MBTI）|
