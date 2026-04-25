@@ -33,6 +33,7 @@
 | LINE OAuth Published | ✅ 完成（2026-04-25；LINE Developers Console → Published，全用戶可用）|
 | 全站 Logo 可點擊（回首頁） | ✅ 完成（2026-04-25；所有頁面 sidebar .sb-brand 改為 `<a href="/">`）|
 | 會員登入入口 | ✅ 完成（2026-04-25；Sidebar 底部「👤 會員登入」連結 + Mobile TopBar 人像圖示，5 頁全覆蓋）|
+| Mobile overlay 手勢 + Bug 修復 | ✅ 完成（2026-04-25；向下拖曳關閉；about.html overlay nav 補齊 6 項 + 修正「聯絡我們」→「接案諮詢」；about/portfolio/requisition 補 backdrop click 關閉）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
