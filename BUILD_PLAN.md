@@ -35,6 +35,7 @@
 | 會員登入入口 | ✅ 完成（2026-04-25；Sidebar 底部「👤 會員登入」連結 + Mobile TopBar 人像圖示，5 頁全覆蓋）|
 | Mobile overlay 手勢 + Bug 修復 | ✅ 完成（2026-04-25；向下拖曳關閉；about.html overlay nav 補齊 6 項 + 修正「聯絡我們」→「接案諮詢」；about/portfolio/requisition 補 backdrop click 關閉）|
 | mbti.chiyigo.com IAM 整合 | ✅ 完成（2026-04-25；Method A — 完整 PKCE 替換；chiyigo.com 側 3 個端點更新 + mbti 側 15 個檔案更新）|
+| mbti.chiyigo.com 加入作品集 | ✅ 完成（2026-04-25；D1 portfolio 表 id=7 插入，category=System，sort_order=0，tags: Cloudflare Workers/D1 SQLite/OAuth PKCE/MBTI/認知評估）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -602,6 +603,7 @@ npx wrangler pages deploy public/ --project-name mental-modeling-assessment-v1
 |------|------|------|
 | login.html PKCE 重導向 | ✅ 通過 | 點擊按鈕 → chiyigo.com 登入 → 回到 mbti dashboard |
 | dashboard 資料載入 | ✅ 通過 | Token Introspection 驗證成功，歷史紀錄正常顯示 |
+| portfolio 項目新增（D1） | ✅ 完成 | `INSERT INTO portfolio ... id=7`；`wrangler d1 execute --remote` 確認 `changes=1` |
 
 ### 技術備忘：Token Introspection 模式
 > 原本設計使用 JWKS + crypto.subtle 手刻 ES256 驗證，但實作複雜且難除錯。
