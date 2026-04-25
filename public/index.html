@@ -535,7 +535,7 @@
     .services { padding: var(--section-y) var(--pad-x); background: var(--bg); }
     .svc-inner { max-width: var(--max-w); margin: 0 auto; }
     .svc-head { margin-bottom: 1.5rem; }
-    .svc-label { font-family: var(--font-body); font-size: 1rem; font-weight: 600; color: var(--text); }
+    .svc-label { font-family: var(--font-sans); font-size: clamp(1.75rem,3.5vw,2.5rem); font-weight: 700; letter-spacing: -.01em; color: var(--text); }
     .svc-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
     .svc-card {
       background: var(--bg-surface); border: 1px solid var(--border);
@@ -837,7 +837,7 @@
         <section id="services" class="services">
           <div class="svc-inner">
             <div class="svc-head" data-reveal>
-              <div class="svc-label">我們提供什麼</div>
+              <div class="svc-label">服務項目</div>
             </div>
             <div class="svc-grid">
               <div class="svc-card" data-reveal data-reveal-delay="1">
