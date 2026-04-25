@@ -553,6 +553,9 @@
 
     loadProfile();
 
+    // ── HTML 轉義 helper（防 XSS）────────────────────────────────
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+
     // ── 需求單 ───────────────────────────────────────────────────
 
     const REQ_STATUS = {
@@ -595,7 +598,7 @@
           <div class="flex items-center justify-between px-5 py-3.5 gap-3">
             <div class="flex items-center gap-2 min-w-0">
               <span class="text-xs text-gray-600 shrink-0">#${r.id}</span>
-              <span class="text-sm text-white truncate">${r.service_type}</span>
+              <span class="text-sm text-white truncate">${esc(r.service_type)}</span>
               <span class="text-xs text-gray-500 shrink-0">${date}</span>
             </div>
             <div class="flex items-center gap-2 shrink-0">
@@ -682,7 +685,7 @@
               ${dot}
               <span class="text-sm font-medium text-white">${label}</span>
               ${linked && displayName
-                ? `<span class="text-xs text-gray-500 truncate max-w-[120px]">${displayName}</span>`
+                ? `<span class="text-xs text-gray-500 truncate max-w-[120px]">${esc(displayName)}</span>`
                 : ''}
             </div>
             ${linked
