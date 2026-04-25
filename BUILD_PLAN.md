@@ -17,7 +17,8 @@
 
 **SSO 流程**：子網域 → `chiyigo.com/login.html?redirect=ORIGIN` → 登入後帶 `?mbti_token=JWT&mbti_email=...` 跳回  
 **白名單**（`auth-ui.js` `_CROSS_APP_WHITELIST`）：`talo.chiyigo.com`、`mbti.chiyigo.com`  
-**CORS**（`functions/utils/cors.js` `DEFAULT_ORIGINS`）：已加入 `talo.chiyigo.com`
+**CORS**（`functions/utils/cors.js` `DEFAULT_ORIGINS`）：已加入 `talo.chiyigo.com`  
+**OAuth 支援**：登入前將 `_crossAppOrigin` 存入 sessionStorage；OAuth callback bridge 讀取並直接跳回子網域（不繞過 dashboard）
 
 ---
 

@@ -469,6 +469,15 @@ async function handleTotp(event) {
       } catch { /* 忽略無效連結 */ }
     });
   }
+
+  // Cross-app redirect：OAuth 會離開此頁再跳回，用 sessionStorage 保留目標 origin
+  if (_crossAppOrigin) {
+    document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+      a.addEventListener('click', () => {
+        sessionStorage.setItem('_cross_app_redirect', _crossAppOrigin);
+      }, { once: true });
+    });
+  }
 })();
 
 // bfcache 還原時：已登入 → 直接跳回 dashboard；未登入 → 清空欄位並重置到登入分頁

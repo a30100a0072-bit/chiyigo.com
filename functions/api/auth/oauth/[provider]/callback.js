@@ -249,7 +249,19 @@ async function handle(context) {
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <script>
 try{sessionStorage.setItem('access_token',${safeToken});}catch(e){}
-location.replace(${safeDestUrl});
+(function(){
+  var ca=sessionStorage.getItem('_cross_app_redirect');
+  if(ca){
+    sessionStorage.removeItem('_cross_app_redirect');
+    try{
+      var p=JSON.parse(atob(${safeToken}.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      var u=ca+'?mbti_token='+encodeURIComponent(${safeToken});
+      if(p.email)u+='&mbti_email='+encodeURIComponent(p.email);
+      location.replace(u);return;
+    }catch(e){}
+  }
+  location.replace(${safeDestUrl});
+})();
 </script></head><body></body></html>`
 
   return new Response(html, {
