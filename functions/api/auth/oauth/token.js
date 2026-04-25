@@ -17,18 +17,25 @@
 
 import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
+import { getCorsHeaders } from '../../../utils/cors.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 
+export async function onRequestOptions({ request, env }) {
+  return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
+}
+
 export async function onRequestPost({ request, env }) {
+  const cors = getCorsHeaders(request, env)
+
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON' }, 400, cors) }
 
   const { code, code_verifier, redirect_uri } = body ?? {}
 
   if (!code || !code_verifier || !redirect_uri)
-    return res({ error: 'code, code_verifier, and redirect_uri are required' }, 400)
+    return res({ error: 'code, code_verifier, and redirect_uri are required' }, 400, cors)
 
   const db       = env.chiyigo_db
   const codeHash = await hashToken(code)
@@ -43,15 +50,15 @@ export async function onRequestPost({ request, env }) {
     .bind(codeHash)
     .first()
 
-  if (!authCode) return res({ error: 'Invalid or expired authorization code' }, 400)
+  if (!authCode) return res({ error: 'Invalid or expired authorization code' }, 400, cors)
 
   // redirect_uri 必須完全吻合（RFC 6749 §4.1.3）
   if (authCode.redirect_uri !== redirect_uri)
-    return res({ error: 'redirect_uri mismatch' }, 400)
+    return res({ error: 'redirect_uri mismatch' }, 400, cors)
 
   // PKCE 驗證
   const pkceOk = await pkceVerify(code_verifier, authCode.code_challenge)
-  if (!pkceOk) return res({ error: 'PKCE verification failed' }, 400)
+  if (!pkceOk) return res({ error: 'PKCE verification failed' }, 400, cors)
 
   // 取用戶資料
   const user = await db
@@ -59,8 +66,8 @@ export async function onRequestPost({ request, env }) {
     .bind(authCode.user_id)
     .first()
 
-  if (!user) return res({ error: 'User not found' }, 404)
-  if (user.status === 'banned') return res({ error: 'Account banned', code: 'ACCOUNT_BANNED' }, 403)
+  if (!user) return res({ error: 'User not found' }, 404, cors)
+  if (user.status === 'banned') return res({ error: 'Account banned', code: 'ACCOUNT_BANNED' }, 403, cors)
 
   // 簽發 Refresh Token（遊戲端 30 天）
   const refreshToken     = generateSecureToken()
@@ -90,12 +97,12 @@ export async function onRequestPost({ request, env }) {
     user_id:       user.id,
     role:          user.role,
     status:        user.status,
-  })
+  }, 200, cors)
 }
 
-function res(data, status = 200) {
+function res(data, status = 200, corsHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
   })
 }
