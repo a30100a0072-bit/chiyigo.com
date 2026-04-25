@@ -74,6 +74,8 @@
 | 作品集支援 URL ?filter= 參數 | ✅ 完成（2026-04-25；從他頁跳轉帶 filter 可自動套用分類）|
 | 首頁服務卡片連結至作品集分類 | ✅ 完成（2026-04-25；AI→filter=AI、量化數據分析→filter=Analytics、App設計→filter=App，各服務獨立 filter key）|
 | 作品集類別對齊服務項目 | ✅ 完成（2026-04-25；D1 移除重複 ids 1-3、Branding→Web、Marketing→Analytics）|
+| i18n 語言切換（portfolio） | ✅ 完成（2026-04-25；地球儀按鈕 + 繁體中文/English/日本語/한국어，localStorage 持久化）|
+| i18n 語言切換（全站同步） | ✅ 完成（2026-04-25；index/about/requisition 補加 lang dropdown + JS；修正 index.html 主題 icon 邏輯反轉 bug）|
 | 作品集圖片（其他項目） | 🔒 待辦（提供截圖後可依相同流程更新）|
 | iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 | mbti.chiyigo.com | PKCE 整合完成；mbti 側已更新 15 個檔案（2026-04-25）|

@@ -668,6 +668,13 @@
     @media (max-width:640px) {
       .cta-card { grid-template-columns: auto 1fr; }
     }
+    /* ── Lang dropdown ──────────────────────────────── */
+    .sb-footer{position:relative}
+    .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
+    .lang-dropdown.open{display:flex}
+    .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
+    .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
+    .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
   </style>
 </head>
 <body>
@@ -722,10 +729,19 @@
           <span>會員登入</span>
         </a>
         <div class="sb-footer">
+          <div class="lang-dropdown" id="lang-dropdown">
+            <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="lang-opt" data-lang="en">English</button>
+            <button class="lang-opt" data-lang="ja">日本語</button>
+            <button class="lang-opt" data-lang="ko">한국어</button>
+          </div>
           <div class="sb-foot-icons">
-            <button class="sb-foot-btn" id="theme-toggle-btn" onclick="toggleTheme()" aria-label="切換主題">
+            <button class="sb-foot-btn" id="theme-toggle-btn" onclick="toggleTheme()" aria-label="切換明暗" title="切換明暗">
               <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
               <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+            <button class="sb-foot-btn" aria-label="切換語言" id="lang-toggle-btn" title="切換語言">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
             </button>
           </div>
           <span class="sb-copyright">© 2026 chiyigo</span>
@@ -1039,8 +1055,8 @@
     // ── Theme ──
     function syncThemeIcons() {
       const dark = document.documentElement.classList.contains('theme-dark')
-      document.querySelectorAll('.icon-moon').forEach(el => el.style.display = dark ? 'none'  : 'block')
-      document.querySelectorAll('.icon-sun' ).forEach(el => el.style.display = dark ? 'block' : 'none')
+      document.querySelectorAll('.icon-moon').forEach(el => el.style.display = dark ? '' : 'none')
+      document.querySelectorAll('.icon-sun' ).forEach(el => el.style.display = dark ? 'none' : '')
     }
     function toggleTheme() {
       const html = document.documentElement
@@ -1051,6 +1067,33 @@
       updateCanvasColors()
     }
     syncThemeIcons()
+
+    // ── i18n ──────────────────────────────────────────────
+    const LANGS_I18N = {
+      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言'},
+      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language'},
+      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替'},
+      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환'},
+    };
+    let curLangI = localStorage.getItem('lang') || 'zh-TW';
+    function applyLangI(lang) {
+      if (!LANGS_I18N[lang]) return;
+      curLangI = lang;
+      const t = LANGS_I18N[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k]; });
+      const tBtn = document.getElementById('theme-toggle-btn');
+      const lBtn = document.getElementById('lang-toggle-btn');
+      if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
+      if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
+      document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      localStorage.setItem('lang', lang);
+    }
+    const langTogBtnI = document.getElementById('lang-toggle-btn');
+    const langDropI   = document.getElementById('lang-dropdown');
+    langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
+    document.addEventListener('click', () => langDropI?.classList.remove('open'));
+    langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+    applyLangI(curLangI);
 
     // ── Mobile overlay ──
     function toggleOverlay() {
