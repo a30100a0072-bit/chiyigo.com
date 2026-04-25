@@ -30,6 +30,9 @@
 | 動態 OAuth 路由（Google/LINE/FB） | ✅ 完成（Stage 18；Google ✅ LINE ✅ 碰撞防禦 ✅；Facebook 暫緩——目標用戶以遊戲玩家為主，Discord/Google/LINE 已足夠）|
 | 首頁重設計（新設計系統） | ✅ 完成（Stage 19，2026-04-25）|
 | login.html / portfolio.html 風格同步 | ✅ 完成（2026-04-25；mobile overlay 統一 is-open、6 項導覽、接案中徽章）|
+| LINE OAuth Published | ✅ 完成（2026-04-25；LINE Developers Console → Published，全用戶可用）|
+| 全站 Logo 可點擊（回首頁） | ✅ 完成（2026-04-25；所有頁面 sidebar .sb-brand 改為 `<a href="/">`）|
+| 會員登入入口 | ✅ 完成（2026-04-25；Sidebar 底部「👤 會員登入」連結 + Mobile TopBar 人像圖示，5 頁全覆蓋）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
