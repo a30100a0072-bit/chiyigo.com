@@ -47,9 +47,13 @@ async function sendTelegram(env, text) {
 }
 
 export async function onRequestPost({ request, env }) {
-  // ── 1. JWT 驗證 ───────────────────────────────────────────────
-  const { user, error } = await requireAuth(request, env)
-  if (error) return error
+  // ── 1. Auth optional（訪客不需登入即可提單）─────────────────
+  let userId = null
+  const authHeader = request.headers.get('Authorization') ?? ''
+  if (authHeader.startsWith('Bearer ')) {
+    const { user, error } = await requireAuth(request, env)
+    if (!error && user) userId = Number(user.sub)
+  }
 
   let body
   try { body = await request.json() }
@@ -58,22 +62,26 @@ export async function onRequestPost({ request, env }) {
   const err = validate(body)
   if (err) return res({ error: err }, 422)
 
-  const userId = Number(user.sub)
-  const db     = env.chiyigo_db
+  const db = env.chiyigo_db
 
-  // ── 2. 限流：每日 (UTC+8) 最多 3 單 ─────────────────────────
-  const countRow = await db
-    .prepare(`
-      SELECT COUNT(*) AS cnt FROM requisition
-      WHERE user_id = ?
-        AND date(created_at, '+8 hours') = date('now', '+8 hours')
-        AND deleted_at IS NULL
-    `)
-    .bind(userId)
-    .first()
+  // ── 2. 限流：登入用戶 3 單/日；訪客全域 20 單/日 ─────────────
+  const countRow = userId !== null
+    ? await db.prepare(`
+        SELECT COUNT(*) AS cnt FROM requisition
+        WHERE user_id = ?
+          AND date(created_at, '+8 hours') = date('now', '+8 hours')
+          AND deleted_at IS NULL
+      `).bind(userId).first()
+    : await db.prepare(`
+        SELECT COUNT(*) AS cnt FROM requisition
+        WHERE user_id IS NULL
+          AND date(created_at, '+8 hours') = date('now', '+8 hours')
+          AND deleted_at IS NULL
+      `).first()
 
-  if ((countRow?.cnt ?? 0) >= 3)
-    return res({ error: '今日提單次數已達上限（每日最多 3 單）' }, 429)
+  const dayLimit = userId !== null ? 3 : 20
+  if ((countRow?.cnt ?? 0) >= dayLimit)
+    return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們' }, 429)
 
   try {
     // ── 3. INSERT 基本資料 ────────────────────────────────────

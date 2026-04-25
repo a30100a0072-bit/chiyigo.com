@@ -437,11 +437,11 @@
                 <ul class="info-cards">
                   <li class="info-card">
                     <div class="info-card-icon" aria-hidden="true">
-                      <svg viewBox="0 0 20 20" fill="none"><rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.1"></rect><path d="M2 7l8 5 8-5" stroke="currentColor" stroke-width="1.1"></path></svg>
+                      <svg viewBox="0 0 20 20" fill="none"><path d="M7 3.5H4.5C4 3.5 3.5 4 3.5 4.5c0 6.5 5.5 12 12 12 .5 0 1-.5 1-1v-2.5l-3.5-1.3-1.6 1.6C10 12.4 8.6 11 8 9.5l1.6-1.6-1.3-3.5z" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                     <div class="info-card-body">
-                      <span class="info-card-type">EMAIL</span>
-                      <button type="button" id="btn-contact-email" class="info-card-btn">hello@chiyigo.com</button>
+                      <span class="info-card-type">PHONE</span>
+                      <button type="button" id="btn-contact-phone" class="info-card-btn" onclick="window.location.href='tel:0900542992'">0900-542-992</button>
                     </div>
                   </li>
                   <li class="info-card">
@@ -451,6 +451,15 @@
                     <div class="info-card-body">
                       <span class="info-card-type">LINE</span>
                       <button type="button" id="btn-contact-line" class="info-card-btn">@chiyigo</button>
+                    </div>
+                  </li>
+                  <li class="info-card">
+                    <div class="info-card-icon" aria-hidden="true">
+                      <svg viewBox="0 0 20 20" fill="none"><rect x="2" y="4" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.1"></rect><path d="M2 7l8 5 8-5" stroke="currentColor" stroke-width="1.1"></path></svg>
+                    </div>
+                    <div class="info-card-body">
+                      <span class="info-card-type">EMAIL</span>
+                      <button type="button" id="btn-contact-email" class="info-card-btn">chiyigo20201208@gmail.com</button>
                     </div>
                   </li>
                 </ul>
@@ -822,14 +831,6 @@
         }
       }
 
-      // 需登入才能提單
-      const _token = sessionStorage.getItem('access_token');
-      if (!_token) {
-        sessionStorage.setItem('auth_redirect', '/requisition.html');
-        window.location.href = '/login.html';
-        return;
-      }
-
       setLoading(true);
       try {
         const payload = {
@@ -841,15 +842,18 @@
           timeline:     form.querySelector('[name="timeline"]').value,
           message:      form.querySelector('[name="message"]').value.trim(),
         };
+        const _token = sessionStorage.getItem('access_token');
+        const fetchHeaders = { 'Content-Type': 'application/json' };
+        if (_token) fetchHeaders['Authorization'] = 'Bearer ' + _token;
         const res = await fetch('/api/requisition', {
           method:  'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
+          headers: fetchHeaders,
           body:    JSON.stringify(payload),
         });
         if (res.status === 401) {
           sessionStorage.removeItem('access_token');
-          sessionStorage.setItem('auth_redirect', '/requisition.html');
-          window.location.href = '/login.html';
+          showErr('// error: 認證失敗，請重新整理後再試');
+          setLoading(false);
           return;
         }
         if (res.status === 429) {
