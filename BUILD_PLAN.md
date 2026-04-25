@@ -68,8 +68,8 @@
 |------|------|
 | 作品集圖片（MBTI） | ✅ 完成（2026-04-25；`/images/portfolio/mbti.png` 上傳，D1 id=7 image_url 已更新）|
 | 作品集圖片點擊連結至專案 | ✅ 完成（2026-04-25；cardHTML 圖片區塊改為 `<a>` 當 link_url 存在時）|
-| 作品集篩選標籤改中文 | ✅ 完成（2026-04-25；CAT_LABEL：System→系統設計、Web→網頁設計、Analytics→量化數據分析、AI→AI解決方案、App→APP設計、Integration→企業應用整合）|
-| 作品集 filter 固定順序 | ✅ 完成（2026-04-25；CAT_ORDER 定義順序：全部＞網頁設計＞系統設計＞AI解決方案＞量化數據分析＞APP設計＞企業應用整合）|
+| 作品集篩選標籤改中文 | ✅ 完成（2026-04-25；CAT_LABEL：System→系統設計、Web→網站設計、Analytics→量化數據分析、AI→AI解決方案、App→APP設計、Integration→企業應用整合）|
+| 作品集 filter 固定順序 | ✅ 完成（2026-04-25；CAT_ORDER 定義順序：全部＞網站設計＞系統設計＞AI解決方案＞量化數據分析＞APP設計＞企業應用整合）|
 | 作品集頁 hero stat 補齊 | ✅ 完成（2026-04-25；新增「5yr+ 開發經驗」，與首頁統計數字一致）|
 | 作品集支援 URL ?filter= 參數 | ✅ 完成（2026-04-25；從他頁跳轉帶 filter 可自動套用分類）|
 | 首頁服務卡片連結至作品集分類 | ✅ 完成（2026-04-25；AI→filter=AI、量化數據分析→filter=Analytics、App設計→filter=App，各服務獨立 filter key）|
