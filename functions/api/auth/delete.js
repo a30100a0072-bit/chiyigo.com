@@ -8,6 +8,7 @@ import { sendDeleteConfirmationEmail } from '../../utils/email.js'
 
 const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_MINUTES = 15
+const IP_HOURLY_LIMIT   = 5
 
 export async function onRequestPost({ request, env }) {
   // ── 1. JWT 驗證 ───────────────────────────────────────────────
@@ -24,6 +25,20 @@ export async function onRequestPost({ request, env }) {
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
+  const ip     = request.headers.get('CF-Connecting-IP') ?? null
+
+  // ── 2b. IP 全域限流 ──────────────────────────────────────────
+  if (ip) {
+    const ipCount = await db
+      .prepare(`
+        SELECT COUNT(*) AS cnt FROM email_verifications
+        WHERE ip_address = ? AND created_at > datetime('now', '-1 hour')
+      `)
+      .bind(ip)
+      .first()
+    if ((ipCount?.cnt ?? 0) >= IP_HOURLY_LIMIT)
+      return res({ error: 'Too many requests. Please try again later.' }, 429)
+  }
 
   // ── 3. 驗證密碼 & 帳號狀態 ───────────────────────────────────
   const [account, userRow] = await Promise.all([
@@ -67,7 +82,7 @@ export async function onRequestPost({ request, env }) {
       INSERT INTO email_verifications (user_id, token_hash, token_type, ip_address, expires_at)
       VALUES (?, ?, 'delete_account', ?, ?)
     `)
-    .bind(userId, tokenHash, request.headers.get('CF-Connecting-IP') ?? null, expiresAt)
+    .bind(userId, tokenHash, ip, expiresAt)
     .run()
 
   // ── 6. 發送確認信 ────────────────────────────────────────────

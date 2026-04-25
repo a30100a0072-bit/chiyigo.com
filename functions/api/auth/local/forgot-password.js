@@ -12,8 +12,9 @@
 import { generateSecureToken, hashToken, hashPassword } from '../../../utils/crypto.js'
 import { sendPasswordResetEmail } from '../../../utils/email.js'
 
-const COOLDOWN_SECONDS = 60
-const TOKEN_TTL_HOURS  = 1
+const COOLDOWN_SECONDS  = 60
+const TOKEN_TTL_HOURS   = 1
+const IP_HOURLY_LIMIT   = 5   // per IP, across all token types
 
 export async function onRequestPost({ request, env }) {
   let body
@@ -24,6 +25,20 @@ export async function onRequestPost({ request, env }) {
   if (!email) return res({ error: 'email is required' }, 400)
 
   const db = env.chiyigo_db
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
+
+  // ── 0. IP 全域限流（防同 IP 大量發信）────────────────────────
+  if (ip) {
+    const ipCount = await db
+      .prepare(`
+        SELECT COUNT(*) AS cnt FROM email_verifications
+        WHERE ip_address = ? AND created_at > datetime('now', '-1 hour')
+      `)
+      .bind(ip)
+      .first()
+    if ((ipCount?.cnt ?? 0) >= IP_HOURLY_LIMIT)
+      return res({ error: 'Too many requests. Please try again later.' }, 429)
+  }
 
   // ── 1. 查詢帳號（不透過回應時間洩漏是否存在）───────────────────
   const userRow = await db
@@ -59,8 +74,6 @@ export async function onRequestPost({ request, env }) {
   const tokenHash = await hashToken(token)
   const expiresAt = new Date(Date.now() + TOKEN_TTL_HOURS * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
-
-  const ip = request.headers.get('CF-Connecting-IP') ?? null
 
   await db
     .prepare(`

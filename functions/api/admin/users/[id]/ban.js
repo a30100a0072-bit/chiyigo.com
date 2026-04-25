@@ -5,16 +5,11 @@
  * 封禁指定用戶：
  *  1. 將 users.status 設為 'banned'
  *  2. 原子撤銷該用戶所有有效 refresh_token（防止 token 繼續換發）
+ *  3. 寫入 admin_audit_log
  *
  * 保護規則（ROLE_LEVEL 層級）：
  *  - 不可封禁自己
  *  - 不可封禁角色層級 ≥ 自己的用戶（admin 不可封禁 admin 或 developer）
- *
- * 回傳：
- *  200 → { message, user_id, status: 'banned' }
- *  400 → 已封禁 / 禁止自我封禁
- *  403 → 角色不足 / 目標角色過高
- *  404 → 用戶不存在
  */
 
 import { requireRole } from '../../../../utils/requireRole.js'
@@ -32,7 +27,7 @@ export async function onRequestPost({ request, env, params }) {
   const db = env.chiyigo_db
 
   const target = await db
-    .prepare(`SELECT id, role, status FROM users WHERE id = ? AND deleted_at IS NULL`)
+    .prepare(`SELECT id, email, role, status FROM users WHERE id = ? AND deleted_at IS NULL`)
     .bind(targetId)
     .first()
 
@@ -51,6 +46,20 @@ export async function onRequestPost({ request, env, params }) {
       WHERE user_id = ? AND revoked_at IS NULL
     `).bind(targetId),
   ])
+
+  // ── 稽核日誌（table 不存在時靜默跳過）───────────────────────
+  try {
+    await db.prepare(`
+      INSERT INTO admin_audit_log (admin_id, admin_email, action, target_id, target_email, ip_address)
+      VALUES (?, ?, 'ban', ?, ?, ?)
+    `).bind(
+      Number(user.sub),
+      user.email,
+      targetId,
+      target.email,
+      request.headers.get('CF-Connecting-IP') ?? null,
+    ).run()
+  } catch { /* migration 0003 not yet applied */ }
 
   return res({ message: 'User banned', user_id: targetId, status: 'banned' })
 }

@@ -29,7 +29,7 @@ export async function onRequestPost({ request, env, params }) {
   const db = env.chiyigo_db
 
   const target = await db
-    .prepare(`SELECT id, role, status FROM users WHERE id = ? AND deleted_at IS NULL`)
+    .prepare(`SELECT id, email, role, status FROM users WHERE id = ? AND deleted_at IS NULL`)
     .bind(targetId)
     .first()
 
@@ -44,6 +44,20 @@ export async function onRequestPost({ request, env, params }) {
     .prepare(`UPDATE users SET status = 'active' WHERE id = ?`)
     .bind(targetId)
     .run()
+
+  // ── 稽核日誌（table 不存在時靜默跳過）───────────────────────
+  try {
+    await db.prepare(`
+      INSERT INTO admin_audit_log (admin_id, admin_email, action, target_id, target_email, ip_address)
+      VALUES (?, ?, 'unban', ?, ?, ?)
+    `).bind(
+      Number(user.sub),
+      user.email,
+      targetId,
+      target.email,
+      request.headers.get('CF-Connecting-IP') ?? null,
+    ).run()
+  } catch { /* migration 0003 not yet applied */ }
 
   return res({ message: 'User unbanned', user_id: targetId, status: 'active' })
 }
