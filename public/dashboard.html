@@ -212,6 +212,19 @@
           </div>
         </div>
 
+        <!-- 我的需求單 -->
+        <div id="req-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[#2a2a35] flex items-center justify-between">
+            <div>
+              <p class="text-sm font-semibold text-white">我的需求單</p>
+              <p class="text-xs text-gray-500 mt-0.5">近期提交的接案諮詢</p>
+            </div>
+            <a href="/requisition.html" class="text-xs text-brand-400 hover:text-brand-500 transition-colors">提交新單 →</a>
+          </div>
+          <div id="req-list" class="divide-y divide-[#2a2a35]"></div>
+          <div id="req-empty" class="hidden px-5 py-6 text-center text-sm text-gray-500">尚無需求單紀錄</div>
+        </div>
+
         <!-- 帳號綁定區塊 -->
         <div id="bind-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[#2a2a35]">
@@ -525,6 +538,9 @@
         // 帳號綁定區塊
         renderBindingSection(data.identities ?? []);
 
+        // 需求單區塊
+        loadRequisitions();
+
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('user-card').classList.remove('hidden');
 
@@ -536,6 +552,89 @@
     }
 
     loadProfile();
+
+    // ── 需求單 ───────────────────────────────────────────────────
+
+    const REQ_STATUS = {
+      pending:    { text: '待處理', cls: 'bg-amber-500/15 text-amber-300 border border-amber-500/20' },
+      revoked:    { text: '已撤銷', cls: 'bg-gray-500/15 text-gray-500 border border-gray-500/20' },
+      processing: { text: '處理中', cls: 'bg-blue-500/15 text-blue-300 border border-blue-500/20' },
+      completed:  { text: '已完成', cls: 'bg-green-500/15 text-green-300 border border-green-500/20' },
+    }
+
+    async function loadRequisitions() {
+      const token = sessionStorage.getItem('access_token')
+      if (!token) return
+      try {
+        const r = await fetch('/api/requisition/me', {
+          headers: { 'Authorization': 'Bearer ' + token },
+        })
+        if (!r.ok) return
+        const { requisitions } = await r.json()
+        renderRequisitions(requisitions)
+      } catch { /* 非必要區塊，靜默失敗 */ }
+    }
+
+    function renderRequisitions(list) {
+      const section  = document.getElementById('req-section')
+      const listEl   = document.getElementById('req-list')
+      const emptyEl  = document.getElementById('req-empty')
+      if (!list || list.length === 0) {
+        emptyEl.classList.remove('hidden')
+        section.classList.remove('hidden')
+        return
+      }
+      emptyEl.classList.add('hidden')
+      listEl.innerHTML = list.map(r => {
+        const s    = REQ_STATUS[r.status] ?? REQ_STATUS.pending
+        const date = r.created_at
+          ? new Date(r.created_at.replace(' ', 'T') + 'Z')
+              .toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
+          : '—'
+        return `
+          <div class="flex items-center justify-between px-5 py-3.5 gap-3">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-xs text-gray-600 shrink-0">#${r.id}</span>
+              <span class="text-sm text-white truncate">${r.service_type}</span>
+              <span class="text-xs text-gray-500 shrink-0">${date}</span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${s.cls}">${s.text}</span>
+              ${r.status === 'pending'
+                ? `<button id="revoke-btn-${r.id}" onclick="revokeRequisition(${r.id})"
+                     class="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
+                     撤銷
+                   </button>`
+                : ''}
+            </div>
+          </div>`
+      }).join('')
+      section.classList.remove('hidden')
+    }
+
+    async function revokeRequisition(id) {
+      const token = sessionStorage.getItem('access_token')
+      const btn   = document.getElementById(`revoke-btn-${id}`)
+      if (btn) { btn.disabled = true; btn.textContent = '處理中…' }
+      try {
+        const r    = await fetch('/api/requisition/revoke', {
+          method:  'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ requisition_id: id }),
+        })
+        const data = await r.json()
+        if (!r.ok) {
+          showBindToast(data.error ?? '撤銷失敗，請重試', 'err')
+          if (btn) { btn.disabled = false; btn.textContent = '撤銷' }
+          return
+        }
+        showBindToast(`需求單 #${id} 已撤銷`, 'ok')
+        loadRequisitions()
+      } catch {
+        showBindToast('網路錯誤，請稍後再試', 'err')
+        if (btn) { btn.disabled = false; btn.textContent = '撤銷' }
+      }
+    }
 
     // ── 綁定結果 URL 參數處理（OAuth callback 跳回後顯示 Toast）───
     ;(function checkBindResult() {

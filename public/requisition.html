@@ -802,6 +802,14 @@
         }
       }
 
+      // 需登入才能提單
+      const _token = sessionStorage.getItem('access_token');
+      if (!_token) {
+        sessionStorage.setItem('auth_redirect', '/requisition.html');
+        window.location.href = '/login.html';
+        return;
+      }
+
       setLoading(true);
       try {
         const payload = {
@@ -814,10 +822,22 @@
           message:      form.querySelector('[name="message"]').value.trim(),
         };
         const res = await fetch('/api/requisition', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
+          body:    JSON.stringify(payload),
         });
+        if (res.status === 401) {
+          sessionStorage.removeItem('access_token');
+          sessionStorage.setItem('auth_redirect', '/requisition.html');
+          window.location.href = '/login.html';
+          return;
+        }
+        if (res.status === 429) {
+          const d = await res.json().catch(() => ({}));
+          showErr('// error: ' + (d.error ?? '今日提單次數已達上限'));
+          setLoading(false);
+          return;
+        }
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error ?? `HTTP ${res.status}`);
