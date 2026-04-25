@@ -34,6 +34,7 @@
 | 全站 Logo 可點擊（回首頁） | ✅ 完成（2026-04-25；所有頁面 sidebar .sb-brand 改為 `<a href="/">`）|
 | 會員登入入口 | ✅ 完成（2026-04-25；Sidebar 底部「👤 會員登入」連結 + Mobile TopBar 人像圖示，5 頁全覆蓋）|
 | Mobile overlay 手勢 + Bug 修復 | ✅ 完成（2026-04-25；向下拖曳關閉；about.html overlay nav 補齊 6 項 + 修正「聯絡我們」→「接案諮詢」；about/portfolio/requisition 補 backdrop click 關閉）|
+| mbti.chiyigo.com IAM 整合 | ✅ 完成（2026-04-25；Method A — 完整 PKCE 替換；chiyigo.com 側 3 個端點更新 + mbti 側 15 個檔案更新）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---
@@ -555,6 +556,46 @@ npx wrangler pages dev public --d1 chiyigo_db
 ### 部署（推送至 GitHub 即自動觸發）
 ```bash
 git push origin main
+```
+
+---
+
+## 階段二十一：mbti.chiyigo.com IAM 整合（Method A — 完整 PKCE 替換）
+
+> **決策**：採方案 A（全面替換），放棄舊帳號讓用戶重新以 chiyigo.com 帳號登入。
+> **完成日期**：2026-04-25
+
+### 整合範圍
+
+| 項目 | 狀態 | 說明 |
+|------|------|------|
+| authorize.js whitelist | ✅ 完成 | 新增 `https://mbti.chiyigo.com/login.html` |
+| cors.js DEFAULT_ORIGINS | ✅ 完成 | 新增 `https://mbti.chiyigo.com` |
+| token.js CORS | ✅ 完成 | OPTIONS preflight + getCorsHeaders 於所有回應 |
+| mbti auth.js | ✅ 完成 | 完整 PKCE 客戶端：verifier/challenge → chiyigo.com → callback 換 token |
+| mbti login.html | ✅ 完成 | 移除舊登入表單，改為「使用 Chiyigo.com 帳號登入」按鈕 |
+| mbti dashboard.js | ✅ 完成 | token key `localStorage.mbti_jwt_token` → `sessionStorage.chiyigo_access_token` |
+| mbti dashboard.html | ✅ 完成 | 內聯 script 同步更新 |
+| mbti api.js | ✅ 完成 | proceedToResultAPI token key 更新 |
+| mbti script.js | ✅ 完成 | initApp login-wall + goToTalo SSO token key 更新 |
+| mbti 全站 HTML（8 頁） | ✅ 完成 | assessment/beebe-model/index/jung-theory/mbti-stats/mbti-types/reset-password/type-detail |
+| mbti src/index.ts | ✅ 完成 | 新增 `verifyChiyigoJWT()` via JWKS ES256；3 處保護路由由 HS256 換為 ES256 |
+
+### Token 儲存（mbti 端）
+| 項目 | 儲存位置 | TTL |
+|------|---------|-----|
+| access_token（ES256） | `sessionStorage.chiyigo_access_token` | 15 分鐘 |
+| refresh_token | `localStorage.chiyigo_refresh_token` | 30 天 |
+
+### mbti 部署指令（無 git remote，需手動執行）
+```bash
+# 在 C:\Users\User\Desktop\mental-modeling-assessment-v1 目錄執行：
+# 1. 更新 Worker（後端 API）
+npx wrangler deploy
+
+# 2. 更新靜態檔案（前端 HTML/JS/CSS）
+# 查詢 Pages project 名稱後執行：
+npx wrangler pages deploy public/ --project-name <mbti-pages-project-name>
 ```
 
 ---
