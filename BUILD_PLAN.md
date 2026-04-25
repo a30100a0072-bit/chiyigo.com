@@ -72,7 +72,7 @@
 | POST /api/requisition：requireAuth + 每日 3 單限流（UTC+8）+ TG message_id 回寫 | ✅ |
 | POST /api/requisition/revoke：IDOR 防禦 + 狀態機鎖定 + Telegram editMessageText | ✅ |
 | GET /api/requisition/me：回傳當前用戶所有單（含已撤銷） | ✅ |
-| requisition.html：提單前驗 JWT，401/429 個別處理，未登入導向 login | ✅ |
+| requisition.html：訪客可直接提單（user_id=NULL），登入用戶帶 JWT（rate limit 各別）| ✅ |
 | Dashboard「我的需求單」區塊：狀態顯示 + pending 單顯示撤銷按鈕 + Toast 回饋 | ✅ |
 
 ### IAM 身分橋接與邊界防禦（2026-04-25）
