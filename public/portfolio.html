@@ -476,13 +476,13 @@
     let curFilter = new URLSearchParams(location.search).get('filter') ?? 'all';
 
     const CAT_LABEL = {
-      'System':      '系統開發',
-      'Web':         '網站建置',
+      'Web':         '網站設計',
+      'System':      '系統設計',
+      'AI':          'AI 解決方案',
+      'Analytics':   '量化數據分析',
+      'App':         'App 設計',
+      'Integration': '企業應用整合',
       'Game':        '遊戲開發',
-      'Integration': '第三方串接',
-      'Interactive': '互動體驗',
-      'Branding':    '品牌識別',
-      'Marketing':   '數位行銷',
     };
 
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
