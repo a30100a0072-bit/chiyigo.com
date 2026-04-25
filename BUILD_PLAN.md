@@ -6,47 +6,54 @@
 
 ---
 
-## 整體進度快照（2026-04-25 更新 #6）
+## 整體進度快照（2026-04-25 最終更新）
+
+### 核心系統
 
 | 模組 | 狀態 |
 |------|------|
-| 靜態站 + SEO | ✅ 完成（全站 Sidebar 統一 6 項、預設深色主題、2026-04-25）|
-| D1 Schema（全量） | ✅ 已部署至 `chiyigo_db`（含 pkce_sessions + auth_codes）|
-| Auth 核心（註冊/登入/2FA） | ✅ 完成，遠端 DB 驗證通過 2026-04-23 |
-| ES256 JWT + JWKS | ✅ 完成 |
-| Refresh Token 輪換 | ✅ 完成，Replay 防護通過 |
-| Discord OAuth | ✅ 完成，線上測試通過 2026-04-23 |
+| D1 Schema（全量） | ✅ 部署（含 pkce_sessions + auth_codes）|
+| Auth 核心（本地登入/2FA/JWT/Refresh） | ✅ 完成，遠端驗證通過 2026-04-23 |
+| OAuth（Discord / Google / LINE） | ✅ 完成；Discord redirect_uri 已修正（prompt=consent）|
+| PKCE 跨平台授權流程 | ✅ 完成（authorize / code / token；社群登入回傳 MBTI 問題修復）|
 | CORS 防禦層 | ✅ 完成 |
-| Admin API（封禁/解封/列表） | ✅ 完成，線上測試通過 2026-04-23 |
-| Logout / Revoke Token | ✅ 完成 |
-| PKCE 跨平台 OAuth（authorize/code/token） | ✅ 完成 |
-| Android App Link（assetlinks.json） | ✅ 完成，package_name 佔位符待 App 建立後更新 |
-| 使用者儀表板（dashboard.html） | ✅ 完成，線上驗證通過 2026-04-23 |
-| HttpOnly Cookie 雙軌制（Web XSS 防禦） | ✅ 完成，密碼 + Discord 登入均驗證通過 2026-04-23 |
-| D1 垃圾回收 Cron Trigger | ✅ 完成（GitHub Actions `cleanup.yml`，每日 UTC 03:00）|
-| Discord 登入按鈕（login.html UI） | ✅ 完成 2026-04-23（登入 + 註冊分頁均已加入）|
-| Dashboard UX 強化（bfcache 防禦 + 靜默刷新） | ✅ 完成 2026-04-23 |
-| Email 驗證 + 忘記密碼 | ✅ 完成（Stage 17，2026-04-24）|
-| 動態 OAuth 路由（Google/LINE/FB） | ✅ 完成（Stage 18；Google ✅ LINE ✅ 碰撞防禦 ✅；Facebook 暫緩——目標用戶以遊戲玩家為主，Discord/Google/LINE 已足夠）|
-| 首頁重設計（新設計系統） | ✅ 完成（Stage 19，2026-04-25）|
-| login.html / portfolio.html 風格同步 | ✅ 完成（2026-04-25；mobile overlay 統一 is-open、6 項導覽、接案中徽章）|
-| LINE OAuth Published | ✅ 完成（2026-04-25；LINE Developers Console → Published，全用戶可用）|
-| 全站 Logo 可點擊（回首頁） | ✅ 完成（2026-04-25；所有頁面 sidebar .sb-brand 改為 `<a href="/">`）|
-| 會員登入入口 | ✅ 完成（2026-04-25；Sidebar 底部「👤 會員登入」連結 + Mobile TopBar 人像圖示，5 頁全覆蓋）|
-| Mobile overlay 手勢 + Bug 修復 | ✅ 完成（2026-04-25；向下拖曳關閉；about.html overlay nav 補齊 6 項 + 修正「聯絡我們」→「接案諮詢」；about/portfolio/requisition 補 backdrop click 關閉）|
-| mbti.chiyigo.com IAM 整合 | ✅ 完成（2026-04-25；Method A — 完整 PKCE 替換；chiyigo.com 側 3 個端點更新 + mbti 側 15 個檔案更新）|
-| mbti.chiyigo.com 加入作品集 | ✅ 完成（2026-04-25；D1 portfolio 表 id=7 插入，category=System，sort_order=0，tags: Cloudflare Workers/D1 SQLite/OAuth PKCE/MBTI/認知評估）|
-| 全站 Sidebar 順序重整 + Footer 統一 | ✅ 完成（2026-04-25；Sidebar 順序改為 首頁→服務項目→服務流程→案例作品→關於我們→接案資訊；Footer 統一顯示 首頁/案例作品/關於我們/接案諮詢；5 頁全覆蓋含 mobile overlay）|
-| 接案諮詢新增遊戲開發選項 | ✅ 完成（2026-04-25；service_type 下拉新增「遊戲開發 / Unity・Web Game」，value=game，插入網站建置後、第三方串接前）|
-| Email 按鈕 debug（mailto temp anchor） | ✅ 完成（2026-04-25；window.location.href='mailto:' 在無預設 mail client 環境無聲失敗，改用 createElement('a').click() 臨時錨點方式，跨瀏覽器相容）|
-| 預算下拉選項更新 | ✅ 完成（2026-04-25；「200,000 以上」→「200,000 – 1,000,000」，value 改為 200k-1m）|
-| 關於我們 2025 經歷更新 | ✅ 完成（2026-04-25；新增時間軸條目：「正式推出 CHIYIGO IAM 跨平台身份認證服務，Serverless 架構整合 OAuth 社群登入與多站台授權」）|
-| 全站回覆時效更新 | ✅ 完成（2026-04-25；「24 小時內回覆」全站改為「48 小時內回覆」，含 index.html CTA 區塊 2 處）|
-| 聯絡按鈕防爬蟲實作（L2-L3） | ✅ 完成（2026-04-25；Email：JS 動態拼接混淆，點擊觸發 mailto:chiyigo20201208@gmail.com，顯示仍為 hello@chiyigo.com；LINE：Worker /api/redirect/line 302 轉址至 LINE deep link，含 IP/UA log 佔位符；前端無明文連結）|
-| 首頁服務區塊標題更新 | ✅ 完成（2026-04-25；「我們提供什麼」→「服務項目」，字體改用與「服務流程」相同的 clamp(1.75rem,3.5vw,2.5rem) font-weight:700 大標題樣式）|
-| Discord OAuth redirect_uri 修復 | ✅ 完成（2026-04-25；prompt=none 改 prompt=consent；Discord Developer Portal 需補登錄 redirect URI：`https://chiyigo.com/api/auth/oauth/discord/callback`）|
-| MBTI 登入後跳回問題修復（PKCE OAuth 流程） | ✅ 完成（2026-04-25；pkce_key 透過 OAuth init→oauth_states→callback 傳遞，社群登入也能正確回到 MBTI）|
-| iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
+| Admin API（封禁/解封/列表） | ✅ 完成 2026-04-23 |
+| Email 驗證 + 忘記密碼 | ✅ 完成 Stage 17（2026-04-24）|
+| D1 垃圾回收 Cron Trigger | ✅ 完成（GitHub Actions，每日 UTC 03:00）|
+| Android App Link | ✅ 完成（package_name 待 App 建立後更新）|
+| iOS Universal Link | 🔒 待辦（需 Apple Developer $99/yr）|
+
+### 前端 UI
+
+| 模組 | 狀態 |
+|------|------|
+| 首頁重設計（Arshire 設計系統） | ✅ 完成 Stage 19（2026-04-25）|
+| 全站 Sidebar（6 項順序：首頁→服務項目→服務流程→案例作品→關於我們→接案諮詢） | ✅ 完成（2026-04-25；5 頁 + mobile overlay 全覆蓋）|
+| 全站 Footer（首頁 / 案例作品 / 關於我們 / 接案諮詢） | ✅ 完成（2026-04-25）|
+| 關於我們 Avatar 改為品牌 Logo（深淺主題切換） | ✅ 完成（2026-04-25）|
+| 服務流程移除「HOW WE WORK」與座標字樣 | ✅ 完成（2026-04-25）|
+| 首頁服務區塊標題 →「服務項目」，字體對齊服務流程 | ✅ 完成（2026-04-25）|
+| 關於我們 2025 經歷新增 | ✅ 完成（2026-04-25；CHIYIGO IAM 跨平台身份認證服務上線）|
+| 全站回覆時效 24h → 48h | ✅ 完成（2026-04-25）|
+| 使用者儀表板 | ✅ 完成，線上驗證通過 2026-04-23 |
+| Mobile overlay 手勢（下滑關閉）+ backdrop click | ✅ 完成（2026-04-25）|
+
+### 接案諮詢頁
+
+| 模組 | 狀態 |
+|------|------|
+| Email 防爬蟲（JS 拼接混淆，temp anchor click） | ✅ 完成（2026-04-25；顯示 hello@chiyigo.com，實際寄至 gmail）|
+| LINE 防爬蟲（Worker `/api/redirect/line` 302 轉址） | ✅ 完成（2026-04-25；IP/UA log 佔位符；env: LINE_OA_URL 已設定）|
+| 預算選項：200,000 以上 → 200,000 – 1,000,000 | ✅ 完成（2026-04-25）|
+| 服務類型新增「遊戲開發 / Unity・Web Game」 | ✅ 完成（2026-04-25）|
+
+### 待辦
+
+| 項目 | 說明 |
+|------|------|
+| 作品集圖片 | 需提供截圖/設計稿→上傳 `/images/portfolio/`→更新 D1 `image_url` 欄位 |
+| iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
+| mbti.chiyigo.com | PKCE 整合完成；mbti 側已更新 15 個檔案（2026-04-25）|
 
 ---
 

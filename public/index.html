@@ -561,10 +561,8 @@
       font-style: italic; color: var(--text); opacity: .018;
       line-height: 1; pointer-events: none; user-select: none; z-index: 0;
     }
-    .proc-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 3.5rem; }
-    .proc-label { font-family: var(--font-mono); font-size: .78rem; letter-spacing: .14em; color: var(--text-dim); display: block; margin-bottom: .85rem; }
+    .proc-head { margin-bottom: 3.5rem; }
     .proc-title { font-family: var(--font-sans); font-size: clamp(1.75rem,3.5vw,2.5rem); font-weight: 700; letter-spacing: -.01em; color: var(--text); }
-    .proc-coord { font-family: var(--font-mono); font-size: .72rem; letter-spacing: .1em; color: var(--text-dim); padding-bottom: .5rem; flex-shrink: 0; }
     .steps { display: grid; grid-template-columns: repeat(3,1fr); gap: 2.75rem; }
     .step-top { display: flex; align-items: center; gap: .85rem; margin-bottom: 1.5rem; }
     .step-badge {
@@ -647,7 +645,6 @@
       .hero-trust { flex-wrap: wrap; gap: 1rem; }
       .hero-mockup { max-width: 480px; }
       .steps { grid-template-columns: 1fr; gap: 0; }
-      .proc-coord { display: none; }
       .step-arrow-wrap { display: none; }
       .step { position: relative; padding-bottom: 2.25rem; }
       .step:last-child { padding-bottom: 0; }
@@ -885,11 +882,7 @@
           <div class="proc-wrap">
             <div class="bg-num" aria-hidden="true">03</div>
             <div class="proc-head" data-reveal>
-              <div>
-                <span class="proc-label">HOW WE WORK</span>
-                <div class="proc-title">服務流程</div>
-              </div>
-              <span class="proc-coord">25.0330° N, 121.5654° E</span>
+              <div class="proc-title">服務流程</div>
             </div>
             <div class="steps">
               <div class="step" data-reveal data-reveal-delay="1">

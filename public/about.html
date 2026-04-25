@@ -185,7 +185,8 @@
 
     /* Identity card */
     .ab-identity{display:flex;align-items:center;gap:.85rem;margin-bottom:1.5rem}
-    .ab-avatar{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#7370EC,#5B8BF5);display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:1.3rem;font-weight:700;color:#fff;flex-shrink:0}
+    .ab-avatar{height:48px;width:auto;min-width:48px;border-radius:14px;background:var(--bg-elevated);border:1px solid var(--border-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:.3rem .6rem}
+    .ab-logo{height:34px;width:auto}
     .ab-name{font-size:1rem;font-weight:600;color:var(--text);line-height:1.2}
     .ab-role{font-size:.78rem;color:var(--text-muted);margin-top:.15rem}
 
@@ -318,7 +319,10 @@
             <!-- Left column -->
             <div class="about-left">
               <div class="ab-identity">
-                <div class="ab-avatar">C</div>
+                <div class="ab-avatar">
+                  <img src="/images/logo-light.png" alt="chiyigo" class="logo-light ab-logo">
+                  <img src="/images/logo-dark.png"  alt="chiyigo" class="logo-dark ab-logo">
+                </div>
                 <div>
                   <p class="ab-name">chiyigo</p>
                   <p class="ab-role">獨立系統開發者</p>
