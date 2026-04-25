@@ -322,6 +322,10 @@
     .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
     .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
     .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
+    .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
+    .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
   </style>
 </head>
 <body>
@@ -342,27 +346,27 @@
       <nav class="sb-nav" aria-label="主要導覽">
         <a href="index.html" class="sb-item" data-nav-id="home" aria-label="首頁">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
-          <span class="sb-label">首頁</span>
+          <span class="sb-label" data-i18n="nav_home">首頁</span>
         </a>
         <a href="index.html#services" class="sb-item" data-nav-id="services" aria-label="服務項目">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
-          <span class="sb-label">服務項目</span>
+          <span class="sb-label" data-i18n="nav_services">服務項目</span>
         </a>
         <a href="index.html#process" class="sb-item" data-nav-id="process" aria-label="服務流程">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
-          <span class="sb-label">服務流程</span>
+          <span class="sb-label" data-i18n="nav_process">服務流程</span>
         </a>
         <a href="portfolio.html" class="sb-item" data-nav-id="portfolio" aria-label="案例作品">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
-          <span class="sb-label">案例作品</span>
+          <span class="sb-label" data-i18n="nav_portfolio">案例作品</span>
         </a>
         <a href="about.html" class="sb-item" data-nav-id="about" aria-label="關於我們">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
-          <span class="sb-label">關於我們</span>
+          <span class="sb-label" data-i18n="nav_about">關於我們</span>
         </a>
         <a href="requisition.html" class="sb-item active" data-nav-id="contact" aria-label="接案諮詢">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          <span class="sb-label">接案諮詢</span>
+          <span class="sb-label" data-i18n="nav_contact">接案諮詢</span>
         </a>
       </nav>
 
@@ -371,13 +375,13 @@
           <div class="sb-cta-icon" aria-hidden="true">
             <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3" opacity="0.4"></circle><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
           </div>
-          <p class="sb-cta-q">準備好開始專案了嗎？</p>
-          <p class="sb-cta-desc">讓我一起打造最適合你的數位解決方案！</p>
-          <a href="requisition.html" class="sb-cta-btn">開始諮詢</a>
+          <p class="sb-cta-q" data-i18n="cta_q">準備好開始專案了嗎？</p>
+          <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
         </div>
         <a href="/login.html" class="sb-login-link" aria-label="會員登入">
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
-          <span>會員登入</span>
+          <span data-i18n="login">會員登入</span>
         </a>
         <div class="sb-footer">
           <div class="lang-dropdown" id="lang-dropdown">
@@ -408,12 +412,12 @@
 
           <!-- Page Header -->
           <div class="contact-header" data-reveal>
-            <p class="eyebrow">// 接案諮詢</p>
+            <p class="eyebrow" data-i18n="req_eyebrow">// 接案諮詢</p>
             <h1 class="page-title">
-              <span class="pt-dim">把你的想法</span>
-              <span class="pt-grad">告訴我</span>
+              <span class="pt-dim" data-i18n="req_h1">把你的想法</span>
+              <span class="pt-grad" data-i18n="req_h2">告訴我</span>
             </h1>
-            <p class="page-sub">填寫以下表單，我會在 1–2 個工作天內回覆。<br class="desk-only">急件可直接 LINE 聯絡。</p>
+            <p class="page-sub" data-i18n="req_sub">填寫以下表單，我會在 1–2 個工作天內回覆。</p>
           </div>
 
           <!-- Two-column: info + form -->
@@ -464,7 +468,7 @@
                 <p class="info-block-label">// 目前狀態</p>
                 <div class="availability">
                   <span class="avail-dot"></span>
-                  <span class="avail-text">接受新專案洽談中</span>
+                  <span class="avail-text" data-i18n="avail_text">接受新專案洽談中</span>
                 </div>
               </div>
 
@@ -644,13 +648,13 @@
             <div>
               <img src="images/logo-light.png" alt="CHIYIGO" class="logo logo-light">
               <img src="images/logo-dark.png"  alt="CHIYIGO" class="logo logo-dark">
-              <p class="tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+              <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
             </div>
             <nav class="footer-links">
-              <a href="index.html">首頁</a>
-              <a href="portfolio.html">案例作品</a>
-              <a href="about.html">關於我們</a>
-              <a href="requisition.html">接案諮詢</a>
+              <a href="index.html" data-i18n="nav_home">首頁</a>
+              <a href="portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+              <a href="about.html" data-i18n="nav_about">關於我們</a>
+              <a href="requisition.html" data-i18n="nav_contact">接案諮詢</a>
             </nav>
             <p class="copy">© 2025 CHIYIGO</p>
           </div>
@@ -694,43 +698,49 @@
         </div>
         <div class="m-ov-status">
           <span class="m-ov-status-dot" aria-hidden="true"></span>
-          <span class="m-ov-status-txt">接案中</span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
         </div>
       </div>
       <nav class="m-ov-nav" aria-label="主導覽">
         <a href="index.html" class="m-ov-item" style="--i:0" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></span>
-          <span class="m-ov-label">首頁</span>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
         <a href="index.html#services" class="m-ov-item" style="--i:1" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
-          <span class="m-ov-label">服務項目</span>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
         <a href="index.html#process" class="m-ov-item" style="--i:2" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></span>
-          <span class="m-ov-label">服務流程</span>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
         <a href="portfolio.html" class="m-ov-item" style="--i:3" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
-          <span class="m-ov-label">案例作品</span>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
         <a href="about.html" class="m-ov-item" style="--i:4" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
-          <span class="m-ov-label">關於我們</span>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
         <a href="requisition.html" class="m-ov-item active" style="--i:5" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
-          <span class="m-ov-label">接案諮詢</span>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
       </nav>
       <div class="m-ov-cta">
-        <a href="requisition.html" class="m-ov-cta-btn" data-close-overlay>開始諮詢 →</a>
+        <a href="requisition.html" class="m-ov-cta-btn" data-close-overlay data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
       </div>
     </div>
   </div>
@@ -929,10 +939,10 @@
 
     // ── i18n ──────────────────────────────────────────────
     const LANGS_I18N = {
-      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言'},
-      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language'},
-      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替'},
-      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환'},
+      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言',footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',req_eyebrow:'// 接案諮詢',req_h1:'把你的想法',req_h2:'告訴我',req_sub:'填寫以下表單，我會在 1–2 個工作天內回覆。',avail_text:'接受新專案洽談中'},
+      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",req_eyebrow:'// Hire Me',req_h1:'Share Your Ideas',req_h2:'With Me',req_sub:"Fill out the form below. I'll reply within 1–2 business days.",avail_text:'Open for New Projects'},
+      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',req_eyebrow:'// お問い合わせ',req_h1:'アイデアを',req_h2:'聞かせてください',req_sub:'以下のフォームを送信してください。1〜2 営業日以内に返信します。',avail_text:'新規案件受付中'},
+      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',req_eyebrow:'// 프로젝트 문의',req_h1:'아이디어를',req_h2:'알려주세요',req_sub:'아래 양식을 작성해 주세요. 1–2 영업일 내에 답변드립니다.',avail_text:'새 프로젝트 수주 중'},
     };
     let curLangI = localStorage.getItem('lang') || 'zh-TW';
     function applyLangI(lang) {
@@ -945,6 +955,7 @@
       if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
       if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
       document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
       localStorage.setItem('lang', lang);
     }
     const langTogBtnI = document.getElementById('lang-toggle-btn');
@@ -952,6 +963,7 @@
     langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
     document.addEventListener('click', () => langDropI?.classList.remove('open'));
     langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+    document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
     applyLangI(curLangI);
 
     // ── Reveal animation ──────────────────────────────

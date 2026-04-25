@@ -675,6 +675,10 @@
     .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
     .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
     .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
+    .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
+    .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
   </style>
 </head>
 <body>
@@ -692,27 +696,27 @@
       <nav class="sb-nav" id="sidebar-nav" aria-label="主要導覽">
         <a href="#hero" class="sb-item active" data-section="hero">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
-          <span class="sb-label">首頁</span>
+          <span class="sb-label" data-i18n="nav_home">首頁</span>
         </a>
         <a href="#services" class="sb-item" data-section="services">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
-          <span class="sb-label">服務項目</span>
+          <span class="sb-label" data-i18n="nav_services">服務項目</span>
         </a>
         <a href="#process" class="sb-item" data-section="process">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
-          <span class="sb-label">服務流程</span>
+          <span class="sb-label" data-i18n="nav_process">服務流程</span>
         </a>
         <a href="portfolio.html" class="sb-item">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
-          <span class="sb-label">案例作品</span>
+          <span class="sb-label" data-i18n="nav_portfolio">案例作品</span>
         </a>
         <a href="about.html" class="sb-item">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
-          <span class="sb-label">關於我們</span>
+          <span class="sb-label" data-i18n="nav_about">關於我們</span>
         </a>
         <a href="requisition.html" class="sb-item">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          <span class="sb-label">接案諮詢</span>
+          <span class="sb-label" data-i18n="nav_contact">接案諮詢</span>
         </a>
       </nav>
       <div class="sb-bottom">
@@ -720,13 +724,13 @@
           <div class="sb-cta-icon">
             <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3" opacity="0.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
-          <p class="sb-cta-q">準備好開始專案了嗎？</p>
-          <p class="sb-cta-desc">讓我一起打造最適合你的數位解決方案！</p>
-          <a href="requisition.html" class="sb-cta-btn">開始諮詢</a>
+          <p class="sb-cta-q" data-i18n="cta_q">準備好開始專案了嗎？</p>
+          <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
         </div>
         <a href="/login.html" class="sb-login-link" aria-label="會員登入">
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
-          <span>會員登入</span>
+          <span data-i18n="login">會員登入</span>
         </a>
         <div class="sb-footer">
           <div class="lang-dropdown" id="lang-dropdown">
@@ -759,23 +763,23 @@
             <div class="hero-text">
               <div class="hero-eyebrow">
                 <span class="eyebrow-dot" aria-hidden="true"></span>
-                <span class="eyebrow-label">客製化系統開發專家</span>
+                <span class="eyebrow-label" data-i18n="hero_eyebrow">客製化系統開發專家</span>
               </div>
               <h1 class="hero-headline">
-                <span class="h-line h-dim">打造專屬於你的</span>
-                <span class="h-line h-grad">數位解決方案</span>
+                <span class="h-line h-dim" data-i18n="hero_h1">打造專屬於你的</span>
+                <span class="h-line h-grad" data-i18n="hero_h2">數位解決方案</span>
               </h1>
-              <p class="hero-desc">從需求釐清到系統上線，我們提供一站式客製化服務，協助企業提升效率、優化流程、創造更大價值。</p>
+              <p class="hero-desc" data-i18n="hero_desc">從需求釐清到系統上線，我們提供一站式客製化服務，協助企業提升效率、優化流程、創造更大價值。</p>
               <div class="hero-actions">
-                <a href="requisition.html" class="btn-primary">探索解決方案 →</a>
-                <a href="portfolio.html"   class="btn-ghost">觀看案例 ▷</a>
+                <a href="requisition.html" class="btn-primary" data-i18n="hero_btn1">探索解決方案 →</a>
+                <a href="portfolio.html"   class="btn-ghost" data-i18n="hero_btn2">觀看案例 ▷</a>
               </div>
               <div class="hero-trust">
-                <div class="trust-item"><span class="trust-num">50+</span><span class="trust-label">完成專案</span></div>
+                <div class="trust-item"><span class="trust-num">50+</span><span class="trust-label" data-i18n="trust_projects">完成專案</span></div>
                 <div class="trust-sep" aria-hidden="true"></div>
-                <div class="trust-item"><span class="trust-num">98%</span><span class="trust-label">客戶滿意度</span></div>
+                <div class="trust-item"><span class="trust-num">98%</span><span class="trust-label" data-i18n="trust_satisfaction">客戶滿意度</span></div>
                 <div class="trust-sep" aria-hidden="true"></div>
-                <div class="trust-item"><span class="trust-num">5yr+</span><span class="trust-label">開發經驗</span></div>
+                <div class="trust-item"><span class="trust-num">5yr+</span><span class="trust-label" data-i18n="trust_experience">開發經驗</span></div>
               </div>
             </div>
 
@@ -851,42 +855,42 @@
         <section id="services" class="services">
           <div class="svc-inner">
             <div class="svc-head" data-reveal>
-              <div class="svc-label">服務項目</div>
+              <div class="svc-label" data-i18n="svc_title">服務項目</div>
             </div>
             <div class="svc-grid">
               <a class="svc-card" href="portfolio.html?filter=Web" data-reveal data-reveal-delay="1">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" fill="none"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-linecap="round"/></svg></div>
-                <div class="svc-title">網站設計</div>
+                <div class="svc-title" data-i18n="svc1_title">網站設計</div>
                 <div class="svc-desc">高效能靜態網站與 Serverless 後端，快速、安全、易於維護，讓第一印象成為持久印象。</div>
                 <span class="svc-arrow">→</span>
               </a>
               <a class="svc-card" href="portfolio.html?filter=System" data-reveal data-reveal-delay="2">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor"/></svg></div>
-                <div class="svc-title">系統設計</div>
+                <div class="svc-title" data-i18n="svc2_title">系統設計</div>
                 <div class="svc-desc">從架構規劃到資料庫設計，打造穩健可擴展的系統，確保每個環節都對齊商業目標。</div>
                 <span class="svc-arrow">→</span>
               </a>
               <a class="svc-card" href="portfolio.html?filter=AI" data-reveal data-reveal-delay="3">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M12 2a7 7 0 0 1 4 12.74V17H8v-2.26A7 7 0 0 1 12 2z" fill="none" stroke="currentColor"/><path d="M9 17v1a3 3 0 0 0 6 0v-1M9 21h6" stroke="currentColor" stroke-linecap="round"/></svg></div>
-                <div class="svc-title">AI 解決方案</div>
+                <div class="svc-title" data-i18n="svc3_title">AI 解決方案</div>
                 <div class="svc-desc">將 AI 能力整合進你的工作流程，自動化重複任務，讓團隊專注在真正有價值的事情上。</div>
                 <span class="svc-arrow">→</span>
               </a>
               <a class="svc-card" href="portfolio.html?filter=Analytics" data-reveal data-reveal-delay="1">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-                <div class="svc-title">量化數據分析</div>
+                <div class="svc-title" data-i18n="svc4_title">量化數據分析</div>
                 <div class="svc-desc">以數據驅動決策，打通數據管道、建立儀表板，讓每個商業決策都有根據。</div>
                 <span class="svc-arrow">→</span>
               </a>
               <a class="svc-card" href="portfolio.html?filter=App" data-reveal data-reveal-delay="2">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="7" y="2" width="10" height="18" rx="2.5" fill="none" stroke="currentColor"/><circle cx="12" cy="17.5" r="0.8" fill="currentColor" stroke="none"/><path d="M10 5.5h4" stroke="currentColor" stroke-linecap="round"/></svg></div>
-                <div class="svc-title">App 設計</div>
+                <div class="svc-title" data-i18n="svc5_title">App 設計</div>
                 <div class="svc-desc">iOS / Android 原生體驗設計，從線框圖到互動原型，確保產品上線即可用。</div>
                 <span class="svc-arrow">→</span>
               </a>
               <a class="svc-card" href="portfolio.html?filter=Integration" data-reveal data-reveal-delay="3">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M3 21V7l9-4 9 4v14" fill="none" stroke="currentColor" stroke-linejoin="round"/><path d="M9 21V15h6v6" stroke="currentColor" stroke-linejoin="round"/><path d="M9 9h2M13 9h2M9 12h2M13 12h2" stroke="currentColor" stroke-linecap="round"/></svg></div>
-                <div class="svc-title">企業應用整合</div>
+                <div class="svc-title" data-i18n="svc6_title">企業應用整合</div>
                 <div class="svc-desc">串接 ERP、CRM、電商平台等既有系統，消弭資料孤島，提升整體營運效率。</div>
                 <span class="svc-arrow">→</span>
               </a>
@@ -899,7 +903,7 @@
           <div class="proc-wrap">
             <div class="bg-num" aria-hidden="true">03</div>
             <div class="proc-head" data-reveal>
-              <div class="proc-title">服務流程</div>
+              <div class="proc-title" data-i18n="process_title">服務流程</div>
             </div>
             <div class="steps">
               <div class="step" data-reveal data-reveal-delay="1">
@@ -908,7 +912,7 @@
                   <div class="step-rule"></div>
                   <div class="step-arrow-wrap"><svg viewBox="0 0 16 10" fill="none" width="16" height="10"><path d="M0 5h14M10 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                 </div>
-                <div class="step-title">需求溝通</div>
+                <div class="step-title" data-i18n="proc1_title">需求溝通</div>
                 <div class="step-desc">深入了解你的業務目標與痛點，制定清晰的專案藍圖與成功標準。</div>
               </div>
               <div class="step" data-reveal data-reveal-delay="2">
@@ -917,14 +921,14 @@
                   <div class="step-rule"></div>
                   <div class="step-arrow-wrap"><svg viewBox="0 0 16 10" fill="none" width="16" height="10"><path d="M0 5h14M10 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                 </div>
-                <div class="step-title">策略規劃</div>
+                <div class="step-title" data-i18n="proc2_title">策略規劃</div>
                 <div class="step-desc">結合設計美學與技術實踐，提供完整的執行方案、技術選型與時程規劃。</div>
               </div>
               <div class="step" data-reveal data-reveal-delay="3">
                 <div class="step-top">
                   <div class="step-badge"><span class="step-num">03</span></div>
                 </div>
-                <div class="step-title">落地執行</div>
+                <div class="step-title" data-i18n="proc3_title">落地執行</div>
                 <div class="step-desc">高效開發與設計，確保每個細節都對齊商業目標，準時交付可用的系統。</div>
               </div>
             </div>
@@ -937,9 +941,9 @@
             <div class="cta-card">
               <div class="cta-accent"><div class="accent-orb"></div></div>
               <div class="cta-copy">
-                <div class="cta-badge"><span class="badge-dot"></span>接受新專案中</div>
-                <div class="cta-title">準備好開始了嗎？</div>
-                <div class="cta-sub">告訴我們你的需求，我們在 48 小時內回覆。</div>
+                <div class="cta-badge"><span class="badge-dot"></span><span data-i18n="cta_badge">接受新專案中</span></div>
+                <div class="cta-title" data-i18n="cta_title">準備好開始了嗎？</div>
+                <div class="cta-sub" data-i18n="cta_main_sub">告訴我們你的需求，我們在 48 小時內回覆。</div>
               </div>
               <ul class="cta-features">
                 <li class="feat-item"><div class="feat-check"><svg viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="feat-label">免費初步諮詢</span></li>
@@ -960,13 +964,13 @@
             <div>
               <img src="/images/logo-light.png" alt="chiyigo" class="footer-logo logo-light">
               <img src="/images/logo-dark.png"  alt="chiyigo" class="footer-logo logo-dark">
-              <p class="footer-tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+              <p class="footer-tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
             </div>
             <nav class="footer-links">
-              <a href="#hero">首頁</a>
-              <a href="portfolio.html">案例作品</a>
-              <a href="about.html">關於我們</a>
-              <a href="requisition.html">接案諮詢</a>
+              <a href="#hero" data-i18n="nav_home">首頁</a>
+              <a href="portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+              <a href="about.html" data-i18n="nav_about">關於我們</a>
+              <a href="requisition.html" data-i18n="nav_contact">接案諮詢</a>
             </nav>
             <p class="footer-copy">© 2026 CHIYIGO. All rights reserved.</p>
           </div>
@@ -1010,43 +1014,49 @@
         </div>
         <div class="m-ov-status">
           <span class="m-ov-status-dot"></span>
-          <span class="m-ov-status-txt">接案中</span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
         </div>
       </div>
       <nav class="m-ov-nav">
         <a href="#hero"     class="m-ov-item active" style="--i:0" onclick="closeOverlay()">
           <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></div>
-          <span class="m-ov-label">首頁</span>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
         <a href="#services" class="m-ov-item" style="--i:1" onclick="closeOverlay()">
           <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></div>
-          <span class="m-ov-label">服務項目</span>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
         <a href="#process"  class="m-ov-item" style="--i:2" onclick="closeOverlay()">
           <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></div>
-          <span class="m-ov-label">服務流程</span>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
         <a href="portfolio.html" class="m-ov-item" style="--i:3" onclick="closeOverlay()">
           <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></div>
-          <span class="m-ov-label">案例作品</span>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
         <a href="about.html" class="m-ov-item" style="--i:4" onclick="closeOverlay()">
           <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></div>
-          <span class="m-ov-label">關於我們</span>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
         <a href="requisition.html" class="m-ov-item" style="--i:5" onclick="closeOverlay()">
           <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
-          <span class="m-ov-label">接案諮詢</span>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
       </nav>
       <div class="m-ov-cta">
-        <a href="requisition.html" class="m-ov-cta-btn" onclick="closeOverlay()">開始諮詢 →</a>
+        <a href="requisition.html" class="m-ov-cta-btn" onclick="closeOverlay()" data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1070,10 +1080,10 @@
 
     // ── i18n ──────────────────────────────────────────────
     const LANGS_I18N = {
-      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言'},
-      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language'},
-      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替'},
-      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환'},
+      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言',footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',hero_eyebrow:'客製化系統開發專家',hero_h1:'打造專屬於你的',hero_h2:'數位解決方案',hero_desc:'從需求釐清到系統上線，我們提供一站式客製化服務，協助企業提升效率、優化流程、創造更大價值。',hero_btn1:'探索解決方案 →',hero_btn2:'觀看案例 ▷',trust_projects:'完成專案',trust_satisfaction:'客戶滿意度',trust_experience:'開發經驗',svc_title:'服務項目',svc1_title:'網站設計',svc2_title:'系統設計',svc3_title:'AI 解決方案',svc4_title:'量化數據分析',svc5_title:'App 設計',svc6_title:'企業應用整合',process_title:'服務流程',proc1_title:'需求溝通',proc2_title:'策略規劃',proc3_title:'落地執行',cta_badge:'接受新專案中',cta_title:'準備好開始了嗎？',cta_main_sub:'告訴我們你的需求，我們在 48 小時內回覆。'},
+      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",hero_eyebrow:'Custom System Development Expert',hero_h1:'Build Your Exclusive',hero_h2:'Digital Solution',hero_desc:'From requirements to launch, we provide one-stop custom services to help businesses boost efficiency, optimize processes, and create greater value.',hero_btn1:'Explore Solutions →',hero_btn2:'View Cases ▷',trust_projects:'Projects Done',trust_satisfaction:'Client Satisfaction',trust_experience:'Dev Experience',svc_title:'Services',svc1_title:'Web Design',svc2_title:'System Design',svc3_title:'AI Solutions',svc4_title:'Data Analytics',svc5_title:'App Design',svc6_title:'Enterprise Integration',process_title:'Our Process',proc1_title:'Requirements',proc2_title:'Strategy',proc3_title:'Execution',cta_badge:'Open for New Projects',cta_title:'Ready to Start?',cta_main_sub:'Tell us your needs — we reply within 48 hours.'},
+      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',hero_eyebrow:'カスタムシステム開発のエキスパート',hero_h1:'あなた専用の',hero_h2:'デジタルソリューションを',hero_desc:'要件定義からシステム稼働まで、ワンストップのカスタムサービスで企業の効率化・プロセス最適化・価値創造を支援します。',hero_btn1:'ソリューションを探る →',hero_btn2:'事例を見る ▷',trust_projects:'完了案件',trust_satisfaction:'顧客満足度',trust_experience:'開発経験',svc_title:'サービス',svc1_title:'Webデザイン',svc2_title:'システム設計',svc3_title:'AIソリューション',svc4_title:'データ分析',svc5_title:'アプリ設計',svc6_title:'システム連携',process_title:'開発プロセス',proc1_title:'要件定義',proc2_title:'戦略立案',proc3_title:'実装・納品',cta_badge:'新規案件受付中',cta_title:'始める準備はできましたか？',cta_main_sub:'ご要望をお聞かせください。48 時間以内に返信します。'},
+      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',hero_eyebrow:'맞춤형 시스템 개발 전문가',hero_h1:'당신만을 위한',hero_h2:'디지털 솔루션 구축',hero_desc:'요구사항 정의부터 시스템 출시까지, 원스톱 맞춤 서비스로 기업의 효율 향상, 프로세스 최적화, 가치 창출을 지원합니다.',hero_btn1:'솔루션 탐색 →',hero_btn2:'사례 보기 ▷',trust_projects:'완료 프로젝트',trust_satisfaction:'고객 만족도',trust_experience:'개발 경력',svc_title:'서비스',svc1_title:'웹 디자인',svc2_title:'시스템 설계',svc3_title:'AI 솔루션',svc4_title:'데이터 분석',svc5_title:'앱 디자인',svc6_title:'엔터프라이즈 통합',process_title:'진행 과정',proc1_title:'요구사항 파악',proc2_title:'전략 수립',proc3_title:'개발 & 납품',cta_badge:'새 프로젝트 수주 중',cta_title:'시작할 준비가 되셨나요?',cta_main_sub:'필요한 것을 알려주세요 — 48시간 내에 답변드립니다.'},
     };
     let curLangI = localStorage.getItem('lang') || 'zh-TW';
     function applyLangI(lang) {
@@ -1086,6 +1096,7 @@
       if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
       if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
       document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
       localStorage.setItem('lang', lang);
     }
     const langTogBtnI = document.getElementById('lang-toggle-btn');
@@ -1093,6 +1104,7 @@
     langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
     document.addEventListener('click', () => langDropI?.classList.remove('open'));
     langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+    document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
     applyLangI(curLangI);
 
     // ── Mobile overlay ──

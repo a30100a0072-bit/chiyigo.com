@@ -249,6 +249,10 @@
     .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
     .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
     .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
+    .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
+    .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
   </style>
 </head>
 <body>
@@ -481,6 +485,12 @@
       </nav>
       <div class="m-ov-cta">
         <a href="requisition.html" class="m-ov-cta-btn" data-close-overlay data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
       </div>
     </div>
   </div>
@@ -672,6 +682,8 @@
       CAT_LABEL['Game'] = t.cat_game;
       document.querySelectorAll('.lang-opt').forEach(b =>
         b.classList.toggle('active', b.dataset.lang === lang));
+      document.querySelectorAll('.m-ov-lang-opt').forEach(b =>
+        b.classList.toggle('active', b.dataset.lang === lang));
       localStorage.setItem('lang', lang);
       if (allItems.length > 0) {
         FBAR.querySelectorAll('.filter-btn:not([data-filter="all"])').forEach(b => b.remove());
@@ -694,6 +706,11 @@
       if (!opt) return;
       applyLang(opt.dataset.lang);
       langDropdown.classList.remove('open');
+    });
+    document.getElementById('m-overlay')?.addEventListener('click', e => {
+      const opt = e.target.closest('.m-ov-lang-opt');
+      if (!opt) return;
+      applyLang(opt.dataset.lang);
     });
     applyLang(curLang);
 
