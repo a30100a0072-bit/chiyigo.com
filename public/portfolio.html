@@ -230,6 +230,7 @@
     .p-card-tag{padding:.15rem .5rem;border-radius:4px;font-size:.72rem;background:var(--bg);color:var(--text-dim);border:1px solid var(--border-dim)}
     .p-card-link{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.04em;color:var(--accent);transition:opacity .18s ease;display:inline-block}
     .p-card-link:hover{opacity:.7}
+    a.p-card-img{display:block;text-decoration:none;cursor:pointer}
 
     /* Skeleton */
     .skeleton{border-radius:12px;height:300px;background:linear-gradient(90deg,var(--bg-surface) 25%,var(--bg-elevated) 50%,var(--bg-surface) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite}
@@ -471,25 +472,41 @@
     const EMPTY   = document.getElementById('empty-state');
     const FBAR    = document.getElementById('filter-bar');
     let allItems  = [];
-    let curFilter = 'all';
+    // Read URL ?filter= param for cross-page linking
+    let curFilter = new URLSearchParams(location.search).get('filter') ?? 'all';
+
+    const CAT_LABEL = {
+      'System':      '系統開發',
+      'Web':         '網站建置',
+      'Game':        '遊戲開發',
+      'Integration': '第三方串接',
+      'Interactive': '互動體驗',
+      'Branding':    '品牌識別',
+      'Marketing':   '數位行銷',
+    };
 
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
     function cardHTML(item) {
-      const img = item.image_url
+      const imgInner = item.image_url
         ? `<img src="${esc(item.image_url)}" alt="${esc(item.title)}" loading="lazy">`
         : `<div class="p-card-placeholder">${esc((item.category||'?')[0])}</div>`;
+      // 圖片點擊連結至專案
+      const imgWrapper = item.link_url
+        ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card-img">${imgInner}</a>`
+        : `<div class="p-card-img">${imgInner}</div>`;
       const tags = item.tags
         ? item.tags.split(',').map(t => `<span class="p-card-tag">${esc(t.trim())}</span>`).join('')
         : '';
       const link = item.link_url
         ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card-link">查看專案 →</a>`
         : '';
+      const badgeLabel = CAT_LABEL[item.category] || esc(item.category);
       return `
         <article class="p-card">
-          <div class="p-card-img">${img}</div>
+          ${imgWrapper}
           <div class="p-card-body">
-            <span class="p-card-badge">${esc(item.category)}</span>
+            <span class="p-card-badge">${badgeLabel}</span>
             <h3 class="p-card-title">${esc(item.title)}</h3>
             ${item.description ? `<p class="p-card-desc">${esc(item.description)}</p>` : ''}
             ${tags ? `<div class="p-card-tags">${tags}</div>` : ''}
@@ -514,17 +531,22 @@
         const btn = document.createElement('button');
         btn.className = 'filter-btn';
         btn.dataset.filter = cat;
-        btn.textContent = cat;
+        btn.textContent = CAT_LABEL[cat] || cat;
         FBAR.appendChild(btn);
       });
+    }
+
+    function applyFilter(filter) {
+      curFilter = filter;
+      FBAR.querySelectorAll('.filter-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.filter === filter));
+      renderGrid(filter === 'all' ? allItems : allItems.filter(i => i.category === filter));
     }
 
     FBAR.addEventListener('click', e => {
       const btn = e.target.closest('.filter-btn');
       if (!btn) return;
-      curFilter = btn.dataset.filter;
-      FBAR.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
-      renderGrid(curFilter === 'all' ? allItems : allItems.filter(i => i.category === curFilter));
+      applyFilter(btn.dataset.filter);
     });
 
     async function loadPortfolio() {
@@ -535,7 +557,7 @@
         allItems = data.items ?? [];
         SKEL.style.display = 'none';
         buildFilters(allItems);
-        renderGrid(allItems);
+        applyFilter(curFilter);
       } catch {
         SKEL.style.display = 'none';
         ERR.classList.add('visible');

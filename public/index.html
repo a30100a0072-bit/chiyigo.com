@@ -541,8 +541,9 @@
       background: var(--bg-surface); border: 1px solid var(--border);
       border-radius: 18px; padding: 1.4rem 1.2rem 1.1rem;
       display: flex; flex-direction: column; gap: .65rem;
-      transition: box-shadow .22s ease, border-color .22s ease, transform .22s ease; cursor: default;
+      transition: box-shadow .22s ease, border-color .22s ease, transform .22s ease; cursor: pointer;
     }
+    a.svc-card { text-decoration: none; color: inherit; }
     .svc-card:hover { box-shadow: 0 4px 20px #6c6ee51a, 0 1px 4px rgba(0,0,0,.05); border-color: #6c6ee533; transform: translateY(-2px); }
     .svc-icon-wrap { width: 42px; height: 42px; border-radius: 11px; background: #6c6ee51a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent); transition: background .22s ease; }
     .svc-card:hover .svc-icon-wrap { background: #6c6ee529; }
@@ -837,42 +838,42 @@
               <div class="svc-label">服務項目</div>
             </div>
             <div class="svc-grid">
-              <div class="svc-card" data-reveal data-reveal-delay="1">
+              <a class="svc-card" href="portfolio.html?filter=Web" data-reveal data-reveal-delay="1">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" fill="none"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-linecap="round"/></svg></div>
                 <div class="svc-title">網站設計</div>
                 <div class="svc-desc">高效能靜態網站與 Serverless 後端，快速、安全、易於維護，讓第一印象成為持久印象。</div>
                 <span class="svc-arrow">→</span>
-              </div>
-              <div class="svc-card" data-reveal data-reveal-delay="2">
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=System" data-reveal data-reveal-delay="2">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor"/></svg></div>
                 <div class="svc-title">系統設計</div>
                 <div class="svc-desc">從架構規劃到資料庫設計，打造穩健可擴展的系統，確保每個環節都對齊商業目標。</div>
                 <span class="svc-arrow">→</span>
-              </div>
-              <div class="svc-card" data-reveal data-reveal-delay="3">
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=System" data-reveal data-reveal-delay="3">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M12 2a7 7 0 0 1 4 12.74V17H8v-2.26A7 7 0 0 1 12 2z" fill="none" stroke="currentColor"/><path d="M9 17v1a3 3 0 0 0 6 0v-1M9 21h6" stroke="currentColor" stroke-linecap="round"/></svg></div>
                 <div class="svc-title">AI 解決方案</div>
                 <div class="svc-desc">將 AI 能力整合進你的工作流程，自動化重複任務，讓團隊專注在真正有價值的事情上。</div>
                 <span class="svc-arrow">→</span>
-              </div>
-              <div class="svc-card" data-reveal data-reveal-delay="1">
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=System" data-reveal data-reveal-delay="1">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
                 <div class="svc-title">量化數據分析</div>
                 <div class="svc-desc">以數據驅動決策，打通數據管道、建立儀表板，讓每個商業決策都有根據。</div>
                 <span class="svc-arrow">→</span>
-              </div>
-              <div class="svc-card" data-reveal data-reveal-delay="2">
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=Web" data-reveal data-reveal-delay="2">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="7" y="2" width="10" height="18" rx="2.5" fill="none" stroke="currentColor"/><circle cx="12" cy="17.5" r="0.8" fill="currentColor" stroke="none"/><path d="M10 5.5h4" stroke="currentColor" stroke-linecap="round"/></svg></div>
                 <div class="svc-title">App 設計</div>
                 <div class="svc-desc">iOS / Android 原生體驗設計，從線框圖到互動原型，確保產品上線即可用。</div>
                 <span class="svc-arrow">→</span>
-              </div>
-              <div class="svc-card" data-reveal data-reveal-delay="3">
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=Integration" data-reveal data-reveal-delay="3">
                 <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M3 21V7l9-4 9 4v14" fill="none" stroke="currentColor" stroke-linejoin="round"/><path d="M9 21V15h6v6" stroke="currentColor" stroke-linejoin="round"/><path d="M9 9h2M13 9h2M9 12h2M13 12h2" stroke="currentColor" stroke-linecap="round"/></svg></div>
                 <div class="svc-title">企業應用整合</div>
                 <div class="svc-desc">串接 ERP、CRM、電商平台等既有系統，消弭資料孤島，提升整體營運效率。</div>
                 <span class="svc-arrow">→</span>
-              </div>
+              </a>
             </div>
           </div>
         </section>
