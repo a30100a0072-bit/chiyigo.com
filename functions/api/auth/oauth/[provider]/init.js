@@ -74,6 +74,7 @@ export async function onRequestGet(context) {
   const url      = new URL(request.url)
   const platform = url.searchParams.get('platform') ?? 'web'
   const port     = url.searchParams.get('port')
+  const pkceReturn = url.searchParams.get('pkce_key')
 
   if (!['web', 'pc', 'mobile'].includes(platform))
     return res({ error: 'platform 必須為 web、pc 或 mobile' }, 400)
@@ -91,6 +92,11 @@ export async function onRequestGet(context) {
     client_callback = buildClientCallback(platform, port)
   } catch (err) {
     return res({ error: err.message }, 400)
+  }
+
+  // Web + PKCE 模式：將 pkce_key 存入 client_callback，供 callback 回傳登入頁
+  if (platform === 'web' && pkceReturn && /^[0-9a-f]{64}$/.test(pkceReturn)) {
+    client_callback = `pkce_return:${pkceReturn}`
   }
 
   // ── 4. Server-side redirect_uri（永遠指向我們的 callback）──
@@ -128,7 +134,7 @@ export async function onRequestGet(context) {
   }
 
   // provider 特定參數
-  if (provider === 'discord') authUrl.searchParams.set('prompt', 'none')
+  if (provider === 'discord') authUrl.searchParams.set('prompt', 'consent')
   if (provider === 'google')  authUrl.searchParams.set('access_type', 'online')
 
   return Response.redirect(authUrl.toString(), 302)

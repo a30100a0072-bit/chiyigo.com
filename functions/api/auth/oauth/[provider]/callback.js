@@ -235,11 +235,21 @@ async function handle(context) {
     VALUES (?, ?, NULL, ?)
   `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
 
-  const safeToken = JSON.stringify(accessToken)
+  // PKCE 模式（從 mbti.chiyigo.com 發起）：回到登入頁讓 auth-ui.js 完成授權碼交換
+  let postLoginUrl = '/dashboard.html'
+  if (client_callback?.startsWith('pkce_return:')) {
+    const pk = client_callback.slice('pkce_return:'.length)
+    if (/^[0-9a-f]{64}$/.test(pk)) {
+      postLoginUrl = `/login.html?pkce_key=${encodeURIComponent(pk)}`
+    }
+  }
+
+  const safeToken   = JSON.stringify(accessToken)
+  const safeDestUrl = JSON.stringify(postLoginUrl)
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <script>
 try{sessionStorage.setItem('access_token',${safeToken});}catch(e){}
-location.replace('/dashboard.html');
+location.replace(${safeDestUrl});
 </script></head><body></body></html>`
 
   return new Response(html, {

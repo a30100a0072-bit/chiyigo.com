@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-25 更新）
+## 整體進度快照（2026-04-25 更新 #2）
 
 | 模組 | 狀態 |
 |------|------|
@@ -36,6 +36,9 @@
 | Mobile overlay 手勢 + Bug 修復 | ✅ 完成（2026-04-25；向下拖曳關閉；about.html overlay nav 補齊 6 項 + 修正「聯絡我們」→「接案諮詢」；about/portfolio/requisition 補 backdrop click 關閉）|
 | mbti.chiyigo.com IAM 整合 | ✅ 完成（2026-04-25；Method A — 完整 PKCE 替換；chiyigo.com 側 3 個端點更新 + mbti 側 15 個檔案更新）|
 | mbti.chiyigo.com 加入作品集 | ✅ 完成（2026-04-25；D1 portfolio 表 id=7 插入，category=System，sort_order=0，tags: Cloudflare Workers/D1 SQLite/OAuth PKCE/MBTI/認知評估）|
+| 全站 Sidebar 順序重整 + Footer 統一 | ✅ 完成（2026-04-25；Sidebar 順序改為 首頁→服務項目→服務流程→案例作品→關於我們→接案資訊；Footer 統一顯示 首頁/案例作品/關於我們/接案諮詢；5 頁全覆蓋含 mobile overlay）|
+| Discord OAuth redirect_uri 修復 | ✅ 完成（2026-04-25；prompt=none 改 prompt=consent；Discord Developer Portal 需補登錄 redirect URI：`https://chiyigo.com/api/auth/oauth/discord/callback`）|
+| MBTI 登入後跳回問題修復（PKCE OAuth 流程） | ✅ 完成（2026-04-25；pkce_key 透過 OAuth init→oauth_states→callback 傳遞，社群登入也能正確回到 MBTI）|
 | iOS Universal Link（apple-app-site-association） | 🔒 待辦（需 Apple Developer $99/yr）|
 
 ---

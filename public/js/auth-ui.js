@@ -425,6 +425,14 @@ async function handleTotp(event) {
   if (_pkceKey) {
     const notice = document.getElementById('pkce-notice');
     if (notice) notice.classList.remove('hidden');
+    // 將 pkce_key 帶入 OAuth 按鈕，讓社群登入也能在完成後回到正確頁面
+    document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+      try {
+        const u = new URL(a.href, location.origin);
+        u.searchParams.set('pkce_key', _pkceKey);
+        a.href = u.toString();
+      } catch { /* 忽略無效連結 */ }
+    });
   }
 })();
 
