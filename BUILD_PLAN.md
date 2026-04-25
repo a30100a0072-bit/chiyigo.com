@@ -104,11 +104,11 @@
 | 🔴 Critical | OAuth Callback provider 路徑反射 XSS | `functions/api/auth/oauth/[provider]/callback.js` | ✅ 已修復 |
 | 🟠 High | POST 端點缺 Content-Type 驗證（潛在 CSRF 面） | 全部 POST API | ✅ 已修復 |
 | 🟠 High | 刪帳未二次 Email OTP 確認 | `functions/api/auth/delete.js` | ✅ 已修復 |
-| 🟡 Medium | Email 發送無 IP 全域限流 | register / forgot-password | ⏳ 待處理 |
-| 🟡 Medium | Admin ban/unban 無操作稽核日誌 | `functions/api/admin/` | ⏳ 待處理 |
-| 🟡 Medium | 2FA 備用碼 8 組偏少，無 UI 重新生成 | `functions/api/auth/2fa/` | ⏳ 待處理 |
+| 🟡 Medium | Email 發送無 IP 全域限流 | register / forgot-password | ✅ 已修復 |
+| 🟡 Medium | Admin ban/unban 無操作稽核日誌 | `functions/api/admin/` | ✅ 已修復 |
+| 🟡 Medium | 2FA 備用碼無 UI 重新生成 | `functions/api/auth/2fa/` | ✅ 已修復 |
 
-> 🔴 Critical 兩項已於 2026-04-25 修復（commit 見下方）。
+> 全部 7 項安全待辦已於 2026-04-25 修復完畢。Admin 稽核日誌需手動執行 `migrations/0003_admin_audit_log.sql`。
 
 ---
 
