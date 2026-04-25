@@ -542,6 +542,68 @@
     overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
     overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+
+    // ── Drag-to-close (bottom sheet swipe down) ──────────
+    ;(function () {
+      const THRESHOLD = 110
+      let startY = 0, lastY = 0, active = false
+      document.addEventListener('touchstart', function (e) {
+        const ov = document.getElementById('m-overlay')
+        if (!ov || !ov.classList.contains('is-open')) return
+        const wrap = ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        const t = e.touches[0], r = wrap.getBoundingClientRect()
+        if (t.clientY < r.top || t.clientY > r.bottom) return
+        const nav = wrap.querySelector('.m-ov-nav')
+        if (nav && nav.scrollTop > 0) {
+          const nr = nav.getBoundingClientRect()
+          if (t.clientY >= nr.top && t.clientY <= nr.bottom) return
+        }
+        startY = t.clientY; lastY = startY; active = true
+        wrap.style.transition = 'none'
+      }, { passive: true })
+      document.addEventListener('touchmove', function (e) {
+        if (!active) return
+        lastY = e.touches[0].clientY
+        const dy = lastY - startY
+        if (dy <= 0) return
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        wrap.style.transform = `translateY(${dy}px)`
+        const ratio = Math.max(0, 1 - dy / wrap.offsetHeight * 1.5)
+        ov.style.background = `rgba(10,12,28,${(0.32 * ratio).toFixed(3)})`
+        e.preventDefault()
+      }, { passive: false })
+      document.addEventListener('touchend', function () {
+        if (!active) return
+        active = false
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) { startY = 0; lastY = 0; return }
+        const dy = lastY - startY
+        ov.style.background = ''
+        if (dy > THRESHOLD) {
+          wrap.style.transition = 'transform .26s ease'
+          wrap.style.transform = 'translateY(100%)'
+          setTimeout(() => {
+            wrap.style.transform = ''; wrap.style.transition = ''
+            ov.classList.remove('is-open')
+            ov.setAttribute('aria-hidden', 'true')
+            const btn = document.getElementById('m-ham-btn')
+            btn?.classList.remove('is-open')
+            btn?.setAttribute('aria-expanded', 'false')
+            document.getElementById('m-topbar')?.classList.remove('menu-open')
+            document.body.style.overflow = ''
+          }, 260)
+        } else {
+          wrap.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1)'
+          wrap.style.transform = ''
+          setTimeout(() => { wrap.style.transition = '' }, 420)
+        }
+        startY = 0; lastY = 0
+      }, { passive: true })
+    })()
   </script>
 </body>
 </html>
