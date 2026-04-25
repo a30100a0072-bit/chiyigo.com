@@ -51,7 +51,8 @@
 
 | 項目 | 說明 |
 |------|------|
-| 作品集圖片 | 需提供截圖/設計稿→上傳 `/images/portfolio/`→更新 D1 `image_url` 欄位 |
+| 作品集圖片（MBTI） | ✅ 完成（2026-04-25；`/images/portfolio/mbti.png` 上傳，D1 id=7 image_url 已更新）|
+| 作品集圖片（其他項目） | 🔒 待辦（提供截圖後可依相同流程更新）|
 | iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 | mbti.chiyigo.com | PKCE 整合完成；mbti 側已更新 15 個檔案（2026-04-25）|
 
