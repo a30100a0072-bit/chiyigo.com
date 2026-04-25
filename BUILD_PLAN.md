@@ -68,9 +68,10 @@
 |------|------|
 | 作品集圖片（MBTI） | ✅ 完成（2026-04-25；`/images/portfolio/mbti.png` 上傳，D1 id=7 image_url 已更新）|
 | 作品集圖片點擊連結至專案 | ✅ 完成（2026-04-25；cardHTML 圖片區塊改為 `<a>` 當 link_url 存在時）|
-| 作品集篩選標籤改中文 | ✅ 完成（2026-04-25；CAT_LABEL 對應表：System→系統開發、Web→網站建置 等）|
+| 作品集篩選標籤改中文 | ✅ 完成（2026-04-25；CAT_LABEL 對應表：System→系統設計、Web→網站設計、Analytics→量化數據分析、AI→AI解決方案、App→App設計、Integration→企業應用整合）|
 | 作品集支援 URL ?filter= 參數 | ✅ 完成（2026-04-25；從他頁跳轉帶 filter 可自動套用分類）|
-| 首頁服務卡片連結至作品集分類 | ✅ 完成（2026-04-25；6 張 svc-card 改為 `<a>`，連結 portfolio.html?filter=Web/System/Integration）|
+| 首頁服務卡片連結至作品集分類 | ✅ 完成（2026-04-25；AI→filter=AI、量化數據分析→filter=Analytics、App設計→filter=App，各服務獨立 filter key）|
+| 作品集類別對齊服務項目 | ✅ 完成（2026-04-25；D1 移除重複 ids 1-3、Branding→Web、Marketing→Analytics）|
 | 作品集圖片（其他項目） | 🔒 待辦（提供截圖後可依相同流程更新）|
 | iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
 | mbti.chiyigo.com | PKCE 整合完成；mbti 側已更新 15 個檔案（2026-04-25）|
