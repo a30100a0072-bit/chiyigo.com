@@ -103,7 +103,7 @@
 | 🔴 Critical | 登入失敗無 Rate Limiting → 暴力破解 | `functions/api/auth/local/login.js` | ✅ 已修復 |
 | 🔴 Critical | OAuth Callback provider 路徑反射 XSS | `functions/api/auth/oauth/[provider]/callback.js` | ✅ 已修復 |
 | 🟠 High | POST 端點缺 Content-Type 驗證（潛在 CSRF 面） | 全部 POST API | ✅ 已修復 |
-| 🟠 High | 刪帳未二次 Email OTP 確認 | `functions/api/auth/delete.js` | ⏳ 待處理 |
+| 🟠 High | 刪帳未二次 Email OTP 確認 | `functions/api/auth/delete.js` | ✅ 已修復 |
 | 🟡 Medium | Email 發送無 IP 全域限流 | register / forgot-password | ⏳ 待處理 |
 | 🟡 Medium | Admin ban/unban 無操作稽核日誌 | `functions/api/admin/` | ⏳ 待處理 |
 | 🟡 Medium | 2FA 備用碼 8 組偏少，無 UI 重新生成 | `functions/api/auth/2fa/` | ⏳ 待處理 |
