@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>確認刪除帳號 — CHIYIGO</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand:   { 500: "#4f6ef7", 600: "#3b55e6", 700: "#2d42cc" },
+            surface: { DEFAULT: "#0e0e12", card: "#16161d", border: "#2a2a35" },
+          },
+          fontFamily: { sans: ["Inter", "Noto Sans TC", "sans-serif"] },
+          keyframes: {
+            fadeUp: { "0%": { opacity:"0", transform:"translateY(20px)" }, "100%": { opacity:"1", transform:"translateY(0)" } },
+          },
+          animation: { "fade-up": "fadeUp 0.5s ease forwards" },
+        },
+      },
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    body { background-color: #0e0e12; color: #e4e4ef; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+  </style>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col">
+
+  <header class="fixed top-0 inset-x-0 z-50 border-b border-[#2a2a35] bg-[#0e0e12]/80 backdrop-blur-md">
+    <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+      <a href="/login.html" class="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors group">
+        <svg class="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        返回登入
+      </a>
+      <span class="text-sm font-semibold text-white tracking-tight">CHIYIGO</span>
+      <div class="w-20"></div>
+    </div>
+  </header>
+
+  <main class="flex-1 flex items-center justify-center px-4 pt-14">
+    <div class="w-full max-w-md animate-fade-up">
+
+      <div class="text-center mb-8">
+        <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 mb-4">
+          <svg class="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+        </div>
+        <h1 class="text-2xl font-bold text-white">刪除帳號確認</h1>
+        <p class="text-gray-500 text-sm mt-1">此操作不可逆，請謹慎確認</p>
+      </div>
+
+      <div class="rounded-2xl bg-[#16161d] border border-[#2a2a35] p-8 shadow-2xl">
+
+        <div id="msg-box" class="hidden mb-5 px-4 py-3 rounded-lg text-sm font-medium"></div>
+
+        <!-- 確認面板 -->
+        <div id="panel-confirm" class="panel active">
+          <div class="mb-6 p-4 rounded-xl bg-red-500/5 border border-red-500/20">
+            <p class="text-red-400 text-sm font-semibold mb-1">以下資料將被永久刪除：</p>
+            <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
+              <li>帳號登入資訊與密碼</li>
+              <li>雙重驗證設定與備用碼</li>
+              <li>OAuth 第三方綁定</li>
+              <li>所有個人資料與登入記錄</li>
+            </ul>
+          </div>
+          <button id="confirm-btn" onclick="confirmDelete()"
+            class="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
+            確認永久刪除我的帳號
+          </button>
+          <a href="/dashboard.html"
+            class="block mt-3 w-full py-2 text-xs text-center text-gray-500 hover:text-gray-300 transition">
+            取消，返回帳號設定
+          </a>
+        </div>
+
+        <!-- 成功面板 -->
+        <div id="panel-success" class="panel text-center py-2">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-500/10 border border-green-500/20 mb-4">
+            <svg class="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <p class="text-white font-semibold mb-1">帳號已刪除</p>
+          <p class="text-gray-500 text-sm">你的帳號與個人資料已永久移除。感謝你使用 CHIYIGO。</p>
+          <p class="text-gray-600 text-xs mt-3">
+            <span id="countdown">5</span> 秒後自動跳轉…
+          </p>
+        </div>
+
+        <!-- Token 無效面板 -->
+        <div id="panel-invalid" class="panel text-center py-2">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 mb-4">
+            <svg class="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+          </div>
+          <p class="text-white font-semibold mb-1">連結無效或已過期</p>
+          <p class="text-gray-500 text-sm">刪除確認連結僅能使用一次，且有效期為 15 分鐘。</p>
+          <a href="/dashboard.html"
+            class="inline-block mt-6 px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
+            返回帳號設定
+          </a>
+        </div>
+
+      </div>
+
+      <p class="text-center text-xs text-gray-600 mt-6">
+        若非本人操作，請忽略此頁面，你的帳號不會有任何變動。
+      </p>
+    </div>
+  </main>
+
+  <script>
+    const token = new URLSearchParams(location.search).get('token') ?? ''
+
+    if (!token) showPanel('panel-invalid')
+
+    function showPanel(id) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'))
+      document.getElementById(id).classList.add('active')
+    }
+
+    function setMsg(text, type = 'error') {
+      const box = document.getElementById('msg-box')
+      if (!text) { box.classList.add('hidden'); return }
+      box.textContent = text
+      box.className = type === 'error'
+        ? 'mb-5 px-4 py-3 rounded-lg text-sm font-medium bg-red-500/10 border border-red-500/20 text-red-400'
+        : 'mb-5 px-4 py-3 rounded-lg text-sm font-medium bg-green-500/10 border border-green-500/20 text-green-400'
+    }
+
+    async function confirmDelete() {
+      const btn = document.getElementById('confirm-btn')
+      btn.disabled = true
+      btn.textContent = '處理中…'
+      setMsg('')
+
+      try {
+        const res  = await fetch('/api/auth/delete/confirm', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ token }),
+        })
+        const data = await res.json().catch(() => ({}))
+
+        if (res.ok) {
+          showPanel('panel-success')
+          startCountdown()
+          return
+        }
+
+        if (res.status === 400) {
+          showPanel('panel-invalid')
+          return
+        }
+
+        setMsg(data.error ?? '發生錯誤，請稍後再試。')
+      } catch {
+        setMsg('網路錯誤，請檢查連線後重試。')
+      } finally {
+        if (!document.getElementById('panel-success').classList.contains('active') &&
+            !document.getElementById('panel-invalid').classList.contains('active')) {
+          btn.disabled = false
+          btn.textContent = '確認永久刪除我的帳號'
+        }
+      }
+    }
+
+    function startCountdown() {
+      let sec = 5
+      const el = document.getElementById('countdown')
+      const iv = setInterval(() => {
+        sec--
+        el.textContent = sec
+        if (sec <= 0) { clearInterval(iv); location.href = '/login.html' }
+      }, 1000)
+    }
+  </script>
+</body>
+</html>

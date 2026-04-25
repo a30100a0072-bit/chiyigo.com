@@ -1,27 +1,16 @@
-/**
- * POST /api/auth/delete
- * Header: Authorization: Bearer <access_token>
- * Body:   { password }
- *
- * 合規帳號刪除（GDPR / 資料主權）：
- *
- *  Hard Delete（個資完全消除）：
- *    local_accounts, backup_codes, refresh_tokens,
- *    email_verifications, password_resets, user_identities
- *
- *  Soft Delete（業務資料保留稽核軌跡）：
- *    requisition — 設定 deleted_at（欄位不存在時靜默跳過）
- *
- *  匿名化（允許相同 email 重新註冊）：
- *    users.email → 'deleted_<id>@deleted.invalid'
- *    users.deleted_at → 當前時間
- */
+// POST /api/auth/delete
+// Step 1 of 2: verify password, send deletion-confirmation email.
+// Step 2 is POST /api/auth/delete/confirm with the emailed token.
 
-import { verifyPassword } from '../../utils/crypto.js'
+import { verifyPassword, generateSecureToken, hashToken } from '../../utils/crypto.js'
 import { requireAuth, res } from '../../utils/auth.js'
+import { sendDeleteConfirmationEmail } from '../../utils/email.js'
+
+const COOLDOWN_SECONDS  = 60
+const TOKEN_TTL_MINUTES = 15
 
 export async function onRequestPost({ request, env }) {
-  // ── 1. 驗證 JWT ──────────────────────────────────────────────
+  // ── 1. JWT 驗證 ───────────────────────────────────────────────
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 
@@ -36,54 +25,60 @@ export async function onRequestPost({ request, env }) {
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
 
-  // ── 3. 驗證當前密碼 ──────────────────────────────────────────
-  const account = await db
-    .prepare('SELECT password_hash, password_salt FROM local_accounts WHERE user_id = ?')
-    .bind(userId)
-    .first()
-
-  if (!account) return res({ error: 'Account not found' }, 404)
-
-  const valid = await verifyPassword(password, account.password_salt, account.password_hash)
-  if (!valid)   return res({ error: 'Incorrect password' }, 401)
-
-  // ── 4. 確認帳號未被刪除 ──────────────────────────────────────
-  const userRow = await db
-    .prepare('SELECT deleted_at FROM users WHERE id = ?')
-    .bind(userId)
-    .first()
-
-  if (!userRow || userRow.deleted_at)
-    return res({ error: 'Account not found' }, 404)
-
-  // ── 5. 原子 Batch：Hard Delete 個資 + Soft Delete 業務資料 ──
-  await db.batch([
-    // Hard Delete：敏感個資完全清除
-    db.prepare('DELETE FROM local_accounts      WHERE user_id = ?').bind(userId),
-    db.prepare('DELETE FROM backup_codes        WHERE user_id = ?').bind(userId),
-    db.prepare('DELETE FROM refresh_tokens      WHERE user_id = ?').bind(userId),
-    db.prepare('DELETE FROM email_verifications WHERE user_id = ?').bind(userId),
-    db.prepare('DELETE FROM password_resets     WHERE user_id = ?').bind(userId),
-    db.prepare('DELETE FROM user_identities     WHERE user_id = ?').bind(userId),
-
-    // 匿名化 users：清除 email，設 deleted_at，允許同 email 重新註冊
-    db.prepare(`
-      UPDATE users
-      SET email      = 'deleted_' || id || '@deleted.invalid',
-          deleted_at = datetime('now')
-      WHERE id = ?
-    `).bind(userId),
+  // ── 3. 驗證密碼 & 帳號狀態 ───────────────────────────────────
+  const [account, userRow] = await Promise.all([
+    db.prepare('SELECT password_hash, password_salt FROM local_accounts WHERE user_id = ?')
+      .bind(userId).first(),
+    db.prepare('SELECT email, deleted_at FROM users WHERE id = ?')
+      .bind(userId).first(),
   ])
 
-  // ── 6. Soft Delete 業務資料（欄位不存在時靜默跳過）─────────
+  if (!account || !userRow || userRow.deleted_at)
+    return res({ error: 'Account not found' }, 404)
+
+  const valid = await verifyPassword(password, account.password_salt, account.password_hash)
+  if (!valid) return res({ error: 'Incorrect password' }, 401)
+
+  // ── 4. 60 秒冷卻（防止重複請求發信）────────────────────────
+  const recent = await db
+    .prepare(`
+      SELECT id FROM email_verifications
+      WHERE user_id = ? AND token_type = 'delete_account'
+        AND created_at > datetime('now', '-${COOLDOWN_SECONDS} seconds')
+      LIMIT 1
+    `)
+    .bind(userId)
+    .first()
+
+  if (recent)
+    return res({
+      error: 'Please wait before requesting another confirmation email',
+      retry_after: COOLDOWN_SECONDS,
+    }, 429)
+
+  // ── 5. 生成一次性 Token（DB 存 SHA-256 hash）────────────────
+  const token     = generateSecureToken()
+  const tokenHash = await hashToken(token)
+  const expiresAt = new Date(Date.now() + TOKEN_TTL_MINUTES * 60 * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19)
+
+  await db
+    .prepare(`
+      INSERT INTO email_verifications (user_id, token_hash, token_type, ip_address, expires_at)
+      VALUES (?, ?, 'delete_account', ?, ?)
+    `)
+    .bind(userId, tokenHash, request.headers.get('CF-Connecting-IP') ?? null, expiresAt)
+    .run()
+
+  // ── 6. 發送確認信 ────────────────────────────────────────────
   try {
-    await db
-      .prepare(`UPDATE requisition SET deleted_at = datetime('now') WHERE owner_user_id = ?`)
-      .bind(userId)
-      .run()
+    await sendDeleteConfirmationEmail(env.RESEND_API_KEY, userRow.email, token)
   } catch {
-    // requisition.deleted_at 或 owner_user_id 欄位尚未遷移，跳過
+    await db.prepare('DELETE FROM email_verifications WHERE token_hash = ?').bind(tokenHash).run()
+    return res({ error: 'Failed to send confirmation email, please try again later' }, 502)
   }
 
-  return res({ message: 'Account deleted successfully' })
+  return res({
+    message: 'Confirmation email sent. You have 15 minutes to complete account deletion.',
+  })
 }
