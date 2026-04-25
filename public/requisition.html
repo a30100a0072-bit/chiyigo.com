@@ -546,7 +546,7 @@
                             <option value="under30k">30,000 以下</option>
                             <option value="30k-80k">30,000 – 80,000</option>
                             <option value="80k-200k">80,000 – 200,000</option>
-                            <option value="over200k">200,000 以上</option>
+                            <option value="200k-1m">200,000 – 1,000,000</option>
                             <option value="flexible">預算彈性，視方案而定</option>
                           </select>
                           <span class="select-arrow" aria-hidden="true">
@@ -922,7 +922,11 @@
     document.getElementById('btn-contact-email')?.addEventListener('click', function () {
       var u = ['chiyigo', '20201208'].join('');
       var d = ['gmail', 'com'].join('.');
-      window.location.href = 'mailto:' + u + '\x40' + d;
+      var el = document.createElement('a');
+      el.setAttribute('href', 'mailto:' + u + '\x40' + d);
+      document.body.appendChild(el);
+      el.click();
+      document.body.removeChild(el);
     });
 
     // ── Contact: LINE (Worker redirect — no raw LINE URL in frontend) ──
