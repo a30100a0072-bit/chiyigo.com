@@ -29,12 +29,18 @@ const TEMP_BIND_TTL      = '10m'
 export const onRequestGet  = (ctx) => handle(ctx)
 export const onRequestPost = (ctx) => handle(ctx)
 
+const ALLOWED_PROVIDERS = new Set(['discord', 'google', 'line', 'facebook', 'apple'])
+
 async function handle(context) {
   const { request, env, params } = context
   const provider = params.provider?.toLowerCase()
-  const cfg      = getProvider(provider, env)
 
-  if (!cfg) return htmlError(`不支援的登入方式：${provider}`)
+  // 白名單驗證：避免任意 provider 路徑反射 XSS
+  if (!provider || !ALLOWED_PROVIDERS.has(provider)) {
+    return htmlError('不支援的登入方式，請確認登入連結是否正確。')
+  }
+
+  const cfg = getProvider(provider, env)
   if (!cfg.clientId) return htmlError(`${provider} 尚未設定`)
 
   // ── 1. 提取 code + state（GET: URL params；POST: FormData）────

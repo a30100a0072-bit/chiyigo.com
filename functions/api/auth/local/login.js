@@ -30,9 +30,24 @@ export async function onRequestPost({ request, env }) {
   if (!email || !password)
     return res({ error: 'email and password are required' }, 400)
 
-  const db = env.chiyigo_db
+  const db        = env.chiyigo_db
+  const ip        = request.headers.get('CF-Connecting-IP') ?? 'unknown'
+  const emailNorm = email.toLowerCase()
 
-  // ── 2. 查詢 user + local_account（一次 JOIN）─────────────────
+  // ── 2. Rate Limit（15 分鐘視窗：同 IP ≤ 20 次，同 email ≤ 10 次）──
+  const [ipRow, emailRow] = await Promise.all([
+    db.prepare(`SELECT COUNT(*) AS cnt FROM login_attempts
+                WHERE ip = ? AND created_at > datetime('now', '-15 minutes')`)
+      .bind(ip).first(),
+    db.prepare(`SELECT COUNT(*) AS cnt FROM login_attempts
+                WHERE email = ? AND created_at > datetime('now', '-15 minutes')`)
+      .bind(emailNorm).first(),
+  ])
+  if ((ipRow?.cnt ?? 0) >= 20 || (emailRow?.cnt ?? 0) >= 10) {
+    return res({ error: 'Too many login attempts, please try again later.', code: 'RATE_LIMITED' }, 429)
+  }
+
+  // ── 3. 查詢 user + local_account（一次 JOIN）─────────────────
   const record = await db
     .prepare(`
       SELECT
@@ -52,23 +67,34 @@ export async function onRequestPost({ request, env }) {
     .bind(email.toLowerCase())
     .first()
 
-  // ── 3. 帳號不存在或已刪除 ────────────────────────────────────
+  // ── 4. 帳號不存在或已刪除 ────────────────────────────────────
   // 無論是「不存在」或「密碼錯誤」皆回傳相同訊息，防帳號枚舉
   if (!record || record.deleted_at) {
-    await fakeHashDelay()
+    await Promise.all([
+      fakeHashDelay(),
+      db.prepare(`INSERT INTO login_attempts (ip, email) VALUES (?, ?)`)
+        .bind(ip, emailNorm).run(),
+    ])
     return res({ error: 'Invalid credentials' }, 401)
   }
 
-  // ── 4. 驗證密碼 ──────────────────────────────────────────────
+  // ── 5. 驗證密碼 ──────────────────────────────────────────────
   const valid = await verifyPassword(password, record.password_salt, record.password_hash)
-  if (!valid) return res({ error: 'Invalid credentials' }, 401)
+  if (!valid) {
+    await db.prepare(`INSERT INTO login_attempts (ip, email) VALUES (?, ?)`)
+      .bind(ip, emailNorm).run()
+    return res({ error: 'Invalid credentials' }, 401)
+  }
 
-  // ── 4.5 封禁帳號：密碼正確但帳號已被封禁，禁止取得新 token ──
+  // ── 5.5 封禁帳號：密碼正確但帳號已被封禁，禁止取得新 token ──
   if (record.status === 'banned') {
     return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
   }
 
-  // ── 5a. 需要 2FA → 回傳受限 pre_auth_token（ES256）───────────
+  // 密碼驗證通過：清除此 email 的失敗記錄（fire-and-forget）
+  db.prepare(`DELETE FROM login_attempts WHERE email = ?`).bind(emailNorm).run()
+
+  // ── 6a. 需要 2FA → 回傳受限 pre_auth_token（ES256）───────────
   if (record.totp_enabled) {
     const preAuthToken = await signJwt({
       sub:    String(record.user_id),
@@ -83,7 +109,7 @@ export async function onRequestPost({ request, env }) {
     }, 403)
   }
 
-  // ── 5b. 無 2FA → 簽發完整 Access Token + Refresh Token ──────
+  // ── 6b. 無 2FA → 簽發完整 Access Token + Refresh Token ──────
   const accessToken = await signJwt({
     sub:            String(record.user_id),
     email:          record.email,

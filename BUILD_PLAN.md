@@ -96,6 +96,20 @@
 | www.chiyigo.com 重導向 | Cloudflare DNS 驗證後自動生效 |
 | Android App Link SHA-256 | 待 App 建立後更新 |
 
+### 安全待辦（Security Backlog，2026-04-25 審查）
+
+| 嚴重度 | 項目 | 檔案 | 狀態 |
+|--------|------|------|------|
+| 🔴 Critical | 登入失敗無 Rate Limiting → 暴力破解 | `functions/api/auth/local/login.js` | ✅ 已修復 |
+| 🔴 Critical | OAuth Callback provider 路徑反射 XSS | `functions/api/auth/oauth/[provider]/callback.js` | ✅ 已修復 |
+| 🟠 High | POST 端點缺 Content-Type 驗證（潛在 CSRF 面） | 全部 POST API | ⏳ 待處理 |
+| 🟠 High | 刪帳未二次 Email OTP 確認 | `functions/api/auth/delete.js` | ⏳ 待處理 |
+| 🟡 Medium | Email 發送無 IP 全域限流 | register / forgot-password | ⏳ 待處理 |
+| 🟡 Medium | Admin ban/unban 無操作稽核日誌 | `functions/api/admin/` | ⏳ 待處理 |
+| 🟡 Medium | 2FA 備用碼 8 組偏少，無 UI 重新生成 | `functions/api/auth/2fa/` | ⏳ 待處理 |
+
+> 🔴 Critical 兩項已於 2026-04-25 修復（commit 見下方）。
+
 ---
 
 ## 線上測試（全通過）
