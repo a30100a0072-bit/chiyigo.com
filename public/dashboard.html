@@ -212,6 +212,15 @@
           </div>
         </div>
 
+        <!-- 帳號綁定區塊 -->
+        <div id="bind-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[#2a2a35]">
+            <p class="text-sm font-semibold text-white" data-i18n="bind_title">帳號綁定</p>
+            <p class="text-xs text-gray-500 mt-0.5" data-i18n="bind_subtitle">連結第三方帳號以增加登入選項</p>
+          </div>
+          <div id="bind-list" class="divide-y divide-[#2a2a35]"></div>
+        </div>
+
         <!-- Email 未驗證提示 -->
         <div id="email-banner" class="hidden mb-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-5 py-4">
           <div class="flex items-center justify-between gap-4">
@@ -244,6 +253,9 @@
     </div>
   </main>
 
+  <!-- Toast 通知（綁定/解綁結果） -->
+  <div id="bind-toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl whitespace-nowrap pointer-events-none transition-opacity duration-300"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
   <script src="/js/auth-ui.js?v=6"></script>
   <script>
@@ -275,6 +287,13 @@
         totp_err6:'請輸入 6 位數驗證碼',
         setup_fail:'設定失敗', enable_fail:'啟用失敗', disable_fail:'停用失敗',
         resend_timer_label:'重發（${s}s）',
+        bind_title:'帳號綁定', bind_subtitle:'連結第三方帳號以增加登入選項',
+        bind_btn:'綁定', unbind_btn:'解除綁定',
+        bind_success:'${p} 綁定成功', unbind_success:'已解除 ${p} 綁定',
+        bind_fail:'綁定失敗，請重試', unbind_fail:'解除失敗，請重試',
+        unbind_last_method:'請先設定本地密碼或綁定其他帳號後，才能解除此綁定',
+        bind_err_already:'此帳號已綁定', bind_err_taken:'此身分已被其他用戶使用',
+        bind_err_state:'綁定請求已過期，請重試', bind_err_account:'帳號狀態異常，請重新登入',
       },
       'en': {
         back_home:'Back to Home', logout_header:'Log Out', loading_text:'Loading…',
@@ -302,6 +321,13 @@
         totp_err6:'Please enter a 6-digit code',
         setup_fail:'Setup failed', enable_fail:'Enable failed', disable_fail:'Disable failed',
         resend_timer_label:'Resend (${s}s)',
+        bind_title:'Account Linking', bind_subtitle:'Link third-party accounts for more login options',
+        bind_btn:'Link', unbind_btn:'Unlink',
+        bind_success:'${p} linked successfully', unbind_success:'${p} unlinked',
+        bind_fail:'Linking failed, please try again', unbind_fail:'Unlinking failed, please try again',
+        unbind_last_method:'Please set a local password or link another account before removing this one',
+        bind_err_already:'Already linked', bind_err_taken:'This identity is already used by another account',
+        bind_err_state:'Linking session expired, please try again', bind_err_account:'Account error, please log in again',
       },
       'ja': {
         back_home:'ホームに戻る', logout_header:'ログアウト', loading_text:'読み込み中…',
@@ -329,6 +355,13 @@
         totp_err6:'6桁のコードを入力してください',
         setup_fail:'設定に失敗しました', enable_fail:'有効化に失敗しました', disable_fail:'無効化に失敗しました',
         resend_timer_label:'再送（${s}s）',
+        bind_title:'アカウント連携', bind_subtitle:'外部アカウントを連携してログイン方法を増やす',
+        bind_btn:'連携', unbind_btn:'連携解除',
+        bind_success:'${p}の連携が完了しました', unbind_success:'${p}の連携を解除しました',
+        bind_fail:'連携に失敗しました。再試行してください', unbind_fail:'連携解除に失敗しました。再試行してください',
+        unbind_last_method:'ローカルパスワードを設定するか他のアカウントを連携してから解除してください',
+        bind_err_already:'すでに連携済みです', bind_err_taken:'このアカウントは別のユーザーが使用しています',
+        bind_err_state:'連携セッションが期限切れです。再試行してください', bind_err_account:'アカウント状態に問題があります。再ログインしてください',
       },
       'ko': {
         back_home:'홈으로 돌아가기', logout_header:'로그아웃', loading_text:'로딩 중…',
@@ -356,6 +389,13 @@
         totp_err6:'6자리 코드를 입력해 주세요',
         setup_fail:'설정 실패', enable_fail:'활성화 실패', disable_fail:'비활성화 실패',
         resend_timer_label:'재발송（${s}s）',
+        bind_title:'계정 연동', bind_subtitle:'서드파티 계정을 연동하여 로그인 옵션을 추가하세요',
+        bind_btn:'연동', unbind_btn:'연동 해제',
+        bind_success:'${p} 연동 완료', unbind_success:'${p} 연동이 해제되었습니다',
+        bind_fail:'연동 실패. 다시 시도해 주세요', unbind_fail:'연동 해제 실패. 다시 시도해 주세요',
+        unbind_last_method:'로컬 비밀번호를 설정하거나 다른 계정을 연동한 후 해제하세요',
+        bind_err_already:'이미 연동되어 있습니다', bind_err_taken:'이 계정은 이미 다른 사용자가 사용 중입니다',
+        bind_err_state:'연동 세션이 만료되었습니다. 다시 시도해 주세요', bind_err_account:'계정 오류. 다시 로그인하세요',
       },
     };
 
@@ -482,6 +522,9 @@
         // 2FA 區塊
         render2FASection(data.totp_enabled ?? false);
 
+        // 帳號綁定區塊
+        renderBindingSection(data.identities ?? []);
+
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('user-card').classList.remove('hidden');
 
@@ -493,6 +536,129 @@
     }
 
     loadProfile();
+
+    // ── 綁定結果 URL 參數處理（OAuth callback 跳回後顯示 Toast）───
+    ;(function checkBindResult() {
+      const sp = new URLSearchParams(location.search);
+      const bindOk    = sp.get('bind');
+      const bindError = sp.get('bind_error');
+      const provider  = sp.get('provider') ?? '';
+      if (!bindOk && !bindError) return;
+      history.replaceState(null, '', '/dashboard.html');
+      const ERR_KEY = {
+        already_linked:  'bind_err_already',
+        identity_taken:  'bind_err_taken',
+        invalid_state:   'bind_err_state',
+        account_invalid: 'bind_err_account',
+      };
+      setTimeout(() => {
+        if (bindOk === 'success') {
+          showBindToast(T('bind_success').replace('${p}', provider || ''), 'ok');
+        } else {
+          showBindToast(T(ERR_KEY[bindError] ?? 'bind_fail'), 'err');
+        }
+      }, 600);
+    })();
+
+    // ── 帳號綁定 ─────────────────────────────────────────────────
+
+    const BIND_PROVIDERS = [
+      { id: 'google',   label: 'Google',   color: '#ea4335' },
+      { id: 'discord',  label: 'Discord',  color: '#5865F2' },
+      { id: 'line',     label: 'LINE',     color: '#06c755' },
+      { id: 'facebook', label: 'Facebook', color: '#1877f2' },
+    ];
+
+    function renderBindingSection(identities) {
+      const linkedSet = new Set((identities ?? []).map(i => i.provider));
+      const list = document.getElementById('bind-list');
+      list.innerHTML = BIND_PROVIDERS.map(({ id, label, color }) => {
+        const linked      = linkedSet.has(id);
+        const identity    = (identities ?? []).find(i => i.provider === id);
+        const displayName = identity?.display_name ?? '';
+        const dot         = `<span class="inline-block w-2 h-2 rounded-full mr-2" style="background:${color}"></span>`;
+        return `
+          <div class="flex items-center justify-between px-5 py-3.5">
+            <div class="flex items-center gap-2 min-w-0">
+              ${dot}
+              <span class="text-sm font-medium text-white">${label}</span>
+              ${linked && displayName
+                ? `<span class="text-xs text-gray-500 truncate max-w-[120px]">${displayName}</span>`
+                : ''}
+            </div>
+            ${linked
+              ? `<button id="unbind-btn-${id}" onclick="unbindProvider('${id}')"
+                   class="shrink-0 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
+                   ${T('unbind_btn')}
+                 </button>`
+              : `<button id="bind-btn-${id}" onclick="bindProvider('${id}')"
+                   class="shrink-0 px-3 py-1.5 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
+                   ${T('bind_btn')}
+                 </button>`
+            }
+          </div>`;
+      }).join('');
+      document.getElementById('bind-section').classList.remove('hidden');
+    }
+
+    async function bindProvider(provider) {
+      const token = sessionStorage.getItem('access_token');
+      const btn   = document.getElementById(`bind-btn-${provider}`);
+      if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
+      try {
+        const res  = await fetch(`/api/auth/oauth/${provider}/init?is_binding=true`, {
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        const data = await res.json();
+        if (!res.ok || !data.redirect_url) {
+          showBindToast(data.error ?? T('bind_fail'), 'err');
+          return;
+        }
+        window.location.href = data.redirect_url;
+      } catch {
+        showBindToast(T('net_err'), 'err');
+        if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); }
+      }
+    }
+
+    async function unbindProvider(provider) {
+      const token = sessionStorage.getItem('access_token');
+      const btn   = document.getElementById(`unbind-btn-${provider}`);
+      if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
+      try {
+        const res  = await fetch('/api/auth/identity/unbind', {
+          method:  'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ provider }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = res.status === 400 ? T('unbind_last_method') : (data.error ?? T('unbind_fail'));
+          showBindToast(msg, res.status === 400 ? 'warn' : 'err');
+          if (btn) { btn.disabled = false; btn.textContent = T('unbind_btn'); }
+          return;
+        }
+        showBindToast(T('unbind_success').replace('${p}', provider), 'ok');
+        loadProfile();
+      } catch {
+        showBindToast(T('net_err'), 'err');
+        if (btn) { btn.disabled = false; btn.textContent = T('unbind_btn'); }
+      }
+    }
+
+    let _toastTimer;
+    function showBindToast(msg, type) {
+      const el = document.getElementById('bind-toast');
+      el.textContent = msg;
+      el.className = [
+        'fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl whitespace-nowrap pointer-events-none',
+        type === 'ok'   ? 'bg-green-500/20 text-green-300 border border-green-500/30' :
+        type === 'warn' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                          'bg-red-500/20 text-red-300 border border-red-500/30',
+      ].join(' ');
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => { el.className += ' opacity-0'; }, 3200);
+    }
 
     // ── 2FA 管理 ─────────────────────────────────────────────────
 

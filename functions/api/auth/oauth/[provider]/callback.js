@@ -74,6 +74,7 @@ async function handle(context) {
   if (!stateRow) return htmlError('登入階段已過期或無效，請重新登入。')
 
   const { code_verifier, redirect_uri, platform, client_callback } = stateRow
+  const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
 
   // ── 3. 換取 access_token ─────────────────────────────────────
   let providerTokens
@@ -96,7 +97,45 @@ async function handle(context) {
 
   const { provider_id, email, name, avatar, email_verified } = profile
 
-  // ── 5. 安防邏輯 ──────────────────────────────────────────────
+  // ── 5. 綁定模式（is_binding）─────────────────────────────────
+  if (client_callback?.startsWith('binding:')) {
+    const bindingUserId = Number(client_callback.slice('binding:'.length))
+    if (!bindingUserId || !Number.isFinite(bindingUserId))
+      return Response.redirect(`${baseUrl}/dashboard.html?bind_error=invalid_state`, 302)
+
+    // 確認帳號仍有效
+    const bindUser = await db
+      .prepare('SELECT status FROM users WHERE id = ? AND deleted_at IS NULL')
+      .bind(bindingUserId)
+      .first()
+
+    if (!bindUser || bindUser.status === 'banned')
+      return Response.redirect(`${baseUrl}/dashboard.html?bind_error=account_invalid`, 302)
+
+    // 檢查 provider_id 是否已被占用
+    const existingBind = await db
+      .prepare('SELECT user_id FROM user_identities WHERE provider = ? AND provider_id = ?')
+      .bind(provider, provider_id)
+      .first()
+
+    if (existingBind) {
+      const errCode = existingBind.user_id === bindingUserId ? 'already_linked' : 'identity_taken'
+      return Response.redirect(`${baseUrl}/dashboard.html?bind_error=${errCode}`, 302)
+    }
+
+    // 執行綁定
+    await db
+      .prepare(`
+        INSERT INTO user_identities (user_id, provider, provider_id, display_name, avatar_url)
+        VALUES (?, ?, ?, ?, ?)
+      `)
+      .bind(bindingUserId, provider, provider_id, name ?? null, avatar ?? null)
+      .run()
+
+    return Response.redirect(`${baseUrl}/dashboard.html?bind=success&provider=${provider}`, 302)
+  }
+
+  // ── 6. 一般登入安防邏輯 ──────────────────────────────────────
 
   // 5a. 無信箱 → 發 temp_bind_token，導向補填頁
   if (!email) {
@@ -188,7 +227,7 @@ async function handle(context) {
     }
   }
 
-  // ── 6. 查詢 role / status ────────────────────────────────────
+  // ── 7. 查詢 role / status ────────────────────────────────────
   const userRow = await db
     .prepare('SELECT email, email_verified, role, status FROM users WHERE id = ?')
     .bind(userId)
@@ -197,7 +236,7 @@ async function handle(context) {
   if (!userRow) return htmlError('帳號建立後無法查詢，請稍後重試。')
   if (userRow.status === 'banned') return htmlError('此帳號已被停用。', 403)
 
-  // ── 7. 簽發 Access Token ─────────────────────────────────────
+  // ── 8. 簽發 Access Token ─────────────────────────────────────
   const accessToken = await signJwt({
     sub:            String(userId),
     email:          userRow.email,
@@ -207,9 +246,7 @@ async function handle(context) {
     provider,
   }, ACCESS_TOKEN_TTL, env)
 
-  // ── 8. 依 platform 回傳 ──────────────────────────────────────
-  const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
-
+  // ── 9. 依 platform 回傳 ──────────────────────────────────────
   if (platform === 'pc') {
     const dest = new URL(client_callback)
     dest.searchParams.set('access_token', accessToken)

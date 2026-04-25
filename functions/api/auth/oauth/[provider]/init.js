@@ -11,6 +11,7 @@
  */
 
 import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-providers.js'
+import { requireAuth } from '../../../../utils/auth.js'
 
 const STATE_BYTES       = 16   // 128 bits
 const VERIFIER_BYTES    = 32   // 256 bits
@@ -71,13 +72,22 @@ export async function onRequestGet(context) {
   if (provider === 'apple')
     return res({ error: 'Apple 登入尚未開放' }, 503)
 
-  const url      = new URL(request.url)
-  const platform = url.searchParams.get('platform') ?? 'web'
-  const port     = url.searchParams.get('port')
+  const url        = new URL(request.url)
+  const platform   = url.searchParams.get('platform') ?? 'web'
+  const port       = url.searchParams.get('port')
   const pkceReturn = url.searchParams.get('pkce_key')
+  const isBinding  = url.searchParams.get('is_binding') === 'true'
 
   if (!['web', 'pc', 'mobile'].includes(platform))
     return res({ error: 'platform 必須為 web、pc 或 mobile' }, 400)
+
+  // ── 綁定模式：JWT 驗證，取得當前登入用戶 ───────────────────
+  let bindingUserId = null
+  if (isBinding) {
+    const { user, error: authError } = await requireAuth(request, env)
+    if (authError) return authError
+    bindingUserId = Number(user.sub)
+  }
 
   // ── 2. State（CSRF）+ PKCE ──────────────────────────────────
   const state = randomHex(STATE_BYTES)
@@ -97,6 +107,11 @@ export async function onRequestGet(context) {
   // Web + PKCE 模式：將 pkce_key 存入 client_callback，供 callback 回傳登入頁
   if (platform === 'web' && pkceReturn && /^[0-9a-f]{64}$/.test(pkceReturn)) {
     client_callback = `pkce_return:${pkceReturn}`
+  }
+
+  // 綁定模式：覆寫 client_callback，嵌入 binding user id
+  if (isBinding && bindingUserId) {
+    client_callback = `binding:${bindingUserId}`
   }
 
   // ── 4. Server-side redirect_uri（永遠指向我們的 callback）──
@@ -136,6 +151,11 @@ export async function onRequestGet(context) {
   // provider 特定參數
   if (provider === 'discord') authUrl.searchParams.set('prompt', 'consent')
   if (provider === 'google')  authUrl.searchParams.set('access_type', 'online')
+
+  // 綁定模式：回傳 JSON，讓前端 JS 讀取後自行跳轉（不可用 302，因為需先帶 Authorization header）
+  if (isBinding) {
+    return res({ redirect_url: authUrl.toString() })
+  }
 
   return Response.redirect(authUrl.toString(), 302)
 }

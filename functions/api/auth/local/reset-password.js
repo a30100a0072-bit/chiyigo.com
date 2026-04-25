@@ -53,19 +53,21 @@ export async function onRequestPost({ request, env }) {
   const userId = tokenRow.user_id
 
   // ── 2. 取得帳號資料（含 2FA 狀態）──────────────────────────────
+  // LEFT JOIN：OAuth-only 用戶無 local_accounts，視為 totp_enabled=0
   const record = await db
     .prepare(`
-      SELECT la.totp_secret, la.totp_enabled
-      FROM   local_accounts la
-      WHERE  la.user_id = ?
+      SELECT u.deleted_at, la.totp_secret, la.totp_enabled
+      FROM   users u
+      LEFT JOIN local_accounts la ON la.user_id = u.id
+      WHERE  u.id = ?
     `)
     .bind(userId)
     .first()
 
-  if (!record) return res({ error: 'Account not found' }, 400)
+  if (!record || record.deleted_at) return res({ error: 'Account not found' }, 400)
 
   // ── 3. 2FA 閉環 ──────────────────────────────────────────────
-  if (record.totp_enabled) {
+  if (record.totp_enabled === 1) {
     if (!totp_code)
       return res({ requires_2fa: true, error: '2FA verification required' }, 403)
 
@@ -123,17 +125,19 @@ export async function onRequestPost({ request, env }) {
 
   if (!consumed) return res({ error: 'Token is invalid or has expired' }, 400)
 
-  // ── 5. 更新密碼（新 salt + PBKDF2）──────────────────────────
+  // ── 5. UPSERT 密碼（新 salt + PBKDF2；OAuth-only 用戶首次建立密碼）──
   const newSalt = generateSalt()
   const newHash = await hashPassword(new_password, newSalt)
 
   await db
     .prepare(`
-      UPDATE local_accounts
-      SET    password_hash = ?, password_salt = ?
-      WHERE  user_id = ?
+      INSERT INTO local_accounts (user_id, password_hash, password_salt, totp_enabled)
+      VALUES (?, ?, ?, 0)
+      ON CONFLICT(user_id) DO UPDATE SET
+        password_hash = excluded.password_hash,
+        password_salt = excluded.password_salt
     `)
-    .bind(newHash, newSalt, userId)
+    .bind(userId, newHash, newSalt)
     .run()
 
   // ── 6. 撤銷所有 refresh_tokens（登出所有裝置）───────────────

@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-25）
+## 整體進度快照（2026-04-25 更新）
 
 ### Cross-App SSO
 
@@ -63,6 +63,17 @@
 | 6 | 量化數據分析儀表板 | Analytics（量化數據分析）|
 | 8 | 健身紀錄 APP | App（APP設計）|
 | 9 | ERP 企業系統整合 | Integration（企業應用整合）|
+
+### IAM 身分橋接與邊界防禦（2026-04-25）
+
+| 模組 | 狀態 |
+|------|------|
+| reset-password UPSERT（OAuth 用戶首次建立密碼）| ✅ |
+| `/api/auth/identity/bind` — 通用綁定 API（JWT 保護）| ✅ |
+| `/api/auth/identity/unbind` — 防自殺解綁 API（最後登入方式保護）| ✅ |
+| OAuth init `is_binding=true` — 綁定模式 JSON 回傳 redirect_url | ✅ |
+| OAuth callback 綁定分支（`binding:USER_ID` 前綴，CSRF 由 state 原子核銷保護）| ✅ |
+| Dashboard 帳號綁定 UI（Google/Discord/LINE/Facebook 動態顯示，4 語言 i18n）| ✅ |
 
 ### 待辦
 
