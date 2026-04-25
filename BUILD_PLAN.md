@@ -301,6 +301,7 @@ curl https://chiyigo.com/api/admin/users -H "Authorization: Bearer <admin_jwt>"
 | ~~低~~ | ~~login.html 忘記密碼入口~~ | ✅ 完成 2026-04-24（登入按鈕右下角加「忘記密碼？」連結）|
 | 高 | Stage 19 — 首頁重設計 | 套用新設計系統（CSS Variables、SaaS Dashboard 版面、Neural Canvas、亮暗主題）|
 | ~~待考慮~~ | ~~首頁統計數字區塊~~ | ✅ 完成 2026-04-24（50+ 完成專案 / 98% 客戶滿意度 / 5yr+ 開發經驗 / 24/7 技術支援，數字 count-up 動畫）|
+| ✅ 完成 | 安全掃描修補（2026-04-25） | CRITICAL×2 + MEDIUM×2 + HIGH×1 共 5 項漏洞修補完成（見下方安全補強記錄）|
 | 待討論 | 會員頁面重設計 | login.html / dashboard.html 等頁面套用新設計系統，討論後再動 |
 | 🔒 | Apple Sign In | 需 Apple Developer 帳號（$99/yr），Stage 18 預留架構 |
 
@@ -508,6 +509,20 @@ CREATE INDEX idx_email_verif_hash ON email_verifications(token_hash);
 - [x] 統計數字區塊（50+ 完成專案、98% 客戶滿意度、5yr+ 開發經驗、24/7 技術支援服務，count-up 動畫）
 - [x] 19.8 `login.html` 套用新設計系統（sidebar、CSS 變數、mobile overlay 同步為 is-open pattern、接案中徽章、Escape 鍵關閉、backdrop 點擊關閉）
 - [x] 19.9 `portfolio.html` mobile overlay 補齊 6 項導覽（首頁、服務項目、案例作品、服務流程、關於我們、接案諮詢）並修正「聯絡我們」→「接案諮詢」標籤
+
+---
+
+## 安全補強記錄（2026-04-25）
+
+| 嚴重度 | 檔案 | 問題 | 修法 |
+|---|---|---|---|
+| CRITICAL | `2fa/disable.js` | 備用碼用 DB hash 直查，未使用常時性比較 | 改用 `verifyBackupCode()` 逐一常時比對 |
+| CRITICAL | `oauth/[provider]/callback.js` | LINE `id_token` 只 base64 decode，未驗 HS256 簽名 | 新增 `verifyLineIdToken()` 以 channel secret 驗 HMAC-SHA256 |
+| MEDIUM | `oauth/authorize.js` | `redirect_uri` 白名單用 regex 允許 chiyigo.com 任意路徑 | 改為 Set 明確列舉 + loopback regex |
+| MEDIUM | `admin/users.js` | LIKE 搜尋未 escape `%` `_`，可被利用作帳號列舉 | 加 ESCAPE 子句並 escape 特殊字元 |
+| MEDIUM | `email/send-verification.js` | 冷卻只查 `verify_email` type，可搭配 reset_password 繞過 | 改為不分 token_type 統一 60 秒冷卻 |
+
+暫緩項目（真實利用條件嚴苛）：device_uuid 空字串邊界、PC port 高位驗證、Cookie regex 尾部空格、bind-email 競態條件。
 
 ---
 

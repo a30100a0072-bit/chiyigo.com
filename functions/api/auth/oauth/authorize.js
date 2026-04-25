@@ -21,11 +21,17 @@ import { generateSecureToken } from '../../../utils/crypto.js'
 
 const SESSION_TTL_MS = 10 * 60 * 1000 // 10 分鐘完成登入
 
-// redirect_uri 白名單規則
+// redirect_uri 白名單（明確列舉，不接受 pattern 匹配 chiyigo.com 任意路徑）
+const ALLOWED_REDIRECT_URIS = new Set([
+  'chiyigo://auth/callback',          // Unity / Unreal / mobile custom scheme
+  'https://chiyigo.com/callback',     // Web SPA
+  'https://chiyigo.com/app/callback', // iOS Universal Link（預留）
+])
+
 function isAllowedRedirectUri(uri) {
-  if (uri === 'chiyigo://auth/callback') return true
-  if (/^http:\/\/127\.0\.0\.1(:\d{1,5})?\/callback$/.test(uri)) return true
-  if (/^https:\/\/chiyigo\.com\//.test(uri)) return true
+  if (ALLOWED_REDIRECT_URIS.has(uri)) return true
+  // Loopback（Desktop Launcher，RFC 8252）
+  if (/^http:\/\/127\.0\.0\.1:\d{1,5}\/callback$/.test(uri)) return true
   return false
 }
 

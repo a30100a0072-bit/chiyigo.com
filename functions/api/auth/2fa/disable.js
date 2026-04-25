@@ -9,6 +9,7 @@
 
 import { TOTP, Secret } from 'otpauth'
 import { requireAuth, res } from '../../../utils/auth.js'
+import { verifyBackupCode } from '../../../utils/crypto.js'
 
 export async function onRequestPost({ request, env }) {
   const { user, error } = await requireAuth(request, env)
@@ -47,17 +48,19 @@ export async function onRequestPost({ request, env }) {
       return res({ error: 'Invalid OTP code' }, 401)
   }
 
-  // ── 驗證備用碼 ────────────────────────────────────────────────
+  // ── 驗證備用碼（常時性比較，防計時攻擊）────────────────────────
   if (backup_code) {
-    const normalized = String(backup_code).replace(/[-\s]/g, '').toUpperCase()
-    const hashBuf    = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized))
-    const hash       = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('')
+    const normalized = String(backup_code).replace(/[-\s]/g, '').toLowerCase()
+    const codes = await db
+      .prepare('SELECT code_hash FROM backup_codes WHERE user_id = ? AND used_at IS NULL')
+      .bind(userId)
+      .all()
 
-    const row = await db
-      .prepare('SELECT id FROM backup_codes WHERE user_id = ? AND code_hash = ? AND used_at IS NULL')
-      .bind(userId, hash)
-      .first()
-    if (!row) return res({ error: 'Invalid or already used backup code' }, 401)
+    let valid = false
+    for (const code of codes.results ?? []) {
+      if (await verifyBackupCode(normalized, code.code_hash)) { valid = true; break }
+    }
+    if (!valid) return res({ error: 'Invalid or already used backup code' }, 401)
   }
 
   // ── 停用 2FA，清除所有備用碼 ──────────────────────────────────

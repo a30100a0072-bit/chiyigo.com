@@ -285,13 +285,13 @@ async function fetchProfile(provider, cfg, tokens) {
     return decodeJwtPayload(tokens.id_token)
   }
 
-  // LINE：email 在 id_token 內（scope 包含 email 時）
+  // LINE：email 在 id_token 內（scope 包含 email 時），驗 HMAC-SHA256 簽名
   let lineEmail = null
   if (provider === 'line' && tokens.id_token) {
     try {
-      const payload = decodeJwtPayload(tokens.id_token)
+      const payload = await verifyLineIdToken(tokens.id_token, cfg.clientSecret)
       lineEmail = payload.email ?? null
-    } catch { /* id_token 不存在或解碼失敗，略過 */ }
+    } catch { /* 驗簽失敗或 token 過期，忽略 id_token email */ }
   }
 
   const res = await fetch(cfg.userInfoUrl, {
@@ -307,6 +307,34 @@ async function fetchProfile(provider, cfg, tokens) {
 }
 
 // ── 工具 ─────────────────────────────────────────────────────────
+
+// LINE id_token 驗簽（HS256，以 channel secret 為 key）
+async function verifyLineIdToken(idToken, channelSecret) {
+  const parts = idToken.split('.')
+  if (parts.length !== 3) throw new Error('Invalid id_token format')
+  const [headerB64, payloadB64, sigB64] = parts
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(channelSecret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify']
+  )
+  const sigBytes = Uint8Array.from(
+    atob(sigB64.replace(/-/g, '+').replace(/_/g, '/')),
+    c => c.charCodeAt(0)
+  )
+  const valid = await crypto.subtle.verify(
+    'HMAC', key, sigBytes,
+    new TextEncoder().encode(`${headerB64}.${payloadB64}`)
+  )
+  if (!valid) throw new Error('id_token signature invalid')
+
+  const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')))
+  if (payload.exp && Date.now() / 1000 > payload.exp) throw new Error('id_token expired')
+  return payload
+}
 
 function decodeJwtPayload(token) {
   const part = token.split('.')[1]

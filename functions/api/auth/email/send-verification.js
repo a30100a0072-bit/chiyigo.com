@@ -34,12 +34,11 @@ export async function onRequestPost({ request, env }) {
   if (userRow.email_verified === 1)
     return res({ error: 'Email already verified' }, 400)
 
-  // ── 3. 60 秒冷卻檢查 ─────────────────────────────────────────
+  // ── 3. 60 秒冷卻檢查（統一跨所有 token_type，防多種信件搭配繞過）──
   const recent = await db
     .prepare(`
       SELECT id FROM email_verifications
       WHERE user_id = ?
-        AND token_type = 'verify_email'
         AND created_at > datetime('now', '-${COOLDOWN_SECONDS} seconds')
       LIMIT 1
     `)

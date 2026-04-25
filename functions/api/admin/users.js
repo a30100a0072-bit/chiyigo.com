@@ -38,7 +38,11 @@ export async function onRequestGet({ request, env }) {
 
   if (status) { conditions.push('status = ?');  bindings.push(status) }
   if (role)   { conditions.push('role = ?');    bindings.push(role) }
-  if (q)      { conditions.push('email LIKE ?'); bindings.push(`%${q}%`) }
+  if (q) {
+    const escaped = q.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+    conditions.push("email LIKE ? ESCAPE '\\\\'")
+    bindings.push(`%${escaped}%`)
+  }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
