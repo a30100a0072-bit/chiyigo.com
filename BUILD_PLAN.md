@@ -48,7 +48,7 @@
 | 案例作品（動態 D1 / filter 固定順序 / URL ?filter= / i18n）| ✅ |
 | 關於我們 | ✅ |
 | 接案諮詢（防爬蟲 email & LINE / 服務類型）| ✅ |
-| 全站 i18n（繁體中文 / English / 日本語 / 한국어，localStorage 持久化）| ✅ |
+| 全站 i18n（繁體中文 / English / 日本語 / 한국어，localStorage 持久化；i18n bug 修復 2026-04-25）| ✅ |
 | 全站主題切換一致（dark mode → 🌙，已修正 index.html 反轉 bug）| ✅ |
 | 使用者儀表板 + 2FA 管理 UI | ✅ |
 | Login / Forgot-password / Reset-password / Bind-email 頁面 | ✅ |

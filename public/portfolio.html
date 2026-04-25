@@ -397,10 +397,10 @@
               <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
             </div>
             <nav class="footer-links">
-              <a href="index.html">首頁</a>
-              <a href="portfolio.html">案例作品</a>
-              <a href="about.html">關於我們</a>
-              <a href="requisition.html">接案諮詢</a>
+              <a href="index.html" data-i18n="nav_home">首頁</a>
+              <a href="portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+              <a href="about.html" data-i18n="nav_about">關於我們</a>
+              <a href="requisition.html" data-i18n="nav_contact">接案諮詢</a>
             </nav>
             <p class="copy">© 2025 CHIYIGO</p>
           </div>
@@ -520,8 +520,9 @@
       const tags = item.tags
         ? item.tags.split(',').map(t => `<span class="p-card-tag">${esc(t.trim())}</span>`).join('')
         : '';
+      const linkLabel = (LANGS[curLang] || LANGS['zh-TW']).view_project || '查看專案 →';
       const link = item.link_url
-        ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card-link">查看專案 →</a>`
+        ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card-link">${linkLabel}</a>`
         : '';
       const badgeLabel = CAT_LABEL[item.category] || esc(item.category);
       return `
@@ -599,7 +600,7 @@
         filter_all:'全部',
         err_load:'// error: 載入失敗，請稍後再試',err_empty:'// empty: 此分類尚無作品',
         footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',
-        tooltip_theme:'切換明暗',tooltip_lang:'切換語言',
+        tooltip_theme:'切換明暗',tooltip_lang:'切換語言',view_project:'查看專案 →',
         cat_web:'網站設計',cat_system:'系統設計',cat_ai:'AI解決方案',
         cat_analytics:'量化數據分析',cat_app:'APP設計',cat_integration:'企業應用整合',cat_game:'遊戲開發',
       },
@@ -614,7 +615,7 @@
         filter_all:'All',
         err_load:'// error: Failed to load. Please try again.',err_empty:'// empty: No projects in this category.',
         footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",
-        tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',
+        tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',view_project:'View Project →',
         cat_web:'Web Design',cat_system:'System Design',cat_ai:'AI Solutions',
         cat_analytics:'Data Analytics',cat_app:'App Design',cat_integration:'Enterprise Integration',cat_game:'Game Dev',
       },
@@ -629,7 +630,7 @@
         filter_all:'すべて',
         err_load:'// error: 読み込み失敗。もう一度お試しください。',err_empty:'// empty: このカテゴリには作品がありません。',
         footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',
-        tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',
+        tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',view_project:'プロジェクトを見る →',
         cat_web:'Webデザイン',cat_system:'システム設計',cat_ai:'AIソリューション',
         cat_analytics:'データ分析',cat_app:'アプリ設計',cat_integration:'システム連携',cat_game:'ゲーム開発',
       },
@@ -644,7 +645,7 @@
         filter_all:'전체',
         err_load:'// error: 로드 실패. 다시 시도해주세요.',err_empty:'// empty: 이 카테고리에는 작품이 없습니다.',
         footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',
-        tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',
+        tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',view_project:'프로젝트 보기 →',
         cat_web:'웹 디자인',cat_system:'시스템 설계',cat_ai:'AI 솔루션',
         cat_analytics:'데이터 분석',cat_app:'앱 디자인',cat_integration:'엔터프라이즈 통합',cat_game:'게임 개발',
       },
@@ -677,6 +678,7 @@
         buildFilters(allItems);
         FBAR.querySelectorAll('.filter-btn').forEach(b =>
           b.classList.toggle('active', b.dataset.filter === curFilter));
+        renderGrid(curFilter === 'all' ? allItems : allItems.filter(i => i.category === curFilter));
       }
     }
 
