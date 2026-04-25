@@ -335,6 +335,10 @@
                   <span class="ph-stat-n">98%</span>
                   <span class="ph-stat-l">客戶滿意度</span>
                 </div>
+                <div class="ph-stat">
+                  <span class="ph-stat-n">5yr+</span>
+                  <span class="ph-stat-l">開發經驗</span>
+                </div>
               </div>
             </div>
           </div>
@@ -476,14 +480,15 @@
     let curFilter = new URLSearchParams(location.search).get('filter') ?? 'all';
 
     const CAT_LABEL = {
-      'Web':         '網站設計',
+      'Web':         '網頁設計',
       'System':      '系統設計',
-      'AI':          'AI 解決方案',
+      'AI':          'AI解決方案',
       'Analytics':   '量化數據分析',
-      'App':         'App 設計',
+      'App':         'APP設計',
       'Integration': '企業應用整合',
       'Game':        '遊戲開發',
     };
+    const CAT_ORDER = ['Web','System','AI','Analytics','App','Integration','Game'];
 
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -526,8 +531,9 @@
     }
 
     function buildFilters(items) {
-      const cats = [...new Set(items.map(i => i.category).filter(Boolean))];
-      cats.forEach(cat => {
+      const existing = new Set(items.map(i => i.category).filter(Boolean));
+      CAT_ORDER.forEach(cat => {
+        if (!existing.has(cat)) return;
         const btn = document.createElement('button');
         btn.className = 'filter-btn';
         btn.dataset.filter = cat;
