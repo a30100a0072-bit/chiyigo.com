@@ -579,7 +579,7 @@ git push origin main
 | mbti api.js | ✅ 完成 | proceedToResultAPI token key 更新 |
 | mbti script.js | ✅ 完成 | initApp login-wall + goToTalo SSO token key 更新 |
 | mbti 全站 HTML（8 頁） | ✅ 完成 | assessment/beebe-model/index/jung-theory/mbti-stats/mbti-types/reset-password/type-detail |
-| mbti src/index.ts | ✅ 完成 | 新增 `verifyChiyigoJWT()` via JWKS ES256；3 處保護路由由 HS256 換為 ES256 |
+| mbti src/index.ts | ✅ 完成 | `verifyChiyigoJWT()` 呼叫 chiyigo.com `/api/auth/me` (Token Introspection)；3 處保護路由由 HS256 換為 ES256 代理驗證 |
 
 ### Token 儲存（mbti 端）
 | 項目 | 儲存位置 | TTL |
@@ -594,9 +594,20 @@ git push origin main
 npx wrangler deploy
 
 # 2. 更新靜態檔案（前端 HTML/JS/CSS）
-# 查詢 Pages project 名稱後執行：
-npx wrangler pages deploy public/ --project-name <mbti-pages-project-name>
+npx wrangler pages deploy public/ --project-name mental-modeling-assessment-v1
 ```
+
+### 線上驗證結果（2026-04-25）
+| 項目 | 狀態 | 說明 |
+|------|------|------|
+| login.html PKCE 重導向 | ✅ 通過 | 點擊按鈕 → chiyigo.com 登入 → 回到 mbti dashboard |
+| dashboard 資料載入 | ✅ 通過 | Token Introspection 驗證成功，歷史紀錄正常顯示 |
+
+### 技術備忘：Token Introspection 模式
+> 原本設計使用 JWKS + crypto.subtle 手刻 ES256 驗證，但實作複雜且難除錯。
+> 最終改為 mbti Worker → `GET https://chiyigo.com/api/auth/me` (Bearer token)。
+> chiyigo.com 用 `jose` 正確驗證 ES256 + 即時查 DB 封禁狀態，回傳 `user_id`。
+> Server-to-Server 請求無 CORS 限制，簡單可靠。
 
 ---
 
