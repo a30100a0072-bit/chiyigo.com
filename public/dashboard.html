@@ -28,6 +28,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
     body { background-color: #0e0e12; color: #e4e4ef; }
+    .lang-bar{display:flex;gap:.375rem;align-items:center}
+    .lang-pill{background:none;border:1px solid #2a2a35;border-radius:6px;padding:.2rem .55rem;font-size:.7rem;color:#6b7280;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}
+    .lang-pill:hover,.lang-pill.active{border-color:#4f6ef7;color:#4f6ef7}
   </style>
 </head>
 <body class="font-sans antialiased min-h-screen flex flex-col">
@@ -39,15 +42,23 @@
         <svg class="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
-        返回首頁
+        <span data-i18n="back_home">返回首頁</span>
       </a>
-      <span class="text-sm font-semibold text-white tracking-tight">CHIYIGO</span>
+      <div class="flex items-center gap-3">
+        <span class="text-sm font-semibold text-white tracking-tight">CHIYIGO</span>
+        <div class="lang-bar">
+          <button class="lang-pill active" data-lang="zh-TW">繁中</button>
+          <button class="lang-pill" data-lang="en">EN</button>
+          <button class="lang-pill" data-lang="ja">日本語</button>
+          <button class="lang-pill" data-lang="ko">한국어</button>
+        </div>
+      </div>
       <button onclick="logout()"
         class="flex items-center gap-1.5 text-sm text-gray-400 hover:text-red-400 transition-colors">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
         </svg>
-        登出
+        <span data-i18n="logout_header">登出</span>
       </button>
     </div>
   </header>
@@ -59,7 +70,7 @@
       <!-- 載入中 -->
       <div id="loading" class="text-center py-20">
         <div class="inline-block w-8 h-8 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin"></div>
-        <p class="text-gray-600 text-sm mt-3">載入中…</p>
+        <p class="text-gray-600 text-sm mt-3" data-i18n="loading_text">載入中…</p>
       </div>
 
       <!-- 用戶卡片（載入後顯示） -->
@@ -82,19 +93,19 @@
         <!-- 詳細資訊 -->
         <div class="rounded-2xl bg-[#16161d] border border-[#2a2a35] divide-y divide-[#2a2a35] shadow-2xl mb-4">
           <div class="flex items-center justify-between px-5 py-4">
-            <span class="text-sm text-gray-500">電子信箱</span>
+            <span class="text-sm text-gray-500" data-i18n="lbl_email">電子信箱</span>
             <span id="info-email" class="text-sm text-white font-medium">—</span>
           </div>
           <div class="flex items-center justify-between px-5 py-4">
-            <span class="text-sm text-gray-500">Email 驗證</span>
+            <span class="text-sm text-gray-500" data-i18n="lbl_verified">Email 驗證</span>
             <span id="info-verified" class="text-sm font-medium">—</span>
           </div>
           <div class="flex items-center justify-between px-5 py-4">
-            <span class="text-sm text-gray-500">登入方式</span>
+            <span class="text-sm text-gray-500" data-i18n="lbl_providers">登入方式</span>
             <div id="info-providers" class="flex gap-1.5">—</div>
           </div>
           <div class="flex items-center justify-between px-5 py-4">
-            <span class="text-sm text-gray-500">加入時間</span>
+            <span class="text-sm text-gray-500" data-i18n="lbl_created">加入時間</span>
             <span id="info-created" class="text-sm text-gray-300">—</span>
           </div>
         </div>
@@ -107,7 +118,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
               </svg>
               <div>
-                <p class="text-sm font-semibold text-white">雙重驗證（2FA）</p>
+                <p class="text-sm font-semibold text-white" data-i18n="tfa_title">雙重驗證（2FA）</p>
                 <p id="tfa-status-text" class="text-xs text-gray-500 mt-0.5">載入中…</p>
               </div>
             </div>
@@ -118,30 +129,30 @@
           <div class="border-t border-[#2a2a35] px-5 py-3 flex gap-2">
             <button id="tfa-enable-btn" onclick="startSetup2FA()"
               class="hidden px-4 py-2 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
-              啟用 2FA
+              <span data-i18n="tfa_enable_btn">啟用 2FA</span>
             </button>
             <button id="tfa-disable-btn" onclick="showDisablePanel()"
               class="hidden px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
-              停用 2FA
+              <span data-i18n="tfa_disable_btn">停用 2FA</span>
             </button>
           </div>
 
           <!-- Setup 面板（啟用流程）-->
           <div id="tfa-setup-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-4">
-            <p class="text-xs text-gray-400">用 Google Authenticator 或任何 TOTP App 掃描 QR Code，然後輸入 6 位數驗證碼完成啟用。</p>
+            <p class="text-xs text-gray-400" data-i18n="tfa_setup_hint">用 Google Authenticator 或任何 TOTP App 掃描 QR Code，然後輸入 6 位數驗證碼完成啟用。</p>
             <div class="flex flex-col items-center gap-3">
               <canvas id="tfa-qr" class="rounded-xl bg-white p-3"></canvas>
               <div class="text-center">
-                <p class="text-xs text-gray-500 mb-1">或手動輸入金鑰：</p>
+                <p class="text-xs text-gray-500 mb-1" data-i18n="tfa_manual_key">或手動輸入金鑰：</p>
                 <code id="tfa-secret" class="text-xs text-brand-400 bg-brand-500/10 px-2 py-1 rounded select-all break-all"></code>
               </div>
             </div>
             <div class="flex gap-2">
-              <input id="tfa-otp-input" type="text" inputmode="numeric" maxlength="6" placeholder="輸入 6 位數驗證碼"
+              <input id="tfa-otp-input" type="text" inputmode="numeric" maxlength="6" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph"
                 class="flex-1 bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-500/50 tracking-widest text-center" />
               <button onclick="confirmEnable2FA()"
                 class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all">
-                確認啟用
+                <span data-i18n="tfa_confirm_enable">確認啟用</span>
               </button>
             </div>
             <p id="tfa-setup-msg" class="hidden text-xs"></p>
@@ -149,13 +160,13 @@
 
           <!-- Disable 面板（停用流程）-->
           <div id="tfa-disable-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-3">
-            <p class="text-xs text-amber-400">停用後需重新設定才能再次啟用。請輸入 Authenticator App 的驗證碼確認。</p>
+            <p class="text-xs text-amber-400" data-i18n="tfa_disable_warn">停用後需重新設定才能再次啟用。請輸入 Authenticator App 的驗證碼確認。</p>
             <div class="flex gap-2">
-              <input id="tfa-disable-input" type="text" inputmode="numeric" maxlength="6" placeholder="輸入 6 位數驗證碼"
+              <input id="tfa-disable-input" type="text" inputmode="numeric" maxlength="6" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph"
                 class="flex-1 bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/50 tracking-widest text-center" />
               <button onclick="confirmDisable2FA()"
                 class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-all">
-                確認停用
+                <span data-i18n="tfa_confirm_disable">確認停用</span>
               </button>
             </div>
             <p id="tfa-disable-msg" class="hidden text-xs"></p>
@@ -165,12 +176,12 @@
           <div id="tfa-backup-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-3">
             <div class="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 p-3">
               <svg class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
-              <p class="text-xs text-amber-300">請立即抄下這 10 組備用碼，之後<strong>無法再次查看</strong>。每組只能使用一次。</p>
+              <p class="text-xs text-amber-300" data-i18n-html="tfa_backup_warn">請立即抄下這 10 組備用碼，之後<strong>無法再次查看</strong>。每組只能使用一次。</p>
             </div>
             <div id="tfa-backup-codes" class="grid grid-cols-2 gap-1.5"></div>
             <button onclick="closeTfaBackup()"
               class="w-full py-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-400 text-xs font-semibold transition-all">
-              我已抄寫完畢
+              <span data-i18n="tfa_backup_done">我已抄寫完畢</span>
             </button>
           </div>
         </div>
@@ -179,12 +190,12 @@
         <div id="email-banner" class="hidden mb-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-5 py-4">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <p class="text-sm font-medium text-amber-300">Email 尚未驗證</p>
-              <p class="text-xs text-gray-500 mt-0.5">驗證後可使用完整帳號功能</p>
+              <p class="text-sm font-medium text-amber-300" data-i18n="email_unverified">Email 尚未驗證</p>
+              <p class="text-xs text-gray-500 mt-0.5" data-i18n="email_unverified_sub">驗證後可使用完整帳號功能</p>
             </div>
             <button id="resend-btn" onclick="sendVerification()"
               class="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-              重發驗證信
+              <span data-i18n="resend_btn">重發驗證信</span>
             </button>
           </div>
           <p id="resend-msg" class="hidden text-xs mt-2 text-gray-400"></p>
@@ -193,15 +204,15 @@
         <!-- 登出按鈕 -->
         <button onclick="logout()"
           class="w-full py-3 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 font-semibold text-sm transition-all hover:scale-[1.01] active:scale-[0.99]">
-          登出帳號
+          <span data-i18n="logout_btn">登出帳號</span>
         </button>
 
       </div>
 
       <!-- 錯誤畫面 -->
       <div id="error-card" class="hidden text-center py-20">
-        <p class="text-red-400 text-sm mb-4" id="error-msg">載入失敗</p>
-        <a href="/login.html" class="text-brand-500 hover:text-brand-600 text-sm transition-colors">← 重新登入</a>
+        <p class="text-red-400 text-sm mb-4" id="error-msg" data-i18n="load_fail">載入失敗</p>
+        <a href="/login.html" class="text-brand-500 hover:text-brand-600 text-sm transition-colors" data-i18n="relogin_link">← 重新登入</a>
       </div>
 
     </div>
@@ -210,16 +221,158 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
   <script src="/js/auth-ui.js?v=6"></script>
   <script>
+    // ── i18n ──────────────────────────────────────────────
+    const LANGS_D = {
+      'zh-TW': {
+        back_home:'返回首頁', logout_header:'登出', loading_text:'載入中…',
+        lbl_email:'電子信箱', lbl_verified:'Email 驗證', lbl_providers:'登入方式', lbl_created:'加入時間',
+        tfa_title:'雙重驗證（2FA）', tfa_enable_btn:'啟用 2FA', tfa_disable_btn:'停用 2FA',
+        tfa_setup_hint:'用 Google Authenticator 或任何 TOTP App 掃描 QR Code，然後輸入 6 位數驗證碼完成啟用。',
+        tfa_manual_key:'或手動輸入金鑰：', tfa_otp_ph:'輸入 6 位數驗證碼',
+        tfa_confirm_enable:'確認啟用', tfa_confirm_disable:'確認停用',
+        tfa_disable_warn:'停用後需重新設定才能再次啟用。請輸入 Authenticator App 的驗證碼確認。',
+        tfa_backup_warn:'請立即抄下這 10 組備用碼，之後<strong>無法再次查看</strong>。每組只能使用一次。',
+        tfa_backup_done:'我已抄寫完畢',
+        email_unverified:'Email 尚未驗證', email_unverified_sub:'驗證後可使用完整帳號功能',
+        resend_btn:'重發驗證信', logout_btn:'登出帳號',
+        load_fail:'載入失敗', relogin_link:'← 重新登入',
+        role_developer:'開發者', role_admin:'管理員', role_moderator:'版主', role_player:'玩家',
+        provider_local:'密碼登入',
+        status_active:'正常', verified_yes:'已驗證', verified_no:'尚未驗證',
+        tfa_badge_on:'已啟用', tfa_badge_off:'未啟用',
+        tfa_text_on:'帳號已受雙重驗證保護', tfa_text_off:'建議啟用以提升帳號安全性',
+        err_profile:'無法載入帳號資訊，請重新整理或重新登入',
+        btn_loading:'請稍候…', btn_sending:'送出中…',
+        resend_sent:'驗證信已送出，請查收信箱（連結 1 小時內有效）。',
+        resend_wait:'請稍候再試。', resend_fail:'發送失敗，請稍後再試。',
+        net_err:'網路錯誤，請稍後再試。',
+        totp_err6:'請輸入 6 位數驗證碼',
+        setup_fail:'設定失敗', enable_fail:'啟用失敗', disable_fail:'停用失敗',
+        resend_timer_label:'重發（${s}s）',
+      },
+      'en': {
+        back_home:'Back to Home', logout_header:'Log Out', loading_text:'Loading…',
+        lbl_email:'Email', lbl_verified:'Email Verification', lbl_providers:'Login Method', lbl_created:'Joined',
+        tfa_title:'Two-Factor Authentication (2FA)', tfa_enable_btn:'Enable 2FA', tfa_disable_btn:'Disable 2FA',
+        tfa_setup_hint:'Scan the QR Code with Google Authenticator or any TOTP app, then enter the 6-digit code to complete setup.',
+        tfa_manual_key:'Or enter key manually:', tfa_otp_ph:'Enter 6-digit code',
+        tfa_confirm_enable:'Confirm Enable', tfa_confirm_disable:'Confirm Disable',
+        tfa_disable_warn:'After disabling, you must set it up again to re-enable. Enter your authenticator code to confirm.',
+        tfa_backup_warn:'Please copy these 10 backup codes now. They <strong>cannot be viewed again</strong>. Each code can only be used once.',
+        tfa_backup_done:'I have saved my codes',
+        email_unverified:'Email Not Verified', email_unverified_sub:'Verify to unlock full account features',
+        resend_btn:'Resend Verification', logout_btn:'Log Out',
+        load_fail:'Failed to load', relogin_link:'← Back to Login',
+        role_developer:'Developer', role_admin:'Admin', role_moderator:'Moderator', role_player:'Player',
+        provider_local:'Password',
+        status_active:'Active', verified_yes:'Verified', verified_no:'Not Verified',
+        tfa_badge_on:'Enabled', tfa_badge_off:'Disabled',
+        tfa_text_on:'Account is protected by 2FA', tfa_text_off:'We recommend enabling 2FA for better security',
+        err_profile:'Unable to load account info. Please refresh or log in again.',
+        btn_loading:'Please wait…', btn_sending:'Sending…',
+        resend_sent:'Verification email sent. Check your inbox (valid for 1 hour).',
+        resend_wait:'Please wait before trying again.', resend_fail:'Send failed, please try again later.',
+        net_err:'Network error, please try again later.',
+        totp_err6:'Please enter a 6-digit code',
+        setup_fail:'Setup failed', enable_fail:'Enable failed', disable_fail:'Disable failed',
+        resend_timer_label:'Resend (${s}s)',
+      },
+      'ja': {
+        back_home:'ホームに戻る', logout_header:'ログアウト', loading_text:'読み込み中…',
+        lbl_email:'メールアドレス', lbl_verified:'Email 認証', lbl_providers:'ログイン方法', lbl_created:'登録日',
+        tfa_title:'二段階認証（2FA）', tfa_enable_btn:'2FAを有効化', tfa_disable_btn:'2FAを無効化',
+        tfa_setup_hint:'Google Authenticatorまたは任意のTOTPアプリでQRコードをスキャンし、6桁のコードを入力して完了してください。',
+        tfa_manual_key:'または手動でキーを入力：', tfa_otp_ph:'6桁のコードを入力',
+        tfa_confirm_enable:'有効化を確認', tfa_confirm_disable:'無効化を確認',
+        tfa_disable_warn:'無効化後は再設定が必要です。確認のためにAuthenticatorコードを入力してください。',
+        tfa_backup_warn:'今すぐこの10組のバックアップコードをメモしてください。<strong>再表示はできません</strong>。各コードは1回のみ使用可能です。',
+        tfa_backup_done:'保存しました',
+        email_unverified:'メール未認証', email_unverified_sub:'認証するとすべての機能が使えます',
+        resend_btn:'認証メール再送', logout_btn:'ログアウト',
+        load_fail:'読み込み失敗', relogin_link:'← ログインに戻る',
+        role_developer:'開発者', role_admin:'管理者', role_moderator:'モデレーター', role_player:'プレイヤー',
+        provider_local:'パスワードログイン',
+        status_active:'正常', verified_yes:'認証済み', verified_no:'未認証',
+        tfa_badge_on:'有効', tfa_badge_off:'無効',
+        tfa_text_on:'2FAでアカウントが保護されています', tfa_text_off:'セキュリティ向上のため2FAの有効化を推奨します',
+        err_profile:'アカウント情報を読み込めませんでした。リロードまたは再ログインしてください。',
+        btn_loading:'お待ちください…', btn_sending:'送信中…',
+        resend_sent:'認証メールを送信しました。受信トレイをご確認ください（有効期限1時間）。',
+        resend_wait:'しばらく後でお試しください。', resend_fail:'送信に失敗しました。後でお試しください。',
+        net_err:'ネットワークエラーが発生しました。後でお試しください。',
+        totp_err6:'6桁のコードを入力してください',
+        setup_fail:'設定に失敗しました', enable_fail:'有効化に失敗しました', disable_fail:'無効化に失敗しました',
+        resend_timer_label:'再送（${s}s）',
+      },
+      'ko': {
+        back_home:'홈으로 돌아가기', logout_header:'로그아웃', loading_text:'로딩 중…',
+        lbl_email:'이메일', lbl_verified:'이메일 인증', lbl_providers:'로그인 방법', lbl_created:'가입일',
+        tfa_title:'이중 인증（2FA）', tfa_enable_btn:'2FA 활성화', tfa_disable_btn:'2FA 비활성화',
+        tfa_setup_hint:'Google Authenticator 또는 TOTP 앱으로 QR 코드를 스캔한 후, 6자리 코드를 입력하여 설정을 완료하세요.',
+        tfa_manual_key:'또는 키를 직접 입력:', tfa_otp_ph:'6자리 코드 입력',
+        tfa_confirm_enable:'활성화 확인', tfa_confirm_disable:'비활성화 확인',
+        tfa_disable_warn:'비활성화 후 다시 설정해야 재활성화할 수 있습니다. 인증 코드를 입력하여 확인하세요.',
+        tfa_backup_warn:'지금 바로 이 10개의 백업 코드를 기록해 두세요. <strong>다시 볼 수 없습니다</strong>. 각 코드는 한 번만 사용 가능합니다.',
+        tfa_backup_done:'저장 완료',
+        email_unverified:'이메일 미인증', email_unverified_sub:'인증 후 모든 기능을 사용할 수 있습니다',
+        resend_btn:'인증 메일 재발송', logout_btn:'로그아웃',
+        load_fail:'로드 실패', relogin_link:'← 다시 로그인',
+        role_developer:'개발자', role_admin:'관리자', role_moderator:'모더레이터', role_player:'플레이어',
+        provider_local:'비밀번호 로그인',
+        status_active:'정상', verified_yes:'인증됨', verified_no:'미인증',
+        tfa_badge_on:'활성화됨', tfa_badge_off:'비활성화됨',
+        tfa_text_on:'계정이 2FA로 보호되고 있습니다', tfa_text_off:'보안 강화를 위해 2FA 활성화를 권장합니다',
+        err_profile:'계정 정보를 불러올 수 없습니다. 새로고침하거나 다시 로그인해 주세요.',
+        btn_loading:'잠시만요…', btn_sending:'전송 중…',
+        resend_sent:'인증 메일이 전송되었습니다. 받은 편지함을 확인하세요（1시간 유효）。',
+        resend_wait:'잠시 후 다시 시도해 주세요.', resend_fail:'전송 실패. 나중에 다시 시도해 주세요.',
+        net_err:'네트워크 오류. 나중에 다시 시도해 주세요.',
+        totp_err6:'6자리 코드를 입력해 주세요',
+        setup_fail:'설정 실패', enable_fail:'활성화 실패', disable_fail:'비활성화 실패',
+        resend_timer_label:'재발송（${s}s）',
+      },
+    };
+
+    let curLangD = localStorage.getItem('lang') || 'zh-TW';
+    function T(key) { return (LANGS_D[curLangD] || LANGS_D['zh-TW'])[key] ?? (LANGS_D['zh-TW'][key] ?? key); }
+
+    function applyLangD(lang) {
+      curLangD = lang;
+      localStorage.setItem('lang', lang);
+      const t = LANGS_D[lang] || LANGS_D['zh-TW'];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k];
+      });
+      document.querySelectorAll('[data-i18n-html]').forEach(el => {
+        const k = el.dataset.i18nHtml; if (t[k] !== undefined) el.innerHTML = t[k];
+      });
+      document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+        const k = el.dataset.i18nPh; if (t[k] !== undefined) el.placeholder = t[k];
+      });
+      document.querySelectorAll('.lang-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lang === lang);
+      });
+      // re-render any already-rendered dynamic UI
+      const tfaBadge = document.getElementById('tfa-badge');
+      const tfaText  = document.getElementById('tfa-status-text');
+      if (tfaBadge && tfaBadge.dataset.tfaState) {
+        const on = tfaBadge.dataset.tfaState === 'on';
+        tfaBadge.textContent = on ? T('tfa_badge_on') : T('tfa_badge_off');
+        if (tfaText) tfaText.textContent = on ? T('tfa_text_on') : T('tfa_text_off');
+      }
+    }
+
+    // lang switcher
+    document.querySelectorAll('.lang-pill').forEach(btn => {
+      btn.addEventListener('click', () => applyLangD(btn.dataset.lang));
+    });
+    applyLangD(curLangD);
+
     const ROLE_STYLE = {
       developer: 'bg-purple-500/15 text-purple-300 border border-purple-500/20',
       admin:     'bg-red-500/15 text-red-300 border border-red-500/20',
       moderator: 'bg-amber-500/15 text-amber-300 border border-amber-500/20',
       player:    'bg-brand-500/15 text-brand-300 border border-brand-500/20',
-    };
-    const ROLE_LABEL = { developer: '開發者', admin: '管理員', moderator: '版主', player: '玩家' };
-    const PROVIDER_ICON = {
-      discord: `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[#5865F2]/15 text-[#5865F2] border border-[#5865F2]/20">Discord</span>`,
-      local:   `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-500/15 text-gray-300 border border-gray-500/20">密碼登入</span>`,
     };
 
     function formatDate(str) {
@@ -265,25 +418,30 @@
         document.getElementById('info-created').textContent = formatDate(data.created_at);
 
         const roleBadge = document.getElementById('role-badge');
-        roleBadge.textContent = ROLE_LABEL[data.role] ?? data.role;
+        roleBadge.textContent = T('role_' + data.role) || data.role;
         roleBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold ' + (ROLE_STYLE[data.role] ?? ROLE_STYLE.player);
 
         const statusBadge = document.getElementById('status-badge');
-        statusBadge.textContent = data.status === 'active' ? '正常' : data.status;
+        statusBadge.textContent = data.status === 'active' ? T('status_active') : data.status;
         statusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold ' +
           (data.status === 'active'
             ? 'bg-green-500/15 text-green-300 border border-green-500/20'
             : 'bg-red-500/15 text-red-300 border border-red-500/20');
 
         const verifiedEl = document.getElementById('info-verified');
-        verifiedEl.textContent = data.email_verified ? '已驗證' : '尚未驗證';
+        verifiedEl.textContent = data.email_verified ? T('verified_yes') : T('verified_no');
         verifiedEl.className   = 'text-sm font-medium ' + (data.email_verified ? 'text-green-400' : 'text-amber-400');
 
         document.getElementById('email-banner').classList.toggle('hidden', !!data.email_verified);
 
         const providersEl = document.getElementById('info-providers');
-        const icons = (data.identities ?? []).map(i => PROVIDER_ICON[i.provider] ?? `<span class="text-xs text-gray-500">${i.provider}</span>`);
-        if (icons.length === 0) icons.push(PROVIDER_ICON.local);
+        const PROVIDER_ICON_FN = (p) => p === 'discord'
+          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[#5865F2]/15 text-[#5865F2] border border-[#5865F2]/20">Discord</span>`
+          : p === 'local'
+          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-500/15 text-gray-300 border border-gray-500/20">${T('provider_local')}</span>`
+          : `<span class="text-xs text-gray-500">${p}</span>`;
+        const icons = (data.identities ?? []).map(i => PROVIDER_ICON_FN(i.provider));
+        if (icons.length === 0) icons.push(PROVIDER_ICON_FN('local'));
         providersEl.innerHTML = icons.join('');
 
         // 2FA 區塊
@@ -295,7 +453,7 @@
       } catch {
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('error-card').classList.remove('hidden');
-        document.getElementById('error-msg').textContent = '無法載入帳號資訊，請重新整理或重新登入';
+        document.getElementById('error-msg').textContent = T('err_profile');
       }
     }
 
@@ -307,16 +465,17 @@
       document.getElementById('tfa-section').classList.remove('hidden');
       const badge = document.getElementById('tfa-badge');
       const text  = document.getElementById('tfa-status-text');
+      badge.dataset.tfaState = enabled ? 'on' : 'off';
       if (enabled) {
-        badge.textContent  = '已啟用';
+        badge.textContent  = T('tfa_badge_on');
         badge.className    = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-green-500/15 text-green-300 border border-green-500/20';
-        text.textContent   = '帳號已受雙重驗證保護';
+        text.textContent   = T('tfa_text_on');
         document.getElementById('tfa-enable-btn').classList.add('hidden');
         document.getElementById('tfa-disable-btn').classList.remove('hidden');
       } else {
-        badge.textContent  = '未啟用';
+        badge.textContent  = T('tfa_badge_off');
         badge.className    = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-500/15 text-gray-400 border border-gray-500/20';
-        text.textContent   = '建議啟用以提升帳號安全性';
+        text.textContent   = T('tfa_text_off');
         document.getElementById('tfa-enable-btn').classList.remove('hidden');
         document.getElementById('tfa-disable-btn').classList.add('hidden');
       }
@@ -328,32 +487,32 @@
     async function startSetup2FA() {
       const token = sessionStorage.getItem('access_token');
       const btn   = document.getElementById('tfa-enable-btn');
-      btn.disabled = true; btn.textContent = '請稍候…';
+      btn.disabled = true; btn.querySelector('[data-i18n]').textContent = T('btn_loading');
       try {
         const res  = await fetch('/api/auth/2fa/setup', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
         const data = await res.json();
-        if (!res.ok) { alert(data.error ?? '設定失敗'); btn.disabled = false; btn.textContent = '啟用 2FA'; return; }
+        if (!res.ok) { alert(data.error ?? T('setup_fail')); btn.disabled = false; btn.querySelector('[data-i18n]').textContent = T('tfa_enable_btn'); return; }
         document.getElementById('tfa-secret').textContent = data.secret;
         await QRCode.toCanvas(document.getElementById('tfa-qr'), data.otpauth_uri, { width: 180, margin: 1 });
         document.getElementById('tfa-setup-panel').classList.remove('hidden');
         document.getElementById('tfa-otp-input').value = '';
         document.getElementById('tfa-setup-msg').classList.add('hidden');
-      } catch { alert('網路錯誤，請稍後再試'); }
-      btn.disabled = false; btn.textContent = '啟用 2FA';
+      } catch { alert(T('net_err')); }
+      btn.disabled = false; btn.querySelector('[data-i18n]').textContent = T('tfa_enable_btn');
     }
 
     async function confirmEnable2FA() {
       const token = sessionStorage.getItem('access_token');
       const otp   = document.getElementById('tfa-otp-input').value.trim();
       const msg   = document.getElementById('tfa-setup-msg');
-      if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, '請輸入 6 位數驗證碼', 'err'); return; }
+      if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); return; }
       try {
         const res  = await fetch('/api/auth/2fa/activate', {
           method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
           body: JSON.stringify({ otp_code: otp }),
         });
         const data = await res.json();
-        if (!res.ok) { showTfaMsg(msg, data.error ?? '啟用失敗', 'err'); return; }
+        if (!res.ok) { showTfaMsg(msg, data.error ?? T('enable_fail'), 'err'); return; }
         // 顯示備用碼
         const codesEl = document.getElementById('tfa-backup-codes');
         codesEl.innerHTML = data.backup_codes.map(c =>
@@ -362,7 +521,7 @@
         document.getElementById('tfa-setup-panel').classList.add('hidden');
         document.getElementById('tfa-backup-panel').classList.remove('hidden');
         render2FASection(true);
-      } catch { showTfaMsg(msg, '網路錯誤，請稍後再試', 'err'); }
+      } catch { showTfaMsg(msg, T('net_err'), 'err'); }
     }
 
     function closeTfaBackup() {
@@ -380,16 +539,16 @@
       const token = sessionStorage.getItem('access_token');
       const otp   = document.getElementById('tfa-disable-input').value.trim();
       const msg   = document.getElementById('tfa-disable-msg');
-      if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, '請輸入 6 位數驗證碼', 'err'); return; }
+      if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); return; }
       try {
         const res  = await fetch('/api/auth/2fa/disable', {
           method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
           body: JSON.stringify({ otp_code: otp }),
         });
         const data = await res.json();
-        if (!res.ok) { showTfaMsg(msg, data.error ?? '停用失敗', 'err'); return; }
+        if (!res.ok) { showTfaMsg(msg, data.error ?? T('disable_fail'), 'err'); return; }
         render2FASection(false);
-      } catch { showTfaMsg(msg, '網路錯誤，請稍後再試', 'err'); }
+      } catch { showTfaMsg(msg, T('net_err'), 'err'); }
     }
 
     function showTfaMsg(el, text, type) {
@@ -404,7 +563,7 @@
       if (!token) { window.location.href = '/login.html'; return; }
 
       btn.disabled = true;
-      btn.textContent = '送出中…';
+      btn.querySelector('[data-i18n]').textContent = T('btn_sending');
       msg.className = 'hidden text-xs mt-2';
 
       try {
@@ -415,7 +574,7 @@
         const data = await res.json().catch(() => ({}));
 
         if (res.ok) {
-          showResendMsg('驗證信已送出，請查收信箱（連結 1 小時內有效）。', 'ok');
+          showResendMsg(T('resend_sent'), 'ok');
           startResendCooldown(60);
           return;
         }
@@ -426,17 +585,17 @@
         }
         if (res.status === 429) {
           const wait = data.retry_after ?? 60;
-          showResendMsg(`請稍候再試。`, 'warn');
+          showResendMsg(T('resend_wait'), 'warn');
           startResendCooldown(wait);
           return;
         }
-        showResendMsg(data.error ?? '發送失敗，請稍後再試。', 'err');
+        showResendMsg(data.error ?? T('resend_fail'), 'err');
         btn.disabled = false;
-        btn.textContent = '重發驗證信';
+        btn.querySelector('[data-i18n]').textContent = T('resend_btn');
       } catch {
-        showResendMsg('網路錯誤，請稍後再試。', 'err');
+        showResendMsg(T('net_err'), 'err');
         btn.disabled = false;
-        btn.textContent = '重發驗證信';
+        btn.querySelector('[data-i18n]').textContent = T('resend_btn');
       }
     }
 
@@ -448,17 +607,18 @@
 
     function startResendCooldown(seconds) {
       const btn = document.getElementById('resend-btn');
+      const span = btn.querySelector('[data-i18n]');
       let remaining = seconds;
       btn.disabled = true;
-      btn.textContent = `重發（${remaining}s）`;
+      span.textContent = T('resend_timer_label').replace('${s}', remaining);
       const iv = setInterval(() => {
         remaining--;
         if (remaining <= 0) {
           clearInterval(iv);
           btn.disabled = false;
-          btn.textContent = '重發驗證信';
+          span.textContent = T('resend_btn');
         } else {
-          btn.textContent = `重發（${remaining}s）`;
+          span.textContent = T('resend_timer_label').replace('${s}', remaining);
         }
       }, 1000);
     }
