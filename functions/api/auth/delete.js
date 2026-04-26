@@ -21,6 +21,7 @@ export async function onRequestPost({ request, env }) {
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
   const { password } = body ?? {}
+  if (!password) return res({ error: 'password is required' }, 400)
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
@@ -39,7 +40,9 @@ export async function onRequestPost({ request, env }) {
       return res({ error: 'Too many requests. Please try again later.' }, 429)
   }
 
-  // ── 3. 帳號狀態 + 是否設過密碼 ───────────────────────────────
+  // ── 3. 驗證密碼 & 帳號狀態 ───────────────────────────────────
+  // OAuth-only 帳號（無密碼）必須先在 dashboard 走「設定登入密碼」流程，
+  // 才能執行刪帳等敏感操作 — 維持全站授權模型一致。
   const [account, userRow] = await Promise.all([
     db.prepare('SELECT password_hash, password_salt FROM local_accounts WHERE user_id = ?')
       .bind(userId).first(),
@@ -47,17 +50,11 @@ export async function onRequestPost({ request, env }) {
       .bind(userId).first(),
   ])
 
-  if (!userRow || userRow.deleted_at)
+  if (!account || !userRow || userRow.deleted_at)
     return res({ error: 'Account not found' }, 404)
 
-  // 有密碼 → 必須驗密碼；OAuth-only（無 local_accounts 或 password_hash 為 null）→ 跳過密碼，
-  // 由「已驗證 Email + 信件確認連結」雙因子完成授權。
-  const hasPassword = !!(account && account.password_hash)
-  if (hasPassword) {
-    if (!password) return res({ error: 'password is required' }, 400)
-    const valid = await verifyPassword(password, account.password_salt, account.password_hash)
-    if (!valid) return res({ error: 'Incorrect password' }, 401)
-  }
+  const valid = await verifyPassword(password, account.password_salt, account.password_hash)
+  if (!valid) return res({ error: 'Incorrect password' }, 401)
 
   // ── 4. 60 秒冷卻（防止重複請求發信）────────────────────────
   const recent = await db

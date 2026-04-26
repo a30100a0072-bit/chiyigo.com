@@ -263,6 +263,21 @@
           <div id="bind-list" class="divide-y divide-[#2a2a35]"></div>
         </div>
 
+        <!-- 設定登入密碼（OAuth-only 帳號）-->
+        <div id="setpw-section" class="hidden rounded-2xl bg-[#16161d] border border-amber-500/20 shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-amber-500/15">
+            <p class="text-sm font-semibold text-amber-300">設定登入密碼</p>
+            <p class="text-xs text-gray-500 mt-0.5">你目前透過第三方帳號登入。設定密碼後，將擁有後備登入方式，並可執行刪帳等敏感操作。</p>
+          </div>
+          <div class="px-5 py-4">
+            <button id="setpw-btn" onclick="sendSetPasswordEmail()"
+              class="w-full py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <span>寄送設定密碼信</span>
+            </button>
+            <p id="setpw-msg" class="hidden text-xs mt-3"></p>
+          </div>
+        </div>
+
         <!-- Email 未驗證提示 -->
         <div id="email-banner" class="hidden mb-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-5 py-4">
           <div class="flex items-center justify-between gap-4">
@@ -292,17 +307,18 @@
           </div>
           <div class="px-5 py-4">
             <div id="del-stage1" class="space-y-3">
-              <button onclick="showDeleteForm()"
-                class="w-full py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-semibold text-sm transition-all">
-                <span data-i18n="del_open_btn">我要刪除帳號</span>
+              <button id="del-open-btn" onclick="showDeleteForm()"
+                class="w-full py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <span id="del-open-label">我要刪除帳號</span>
               </button>
+              <p id="del-need-pw" class="hidden text-xs text-amber-400">請先到上方「設定登入密碼」完成密碼設定，才能刪除帳號。</p>
             </div>
             <div id="del-stage2" class="hidden space-y-3">
-              <p id="del-warn-text" class="text-xs text-gray-400 leading-relaxed">
+              <p class="text-xs text-gray-400 leading-relaxed">
                 為防誤刪，請輸入登入密碼確認。送出後會寄送一封確認信到你的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。
               </p>
               <input id="del-password" type="password" autocomplete="current-password"
-                placeholder="登入密碼" data-i18n-ph="del_pass_ph"
+                placeholder="登入密碼"
                 class="w-full px-4 py-2.5 rounded-xl bg-[#0f0f14] border border-red-500/20 focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
               <p id="del-msg" class="hidden text-xs"></p>
               <div class="flex gap-2">
@@ -634,8 +650,11 @@
         // 帳號綁定區塊
         renderBindingSection(data.identities ?? []);
 
-        // 刪除帳號：依是否設過密碼決定 UI
+        // 設密碼 / 刪帳號：依是否設過密碼決定 UI
         window.__hasPassword = !!data.has_password;
+        window.__userEmail   = data.email;
+        renderSetPasswordSection(window.__hasPassword);
+        renderDeleteSection(window.__hasPassword);
 
         // 需求單區塊
         loadRequisitions();
@@ -1067,20 +1086,66 @@
       });
     })();
 
+    // ── 設定登入密碼（OAuth-only）────────────────────────────
+    function renderSetPasswordSection(hasPw) {
+      const sec = document.getElementById('setpw-section');
+      if (!sec) return;
+      sec.classList.toggle('hidden', !!hasPw);
+    }
+    async function sendSetPasswordEmail() {
+      const btn = document.getElementById('setpw-btn');
+      const msg = document.getElementById('setpw-msg');
+      msg.classList.add('hidden');
+      msg.textContent = '';
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/auth/local/forgot-password', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ email: window.__userEmail }),
+        });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          msg.textContent = d.error || '寄送失敗，請稍後再試';
+          msg.className = 'text-xs text-red-400';
+          msg.classList.remove('hidden');
+          btn.disabled = false;
+          return;
+        }
+        msg.innerHTML = '✓ 設定密碼信已寄出，請至 <strong>' + esc(window.__userEmail) + '</strong> 點擊連結完成設定（連結有效 1 小時）。設定完成後請重新整理本頁。';
+        msg.className = 'text-xs text-emerald-400';
+        msg.classList.remove('hidden');
+        // 60 秒冷卻保護
+        setTimeout(() => { btn.disabled = false; }, 60000);
+      } catch (e) {
+        msg.textContent = '網路錯誤，請稍後再試';
+        msg.className = 'text-xs text-red-400';
+        msg.classList.remove('hidden');
+        btn.disabled = false;
+      }
+    }
+
     // ── 刪除帳號 ─────────────────────────────────────────────
+    function renderDeleteSection(hasPw) {
+      const btn   = document.getElementById('del-open-btn');
+      const label = document.getElementById('del-open-label');
+      const hint  = document.getElementById('del-need-pw');
+      if (!btn) return;
+      if (hasPw) {
+        btn.disabled = false;
+        label.textContent = '我要刪除帳號';
+        hint.classList.add('hidden');
+      } else {
+        btn.disabled = true;
+        label.textContent = '需先設定登入密碼';
+        hint.classList.remove('hidden');
+      }
+    }
     function showDeleteForm() {
+      if (!window.__hasPassword) return;
       document.getElementById('del-stage1').classList.add('hidden');
       document.getElementById('del-stage2').classList.remove('hidden');
-      const pwField = document.getElementById('del-password');
-      const warnEl  = document.getElementById('del-warn-text');
-      if (window.__hasPassword) {
-        pwField.classList.remove('hidden');
-        if (warnEl) warnEl.textContent = '為防誤刪，請輸入登入密碼確認。送出後會寄送一封確認信到你的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。';
-        pwField.focus();
-      } else {
-        pwField.classList.add('hidden');
-        if (warnEl) warnEl.textContent = '你尚未設定登入密碼（OAuth 帳號）。送出後會寄送一封確認信到你綁定的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。';
-      }
+      document.getElementById('del-password').focus();
     }
     function hideDeleteForm() {
       document.getElementById('del-stage2').classList.add('hidden');
@@ -1096,7 +1161,7 @@
       const btn  = document.getElementById('del-submit-btn');
       msg.classList.add('hidden');
       msg.textContent = '';
-      if (window.__hasPassword && !pw) {
+      if (!pw) {
         msg.textContent = '請輸入密碼';
         msg.className = 'text-xs text-red-400';
         msg.classList.remove('hidden');
@@ -1104,12 +1169,11 @@
       }
       btn.disabled = true;
       try {
-        const tk   = sessionStorage.getItem('access_token');
-        const body = window.__hasPassword ? { password: pw } : {};
-        const r    = await fetch('/api/auth/delete', {
+        const tk = sessionStorage.getItem('access_token');
+        const r  = await fetch('/api/auth/delete', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tk },
-          body:    JSON.stringify(body),
+          body:    JSON.stringify({ password: pw }),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
