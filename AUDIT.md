@@ -563,8 +563,18 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
     - 2 頁 logout 功能：dashboard（line 109 onclick="logout()"）/ admin-requisitions（line 41 logout-btn → POST /api/auth/logout + sessionStorage.clear）— 皆驗 OK
     - admin-requisitions：管理後台、設計鎖死暗色 + zh-TW，免巡檢（low priority）
     - **3 頁缺 i18n / theme toggle（已知 gap，non-blocker，列入 backlog）**：bind-email / verify-email / confirm-delete — 皆為 email 連結觸發的一次性流程頁，預設暗色顯示，使用者僅在點 email link 時短暫經過。下次新功能順便補。
-- [x] 步驟 6：requisition + IP 限流 ✅ 完成（2026-04-26）— 詳見下方
-- [x] 步驟 7：Pages logs + Console 巡檢 ✅ 完成（2026-04-26）— 詳見下方
+- [x] 步驟 6：requisition + IP 限流 ✅ 完成（2026-04-26）
+  - `functions/api/requisition.js`：三層限流確認 OK（登入用戶 10/日、訪客全域 5/日、每 IP 3/日）— `source_ip` 欄位 (migration 0006)、UTC+8 day window、`deleted_at IS NULL` 排除已撤銷單
+  - 順手修：檔頭 doc-comment 寫「每位用戶每日最多 3 單」與實際 10/IP 3 不符 → 改為三層限流描述
+  - Telegram 訊息 `escapeTgHtml` 對使用者輸入做 `&<>` escape（M8 已修，重點驗 OK）
+  - contact 驗證：email / `09\d{8}` 手機 / LINE ID 三選一；message ≤ 2000 字
+  - DB 寫入用 `last_row_id` 取得 reqId；TG 失敗不阻塞請求（fire-and-forget after INSERT）
+- [x] 步驟 7：Pages logs + Console 巡檢 ✅ 完成（2026-04-26）
+  - 全域掃 `console.log/debug/warn`：functions/ 僅剩 `redirect/line.js:22` 1 處（Placeholder observability log，意圖保留供 Pages logs 觀察 LINE 點擊事件）；public/*.html 0 處
+  - `console.error` 殘留檢視：均為合理錯誤路徑（catch block 寫入），無使用者輸入或敏感欄位 leak
+  - `public/_headers` 檢查：HSTS / X-Content-Type-Options / X-Frame-Options=DENY / Referrer-Policy / Permissions-Policy / CSP 均到位（M5）
+  - CSP 白名單：tailwindcss / jsdelivr / cloudflareinsights / Google Fonts，含 `'unsafe-inline'` 'unsafe-eval'`（過渡態，inline script 多）
+  - Cloudflare Pages 線上 logs 與 browser console 巡檢屬部署後人工驗收動作，待下次部署觸發後使用者於 dashboard 觀察即可
 
 **待跟進的設計問題（非 blocker）**：
 - dashboard 對 401 沒有自動 refresh access_token retry 機制（token 一過期所有按鈕都報失敗）→ 排入 backlog

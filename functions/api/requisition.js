@@ -2,9 +2,9 @@
  * POST /api/requisition
  * Header: Authorization: Bearer <access_token>
  *
- * 提交接案需求單（需登入）。
- * 限流：每位用戶每日 (UTC+8) 最多 3 單。
- * 流程：驗 JWT → 限流檢查 → INSERT → 發 TG → UPDATE tg_message_id
+ * 提交接案需求單（登入選填，訪客可送）。
+ * 限流（UTC+8）：登入用戶 10 單/日、訪客 5 單/日（全域）、每 IP 3 單/日。
+ * 流程：驗 JWT（選填）→ 主限流 → IP 限流 → INSERT → 發 TG → UPDATE tg_message_id
  */
 
 import { requireAuth, res } from '../utils/auth.js'
