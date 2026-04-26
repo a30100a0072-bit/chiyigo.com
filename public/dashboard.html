@@ -821,7 +821,11 @@
       const btn   = document.getElementById('tfa-enable-btn');
       btn.disabled = true; btn.querySelector('[data-i18n]').textContent = T('btn_loading');
       try {
-        const res  = await fetch('/api/auth/2fa/setup', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+        const res  = await fetch('/api/auth/2fa/setup', {
+          method:  'POST',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body:    '{}',
+        });
         const data = await res.json();
         if (!res.ok) { alert(data.error ?? T('setup_fail')); btn.disabled = false; btn.querySelector('[data-i18n]').textContent = T('tfa_enable_btn'); return; }
         document.getElementById('tfa-secret').textContent = data.secret;
@@ -901,7 +905,11 @@
       try {
         const res  = await fetch('/api/auth/email/send-verification', {
           method:  'POST',
-          headers: { 'Authorization': 'Bearer ' + token },
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type':  'application/json',
+          },
+          body: '{}',
         });
         const data = await res.json().catch(() => ({}));
 
