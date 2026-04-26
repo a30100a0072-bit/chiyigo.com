@@ -346,6 +346,49 @@
     </div>
   </main>
 
+  <!-- Footer：與 index.html 一致 -->
+  <footer class="border-t border-[#1f1f28] mt-12">
+    <div class="max-w-5xl mx-auto px-6 py-10 grid gap-8 md:grid-cols-[1.4fr_1fr_1fr] text-sm">
+      <div>
+        <img src="/images/logo-light.png" alt="chiyigo" class="h-7 mb-3 logo-light">
+        <img src="/images/logo-dark.png"  alt="chiyigo" class="h-7 mb-3 logo-dark hidden">
+        <p class="text-gray-500 text-xs leading-relaxed" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+      </div>
+      <div>
+        <p class="text-[0.66rem] uppercase tracking-widest text-gray-500 mb-2" data-i18n="footer_contact_title">聯絡我們</p>
+        <div class="flex flex-col gap-2 text-xs text-gray-400">
+          <a href="tel:0900542992" class="hover:text-gray-200 transition-colors flex items-center gap-2">
+            <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 2.5H3.2C2.5 2.5 2 3 2 3.7c0 5.4 4.4 9.8 9.8 9.8.7 0 1.2-.5 1.2-1.2V10l-2.5-1L9 10.5C7.5 9.7 6.3 8.5 5.5 7L7 5.5 6 3z"/></svg>
+            0900-542-992
+          </a>
+          <a href="https://line.me/ti/p/~chiyigo" target="_blank" rel="noopener" class="hover:text-gray-200 transition-colors flex items-center gap-2">
+            <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><path d="M8 4.5C5.5 4.5 3.5 6 3.5 7.8c0 1.6 1.5 2.9 3.5 3.1l.5.9.5-.9c2-.2 3.5-1.5 3.5-3.1C11.5 6 9.5 4.5 8 4.5z"/></svg>
+            LINE: chiyigo
+          </a>
+          <a href="mailto:chiyigo20201208@gmail.com" class="hover:text-gray-200 transition-colors flex items-center gap-2">
+            <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><path d="M1 5.5l7 4 7-4"/></svg>
+            chiyigo20201208@gmail.com
+          </a>
+        </div>
+      </div>
+      <nav class="flex flex-col gap-2 text-xs text-gray-400">
+        <a href="/" class="hover:text-gray-200 transition-colors" data-i18n="nav_home">首頁</a>
+        <a href="/portfolio.html" class="hover:text-gray-200 transition-colors" data-i18n="nav_portfolio">案例作品</a>
+        <a href="/about.html" class="hover:text-gray-200 transition-colors" data-i18n="nav_about">關於我們</a>
+        <a href="/requisition.html" class="hover:text-gray-200 transition-colors" data-i18n="nav_contact">接案諮詢</a>
+      </nav>
+    </div>
+    <p class="text-center text-[0.7rem] text-gray-600 pb-6">© 2026 CHIYIGO. All rights reserved.</p>
+  </footer>
+
+  <!-- 亮模式 logo 切換（與 index.html 同邏輯） -->
+  <style>
+    .theme-light .logo-light { display: block !important; }
+    .theme-light .logo-dark  { display: none  !important; }
+    .theme-dark  .logo-light { display: none  !important; }
+    .theme-dark  .logo-dark  { display: block !important; }
+  </style>
+
   <!-- Toast 通知（綁定/解綁結果） -->
   <div id="bind-toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl whitespace-nowrap pointer-events-none transition-opacity duration-300"></div>
 
@@ -412,6 +455,9 @@
         del_err_send:'寄信失敗，請稍後再試',
         del_err_unauth:'登入狀態已失效，請重新登入',
         del_err_generic:'送出失敗（${status}），請稍後再試',
+        footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',
+        footer_contact_title:'聯絡我們',
+        nav_home:'首頁', nav_portfolio:'案例作品', nav_about:'關於我們', nav_contact:'接案諮詢',
       },
       'en': {
         back_home:'Back to Home', logout_header:'Log Out', loading_text:'Loading…',
@@ -471,6 +517,9 @@
         del_err_send:'Failed to send email, please try again later',
         del_err_unauth:'Session expired, please log in again',
         del_err_generic:'Submission failed (${status}), please try again later',
+        footer_tagline:'We don\'t just build pretty interfaces — we turn your requirements into systems that actually work.',
+        footer_contact_title:'Contact Us',
+        nav_home:'Home', nav_portfolio:'Portfolio', nav_about:'About', nav_contact:'Get a Quote',
       },
       'ja': {
         back_home:'ホームに戻る', logout_header:'ログアウト', loading_text:'読み込み中…',
@@ -530,6 +579,9 @@
         del_err_send:'メール送信に失敗しました。後でお試しください',
         del_err_unauth:'セッションが切れました。再ログインしてください',
         del_err_generic:'送信に失敗しました（${status}）。後でお試しください',
+        footer_tagline:'見た目だけのサイトではなく、本当に使えるシステムを形にします。',
+        footer_contact_title:'お問い合わせ',
+        nav_home:'ホーム', nav_portfolio:'実績', nav_about:'私たちについて', nav_contact:'お見積り',
       },
       'ko': {
         back_home:'홈으로 돌아가기', logout_header:'로그아웃', loading_text:'로딩 중…',
@@ -589,6 +641,9 @@
         del_err_send:'메일 발송 실패. 나중에 다시 시도해 주세요',
         del_err_unauth:'세션이 만료되었습니다. 다시 로그인해 주세요',
         del_err_generic:'전송 실패（${status}）. 나중에 다시 시도해 주세요',
+        footer_tagline:'예쁜 화면만 만드는 게 아니라, 실제로 동작하는 시스템을 구현합니다.',
+        footer_contact_title:'문의하기',
+        nav_home:'홈', nav_portfolio:'포트폴리오', nav_about:'소개', nav_contact:'문의/견적',
       },
     };
 
