@@ -25,6 +25,10 @@
 | M3 | ✅ 已修 | email 驗證信改指 `/verify-email.html?token=...`；新建前端確認頁，token 核銷只走 POST，避免郵件代理預載；舊 GET link 自動 redirect 至確認頁向後相容 |
 | M7 | N/A | 驗證後 `login.js` INSERT login_attempts 僅在密碼/帳號失敗的兩個分支執行（無誤報） |
 | M8 | ✅ 已修 | migration 0006 為 requisition 加 `source_ip`；POST 加 per-IP 3 單/日上限；TG 訊息對使用者輸入做 HTML escape；移除 `console.error` 殘留 |
+| L1 | ✅ 已修 | 刪除根目錄過時 `schema.sql`；新建 `database/README.md` 明示 migrations 為 SoT、`database/*.sql` 僅為 reference |
+| L2 | ✅ 已修 | `email.js` BASE_URL/FROM_ADDRESS 改從 `env.IAM_BASE_URL` / `env.MAIL_FROM_ADDRESS` 讀；4 個呼叫端皆傳入 env |
+| L3 | ✅ 已修 | `wrangler.toml` 加 `[vars]` 預設與 `[env.preview.vars]` 區段；IAM_BASE_URL / MAIL_FROM_ADDRESS 改用 vars 管控 |
+| L9 | ✅ 已修 | `callback.js` 全新用戶建立改用 `last_row_id` 取代 batch + SELECT，避免 D1 batch 跨語句可見性風險 |
 
 **勘誤（驗證後）**：
 - `email_verifications` 在 prod **已有** 完整欄位（token_type/used_at/ip_address/created_at），原報告 C1 誇大為「程式會立刻崩潰」實為「schema 來源真相不一致」。已透過同步 schema_auth.sql 修正。

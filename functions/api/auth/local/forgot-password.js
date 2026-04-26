@@ -85,7 +85,7 @@ export async function onRequestPost({ request, env }) {
 
   // ── 4. 發信（失敗時回滾 token，但仍回 200 防枚舉）──────────────
   try {
-    await sendPasswordResetEmail(env.RESEND_API_KEY, userRow.email, token)
+    await sendPasswordResetEmail(env.RESEND_API_KEY, userRow.email, token, env)
   } catch {
     await db
       .prepare('DELETE FROM email_verifications WHERE token_hash = ?')

@@ -2,10 +2,18 @@ name = "chiyigo-com"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "public"
 
+# 預設（production / preview deployments）
 [vars]
-ENVIRONMENT = "production"
+ENVIRONMENT      = "production"
+IAM_BASE_URL     = "https://chiyigo.com"
+MAIL_FROM_ADDRESS = "noreply@chiyigo.com"
 
 [[d1_databases]]
 binding = "chiyigo_db"
 database_name = "chiyigo_db"
 database_id = "59f73214-1203-44b7-840f-86cb3998fbb6"
+
+# Cloudflare Pages preview branch（非 main）會套用 ENVIRONMENT=preview，
+# 與生產共用同一 D1（如需獨立 D1 須在 Pages dashboard 設定）。
+[env.preview.vars]
+ENVIRONMENT = "preview"

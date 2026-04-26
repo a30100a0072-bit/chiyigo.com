@@ -79,7 +79,7 @@ export async function onRequestPost({ request, env }) {
 
   // ── 5. 發信 ──────────────────────────────────────────────────
   try {
-    await sendVerificationEmail(env.RESEND_API_KEY, userRow.email, token)
+    await sendVerificationEmail(env.RESEND_API_KEY, userRow.email, token, env)
   } catch (e) {
     // 發信失敗時刪除剛寫入的 token，避免孤兒紀錄占用冷卻視窗
     await db

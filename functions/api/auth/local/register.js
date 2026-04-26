@@ -117,7 +117,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
 
   // 發送驗證信（fire-and-forget，不阻塞註冊回應；失敗時使用者仍可到 dashboard 重發）
   if (env.RESEND_API_KEY) {
-    const sendTask = sendVerificationEmail(env.RESEND_API_KEY, emailLower, verifyToken)
+    const sendTask = sendVerificationEmail(env.RESEND_API_KEY, emailLower, verifyToken, env)
       .catch(() => { /* 靜默失敗，避免吞掉註冊流程 */ })
     if (typeof waitUntil === 'function') waitUntil(sendTask)
   }

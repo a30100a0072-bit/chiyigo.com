@@ -211,23 +211,24 @@ async function handle(context) {
         .bind(userId).run()
 
     } else {
-      // 5d. 全新用戶 → 建立 user + identity
+      // 5d. 全新用戶 → 建立 user，再以 last_row_id 寫入 identity
+      // （避免 D1 batch 中第二條 SELECT 不可見第一條 INSERT 的潛在問題）
       const emailVerifiedInt = email_verified ? 1 : 0
-      await db.batch([
-        db.prepare(`INSERT INTO users (email, email_verified) VALUES (?, ?)`)
-          .bind(emailLower, emailVerifiedInt),
-        db.prepare(`
+      const insertUser = await db
+        .prepare(`INSERT INTO users (email, email_verified) VALUES (?, ?)`)
+        .bind(emailLower, emailVerifiedInt)
+        .run()
+      userId = insertUser.meta?.last_row_id
+      if (!userId) return htmlError('帳號建立失敗，請稍後重試。', 500)
+
+      await db
+        .prepare(`
           INSERT INTO user_identities
             (user_id, provider, provider_id, display_name, avatar_url)
-          SELECT id, ?, ?, ?, ? FROM users WHERE email = ?
-        `).bind(provider, provider_id, name ?? null, avatar ?? null, emailLower),
-      ])
-
-      const newUser = await db
-        .prepare(`SELECT id FROM users WHERE email = ?`)
-        .bind(emailLower)
-        .first()
-      userId = newUser.id
+          VALUES (?, ?, ?, ?, ?)
+        `)
+        .bind(userId, provider, provider_id, name ?? null, avatar ?? null)
+        .run()
     }
   }
 

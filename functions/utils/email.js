@@ -1,13 +1,21 @@
 const RESEND_API = 'https://api.resend.com/emails';
-const FROM_ADDRESS = 'noreply@chiyigo.com';
-const BASE_URL = 'https://chiyigo.com';
+const DEFAULT_FROM     = 'noreply@chiyigo.com';
+const DEFAULT_BASE_URL = 'https://chiyigo.com';
+
+function fromOf(env)    { return env?.MAIL_FROM_ADDRESS ?? DEFAULT_FROM }
+function baseUrlOf(env) { return env?.IAM_BASE_URL      ?? DEFAULT_BASE_URL }
 
 /**
+ * 所有 send* 函式皆額外接受 env，用以讀取 MAIL_FROM_ADDRESS / IAM_BASE_URL。
+ * 既有呼叫方 (apiKey, to, token) 可繼續運作（env=undefined 時回退到預設值）。
+ *
  * @param {string} apiKey
  * @param {string} to
  * @param {string} token  raw hex token
+ * @param {object} [env]
  */
-export async function sendDeleteConfirmationEmail(apiKey, to, token) {
+export async function sendDeleteConfirmationEmail(apiKey, to, token, env) {
+  const BASE_URL = baseUrlOf(env)
   const link = `${BASE_URL}/confirm-delete.html?token=${token}`
 
   const html = `
@@ -36,21 +44,21 @@ export async function sendDeleteConfirmationEmail(apiKey, to, token) {
 </body>
 </html>`.trim()
 
-  return sendEmail(apiKey, {
+  return sendEmail(apiKey, env, {
     to,
     subject: '確認刪除你的 Chiyigo 帳號',
     html,
   })
 }
 
-async function sendEmail(apiKey, { to, subject, html }) {
+async function sendEmail(apiKey, env, { to, subject, html }) {
   const res = await fetch(RESEND_API, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: FROM_ADDRESS, to, subject, html }),
+    body: JSON.stringify({ from: fromOf(env), to, subject, html }),
   });
 
   if (!res.ok) {
@@ -67,7 +75,8 @@ async function sendEmail(apiKey, { to, subject, html }) {
  * @param {string} to      收件人信箱
  * @param {string} token   原始 token（hex，64 字元）
  */
-export async function sendVerificationEmail(apiKey, to, token) {
+export async function sendVerificationEmail(apiKey, to, token, env) {
+  const BASE_URL = baseUrlOf(env)
   // 改指向前端確認頁，使用者按下按鈕才 POST 核銷，避免郵件代理 / 預載提前消耗 token
   const link = `${BASE_URL}/verify-email.html?token=${token}`;
 
@@ -93,7 +102,7 @@ export async function sendVerificationEmail(apiKey, to, token) {
 </body>
 </html>`.trim();
 
-  return sendEmail(apiKey, {
+  return sendEmail(apiKey, env, {
     to,
     subject: '驗證你的 Chiyigo 帳號 Email',
     html,
@@ -106,7 +115,8 @@ export async function sendVerificationEmail(apiKey, to, token) {
  * @param {string} to      收件人信箱
  * @param {string} token   原始 token（hex，64 字元）
  */
-export async function sendPasswordResetEmail(apiKey, to, token) {
+export async function sendPasswordResetEmail(apiKey, to, token, env) {
+  const BASE_URL = baseUrlOf(env)
   const link = `${BASE_URL}/reset-password.html?token=${token}`;
 
   const html = `
@@ -131,7 +141,7 @@ export async function sendPasswordResetEmail(apiKey, to, token) {
 </body>
 </html>`.trim();
 
-  return sendEmail(apiKey, {
+  return sendEmail(apiKey, env, {
     to,
     subject: '重設你的 Chiyigo 帳號密碼',
     html,

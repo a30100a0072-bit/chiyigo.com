@@ -87,7 +87,7 @@ export async function onRequestPost({ request, env }) {
 
   // ── 6. 發送確認信 ────────────────────────────────────────────
   try {
-    await sendDeleteConfirmationEmail(env.RESEND_API_KEY, userRow.email, token)
+    await sendDeleteConfirmationEmail(env.RESEND_API_KEY, userRow.email, token, env)
   } catch {
     await db.prepare('DELETE FROM email_verifications WHERE token_hash = ?').bind(tokenHash).run()
     return res({ error: 'Failed to send confirmation email, please try again later' }, 502)
