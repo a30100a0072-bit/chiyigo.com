@@ -34,6 +34,7 @@
 | L4 | ✅ 已修 | 引入 vitest，新增 `tests/` 目錄含 password / crypto / jwt 共 20 個 unit test（PBKDF2 roundtrip、PKCE RFC 7636 vector、ES256 sign/verify、tampered token 拒絕、備用碼 hash 驗證），`npm test` 全綠 |
 | L5 | ✅ 已修 | 新增 `.github/workflows/ci.yml`：PR/push 跑 `npm ci` + `npm run lint` + `npm test` + `npm audit --omit=dev --audit-level=high`（生產依賴 0 漏洞） |
 | L6 | ✅ 已修 | ESLint v9 flat config (`eslint.config.js`)，functions / tests 分區、僅基礎正確性規則；`npm run lint` 加入 CI；目前 0 errors / 6 warnings |
+| L7 | ✅ 已修 | `auth-ui.js` ERROR_ZH → ERROR_I18N（4 語）+ 新增 UI_I18N 字典（14 keys × 4 語）+ `getLang()` / `uiT()`；所有內嵌 zh-TW showMsg / btn label 改為 i18n 查詢；dashboard / login / reset-password 既有 data-i18n 架構不變 |
 
 ### 部署驗證 — 2026-04-26
 
@@ -373,8 +374,12 @@ if (!token) return { user: null, error: res({ error: 'Unauthorized' }, 401) }
 - `npm run lint` script 加入 CI workflow（lint 階段）
 - 目前 0 errors / 6 warnings（皆為 catch err 未用，留待之後逐一清理）
 
-### L7. i18n 不完整
-`auth-ui.js` 中只有中文 string，但專案宣稱多語。需把 dashboard、register、reset-password 的內嵌字串抽到 i18n dictionary。
+### L7. ~~i18n 不完整~~ ✅ 已修（2026-04-26）
+- `public/js/auth-ui.js`：將 `ERROR_ZH` 升級為 `ERROR_I18N`（4 語），新增 `UI_I18N`（loading / btn_login/register/verify、密碼/驗證碼錯誤、網路錯誤、註冊成功、PKCE 錯誤共 14 keys × 4 語）
+- 新增 `getLang()` 讀 `localStorage.lang`、`uiT(key)` 查詢函式
+- 所有內嵌 zh-TW alert / showMsg / btn label 換成 `uiT()` 呼叫
+- TAB_CONFIG 預設仍為 zh-TW（first-paint），login.html `applyLangI` 載入後即時 patch（既有架構，per memory note 為設計）
+- dashboard.html / register（login.html 內含）/ reset-password.html 早已實作 `data-i18n` + `LANGS_*` 字典（見 memory project_i18n.md），本次補完僅 auth-ui.js 動態字串部分
 
 ### L8. ~~`confirm-delete.html`、`bind-email.html` 等頁面缺 a11y 標籤~~ ✅ 已修（2026-04-26）
 - bind-email / forgot-password / reset-password：`<label>` 補 `for=` 綁定對應 input id

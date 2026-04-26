@@ -11,22 +11,55 @@
 
 'use strict';
 
-// ── 錯誤訊息中文對照 ─────────────────────────────────────────────
-const ERROR_ZH = {
-  'Invalid credentials':                    '帳號或密碼錯誤',
-  'email and password are required':        '請填寫信箱與密碼',
-  'Invalid email format':                   '信箱格式不正確',
-  'Password must be at least 8 characters': '密碼至少需要 8 個字元',
-  'Email already registered':               '此信箱已被註冊，請直接登入',
-  'Account is banned':                      '此帳號已被停用，請聯繫客服',
-  'Invalid OTP or backup code':             '驗證碼錯誤，請重試',
-  'Local account not found':                '此帳號無法使用密碼登入',
-  '2FA is already enabled':                 '雙重驗證已啟用',
-  'Invalid request':                        '請求無效，請重新登入',
+// ── i18n：四語系錯誤 / UI 字串 ───────────────────────────────────
+// 後端錯誤訊息（res.json().error）對照：以英文 key 查 4 語對應翻譯
+const ERROR_I18N = {
+  'Invalid credentials':                    { 'zh-TW':'帳號或密碼錯誤', en:'Invalid email or password', ja:'メールアドレスまたはパスワードが正しくありません', ko:'이메일 또는 비밀번호가 올바르지 않습니다' },
+  'email and password are required':        { 'zh-TW':'請填寫信箱與密碼', en:'Email and password are required', ja:'メールアドレスとパスワードを入力してください', ko:'이메일과 비밀번호를 입력해주세요' },
+  'Invalid email format':                   { 'zh-TW':'信箱格式不正確', en:'Invalid email format', ja:'メールアドレスの形式が正しくありません', ko:'이메일 형식이 올바르지 않습니다' },
+  'Password must be at least 8 characters': { 'zh-TW':'密碼至少需要 8 個字元', en:'Password must be at least 8 characters', ja:'パスワードは8文字以上で入力してください', ko:'비밀번호는 8자 이상이어야 합니다' },
+  'Email already registered':               { 'zh-TW':'此信箱已被註冊，請直接登入', en:'Email already registered, please log in', ja:'このメールアドレスは既に登録されています。ログインしてください', ko:'이미 등록된 이메일입니다. 로그인해주세요' },
+  'Account is banned':                      { 'zh-TW':'此帳號已被停用，請聯繫客服', en:'This account has been suspended, please contact support', ja:'このアカウントは停止されています。サポートまでご連絡ください', ko:'이 계정은 정지되었습니다. 고객센터로 문의해주세요' },
+  'Invalid OTP or backup code':             { 'zh-TW':'驗證碼錯誤，請重試', en:'Invalid code, please try again', ja:'認証コードが正しくありません。もう一度お試しください', ko:'인증 코드가 올바르지 않습니다. 다시 시도해주세요' },
+  'Local account not found':                { 'zh-TW':'此帳號無法使用密碼登入', en:'This account cannot log in with password', ja:'このアカウントはパスワードログインに対応していません', ko:'이 계정은 비밀번호 로그인을 지원하지 않습니다' },
+  '2FA is already enabled':                 { 'zh-TW':'雙重驗證已啟用', en:'Two-factor authentication is already enabled', ja:'2段階認証は既に有効です', ko:'2단계 인증이 이미 활성화되어 있습니다' },
+  'Invalid request':                        { 'zh-TW':'請求無效，請重新登入', en:'Invalid request, please log in again', ja:'リクエストが無効です。もう一度ログインしてください', ko:'요청이 유효하지 않습니다. 다시 로그인해주세요' },
 }
 
+// 前端內嵌 UI 字串
+const UI_I18N = {
+  loading:        { 'zh-TW':'處理中…', en:'Processing…', ja:'処理中…', ko:'처리 중…' },
+  btn_login:      { 'zh-TW':'登入', en:'Log In', ja:'ログイン', ko:'로그인' },
+  btn_register:   { 'zh-TW':'建立帳號', en:'Create Account', ja:'アカウント作成', ko:'계정 만들기' },
+  btn_verify:     { 'zh-TW':'驗證', en:'Verify', ja:'認証', ko:'인증' },
+  err_pwd_short:  { 'zh-TW':'密碼至少需要 8 個字元', en:'Password must be at least 8 characters', ja:'パスワードは8文字以上で入力してください', ko:'비밀번호는 8자 이상이어야 합니다' },
+  err_pwd_mismatch:{'zh-TW':'兩次輸入的密碼不一致，請重新確認', en:"Passwords don't match, please re-enter", ja:'パスワードが一致しません。もう一度ご確認ください', ko:'비밀번호가 일치하지 않습니다. 다시 확인해주세요' },
+  err_otp_empty:  { 'zh-TW':'請輸入驗證碼', en:'Please enter the verification code', ja:'認証コードを入力してください', ko:'인증 코드를 입력해주세요' },
+  err_otp_expired:{ 'zh-TW':'驗證階段已過期，請重新登入', en:'Verification session expired, please log in again', ja:'認証セッションの有効期限が切れました。もう一度ログインしてください', ko:'인증 세션이 만료되었습니다. 다시 로그인해주세요' },
+  err_login_fail: { 'zh-TW':'登入失敗，請重試', en:'Login failed, please try again', ja:'ログインに失敗しました。もう一度お試しください', ko:'로그인에 실패했습니다. 다시 시도해주세요' },
+  err_reg_fail:   { 'zh-TW':'註冊失敗，請重試', en:'Registration failed, please try again', ja:'登録に失敗しました。もう一度お試しください', ko:'가입에 실패했습니다. 다시 시도해주세요' },
+  reg_success:    { 'zh-TW':'帳號建立成功！正在跳轉…', en:'Account created! Redirecting…', ja:'アカウントを作成しました！移動中…', ko:'계정이 생성되었습니다! 이동 중…' },
+  err_otp_invalid:{ 'zh-TW':'驗證碼錯誤，請重試', en:'Invalid code, please try again', ja:'認証コードが正しくありません。もう一度お試しください', ko:'인증 코드가 올바르지 않습니다. 다시 시도해주세요' },
+  err_network:    { 'zh-TW':'網路錯誤，請檢查連線後重試', en:'Network error, please check your connection and retry', ja:'ネットワークエラーです。接続を確認してもう一度お試しください', ko:'네트워크 오류입니다. 연결을 확인하고 다시 시도해주세요' },
+  err_pkce:       { 'zh-TW':'PKCE 授權失敗，請重試', en:'PKCE authorization failed, please try again', ja:'PKCE認可に失敗しました。もう一度お試しください', ko:'PKCE 인증에 실패했습니다. 다시 시도해주세요' },
+}
+
+function getLang() {
+  try { return localStorage.getItem('lang') || 'zh-TW' } catch { return 'zh-TW' }
+}
+
+// 後端錯誤訊息翻譯（保留原訊息為 fallback）
 function t(msg) {
-  return ERROR_ZH[msg] || msg
+  const entry = ERROR_I18N[msg]
+  if (!entry) return msg
+  return entry[getLang()] || entry['zh-TW'] || msg
+}
+
+// 前端 UI 字串翻譯
+function uiT(key) {
+  const entry = UI_I18N[key]
+  if (!entry) return key
+  return entry[getLang()] || entry['zh-TW'] || key
 }
 
 // ── 常數 ────────────────────────────────────────────────────────
@@ -163,13 +196,13 @@ async function handlePkceRedirect(accessToken) {
     });
     const data = await res.json();
     if (!res.ok) {
-      showMsg(data.error || 'PKCE 授權失敗，請重試');
+      showMsg(data.error || uiT('err_pkce'));
       return;
     }
     // 跳轉至 App（chiyigo:// 或 loopback 或 https://）
     window.location.href = data.redirect_url;
   } catch {
-    showMsg('網路錯誤，請檢查連線後重試');
+    showMsg(uiT('err_network'));
   }
 }
 
@@ -272,7 +305,7 @@ function setLoading(btnId, loading) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
   btn.disabled = loading;
-  btn.textContent = loading ? '處理中…' : btn.dataset.label || btn.textContent;
+  btn.textContent = loading ? uiT('loading') : btn.dataset.label || btn.textContent;
 }
 
 // ── 登入處理 ─────────────────────────────────────────────────────
@@ -287,7 +320,7 @@ async function handleLogin(event) {
   const email    = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const btn      = document.getElementById('login-btn');
-  btn.dataset.label = '登入';
+  btn.dataset.label = uiT('btn_login');
 
   setLoading('login-btn', true);
 
@@ -309,7 +342,7 @@ async function handleLogin(event) {
     }
 
     if (!res.ok) {
-      showMsg(t(data.error) || '登入失敗，請重試');
+      showMsg(t(data.error) || uiT('err_login_fail'));
       return;
     }
 
@@ -319,7 +352,7 @@ async function handleLogin(event) {
     redirectAfterAuth();
 
   } catch {
-    showMsg('網路錯誤，請檢查連線後重試');
+    showMsg(uiT('err_network'));
   } finally {
     setLoading('login-btn', false);
   }
@@ -336,15 +369,15 @@ async function handleRegister(event) {
   const confirm  = document.getElementById('reg-confirm').value;
   const guest_id = getOrCreateGuestId();
   const btn      = document.getElementById('reg-btn');
-  btn.dataset.label = '建立帳號';
+  btn.dataset.label = uiT('btn_register');
 
   if (password.length < 8) {
-    showMsg('密碼至少需要 8 個字元');
+    showMsg(uiT('err_pwd_short'));
     return;
   }
 
   if (password !== confirm) {
-    showMsg('兩次輸入的密碼不一致，請重新確認');
+    showMsg(uiT('err_pwd_mismatch'));
     document.getElementById('reg-confirm').focus();
     return;
   }
@@ -362,7 +395,7 @@ async function handleRegister(event) {
     const data = await res.json();
 
     if (!res.ok) {
-      showMsg(t(data.error) || '註冊失敗，請重試');
+      showMsg(t(data.error) || uiT('err_reg_fail'));
       return;
     }
 
@@ -370,11 +403,11 @@ async function handleRegister(event) {
     clearGuestId();
     if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
     if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
-    showMsg('帳號建立成功！正在跳轉…', 'success');
+    showMsg(uiT('reg_success'), 'success');
     setTimeout(redirectAfterAuth, 800);
 
   } catch {
-    showMsg('網路錯誤，請檢查連線後重試');
+    showMsg(uiT('err_network'));
   } finally {
     setLoading('reg-btn', false);
   }
@@ -388,14 +421,14 @@ async function handleTotp(event) {
 
   const otp_code = document.getElementById('totp-code').value.trim();
   const btn      = document.getElementById('totp-btn');
-  btn.dataset.label = '驗證';
+  btn.dataset.label = uiT('btn_verify');
 
   if (!otp_code) {
-    showMsg('請輸入驗證碼');
+    showMsg(uiT('err_otp_empty'));
     return;
   }
   if (!_preAuthToken) {
-    showMsg('驗證階段已過期，請重新登入');
+    showMsg(uiT('err_otp_expired'));
     switchTab('login');
     return;
   }
@@ -416,7 +449,7 @@ async function handleTotp(event) {
     const data = await res.json();
 
     if (!res.ok) {
-      showMsg(t(data.error) || '驗證碼錯誤，請重試');
+      showMsg(t(data.error) || uiT('err_otp_invalid'));
       return;
     }
 
@@ -427,7 +460,7 @@ async function handleTotp(event) {
     redirectAfterAuth();
 
   } catch {
-    showMsg('網路錯誤，請檢查連線後重試');
+    showMsg(uiT('err_network'));
   } finally {
     setLoading('totp-btn', false);
   }
