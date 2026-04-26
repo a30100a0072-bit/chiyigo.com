@@ -31,7 +31,7 @@
 | L9 | ✅ 已修 | `callback.js` 全新用戶建立改用 `last_row_id` 取代 batch + SELECT，避免 D1 batch 跨語句可見性風險 |
 | L8 | ✅ 已修 | bind/forgot/reset-password、login、admin-requisitions、dashboard 所有 form input 補 `<label for>` 或 `aria-label`（confirm-delete / verify-email 純按鈕無 input） |
 | dashboard 主題 | ✅ 已修 | dashboard 加回光/暗模式切換按鈕（與 login.html 同款式），新增 `.theme-light` CSS 反轉，沿用 `localStorage.theme` 預載（line 9 IIFE）避免登入後重置為暗模式 |
-| L4 | ✅ 已修 | 引入 vitest，新增 `tests/` 目錄含 password / crypto / jwt 共 20 個 unit test（PBKDF2 roundtrip、PKCE RFC 7636 vector、ES256 sign/verify、tampered token 拒絕、備用碼 hash 驗證），`npm test` 全綠 |
+| L4 | ✅ 已修 | 引入 vitest（unit 20 tests）+ `@cloudflare/vitest-pool-workers`（integration，workerd + miniflare D1）；reset-password 整合測試 9 tests（非 2FA 流程），CI 兩階段執行 |
 | L5 | ✅ 已修 | 新增 `.github/workflows/ci.yml`：PR/push 跑 `npm ci` + `npm run lint` + `npm test` + `npm audit --omit=dev --audit-level=high`（生產依賴 0 漏洞） |
 | L6 | ✅ 已修 | ESLint v9 flat config (`eslint.config.js`)，functions / tests 分區、僅基礎正確性規則；`npm run lint` 加入 CI；目前 0 errors / 6 warnings |
 | L7 | ✅ 已修 | `auth-ui.js` ERROR_ZH → ERROR_I18N（4 語）+ 新增 UI_I18N 字典（14 keys × 4 語）+ `getLang()` / `uiT()`；所有內嵌 zh-TW showMsg / btn label 改為 i18n 查詢；dashboard / login / reset-password 既有 data-i18n 架構不變 |
@@ -358,10 +358,18 @@ if (!token) return { user: null, error: res({ error: 'Unauthorized' }, 401) }
 未來上 staging 時必須補。
 
 ### L4. ~~沒有任何測試~~ ✅ 已修（2026-04-26）
-- 引入 vitest（devDep `^2.1.9`），加 `npm test` / `npm run test:watch` script
-- `tests/password.test.js`：5 tests — validatePassword 各分支
-- `tests/crypto.test.js`：12 tests — salt/token 隨機性、PBKDF2 roundtrip、hashToken 確定性、PKCE RFC 7636 vector、備用碼產生與驗證
-- reset-password 流程整合測試暫不做（需 miniflare + D1，複雜度高，留待 L5 CI 穩定後再評估）
+- **Unit tests**（vitest，Node runtime）
+  - `tests/password.test.js`：5 tests — validatePassword 各分支
+  - `tests/crypto.test.js`：12 tests — salt/token 隨機性、PBKDF2 roundtrip、hashToken 確定性、PKCE RFC 7636 vector、備用碼產生與驗證
+  - `tests/jwt.test.js`：3 tests — ES256 sign/verify roundtrip、tampered token 拒絕、getPublicJwk 不外洩 d
+- **Integration tests**（@cloudflare/vitest-pool-workers，workerd runtime + miniflare D1）
+  - `tests/integration/reset-password.test.js`：9 tests — happy path（密碼換新 + token 核銷 + refresh_tokens 清空）、過期/已用/未知 token、弱密碼、缺欄位（無 token / 無 new_password）、Invalid JSON、軟刪除帳號
+  - 設定：`vitest.workers.config.js`（pool-workers + d1Databases:['chiyigo_db'] + bindings）
+  - schema：`tests/integration/_setup.sql`（users / local_accounts / backup_codes / email_verifications / refresh_tokens 真實 schema 子集）
+  - helpers：`_helpers.js` 提供 `resetDb()` / `seedUser()` / `seedResetToken()` / `callFunction()` / `jsonPost()`
+- **scripts**：`npm test`（unit 快）/ `npm run test:int`（integration 慢）/ `npm run test:all`
+- **CI**：兩階段都跑（lint → unit → integration）
+- 待補：reset-password 2FA 分支（TOTP / backup code / OAuth-only）+ 並發重放測試（commit 2）
 
 ### L5. ~~無 CI~~ ✅ 已修（2026-04-26）
 - 新增 `.github/workflows/ci.yml`：PR + push to main 觸發

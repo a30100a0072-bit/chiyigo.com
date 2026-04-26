@@ -67,4 +67,17 @@ export default [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   },
+
+  // Integration tests run inside workerd via @cloudflare/vitest-pool-workers
+  {
+    files: ['tests/integration/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: {
+        ...globals.serviceworker,
+        crypto: 'readonly',
+      },
+    },
+  },
 ]

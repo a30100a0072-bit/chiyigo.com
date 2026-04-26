@@ -6,6 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:int": "vitest run --config vitest.workers.config.js",
+    "test:all": "npm test && npm run test:int",
     "lint": "eslint functions tests"
   },
   "dependencies": {
@@ -13,6 +15,7 @@
     "otpauth": "^9.3.6"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.5.40",
     "eslint": "^9.39.4",
     "globals": "^15.15.0",
     "vitest": "^2.1.9"

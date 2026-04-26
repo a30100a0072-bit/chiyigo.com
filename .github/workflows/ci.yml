@@ -26,6 +26,9 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Run integration tests (workerd + D1)
+        run: npm run test:int
+
       - name: npm audit (production deps, high+)
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: false
