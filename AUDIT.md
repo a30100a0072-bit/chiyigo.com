@@ -22,6 +22,9 @@
 | M4 | ✅ 已修 | `auth.js` Bearer token `slice(7).trim()`，空值直接回 401 |
 | M5 | ✅ 已修 | `public/_headers` 加 HSTS / X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy / CSP（白名單 Tailwind CDN / jsdelivr / CF Insights / Google Fonts） |
 | M6 | ✅ 已修 | `register.js` 訪客轉正加 `AND owner_user_id IS NULL` 保險，避免覆蓋已綁定紀錄 |
+| M3 | ✅ 已修 | email 驗證信改指 `/verify-email.html?token=...`；新建前端確認頁，token 核銷只走 POST，避免郵件代理預載；舊 GET link 自動 redirect 至確認頁向後相容 |
+| M7 | N/A | 驗證後 `login.js` INSERT login_attempts 僅在密碼/帳號失敗的兩個分支執行（無誤報） |
+| M8 | ✅ 已修 | migration 0006 為 requisition 加 `source_ip`；POST 加 per-IP 3 單/日上限；TG 訊息對使用者輸入做 HTML escape；移除 `console.error` 殘留 |
 
 **勘誤（驗證後）**：
 - `email_verifications` 在 prod **已有** 完整欄位（token_type/used_at/ip_address/created_at），原報告 C1 誇大為「程式會立刻崩潰」實為「schema 來源真相不一致」。已透過同步 schema_auth.sql 修正。

@@ -24,6 +24,10 @@ function validate(body) {
   return null
 }
 
+function escapeTgHtml(s) {
+  return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+}
+
 async function sendTelegram(env, text) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return null
   try {
@@ -63,8 +67,9 @@ export async function onRequestPost({ request, env }) {
   if (err) return res({ error: err }, 422)
 
   const db = env.chiyigo_db
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
 
-  // ── 2. 限流：登入用戶 10 單/日；訪客全域 5 單/日 ─────────────
+  // ── 2a. 主限流：登入用戶 10 單/日；訪客全域 5 單/日 ──────────
   const countRow = userId !== null
     ? await db.prepare(`
         SELECT COUNT(*) AS cnt FROM requisition
@@ -83,13 +88,25 @@ export async function onRequestPost({ request, env }) {
   if ((countRow?.cnt ?? 0) >= dayLimit)
     return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們' }, 429)
 
+  // ── 2b. 每 IP 限流：3 單/日（防單一機器人耗光訪客全域配額）──
+  if (ip) {
+    const ipRow = await db.prepare(`
+      SELECT COUNT(*) AS cnt FROM requisition
+      WHERE source_ip = ?
+        AND date(created_at, '+8 hours') = date('now', '+8 hours')
+        AND deleted_at IS NULL
+    `).bind(ip).first()
+    if ((ipRow?.cnt ?? 0) >= 3)
+      return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們' }, 429)
+  }
+
   try {
     // ── 3. INSERT 基本資料 ────────────────────────────────────
     const { meta } = await db
       .prepare(`
         INSERT INTO requisition
-          (user_id, name, company, contact, service_type, budget, timeline, message)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          (user_id, name, company, contact, service_type, budget, timeline, message, source_ip)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         userId,
@@ -99,22 +116,24 @@ export async function onRequestPost({ request, env }) {
         body.service_type.trim(),
         body.budget?.trim()   ?? '',
         body.timeline?.trim() ?? '',
-        body.message.trim()
+        body.message.trim(),
+        ip
       )
       .run()
 
     const reqId = meta.last_row_id
 
-    // ── 4. 發送 Telegram，取得 message_id ────────────────────
+    // ── 4. 發送 Telegram，取得 message_id（使用者輸入須 escape 防 HTML 注入）──
+    const E = escapeTgHtml
     const tgText =
       `📥 <b>新諮詢通知</b>  #${reqId}\n\n` +
-      `👤 <b>姓名：</b>${body.name}\n` +
-      `📱 <b>聯絡：</b>${body.contact}\n` +
-      `🏢 <b>公司：</b>${body.company || '未填'}\n` +
-      `🛠 <b>需求：</b>${body.service_type}\n` +
-      `💰 <b>預算：</b>${body.budget || '未填'}\n` +
-      `⏱ <b>時程：</b>${body.timeline || '未填'}\n` +
-      `📝 <b>簡述：</b>\n${body.message}`
+      `👤 <b>姓名：</b>${E(body.name)}\n` +
+      `📱 <b>聯絡：</b>${E(body.contact)}\n` +
+      `🏢 <b>公司：</b>${E(body.company || '未填')}\n` +
+      `🛠 <b>需求：</b>${E(body.service_type)}\n` +
+      `💰 <b>預算：</b>${E(body.budget || '未填')}\n` +
+      `⏱ <b>時程：</b>${E(body.timeline || '未填')}\n` +
+      `📝 <b>簡述：</b>\n${E(body.message)}`
 
     const tgMessageId = await sendTelegram(env, tgText)
 
@@ -127,8 +146,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     return res({ success: true, id: reqId }, 201)
-  } catch (e) {
-    console.error(e)
+  } catch {
     return res({ error: 'Server error' }, 500)
   }
 }
