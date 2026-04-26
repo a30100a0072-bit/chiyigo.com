@@ -2,18 +2,13 @@ name = "chiyigo-com"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "public"
 
-# 預設（production / preview deployments）
+# 注意：Cloudflare Pages 不會合併 wrangler.toml [vars] 與 dashboard 設的環境變數，
+# 同 key 衝突時部署會失敗。其他 env vars (IAM_BASE_URL / MAIL_FROM_ADDRESS /
+# RESEND_API_KEY 等) 由 Pages dashboard 管理。
 [vars]
-ENVIRONMENT      = "production"
-IAM_BASE_URL     = "https://chiyigo.com"
-MAIL_FROM_ADDRESS = "noreply@chiyigo.com"
+ENVIRONMENT = "production"
 
 [[d1_databases]]
 binding = "chiyigo_db"
 database_name = "chiyigo_db"
 database_id = "59f73214-1203-44b7-840f-86cb3998fbb6"
-
-# Cloudflare Pages preview branch（非 main）會套用 ENVIRONMENT=preview，
-# 與生產共用同一 D1（如需獨立 D1 須在 Pages dashboard 設定）。
-[env.preview.vars]
-ENVIRONMENT = "preview"
