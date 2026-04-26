@@ -535,21 +535,22 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 
 - [x] 註冊新帳號 → 收驗證信 ✅（信寄達 Gmail，發信路徑全綠）— 點 link 驗證待補
 
-**煙霧測發現並修復的 4 個 bug**：
+**煙霧測發現並修復的 5 個 bug**：
 - **B1 (415)**：`dashboard.html:902` 重發驗證信 fetch 漏 `Content-Type: application/json` → middleware 415 → fix `be8e160`
 - **B2 (同類)**：`dashboard.html:824` 啟用 2FA 同樣漏 Content-Type → fix `be8e160`
 - **B3 (524)**：`RESEND_API_KEY` env var 開頭含 UTF-8 BOM (`EF BB BF`) → Resend 回 400 + 舊 code 無 fetch timeout → Worker 卡 100s → CF 524。修法：(1) 用 `wrangler pages secret put` 重設 key（隱藏式輸入避 BOM）+ 輪換舊 key（已洩漏）(2) `send-verification.js` 加 `AbortController` 8s fetch timeout 防未來外部服務掛掉 → fix `bcf06b6` + cleanup `06bb6c8`
 - **B4 (QRCode is not defined)**：`dashboard.html:301` 載入 `qrcode@1.5.4/build/qrcode.min.js` 回 404（該版本移除 UMD bundle，只剩 CommonJS）→ `QRCode` global 未定義 → `QRCode.toCanvas` ReferenceError → catch 吞成「網路錯誤」alert → 啟用 2FA 失敗。降版 1.5.4 → 1.5.0（最後一個含 UMD 的版本）→ fix `9c87e1e`
+- **B5 (備用碼面板被蓋掉)**：`confirmEnable2FA()` 順序錯誤 — 先 `tfa-backup-panel.classList.remove('hidden')` 才呼叫 `render2FASection(true)`，但 `render2FASection` 內部會把三個 panel 一律 hidden，導致剛 reveal 的備用碼面板立刻被覆蓋。使用者啟用 2FA 後完全看不到 10 組救援碼 → 手機壞掉直接被鎖死。修法：先呼叫 `render2FASection(true)`，再 reveal backup-panel → fix `e6a4ad5`
 
 **defensive 改動**：
 - `send-verification.js` 整個 handler 包外層 try/catch，未捕捉例外回 500 而非 propagate 出 Worker（避 CF 502）
 - `email.js` `sendEmail` / `sendVerificationEmail` 加 `signal` 參數支援 abort
 - `eslint.config.js` Workers globals 加 `AbortController` / `setTimeout` / `clearTimeout`
 
-**進度（2026-04-26 03:40 截止）**：
+**進度（2026-04-26 截止）**：
 - [x] 步驟 1：註冊 + 收驗證信 + 點 link 確認 → email_verified=1 ✅
 - [x] 步驟 2：登入無 2FA → dashboard ✅（測試 B1 修復時順便驗到）
-- [ ] 步驟 3：啟用 2FA — fix `9c87e1e` push 後待重測
+- [x] 步驟 3：啟用 2FA → 登出 → 重登 → 輸入 TOTP → dashboard ✅（過程發現 B5，已修；備用碼可由停用後重新啟用 / `regenerate.js` API 取得）
 - [ ] 步驟 4：forgot password / reset
 - [ ] 步驟 5：主題 / 語言 / 登出
 - [ ] 步驟 6：requisition + IP 限流
