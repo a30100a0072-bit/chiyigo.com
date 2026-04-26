@@ -122,14 +122,16 @@ export async function onRequestGet(context) {
   const expires_at = new Date(Date.now() + STATE_TTL_MINUTES * 60_000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
+
   try {
     await env.chiyigo_db
       .prepare(`
         INSERT INTO oauth_states
-          (state_token, code_verifier, redirect_uri, platform, client_callback, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (state_token, code_verifier, redirect_uri, platform, client_callback, expires_at, ip_address, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `)
-      .bind(state, code_verifier, redirect_uri, platform, client_callback ?? '', expires_at)
+      .bind(state, code_verifier, redirect_uri, platform, client_callback ?? '', expires_at, ip)
       .run()
   } catch {
     return res({ error: 'OAuth 狀態儲存失敗，請重試' }, 500)

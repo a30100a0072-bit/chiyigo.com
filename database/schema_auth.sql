@@ -58,14 +58,22 @@ CREATE TABLE IF NOT EXISTS user_identities (
 -- 狀態與憑證表
 -- =============================================
 
--- 信箱驗證 Token（token_hash 為 PK，防止重複核銷）
+-- 信箱驗證 / 密碼重設 / 刪除帳號 Token（合併表，以 token_type 區分）
+-- 與 prod 實際結構同步（migration 0004 之前已手動 ALTER）
 CREATE TABLE IF NOT EXISTS email_verifications (
-  token_hash TEXT    PRIMARY KEY,
-  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  expires_at TEXT    NOT NULL
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT    NOT NULL UNIQUE,
+  token_type  TEXT    NOT NULL,
+  ip_address  TEXT,
+  expires_at  TEXT    NOT NULL,
+  used_at     TEXT,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  CHECK(token_type IN ('verify_email','reset_password','delete_account'))
 );
 
--- 密碼重設 Token
+-- LEGACY：舊 password_resets 表，現由 email_verifications + token_type 取代。
+-- 保留以避免 DROP 影響歷史資料；新流程不再寫入。
 CREATE TABLE IF NOT EXISTS password_resets (
   token_hash TEXT    PRIMARY KEY,
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -82,21 +90,30 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   revoked_at  TEXT    -- NULL = 有效
 );
 
--- 預留 OAuth PKCE State 表（防 CSRF 攻擊）
+-- OAuth PKCE State 表（防 CSRF / 防重放）
 CREATE TABLE IF NOT EXISTS oauth_states (
-  state_token   TEXT PRIMARY KEY,
-  code_verifier TEXT NOT NULL,
-  redirect_uri  TEXT NOT NULL,
-  expires_at    TEXT NOT NULL
+  state_token     TEXT PRIMARY KEY,
+  code_verifier   TEXT NOT NULL,
+  redirect_uri    TEXT NOT NULL,
+  platform        TEXT NOT NULL DEFAULT 'web',
+  client_callback TEXT,
+  expires_at      TEXT NOT NULL,
+  created_at      TEXT,
+  ip_address      TEXT
 );
 
 -- =============================================
 -- 索引（效能優化）
 -- =============================================
 
-CREATE INDEX IF NOT EXISTS idx_backup_codes_user_id    ON backup_codes(user_id);
-CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id  ON refresh_tokens(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_id);
+CREATE INDEX IF NOT EXISTS idx_backup_codes_user_id        ON backup_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id      ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_identities_user_id     ON user_identities(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_verifications_user    ON email_verifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_verifications_expires ON email_verifications(expires_at);
+CREATE INDEX IF NOT EXISTS idx_email_verifications_ip      ON email_verifications(ip_address, created_at);
+CREATE INDEX IF NOT EXISTS idx_oauth_states_expires        ON oauth_states(expires_at);
+CREATE INDEX IF NOT EXISTS idx_oauth_states_ip             ON oauth_states(ip_address, created_at);
 
 -- =============================================
 -- 訪客綁定遷移（Lazy Registration）

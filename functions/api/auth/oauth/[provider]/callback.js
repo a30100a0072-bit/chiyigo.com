@@ -191,15 +191,15 @@ async function handle(context) {
       .first()
 
     if (existingUser) {
-      // 信箱碰撞
-      if (!cfg.trustEmail) {
-        // trustEmail=false（FB / LINE）→ 阻擋，要求密碼登入後手動綁定
+      // 信箱碰撞 — 雙重守門：必須 provider trustEmail=true 且本次回傳 email_verified=true
+      // 才允許靜默綁定，否則一律走密碼登入後手動綁定流程，避免 IdP 端假冒 email 接管帳號。
+      if (!cfg.trustEmail || !email_verified) {
         return htmlError(
-          `此信箱已透過密碼登入註冊。<br>請改用「密碼登入」，登入後可在帳號設定中綁定 ${provider} 帳號。`,
+          `此信箱已透過密碼登入註冊。請改用「密碼登入」，登入後可在帳號設定中綁定 ${provider} 帳號。`,
           403
         )
       }
-      // trustEmail=true（Discord / Google）→ 靜默綁定
+      // trustEmail=true 且 email_verified=true → 靜默綁定
       userId = existingUser.id
       await db.prepare(`
         INSERT OR IGNORE INTO user_identities
@@ -207,10 +207,8 @@ async function handle(context) {
         VALUES (?, ?, ?, ?, ?)
       `).bind(userId, provider, provider_id, name ?? null, avatar ?? null).run()
 
-      if (email_verified) {
-        await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`)
-          .bind(userId).run()
-      }
+      await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`)
+        .bind(userId).run()
 
     } else {
       // 5d. 全新用戶 → 建立 user + identity
@@ -411,6 +409,12 @@ function refreshCookie(token, maxAge) {
   return `chiyigo_refresh=${token}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]))
+}
+
 function htmlError(message, status = 400) {
   return new Response(
     `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">
@@ -419,7 +423,7 @@ function htmlError(message, status = 400) {
     .card{background:#16161d;border:1px solid #2a2a35;border-radius:16px;padding:2rem;text-align:center;max-width:420px}
     h2{color:#f87171;margin-bottom:1rem}a{color:#4f6ef7;text-decoration:none}</style></head>
     <body><div class="card">
-    <h2>登入失敗</h2><p>${message}</p>
+    <h2>登入失敗</h2><p>${escapeHtml(message)}</p>
     <p style="margin-top:1.5rem"><a href="/login.html">← 返回登入頁</a></p>
     </div></body></html>`,
     { status, headers: { 'Content-Type': 'text/html;charset=UTF-8' } }
