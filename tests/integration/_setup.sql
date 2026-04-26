@@ -60,3 +60,27 @@ CREATE TABLE IF NOT EXISTS requisition (
   owner_user_id   INTEGER,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS oauth_states (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  state_token     TEXT    NOT NULL UNIQUE,
+  code_verifier   TEXT,
+  redirect_uri    TEXT,
+  platform        TEXT,
+  client_callback TEXT,
+  ip_address      TEXT,
+  expires_at      TEXT    NOT NULL,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS user_identities (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider     TEXT    NOT NULL,
+  provider_id  TEXT    NOT NULL,
+  display_name TEXT,
+  avatar_url   TEXT,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT,
+  UNIQUE(provider, provider_id)
+);

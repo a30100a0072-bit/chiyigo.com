@@ -517,15 +517,17 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 - [x] 必要架構：`_setup.sql` 加 minimal `requisition`（id/owner_guest_id/owner_user_id/created_at）；`_helpers.resetDb` 加 `DELETE FROM requisition`
 - [x] 驗收：integration **48/48**（register 10 + login 13 + forgot 9 + reset 9 + reset-2fa 7）
 
-#### 3c. callback.test.js（OAuth ~6 tests，較複雜）
-- [ ] 此檔需要 mock IdP token 交換（fetch mock）
-- [ ] 新用戶建立：用 `last_row_id` 寫 user_identities（L9 修正後的邏輯）
-- [ ] 信箱碰撞 + `trustEmail && email_verified=true` → 靜默綁定（C2）
-- [ ] 信箱碰撞 + 不信任 IdP → 403 拒絕
-- [ ] state 過期 → 400
-- [ ] PKCE verifier mismatch → 400
-- [ ] 寫入 ip_address 至 oauth_states（M2）
-- [ ] **commit**：`test: callback OAuth 整合測試 (6 tests, IdP mock)`
+#### 3c. callback.test.js ✅ 完成（2026-04-26，7 tests，IdP fetch mock）
+- [x] state 不存在 / 過期 → 400 htmlError（雙場景：未 seed、TTL=-10）
+- [x] PKCE / token 交換失敗（IdP 回 4xx）→ 400 htmlError；oauth_states 已被原子核銷
+- [x] 全新用戶（google + email_verified=true）→ 200 + users.email_verified=1 + user_identities（L9：用 `last_row_id`）+ refresh_tokens row + Set-Cookie
+- [x] 信箱碰撞 + trustEmail=true (google) + email_verified=true → 靜默綁定（C2 雙重守門通過分支）
+- [x] 信箱碰撞 + trustEmail=true 但 email_verified=false → 403 拒絕（C2 雙重守門攔截）
+- [x] 信箱碰撞 + 不信任 IdP (line, trustEmail=false) → 403 拒絕
+- [x] 既有 identity（同 provider+provider_id）→ 不再造新 user，只更新 display_name/avatar
+- [x] 必要架構：`_setup.sql` 加 `oauth_states` / `user_identities` 表（含 UNIQUE(provider, provider_id)）；`_helpers.resetDb` 補清理；`vi.stubGlobal('fetch', ...)` URL pattern dispatch mock IdP token + userinfo
+- [x] 驗收：integration **55/55**（callback 7 + login 13 + register 10 + forgot 9 + reset 9 + reset-2fa 7）
+- 註：M2「oauth_states 寫 ip_address」屬 `authorize.js` 端 INSERT，不在 callback 範疇；之後若補 authorize.test.js 再覆蓋
 
 ### 階段 4 — 部署煙霧驗收（~30 分鐘，無 commit）
 
