@@ -553,13 +553,18 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 - [x] 步驟 3：啟用 2FA → 登出 → 重登 → 輸入 TOTP → dashboard ✅（過程發現 B5，已修；備用碼可由停用後重新啟用 / `regenerate.js` API 取得）
 - [x] 步驟 4：forgot password → reset（含 2FA 分支 → TOTP 驗證 → 換新密碼 → refresh_tokens 已清）✅
   - 過程發現 UX 問題：reset / forgot 兩頁缺翻譯選單與光暗切換、密碼條件描述（「最少 8 字元」）與後端實際規則（≥12 或 ≥8 含 3 類字元）不一致 → 已加 4 語 i18n + theme toggle + 修正密碼規則文案
-- [ ] 步驟 5：主題 / 語言 / 登出（部分檢核中）
+- [x] 步驟 5：主題 / 語言 / 登出全頁面巡檢 ✅ 完成（2026-04-26）
   - dashboard 切換英文時「Joined 日期」仍顯示中文（formatDate 寫死 'zh-TW' locale）→ 已修為依當前語系（zh-TW / en / ja / ko）動態 format
   - dashboard 「我的需求單」「近期提交的接案諮詢」「提交新單」「尚無需求單紀錄」「待處理/處理中/已完成/已撤銷」status badge、「撤銷」按鈕、撤銷成功/失敗 toast 全部漏 i18n → 補上 4 語並讓 applyLangD 重畫已渲染的需求單列表
   - login.html 註冊面板密碼欄位 hint「（最少 8 字元）」誤導 → 改為完整密碼規則（4 語）顯示在欄位下方 .field-hint
   - auth-ui.js ERROR_I18N 加入 `Password must be ≥12 chars...` 後端訊息 4 語對照（之前出現紅框只有英文）
-- [ ] 步驟 6：requisition + IP 限流
-- [ ] 步驟 7：Pages logs + Console 巡檢
+  - **巡檢結果（12 頁）**：
+    - 8 頁完整支援 theme + 4 語 i18n：index / about / portfolio / requisition / login / forgot-password / reset-password / dashboard（皆從 `localStorage.getItem('lang') \|\| 'zh-TW'` 載入，theme key 統一 `localStorage.theme`，預載 IIFE 在 `<script>` line 9 避免閃白）
+    - 2 頁 logout 功能：dashboard（line 109 onclick="logout()"）/ admin-requisitions（line 41 logout-btn → POST /api/auth/logout + sessionStorage.clear）— 皆驗 OK
+    - admin-requisitions：管理後台、設計鎖死暗色 + zh-TW，免巡檢（low priority）
+    - **3 頁缺 i18n / theme toggle（已知 gap，non-blocker，列入 backlog）**：bind-email / verify-email / confirm-delete — 皆為 email 連結觸發的一次性流程頁，預設暗色顯示，使用者僅在點 email link 時短暫經過。下次新功能順便補。
+- [x] 步驟 6：requisition + IP 限流 ✅ 完成（2026-04-26）— 詳見下方
+- [x] 步驟 7：Pages logs + Console 巡檢 ✅ 完成（2026-04-26）— 詳見下方
 
 **待跟進的設計問題（非 blocker）**：
 - dashboard 對 401 沒有自動 refresh access_token retry 機制（token 一過期所有按鈕都報失敗）→ 排入 backlog
