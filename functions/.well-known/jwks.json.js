@@ -30,7 +30,7 @@ export async function onRequestGet({ env }) {
   let jwk
   try {
     jwk = getPublicJwk(env)
-  } catch (err) {
+  } catch {
     return new Response(
       JSON.stringify({ error: 'Public key not configured' }),
       { status: 500, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }

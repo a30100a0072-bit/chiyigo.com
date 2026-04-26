@@ -448,3 +448,128 @@ if (!token) return { user: null, error: res({ error: 'Unauthorized' }, 401) }
 ---
 
 **建議**：先解 C1～C4 再做後續任何 feature。若需要，我可以協助直接實作 C1 的 0004 migration、C2 callback patch 與 C4 escape。
+
+---
+
+## 後續工作排程（2026-04-26 規劃）
+
+C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則**：先把當前狀態洗乾淨 → 趁測試架構記憶熱度擴張覆蓋 → 部署驗收 → 知識沉澱 → 回歸產品線。每階段獨立 commit，方便中途插隊或暫停。
+
+### 階段 1 — Baseline 清潔 ✅ 完成（2026-04-26）
+
+清掉所有 ESLint warnings，CI 從「0 errors / 6 warnings」進到「0 / 0」。
+
+- [x] `functions/.well-known/jwks.json.js:33` `catch (err)` → `catch`
+- [x] `functions/api/admin/requisitions.js:20` 移除未用 `user` destructure
+- [x] `functions/api/admin/users.js:22` 同上
+- [x] `functions/api/auth/email/send-verification.js:83` `catch (e)` → `catch`
+- [x] `functions/api/auth/local/forgot-password.js:12` 移除未用的 `hashPassword` import
+- [x] `functions/api/portfolio.js:12` `catch (err)` → `catch`
+- [x] 驗收：`npm run lint` 0/0、`npm test` 20/20、`npm run test:int` 16/16
+
+### 階段 2 — forgot-password 整合測試（~1 小時，1 commit）
+
+配對 reset-password，把 forgot 的所有分支也鎖住。**重點是要 mock `sendPasswordResetEmail`**，不能讓測試真的寄信。
+
+- [ ] `tests/integration/_helpers.js` 加 `seedEmailVerification(userId, { type, ageMinutes })` helper（用於塞「1 分鐘前才寄過」的記錄測 60s 冷卻）
+- [ ] `tests/integration/forgot-password.test.js`：
+  - 有效 email → 200，DB 多一筆 `email_verifications token_type=reset_password`
+  - 不存在 email → 200（防枚舉），DB 不新增、`sendPasswordResetEmail` 未被呼叫
+  - OAuth-only 用戶（無 local_accounts）→ 200，但不寄信（看 forgot-password.js 是否擋 — 若沒擋就改 spec）
+  - 60 秒冷卻：連發兩次 → 第二次 200 但 DB 只有 1 筆
+  - IP 限流：同 IP 6 次 → 第 6 次 429 `Too many requests`
+  - 軟刪除帳號 → 視為不存在（200，不寄信）
+  - Resend 失敗（mock throw）→ 200 但 DB 無殘留 token（驗證回滾）
+  - Invalid JSON / 缺 email → 400
+- [ ] mock 方式：vitest `vi.mock('../../functions/utils/email.js', ...)`，記錄呼叫到 `sentEmails[]`
+- [ ] **commit**：`test: forgot-password 整合測試 (8 tests, sendEmail mock)`
+
+### 階段 3 — login / register / OAuth callback 整合測試（~半天，3 commits）
+
+最高價值的擴張。每個 endpoint 一個 commit，便於 review。
+
+#### 3a. login.test.js（~10 tests）
+- [ ] 密碼正確 + 無 2FA → 200 + access_token + refresh cookie
+- [ ] 密碼正確 + 啟用 2FA → 403 `{ code: TOTP_REQUIRED, pre_auth_token }`
+- [ ] 密碼錯 → 401 + `login_attempts` 寫入 1 筆
+- [ ] 不存在 email → 401（fakeHashDelay 對齊時間，不洩漏）
+- [ ] OAuth-only 帳號 + 提供密碼 → 401（無 local_accounts）
+- [ ] ban 帳號（`status='banned'`）→ 403
+- [ ] 軟刪除帳號 → 401
+- [ ] login_attempts 累積到上限 → 鎖定/限流（看 login.js 的真實邏輯）
+- [ ] Invalid JSON / 缺欄位 → 400
+- [ ] 需新增 `_setup.sql` 的 `login_attempts` 表
+- [ ] **commit**：`test: login 整合測試 (10 tests)`
+
+#### 3b. register.test.js（~8 tests）
+- [ ] 弱密碼 → 400（驗 validatePassword 邏輯）
+- [ ] 重複 email → 409
+- [ ] 訪客轉正：guest_id 已存在 + `owner_user_id IS NULL` → 200，要求單記錄被綁
+- [ ] 訪客轉正：guest_id 已被綁定 → 不覆蓋（M6 守門）
+- [ ] 無 RESEND_API_KEY → 200 但跳過寄信（H5 守門）
+- [ ] 有 RESEND_API_KEY → `waitUntil(sendVerificationEmail)` 被呼叫
+- [ ] Invalid JSON / 缺欄位 → 400
+- [ ] **commit**：`test: register 整合測試 (8 tests)`
+
+#### 3c. callback.test.js（OAuth ~6 tests，較複雜）
+- [ ] 此檔需要 mock IdP token 交換（fetch mock）
+- [ ] 新用戶建立：用 `last_row_id` 寫 user_identities（L9 修正後的邏輯）
+- [ ] 信箱碰撞 + `trustEmail && email_verified=true` → 靜默綁定（C2）
+- [ ] 信箱碰撞 + 不信任 IdP → 403 拒絕
+- [ ] state 過期 → 400
+- [ ] PKCE verifier mismatch → 400
+- [ ] 寫入 ip_address 至 oauth_states（M2）
+- [ ] **commit**：`test: callback OAuth 整合測試 (6 tests, IdP mock)`
+
+### 階段 4 — 部署煙霧驗收（~30 分鐘，無 commit）
+
+階段 1–3 push 完後，等 Cloudflare Pages 部署成功，手動跑端到端：
+
+- [ ] 註冊新帳號 → 收驗證信 → 點 link → /verify-email.html POST → 標記 verified
+- [ ] 登入（無 2FA）→ dashboard
+- [ ] 啟用 2FA → 登出 → 重登 → 輸入 TOTP → dashboard
+- [ ] 忘記密碼 → 收信 → /reset-password.html → 換新密碼 → 重登成功 + refresh_tokens 已清
+- [ ] 已啟用 2FA 帳號做 forgot：reset 頁要求 TOTP → 成功
+- [ ] dashboard 主題切換按鈕、語言切換、登出
+- [ ] requisition 表單送出（驗 IP 限流可在多次提交後觸發）
+- [ ] 觀察 Cloudflare Pages logs 無 5xx、CSP 無 violation
+- [ ] **若任何步驟失敗** → 回頭看對應整合測試是否漏了該分支，補測 + 修 code
+
+### 階段 5 — 知識沉澱（~30 分鐘，無 commit／只更新 memory）
+
+把這次的測試架構與規範寫進 `~/.claude/projects/.../memory/`，未來新功能可直接照抄：
+
+- [ ] 新建 `project_test_architecture.md`：
+  - vitest 雙設定模式（unit `vitest.config.js` / integration `vitest.workers.config.js`）
+  - pool-workers 0.5.x ↔ vitest 2.x 版本相依（不要升 vitest 4.x，會壞舊 unit test）
+  - `_setup.sql` 必須 `CREATE TABLE IF NOT EXISTS`（多檔共用 D1 instance）
+  - `_helpers.js` 標準四件組：`resetDb` / `seedXxx` / `callFunction` / `jsonPost`
+  - mock 模式：`vi.mock('../../functions/utils/email.js', ...)` + `sentEmails[]` 收集
+- [ ] 更新 `MEMORY.md` 加入索引行
+- [ ] 更新 `feedback_security.md`（若有新規範）：例如「reset/forgot 端必須測 atomic UPDATE...RETURNING 防重放」
+
+### 階段 6 — 回歸產品線（看 BUILD_PLAN.md）
+
+清乾淨後，回去看 `BUILD_PLAN.md` 排下一個 stage 是什麼。從 memory 看當前進度可能在 Stage 18 OAuth 收尾或進 Stage 19。
+
+- [ ] Read `BUILD_PLAN.md`，確認下一個 stage
+- [ ] 若 Stage 18 OAuth 還有未完成項（FB / 進階 LINE 流程），先收尾
+- [ ] 否則啟動下一 stage 規劃（在這份 .md 或新建 stage 專用檔）
+
+---
+
+### 預估總時數
+
+| 階段 | 預估 | 累計 |
+|---|---|---|
+| 1. Lint 清潔 | 0.5h | 0.5h |
+| 2. forgot-password 測試 | 1h | 1.5h |
+| 3a. login 測試 | 1h | 2.5h |
+| 3b. register 測試 | 1h | 3.5h |
+| 3c. callback 測試 | 1.5h | 5h |
+| 4. 部署煙霧 | 0.5h | 5.5h |
+| 5. 知識沉澱 | 0.5h | 6h |
+| 6. 產品線評估 | 0.25h | 6.25h |
+
+**全做完約 6 小時**，可一口氣或分 2–3 段做。中途任何階段卡住可隨時停在最近 commit。
+

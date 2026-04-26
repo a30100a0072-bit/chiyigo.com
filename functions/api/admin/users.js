@@ -19,7 +19,7 @@
 import { requireRole, res } from '../../utils/requireRole.js'
 
 export async function onRequestGet({ request, env }) {
-  const { user, error } = await requireRole(request, env, 'admin')
+  const { error } = await requireRole(request, env, 'admin')
   if (error) return error
 
   const url    = new URL(request.url)

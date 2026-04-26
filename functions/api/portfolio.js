@@ -9,7 +9,7 @@ export async function onRequestGet({ env }) {
     return Response.json({ items: results }, {
       headers: { 'Cache-Control': 'public, max-age=60' },
     });
-  } catch (err) {
+  } catch {
     return Response.json({ error: 'Failed to load portfolio' }, { status: 500 });
   }
 }

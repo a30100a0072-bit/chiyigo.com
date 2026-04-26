@@ -9,7 +9,7 @@
  *  - DB 只存 token 的 SHA-256 hash，原始 token 只出現在 email link
  */
 
-import { generateSecureToken, hashToken, hashPassword } from '../../../utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { sendPasswordResetEmail } from '../../../utils/email.js'
 
 const COOLDOWN_SECONDS  = 60
