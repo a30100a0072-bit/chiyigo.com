@@ -10,7 +10,17 @@ const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_MINUTES = 15
 const IP_HOURLY_LIMIT   = 5
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(ctx) {
+  try {
+    return await handleDelete(ctx)
+  } catch (e) {
+    // 把真實 exception 訊息回給前端（diagnostic 模式）—
+    // 比 CF 1101 黑盒 HTML 好除錯，敏感資訊只到 message 層級。
+    return res({ error: 'Internal error', detail: String(e?.message ?? e) }, 500)
+  }
+}
+
+async function handleDelete({ request, env }) {
   // ── 1. JWT 驗證 ───────────────────────────────────────────────
   const { user, error } = await requireAuth(request, env)
   if (error) return error

@@ -1280,7 +1280,7 @@
           msg.classList.remove('hidden');
           btn.disabled = false;
           // 開發者除錯：把後端原始訊息一起印到 console，方便診斷
-          console.warn('[delete-account]', r.status, data);
+          console.warn('[delete-account]', r.status, data, 'detail=', data.detail);
           return;
         }
         msg.innerHTML = T('del_sent');
