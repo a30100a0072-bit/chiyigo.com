@@ -284,6 +284,41 @@
           <span data-i18n="logout_btn">登出帳號</span>
         </button>
 
+        <!-- 危險區：刪除帳號 -->
+        <div class="mt-6 rounded-2xl bg-[#16161d] border border-red-500/20 shadow-2xl overflow-hidden">
+          <div class="px-5 py-4 border-b border-red-500/15">
+            <p class="text-sm font-semibold text-red-400" data-i18n="danger_title">危險區</p>
+            <p class="text-xs text-gray-500 mt-0.5" data-i18n="danger_subtitle">永久刪除帳號與所有相關資料，操作不可復原</p>
+          </div>
+          <div class="px-5 py-4">
+            <div id="del-stage1" class="space-y-3">
+              <button onclick="showDeleteForm()"
+                class="w-full py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-semibold text-sm transition-all">
+                <span data-i18n="del_open_btn">我要刪除帳號</span>
+              </button>
+            </div>
+            <div id="del-stage2" class="hidden space-y-3">
+              <p class="text-xs text-gray-400 leading-relaxed" data-i18n="del_warn">
+                為防誤刪，請輸入登入密碼確認。送出後會寄送一封確認信到你的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。
+              </p>
+              <input id="del-password" type="password" autocomplete="current-password"
+                placeholder="登入密碼" data-i18n-ph="del_pass_ph"
+                class="w-full px-4 py-2.5 rounded-xl bg-[#0f0f14] border border-red-500/20 focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
+              <p id="del-msg" class="hidden text-xs"></p>
+              <div class="flex gap-2">
+                <button onclick="hideDeleteForm()"
+                  class="flex-1 py-2.5 rounded-xl border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 font-semibold text-sm transition-all">
+                  <span data-i18n="del_cancel_btn">取消</span>
+                </button>
+                <button id="del-submit-btn" onclick="submitDeleteAccount()"
+                  class="flex-1 py-2.5 rounded-xl border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                  <span data-i18n="del_send_btn">送出刪除確認信</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- 錯誤畫面 -->
@@ -1028,6 +1063,60 @@
         apply(!root.classList.contains('theme-dark'));
       });
     })();
+
+    // ── 刪除帳號 ─────────────────────────────────────────────
+    function showDeleteForm() {
+      document.getElementById('del-stage1').classList.add('hidden');
+      document.getElementById('del-stage2').classList.remove('hidden');
+      document.getElementById('del-password').focus();
+    }
+    function hideDeleteForm() {
+      document.getElementById('del-stage2').classList.add('hidden');
+      document.getElementById('del-stage1').classList.remove('hidden');
+      document.getElementById('del-password').value = '';
+      const msg = document.getElementById('del-msg');
+      msg.classList.add('hidden');
+      msg.textContent = '';
+    }
+    async function submitDeleteAccount() {
+      const pw   = document.getElementById('del-password').value;
+      const msg  = document.getElementById('del-msg');
+      const btn  = document.getElementById('del-submit-btn');
+      msg.classList.add('hidden');
+      msg.textContent = '';
+      if (!pw) {
+        msg.textContent = '請輸入密碼';
+        msg.className = 'text-xs text-red-400';
+        msg.classList.remove('hidden');
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const tk = sessionStorage.getItem('access_token');
+        const r  = await fetch('/api/auth/delete', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tk },
+          body:    JSON.stringify({ password: pw }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          msg.textContent = data.error || '送出失敗，請稍後再試';
+          msg.className = 'text-xs text-red-400';
+          msg.classList.remove('hidden');
+          btn.disabled = false;
+          return;
+        }
+        msg.innerHTML = '✓ 確認信已寄出，請至信箱點擊連結完成刪除（15 分鐘內有效）。';
+        msg.className = 'text-xs text-emerald-400';
+        msg.classList.remove('hidden');
+        document.getElementById('del-password').value = '';
+      } catch (e) {
+        msg.textContent = '網路錯誤，請稍後再試';
+        msg.className = 'text-xs text-red-400';
+        msg.classList.remove('hidden');
+        btn.disabled = false;
+      }
+    }
   </script>
 </body>
 </html>
