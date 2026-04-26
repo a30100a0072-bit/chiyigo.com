@@ -543,18 +543,20 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 - [ ] 觀察 Cloudflare Pages logs 無 5xx、CSP 無 violation
 - [ ] **若任何步驟失敗** → 回頭看對應整合測試是否漏了該分支，補測 + 修 code
 
-### 階段 5 — 知識沉澱（~30 分鐘，無 commit／只更新 memory）
+### 階段 5 — 知識沉澱 ✅ 完成（2026-04-26）
 
 把這次的測試架構與規範寫進 `~/.claude/projects/.../memory/`，未來新功能可直接照抄：
 
-- [ ] 新建 `project_test_architecture.md`：
-  - vitest 雙設定模式（unit `vitest.config.js` / integration `vitest.workers.config.js`）
-  - pool-workers 0.5.x ↔ vitest 2.x 版本相依（不要升 vitest 4.x，會壞舊 unit test）
-  - `_setup.sql` 必須 `CREATE TABLE IF NOT EXISTS`（多檔共用 D1 instance）
-  - `_helpers.js` 標準四件組：`resetDb` / `seedXxx` / `callFunction` / `jsonPost`
-  - mock 模式：`vi.mock('../../functions/utils/email.js', ...)` + `sentEmails[]` 收集
-- [ ] 更新 `MEMORY.md` 加入索引行
-- [ ] 更新 `feedback_security.md`（若有新規範）：例如「reset/forgot 端必須測 atomic UPDATE...RETURNING 防重放」
+- [x] 新建 `project_test_architecture.md`：
+  - vitest 雙設定（unit / `vitest.workers.config.js`）+ `singleWorker:true` ↔ `isolatedStorage:false` 必須配套
+  - pool-workers 0.5.x ↔ vitest 2.x 版本鎖定
+  - `_setup.sql` `CREATE TABLE IF NOT EXISTS`、目前涵蓋 9 表
+  - `_helpers.js` 標準件：`resetDb` / `ensureJwtKeys` / `seedUser` / `seedOauthOnlyUser` / `seedResetToken` / `enableTotp` / `seedBackupCode` / `callFunction` / `jsonPost`
+  - mock 模式：`vi.hoisted` + `vi.mock` 寄信模組；`vi.stubGlobal('fetch', URL pattern dispatch)` IdP
+  - 重要規範：reset 並發重放、C2 雙重守門、M6 訪客轉正、rate limit 預塞模式
+  - 覆蓋率快照：unit 20 / integration 55
+- [x] 更新 `MEMORY.md` 加入索引行
+- [x] 更新 `feedback_security.md`：新增「Token 核銷必測 atomic UPDATE/DELETE...RETURNING 防重放」規範（含並發測試 SOP）
 
 ### 階段 6 — 回歸產品線（看 BUILD_PLAN.md）
 
