@@ -18,6 +18,12 @@ const ERROR_I18N = {
   'email and password are required':        { 'zh-TW':'請填寫信箱與密碼', en:'Email and password are required', ja:'メールアドレスとパスワードを入力してください', ko:'이메일과 비밀번호를 입력해주세요' },
   'Invalid email format':                   { 'zh-TW':'信箱格式不正確', en:'Invalid email format', ja:'メールアドレスの形式が正しくありません', ko:'이메일 형식이 올바르지 않습니다' },
   'Password must be at least 8 characters': { 'zh-TW':'密碼至少需要 8 個字元', en:'Password must be at least 8 characters', ja:'パスワードは8文字以上で入力してください', ko:'비밀번호는 8자 이상이어야 합니다' },
+  'Password must be ≥12 chars, or ≥8 chars with 3 of: uppercase / lowercase / digit / symbol': {
+    'zh-TW':'密碼長度需 ≥12 字元，或 ≥8 字元並包含「大寫字母 / 小寫字母 / 數字 / 符號」其中 3 類。',
+    en:'Password must be ≥12 chars, or ≥8 chars and contain 3 of: uppercase / lowercase / digit / symbol.',
+    ja:'パスワードは12文字以上、または8文字以上で「大文字 / 小文字 / 数字 / 記号」のうち3種を含めてください。',
+    ko:'비밀번호는 12자 이상, 또는 8자 이상이며 대문자 / 소문자 / 숫자 / 기호 중 3종을 포함해야 합니다.',
+  },
   'Email already registered':               { 'zh-TW':'此信箱已被註冊，請直接登入', en:'Email already registered, please log in', ja:'このメールアドレスは既に登録されています。ログインしてください', ko:'이미 등록된 이메일입니다. 로그인해주세요' },
   'Account is banned':                      { 'zh-TW':'此帳號已被停用，請聯繫客服', en:'This account has been suspended, please contact support', ja:'このアカウントは停止されています。サポートまでご連絡ください', ko:'이 계정은 정지되었습니다. 고객센터로 문의해주세요' },
   'Invalid OTP or backup code':             { 'zh-TW':'驗證碼錯誤，請重試', en:'Invalid code, please try again', ja:'認証コードが正しくありません。もう一度お試しください', ko:'인증 코드가 올바르지 않습니다. 다시 시도해주세요' },

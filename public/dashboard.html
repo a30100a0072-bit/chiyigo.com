@@ -245,13 +245,13 @@
         <div id="req-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[#2a2a35] flex items-center justify-between">
             <div>
-              <p class="text-sm font-semibold text-white">我的需求單</p>
-              <p class="text-xs text-gray-500 mt-0.5">近期提交的接案諮詢</p>
+              <p class="text-sm font-semibold text-white" data-i18n="req_title">我的需求單</p>
+              <p class="text-xs text-gray-500 mt-0.5" data-i18n="req_subtitle">近期提交的接案諮詢</p>
             </div>
-            <a href="/requisition.html" class="text-xs text-brand-400 hover:text-brand-500 transition-colors">提交新單 →</a>
+            <a href="/requisition.html" class="text-xs text-brand-400 hover:text-brand-500 transition-colors" data-i18n="req_new_btn">提交新單 →</a>
           </div>
           <div id="req-list" class="divide-y divide-[#2a2a35]"></div>
-          <div id="req-empty" class="hidden px-5 py-6 text-center text-sm text-gray-500">尚無需求單紀錄</div>
+          <div id="req-empty" class="hidden px-5 py-6 text-center text-sm text-gray-500" data-i18n="req_empty">尚無需求單紀錄</div>
         </div>
 
         <!-- 帳號綁定區塊 -->
@@ -329,6 +329,10 @@
         totp_err6:'請輸入 6 位數驗證碼',
         setup_fail:'設定失敗', enable_fail:'啟用失敗', disable_fail:'停用失敗',
         resend_timer_label:'重發（${s}s）',
+        req_title:'我的需求單', req_subtitle:'近期提交的接案諮詢', req_new_btn:'提交新單 →', req_empty:'尚無需求單紀錄',
+        status_pending:'待處理', status_processing:'處理中', status_completed:'已完成', status_revoked:'已撤銷',
+        btn_revoke:'撤銷', btn_processing:'處理中…',
+        msg_revoke_success:'需求單 #${id} 已撤銷', msg_revoke_fail:'撤銷失敗，請重試',
         bind_title:'帳號綁定', bind_subtitle:'連結第三方帳號以增加登入選項',
         bind_btn:'綁定', unbind_btn:'解除綁定',
         bind_success:'${p} 綁定成功', unbind_success:'已解除 ${p} 綁定',
@@ -363,6 +367,10 @@
         totp_err6:'Please enter a 6-digit code',
         setup_fail:'Setup failed', enable_fail:'Enable failed', disable_fail:'Disable failed',
         resend_timer_label:'Resend (${s}s)',
+        req_title:'My Requisitions', req_subtitle:'Recent project inquiries', req_new_btn:'New Requisition →', req_empty:'No requisitions yet',
+        status_pending:'Pending', status_processing:'Processing', status_completed:'Completed', status_revoked:'Revoked',
+        btn_revoke:'Revoke', btn_processing:'Processing…',
+        msg_revoke_success:'Requisition #${id} revoked', msg_revoke_fail:'Revoke failed, please try again',
         bind_title:'Account Linking', bind_subtitle:'Link third-party accounts for more login options',
         bind_btn:'Link', unbind_btn:'Unlink',
         bind_success:'${p} linked successfully', unbind_success:'${p} unlinked',
@@ -397,6 +405,10 @@
         totp_err6:'6桁のコードを入力してください',
         setup_fail:'設定に失敗しました', enable_fail:'有効化に失敗しました', disable_fail:'無効化に失敗しました',
         resend_timer_label:'再送（${s}s）',
+        req_title:'依頼一覧', req_subtitle:'最近のプロジェクト相談', req_new_btn:'新規依頼 →', req_empty:'依頼の記録はまだありません',
+        status_pending:'保留中', status_processing:'処理中', status_completed:'完了', status_revoked:'取り消し済み',
+        btn_revoke:'取り消し', btn_processing:'処理中…',
+        msg_revoke_success:'依頼 #${id} を取り消しました', msg_revoke_fail:'取り消しに失敗しました。再試行してください',
         bind_title:'アカウント連携', bind_subtitle:'外部アカウントを連携してログイン方法を増やす',
         bind_btn:'連携', unbind_btn:'連携解除',
         bind_success:'${p}の連携が完了しました', unbind_success:'${p}の連携を解除しました',
@@ -431,6 +443,10 @@
         totp_err6:'6자리 코드를 입력해 주세요',
         setup_fail:'설정 실패', enable_fail:'활성화 실패', disable_fail:'비활성화 실패',
         resend_timer_label:'재발송（${s}s）',
+        req_title:'내 요청서', req_subtitle:'최근 프로젝트 문의', req_new_btn:'새 요청서 →', req_empty:'요청서 기록이 없습니다',
+        status_pending:'대기 중', status_processing:'처리 중', status_completed:'완료', status_revoked:'취소됨',
+        btn_revoke:'취소', btn_processing:'처리 중…',
+        msg_revoke_success:'요청서 #${id} 취소됨', msg_revoke_fail:'취소 실패. 다시 시도해 주세요',
         bind_title:'계정 연동', bind_subtitle:'서드파티 계정을 연동하여 로그인 옵션을 추가하세요',
         bind_btn:'연동', unbind_btn:'연동 해제',
         bind_success:'${p} 연동 완료', unbind_success:'${p} 연동이 해제되었습니다',
@@ -468,6 +484,11 @@
         tfaBadge.textContent = on ? T('tfa_badge_on') : T('tfa_badge_off');
         if (tfaText) tfaText.textContent = on ? T('tfa_text_on') : T('tfa_text_off');
       }
+      // 加入時間：依當前語系重新格式化
+      const createdEl = document.getElementById('info-created');
+      if (createdEl?.dataset.raw) createdEl.textContent = formatDate(createdEl.dataset.raw);
+      // 需求單列表：以最後一次 fetch 結果重畫（變數宣告在後段，用 window 規避 TDZ）
+      if (window._lastRequisitions) renderRequisitions(window._lastRequisitions);
     }
 
     // lang switcher — globe dropdown
@@ -492,10 +513,19 @@
       player:    'bg-brand-500/15 text-brand-300 border border-brand-500/20',
     };
 
+    function dateLocale() {
+      // 對應 Intl.DateTimeFormat 可接受的 locale；'zh-TW' 直接用，其餘 BCP-47 通用
+      return curLangD === 'zh-TW' ? 'zh-TW' : curLangD;
+    }
     function formatDate(str) {
       if (!str) return '—';
       const d = new Date(str.replace(' ', 'T') + 'Z');
-      return d.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
+      return d.toLocaleDateString(dateLocale(), { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    function formatDateShort(str) {
+      if (!str) return '—';
+      const d = new Date(str.replace(' ', 'T') + 'Z');
+      return d.toLocaleDateString(dateLocale(), { month: 'numeric', day: 'numeric' });
     }
 
     async function loadProfile() {
@@ -532,7 +562,9 @@
 
         document.getElementById('user-email').textContent   = data.email;
         document.getElementById('info-email').textContent   = data.email;
-        document.getElementById('info-created').textContent = formatDate(data.created_at);
+        const createdEl = document.getElementById('info-created');
+        createdEl.dataset.raw = data.created_at ?? '';
+        createdEl.textContent = formatDate(data.created_at);
 
         const roleBadge = document.getElementById('role-badge');
         roleBadge.textContent = T('role_' + data.role) || data.role;
@@ -587,12 +619,16 @@
 
     // ── 需求單 ───────────────────────────────────────────────────
 
-    const REQ_STATUS = {
-      pending:    { text: '待處理', cls: 'bg-amber-500/15 text-amber-300 border border-amber-500/20' },
-      revoked:    { text: '已撤銷', cls: 'bg-gray-500/15 text-gray-500 border border-gray-500/20' },
-      processing: { text: '處理中', cls: 'bg-blue-500/15 text-blue-300 border border-blue-500/20' },
-      completed:  { text: '已完成', cls: 'bg-green-500/15 text-green-300 border border-green-500/20' },
+    const REQ_STATUS_CLS = {
+      pending:    'bg-amber-500/15 text-amber-300 border border-amber-500/20',
+      revoked:    'bg-gray-500/15 text-gray-500 border border-gray-500/20',
+      processing: 'bg-blue-500/15 text-blue-300 border border-blue-500/20',
+      completed:  'bg-green-500/15 text-green-300 border border-green-500/20',
     }
+    function reqStatus(key) {
+      return { text: T('status_' + key), cls: REQ_STATUS_CLS[key] ?? REQ_STATUS_CLS.pending }
+    }
+    window._lastRequisitions = null;
 
     async function loadRequisitions() {
       const token = sessionStorage.getItem('access_token')
@@ -608,21 +644,20 @@
     }
 
     function renderRequisitions(list) {
+      window._lastRequisitions = list
       const section  = document.getElementById('req-section')
       const listEl   = document.getElementById('req-list')
       const emptyEl  = document.getElementById('req-empty')
       if (!list || list.length === 0) {
         emptyEl.classList.remove('hidden')
+        listEl.innerHTML = ''
         section.classList.remove('hidden')
         return
       }
       emptyEl.classList.add('hidden')
       listEl.innerHTML = list.map(r => {
-        const s    = REQ_STATUS[r.status] ?? REQ_STATUS.pending
-        const date = r.created_at
-          ? new Date(r.created_at.replace(' ', 'T') + 'Z')
-              .toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
-          : '—'
+        const s    = reqStatus(r.status)
+        const date = formatDateShort(r.created_at)
         return `
           <div class="flex items-center justify-between px-5 py-3.5 gap-3">
             <div class="flex items-center gap-2 min-w-0">
@@ -635,7 +670,7 @@
               ${r.status === 'pending'
                 ? `<button id="revoke-btn-${r.id}" onclick="revokeRequisition(${r.id})"
                      class="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
-                     撤銷
+                     ${T('btn_revoke')}
                    </button>`
                 : ''}
             </div>
@@ -647,7 +682,7 @@
     async function revokeRequisition(id) {
       const token = sessionStorage.getItem('access_token')
       const btn   = document.getElementById(`revoke-btn-${id}`)
-      if (btn) { btn.disabled = true; btn.textContent = '處理中…' }
+      if (btn) { btn.disabled = true; btn.textContent = T('btn_processing') }
       try {
         const r    = await fetch('/api/requisition/revoke', {
           method:  'POST',
@@ -656,15 +691,15 @@
         })
         const data = await r.json()
         if (!r.ok) {
-          showBindToast(data.error ?? '撤銷失敗，請重試', 'err')
-          if (btn) { btn.disabled = false; btn.textContent = '撤銷' }
+          showBindToast(data.error ?? T('msg_revoke_fail'), 'err')
+          if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
           return
         }
-        showBindToast(`需求單 #${id} 已撤銷`, 'ok')
+        showBindToast(T('msg_revoke_success').replace('${id}', id), 'ok')
         loadRequisitions()
       } catch {
-        showBindToast('網路錯誤，請稍後再試', 'err')
-        if (btn) { btn.disabled = false; btn.textContent = '撤銷' }
+        showBindToast(T('net_err'), 'err')
+        if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
       }
     }
 
