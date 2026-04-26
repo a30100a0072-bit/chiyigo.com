@@ -298,7 +298,7 @@
               </button>
             </div>
             <div id="del-stage2" class="hidden space-y-3">
-              <p class="text-xs text-gray-400 leading-relaxed" data-i18n="del_warn">
+              <p id="del-warn-text" class="text-xs text-gray-400 leading-relaxed">
                 為防誤刪，請輸入登入密碼確認。送出後會寄送一封確認信到你的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。
               </p>
               <input id="del-password" type="password" autocomplete="current-password"
@@ -633,6 +633,9 @@
 
         // 帳號綁定區塊
         renderBindingSection(data.identities ?? []);
+
+        // 刪除帳號：依是否設過密碼決定 UI
+        window.__hasPassword = !!data.has_password;
 
         // 需求單區塊
         loadRequisitions();
@@ -1068,7 +1071,16 @@
     function showDeleteForm() {
       document.getElementById('del-stage1').classList.add('hidden');
       document.getElementById('del-stage2').classList.remove('hidden');
-      document.getElementById('del-password').focus();
+      const pwField = document.getElementById('del-password');
+      const warnEl  = document.getElementById('del-warn-text');
+      if (window.__hasPassword) {
+        pwField.classList.remove('hidden');
+        if (warnEl) warnEl.textContent = '為防誤刪，請輸入登入密碼確認。送出後會寄送一封確認信到你的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。';
+        pwField.focus();
+      } else {
+        pwField.classList.add('hidden');
+        if (warnEl) warnEl.textContent = '你尚未設定登入密碼（OAuth 帳號）。送出後會寄送一封確認信到你綁定的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。';
+      }
     }
     function hideDeleteForm() {
       document.getElementById('del-stage2').classList.add('hidden');
@@ -1084,7 +1096,7 @@
       const btn  = document.getElementById('del-submit-btn');
       msg.classList.add('hidden');
       msg.textContent = '';
-      if (!pw) {
+      if (window.__hasPassword && !pw) {
         msg.textContent = '請輸入密碼';
         msg.className = 'text-xs text-red-400';
         msg.classList.remove('hidden');
@@ -1092,11 +1104,12 @@
       }
       btn.disabled = true;
       try {
-        const tk = sessionStorage.getItem('access_token');
-        const r  = await fetch('/api/auth/delete', {
+        const tk   = sessionStorage.getItem('access_token');
+        const body = window.__hasPassword ? { password: pw } : {};
+        const r    = await fetch('/api/auth/delete', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tk },
-          body:    JSON.stringify({ password: pw }),
+          body:    JSON.stringify(body),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {

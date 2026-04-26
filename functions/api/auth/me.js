@@ -30,7 +30,8 @@ export async function onRequestGet({ request, env }) {
   const userRow = await db
     .prepare(`
       SELECT u.id, u.email, u.email_verified, u.role, u.status, u.created_at,
-             COALESCE(la.totp_enabled, 0) AS totp_enabled
+             COALESCE(la.totp_enabled, 0) AS totp_enabled,
+             CASE WHEN la.password_hash IS NOT NULL THEN 1 ELSE 0 END AS has_password
       FROM users u
       LEFT JOIN local_accounts la ON la.user_id = u.id
       WHERE u.id = ? AND u.deleted_at IS NULL
@@ -61,6 +62,7 @@ export async function onRequestGet({ request, env }) {
     email:          userRow.email,
     email_verified: userRow.email_verified === 1,
     totp_enabled:   userRow.totp_enabled === 1,
+    has_password:   userRow.has_password === 1,
     role:           userRow.role,
     status:         userRow.status,
     created_at:     userRow.created_at,
