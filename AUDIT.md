@@ -31,6 +31,7 @@
 | L9 | ✅ 已修 | `callback.js` 全新用戶建立改用 `last_row_id` 取代 batch + SELECT，避免 D1 batch 跨語句可見性風險 |
 | L8 | ✅ 已修 | bind/forgot/reset-password、login、admin-requisitions、dashboard 所有 form input 補 `<label for>` 或 `aria-label`（confirm-delete / verify-email 純按鈕無 input） |
 | dashboard 主題 | ✅ 已修 | dashboard 加回光/暗模式切換按鈕（與 login.html 同款式），新增 `.theme-light` CSS 反轉，沿用 `localStorage.theme` 預載（line 9 IIFE）避免登入後重置為暗模式 |
+| L4 | ✅ 已修 | 引入 vitest，新增 `tests/` 目錄含 password / crypto / jwt 共 20 個 unit test（PBKDF2 roundtrip、PKCE RFC 7636 vector、ES256 sign/verify、tampered token 拒絕、備用碼 hash 驗證），`npm test` 全綠 |
 
 ### 部署驗證 — 2026-04-26
 
@@ -353,8 +354,11 @@ if (!token) return { user: null, error: res({ error: 'Unauthorized' }, 401) }
 ### L3. `wrangler.toml` 缺 `[env.production]` / `[env.staging]` 區段
 未來上 staging 時必須補。
 
-### L4. 沒有任何測試（無 `*.test.js`、無 vitest 配置）
-建議：把 `utils/jwt.js`、`utils/crypto.js`、`reset-password` 流程加 unit test；用 miniflare 做 D1 整合測試。
+### L4. ~~沒有任何測試~~ ✅ 已修（2026-04-26）
+- 引入 vitest（devDep `^2.1.9`），加 `npm test` / `npm run test:watch` script
+- `tests/password.test.js`：5 tests — validatePassword 各分支
+- `tests/crypto.test.js`：12 tests — salt/token 隨機性、PBKDF2 roundtrip、hashToken 確定性、PKCE RFC 7636 vector、備用碼產生與驗證
+- reset-password 流程整合測試暫不做（需 miniflare + D1，複雜度高，留待 L5 CI 穩定後再評估）
 
 ### L5. 無 CI（`.github/` 內容未審）
 建議：PR 觸發 lint + 測試。`npm audit` 加進 CI。

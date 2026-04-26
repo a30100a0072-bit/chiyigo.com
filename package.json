@@ -3,8 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "dependencies": {
     "jose": "^5.9.6",
     "otpauth": "^9.3.6"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
   }
 }
