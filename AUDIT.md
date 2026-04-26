@@ -467,22 +467,21 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 - [x] `functions/api/portfolio.js:12` `catch (err)` → `catch`
 - [x] 驗收：`npm run lint` 0/0、`npm test` 20/20、`npm run test:int` 16/16
 
-### 階段 2 — forgot-password 整合測試（~1 小時，1 commit）
+### 階段 2 — forgot-password 整合測試 ✅ 完成（2026-04-26）
 
-配對 reset-password，把 forgot 的所有分支也鎖住。**重點是要 mock `sendPasswordResetEmail`**，不能讓測試真的寄信。
+配對 reset-password，把 forgot 的所有分支鎖住。`sendPasswordResetEmail` 用 `vi.hoisted` + `vi.mock` 攔截。
 
-- [ ] `tests/integration/_helpers.js` 加 `seedEmailVerification(userId, { type, ageMinutes })` helper（用於塞「1 分鐘前才寄過」的記錄測 60s 冷卻）
-- [ ] `tests/integration/forgot-password.test.js`：
-  - 有效 email → 200，DB 多一筆 `email_verifications token_type=reset_password`
-  - 不存在 email → 200（防枚舉），DB 不新增、`sendPasswordResetEmail` 未被呼叫
-  - OAuth-only 用戶（無 local_accounts）→ 200，但不寄信（看 forgot-password.js 是否擋 — 若沒擋就改 spec）
-  - 60 秒冷卻：連發兩次 → 第二次 200 但 DB 只有 1 筆
-  - IP 限流：同 IP 6 次 → 第 6 次 429 `Too many requests`
-  - 軟刪除帳號 → 視為不存在（200，不寄信）
-  - Resend 失敗（mock throw）→ 200 但 DB 無殘留 token（驗證回滾）
-  - Invalid JSON / 缺 email → 400
-- [ ] mock 方式：vitest `vi.mock('../../functions/utils/email.js', ...)`，記錄呼叫到 `sentEmails[]`
-- [ ] **commit**：`test: forgot-password 整合測試 (8 tests, sendEmail mock)`
+- [x] `tests/integration/forgot-password.test.js`：**9 tests**
+  - [x] 有效 email + 有 local_accounts → 200，DB 多 token、sendMock 被呼叫
+  - [x] 不存在 email → 200（防枚舉），DB 不變、sendMock 未呼叫
+  - [x] **OAuth-only 帳號 → 200，仍寫 token 並寄信**（spec 改：對齊 reset-password.js UPSERT 首次設密碼設計）
+  - [x] 60s 冷卻：連發兩次 → 兩次 200、DB 只 1 筆、sendMock 只 1 次
+  - [x] IP 限流：同 IP 6 次（換不同 email 避免冷卻）→ 第 6 次 429
+  - [x] 軟刪除帳號 → 200、DB 不變、sendMock 未呼叫
+  - [x] Resend 失敗（`mockImplementationOnce` throw）→ 200 但 DB 無殘留 token（回滾）
+  - [x] Invalid JSON → 400
+  - [x] 缺 email → 400
+- [x] 驗收：`npm run test:int` 25/25（forgot 9 + reset 9 + reset-2fa 7）
 
 ### 階段 3 — login / register / OAuth callback 整合測試（~半天，3 commits）
 
