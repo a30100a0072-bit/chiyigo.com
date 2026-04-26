@@ -7,18 +7,12 @@ import {
   hashToken,
 } from '../../functions/utils/crypto.js'
 
-let _schemaReady = false
-
-/** Apply schema once per worker; truncate tables every call. */
+/** Apply schema (idempotent via IF NOT EXISTS) and truncate tables. */
 export async function resetDb() {
-  if (!_schemaReady) {
-    const stmts = setupSql.split(';').map(s => s.trim()).filter(Boolean)
-    for (const s of stmts) {
-      await env.chiyigo_db.prepare(s).run()
-    }
-    _schemaReady = true
+  const stmts = setupSql.split(';').map(s => s.trim()).filter(Boolean)
+  for (const s of stmts) {
+    await env.chiyigo_db.prepare(s).run()
   }
-  // FK ON DELETE CASCADE handles dependants when we wipe users last.
   await env.chiyigo_db.batch([
     env.chiyigo_db.prepare('DELETE FROM refresh_tokens'),
     env.chiyigo_db.prepare('DELETE FROM email_verifications'),
@@ -98,4 +92,52 @@ export function jsonPost(url, body, headers = {}) {
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
+}
+
+/** Insert a user with NO local_accounts row (OAuth-only). */
+export async function seedOauthOnlyUser({
+  email = 'oauth@example.com',
+  emailVerified = 1,
+} = {}) {
+  const r = await env.chiyigo_db
+    .prepare('INSERT INTO users (email, email_verified) VALUES (?, ?)')
+    .bind(email, emailVerified)
+    .run()
+  return { id: r.meta.last_row_id, email }
+}
+
+/**
+ * Enable TOTP on a user's local_accounts (creates row if missing).
+ * Returns the base32 secret so tests can generate live OTPs via otpauth.
+ */
+export async function enableTotp(userId, base32Secret) {
+  const exists = await env.chiyigo_db
+    .prepare('SELECT user_id FROM local_accounts WHERE user_id = ?')
+    .bind(userId).first()
+  if (exists) {
+    await env.chiyigo_db
+      .prepare('UPDATE local_accounts SET totp_secret = ?, totp_enabled = 1 WHERE user_id = ?')
+      .bind(base32Secret, userId).run()
+  } else {
+    await env.chiyigo_db
+      .prepare(
+        `INSERT INTO local_accounts (user_id, password_hash, password_salt, totp_secret, totp_enabled)
+         VALUES (?, '', '', ?, 1)`,
+      )
+      .bind(userId, base32Secret).run()
+  }
+}
+
+/**
+ * Insert a backup code for user. Returns plaintext code (20 hex chars, no dashes).
+ */
+export async function seedBackupCode(userId, { used = false } = {}) {
+  const bytes = crypto.getRandomValues(new Uint8Array(10))
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  const codeHash = await hashToken(hex)
+  const usedAt = used ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null
+  await env.chiyigo_db
+    .prepare('INSERT INTO backup_codes (user_id, code_hash, used_at) VALUES (?, ?, ?)')
+    .bind(userId, codeHash, usedAt).run()
+  return hex
 }

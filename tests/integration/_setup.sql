@@ -1,7 +1,7 @@
 -- Minimal schema subset for reset-password / forgot-password integration tests.
 -- Mirrors database/schema_auth.sql but only the tables this flow touches.
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   email           TEXT    NOT NULL UNIQUE,
   email_verified  INTEGER NOT NULL DEFAULT 0,
@@ -11,7 +11,7 @@ CREATE TABLE users (
   deleted_at      TEXT
 );
 
-CREATE TABLE local_accounts (
+CREATE TABLE IF NOT EXISTS local_accounts (
   user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   password_hash TEXT    NOT NULL,
   password_salt TEXT    NOT NULL,
@@ -19,14 +19,14 @@ CREATE TABLE local_accounts (
   totp_enabled  INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE backup_codes (
+CREATE TABLE IF NOT EXISTS backup_codes (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   code_hash TEXT    NOT NULL,
   used_at   TEXT
 );
 
-CREATE TABLE email_verifications (
+CREATE TABLE IF NOT EXISTS email_verifications (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash  TEXT    NOT NULL UNIQUE,
@@ -37,7 +37,7 @@ CREATE TABLE email_verifications (
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE refresh_tokens (
+CREATE TABLE IF NOT EXISTS refresh_tokens (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash  TEXT    NOT NULL UNIQUE,
