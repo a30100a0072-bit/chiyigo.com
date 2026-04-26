@@ -17,7 +17,15 @@ const COOLDOWN_SECONDS = 60
 const TOKEN_TTL_HOURS  = 1
 const IP_HOURLY_LIMIT  = 10  // per IP, across all token types
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(ctx) {
+  try {
+    return await handle(ctx)
+  } catch (err) {
+    return res({ error: 'Internal error', detail: String(err?.message ?? err) }, 500)
+  }
+}
+
+async function handle({ request, env }) {
   // ── 1. 身份驗證 ──────────────────────────────────────────────
   const { user, error } = await requireAuth(request, env)
   if (error) return error
