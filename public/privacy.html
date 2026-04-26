@@ -11,150 +11,587 @@
   <script>
     (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *,*:before,*:after{box-sizing:border-box;margin:0;padding:0}
+
     :root,.theme-light{
       --bg:#F0F2FA;--bg-surface:#FFFFFF;--bg-elevated:#FAFAFE;
+      --bg-sidebar:#EAEBF5;--bg-titlebar:#F4F5FC;
       --border:rgba(0,0,0,.07);--border-dim:rgba(0,0,0,.05);
+      --border-bright:rgba(0,0,0,.14);--border-mid:rgba(0,0,0,.1);
       --text:#1A1B2E;--text-muted:rgba(26,27,46,.6);--text-dim:rgba(26,27,46,.38);
-      --accent:#6C6EE5;--accent-dim:rgba(108,110,229,.1);
+      --accent:#6C6EE5;--accent-dim:rgba(108,110,229,.1);--accent-glow:rgba(108,110,229,.18);
+      --hover-overlay:rgba(0,0,0,.05);
+      --neural-r:108;--neural-g:110;--neural-b:229;
+      --neural-node-opacity:.22;--neural-line-opacity:.09;
       --font-sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+      --font-display:var(--font-sans);--font-mono:"DM Mono","Courier New",monospace;
+      --font-body:var(--font-sans);
+      --max-w:1200px;--pad-x:2rem;--sidebar-w:220px;--titlebar-h:60px;
     }
     .theme-dark{
       --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
+      --bg-sidebar:#0F1424;--bg-titlebar:#0D1120;
       --border:rgba(255,255,255,.08);--border-dim:rgba(255,255,255,.05);
+      --border-bright:rgba(255,255,255,.14);--border-mid:rgba(255,255,255,.1);
       --text:#F3F4F6;--text-muted:rgba(243,244,246,.62);--text-dim:rgba(243,244,246,.36);
-      --accent:#7B6CFF;--accent-dim:rgba(123,108,255,.12);
+      --accent:#7B6CFF;--accent-dim:rgba(123,108,255,.12);--accent-glow:rgba(123,108,255,.25);
+      --hover-overlay:rgba(255,255,255,.06);
+      --neural-r:123;--neural-g:108;--neural-b:255;
+      --neural-node-opacity:.4;--neural-line-opacity:.15;
     }
-    html{font-family:var(--font-sans);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background .3s ease,color .3s ease}
-    body{min-height:100vh;line-height:1.75}
-    a{color:var(--accent);text-decoration:none}
-    a:hover{text-decoration:underline}
-    .topbar{position:sticky;top:0;z-index:10;background:var(--bg-surface);border-bottom:1px solid var(--border);padding:.9rem 1.5rem;display:flex;align-items:center;justify-content:space-between}
-    .brand{font-weight:700;font-size:1rem;letter-spacing:.04em;color:var(--text)}
-    .theme-btn{background:none;border:1px solid var(--border);border-radius:8px;padding:.4rem .7rem;cursor:pointer;color:var(--text-muted);font-size:.8rem}
-    .theme-btn:hover{color:var(--accent);border-color:var(--accent)}
-    main{max-width:780px;margin:0 auto;padding:3rem 1.5rem 5rem}
-    h1{font-size:2rem;font-weight:700;margin-bottom:.5rem;letter-spacing:-.01em}
-    .updated{color:var(--text-dim);font-size:.85rem;margin-bottom:2.5rem}
-    h2{font-size:1.2rem;font-weight:600;margin:2.2rem 0 .8rem;color:var(--text);border-left:3px solid var(--accent);padding-left:.7rem}
-    h3{font-size:1rem;font-weight:600;margin:1.4rem 0 .5rem;color:var(--text)}
-    p{color:var(--text-muted);margin-bottom:.8rem}
-    ul{list-style:disc;padding-left:1.4rem;margin-bottom:.8rem;color:var(--text-muted)}
-    li{margin-bottom:.3rem}
-    code{background:var(--bg-elevated);border:1px solid var(--border-dim);border-radius:4px;padding:.1rem .35rem;font-family:"DM Mono",ui-monospace,monospace;font-size:.85em}
-    .contact-box{background:var(--accent-dim);border:1px solid var(--accent);border-radius:10px;padding:1.2rem 1.4rem;margin-top:1.5rem}
-    .contact-box p{color:var(--text);margin-bottom:.4rem}
-    .back-link{display:inline-block;margin-top:2.5rem;font-size:.875rem}
-    footer{border-top:1px solid var(--border);padding:1.5rem;text-align:center;color:var(--text-dim);font-size:.8rem}
+    @media(max-width:768px){:root{--sidebar-w:0px;--titlebar-h:0px;--pad-x:1.25rem}}
+
+    html{font-family:var(--font-sans);background-color:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background-color .3s ease,color .3s ease}
+    body{min-height:100vh;overflow:hidden}
+    @media(max-width:768px){body{overflow:auto}}
+    a{color:inherit;text-decoration:none}
+    ul{list-style:none}
+    img{max-width:100%;height:auto;display:block}
+
+    .logo-dark,.theme-dark .logo-light{display:none!important}
+    .theme-dark .logo-dark{display:block!important}
+
+    #neural-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+    /* ── Layout (same as about.html) ── */
+    .dash-wrap{position:fixed;inset:0;z-index:1;display:grid;grid-template-columns:var(--sidebar-w) 1fr;background:var(--bg);overflow:hidden}
+    .dash-sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border-dim);display:flex;flex-direction:column;overflow:hidden;height:100vh}
+    .dash-main{display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
+    .dash-content{flex:1;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;min-height:0}
+    .dash-content::-webkit-scrollbar{width:4px}
+    .dash-content::-webkit-scrollbar-track{background:transparent}
+    .dash-content::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px}
+    .dash-content::-webkit-scrollbar-thumb:hover{background:var(--border-bright)}
+
+    /* ── Sidebar (same as about.html) ── */
+    .sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0;text-decoration:none}
+    .sb-logo-img{height:76px;width:auto;display:block;flex-shrink:0}
+    .sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .sb-nav::-webkit-scrollbar{display:none}
+    .sb-item{display:flex;align-items:center;gap:.7rem;padding:.6rem .85rem;border-radius:10px;font-family:var(--font-body);font-size:.875rem;font-weight:400;color:var(--text-muted);text-decoration:none;transition:background .18s ease,color .18s ease}
+    .sb-item:hover{background:#6c6ee512;color:var(--text)}
+    .sb-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500}
+    .sb-item.active .sb-icon{color:var(--accent);opacity:1}
+    .sb-icon{width:16px;height:16px;flex-shrink:0;color:var(--text-dim);opacity:.7;transition:color .18s ease,opacity .18s ease}
+    .sb-item:hover .sb-icon{color:var(--text-muted);opacity:.9}
+    .sb-label{line-height:1;white-space:nowrap}
+    .sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--border-dim)}
+    .sb-cta{background:linear-gradient(140deg,#6c6ee51f,#5b8bf514);border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem;position:relative;overflow:hidden}
+    .sb-cta:before{content:"";position:absolute;top:-12px;right:-12px;width:60px;height:60px;border-radius:50%;background:#6c6ee514;pointer-events:none}
+    .sb-cta-icon{width:28px;height:28px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:.65rem}
+    .sb-cta-icon svg{width:16px;height:16px}
+    .sb-cta-q{font-family:var(--font-body);font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:.3rem;line-height:1.3}
+    .sb-cta-desc{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:.75rem}
+    .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
+    .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .sb-footer{display:flex;align-items:center;gap:.5rem;position:relative}
+    .sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
+    .sb-login-link:hover{color:var(--accent);background:var(--bg-elevated)}
+    .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
+    .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
+    .m-login-btn:hover{color:var(--text)}
+    .m-login-btn svg{width:17px;height:17px}
+    .sb-foot-icons{display:flex;gap:.25rem}
+    .sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
+    .sb-foot-btn svg{width:14px;height:14px}
+    .sb-copyright{font-family:var(--font-mono);font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
+
+    /* ── Mobile topbar (same as about.html) ── */
+    .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim);transition:background .3s ease,border-color .3s ease}
+    .m-tb-inner{display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:52px}
+    .m-tb-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none}
+    .m-logo-img{height:68px;width:auto;display:block;flex-shrink:0}
+    .m-tb-right{display:flex;align-items:center;gap:.85rem}
+    .m-theme-btn{width:36px;height:36px;border:1px solid rgba(108,110,229,.14);background:#6c6ee512;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6c6ee5;flex-shrink:0;transition:background .2s ease,border-color .2s ease}
+    .m-theme-btn svg{width:14px;height:14px;display:block}
+    .theme-dark .m-theme-btn{border-color:#ffffff4d;background:#ffffff0f;color:#fff}
+    .m-ham-btn{display:flex;flex-direction:column;justify-content:center;gap:6px;width:36px;height:36px;border:1px solid rgba(108,110,229,.22);background:#6c6ee51a;border-radius:9px;cursor:pointer;padding:0 10px;transition:background .2s ease,border-color .2s ease;flex-shrink:0}
+    .m-ham-line{display:block;width:100%;height:1.5px;background:#6c6ee5;border-radius:2px;transform-origin:center;transition:transform .32s cubic-bezier(.23,1,.32,1)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(1){transform:translateY(3.75px) rotate(45deg)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(2){transform:translateY(-3.75px) rotate(-45deg)}
+    .theme-dark .m-ham-btn{border-color:#ffffff4d;background:#ffffff0f}
+    .theme-dark .m-ham-line{background:#fff}
+
+    /* ── Mobile overlay (same as about.html) ── */
+    .m-overlay{display:none;position:fixed;inset:0;z-index:49;background:#0a0c1c00;transition:background .35s ease;pointer-events:none}
+    .m-overlay.is-open{background:#0a0c1c52;pointer-events:auto}
+    .m-ov-wrap{position:absolute;bottom:0;left:0;right:0;background:var(--bg-surface);border-radius:22px 22px 0 0;border:1px solid var(--border);border-bottom:none;box-shadow:0 -4px 24px #6c6ee514;display:flex;flex-direction:column;max-height:88svh;overflow:hidden;transform:translateY(100%);transition:transform .42s cubic-bezier(.22,1,.36,1)}
+    .m-overlay.is-open .m-ov-wrap{transform:translateY(0)}
+    .m-ov-handle{width:36px;height:4px;background:#6c6ee52e;border-radius:100px;margin:12px auto 0;flex-shrink:0}
+    .m-ov-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.4rem .65rem;flex-shrink:0}
+    .m-ov-brand{display:flex;align-items:center;gap:.55rem}
+    .m-ov-logo-img{height:72px;width:auto;display:block}
+    .m-ov-status{display:flex;align-items:center;gap:.4rem;background:#22a86517;border:1px solid rgba(34,168,101,.18);border-radius:100px;padding:.22rem .65rem}
+    .m-ov-status-dot{width:5px;height:5px;border-radius:50%;background:#22a865;flex-shrink:0;animation:dot-pulse 2.5s ease-in-out infinite}
+    .m-ov-status-txt{font-family:var(--font-sans);font-size:.68rem;font-weight:500;color:#22a865}
+    @keyframes dot-pulse{0%,to{opacity:1}50%{opacity:.45}}
+    .m-ov-nav{flex:1;overflow-y:auto;padding:.35rem .75rem .5rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .m-ov-nav::-webkit-scrollbar{display:none}
+    .m-ov-item{display:flex;align-items:center;gap:.75rem;padding:.72rem .85rem;border-radius:12px;text-decoration:none;background:transparent;border:1px solid transparent;opacity:0;transform:translateY(10px);transition:opacity .32s cubic-bezier(.22,1,.36,1),transform .32s cubic-bezier(.22,1,.36,1),background .18s ease,border-color .18s ease;transition-delay:calc(var(--i,0)*.04s + .12s)}
+    .m-overlay.is-open .m-ov-item{opacity:1;transform:translateY(0)}
+    .m-ov-item:active{background:#6c6ee50f;transform:scale(.98)}
+    .m-ov-item.active{background:var(--accent-dim);border-color:#6c6ee524}
+    .m-ov-icon-wrap{width:32px;height:32px;border-radius:9px;background:var(--hover-overlay);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .m-ov-item.active .m-ov-icon-wrap{background:#6c6ee51f;color:var(--accent)}
+    .m-ov-icon{width:15px;height:15px}
+    .m-ov-label{flex:1;font-family:var(--font-sans);font-size:.9rem;font-weight:400;color:var(--text-muted);line-height:1;transition:color .18s ease}
+    .m-ov-item.active .m-ov-label{color:var(--accent);font-weight:500}
+    .m-ov-chevron{width:6px;height:10px;color:var(--text-dim);flex-shrink:0;opacity:.5}
+    .m-ov-cta{flex-shrink:0;padding:.75rem 1.2rem calc(1.25rem + env(safe-area-inset-bottom));border-top:1px solid rgba(108,110,229,.07);opacity:0;transform:translateY(8px);transition:opacity .32s ease .42s,transform .32s ease .42s}
+    .m-overlay.is-open .m-ov-cta{opacity:1;transform:translateY(0)}
+    .m-ov-cta-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:.78rem 1rem;background:linear-gradient(135deg,#7370ec,#5b8bf5);color:#fff;font-family:var(--font-sans);font-size:.9rem;font-weight:600;border-radius:12px;text-decoration:none;box-shadow:0 4px 16px #6c6ee547;transition:filter .18s ease,transform .18s ease}
+    .m-ov-cta-btn:active{filter:brightness(.96);transform:scale(.98)}
+
+    @media(max-width:768px){
+      .dash-wrap{position:relative;display:block;height:auto;min-height:100svh;overflow:visible}
+      .dash-sidebar{display:none}
+      .dash-main{display:block;height:auto;overflow:visible}
+      .dash-content{overflow:visible;height:auto;background:var(--bg);padding-top:52px;padding-bottom:2rem;min-height:100svh}
+      .m-topbar,.m-overlay{display:block}
+    }
+
+    /* ── Footer (same as about.html) ── */
+    .footer{border-top:1px solid var(--border-dim);background:var(--bg-titlebar)}
+    .footer-inner{max-width:var(--max-w);margin:0 auto;padding:2.5rem var(--pad-x);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2rem}
+    .footer .logo{height:72px;width:auto;display:block;margin-bottom:.45rem;opacity:.7}
+    .footer .tagline{font-size:.76rem;color:var(--text-dim);max-width:26rem;line-height:1.65}
+    .footer-links{display:flex;gap:2rem}
+    .footer-links a{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);transition:color .2s ease}
+    .footer-links a:hover{color:var(--text-muted)}
+    .footer-contact{display:flex;flex-direction:column;gap:.5rem}
+    .footer-contact-title{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.2rem}
+    .footer-contact-item{display:flex;align-items:center;gap:.45rem;font-size:.76rem;color:var(--text-dim);transition:color .2s ease}
+    .footer-contact-item:hover{color:var(--text-muted)}
+    .footer-contact-item svg{width:13px;height:13px;flex-shrink:0}
+    .copy{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);width:100%;opacity:.6}
+
+    /* ── Lang dropdown (same as about.html) ── */
+    .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
+    .lang-dropdown.open{display:flex}
+    .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
+    .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
+    .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
+    .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
+    .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    .m-top-lang-drop{position:fixed;top:58px;right:1.25rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:60;min-width:128px}
+    .m-top-lang-drop.open{display:flex}
+
+    /* ══════════════════════════════════════════════════
+       PRIVACY PAGE STYLES
+       ══════════════════════════════════════════════════ */
+    .privacy-wrap{max-width:780px;margin:0 auto;padding:clamp(2.5rem,5vw,4rem) var(--pad-x) 4rem;line-height:1.75}
+    .privacy-wrap h1{font-size:clamp(1.75rem,4vw,2.4rem);font-weight:700;margin-bottom:.5rem;letter-spacing:-.01em;color:var(--text)}
+    .privacy-wrap .updated{color:var(--text-dim);font-size:.85rem;margin-bottom:1.5rem}
+    .privacy-wrap .disclaimer{display:none;background:var(--accent-dim);border:1px solid var(--accent);border-radius:10px;padding:.85rem 1.1rem;margin-bottom:2rem;font-size:.82rem;color:var(--text);line-height:1.6}
+    .privacy-wrap .disclaimer.show{display:block}
+    .privacy-wrap h2{font-size:1.2rem;font-weight:600;margin:2.2rem 0 .8rem;color:var(--text);border-left:3px solid var(--accent);padding-left:.7rem}
+    .privacy-wrap h3{font-size:1rem;font-weight:600;margin:1.4rem 0 .5rem;color:var(--text)}
+    .privacy-wrap p{color:var(--text-muted);margin-bottom:.8rem}
+    .privacy-wrap ul{list-style:disc;padding-left:1.4rem;margin-bottom:.8rem;color:var(--text-muted)}
+    .privacy-wrap li{margin-bottom:.3rem}
+    .privacy-wrap a{color:var(--accent)}
+    .privacy-wrap a:hover{text-decoration:underline}
+    .privacy-wrap code{background:var(--bg-elevated);border:1px solid var(--border-dim);border-radius:4px;padding:.1rem .35rem;font-family:var(--font-mono);font-size:.85em}
+    .privacy-wrap .contact-box{background:var(--accent-dim);border:1px solid var(--accent);border-radius:10px;padding:1.2rem 1.4rem;margin-top:1.5rem}
+    .privacy-wrap .contact-box p{color:var(--text);margin-bottom:.4rem}
+    .privacy-wrap .back-link{display:inline-block;margin-top:2.5rem;font-size:.875rem;color:var(--accent)}
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <a href="/index.html" class="brand">CHIYIGO</a>
-    <button class="theme-btn" id="theme-btn" aria-label="切換主題">🌓 主題</button>
-  </header>
 
-  <main>
-    <h1>隱私政策</h1>
-    <p class="updated">最後更新日期：2026-04-26</p>
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
 
-    <p>感謝你使用 CHIYIGO（「本站」、「我們」）所提供的服務。本隱私政策說明我們在你瀏覽 <a href="https://chiyigo.com">chiyigo.com</a> 及其子網域、註冊帳號、使用第三方登入、提交需求工單時，如何收集、使用、保存與保護你的個人資料。使用本服務即代表你同意本政策內容。</p>
+  <div class="dash-wrap" id="dash-wrap">
 
-    <h2>1. 我們收集的資料</h2>
+    <!-- ── Sidebar ── -->
+    <aside class="dash-sidebar" id="dash-sidebar">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="sb-logo-img logo-dark">
+      </a>
 
-    <h3>1.1 你主動提供的資料</h3>
-    <ul>
-      <li><strong>帳號註冊</strong>：電子信箱、密碼（以 bcrypt 雜湊儲存，不保存明碼）。</li>
-      <li><strong>第三方登入（OAuth）</strong>：當你使用 Google、Discord、LINE、Facebook 等第三方帳號登入時，我們會依平台授權範圍取得「使用者識別碼、姓名／顯示名稱、電子信箱、頭像 URL」。我們<strong>不會</strong>取得你的密碼或好友清單。</li>
-      <li><strong>需求工單</strong>：你提交的姓名、聯絡方式、需求描述、預算、交期等內容。</li>
-      <li><strong>2FA（雙因素驗證）</strong>：若啟用，會儲存 TOTP secret 與備用碼雜湊。</li>
-    </ul>
+      <nav class="sb-nav" aria-label="主要導覽">
+        <a href="/index.html" class="sb-item" aria-label="首頁">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_home">首頁</span>
+        </a>
+        <a href="/index.html#services" class="sb-item" aria-label="服務項目">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_services">服務項目</span>
+        </a>
+        <a href="/index.html#process" class="sb-item" aria-label="服務流程">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
+          <span class="sb-label" data-i18n="nav_process">服務流程</span>
+        </a>
+        <a href="/portfolio.html" class="sb-item" aria-label="案例作品">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_portfolio">案例作品</span>
+        </a>
+        <a href="/about.html" class="sb-item" aria-label="關於我們">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_about">關於我們</span>
+        </a>
+        <a href="/requisition.html" class="sb-item" aria-label="接案諮詢">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_contact">接案諮詢</span>
+        </a>
+      </nav>
 
-    <h3>1.2 自動收集的資料</h3>
-    <ul>
-      <li><strong>裝置與連線資訊</strong>：IP 位址、User-Agent、裝置 UUID（App 端）、登入時間。</li>
-      <li><strong>Cookie 與本機儲存</strong>：用於維持登入狀態（HttpOnly Refresh Token Cookie）、主題偏好、語言偏好、PKCE 流程暫存。</li>
-      <li><strong>分析數據</strong>：透過 Cloudflare Web Analytics 收集匿名瀏覽量與效能指標，<strong>不</strong>使用 cookie 進行個人追蹤。</li>
-    </ul>
+      <div class="sb-bottom">
+        <div class="sb-cta">
+          <div class="sb-cta-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3" opacity="0.4"></circle><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <p class="sb-cta-q" data-i18n="cta_q">準備好開始專案了嗎？</p>
+          <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="/requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
+        </div>
+        <a href="/login.html" class="sb-login-link" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+          <span data-i18n="login">會員登入</span>
+        </a>
+        <div class="sb-footer">
+          <div class="lang-dropdown" id="lang-dropdown">
+            <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="lang-opt" data-lang="en">English</button>
+            <button class="lang-opt" data-lang="ja">日本語</button>
+            <button class="lang-opt" data-lang="ko">한국어</button>
+          </div>
+          <div class="sb-foot-icons">
+            <button class="sb-foot-btn" aria-label="切換明暗" id="theme-toggle-btn" title="切換明暗">
+              <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"></circle><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
+              <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+            </button>
+            <button class="sb-foot-btn" aria-label="切換語言" id="lang-toggle-btn" title="切換語言">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <span class="sb-copyright">© 2026 chiyigo</span>
+        </div>
+      </div>
+    </aside>
 
-    <h2>2. 我們如何使用資料</h2>
-    <ul>
-      <li>建立並維護你的帳號、驗證身份、發送驗證信與密碼重設信。</li>
-      <li>處理你提交的需求工單，並透過 Telegram 通知本站管理員。</li>
-      <li>偵測異常登入、防止暴力破解、限流濫用請求（rate limiting）。</li>
-      <li>跨平台統一身份（Web / App / Unity / Unreal）的單一登入（SSO）流程。</li>
-      <li>持續改善服務品質與安全性。</li>
-    </ul>
+    <!-- ── Main ── -->
+    <div class="dash-main">
+      <main class="dash-content" id="os-content">
 
-    <h2>3. 第三方服務與資料共享</h2>
-    <p>我們<strong>不會</strong>販售或出租你的個人資料給任何第三方。在以下情況下，我們可能與第三方共享必要資料：</p>
-    <ul>
-      <li><strong>OAuth 平台</strong>（Google / Discord / LINE / Facebook）：僅在你主動發起登入時，由你向平台授權；本站只接收平台回傳的識別資訊。</li>
-      <li><strong>Cloudflare</strong>：作為基礎架構服務商，承載靜態資源、Pages Functions、D1 資料庫與 Web Analytics。</li>
-      <li><strong>Resend</strong>：用於發送系統電子郵件（驗證信、密碼重設、2FA 通知）。</li>
-      <li><strong>Telegram Bot API</strong>：用於將需求工單通知本站管理員。</li>
-      <li><strong>法律要求</strong>：若依法律程序、法院命令或政府機關合法要求，我們可能必須揭露相關資料。</li>
-    </ul>
+        <div class="privacy-wrap">
+          <h1 data-i18n="privacy_h1">隱私政策</h1>
+          <p class="updated" data-i18n="privacy_updated">最後更新日期：2026-04-26</p>
 
-    <h2>4. 資料保存期限</h2>
-    <ul>
-      <li>帳號資料保存至你刪除帳號為止。</li>
-      <li>Refresh Token 預設 7–90 天（依平台不同），逾期自動輪換或失效。</li>
-      <li>Email 驗證碼、密碼重設 token、PKCE session 等暫存性資料於 1–60 分鐘內過期，並由每日 Cron 清除。</li>
-      <li>需求工單於你按下「撤銷」後標記 <code>deleted_at</code>，保留審計追蹤。</li>
-    </ul>
+          <div class="disclaimer" id="privacy-disclaimer" data-i18n="privacy_disclaimer"></div>
 
-    <h2>5. 你的權利</h2>
-    <p>你擁有以下權利，可隨時透過下方聯絡方式行使：</p>
-    <ul>
-      <li><strong>查詢與取得</strong>：要求查看我們持有關於你的個人資料。</li>
-      <li><strong>更正</strong>：要求更正不正確的資料。</li>
-      <li><strong>刪除</strong>：透過儀表板的「刪除帳號」功能（需 Email OTP 二次確認）永久刪除資料。</li>
-      <li><strong>解綁第三方登入</strong>：透過儀表板「帳號綁定」區塊取消任意 OAuth 連結（需保留至少一個有效登入方式）。</li>
-      <li><strong>撤回同意</strong>：你可隨時於各平台後台撤回 OAuth 授權。</li>
-    </ul>
+          <p>感謝你使用 CHIYIGO（「本站」、「我們」）所提供的服務。本隱私政策說明我們在你瀏覽 <a href="https://chiyigo.com">chiyigo.com</a> 及其子網域、註冊帳號、使用第三方登入、提交需求工單時，如何收集、使用、保存與保護你的個人資料。使用本服務即代表你同意本政策內容。</p>
 
-    <h2>6. 資料安全</h2>
-    <ul>
-      <li>所有連線強制 HTTPS（TLS 1.2+），由 Cloudflare 提供端到端加密。</li>
-      <li>密碼使用 bcrypt 雜湊；2FA 備用碼以雜湊形式儲存，並使用常數時間比較防止 timing attack。</li>
-      <li>JWT 採 ES256 簽章，敏感操作（解綁、刪帳）需二次驗證。</li>
-      <li>Admin 操作全程留下稽核日誌（admin_audit_log）。</li>
-      <li>跨來源請求受 CORS 白名單與 Content-Type 驗證雙重保護。</li>
-    </ul>
+          <h2>1. 我們收集的資料</h2>
 
-    <h2>7. 兒童隱私</h2>
-    <p>本服務未針對 13 歲以下兒童設計。若我們發現未滿 13 歲兒童在未經父母同意下提供個人資料，將立即刪除相關資料。</p>
+          <h3>1.1 你主動提供的資料</h3>
+          <ul>
+            <li><strong>帳號註冊</strong>：電子信箱、密碼（以 PBKDF2-SHA256 雜湊儲存，不保存明碼）。</li>
+            <li><strong>第三方登入（OAuth）</strong>：當你使用 Google、Discord、LINE、Facebook 等第三方帳號登入時，我們會依平台授權範圍取得「使用者識別碼、姓名／顯示名稱、電子信箱、頭像 URL」。我們<strong>不會</strong>取得你的密碼或好友清單。</li>
+            <li><strong>需求工單</strong>：你提交的姓名、聯絡方式、需求描述、預算、交期等內容。</li>
+            <li><strong>2FA（雙因素驗證）</strong>：若啟用，會儲存 TOTP secret 與備用碼雜湊。</li>
+          </ul>
 
-    <h2>8. 政策變更</h2>
-    <p>我們可能會不定期更新本政策。若有重大變更，將透過電子郵件或站內公告通知。最新版本永遠可於本頁查閱，並以頁首「最後更新日期」為準。</p>
+          <h3>1.2 自動收集的資料</h3>
+          <ul>
+            <li><strong>裝置與連線資訊</strong>：IP 位址、User-Agent、裝置 UUID（App 端）、登入時間。</li>
+            <li><strong>Cookie 與本機儲存</strong>：用於維持登入狀態（HttpOnly Refresh Token Cookie）、主題偏好、語言偏好、PKCE 流程暫存。</li>
+            <li><strong>分析數據</strong>：透過 Cloudflare Web Analytics 收集匿名瀏覽量與效能指標，<strong>不</strong>使用 cookie 進行個人追蹤。</li>
+          </ul>
 
-    <h2>9. 聯絡我們</h2>
-    <div class="contact-box">
-      <p><strong>站長</strong>：CHIYIGO</p>
-      <p><strong>Email</strong>：<a href="mailto:a3010030100a@gmail.com">a3010030100a@gmail.com</a></p>
-      <p><strong>需求工單</strong>：<a href="/requisition.html">/requisition.html</a></p>
+          <h2>2. 我們如何使用資料</h2>
+          <ul>
+            <li>建立並維護你的帳號、驗證身份、發送驗證信與密碼重設信。</li>
+            <li>處理你提交的需求工單，並透過 Telegram 通知本站管理員。</li>
+            <li>偵測異常登入、防止暴力破解、限流濫用請求（rate limiting）。</li>
+            <li>跨平台統一身份（Web / App / Unity / Unreal）的單一登入（SSO）流程。</li>
+            <li>持續改善服務品質與安全性。</li>
+          </ul>
+
+          <h2>3. 第三方服務與資料共享</h2>
+          <p>我們<strong>不會</strong>販售或出租你的個人資料給任何第三方。在以下情況下，我們可能與第三方共享必要資料：</p>
+          <ul>
+            <li><strong>OAuth 平台</strong>（Google / Discord / LINE / Facebook）：僅在你主動發起登入時，由你向平台授權；本站只接收平台回傳的識別資訊。</li>
+            <li><strong>Cloudflare</strong>：作為基礎架構服務商，承載靜態資源、Pages Functions、D1 資料庫與 Web Analytics。</li>
+            <li><strong>Resend</strong>：用於發送系統電子郵件（驗證信、密碼重設、2FA 通知）。</li>
+            <li><strong>Telegram Bot API</strong>：用於將需求工單通知本站管理員。</li>
+            <li><strong>法律要求</strong>：若依法律程序、法院命令或政府機關合法要求，我們可能必須揭露相關資料。</li>
+          </ul>
+
+          <h2>4. 資料保存期限</h2>
+          <ul>
+            <li>帳號資料保存至你刪除帳號為止。</li>
+            <li>Refresh Token 預設 7–90 天（依平台不同），逾期自動輪換或失效。</li>
+            <li>Email 驗證碼、密碼重設 token、PKCE session 等暫存性資料於 1–60 分鐘內過期，並由每日 Cron 清除。</li>
+            <li>需求工單於你按下「撤銷」後標記 <code>deleted_at</code>，保留審計追蹤。</li>
+          </ul>
+
+          <h2>5. 你的權利</h2>
+          <p>你擁有以下權利，可隨時透過下方聯絡方式行使：</p>
+          <ul>
+            <li><strong>查詢與取得</strong>：要求查看我們持有關於你的個人資料。</li>
+            <li><strong>更正</strong>：要求更正不正確的資料。</li>
+            <li><strong>刪除</strong>：透過儀表板的「刪除帳號」功能（需 Email OTP 二次確認）永久刪除資料。</li>
+            <li><strong>解綁第三方登入</strong>：透過儀表板「帳號綁定」區塊取消任意 OAuth 連結（需保留至少一個有效登入方式）。</li>
+            <li><strong>撤回同意</strong>：你可隨時於各平台後台撤回 OAuth 授權。</li>
+          </ul>
+
+          <h2>6. 資料安全</h2>
+          <ul>
+            <li>所有連線強制 HTTPS（TLS 1.2+），由 Cloudflare 提供端到端加密。</li>
+            <li>密碼使用 PBKDF2-SHA256 雜湊；2FA 備用碼以雜湊形式儲存，並使用常數時間比較防止 timing attack。</li>
+            <li>JWT 採 ES256 簽章，敏感操作（解綁、刪帳）需二次驗證。</li>
+            <li>Admin 操作全程留下稽核日誌（admin_audit_log）。</li>
+            <li>跨來源請求受 CORS 白名單與 Content-Type 驗證雙重保護。</li>
+          </ul>
+
+          <h2>7. 兒童隱私</h2>
+          <p>本服務未針對 13 歲以下兒童設計。若我們發現未滿 13 歲兒童在未經父母同意下提供個人資料，將立即刪除相關資料。</p>
+
+          <h2>8. 政策變更</h2>
+          <p>我們可能會不定期更新本政策。若有重大變更，將透過電子郵件或站內公告通知。最新版本永遠可於本頁查閱，並以頁首「最後更新日期」為準。</p>
+
+          <h2>9. 聯絡我們</h2>
+          <div class="contact-box">
+            <p><strong>站長</strong>：CHIYIGO</p>
+            <p><strong>Email</strong>：<a href="mailto:a3010030100a@gmail.com">a3010030100a@gmail.com</a></p>
+            <p><strong>需求工單</strong>：<a href="/requisition.html">/requisition.html</a></p>
+          </div>
+
+          <a href="/index.html" class="back-link" data-i18n="privacy_back">← 返回首頁</a>
+        </div>
+
+        <footer class="footer">
+          <div class="footer-inner">
+            <div>
+              <img src="/images/logo-light.png" alt="CHIYIGO" class="logo logo-light">
+              <img src="/images/logo-dark.png"  alt="CHIYIGO" class="logo logo-dark">
+              <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+            </div>
+            <div class="footer-contact">
+              <p class="footer-contact-title" data-i18n="footer_contact_title">聯絡我們</p>
+              <a href="tel:0900542992" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 2.5H3.2C2.5 2.5 2 3 2 3.7c0 5.4 4.4 9.8 9.8 9.8.7 0 1.2-.5 1.2-1.2V10l-2.5-1L9 10.5C7.5 9.7 6.3 8.5 5.5 7L7 5.5 6 3z"/></svg>
+                0900-542-992
+              </a>
+              <a href="https://line.me/ti/p/~chiyigo" target="_blank" rel="noopener" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><path d="M8 4.5C5.5 4.5 3.5 6 3.5 7.8c0 1.6 1.5 2.9 3.5 3.1l.5.9.5-.9c2-.2 3.5-1.5 3.5-3.1C11.5 6 9.5 4.5 8 4.5z"/></svg>
+                LINE: chiyigo
+              </a>
+              <a href="mailto:chiyigo20201208@gmail.com" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><path d="M1 5.5l7 4 7-4"/></svg>
+                chiyigo20201208@gmail.com
+              </a>
+            </div>
+            <nav class="footer-links">
+              <a href="/index.html" data-i18n="nav_home">首頁</a>
+              <a href="/portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+              <a href="/about.html" data-i18n="nav_about">關於我們</a>
+              <a href="/requisition.html" data-i18n="nav_contact">接案諮詢</a>
+            </nav>
+            <p class="copy">© 2026 CHIYIGO</p>
+          </div>
+        </footer>
+
+      </main>
     </div>
+  </div>
 
-    <a href="/index.html" class="back-link">← 返回首頁</a>
-  </main>
+  <!-- Mobile topbar -->
+  <div class="m-topbar" id="m-topbar">
+    <div class="m-tb-inner">
+      <a href="/index.html" class="m-tb-brand">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="m-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="m-logo-img logo-dark">
+      </a>
+      <div class="m-tb-right">
+        <a href="/login.html" class="m-login-btn" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+        </a>
+        <button class="m-theme-btn" id="m-theme-btn" aria-label="切換主題">
+          <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"></circle><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
+          <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+        </button>
+        <button class="m-theme-btn" id="m-lang-btn" onclick="toggleTopLangDrop(event)" aria-label="切換語言">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+        <button class="m-ham-btn" id="m-ham-btn" aria-label="開啟選單" aria-expanded="false" aria-controls="m-overlay">
+          <span class="m-ham-line"></span>
+          <span class="m-ham-line"></span>
+        </button>
+      </div>
+    </div>
+    <div class="m-top-lang-drop" id="m-top-lang-drop">
+      <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+      <button class="lang-opt" data-lang="en">English</button>
+      <button class="lang-opt" data-lang="ja">日本語</button>
+      <button class="lang-opt" data-lang="ko">한국어</button>
+    </div>
+  </div>
 
-  <footer>
-    © 2026 CHIYIGO. All rights reserved.
-  </footer>
+  <!-- Mobile overlay -->
+  <div class="m-overlay" id="m-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="主選單">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle" aria-hidden="true"></div>
+      <div class="m-ov-head">
+        <div class="m-ov-brand">
+          <img src="/images/logo-light.png" alt="CHIYIGO" class="m-ov-logo-img logo-light">
+          <img src="/images/logo-dark.png"  alt="CHIYIGO" class="m-ov-logo-img logo-dark">
+        </div>
+        <div class="m-ov-status">
+          <span class="m-ov-status-dot" aria-hidden="true"></span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
+        </div>
+      </div>
+      <nav class="m-ov-nav" aria-label="主導覽">
+        <a href="/index.html" class="m-ov-item" style="--i:0" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="/index.html#services" class="m-ov-item" style="--i:1" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="/index.html#process" class="m-ov-item" style="--i:2" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="/portfolio.html" class="m-ov-item" style="--i:3" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="/about.html" class="m-ov-item" style="--i:4" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="/requisition.html" class="m-ov-item" style="--i:5" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+      </nav>
+      <div class="m-ov-cta">
+        <a href="/requisition.html" class="m-ov-cta-btn" data-close-overlay data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
-    (function(){
-      var btn = document.getElementById('theme-btn');
-      btn && btn.addEventListener('click', function(){
-        var isLight = document.documentElement.classList.contains('theme-light');
-        document.documentElement.classList.toggle('theme-light', !isLight);
-        document.documentElement.classList.toggle('theme-dark', isLight);
-        localStorage.setItem('theme', isLight ? 'dark' : 'light');
+    // ── Mobile overlay ──────────────────────────────────────────
+    const hamBtn  = document.getElementById('m-ham-btn');
+    const overlay = document.getElementById('m-overlay');
+    const topbar  = document.getElementById('m-topbar');
+
+    function openMenu() {
+      hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open');
+      overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden');
+      topbar?.classList.add('menu-open'); document.body.style.overflow='hidden';
+    }
+    function closeMenu() {
+      hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open');
+      overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true');
+      topbar?.classList.remove('menu-open'); document.body.style.overflow='';
+    }
+    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
+    overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
+    document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+
+    // ── Theme toggle ──────────────────────────────────────────
+    const themeBtn  = document.getElementById('theme-toggle-btn');
+    const mThemeBtn = document.getElementById('m-theme-btn');
+
+    function applyTheme(dark) {
+      document.documentElement.classList.toggle('theme-dark', dark);
+      document.documentElement.classList.toggle('theme-light', !dark);
+      [themeBtn, mThemeBtn].forEach(btn => {
+        if (!btn) return;
+        const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+        if (sun)  sun.style.display  = dark ? 'none' : '';
+        if (moon) moon.style.display = dark ? ''     : 'none';
       });
+    }
+    applyTheme(localStorage.getItem('theme') !== 'light');
+    const doToggle = () => {
+      const d = !document.documentElement.classList.contains('theme-dark');
+      localStorage.setItem('theme', d ? 'dark' : 'light');
+      applyTheme(d);
+    };
+    themeBtn?.addEventListener('click', doToggle);
+    mThemeBtn?.addEventListener('click', doToggle);
+
+    // ── i18n（UI chrome only；法律條文維持 zh-TW） ─────────
+    const LANGS_I18N = {
+      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言',footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',footer_contact_title:'聯絡我們',privacy_h1:'隱私政策',privacy_updated:'最後更新日期：2026-04-26',privacy_back:'← 返回首頁',privacy_disclaimer:''},
+      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",footer_contact_title:'Contact Us',privacy_h1:'Privacy Policy',privacy_updated:'Last updated: 2026-04-26',privacy_back:'← Back to Home',privacy_disclaimer:'⚠ The full text of this privacy policy is currently available in Traditional Chinese only. An English translation will be provided in a future update.'},
+      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',footer_contact_title:'お問い合わせ',privacy_h1:'プライバシーポリシー',privacy_updated:'最終更新日：2026-04-26',privacy_back:'← ホームへ戻る',privacy_disclaimer:'⚠ このプライバシーポリシーの本文は現在、繁体字中国語版のみのご提供となります。日本語訳は今後のアップデートで対応予定です。'},
+      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',footer_contact_title:'연락하기',privacy_h1:'개인정보 처리방침',privacy_updated:'최종 업데이트: 2026-04-26',privacy_back:'← 홈으로 돌아가기',privacy_disclaimer:'⚠ 이 개인정보 처리방침의 본문은 현재 번체 중국어로만 제공됩니다. 한국어 번역은 향후 업데이트에서 제공될 예정입니다.'},
+    };
+    let curLangI = localStorage.getItem('lang') || 'zh-TW';
+    function applyLangI(lang) {
+      if (!LANGS_I18N[lang]) return;
+      curLangI = lang;
+      const t = LANGS_I18N[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k]; });
+      // disclaimer 顯示控制：非 zh-TW 顯示
+      const dis = document.getElementById('privacy-disclaimer');
+      if (dis) dis.classList.toggle('show', lang !== 'zh-TW');
+      const tBtn = document.getElementById('theme-toggle-btn');
+      const lBtn = document.getElementById('lang-toggle-btn');
+      if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
+      if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
+      document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      localStorage.setItem('lang', lang);
+    }
+    const langTogBtnI = document.getElementById('lang-toggle-btn');
+    const langDropI   = document.getElementById('lang-dropdown');
+    langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
+    document.addEventListener('click', () => langDropI?.classList.remove('open'));
+    langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+    document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+    function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
+    document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
+    document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+    applyLangI(curLangI);
+  </script>
+
+  <!-- Neural canvas (same as about.html) -->
+  <script>
+    (function(){
+      const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+      const ctx=canvas.getContext('2d');if(!ctx)return;
+      let W=0,H=0,nodes=[];const DIST=155;
+      function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+      function initNodes(){const n=W<768?48:115;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
+      const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+      let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
+      function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--neural-r').trim()||'108',g:s.getPropertyValue('--neural-g').trim()||'110',b:s.getPropertyValue('--neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--neural-line-opacity').trim()||'.09')}}
+      syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+      function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
+        for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
+        for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
+        requestAnimationFrame(draw)}
+      resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
     })();
   </script>
+
 </body>
 </html>
