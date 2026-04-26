@@ -6,7 +6,7 @@
 
 ---
 
-## 整體進度快照（2026-04-25 更新）
+## 整體進度快照（2026-04-26 更新）
 
 ### Cross-App SSO
 
@@ -36,7 +36,7 @@
 | Web HttpOnly Cookie 雙軌制（有 device_uuid → JSON；無 → Cookie）| ✅ |
 | Android App Link（SHA-256 待 App 建立後填入）| ✅ |
 | iOS Universal Link | 🔒 需 Apple Developer $99/yr |
-| Facebook OAuth | ⏳ 暫緩（需隱私政策頁面）|
+| Facebook OAuth | 🟡 後端 provider config 完成，隱私政策頁面（/privacy.html）已就緒，待建立 Meta App 並填入 `FACEBOOK_CLIENT_ID/SECRET` |
 
 ### 前端 UI
 
@@ -92,7 +92,7 @@
 |------|------|
 | 作品集圖片（非 MBTI 項目）| 提供截圖後依相同流程更新 |
 | iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
-| Facebook OAuth | 需隱私政策頁面 |
+| Facebook OAuth | 隱私政策頁已建（/privacy.html），待 Meta App 申請 + 設 env 後加上 login.html 按鈕 |
 | www.chiyigo.com 重導向 | Cloudflare DNS 驗證後自動生效 |
 | Android App Link SHA-256 | 待 App 建立後更新 |
 

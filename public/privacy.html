@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>隱私政策 | CHIYIGO</title>
+  <meta name="description" content="CHIYIGO 隱私政策 — 說明本網站收集、使用、保存與保護用戶資料的方式。" />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href="https://chiyigo.com/privacy" />
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>
+    (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *,*:before,*:after{box-sizing:border-box;margin:0;padding:0}
+    :root,.theme-light{
+      --bg:#F0F2FA;--bg-surface:#FFFFFF;--bg-elevated:#FAFAFE;
+      --border:rgba(0,0,0,.07);--border-dim:rgba(0,0,0,.05);
+      --text:#1A1B2E;--text-muted:rgba(26,27,46,.6);--text-dim:rgba(26,27,46,.38);
+      --accent:#6C6EE5;--accent-dim:rgba(108,110,229,.1);
+      --font-sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    }
+    .theme-dark{
+      --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
+      --border:rgba(255,255,255,.08);--border-dim:rgba(255,255,255,.05);
+      --text:#F3F4F6;--text-muted:rgba(243,244,246,.62);--text-dim:rgba(243,244,246,.36);
+      --accent:#7B6CFF;--accent-dim:rgba(123,108,255,.12);
+    }
+    html{font-family:var(--font-sans);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background .3s ease,color .3s ease}
+    body{min-height:100vh;line-height:1.75}
+    a{color:var(--accent);text-decoration:none}
+    a:hover{text-decoration:underline}
+    .topbar{position:sticky;top:0;z-index:10;background:var(--bg-surface);border-bottom:1px solid var(--border);padding:.9rem 1.5rem;display:flex;align-items:center;justify-content:space-between}
+    .brand{font-weight:700;font-size:1rem;letter-spacing:.04em;color:var(--text)}
+    .theme-btn{background:none;border:1px solid var(--border);border-radius:8px;padding:.4rem .7rem;cursor:pointer;color:var(--text-muted);font-size:.8rem}
+    .theme-btn:hover{color:var(--accent);border-color:var(--accent)}
+    main{max-width:780px;margin:0 auto;padding:3rem 1.5rem 5rem}
+    h1{font-size:2rem;font-weight:700;margin-bottom:.5rem;letter-spacing:-.01em}
+    .updated{color:var(--text-dim);font-size:.85rem;margin-bottom:2.5rem}
+    h2{font-size:1.2rem;font-weight:600;margin:2.2rem 0 .8rem;color:var(--text);border-left:3px solid var(--accent);padding-left:.7rem}
+    h3{font-size:1rem;font-weight:600;margin:1.4rem 0 .5rem;color:var(--text)}
+    p{color:var(--text-muted);margin-bottom:.8rem}
+    ul{list-style:disc;padding-left:1.4rem;margin-bottom:.8rem;color:var(--text-muted)}
+    li{margin-bottom:.3rem}
+    code{background:var(--bg-elevated);border:1px solid var(--border-dim);border-radius:4px;padding:.1rem .35rem;font-family:"DM Mono",ui-monospace,monospace;font-size:.85em}
+    .contact-box{background:var(--accent-dim);border:1px solid var(--accent);border-radius:10px;padding:1.2rem 1.4rem;margin-top:1.5rem}
+    .contact-box p{color:var(--text);margin-bottom:.4rem}
+    .back-link{display:inline-block;margin-top:2.5rem;font-size:.875rem}
+    footer{border-top:1px solid var(--border);padding:1.5rem;text-align:center;color:var(--text-dim);font-size:.8rem}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a href="/index.html" class="brand">CHIYIGO</a>
+    <button class="theme-btn" id="theme-btn" aria-label="切換主題">🌓 主題</button>
+  </header>
+
+  <main>
+    <h1>隱私政策</h1>
+    <p class="updated">最後更新日期：2026-04-26</p>
+
+    <p>感謝你使用 CHIYIGO（「本站」、「我們」）所提供的服務。本隱私政策說明我們在你瀏覽 <a href="https://chiyigo.com">chiyigo.com</a> 及其子網域、註冊帳號、使用第三方登入、提交需求工單時，如何收集、使用、保存與保護你的個人資料。使用本服務即代表你同意本政策內容。</p>
+
+    <h2>1. 我們收集的資料</h2>
+
+    <h3>1.1 你主動提供的資料</h3>
+    <ul>
+      <li><strong>帳號註冊</strong>：電子信箱、密碼（以 bcrypt 雜湊儲存，不保存明碼）。</li>
+      <li><strong>第三方登入（OAuth）</strong>：當你使用 Google、Discord、LINE、Facebook 等第三方帳號登入時，我們會依平台授權範圍取得「使用者識別碼、姓名／顯示名稱、電子信箱、頭像 URL」。我們<strong>不會</strong>取得你的密碼或好友清單。</li>
+      <li><strong>需求工單</strong>：你提交的姓名、聯絡方式、需求描述、預算、交期等內容。</li>
+      <li><strong>2FA（雙因素驗證）</strong>：若啟用，會儲存 TOTP secret 與備用碼雜湊。</li>
+    </ul>
+
+    <h3>1.2 自動收集的資料</h3>
+    <ul>
+      <li><strong>裝置與連線資訊</strong>：IP 位址、User-Agent、裝置 UUID（App 端）、登入時間。</li>
+      <li><strong>Cookie 與本機儲存</strong>：用於維持登入狀態（HttpOnly Refresh Token Cookie）、主題偏好、語言偏好、PKCE 流程暫存。</li>
+      <li><strong>分析數據</strong>：透過 Cloudflare Web Analytics 收集匿名瀏覽量與效能指標，<strong>不</strong>使用 cookie 進行個人追蹤。</li>
+    </ul>
+
+    <h2>2. 我們如何使用資料</h2>
+    <ul>
+      <li>建立並維護你的帳號、驗證身份、發送驗證信與密碼重設信。</li>
+      <li>處理你提交的需求工單，並透過 Telegram 通知本站管理員。</li>
+      <li>偵測異常登入、防止暴力破解、限流濫用請求（rate limiting）。</li>
+      <li>跨平台統一身份（Web / App / Unity / Unreal）的單一登入（SSO）流程。</li>
+      <li>持續改善服務品質與安全性。</li>
+    </ul>
+
+    <h2>3. 第三方服務與資料共享</h2>
+    <p>我們<strong>不會</strong>販售或出租你的個人資料給任何第三方。在以下情況下，我們可能與第三方共享必要資料：</p>
+    <ul>
+      <li><strong>OAuth 平台</strong>（Google / Discord / LINE / Facebook）：僅在你主動發起登入時，由你向平台授權；本站只接收平台回傳的識別資訊。</li>
+      <li><strong>Cloudflare</strong>：作為基礎架構服務商，承載靜態資源、Pages Functions、D1 資料庫與 Web Analytics。</li>
+      <li><strong>Resend</strong>：用於發送系統電子郵件（驗證信、密碼重設、2FA 通知）。</li>
+      <li><strong>Telegram Bot API</strong>：用於將需求工單通知本站管理員。</li>
+      <li><strong>法律要求</strong>：若依法律程序、法院命令或政府機關合法要求，我們可能必須揭露相關資料。</li>
+    </ul>
+
+    <h2>4. 資料保存期限</h2>
+    <ul>
+      <li>帳號資料保存至你刪除帳號為止。</li>
+      <li>Refresh Token 預設 7–90 天（依平台不同），逾期自動輪換或失效。</li>
+      <li>Email 驗證碼、密碼重設 token、PKCE session 等暫存性資料於 1–60 分鐘內過期，並由每日 Cron 清除。</li>
+      <li>需求工單於你按下「撤銷」後標記 <code>deleted_at</code>，保留審計追蹤。</li>
+    </ul>
+
+    <h2>5. 你的權利</h2>
+    <p>你擁有以下權利，可隨時透過下方聯絡方式行使：</p>
+    <ul>
+      <li><strong>查詢與取得</strong>：要求查看我們持有關於你的個人資料。</li>
+      <li><strong>更正</strong>：要求更正不正確的資料。</li>
+      <li><strong>刪除</strong>：透過儀表板的「刪除帳號」功能（需 Email OTP 二次確認）永久刪除資料。</li>
+      <li><strong>解綁第三方登入</strong>：透過儀表板「帳號綁定」區塊取消任意 OAuth 連結（需保留至少一個有效登入方式）。</li>
+      <li><strong>撤回同意</strong>：你可隨時於各平台後台撤回 OAuth 授權。</li>
+    </ul>
+
+    <h2>6. 資料安全</h2>
+    <ul>
+      <li>所有連線強制 HTTPS（TLS 1.2+），由 Cloudflare 提供端到端加密。</li>
+      <li>密碼使用 bcrypt 雜湊；2FA 備用碼以雜湊形式儲存，並使用常數時間比較防止 timing attack。</li>
+      <li>JWT 採 ES256 簽章，敏感操作（解綁、刪帳）需二次驗證。</li>
+      <li>Admin 操作全程留下稽核日誌（admin_audit_log）。</li>
+      <li>跨來源請求受 CORS 白名單與 Content-Type 驗證雙重保護。</li>
+    </ul>
+
+    <h2>7. 兒童隱私</h2>
+    <p>本服務未針對 13 歲以下兒童設計。若我們發現未滿 13 歲兒童在未經父母同意下提供個人資料，將立即刪除相關資料。</p>
+
+    <h2>8. 政策變更</h2>
+    <p>我們可能會不定期更新本政策。若有重大變更，將透過電子郵件或站內公告通知。最新版本永遠可於本頁查閱，並以頁首「最後更新日期」為準。</p>
+
+    <h2>9. 聯絡我們</h2>
+    <div class="contact-box">
+      <p><strong>站長</strong>：CHIYIGO</p>
+      <p><strong>Email</strong>：<a href="mailto:a3010030100a@gmail.com">a3010030100a@gmail.com</a></p>
+      <p><strong>需求工單</strong>：<a href="/requisition.html">/requisition.html</a></p>
+    </div>
+
+    <a href="/index.html" class="back-link">← 返回首頁</a>
+  </main>
+
+  <footer>
+    © 2026 CHIYIGO. All rights reserved.
+  </footer>
+
+  <script>
+    (function(){
+      var btn = document.getElementById('theme-btn');
+      btn && btn.addEventListener('click', function(){
+        var isLight = document.documentElement.classList.contains('theme-light');
+        document.documentElement.classList.toggle('theme-light', !isLight);
+        document.documentElement.classList.toggle('theme-dark', isLight);
+        localStorage.setItem('theme', isLight ? 'dark' : 'light');
+      });
+    })();
+  </script>
+</body>
+</html>
