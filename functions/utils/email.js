@@ -51,7 +51,7 @@ export async function sendDeleteConfirmationEmail(apiKey, to, token, env) {
   })
 }
 
-async function sendEmail(apiKey, env, { to, subject, html }) {
+async function sendEmail(apiKey, env, { to, subject, html }, signal) {
   const res = await fetch(RESEND_API, {
     method: 'POST',
     headers: {
@@ -59,6 +59,7 @@ async function sendEmail(apiKey, env, { to, subject, html }) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ from: fromOf(env), to, subject, html }),
+    signal,
   });
 
   if (!res.ok) {
@@ -75,7 +76,7 @@ async function sendEmail(apiKey, env, { to, subject, html }) {
  * @param {string} to      收件人信箱
  * @param {string} token   原始 token（hex，64 字元）
  */
-export async function sendVerificationEmail(apiKey, to, token, env) {
+export async function sendVerificationEmail(apiKey, to, token, env, signal) {
   const BASE_URL = baseUrlOf(env)
   // 改指向前端確認頁，使用者按下按鈕才 POST 核銷，避免郵件代理 / 預載提前消耗 token
   const link = `${BASE_URL}/verify-email.html?token=${token}`;
@@ -106,7 +107,7 @@ export async function sendVerificationEmail(apiKey, to, token, env) {
     to,
     subject: '驗證你的 Chiyigo 帳號 Email',
     html,
-  });
+  }, signal);
 }
 
 /**
