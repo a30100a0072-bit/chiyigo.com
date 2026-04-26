@@ -6,6 +6,7 @@
   <title>確認刪除帳號 — CHIYIGO</title>
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -22,14 +23,49 @@
           animation: { "fade-up": "fadeUp 0.5s ease forwards" },
         },
       },
-    }
+    };
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
-    body { background-color: #0e0e12; color: #e4e4ef; }
+    body { background-color: #0e0e12; color: #e4e4ef; transition: background-color .3s ease, color .3s ease; }
     .panel { display: none; }
-    .panel.active { display: block; }
+    .panel.active { display: block; animation: fadeUpIn 0.3s ease forwards; }
+    @keyframes fadeUpIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+    /* 亮模式覆蓋 */
+    .theme-light body { background-color: #f5f6fa; color: #1a1b2e; }
+    .theme-light .bg-\[\#0e0e12\] { background-color: #f0f2fa !important; }
+    .theme-light .bg-\[\#0e0e12\]\/80 { background-color: rgba(245,246,250,.85) !important; }
+    .theme-light .bg-\[\#16161d\] { background-color: #ffffff !important; }
+    .theme-light .border-\[\#2a2a35\] { border-color: rgba(0,0,0,.10) !important; }
+    .theme-light .text-white { color: #1a1b2e !important; }
+    .theme-light .text-gray-400 { color: rgba(26,27,46,.65) !important; }
+    .theme-light .text-gray-500 { color: rgba(26,27,46,.55) !important; }
+    .theme-light .text-gray-600 { color: rgba(26,27,46,.45) !important; }
+    .theme-light .hover\:text-white:hover { color: #1a1b2e !important; }
+    .theme-light .hover\:text-gray-300:hover { color: rgba(26,27,46,.75) !important; }
+
+    /* 工具按鈕 */
+    .tool-btn { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:9px; border:1px solid #2a2a35; background:transparent; color:#9ca3af; cursor:pointer; transition:background .18s ease, color .18s ease, border-color .18s ease; }
+    .tool-btn:hover { background:rgba(255,255,255,.05); color:#e4e4ef; }
+    .theme-light .tool-btn { border-color:rgba(0,0,0,.10); color:rgba(26,27,46,.65); }
+    .theme-light .tool-btn:hover { background:rgba(0,0,0,.05); color:#1a1b2e; }
+    .tool-btn svg { width:16px; height:16px; }
+    .lang-wrap { position:relative; }
+    .lang-menu { position:absolute; top:calc(100% + 6px); right:0; min-width:140px; background:#16161d; border:1px solid #2a2a35; border-radius:10px; padding:.35rem; display:none; box-shadow:0 12px 28px rgba(0,0,0,.35); z-index:100; }
+    .lang-menu.open { display:block; }
+    .theme-light .lang-menu { background:#ffffff; border-color:rgba(0,0,0,.10); box-shadow:0 12px 28px rgba(0,0,0,.10); }
+    .lang-opt { display:block; width:100%; text-align:left; padding:.45rem .7rem; font-size:.825rem; color:#cbd5e1; background:transparent; border:none; border-radius:7px; cursor:pointer; }
+    .lang-opt:hover { background:rgba(255,255,255,.06); color:#fff; }
+    .lang-opt.active { background:rgba(79,110,247,.15); color:#7c8df9; }
+    .theme-light .lang-opt { color:rgba(26,27,46,.75); }
+    .theme-light .lang-opt:hover { background:rgba(0,0,0,.05); color:#1a1b2e; }
+    .theme-light .lang-opt.active { background:rgba(79,110,247,.10); color:#3b55e6; }
+
+    .hdr-logo { height: 26px; width: auto; display: block; }
+    .logo-dark, .theme-dark .logo-light { display: none !important; }
+    .theme-dark .logo-dark { display: block !important; }
   </style>
 </head>
 <body class="font-sans antialiased min-h-screen flex flex-col">
@@ -40,24 +76,49 @@
         <svg class="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
         </svg>
-        返回登入
+        <span data-i18n="back_login">返回登入</span>
       </a>
-      <span class="text-sm font-semibold text-white tracking-tight">CHIYIGO</span>
-      <div class="w-20"></div>
+      <a href="/" aria-label="CHIYIGO" class="flex items-center">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="hdr-logo logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="hdr-logo logo-dark">
+      </a>
+      <div class="flex items-center gap-2">
+        <div class="lang-wrap">
+          <button id="lang-btn" type="button" class="tool-btn" aria-label="Language">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m-9 9h18" />
+            </svg>
+          </button>
+          <div id="lang-menu" class="lang-menu" role="menu">
+            <button class="lang-opt" data-lang="zh-TW" role="menuitem">繁體中文</button>
+            <button class="lang-opt" data-lang="en" role="menuitem">English</button>
+            <button class="lang-opt" data-lang="ja" role="menuitem">日本語</button>
+            <button class="lang-opt" data-lang="ko" role="menuitem">한국어</button>
+          </div>
+        </div>
+        <button id="theme-btn" type="button" class="tool-btn" aria-label="Toggle theme">
+          <svg id="theme-icon-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+          </svg>
+          <svg id="theme-icon-light" class="hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
 
   <main class="flex-1 flex items-center justify-center px-4 pt-14">
     <div class="w-full max-w-md animate-fade-up">
 
-      <div class="text-center mb-8">
+      <div class="text-center mb-8 mt-6">
         <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 mb-4">
           <svg class="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
         </div>
-        <h1 class="text-2xl font-bold text-white">刪除帳號確認</h1>
-        <p class="text-gray-500 text-sm mt-1">此操作不可逆，請謹慎確認</p>
+        <h1 class="text-2xl font-bold text-white" data-i18n="title">刪除帳號確認</h1>
+        <p class="text-gray-500 text-sm mt-1" data-i18n="subtitle">此操作不可逆，請謹慎確認</p>
       </div>
 
       <div class="rounded-2xl bg-[#16161d] border border-[#2a2a35] p-8 shadow-2xl">
@@ -67,20 +128,20 @@
         <!-- 確認面板 -->
         <div id="panel-confirm" class="panel active">
           <div class="mb-6 p-4 rounded-xl bg-red-500/5 border border-red-500/20">
-            <p class="text-red-400 text-sm font-semibold mb-1">以下資料將被永久刪除：</p>
+            <p class="text-red-400 text-sm font-semibold mb-1" data-i18n="danger_title">以下資料將被永久刪除：</p>
             <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
-              <li>帳號登入資訊與密碼</li>
-              <li>雙重驗證設定與備用碼</li>
-              <li>OAuth 第三方綁定</li>
-              <li>所有個人資料與登入記錄</li>
+              <li data-i18n="danger_li1">帳號登入資訊與密碼</li>
+              <li data-i18n="danger_li2">雙重驗證設定與備用碼</li>
+              <li data-i18n="danger_li3">OAuth 第三方綁定</li>
+              <li data-i18n="danger_li4">所有個人資料與登入記錄</li>
             </ul>
           </div>
           <button id="confirm-btn" onclick="confirmDelete()"
-            class="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100">
+            class="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100" data-i18n="btn_confirm">
             確認永久刪除我的帳號
           </button>
           <a href="/dashboard.html"
-            class="block mt-3 w-full py-2 text-xs text-center text-gray-500 hover:text-gray-300 transition">
+            class="block mt-3 w-full py-2 text-xs text-center text-gray-500 hover:text-gray-300 transition" data-i18n="btn_cancel">
             取消，返回帳號設定
           </a>
         </div>
@@ -92,10 +153,10 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
             </svg>
           </div>
-          <p class="text-white font-semibold mb-1">帳號已刪除</p>
-          <p class="text-gray-500 text-sm">你的帳號與個人資料已永久移除。感謝你使用 CHIYIGO。</p>
+          <p class="text-white font-semibold mb-1" data-i18n="success_title">帳號已刪除</p>
+          <p class="text-gray-500 text-sm" data-i18n="success_desc">你的帳號與個人資料已永久移除。感謝你使用 CHIYIGO。</p>
           <p class="text-gray-600 text-xs mt-3">
-            <span id="countdown">5</span> 秒後自動跳轉…
+            <span id="countdown">5</span><span data-i18n="countdown_suffix"> 秒後自動跳轉…</span>
           </p>
         </div>
 
@@ -106,23 +167,154 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
           </div>
-          <p class="text-white font-semibold mb-1">連結無效或已過期</p>
-          <p class="text-gray-500 text-sm">刪除確認連結僅能使用一次，且有效期為 15 分鐘。</p>
+          <p class="text-white font-semibold mb-1" data-i18n="invalid_title">連結無效或已過期</p>
+          <p class="text-gray-500 text-sm" data-i18n="invalid_desc">刪除確認連結僅能使用一次，且有效期為 15 分鐘。</p>
           <a href="/dashboard.html"
-            class="inline-block mt-6 px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]">
+            class="inline-block mt-6 px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]" data-i18n="btn_back_settings">
             返回帳號設定
           </a>
         </div>
 
       </div>
 
-      <p class="text-center text-xs text-gray-600 mt-6">
+      <p class="text-center text-xs text-gray-600 mt-6" data-i18n="footer_note">
         若非本人操作，請忽略此頁面，你的帳號不會有任何變動。
       </p>
     </div>
   </main>
 
   <script>
+    // ── i18n ─────────────────────────────────────────────────────
+    const I18N = {
+      'zh-TW': {
+        back_login:'返回登入',
+        title:'刪除帳號確認',
+        subtitle:'此操作不可逆，請謹慎確認',
+        danger_title:'以下資料將被永久刪除：',
+        danger_li1:'帳號登入資訊與密碼',
+        danger_li2:'雙重驗證設定與備用碼',
+        danger_li3:'OAuth 第三方綁定',
+        danger_li4:'所有個人資料與登入記錄',
+        btn_confirm:'確認永久刪除我的帳號',
+        btn_cancel:'取消，返回帳號設定',
+        success_title:'帳號已刪除',
+        success_desc:'你的帳號與個人資料已永久移除。感謝你使用 CHIYIGO。',
+        countdown_suffix:' 秒後自動跳轉…',
+        invalid_title:'連結無效或已過期',
+        invalid_desc:'刪除確認連結僅能使用一次，且有效期為 15 分鐘。',
+        btn_back_settings:'返回帳號設定',
+        footer_note:'若非本人操作，請忽略此頁面，你的帳號不會有任何變動。',
+        loading:'處理中…',
+        err_default:'發生錯誤，請稍後再試。',
+        err_network:'網路錯誤，請檢查連線後重試。',
+      },
+      en: {
+        back_login:'Back to login',
+        title:'Confirm Account Deletion',
+        subtitle:'This action is irreversible. Please confirm carefully.',
+        danger_title:'The following data will be permanently deleted:',
+        danger_li1:'Account credentials and password',
+        danger_li2:'Two-factor authentication and backup codes',
+        danger_li3:'Third-party OAuth bindings',
+        danger_li4:'All personal data and sign-in records',
+        btn_confirm:'Permanently delete my account',
+        btn_cancel:'Cancel and return to account settings',
+        success_title:'Account deleted',
+        success_desc:'Your account and personal data have been permanently removed. Thank you for using CHIYIGO.',
+        countdown_suffix:' seconds until redirect…',
+        invalid_title:'Link invalid or expired',
+        invalid_desc:'The deletion link can only be used once, and is valid for 15 minutes.',
+        btn_back_settings:'Back to account settings',
+        footer_note:'If this was not you, please ignore this page — your account will remain unchanged.',
+        loading:'Processing…',
+        err_default:'An error occurred. Please try again later.',
+        err_network:'Network error, please check your connection and retry.',
+      },
+      ja: {
+        back_login:'ログインに戻る',
+        title:'アカウント削除の確認',
+        subtitle:'この操作は元に戻せません。慎重に確認してください。',
+        danger_title:'以下のデータは完全に削除されます：',
+        danger_li1:'アカウント認証情報とパスワード',
+        danger_li2:'二段階認証とバックアップコード',
+        danger_li3:'OAuth 第三者連携',
+        danger_li4:'すべての個人データとログイン履歴',
+        btn_confirm:'アカウントを完全に削除する',
+        btn_cancel:'キャンセルしてアカウント設定に戻る',
+        success_title:'アカウントを削除しました',
+        success_desc:'アカウントと個人データは完全に削除されました。CHIYIGO をご利用いただきありがとうございました。',
+        countdown_suffix:' 秒後に自動的にリダイレクトします…',
+        invalid_title:'リンクが無効または期限切れです',
+        invalid_desc:'削除確認リンクは1回のみ使用でき、有効期限は15分です。',
+        btn_back_settings:'アカウント設定に戻る',
+        footer_note:'本人による操作でない場合、このページを無視してください。アカウントには影響しません。',
+        loading:'処理中…',
+        err_default:'エラーが発生しました。しばらくしてからお試しください。',
+        err_network:'ネットワークエラーです。接続を確認してください。',
+      },
+      ko: {
+        back_login:'로그인으로 돌아가기',
+        title:'계정 삭제 확인',
+        subtitle:'이 작업은 되돌릴 수 없습니다. 신중하게 확인해 주세요.',
+        danger_title:'다음 데이터가 영구적으로 삭제됩니다：',
+        danger_li1:'계정 인증 정보 및 비밀번호',
+        danger_li2:'2단계 인증 및 백업 코드',
+        danger_li3:'OAuth 제3자 연동',
+        danger_li4:'모든 개인 데이터 및 로그인 기록',
+        btn_confirm:'내 계정을 영구적으로 삭제',
+        btn_cancel:'취소하고 계정 설정으로 돌아가기',
+        success_title:'계정이 삭제되었습니다',
+        success_desc:'계정과 개인 데이터가 영구적으로 삭제되었습니다. CHIYIGO를 이용해 주셔서 감사합니다.',
+        countdown_suffix:'초 후 자동으로 이동합니다…',
+        invalid_title:'링크가 유효하지 않거나 만료됨',
+        invalid_desc:'삭제 확인 링크는 한 번만 사용할 수 있으며, 유효 기간은 15분입니다.',
+        btn_back_settings:'계정 설정으로 돌아가기',
+        footer_note:'본인이 한 작업이 아니라면 이 페이지를 무시하세요. 계정에는 변동이 없습니다.',
+        loading:'처리 중…',
+        err_default:'오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+        err_network:'네트워크 오류입니다. 연결을 확인해 주세요.',
+      },
+    };
+
+    function getLang() { try { return localStorage.getItem('lang') || 'zh-TW' } catch { return 'zh-TW' } }
+    function T(key) { const d = I18N[getLang()] || I18N['zh-TW']; return d[key] ?? key; }
+
+    function applyLang(lang) {
+      try { localStorage.setItem('lang', lang) } catch {}
+      document.documentElement.lang = lang;
+      const dict = I18N[lang] || I18N['zh-TW'];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const k = el.dataset.i18n; if (dict[k] != null) el.textContent = dict[k];
+      });
+      document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    }
+
+    function applyTheme(isLight) {
+      document.documentElement.classList.toggle('theme-light', isLight);
+      document.documentElement.classList.toggle('theme-dark', !isLight);
+      try { localStorage.setItem('theme', isLight ? 'light' : 'dark') } catch {}
+      document.getElementById('theme-icon-dark').classList.toggle('hidden', isLight);
+      document.getElementById('theme-icon-light').classList.toggle('hidden', !isLight);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      applyLang(getLang());
+      applyTheme(document.documentElement.classList.contains('theme-light'));
+
+      document.getElementById('theme-btn').addEventListener('click', () => {
+        applyTheme(!document.documentElement.classList.contains('theme-light'));
+      });
+      const langMenu = document.getElementById('lang-menu');
+      document.getElementById('lang-btn').addEventListener('click', e => {
+        e.stopPropagation(); langMenu.classList.toggle('open');
+      });
+      langMenu.querySelectorAll('.lang-opt').forEach(opt => {
+        opt.addEventListener('click', () => { applyLang(opt.dataset.lang); langMenu.classList.remove('open'); });
+      });
+      document.addEventListener('click', () => langMenu.classList.remove('open'));
+    });
+
+    // ── 刪除帳號流程 ─────────────────────────────────────────────
     const token = new URLSearchParams(location.search).get('token') ?? ''
 
     if (!token) showPanel('panel-invalid')
@@ -144,7 +336,7 @@
     async function confirmDelete() {
       const btn = document.getElementById('confirm-btn')
       btn.disabled = true
-      btn.textContent = '處理中…'
+      btn.textContent = T('loading')
       setMsg('')
 
       try {
@@ -166,14 +358,14 @@
           return
         }
 
-        setMsg(data.error ?? '發生錯誤，請稍後再試。')
+        setMsg(data.error ?? T('err_default'))
       } catch {
-        setMsg('網路錯誤，請檢查連線後重試。')
+        setMsg(T('err_network'))
       } finally {
         if (!document.getElementById('panel-success').classList.contains('active') &&
             !document.getElementById('panel-invalid').classList.contains('active')) {
           btn.disabled = false
-          btn.textContent = '確認永久刪除我的帳號'
+          btn.textContent = T('btn_confirm')
         }
       }
     }
