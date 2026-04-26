@@ -30,6 +30,15 @@
 | L3 | ✅ 已修 | `wrangler.toml` 加 `[vars]` 預設與 `[env.preview.vars]` 區段；IAM_BASE_URL / MAIL_FROM_ADDRESS 改用 vars 管控 |
 | L9 | ✅ 已修 | `callback.js` 全新用戶建立改用 `last_row_id` 取代 batch + SELECT，避免 D1 batch 跨語句可見性風險 |
 
+### 部署驗證 — 2026-04-26
+
+- **Production active**：`eef12dbe.chiyigo-com.pages.dev`（commit `5181d63`）
+- **失敗歷史**：commit `84114aa` 因 `wrangler.toml` 加入 `IAM_BASE_URL` / `MAIL_FROM_ADDRESS` 與 Pages dashboard env vars 衝突 → `5181d63` 回退至僅保留 `[vars] ENVIRONMENT="production"` 後重新成功部署。
+- **手動煙霧測試**：
+  - 登入流程 → 密碼正確 → `POST /api/auth/local/login` 回 **403 `{ code: "TOTP_REQUIRED" }`** 觸發 2FA 畫面 ✅（設計如此，非 bug）
+  - Console 無 CSP violation、無 CORS 錯誤
+- **`.md` 雙檔架構**：`BUILD_PLAN.md`（產品路線圖）+ `AUDIT.md`（安全/技術債檢查）職責分離，標準作法，不需合併。
+
 **勘誤（驗證後）**：
 - `email_verifications` 在 prod **已有** 完整欄位（token_type/used_at/ip_address/created_at），原報告 C1 誇大為「程式會立刻崩潰」實為「schema 來源真相不一致」。已透過同步 schema_auth.sql 修正。
 - `password_resets` 表雖然 schema 中存在，但實際所有流程改走 `email_verifications + token_type='reset_password'`；該舊表僅在 `delete/confirm.js` 做防禦性 DELETE。標 LEGACY 不再寫入。
