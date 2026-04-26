@@ -266,13 +266,13 @@
         <!-- 設定登入密碼（OAuth-only 帳號）-->
         <div id="setpw-section" class="hidden rounded-2xl bg-[#16161d] border border-amber-500/20 shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-amber-500/15">
-            <p class="text-sm font-semibold text-amber-300">設定登入密碼</p>
-            <p class="text-xs text-gray-500 mt-0.5">你目前透過第三方帳號登入。設定密碼後，將擁有後備登入方式，並可執行刪帳等敏感操作。</p>
+            <p class="text-sm font-semibold text-amber-300" data-i18n="setpw_title">設定登入密碼</p>
+            <p class="text-xs text-gray-500 mt-0.5" data-i18n="setpw_subtitle">你目前透過第三方帳號登入。設定密碼後，將擁有後備登入方式，並可執行刪帳等敏感操作。</p>
           </div>
           <div class="px-5 py-4">
             <button id="setpw-btn" onclick="sendSetPasswordEmail()"
               class="w-full py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-              <span>寄送設定密碼信</span>
+              <span data-i18n="setpw_btn">寄送設定密碼信</span>
             </button>
             <p id="setpw-msg" class="hidden text-xs mt-3"></p>
           </div>
@@ -309,16 +309,16 @@
             <div id="del-stage1" class="space-y-3">
               <button id="del-open-btn" onclick="showDeleteForm()"
                 class="w-full py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                <span id="del-open-label">我要刪除帳號</span>
+                <span id="del-open-label" data-i18n="del_open_btn">我要刪除帳號</span>
               </button>
-              <p id="del-need-pw" class="hidden text-xs text-amber-400">請先到上方「設定登入密碼」完成密碼設定，才能刪除帳號。</p>
+              <p id="del-need-pw" class="hidden text-xs text-amber-400" data-i18n="del_need_pw">請先到上方「設定登入密碼」完成密碼設定，才能刪除帳號。</p>
             </div>
             <div id="del-stage2" class="hidden space-y-3">
-              <p class="text-xs text-gray-400 leading-relaxed">
+              <p class="text-xs text-gray-400 leading-relaxed" data-i18n="del_stage2_hint">
                 為防誤刪，請輸入登入密碼確認。送出後會寄送一封確認信到你的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。
               </p>
               <input id="del-password" type="password" autocomplete="current-password"
-                placeholder="登入密碼"
+                placeholder="登入密碼" data-i18n-ph="del_pw_ph"
                 class="w-full px-4 py-2.5 rounded-xl bg-[#0f0f14] border border-red-500/20 focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
               <p id="del-msg" class="hidden text-xs"></p>
               <div class="flex gap-2">
@@ -391,6 +391,27 @@
         unbind_last_method:'請先設定本地密碼或綁定其他帳號後，才能解除此綁定',
         bind_err_already:'此帳號已綁定', bind_err_taken:'此身分已被其他用戶使用',
         bind_err_state:'綁定請求已過期，請重試', bind_err_account:'帳號狀態異常，請重新登入',
+        setpw_title:'設定登入密碼',
+        setpw_subtitle:'你目前透過第三方帳號登入。設定密碼後，將擁有後備登入方式，並可執行刪帳等敏感操作。',
+        setpw_btn:'寄送設定密碼信',
+        setpw_sent:'✓ 設定密碼信已寄出，請至 <strong>${email}</strong> 點擊連結完成設定（連結有效 1 小時）。設定完成後請重新整理本頁。',
+        setpw_fail:'寄送失敗，請稍後再試',
+        danger_title:'危險區', danger_subtitle:'永久刪除帳號與所有相關資料，操作不可復原',
+        del_open_btn:'我要刪除帳號',
+        del_need_pw_local:'需先設定登入密碼',
+        del_need_pw:'請先到上方「設定登入密碼」完成密碼設定，才能刪除帳號。',
+        del_stage2_hint:'為防誤刪，請輸入登入密碼確認。送出後會寄送一封確認信到你的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。',
+        del_pw_ph:'登入密碼',
+        del_cancel_btn:'取消', del_send_btn:'送出刪除確認信',
+        del_pw_required:'請輸入密碼',
+        del_sent:'✓ 確認信已寄出，請至信箱點擊連結完成刪除（15 分鐘內有效）。',
+        del_err_pw:'密碼錯誤',
+        del_err_account:'找不到帳號',
+        del_err_rate:'請求次數過多，請稍後再試',
+        del_err_cooldown:'請稍候再申請下一封確認信',
+        del_err_send:'寄信失敗，請稍後再試',
+        del_err_unauth:'登入狀態已失效，請重新登入',
+        del_err_generic:'送出失敗（${status}），請稍後再試',
       },
       'en': {
         back_home:'Back to Home', logout_header:'Log Out', loading_text:'Loading…',
@@ -429,6 +450,27 @@
         unbind_last_method:'Please set a local password or link another account before removing this one',
         bind_err_already:'Already linked', bind_err_taken:'This identity is already used by another account',
         bind_err_state:'Linking session expired, please try again', bind_err_account:'Account error, please log in again',
+        setpw_title:'Set Login Password',
+        setpw_subtitle:'You are currently signed in via a third-party account. Setting a password gives you a fallback login method and unlocks sensitive actions such as account deletion.',
+        setpw_btn:'Send password setup email',
+        setpw_sent:'✓ Setup email sent to <strong>${email}</strong>. Click the link to set your password (valid for 1 hour). Refresh this page after.',
+        setpw_fail:'Failed to send, please try again later',
+        danger_title:'Danger Zone', danger_subtitle:'Permanently delete your account and all related data — this cannot be undone.',
+        del_open_btn:'Delete my account',
+        del_need_pw_local:'Set a login password first',
+        del_need_pw:'Please use “Set Login Password” above first before you can delete your account.',
+        del_stage2_hint:'For safety, enter your login password to confirm. We will send a confirmation email; only after you click the link in that email will your account actually be deleted (link valid for 15 minutes).',
+        del_pw_ph:'Login password',
+        del_cancel_btn:'Cancel', del_send_btn:'Send confirmation email',
+        del_pw_required:'Please enter your password',
+        del_sent:'✓ Confirmation email sent. Click the link in your inbox to complete deletion (valid for 15 minutes).',
+        del_err_pw:'Incorrect password',
+        del_err_account:'Account not found',
+        del_err_rate:'Too many requests. Please try again later.',
+        del_err_cooldown:'Please wait before requesting another confirmation email',
+        del_err_send:'Failed to send email, please try again later',
+        del_err_unauth:'Session expired, please log in again',
+        del_err_generic:'Submission failed (${status}), please try again later',
       },
       'ja': {
         back_home:'ホームに戻る', logout_header:'ログアウト', loading_text:'読み込み中…',
@@ -467,6 +509,27 @@
         unbind_last_method:'ローカルパスワードを設定するか他のアカウントを連携してから解除してください',
         bind_err_already:'すでに連携済みです', bind_err_taken:'このアカウントは別のユーザーが使用しています',
         bind_err_state:'連携セッションが期限切れです。再試行してください', bind_err_account:'アカウント状態に問題があります。再ログインしてください',
+        setpw_title:'ログインパスワードの設定',
+        setpw_subtitle:'現在は外部アカウントでログイン中です。パスワードを設定すると、バックアップのログイン方法が得られ、アカウント削除などの操作が可能になります。',
+        setpw_btn:'パスワード設定メールを送信',
+        setpw_sent:'✓ 設定メールを <strong>${email}</strong> に送信しました。リンクをクリックして設定を完了してください（1時間有効）。完了後、このページを再読み込みしてください。',
+        setpw_fail:'送信に失敗しました。後でお試しください',
+        danger_title:'危険な操作', danger_subtitle:'アカウントとすべての関連データを完全に削除します（取り消し不可）',
+        del_open_btn:'アカウントを削除する',
+        del_need_pw_local:'先にログインパスワードを設定してください',
+        del_need_pw:'削除するには、上の「ログインパスワードの設定」を先に完了してください。',
+        del_stage2_hint:'誤削除防止のため、ログインパスワードを入力してください。送信後に確認メールが届きます。メール内のリンクをクリックすると実際に削除されます（リンクは15分間有効）。',
+        del_pw_ph:'ログインパスワード',
+        del_cancel_btn:'キャンセル', del_send_btn:'削除確認メールを送信',
+        del_pw_required:'パスワードを入力してください',
+        del_sent:'✓ 確認メールを送信しました。受信トレイのリンクをクリックして削除を完了してください（15分間有効）。',
+        del_err_pw:'パスワードが正しくありません',
+        del_err_account:'アカウントが見つかりません',
+        del_err_rate:'リクエストが多すぎます。後でお試しください。',
+        del_err_cooldown:'次の確認メールを送るまで少しお待ちください',
+        del_err_send:'メール送信に失敗しました。後でお試しください',
+        del_err_unauth:'セッションが切れました。再ログインしてください',
+        del_err_generic:'送信に失敗しました（${status}）。後でお試しください',
       },
       'ko': {
         back_home:'홈으로 돌아가기', logout_header:'로그아웃', loading_text:'로딩 중…',
@@ -505,6 +568,27 @@
         unbind_last_method:'로컬 비밀번호를 설정하거나 다른 계정을 연동한 후 해제하세요',
         bind_err_already:'이미 연동되어 있습니다', bind_err_taken:'이 계정은 이미 다른 사용자가 사용 중입니다',
         bind_err_state:'연동 세션이 만료되었습니다. 다시 시도해 주세요', bind_err_account:'계정 오류. 다시 로그인하세요',
+        setpw_title:'로그인 비밀번호 설정',
+        setpw_subtitle:'현재 서드파티 계정으로 로그인 중입니다. 비밀번호를 설정하면 대체 로그인 수단이 생기고, 계정 삭제 등 민감한 작업을 수행할 수 있습니다.',
+        setpw_btn:'비밀번호 설정 메일 발송',
+        setpw_sent:'✓ 설정 메일을 <strong>${email}</strong>(으)로 발송했습니다. 링크를 클릭해 설정을 완료하세요（1시간 유효）. 완료 후 페이지를 새로고침하세요.',
+        setpw_fail:'발송 실패. 나중에 다시 시도해 주세요',
+        danger_title:'위험 영역', danger_subtitle:'계정과 모든 관련 데이터를 영구 삭제합니다（되돌릴 수 없음）',
+        del_open_btn:'계정 삭제',
+        del_need_pw_local:'먼저 로그인 비밀번호를 설정하세요',
+        del_need_pw:'삭제하려면 위의 "로그인 비밀번호 설정"을 먼저 완료하세요.',
+        del_stage2_hint:'오삭제 방지를 위해 로그인 비밀번호를 입력하세요. 제출 후 확인 메일이 발송됩니다. 메일의 링크를 클릭해야 실제로 삭제됩니다（링크 15분 유효）.',
+        del_pw_ph:'로그인 비밀번호',
+        del_cancel_btn:'취소', del_send_btn:'삭제 확인 메일 발송',
+        del_pw_required:'비밀번호를 입력해 주세요',
+        del_sent:'✓ 확인 메일이 발송되었습니다. 받은 편지함에서 링크를 클릭해 삭제를 완료하세요（15분 유효）.',
+        del_err_pw:'비밀번호가 올바르지 않습니다',
+        del_err_account:'계정을 찾을 수 없습니다',
+        del_err_rate:'요청이 너무 많습니다. 나중에 다시 시도해 주세요.',
+        del_err_cooldown:'다음 확인 메일 요청까지 잠시 기다려 주세요',
+        del_err_send:'메일 발송 실패. 나중에 다시 시도해 주세요',
+        del_err_unauth:'세션이 만료되었습니다. 다시 로그인해 주세요',
+        del_err_generic:'전송 실패（${status}）. 나중에 다시 시도해 주세요',
       },
     };
 
@@ -540,6 +624,10 @@
       if (createdEl?.dataset.raw) createdEl.textContent = formatDate(createdEl.dataset.raw);
       // 需求單列表：以最後一次 fetch 結果重畫（變數宣告在後段，用 window 規避 TDZ）
       if (window._lastRequisitions) renderRequisitions(window._lastRequisitions);
+      // 刪帳按鈕 label 隨 hasPassword 動態切換，需在 i18n 套用後重畫
+      if (typeof renderDeleteSection === 'function' && typeof window.__hasPassword !== 'undefined') {
+        renderDeleteSection(window.__hasPassword);
+      }
     }
 
     // lang switcher — globe dropdown
@@ -1105,20 +1193,19 @@
           body:    JSON.stringify({ email: window.__userEmail }),
         });
         if (!r.ok) {
-          const d = await r.json().catch(() => ({}));
-          msg.textContent = d.error || '寄送失敗，請稍後再試';
+          msg.textContent = T('setpw_fail');
           msg.className = 'text-xs text-red-400';
           msg.classList.remove('hidden');
           btn.disabled = false;
           return;
         }
-        msg.innerHTML = '✓ 設定密碼信已寄出，請至 <strong>' + esc(window.__userEmail) + '</strong> 點擊連結完成設定（連結有效 1 小時）。設定完成後請重新整理本頁。';
+        msg.innerHTML = T('setpw_sent').replace('${email}', esc(window.__userEmail));
         msg.className = 'text-xs text-emerald-400';
         msg.classList.remove('hidden');
         // 60 秒冷卻保護
         setTimeout(() => { btn.disabled = false; }, 60000);
       } catch (e) {
-        msg.textContent = '網路錯誤，請稍後再試';
+        msg.textContent = T('net_err');
         msg.className = 'text-xs text-red-400';
         msg.classList.remove('hidden');
         btn.disabled = false;
@@ -1133,11 +1220,11 @@
       if (!btn) return;
       if (hasPw) {
         btn.disabled = false;
-        label.textContent = '我要刪除帳號';
+        label.textContent = T('del_open_btn');
         hint.classList.add('hidden');
       } else {
         btn.disabled = true;
-        label.textContent = '需先設定登入密碼';
+        label.textContent = T('del_need_pw_local');
         hint.classList.remove('hidden');
       }
     }
@@ -1155,6 +1242,16 @@
       msg.classList.add('hidden');
       msg.textContent = '';
     }
+    // 後端錯誤訊息（英文）→ i18n key
+    const DEL_ERR_MAP = {
+      'Incorrect password':                                                 'del_err_pw',
+      'Account not found':                                                  'del_err_account',
+      'Too many requests. Please try again later.':                         'del_err_rate',
+      'Please wait before requesting another confirmation email':           'del_err_cooldown',
+      'Failed to send confirmation email, please try again later':          'del_err_send',
+      'password is required':                                               'del_pw_required',
+      'Unauthorized':                                                       'del_err_unauth',
+    };
     async function submitDeleteAccount() {
       const pw   = document.getElementById('del-password').value;
       const msg  = document.getElementById('del-msg');
@@ -1162,7 +1259,7 @@
       msg.classList.add('hidden');
       msg.textContent = '';
       if (!pw) {
-        msg.textContent = '請輸入密碼';
+        msg.textContent = T('del_pw_required');
         msg.className = 'text-xs text-red-400';
         msg.classList.remove('hidden');
         return;
@@ -1177,18 +1274,21 @@
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
-          msg.textContent = data.error || '送出失敗，請稍後再試';
+          const k = DEL_ERR_MAP[data.error];
+          msg.textContent = k ? T(k) : T('del_err_generic').replace('${status}', r.status);
           msg.className = 'text-xs text-red-400';
           msg.classList.remove('hidden');
           btn.disabled = false;
+          // 開發者除錯：把後端原始訊息一起印到 console，方便診斷
+          console.warn('[delete-account]', r.status, data);
           return;
         }
-        msg.innerHTML = '✓ 確認信已寄出，請至信箱點擊連結完成刪除（15 分鐘內有效）。';
+        msg.innerHTML = T('del_sent');
         msg.className = 'text-xs text-emerald-400';
         msg.classList.remove('hidden');
         document.getElementById('del-password').value = '';
       } catch (e) {
-        msg.textContent = '網路錯誤，請稍後再試';
+        msg.textContent = T('net_err');
         msg.className = 'text-xs text-red-400';
         msg.classList.remove('hidden');
         btn.disabled = false;
