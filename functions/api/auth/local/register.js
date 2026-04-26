@@ -11,13 +11,14 @@
 
 import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
+import { sendVerificationEmail } from '../../../utils/email.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL   = '15m'
 const VERIFY_TOKEN_HOURS = 24
 const REFRESH_TOKEN_DAYS = 7
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, waitUntil }) {
   // ── 1. 解析 Body ────────────────────────────────────────────
   let body
   try { body = await request.json() }
@@ -113,8 +114,12 @@ export async function onRequestPost({ request, env }) {
     status:         user.status,
   }, ACCESS_TOKEN_TTL, env)
 
-  // 生產環境應在此發送驗證信（TODO: Cloudflare Email Worker / SendGrid）
-  // verifyToken 僅此處出現，請在發信後丟棄
+  // 發送驗證信（fire-and-forget，不阻塞註冊回應；失敗時使用者仍可到 dashboard 重發）
+  if (env.RESEND_API_KEY) {
+    const sendTask = sendVerificationEmail(env.RESEND_API_KEY, emailLower, verifyToken)
+      .catch(() => { /* 靜默失敗，避免吞掉註冊流程 */ })
+    if (typeof waitUntil === 'function') waitUntil(sendTask)
+  }
 
   return res({
     access_token:   accessToken,

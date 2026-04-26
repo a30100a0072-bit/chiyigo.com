@@ -14,6 +14,9 @@
 | C2 | ✅ 已修 | `callback.js:194-211` 雙重守門：必須 `cfg.trustEmail && email_verified` 才靜默綁定，否則 403 阻擋；綁定成功後直接標記 email_verified=1 |
 | C4 | ✅ 已修 | `callback.js` 新增 `escapeHtml()`，所有 `htmlError(message)` 內 message 經 escape，移除潛在 reflected XSS（`err.message` 來自第三方 IdP） |
 | 額外 | ✅ | `init.js:125-135` 寫入 IP（migration 已加欄位） |
+| H1 | ✅ 已修 | `.github/workflows/cleanup.yml` 增 oauth_states / password_resets / login_attempts 排程清理（每日 UTC 03:00） |
+| H2 | ✅ 已修 | `cors.js:isAllowedOrigin` 改為僅 `env.ENVIRONMENT === 'development'` 才放行 localhost；`wrangler.toml` 新增 `[vars] ENVIRONMENT = "production"`（dev 端請於 `.dev.vars` 加 `ENVIRONMENT=development`） |
+| H5 | ✅ 已修 | `register.js` 改用 `ctx.waitUntil(sendVerificationEmail(...))` 寄信，移除 TODO；無 `RESEND_API_KEY` 時跳過 |
 
 **勘誤（驗證後）**：
 - `email_verifications` 在 prod **已有** 完整欄位（token_type/used_at/ip_address/created_at），原報告 C1 誇大為「程式會立刻崩潰」實為「schema 來源真相不一致」。已透過同步 schema_auth.sql 修正。

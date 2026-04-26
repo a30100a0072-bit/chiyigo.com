@@ -35,3 +35,21 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           command: d1 execute chiyigo_db --remote --command "DELETE FROM email_verifications WHERE expires_at < datetime('now');"
+
+      - name: Delete expired oauth_states
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: d1 execute chiyigo_db --remote --command "DELETE FROM oauth_states WHERE expires_at < datetime('now');"
+
+      - name: Delete expired password_resets (legacy)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: d1 execute chiyigo_db --remote --command "DELETE FROM password_resets WHERE expires_at < datetime('now');"
+
+      - name: Delete stale login_attempts (>1 day)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: d1 execute chiyigo_db --remote --command "DELETE FROM login_attempts WHERE created_at < datetime('now', '-1 day');"
