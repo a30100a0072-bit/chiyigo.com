@@ -19,7 +19,24 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM backup_codes'),
     env.chiyigo_db.prepare('DELETE FROM local_accounts'),
     env.chiyigo_db.prepare('DELETE FROM users'),
+    env.chiyigo_db.prepare('DELETE FROM login_attempts'),
   ])
+}
+
+/** Generate ES256 test keypair and inject into env (idempotent module-cached). */
+let _keysReady = false
+export async function ensureJwtKeys() {
+  if (_keysReady) return
+  const { generateKeyPair, exportJWK } = await import('jose')
+  const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true })
+  const priv = await exportJWK(privateKey)
+  const pub  = await exportJWK(publicKey)
+  priv.kid = pub.kid = 'test-key'
+  priv.alg = pub.alg = 'ES256'
+  pub.use  = 'sig'
+  env.JWT_PRIVATE_KEY = JSON.stringify(priv)
+  env.JWT_PUBLIC_KEY  = JSON.stringify(pub)
+  _keysReady = true
 }
 
 /**

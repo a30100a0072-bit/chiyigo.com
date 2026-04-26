@@ -41,7 +41,14 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash  TEXT    NOT NULL UNIQUE,
-  device_info TEXT,
+  device_uuid TEXT,
   expires_at  TEXT    NOT NULL,
   revoked_at  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip         TEXT,
+  email      TEXT,
+  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );

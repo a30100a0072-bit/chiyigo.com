@@ -487,18 +487,21 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 
 最高價值的擴張。每個 endpoint 一個 commit，便於 review。
 
-#### 3a. login.test.js（~10 tests）
-- [ ] 密碼正確 + 無 2FA → 200 + access_token + refresh cookie
-- [ ] 密碼正確 + 啟用 2FA → 403 `{ code: TOTP_REQUIRED, pre_auth_token }`
-- [ ] 密碼錯 → 401 + `login_attempts` 寫入 1 筆
-- [ ] 不存在 email → 401（fakeHashDelay 對齊時間，不洩漏）
-- [ ] OAuth-only 帳號 + 提供密碼 → 401（無 local_accounts）
-- [ ] ban 帳號（`status='banned'`）→ 403
-- [ ] 軟刪除帳號 → 401
-- [ ] login_attempts 累積到上限 → 鎖定/限流（看 login.js 的真實邏輯）
-- [ ] Invalid JSON / 缺欄位 → 400
-- [ ] 需新增 `_setup.sql` 的 `login_attempts` 表
-- [ ] **commit**：`test: login 整合測試 (10 tests)`
+#### 3a. login.test.js ✅ 完成（2026-04-26，13 tests）
+- [x] 密碼正確 + 無 2FA → 200 + access_token + refresh cookie + DB row
+- [x] App 平台（platform=app + device_uuid）→ 200 + refresh_token 在 body、無 cookie
+- [x] 密碼正確 + 啟用 2FA → 403 `{ code:TOTP_REQUIRED, pre_auth_token }`（驗 ES256 簽章 + scope）
+- [x] 密碼錯 → 401 + `login_attempts` 寫入 1 筆
+- [x] 成功登入會 DELETE 該 email 之前的 login_attempts
+- [x] 不存在 email → 401 + login_attempts 寫入（fakeHashDelay 對齊）
+- [x] OAuth-only 帳號（無 local_accounts）+ 密碼 → 401
+- [x] 軟刪除帳號 → 401
+- [x] ban 帳號 + 密碼正確 → 403 `{ code:ACCOUNT_BANNED }`
+- [x] Invalid JSON / 缺欄位 → 400
+- [x] **rate limit 同 email ≥ 10 次 / 15 min → 429 RATE_LIMITED**
+- [x] **rate limit 同 IP ≥ 20 次 / 15 min → 429 RATE_LIMITED**
+- [x] 必要架構：`_setup.sql` 加 `login_attempts` 表、`refresh_tokens.device_uuid` 修正、`_helpers.ensureJwtKeys()` 動態 inject ES256 keypair、vitest 設定 `isolatedStorage:false`（與 `singleWorker:true` 配套，避免 storage 隔離破壞 D1 跨 test 狀態）
+- [x] 驗收：integration 38/38（login 13 + forgot 9 + reset 9 + reset-2fa 7）
 
 #### 3b. register.test.js（~8 tests）
 - [ ] 弱密碼 → 400（驗 validatePassword 邏輯）

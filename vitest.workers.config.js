@@ -6,6 +6,7 @@ export default defineWorkersConfig({
     poolOptions: {
       workers: {
         singleWorker: true,
+        isolatedStorage: false,
         miniflare: {
           compatibilityDate: '2024-09-23',
           compatibilityFlags: ['nodejs_compat'],
