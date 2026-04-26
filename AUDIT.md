@@ -551,7 +551,8 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 - [x] 步驟 1：註冊 + 收驗證信 + 點 link 確認 → email_verified=1 ✅
 - [x] 步驟 2：登入無 2FA → dashboard ✅（測試 B1 修復時順便驗到）
 - [x] 步驟 3：啟用 2FA → 登出 → 重登 → 輸入 TOTP → dashboard ✅（過程發現 B5，已修；備用碼可由停用後重新啟用 / `regenerate.js` API 取得）
-- [ ] 步驟 4：forgot password / reset
+- [x] 步驟 4：forgot password → reset（含 2FA 分支 → TOTP 驗證 → 換新密碼 → refresh_tokens 已清）✅
+  - 過程發現 UX 問題：reset / forgot 兩頁缺翻譯選單與光暗切換、密碼條件描述（「最少 8 字元」）與後端實際規則（≥12 或 ≥8 含 3 類字元）不一致 → 已加 4 語 i18n + theme toggle + 修正密碼規則文案
 - [ ] 步驟 5：主題 / 語言 / 登出
 - [ ] 步驟 6：requisition + IP 限流
 - [ ] 步驟 7：Pages logs + Console 巡檢
