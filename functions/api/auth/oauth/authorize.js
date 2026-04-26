@@ -59,13 +59,15 @@ export async function onRequestGet({ request, env }) {
   const sessionKey = generateSecureToken()
   const expiresAt  = new Date(Date.now() + SESSION_TTL_MS)
     .toISOString().replace('T', ' ').slice(0, 19)
+  const ip         = request.headers.get('CF-Connecting-IP') ?? null
 
   await env.chiyigo_db
     .prepare(`
-      INSERT INTO pkce_sessions (session_key, state, code_challenge, redirect_uri, expires_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO pkce_sessions
+        (session_key, state, code_challenge, redirect_uri, expires_at, ip_address, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
     `)
-    .bind(sessionKey, state, codeChallenge, redirectUri, expiresAt)
+    .bind(sessionKey, state, codeChallenge, redirectUri, expiresAt, ip)
     .run()
 
   // 重導至登入頁，帶上 session key

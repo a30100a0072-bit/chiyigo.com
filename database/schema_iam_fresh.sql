@@ -91,8 +91,12 @@ CREATE TABLE IF NOT EXISTS pkce_sessions (
   state          TEXT NOT NULL,
   code_challenge TEXT NOT NULL,
   redirect_uri   TEXT NOT NULL,
-  expires_at     TEXT NOT NULL
+  expires_at     TEXT NOT NULL,
+  created_at     TEXT,
+  ip_address     TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_pkce_sessions_ip ON pkce_sessions(ip_address, created_at);
 
 CREATE TABLE IF NOT EXISTS auth_codes (
   code_hash      TEXT PRIMARY KEY,

@@ -25,7 +25,10 @@ export async function requireAuth(request, env, requiredScope = null) {
     return { user: null, error: res({ error: 'Unauthorized' }, 401) }
   }
 
-  const token = authHeader.slice(7)
+  const token = authHeader.slice(7).trim()
+  if (!token) {
+    return { user: null, error: res({ error: 'Unauthorized' }, 401) }
+  }
 
   let payload
   try {

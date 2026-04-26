@@ -18,6 +18,7 @@ import {
   hashPassword,
   verifyBackupCode,
 } from '../../../utils/crypto.js'
+import { validatePassword } from '../../../utils/password.js'
 
 export async function onRequestPost({ request, env }) {
   let body
@@ -29,8 +30,8 @@ export async function onRequestPost({ request, env }) {
   if (!token || !new_password)
     return res({ error: 'token and new_password are required' }, 400)
 
-  if (typeof new_password !== 'string' || new_password.length < 8)
-    return res({ error: 'new_password must be at least 8 characters' }, 400)
+  const pwCheck = validatePassword(new_password)
+  if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
 
   const db        = env.chiyigo_db
   const tokenHash = await hashToken(token)

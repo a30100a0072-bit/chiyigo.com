@@ -12,6 +12,7 @@
 import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { sendVerificationEmail } from '../../../utils/email.js'
+import { validatePassword } from '../../../utils/password.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL   = '15m'
@@ -30,8 +31,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
     return res({ error: 'email and password are required' }, 400)
   if (!EMAIL_RE.test(email))
     return res({ error: 'Invalid email format' }, 400)
-  if (typeof password !== 'string' || password.length < 8)
-    return res({ error: 'Password must be at least 8 characters' }, 400)
+  const pwCheck = validatePassword(password)
+  if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
 
   const db = env.chiyigo_db
 
@@ -71,7 +72,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     `).bind(verifyTokenHash, verifyExpiry, emailLower),
   ])
 
-  // ── 6. 訪客轉正（Best-effort，欄位不存在時靜默跳過）────────
+  // ── 6. 訪客轉正（Best-effort，僅轉同 guest_id 下尚未綁定的紀錄）────
   if (guest_id) {
     try {
       await db
@@ -79,7 +80,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
           UPDATE requisition
           SET owner_user_id  = (SELECT id FROM users WHERE email = ?),
               owner_guest_id = NULL
-          WHERE owner_guest_id = ?
+          WHERE owner_guest_id = ? AND owner_user_id IS NULL
         `)
         .bind(emailLower, guest_id)
         .run()

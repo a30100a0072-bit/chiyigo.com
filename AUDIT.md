@@ -17,6 +17,11 @@
 | H1 | ✅ 已修 | `.github/workflows/cleanup.yml` 增 oauth_states / password_resets / login_attempts 排程清理（每日 UTC 03:00） |
 | H2 | ✅ 已修 | `cors.js:isAllowedOrigin` 改為僅 `env.ENVIRONMENT === 'development'` 才放行 localhost；`wrangler.toml` 新增 `[vars] ENVIRONMENT = "production"`（dev 端請於 `.dev.vars` 加 `ENVIRONMENT=development`） |
 | H5 | ✅ 已修 | `register.js` 改用 `ctx.waitUntil(sendVerificationEmail(...))` 寄信，移除 TODO；無 `RESEND_API_KEY` 時跳過 |
+| M1 | ✅ 已修 | 新增 `functions/utils/password.js` 共用 `validatePassword()`（≥12 或 ≥8 含 3 類字元），register / reset-password 已替換 |
+| M2 | ✅ 已修 | `migrations/0005_pkce_sessions_audit.sql` 為 pkce_sessions 加 created_at/ip_address；authorize.js INSERT 帶入 IP；schema_iam_fresh.sql 同步 |
+| M4 | ✅ 已修 | `auth.js` Bearer token `slice(7).trim()`，空值直接回 401 |
+| M5 | ✅ 已修 | `public/_headers` 加 HSTS / X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy / CSP（白名單 Tailwind CDN / jsdelivr / CF Insights / Google Fonts） |
+| M6 | ✅ 已修 | `register.js` 訪客轉正加 `AND owner_user_id IS NULL` 保險，避免覆蓋已綁定紀錄 |
 
 **勘誤（驗證後）**：
 - `email_verifications` 在 prod **已有** 完整欄位（token_type/used_at/ip_address/created_at），原報告 C1 誇大為「程式會立刻崩潰」實為「schema 來源真相不一致」。已透過同步 schema_auth.sql 修正。
