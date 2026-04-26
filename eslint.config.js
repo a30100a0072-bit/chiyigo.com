@@ -40,6 +40,9 @@ export default [
         Headers: 'readonly',
         fetch: 'readonly',
         console: 'readonly',
+        AbortController: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
       },
     },
     rules: {

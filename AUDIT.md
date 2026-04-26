@@ -529,11 +529,23 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 - [x] 驗收：integration **55/55**（callback 7 + login 13 + register 10 + forgot 9 + reset 9 + reset-2fa 7）
 - 註：M2「oauth_states 寫 ip_address」屬 `authorize.js` 端 INSERT，不在 callback 範疇；之後若補 authorize.test.js 再覆蓋
 
-### 階段 4 — 部署煙霧驗收（~30 分鐘，無 commit）
+### 階段 4 — 部署煙霧驗收（進行中，2026-04-26）
 
 階段 1–3 push 完後，等 Cloudflare Pages 部署成功，手動跑端到端：
 
-- [ ] 註冊新帳號 → 收驗證信 → 點 link → /verify-email.html POST → 標記 verified
+- [x] 註冊新帳號 → 收驗證信 ✅（信寄達 Gmail，發信路徑全綠）— 點 link 驗證待補
+
+**煙霧測發現並修復的 3 個 bug**：
+- **B1 (415)**：`dashboard.html:902` 重發驗證信 fetch 漏 `Content-Type: application/json` → middleware 415 → fix `be8e160`
+- **B2 (同類)**：`dashboard.html:824` 啟用 2FA 同樣漏 Content-Type → fix `be8e160`
+- **B3 (524)**：`RESEND_API_KEY` env var 開頭含 UTF-8 BOM (`EF BB BF`) → Resend 回 400 + 舊 code 無 fetch timeout → Worker 卡 100s → CF 524。修法：(1) 用 `wrangler pages secret put` 重設 key（隱藏式輸入避 BOM）+ 輪換舊 key（已洩漏）(2) `send-verification.js` 加 `AbortController` 8s fetch timeout 防未來外部服務掛掉 → fix `bcf06b6` + cleanup commit
+
+**defensive 改動**：
+- `send-verification.js` 整個 handler 包外層 try/catch，未捕捉例外回 500 而非 propagate 出 Worker（避 CF 502）
+- `email.js` `sendEmail` / `sendVerificationEmail` 加 `signal` 參數支援 abort
+- `eslint.config.js` Workers globals 加 `AbortController` / `setTimeout` / `clearTimeout`
+
+
 - [ ] 登入（無 2FA）→ dashboard
 - [ ] 啟用 2FA → 登出 → 重登 → 輸入 TOTP → dashboard
 - [ ] 忘記密碼 → 收信 → /reset-password.html → 換新密碼 → 重登成功 + refresh_tokens 已清
