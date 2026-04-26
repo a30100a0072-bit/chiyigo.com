@@ -32,6 +32,7 @@
 | L8 | ✅ 已修 | bind/forgot/reset-password、login、admin-requisitions、dashboard 所有 form input 補 `<label for>` 或 `aria-label`（confirm-delete / verify-email 純按鈕無 input） |
 | dashboard 主題 | ✅ 已修 | dashboard 加回光/暗模式切換按鈕（與 login.html 同款式），新增 `.theme-light` CSS 反轉，沿用 `localStorage.theme` 預載（line 9 IIFE）避免登入後重置為暗模式 |
 | L4 | ✅ 已修 | 引入 vitest，新增 `tests/` 目錄含 password / crypto / jwt 共 20 個 unit test（PBKDF2 roundtrip、PKCE RFC 7636 vector、ES256 sign/verify、tampered token 拒絕、備用碼 hash 驗證），`npm test` 全綠 |
+| L5 | ✅ 已修 | 新增 `.github/workflows/ci.yml`：PR/push 跑 `npm ci` + `npm test` + `npm audit --omit=dev --audit-level=high`（生產依賴 0 漏洞） |
 
 ### 部署驗證 — 2026-04-26
 
@@ -360,8 +361,10 @@ if (!token) return { user: null, error: res({ error: 'Unauthorized' }, 401) }
 - `tests/crypto.test.js`：12 tests — salt/token 隨機性、PBKDF2 roundtrip、hashToken 確定性、PKCE RFC 7636 vector、備用碼產生與驗證
 - reset-password 流程整合測試暫不做（需 miniflare + D1，複雜度高，留待 L5 CI 穩定後再評估）
 
-### L5. 無 CI（`.github/` 內容未審）
-建議：PR 觸發 lint + 測試。`npm audit` 加進 CI。
+### L5. ~~無 CI~~ ✅ 已修（2026-04-26）
+- 新增 `.github/workflows/ci.yml`：PR + push to main 觸發
+- Node 20，`npm ci` → `npm test`（vitest）→ `npm audit --omit=dev --audit-level=high`（只審生產依賴的 high+ 漏洞）
+- ESLint 留待 L6 完成後再加 lint step
 
 ### L6. `package.json` 無 lint / format script
 建議：加 ESLint + prettier 基本配置。
