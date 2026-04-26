@@ -854,9 +854,9 @@
         codesEl.innerHTML = data.backup_codes.map(c =>
           `<code class="block text-center text-xs font-mono bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-2 py-1.5 text-gray-300 select-all">${c}</code>`
         ).join('');
+        render2FASection(true);
         document.getElementById('tfa-setup-panel').classList.add('hidden');
         document.getElementById('tfa-backup-panel').classList.remove('hidden');
-        render2FASection(true);
       } catch { showTfaMsg(msg, T('net_err'), 'err'); }
     }
 
