@@ -503,15 +503,19 @@ C/H/M/L 主線已清，下面是接下來的合理路線。**順序設計原則*
 - [x] 必要架構：`_setup.sql` 加 `login_attempts` 表、`refresh_tokens.device_uuid` 修正、`_helpers.ensureJwtKeys()` 動態 inject ES256 keypair、vitest 設定 `isolatedStorage:false`（與 `singleWorker:true` 配套，避免 storage 隔離破壞 D1 跨 test 狀態）
 - [x] 驗收：integration 38/38（login 13 + forgot 9 + reset 9 + reset-2fa 7）
 
-#### 3b. register.test.js（~8 tests）
-- [ ] 弱密碼 → 400（驗 validatePassword 邏輯）
-- [ ] 重複 email → 409
-- [ ] 訪客轉正：guest_id 已存在 + `owner_user_id IS NULL` → 200，要求單記錄被綁
-- [ ] 訪客轉正：guest_id 已被綁定 → 不覆蓋（M6 守門）
-- [ ] 無 RESEND_API_KEY → 200 但跳過寄信（H5 守門）
-- [ ] 有 RESEND_API_KEY → `waitUntil(sendVerificationEmail)` 被呼叫
-- [ ] Invalid JSON / 缺欄位 → 400
-- [ ] **commit**：`test: register 整合測試 (8 tests)`
+#### 3b. register.test.js ✅ 完成（2026-04-26，10 tests）
+- [x] happy path → 201 + access_token (ES256 驗) + refresh_token + users/local_accounts/email_verifications/refresh_tokens DB rows
+- [x] 弱密碼 → 400（驗 validatePassword 邏輯）
+- [x] 重複 email → 409
+- [x] Invalid email format → 400
+- [x] 訪客轉正：guest_id 已存在 + `owner_user_id IS NULL` → 201，requisition 被綁到新 user、owner_guest_id 清空
+- [x] 訪客轉正：guest_id 已被別 user 綁定 → 201 但不覆蓋既有綁定（M6 守門）
+- [x] 無 RESEND_API_KEY → 201 跳過寄信（H5 守門）
+- [x] 有 RESEND_API_KEY → `sendVerificationEmail` 被呼叫一次（fire-and-forget，apiKey/to/token 正確）
+- [x] Invalid JSON → 400
+- [x] 缺欄位（缺 email / 缺 password）→ 400
+- [x] 必要架構：`_setup.sql` 加 minimal `requisition`（id/owner_guest_id/owner_user_id/created_at）；`_helpers.resetDb` 加 `DELETE FROM requisition`
+- [x] 驗收：integration **48/48**（register 10 + login 13 + forgot 9 + reset 9 + reset-2fa 7）
 
 #### 3c. callback.test.js（OAuth ~6 tests，較複雜）
 - [ ] 此檔需要 mock IdP token 交換（fetch mock）

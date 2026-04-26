@@ -52,3 +52,11 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   email      TEXT,
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Minimal requisition schema (only columns register.js' guest-upgrade UPDATE touches)
+CREATE TABLE IF NOT EXISTS requisition (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_guest_id  TEXT,
+  owner_user_id   INTEGER,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);
