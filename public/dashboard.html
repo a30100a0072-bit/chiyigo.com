@@ -67,60 +67,219 @@
     .theme-light .placeholder-gray-600::placeholder{color:#9a9aac!important}
     .theme-light .globe-btn,.theme-light .theme-btn{border-color:#d8d8e2;color:#5a5a6a}
     .theme-light .db-lang-drop{background:#fff;border-color:#d8d8e2;box-shadow:0 4px 24px rgba(0,0,0,.08)}
+
+    /* ══════════════════════════════════════════════════════════
+       ARSHIRE SIDEBAR LAYOUT (aligned with about.html)
+       ══════════════════════════════════════════════════════════ */
+    :root{
+      --as-bg:#0e0e12;--as-bg-surface:#16161d;--as-bg-elevated:#1a2136;
+      --as-bg-sidebar:#0F1424;--as-bg-titlebar:#0D1120;
+      --as-border:rgba(255,255,255,.08);--as-border-dim:rgba(255,255,255,.05);
+      --as-border-bright:rgba(255,255,255,.14);--as-border-mid:rgba(255,255,255,.1);
+      --as-text:#F3F4F6;--as-text-muted:rgba(243,244,246,.62);--as-text-dim:rgba(243,244,246,.36);
+      --as-accent:#7B6CFF;--as-accent-dim:rgba(123,108,255,.12);--as-hover:rgba(255,255,255,.06);
+      --as-neural-r:123;--as-neural-g:108;--as-neural-b:255;
+      --as-neural-node-opacity:.4;--as-neural-line-opacity:.15;
+      --as-sidebar-w:220px;--as-pad-x:2rem;
+    }
+    .theme-light{
+      --as-bg:#F0F2FA;--as-bg-surface:#FFFFFF;--as-bg-elevated:#FAFAFE;
+      --as-bg-sidebar:#EAEBF5;--as-bg-titlebar:#F4F5FC;
+      --as-border:rgba(0,0,0,.07);--as-border-dim:rgba(0,0,0,.05);
+      --as-border-bright:rgba(0,0,0,.14);--as-border-mid:rgba(0,0,0,.1);
+      --as-text:#1A1B2E;--as-text-muted:rgba(26,27,46,.6);--as-text-dim:rgba(26,27,46,.38);
+      --as-accent:#6C6EE5;--as-accent-dim:rgba(108,110,229,.1);--as-hover:rgba(0,0,0,.05);
+      --as-neural-r:108;--as-neural-g:110;--as-neural-b:229;
+      --as-neural-node-opacity:.22;--as-neural-line-opacity:.09;
+    }
+    @media(max-width:768px){:root{--as-sidebar-w:0px;--as-pad-x:1.25rem}}
+
+    body.has-sidebar{overflow:hidden}
+    @media(max-width:768px){body.has-sidebar{overflow:auto}}
+
+    #neural-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+    .dash-wrap{position:fixed;inset:0;z-index:1;display:grid;grid-template-columns:var(--as-sidebar-w) 1fr;background:var(--as-bg);overflow:hidden}
+    .dash-sidebar{background:var(--as-bg-sidebar);border-right:1px solid var(--as-border-dim);display:flex;flex-direction:column;overflow:hidden;height:100vh}
+    .dash-main{display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
+    .dash-content{flex:1;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;min-height:0;background:var(--as-bg)}
+    .dash-content::-webkit-scrollbar{width:4px}
+    .dash-content::-webkit-scrollbar-track{background:transparent}
+    .dash-content::-webkit-scrollbar-thumb{background:var(--as-border-mid);border-radius:2px}
+    .dash-content section[id]{scroll-margin-top:1rem}
+
+    .sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0;text-decoration:none}
+    .sb-logo-img{height:76px;width:auto;display:block;flex-shrink:0}
+    .sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .sb-nav::-webkit-scrollbar{display:none}
+    .sb-item{display:flex;align-items:center;gap:.7rem;padding:.6rem .85rem;border-radius:10px;font-family:inherit;font-size:.875rem;font-weight:400;color:var(--as-text-muted);text-decoration:none;background:transparent;border:none;width:100%;text-align:left;cursor:pointer;transition:background .18s ease,color .18s ease}
+    .sb-item:hover{background:rgba(108,110,229,.07);color:var(--as-text)}
+    .sb-item.active{background:var(--as-accent-dim);color:var(--as-accent);font-weight:500}
+    .sb-item.active .sb-icon{color:var(--as-accent);opacity:1}
+    .sb-icon{width:16px;height:16px;flex-shrink:0;color:var(--as-text-dim);opacity:.7;transition:color .18s ease,opacity .18s ease}
+    .sb-item:hover .sb-icon{color:var(--as-text-muted);opacity:.9}
+    .sb-item.danger{color:rgba(229,115,115,.9)}
+    .sb-item.danger:hover{background:rgba(229,115,115,.08);color:#e57373}
+    .sb-label{line-height:1;white-space:nowrap}
+    .sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--as-border-dim)}
+    .sb-cta{background:linear-gradient(140deg,rgba(108,110,229,.12),rgba(91,139,245,.08));border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem}
+    .sb-cta-icon{width:28px;height:28px;background:var(--as-accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:.65rem}
+    .sb-cta-icon svg{width:16px;height:16px}
+    .sb-cta-q{font-size:.8rem;font-weight:600;color:var(--as-text);margin-bottom:.3rem;line-height:1.3}
+    .sb-cta-desc{font-size:.72rem;color:var(--as-text-muted);line-height:1.5;margin-bottom:.75rem}
+    .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--as-accent);color:#fff;font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
+    .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .sb-footer{display:flex;align-items:center;gap:.5rem;position:relative}
+    .sb-foot-icons{display:flex;gap:.25rem}
+    .sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--as-text-dim);transition:background .18s ease,color .18s ease}
+    .sb-foot-btn:hover{background:var(--as-hover);color:var(--as-text-muted)}
+    .sb-foot-btn svg{width:14px;height:14px}
+    .sb-copyright{font-family:'DM Mono',monospace;font-size:.6rem;color:var(--as-text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
+
+    .sb-lang-drop{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--as-bg-surface);border:1px solid var(--as-border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
+    .sb-lang-drop.open{display:flex}
+    .sb-lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:inherit;font-size:.8rem;color:var(--as-text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
+    .sb-lang-opt:hover{background:var(--as-hover);color:var(--as-text)}
+    .sb-lang-opt.active{color:var(--as-accent);font-weight:500;background:var(--as-accent-dim)}
+
+    /* Mobile topbar / overlay */
+    .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--as-bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--as-border-dim)}
+    .m-tb-inner{display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:52px}
+    .m-tb-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none}
+    .m-logo-img{height:68px;width:auto;display:block}
+    .m-tb-right{display:flex;align-items:center;gap:.85rem}
+    .m-icon-btn{width:36px;height:36px;border:1px solid rgba(108,110,229,.22);background:rgba(108,110,229,.10);border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6c6ee5;flex-shrink:0;padding:0}
+    .m-icon-btn svg{width:14px;height:14px}
+    .theme-dark .m-icon-btn{border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.06);color:#fff}
+    .m-ham-btn{flex-direction:column;justify-content:center;gap:6px;padding:0 10px}
+    .m-ham-btn .m-ham-line{display:block;width:100%;height:1.5px;background:#6c6ee5;border-radius:2px;transition:transform .32s cubic-bezier(.23,1,.32,1)}
+    .theme-dark .m-ham-btn .m-ham-line{background:#fff}
+    .m-ham-btn.is-open .m-ham-line:nth-child(1){transform:translateY(3.75px) rotate(45deg)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(2){transform:translateY(-3.75px) rotate(-45deg)}
+
+    .m-overlay{display:none;position:fixed;inset:0;z-index:49;background:rgba(10,12,28,0);transition:background .35s ease;pointer-events:none}
+    .m-overlay.is-open{background:rgba(10,12,28,.32);pointer-events:auto}
+    .m-ov-wrap{position:absolute;bottom:0;left:0;right:0;background:var(--as-bg-surface);border-radius:22px 22px 0 0;border:1px solid var(--as-border);border-bottom:none;display:flex;flex-direction:column;max-height:88svh;overflow:hidden;transform:translateY(100%);transition:transform .42s cubic-bezier(.22,1,.36,1)}
+    .m-overlay.is-open .m-ov-wrap{transform:translateY(0)}
+    .m-ov-handle{width:36px;height:4px;background:rgba(108,110,229,.18);border-radius:100px;margin:12px auto 0;flex-shrink:0}
+    .m-ov-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.4rem .65rem}
+    .m-ov-title{font-size:.78rem;font-weight:600;color:var(--as-text);letter-spacing:.04em}
+    .m-ov-nav{flex:1;overflow-y:auto;padding:.35rem .75rem .5rem;display:flex;flex-direction:column;gap:.18rem}
+    .m-ov-item{display:flex;align-items:center;gap:.75rem;padding:.72rem .85rem;border-radius:12px;text-decoration:none;background:transparent;border:1px solid transparent;color:var(--as-text-muted);font-size:.9rem;width:100%;cursor:pointer}
+    .m-ov-item.active{background:var(--as-accent-dim);border-color:rgba(108,110,229,.14);color:var(--as-accent)}
+    .m-ov-item.danger{color:rgba(229,115,115,.9)}
+    .m-ov-icon-wrap{width:32px;height:32px;border-radius:9px;background:var(--as-hover);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--as-text-dim)}
+    .m-ov-icon{width:15px;height:15px}
+    .m-ov-cta{flex-shrink:0;padding:.75rem 1.2rem calc(1.25rem + env(safe-area-inset-bottom));border-top:1px solid rgba(108,110,229,.07)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--as-border-dim);background:transparent;border-radius:8px;font-family:inherit;font-size:.72rem;color:var(--as-text-muted);cursor:pointer;text-align:center}
+    .m-ov-lang-opt.active{border-color:var(--as-accent);color:var(--as-accent);background:var(--as-accent-dim)}
+    .m-top-lang-drop{position:fixed;top:58px;right:1.25rem;background:var(--as-bg-surface);border:1px solid var(--as-border);border-radius:10px;padding:.35rem;box-shadow:0 4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:60;min-width:128px}
+    .m-top-lang-drop.open{display:flex}
+
+    /* Footer (about.html-style) */
+    .as-footer{border-top:1px solid var(--as-border-dim);background:var(--as-bg-titlebar)}
+    .as-footer-inner{max-width:1200px;margin:0 auto;padding:2.5rem var(--as-pad-x);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2rem}
+    .as-footer .logo{height:72px;width:auto;display:block;margin-bottom:.45rem;opacity:.7}
+    .as-footer .tagline{font-size:.76rem;color:var(--as-text-dim);max-width:26rem;line-height:1.65}
+    .as-footer-links{display:flex;gap:2rem}
+    .as-footer-links a{font-family:'DM Mono',monospace;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--as-text-dim);text-decoration:none}
+    .as-footer-links a:hover{color:var(--as-text-muted)}
+    .as-footer-contact{display:flex;flex-direction:column;gap:.5rem}
+    .as-footer-contact-title{font-family:'DM Mono',monospace;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--as-text-dim);margin-bottom:.2rem}
+    .as-footer-contact-item{display:flex;align-items:center;gap:.45rem;font-size:.76rem;color:var(--as-text-dim);text-decoration:none}
+    .as-footer-contact-item:hover{color:var(--as-text-muted)}
+    .as-footer-contact-item svg{width:13px;height:13px;flex-shrink:0}
+    .as-copy{font-family:'DM Mono',monospace;font-size:.62rem;color:var(--as-text-dim);width:100%;opacity:.6;text-align:center;padding-bottom:1.5rem}
+
+    @media(max-width:768px){
+      .dash-wrap{position:relative;display:block;height:auto;min-height:100svh;overflow:visible}
+      .dash-sidebar{display:none}
+      .dash-main{display:block;height:auto;overflow:visible}
+      .dash-content{overflow:visible;height:auto;padding-top:52px;padding-bottom:0;min-height:100svh}
+      .m-topbar,.m-overlay{display:block}
+      .as-footer-inner{justify-content:flex-start}
+    }
   </style>
 </head>
-<body class="font-sans antialiased min-h-screen flex flex-col">
+<body class="font-sans antialiased min-h-screen has-sidebar">
 
-  <!-- 頂部工具列 -->
-  <header class="fixed top-0 inset-x-0 z-50 border-b border-[#2a2a35] bg-[#0e0e12]/80 backdrop-blur-md">
-    <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between relative">
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
 
-      <!-- 左：返回首頁 -->
-      <a href="/index.html" class="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors group">
-        <svg class="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        <span data-i18n="back_home" class="hidden sm:inline">返回首頁</span>
+  <div class="dash-wrap">
+
+    <!-- ── Sidebar ── -->
+    <aside class="dash-sidebar">
+      <a href="/" class="sb-brand" aria-label="CHIYIGO">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="sb-logo-img logo-dark">
       </a>
 
-      <!-- 中央：Logo（絕對置中）-->
-      <a href="/" aria-label="CHIYIGO 首頁" class="absolute left-1/2 -translate-x-1/2 flex items-center">
-        <img src="images/logo-light.png" alt="CHIYIGO" class="db-logo logo-light">
-        <img src="images/logo-dark.png"  alt="CHIYIGO" class="db-logo logo-dark">
-      </a>
-
-      <!-- 右：主題 + 地球語言按鈕 + 登出 -->
-      <div class="flex items-center gap-2">
-        <button class="theme-btn" id="db-theme-btn" aria-label="切換主題（亮/暗）" type="button">
-          <svg class="icon-sun"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <nav class="sb-nav" aria-label="會員功能">
+        <button type="button" class="sb-item active" data-scroll="user-card">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_overview">帳號總覽</span>
         </button>
-        <div class="globe-wrap">
-          <button class="globe-btn" id="db-globe-btn" aria-label="切換語言" type="button">
-            <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6M8 2c1.5 2 2.5 3.8 2.5 6S9.5 12 8 14M2 8h12" stroke="currentColor" stroke-width="1.3"/></svg>
-          </button>
-          <div class="db-lang-drop" id="db-lang-drop">
-            <button class="db-lang-opt active" data-lang="zh-TW">繁體中文</button>
-            <button class="db-lang-opt" data-lang="en">English</button>
-            <button class="db-lang-opt" data-lang="ja">日本語</button>
-            <button class="db-lang-opt" data-lang="ko">한국어</button>
+        <button type="button" class="sb-item" data-scroll="tfa-section">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M8 1.5L3 3.5v4c0 3 2 5.6 5 7 3-1.4 5-4 5-7v-4z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M6 8l1.5 1.5L10 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_2fa">雙重驗證</span>
+        </button>
+        <button type="button" class="sb-item" data-scroll="req-section">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_req">我的需求單</span>
+        </button>
+        <button type="button" class="sb-item" data-scroll="bind-section">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5L4 12a2 2 0 11-2.83-2.83L3.5 6.83M9.5 6.5L12 4a2 2 0 112.83 2.83L12.5 9.17M5.5 10.5l5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_bind">帳號綁定</span>
+        </button>
+        <button type="button" class="sb-item" id="sb-nav-setpw" data-scroll="setpw-section" hidden>
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5.5 7V4.5a2.5 2.5 0 015 0V7" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_setpw">設定密碼</span>
+        </button>
+        <button type="button" class="sb-item danger" data-scroll="danger-section">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M8 2L1.5 13.5h13z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M8 6.5v3.5M8 11.5v.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_danger">危險區</span>
+        </button>
+      </nav>
+
+      <div class="sb-bottom">
+        <div class="sb-cta">
+          <div class="sb-cta-icon">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3" opacity="0.4"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
+          <p class="sb-cta-q" data-i18n="cta_q">準備好開始專案了嗎？</p>
+          <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="/requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
         </div>
-        <button onclick="logout()"
-          class="flex items-center gap-1.5 text-sm text-gray-400 hover:text-red-400 transition-colors">
-          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-          </svg>
-          <span data-i18n="logout_header" class="hidden sm:inline">登出</span>
+        <button type="button" class="sb-item danger" onclick="logout()" style="margin:0 .5rem .35rem">
+          <svg class="sb-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
+          <span class="sb-label" data-i18n="logout_header">登出</span>
         </button>
+        <div class="sb-footer">
+          <div class="sb-lang-drop" id="db-lang-drop">
+            <button class="db-lang-opt sb-lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="db-lang-opt sb-lang-opt" data-lang="en">English</button>
+            <button class="db-lang-opt sb-lang-opt" data-lang="ja">日本語</button>
+            <button class="db-lang-opt sb-lang-opt" data-lang="ko">한국어</button>
+          </div>
+          <div class="sb-foot-icons">
+            <button class="sb-foot-btn" id="db-theme-btn" type="button" aria-label="切換明暗">
+              <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <svg viewBox="0 0 16 16" fill="none" class="icon-moon"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+            <button class="sb-foot-btn" id="db-globe-btn" type="button" aria-label="切換語言">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <span class="sb-copyright">© 2026 chiyigo</span>
+        </div>
       </div>
+    </aside>
 
-    </div>
-  </header>
-
-  <!-- 主體 -->
-  <main class="flex-1 flex items-center justify-center px-4 pt-14">
-    <div class="w-full max-w-md animate-fade-up">
+    <!-- ── Main ── -->
+    <div class="dash-main">
+      <main class="dash-content" style="padding:1.5rem 1rem 0;position:relative;z-index:1">
+    <div class="w-full max-w-md mx-auto animate-fade-up">
 
       <!-- 載入中 -->
       <div id="loading" class="text-center py-20">
@@ -300,7 +459,7 @@
         </button>
 
         <!-- 危險區：刪除帳號 -->
-        <div class="mt-6 rounded-2xl bg-[#16161d] border border-red-500/20 shadow-2xl overflow-hidden">
+        <div id="danger-section" class="mt-6 rounded-2xl bg-[#16161d] border border-red-500/20 shadow-2xl overflow-hidden">
           <div class="px-5 py-4 border-b border-red-500/15">
             <p class="text-sm font-semibold text-red-400" data-i18n="danger_title">危險區</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="danger_subtitle">永久刪除帳號與所有相關資料，操作不可復原</p>
@@ -344,42 +503,121 @@
       </div>
 
     </div>
-  </main>
 
-  <!-- Footer：與 index.html 一致 -->
-  <footer class="border-t border-[#1f1f28] mt-12">
-    <div class="max-w-5xl mx-auto px-6 py-10 grid gap-8 md:grid-cols-[1.4fr_1fr_1fr] text-sm">
+  <!-- Footer：與 about.html 一致 -->
+  <footer class="as-footer">
+    <div class="as-footer-inner">
       <div>
-        <img src="/images/logo-light.png" alt="chiyigo" class="h-7 mb-3 logo-light">
-        <img src="/images/logo-dark.png"  alt="chiyigo" class="h-7 mb-3 logo-dark hidden">
-        <p class="text-gray-500 text-xs leading-relaxed" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="logo logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="logo logo-dark">
+        <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
       </div>
-      <div>
-        <p class="text-[0.66rem] uppercase tracking-widest text-gray-500 mb-2" data-i18n="footer_contact_title">聯絡我們</p>
-        <div class="flex flex-col gap-2 text-xs text-gray-400">
-          <a href="tel:0900542992" class="hover:text-gray-200 transition-colors flex items-center gap-2">
-            <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 2.5H3.2C2.5 2.5 2 3 2 3.7c0 5.4 4.4 9.8 9.8 9.8.7 0 1.2-.5 1.2-1.2V10l-2.5-1L9 10.5C7.5 9.7 6.3 8.5 5.5 7L7 5.5 6 3z"/></svg>
-            0900-542-992
-          </a>
-          <a href="https://line.me/ti/p/~chiyigo" target="_blank" rel="noopener" class="hover:text-gray-200 transition-colors flex items-center gap-2">
-            <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><path d="M8 4.5C5.5 4.5 3.5 6 3.5 7.8c0 1.6 1.5 2.9 3.5 3.1l.5.9.5-.9c2-.2 3.5-1.5 3.5-3.1C11.5 6 9.5 4.5 8 4.5z"/></svg>
-            LINE: chiyigo
-          </a>
-          <a href="mailto:chiyigo20201208@gmail.com" class="hover:text-gray-200 transition-colors flex items-center gap-2">
-            <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><path d="M1 5.5l7 4 7-4"/></svg>
-            chiyigo20201208@gmail.com
-          </a>
+      <div class="as-footer-contact">
+        <p class="as-footer-contact-title" data-i18n="footer_contact_title">聯絡我們</p>
+        <a href="tel:0900542992" class="as-footer-contact-item">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 2.5H3.2C2.5 2.5 2 3 2 3.7c0 5.4 4.4 9.8 9.8 9.8.7 0 1.2-.5 1.2-1.2V10l-2.5-1L9 10.5C7.5 9.7 6.3 8.5 5.5 7L7 5.5 6 3z"/></svg>
+          0900-542-992
+        </a>
+        <a href="https://line.me/ti/p/~chiyigo" target="_blank" rel="noopener" class="as-footer-contact-item">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><path d="M8 4.5C5.5 4.5 3.5 6 3.5 7.8c0 1.6 1.5 2.9 3.5 3.1l.5.9.5-.9c2-.2 3.5-1.5 3.5-3.1C11.5 6 9.5 4.5 8 4.5z"/></svg>
+          LINE: chiyigo
+        </a>
+        <a href="mailto:chiyigo20201208@gmail.com" class="as-footer-contact-item">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><path d="M1 5.5l7 4 7-4"/></svg>
+          chiyigo20201208@gmail.com
+        </a>
+      </div>
+      <nav class="as-footer-links">
+        <a href="/" data-i18n="nav_home">首頁</a>
+        <a href="/portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+        <a href="/about.html" data-i18n="nav_about">關於我們</a>
+        <a href="/requisition.html" data-i18n="nav_contact">接案諮詢</a>
+      </nav>
+      <p class="as-copy">© 2026 CHIYIGO. All rights reserved.</p>
+    </div>
+  </footer>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Mobile topbar -->
+  <div class="m-topbar" id="m-topbar">
+    <div class="m-tb-inner">
+      <a href="/index.html" class="m-tb-brand" aria-label="CHIYIGO">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="m-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="m-logo-img logo-dark">
+      </a>
+      <div class="m-tb-right">
+        <button class="m-icon-btn" id="m-theme-btn" type="button" aria-label="切換主題">
+          <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        </button>
+        <button class="m-icon-btn" id="m-lang-btn" type="button" aria-label="切換語言">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+        <button class="m-icon-btn m-ham-btn" id="m-ham-btn" type="button" aria-label="開啟選單" aria-expanded="false">
+          <span class="m-ham-line"></span>
+          <span class="m-ham-line"></span>
+        </button>
+      </div>
+    </div>
+    <div class="m-top-lang-drop" id="m-top-lang-drop">
+      <button class="db-lang-opt sb-lang-opt active" data-lang="zh-TW">繁體中文</button>
+      <button class="db-lang-opt sb-lang-opt" data-lang="en">English</button>
+      <button class="db-lang-opt sb-lang-opt" data-lang="ja">日本語</button>
+      <button class="db-lang-opt sb-lang-opt" data-lang="ko">한국어</button>
+    </div>
+  </div>
+
+  <!-- Mobile overlay (member-function nav) -->
+  <div class="m-overlay" id="m-overlay" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle"></div>
+      <div class="m-ov-head">
+        <span class="m-ov-title" data-i18n="nav_member_section">會員功能</span>
+      </div>
+      <nav class="m-ov-nav" aria-label="會員功能">
+        <button type="button" class="m-ov-item active" data-scroll="user-card" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span data-i18n="nav_overview">帳號總覽</span>
+        </button>
+        <button type="button" class="m-ov-item" data-scroll="tfa-section" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M8 1.5L3 3.5v4c0 3 2 5.6 5 7 3-1.4 5-4 5-7v-4z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></svg></span>
+          <span data-i18n="nav_2fa">雙重驗證</span>
+        </button>
+        <button type="button" class="m-ov-item" data-scroll="req-section" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="3" y="2" width="10" height="12" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span data-i18n="nav_req">我的需求單</span>
+        </button>
+        <button type="button" class="m-ov-item" data-scroll="bind-section" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M6.5 9.5L4 12a2 2 0 11-2.83-2.83L3.5 6.83M9.5 6.5L12 4a2 2 0 112.83 2.83L12.5 9.17M5.5 10.5l5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span data-i18n="nav_bind">帳號綁定</span>
+        </button>
+        <button type="button" class="m-ov-item" id="m-ov-setpw" data-scroll="setpw-section" data-close-overlay hidden>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="3" y="7" width="10" height="7" rx="1.3" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span data-i18n="nav_setpw">設定密碼</span>
+        </button>
+        <button type="button" class="m-ov-item danger" data-scroll="danger-section" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M8 2L1.5 13.5h13z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></svg></span>
+          <span data-i18n="nav_danger">危險區</span>
+        </button>
+        <button type="button" class="m-ov-item danger" onclick="logout()" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 24 24" fill="none" class="m-ov-icon" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg></span>
+          <span data-i18n="logout_header">登出</span>
+        </button>
+      </nav>
+      <div class="m-ov-cta">
+        <a href="/requisition.html" class="sb-cta-btn" data-close-overlay data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="db-lang-opt m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="db-lang-opt m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="db-lang-opt m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="db-lang-opt m-ov-lang-opt" data-lang="ko">한국어</button>
         </div>
       </div>
-      <nav class="flex flex-col gap-2 text-xs text-gray-400">
-        <a href="/" class="hover:text-gray-200 transition-colors" data-i18n="nav_home">首頁</a>
-        <a href="/portfolio.html" class="hover:text-gray-200 transition-colors" data-i18n="nav_portfolio">案例作品</a>
-        <a href="/about.html" class="hover:text-gray-200 transition-colors" data-i18n="nav_about">關於我們</a>
-        <a href="/requisition.html" class="hover:text-gray-200 transition-colors" data-i18n="nav_contact">接案諮詢</a>
-      </nav>
     </div>
-    <p class="text-center text-[0.7rem] text-gray-600 pb-6">© 2026 CHIYIGO. All rights reserved.</p>
-  </footer>
+  </div>
 
   <!-- 亮模式 logo 切換（與 index.html 同邏輯） -->
   <style>
@@ -458,6 +696,8 @@
         footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',
         footer_contact_title:'聯絡我們',
         nav_home:'首頁', nav_portfolio:'案例作品', nav_about:'關於我們', nav_contact:'接案諮詢',
+        nav_member_section:'會員功能', nav_overview:'帳號總覽', nav_2fa:'雙重驗證', nav_req:'我的需求單', nav_bind:'帳號綁定', nav_setpw:'設定密碼', nav_danger:'危險區',
+        cta_q:'準備好開始專案了嗎？', cta_desc:'讓我一起打造最適合你的數位解決方案！', cta_btn:'開始諮詢', cta_btn_m:'開始諮詢 →',
       },
       'en': {
         back_home:'Back to Home', logout_header:'Log Out', loading_text:'Loading…',
@@ -520,6 +760,8 @@
         footer_tagline:'We don\'t just build pretty interfaces — we turn your requirements into systems that actually work.',
         footer_contact_title:'Contact Us',
         nav_home:'Home', nav_portfolio:'Portfolio', nav_about:'About', nav_contact:'Get a Quote',
+        nav_member_section:'Member', nav_overview:'Overview', nav_2fa:'Two-Factor Auth', nav_req:'My Requisitions', nav_bind:'Account Linking', nav_setpw:'Set Password', nav_danger:'Danger Zone',
+        cta_q:'Ready to Start a Project?', cta_desc:"Let's build the perfect digital solution for you!", cta_btn:'Get in Touch', cta_btn_m:'Get in Touch →',
       },
       'ja': {
         back_home:'ホームに戻る', logout_header:'ログアウト', loading_text:'読み込み中…',
@@ -582,6 +824,8 @@
         footer_tagline:'見た目だけのサイトではなく、本当に使えるシステムを形にします。',
         footer_contact_title:'お問い合わせ',
         nav_home:'ホーム', nav_portfolio:'実績', nav_about:'私たちについて', nav_contact:'お見積り',
+        nav_member_section:'マイページ', nav_overview:'アカウント概要', nav_2fa:'二段階認証', nav_req:'依頼一覧', nav_bind:'アカウント連携', nav_setpw:'パスワード設定', nav_danger:'危険な操作',
+        cta_q:'プロジェクトを始めませんか？', cta_desc:'最適なデジタルソリューションを一緒に作りましょう！', cta_btn:'相談する', cta_btn_m:'相談する →',
       },
       'ko': {
         back_home:'홈으로 돌아가기', logout_header:'로그아웃', loading_text:'로딩 중…',
@@ -644,6 +888,8 @@
         footer_tagline:'예쁜 화면만 만드는 게 아니라, 실제로 동작하는 시스템을 구현합니다.',
         footer_contact_title:'문의하기',
         nav_home:'홈', nav_portfolio:'포트폴리오', nav_about:'소개', nav_contact:'문의/견적',
+        nav_member_section:'마이페이지', nav_overview:'계정 개요', nav_2fa:'이중 인증', nav_req:'내 요청서', nav_bind:'계정 연동', nav_setpw:'비밀번호 설정', nav_danger:'위험 영역',
+        cta_q:'프로젝트를 시작할 준비가 되셨나요?', cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!', cta_btn:'상담 시작', cta_btn_m:'상담 시작 →',
       },
     };
 
@@ -1349,6 +1595,102 @@
         btn.disabled = false;
       }
     }
+  </script>
+
+  <!-- ── Sidebar layout bridge ────────────────────────────────── -->
+  <script>
+    // Sidebar / mobile-overlay nav: scroll to section + active state
+    (function() {
+      const sbItems = document.querySelectorAll('.sb-item[data-scroll], .m-ov-item[data-scroll]');
+      sbItems.forEach(btn => btn.addEventListener('click', () => {
+        const id = btn.dataset.scroll;
+        const target = document.getElementById(id);
+        if (!target) return;
+        target.scrollIntoView({ behavior:'smooth', block:'start' });
+        document.querySelectorAll('.sb-item[data-scroll]').forEach(b => b.classList.toggle('active', b.dataset.scroll === id));
+        document.querySelectorAll('.m-ov-item[data-scroll]').forEach(b => b.classList.toggle('active', b.dataset.scroll === id));
+      }));
+    })();
+
+    // Mobile overlay open/close
+    (function() {
+      const ham = document.getElementById('m-ham-btn');
+      const ov  = document.getElementById('m-overlay');
+      const open = () => { ham?.classList.add('is-open'); ham?.setAttribute('aria-expanded','true'); ov?.classList.add('is-open'); ov?.removeAttribute('aria-hidden'); document.body.style.overflow='hidden'; };
+      const close = () => { ham?.classList.remove('is-open'); ham?.setAttribute('aria-expanded','false'); ov?.classList.remove('is-open'); ov?.setAttribute('aria-hidden','true'); document.body.style.overflow=''; };
+      ham?.addEventListener('click', () => ov?.classList.contains('is-open') ? close() : open());
+      ov?.addEventListener('click', e => { if (e.target === ov) close(); });
+      ov?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(close, 120)));
+      document.addEventListener('keydown', e => { if (e.key==='Escape' && ov?.classList.contains('is-open')) close(); });
+    })();
+
+    // Mobile theme button → proxy to db-theme-btn; mobile lang button → toggle m-top-lang-drop
+    (function() {
+      const mTheme = document.getElementById('m-theme-btn');
+      const mLang  = document.getElementById('m-lang-btn');
+      const mDrop  = document.getElementById('m-top-lang-drop');
+      const dbTheme = document.getElementById('db-theme-btn');
+      mTheme?.addEventListener('click', () => dbTheme?.click());
+      mLang?.addEventListener('click', e => { e.stopPropagation(); mDrop?.classList.toggle('open'); });
+      mDrop?.addEventListener('click', e => {
+        const opt = e.target.closest('.db-lang-opt'); if (!opt) return;
+        if (typeof applyLangD === 'function') applyLangD(opt.dataset.lang);
+        mDrop.classList.remove('open');
+      });
+      document.addEventListener('click', () => mDrop?.classList.remove('open'));
+
+      // Sync mobile theme icon with theme class
+      function syncMTheme() {
+        const dark = document.documentElement.classList.contains('theme-dark');
+        const sun  = mTheme?.querySelector('.icon-sun');
+        const moon = mTheme?.querySelector('.icon-moon');
+        if (sun)  sun.style.display  = dark ? 'none' : '';
+        if (moon) moon.style.display = dark ? ''     : 'none';
+      }
+      syncMTheme();
+      new MutationObserver(syncMTheme).observe(document.documentElement, { attributes:true, attributeFilter:['class'] });
+
+      // Mobile overlay lang options
+      document.getElementById('m-overlay')?.addEventListener('click', e => {
+        const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+        if (typeof applyLangD === 'function') applyLangD(opt.dataset.lang);
+      });
+    })();
+
+    // Sync setpw nav item visibility with section visibility
+    (function() {
+      const sec = document.getElementById('setpw-section');
+      const sbBtn = document.getElementById('sb-nav-setpw');
+      const mBtn  = document.getElementById('m-ov-setpw');
+      if (!sec) return;
+      function sync() {
+        const hidden = sec.classList.contains('hidden');
+        if (sbBtn) sbBtn.hidden = hidden;
+        if (mBtn)  mBtn.hidden  = hidden;
+      }
+      sync();
+      new MutationObserver(sync).observe(sec, { attributes:true, attributeFilter:['class'] });
+    })();
+  </script>
+
+  <!-- Neural canvas (same as about.html) -->
+  <script>
+    (function(){
+      const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+      const ctx=canvas.getContext('2d');if(!ctx)return;
+      let W=0,H=0,nodes=[];const DIST=155;
+      function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+      function initNodes(){const n=W<768?40:90;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
+      const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+      let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
+      function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--as-neural-r').trim()||'108',g:s.getPropertyValue('--as-neural-g').trim()||'110',b:s.getPropertyValue('--as-neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--as-neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--as-neural-line-opacity').trim()||'.09')}}
+      syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+      function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
+        for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
+        for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
+        requestAnimationFrame(draw)}
+      resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
+    })();
   </script>
 </body>
 </html>
