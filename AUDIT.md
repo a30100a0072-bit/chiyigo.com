@@ -29,6 +29,8 @@
 | L2 | ✅ 已修 | `email.js` BASE_URL/FROM_ADDRESS 改從 `env.IAM_BASE_URL` / `env.MAIL_FROM_ADDRESS` 讀；4 個呼叫端皆傳入 env |
 | L3 | ✅ 已修 | `wrangler.toml` 加 `[vars]` 預設與 `[env.preview.vars]` 區段；IAM_BASE_URL / MAIL_FROM_ADDRESS 改用 vars 管控 |
 | L9 | ✅ 已修 | `callback.js` 全新用戶建立改用 `last_row_id` 取代 batch + SELECT，避免 D1 batch 跨語句可見性風險 |
+| L8 | ✅ 已修 | bind/forgot/reset-password、login、admin-requisitions、dashboard 所有 form input 補 `<label for>` 或 `aria-label`（confirm-delete / verify-email 純按鈕無 input） |
+| dashboard 主題 | ✅ 已修 | dashboard 加回光/暗模式切換按鈕（與 login.html 同款式），新增 `.theme-light` CSS 反轉，沿用 `localStorage.theme` 預載（line 9 IIFE）避免登入後重置為暗模式 |
 
 ### 部署驗證 — 2026-04-26
 
@@ -363,8 +365,12 @@ if (!token) return { user: null, error: res({ error: 'Unauthorized' }, 401) }
 ### L7. i18n 不完整
 `auth-ui.js` 中只有中文 string，但專案宣稱多語。需把 dashboard、register、reset-password 的內嵌字串抽到 i18n dictionary。
 
-### L8. `confirm-delete.html`、`bind-email.html` 等頁面缺 a11y 標籤（待逐頁檢）
-建議：每個 form 元素確保有 `<label for>` 或 `aria-label`。
+### L8. ~~`confirm-delete.html`、`bind-email.html` 等頁面缺 a11y 標籤~~ ✅ 已修（2026-04-26）
+- bind-email / forgot-password / reset-password：`<label>` 補 `for=` 綁定對應 input id
+- login.html：login-email/password、reg-email/password/confirm、totp-code 6 個 label 補 `for=`
+- admin-requisitions.html：search-input 補 `aria-label`
+- dashboard.html：tfa-otp-input、tfa-disable-input 補 `aria-label`
+- confirm-delete.html、verify-email.html：純按鈕無 input，無需處理
 
 ### L9. `db.batch([...])` 中 `INSERT INTO users` 後接 `INSERT INTO user_identities ... SELECT id FROM users WHERE email=?`
 **檔案**：`callback.js:230-238`

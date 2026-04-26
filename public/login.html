@@ -414,11 +414,11 @@
               <!-- ── 登入表單 ── -->
               <form id="form-login" class="panel active" onsubmit="handleLogin(event)">
                 <div class="field-wrap">
-                  <label class="field-label" data-i18n="login_email_lbl">電子信箱</label>
+                  <label for="login-email" class="field-label" data-i18n="login_email_lbl">電子信箱</label>
                   <input id="login-email" type="email" autocomplete="email" required placeholder="you@example.com" class="field-input" />
                 </div>
                 <div class="field-wrap">
-                  <label class="field-label" data-i18n="login_pass_lbl">密碼</label>
+                  <label for="login-password" class="field-label" data-i18n="login_pass_lbl">密碼</label>
                   <div class="field-input-wrap">
                     <input id="login-password" type="password" autocomplete="current-password" required placeholder="••••••••" class="field-input" />
                     <button type="button" id="login-eye" onclick="togglePassword('login-password','login-eye')" class="eye-btn">
@@ -448,11 +448,11 @@
               <!-- ── 註冊表單 ── -->
               <form id="form-register" class="panel" onsubmit="handleRegister(event)">
                 <div class="field-wrap">
-                  <label class="field-label" data-i18n="login_email_lbl">電子信箱</label>
+                  <label for="reg-email" class="field-label" data-i18n="login_email_lbl">電子信箱</label>
                   <input id="reg-email" type="email" autocomplete="email" required placeholder="you@example.com" class="field-input" />
                 </div>
                 <div class="field-wrap">
-                  <label class="field-label"><span data-i18n="reg_pass_lbl">密碼</span> <span data-i18n="reg_pass_hint">（最少 8 字元）</span></label>
+                  <label for="reg-password" class="field-label"><span data-i18n="reg_pass_lbl">密碼</span> <span data-i18n="reg_pass_hint">（最少 8 字元）</span></label>
                   <div class="field-input-wrap">
                     <input id="reg-password" type="password" autocomplete="new-password" required minlength="8" placeholder="••••••••" class="field-input" />
                     <button type="button" id="reg-eye" onclick="togglePassword('reg-password','reg-eye')" class="eye-btn">
@@ -461,7 +461,7 @@
                   </div>
                 </div>
                 <div class="field-wrap">
-                  <label class="field-label" data-i18n="reg_confirm_lbl">確認密碼</label>
+                  <label for="reg-confirm" class="field-label" data-i18n="reg_confirm_lbl">確認密碼</label>
                   <div class="field-input-wrap">
                     <input id="reg-confirm" type="password" autocomplete="new-password" required minlength="8" placeholder="••••••••" class="field-input" />
                     <button type="button" id="reg-confirm-eye" onclick="togglePassword('reg-confirm','reg-confirm-eye')" class="eye-btn">
@@ -497,7 +497,7 @@
                   <p class="totp-desc" data-i18n="totp_desc">請輸入驗證器 App 顯示的 6 位數字，或使用備用救援碼。</p>
                 </div>
                 <div class="field-wrap">
-                  <label class="field-label" data-i18n="totp_code_lbl">驗證碼</label>
+                  <label for="totp-code" class="field-label" data-i18n="totp_code_lbl">驗證碼</label>
                   <input id="totp-code" type="text" inputmode="numeric" placeholder="000000 或 備用救援碼" autocomplete="one-time-code" class="field-input totp-input" data-i18n-ph="totp_code_ph" />
                 </div>
                 <button type="submit" id="totp-btn" class="submit-btn" data-i18n="totp_btn">驗證</button>
