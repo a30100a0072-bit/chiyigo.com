@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint functions tests"
   },
   "dependencies": {
     "jose": "^5.9.6",
     "otpauth": "^9.3.6"
   },
   "devDependencies": {
+    "eslint": "^9.39.4",
+    "globals": "^15.15.0",
     "vitest": "^2.1.9"
   }
 }

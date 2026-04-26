@@ -32,7 +32,8 @@
 | L8 | ✅ 已修 | bind/forgot/reset-password、login、admin-requisitions、dashboard 所有 form input 補 `<label for>` 或 `aria-label`（confirm-delete / verify-email 純按鈕無 input） |
 | dashboard 主題 | ✅ 已修 | dashboard 加回光/暗模式切換按鈕（與 login.html 同款式），新增 `.theme-light` CSS 反轉，沿用 `localStorage.theme` 預載（line 9 IIFE）避免登入後重置為暗模式 |
 | L4 | ✅ 已修 | 引入 vitest，新增 `tests/` 目錄含 password / crypto / jwt 共 20 個 unit test（PBKDF2 roundtrip、PKCE RFC 7636 vector、ES256 sign/verify、tampered token 拒絕、備用碼 hash 驗證），`npm test` 全綠 |
-| L5 | ✅ 已修 | 新增 `.github/workflows/ci.yml`：PR/push 跑 `npm ci` + `npm test` + `npm audit --omit=dev --audit-level=high`（生產依賴 0 漏洞） |
+| L5 | ✅ 已修 | 新增 `.github/workflows/ci.yml`：PR/push 跑 `npm ci` + `npm run lint` + `npm test` + `npm audit --omit=dev --audit-level=high`（生產依賴 0 漏洞） |
+| L6 | ✅ 已修 | ESLint v9 flat config (`eslint.config.js`)，functions / tests 分區、僅基礎正確性規則；`npm run lint` 加入 CI；目前 0 errors / 6 warnings |
 
 ### 部署驗證 — 2026-04-26
 
@@ -366,8 +367,11 @@ if (!token) return { user: null, error: res({ error: 'Unauthorized' }, 401) }
 - Node 20，`npm ci` → `npm test`（vitest）→ `npm audit --omit=dev --audit-level=high`（只審生產依賴的 high+ 漏洞）
 - ESLint 留待 L6 完成後再加 lint step
 
-### L6. `package.json` 無 lint / format script
-建議：加 ESLint + prettier 基本配置。
+### L6. ~~`package.json` 無 lint / format script~~ ✅ 已修（2026-04-26）
+- ESLint v9 flat config（`eslint.config.js`），分 functions（Workers globals）/ tests（Node globals）兩塊
+- 規則僅啟基礎正確性檢查（no-undef / no-unused-vars / prefer-const / eqeqeq），不引入 prettier 避免大規模 diff
+- `npm run lint` script 加入 CI workflow（lint 階段）
+- 目前 0 errors / 6 warnings（皆為 catch err 未用，留待之後逐一清理）
 
 ### L7. i18n 不完整
 `auth-ui.js` 中只有中文 string，但專案宣稱多語。需把 dashboard、register、reset-password 的內嵌字串抽到 i18n dictionary。
