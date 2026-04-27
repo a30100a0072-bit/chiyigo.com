@@ -52,6 +52,7 @@
 | 全站主題切換一致（dark mode → 🌙，已修正 index.html 反轉 bug）| ✅ |
 | 使用者儀表板 + 2FA 管理 UI | ✅ |
 | Login / Forgot-password / Reset-password / Bind-email 頁面 | ✅ |
+| AI 需求單助手頁面 `/ai-assistant.html`（會員專屬，sessionStorage redirect、4 語系、Workers AI 結構化輸出 + 多維限流 + ai_audit）| ✅ 2026-04-27 |
 
 ### 案例作品（D1 現有資料）
 
@@ -59,7 +60,7 @@
 |----|------|------|
 | 5 | 電商網站開發 | Web（網站設計）|
 | 7 | MBTI 認知幾何模型 | System（系統設計）|
-| 4 | AI 智能客服系統 | AI（AI解決方案）|
+| 4 | AI 需求單助手（demo: `/ai-assistant.html`）| AI（AI解決方案）|
 | 6 | 量化數據分析儀表板 | Analytics（量化數據分析）|
 | 8 | 健身紀錄 APP | App（APP設計）|
 | 9 | ERP 企業系統整合 | Integration（企業應用整合）|
@@ -95,6 +96,7 @@
 | ~~Facebook OAuth~~ | ✅ 完成（移至核心系統）|
 | www.chiyigo.com 重導向 | Cloudflare DNS 驗證後自動生效 |
 | Android App Link SHA-256 | 待 App 建立後更新 |
+| Cloudflare Turnstile（AI 助手）| 設 `TURNSTILE_SECRET`（Pages env）+ 在 `ai-assistant.html` 填 `TURNSTILE_SITEKEY`，目前條件式跳過 |
 
 ### 安全待辦（Security Backlog，2026-04-25 審查）
 

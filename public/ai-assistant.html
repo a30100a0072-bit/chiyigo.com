@@ -24,7 +24,7 @@
       try { t = sessionStorage.getItem('access_token'); } catch (_) {}
       if (!t) {
         try { sessionStorage.setItem('auth_redirect', '/ai-assistant.html'); } catch (_) {}
-        location.replace('/login.html');
+        location.replace('/login.html?next=' + encodeURIComponent('/ai-assistant.html'));
       }
     })();
   </script>

@@ -7,6 +7,8 @@
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
+  <!-- 把 URL ?next=/path 寫入 sessionStorage（跨 OAuth flow 也能保留），auth-ui.js 登入成功後會讀此值跳轉 -->
+  <script>(function(){try{var n=new URLSearchParams(location.search).get('next');if(n&&n.charAt(0)==='/'&&n.charAt(1)!=='/'){sessionStorage.setItem('auth_redirect',n)}}catch(_){}})();</script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -192,6 +194,7 @@
     .divider-text{font-size:.75rem;color:var(--text-dim)}
 
     .oauth-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+    @media(max-width:768px){.oauth-grid{grid-template-columns:repeat(2,1fr)}}
     .oauth-btn{display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.62rem .5rem;border-radius:10px;font-size:.813rem;font-weight:500;text-decoration:none;border:1px solid;transition:filter .18s ease,transform .18s ease}
     .oauth-btn:hover{filter:brightness(1.12);transform:translateY(-1px)}
     .oauth-btn svg{width:16px;height:16px;flex-shrink:0}
