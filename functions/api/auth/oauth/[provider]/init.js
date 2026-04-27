@@ -77,6 +77,7 @@ export async function onRequestGet(context) {
   const port       = url.searchParams.get('port')
   const pkceReturn = url.searchParams.get('pkce_key')
   const isBinding  = url.searchParams.get('is_binding') === 'true'
+  const nextPath   = url.searchParams.get('next')
 
   if (!['web', 'pc', 'mobile'].includes(platform))
     return res({ error: 'platform 必須為 web、pc 或 mobile' }, 400)
@@ -107,6 +108,20 @@ export async function onRequestGet(context) {
   // Web + PKCE 模式：將 pkce_key 存入 client_callback，供 callback 回傳登入頁
   if (platform === 'web' && pkceReturn && /^[0-9a-f]{64}$/.test(pkceReturn)) {
     client_callback = `pkce_return:${pkceReturn}`
+  }
+
+  // Web + next 模式：將同站絕對路徑存入 client_callback，OAuth 完成後跳回該頁
+  // 校驗：必須以 '/' 開頭、第二字非 '/'（防 protocol-relative URL 開放重定向）
+  if (
+    platform === 'web' &&
+    !pkceReturn &&
+    !isBinding &&
+    nextPath &&
+    nextPath.length <= 200 &&
+    nextPath.charAt(0) === '/' &&
+    nextPath.charAt(1) !== '/'
+  ) {
+    client_callback = `next:${nextPath}`
   }
 
   // 綁定模式：覆寫 client_callback，嵌入 binding user id

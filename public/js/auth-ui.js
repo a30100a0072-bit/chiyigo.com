@@ -516,6 +516,21 @@ async function handleTotp(event) {
     });
   }
 
+  // 將 ?next=/path 帶入 OAuth init 連結，讓 OAuth 完成後 callback worker 能跳回原頁面
+  // （local 登入由 redirectAfterAuth 處理；OAuth 走 worker 直接 redirect，需改 init 端）
+  try {
+    const _nextPath = new URLSearchParams(location.search).get('next');
+    if (_nextPath && _nextPath.charAt(0) === '/' && _nextPath.charAt(1) !== '/') {
+      document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+        try {
+          const u = new URL(a.href, location.origin);
+          u.searchParams.set('next', _nextPath);
+          a.href = u.toString();
+        } catch { /* 忽略無效連結 */ }
+      });
+    }
+  } catch (_) {}
+
   // Cross-app redirect：OAuth 會離開此頁再跳回，用 sessionStorage 保留目標 origin
   if (_crossAppOrigin) {
     document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {

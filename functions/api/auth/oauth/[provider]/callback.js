@@ -284,6 +284,12 @@ async function handle(context) {
     if (/^[0-9a-f]{64}$/.test(pk)) {
       postLoginUrl = `/login.html?pkce_key=${encodeURIComponent(pk)}`
     }
+  } else if (client_callback?.startsWith('next:')) {
+    // next 模式：登入前在 init 端寫入的同站路徑，登入後跳回該頁（已於 init 校驗）
+    const np = client_callback.slice('next:'.length)
+    if (np && np.length <= 200 && np.charAt(0) === '/' && np.charAt(1) !== '/') {
+      postLoginUrl = np
+    }
   }
 
   const safeToken   = JSON.stringify(accessToken)
