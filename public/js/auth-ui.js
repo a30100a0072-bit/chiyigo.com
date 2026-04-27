@@ -184,7 +184,14 @@ async function logout() {
 // ── 成功後跳轉 ───────────────────────────────────────────────────
 
 function redirectAfterAuth() {
-  const target = sessionStorage.getItem(REDIRECT_KEY) || '/dashboard.html';
+  let target = sessionStorage.getItem(REDIRECT_KEY);
+  if (!target) {
+    try {
+      const n = new URLSearchParams(location.search).get('next');
+      if (n && n.charAt(0) === '/' && n.charAt(1) !== '/') target = n;
+    } catch (_) {}
+  }
+  target = target || '/dashboard.html';
   sessionStorage.removeItem(REDIRECT_KEY);
   window.location.href = target;
 }
