@@ -12,3 +12,6 @@ ENVIRONMENT = "production"
 binding = "chiyigo_db"
 database_name = "chiyigo_db"
 database_id = "59f73214-1203-44b7-840f-86cb3998fbb6"
+
+[ai]
+binding = "AI"
