@@ -30,6 +30,7 @@ const ERROR_I18N = {
   'Local account not found':                { 'zh-TW':'此帳號無法使用密碼登入', en:'This account cannot log in with password', ja:'このアカウントはパスワードログインに対応していません', ko:'이 계정은 비밀번호 로그인을 지원하지 않습니다' },
   '2FA is already enabled':                 { 'zh-TW':'雙重驗證已啟用', en:'Two-factor authentication is already enabled', ja:'2段階認証は既に有効です', ko:'2단계 인증이 이미 활성화되어 있습니다' },
   'Invalid request':                        { 'zh-TW':'請求無效，請重新登入', en:'Invalid request, please log in again', ja:'リクエストが無効です。もう一度ログインしてください', ko:'요청이 유효하지 않습니다. 다시 로그인해주세요' },
+  'Invalid or expired PKCE session':        { 'zh-TW':'授權階段已失效或過期，請重新登入', en:'Authorization session is invalid or expired, please log in again', ja:'認可セッションが無効または期限切れです。もう一度ログインしてください', ko:'인증 세션이 유효하지 않거나 만료되었습니다. 다시 로그인해주세요' },
 }
 
 // 前端內嵌 UI 字串
@@ -209,7 +210,7 @@ async function handlePkceRedirect(accessToken) {
     });
     const data = await res.json();
     if (!res.ok) {
-      showMsg(data.error || uiT('err_pkce'));
+      showMsg(t(data.error) || uiT('err_pkce'));
       return;
     }
     // 跳轉至 App（chiyigo:// 或 loopback 或 https://）

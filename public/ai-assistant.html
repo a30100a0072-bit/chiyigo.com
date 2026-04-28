@@ -17,15 +17,31 @@
   <script>
     (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();
   </script>
-  <!-- Auth guard：未登入立刻跳 login，並把目前路徑寫入既有的 auth_redirect sessionStorage（auth-ui.js 登入成功會自動讀） -->
+  <!-- Auth guard：先嘗試以 HttpOnly refresh cookie 換取新 access_token（跨分頁/重整可保持登入），失敗才跳轉登入 -->
   <script>
     (function () {
       var t = null;
       try { t = sessionStorage.getItem('access_token'); } catch (_) {}
-      if (!t) {
-        try { sessionStorage.setItem('auth_redirect', '/ai-assistant.html'); } catch (_) {}
-        location.replace('/login.html?next=' + encodeURIComponent('/ai-assistant.html'));
-      }
+      if (t) return;
+      // 阻擋頁面渲染直到 refresh 嘗試完成
+      document.documentElement.style.visibility = 'hidden';
+      fetch('/api/auth/refresh', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }, body: '{}'
+      }).then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (d && d.access_token) {
+            try { sessionStorage.setItem('access_token', d.access_token); } catch (_) {}
+            document.documentElement.style.visibility = '';
+          } else {
+            try { sessionStorage.setItem('auth_redirect', '/ai-assistant.html'); } catch (_) {}
+            location.replace('/login.html?next=' + encodeURIComponent('/ai-assistant.html'));
+          }
+        })
+        .catch(function () {
+          try { sessionStorage.setItem('auth_redirect', '/ai-assistant.html'); } catch (_) {}
+          location.replace('/login.html?next=' + encodeURIComponent('/ai-assistant.html'));
+        });
     })();
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
