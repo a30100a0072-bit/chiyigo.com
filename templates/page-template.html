@@ -1,17 +1,49 @@
+{{!--
+  ╔══════════════════════════════════════════════════════════════════════╗
+  ║  CHIYIGO 網站子頁範本（Page Template）                                ║
+  ║                                                                       ║
+  ║  使用步驟：                                                            ║
+  ║  1. 將此檔複製到 src/pages/your-page.html                             ║
+  ║  2. 全文搜尋「TODO」逐一填入                                           ║
+  ║  3. 在 LANGS_I18N 物件加入頁面用到的 data-i18n key（4 種語言都要）     ║
+  ║  4. 在主內容區（<main> 內）填入內容；元素加 data-i18n="key" 綁文字     ║
+  ║  5. 跑 npm run build → public/ 會產出對應 HTML                        ║
+  ║                                                                       ║
+  ║  架構規範（不可改）：                                                  ║
+  ║  - 只改 src/pages/，不要改 public/（後者是 build 產物）               ║
+  ║  - Sidebar / Topbar / Footer 只能用 partial 引用，不要複製貼          ║
+  ║  - 顏色用 CSS 變數（--bg, --text, --accent…），不要寫死色碼           ║
+  ║  - 所有顯示文字加 data-i18n="key"，並在 LANGS_I18N 補 4 語言          ║
+  ║  - <section id="..."> 已自帶 scroll-margin-top: 6rem（防 header 遮擋）║
+  ║  - 不要動 sidebar / topbar / footer / overlay 既有結構                ║
+  ║                                                                       ║
+  ║  可用 partials（src/partials/）：                                      ║
+  ║  - sidebar-public-other（桌機側欄，傳 active="..." 標當前頁）         ║
+  ║  - sidebar-public-home（僅 index 用）                                  ║
+  ║  - topbar-mobile（手機頂欄）                                           ║
+  ║  - footer-contact（footer 內聯絡資訊區塊）                             ║
+  ║                                                                       ║
+  ║  active 可選值：home / services / process / portfolio / about / contact║
+  ║  （沒對應就傳空字串，不會標 active）                                   ║
+  ╚══════════════════════════════════════════════════════════════════════╝
+--}}
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>關於我 | CHIYIGO</title>
-  <meta name="description" content="CHIYIGO — 全端獨立開發者，專注於系統設計、客製化開發與 AI 整合。把需求變成真正能用的系統。" />
+  <!-- TODO: 改頁面標題（格式：頁名 | CHIYIGO） -->
+  <title>TODO 頁名 | CHIYIGO</title>
+  <!-- TODO: 改 70~140 字的頁面描述（給 SEO / 社群分享） -->
+  <meta name="description" content="TODO 頁面描述" />
   <meta property="og:type"        content="website" />
-  <meta property="og:url"         content="https://chiyigo.com/about" />
-  <meta property="og:title"       content="關於我 | CHIYIGO" />
-  <meta property="og:description" content="CHIYIGO — 不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。" />
+  <!-- TODO: 改成本頁正式網址 -->
+  <meta property="og:url"         content="https://chiyigo.com/TODO-slug" />
+  <meta property="og:title"       content="TODO 頁名 | CHIYIGO" />
+  <meta property="og:description" content="TODO 頁面描述（社群分享預覽用）" />
   <meta property="og:image"       content="https://chiyigo.com/images/chiyigo.jpg" />
   <meta name="twitter:card"       content="summary_large_image" />
-  <link rel="canonical" href="https://chiyigo.com/about" />
+  <link rel="canonical" href="https://chiyigo.com/TODO-slug" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>
     (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();
@@ -179,72 +211,17 @@
     .copy{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);width:100%;opacity:.6}
 
     /* ══════════════════════════════════════════════════
-       ABOUT PAGE STYLES
+       PAGE-SPECIFIC STYLES — TODO 在這裡加你的頁面 CSS
+       規則：
+       - 顏色用 var(--bg) / var(--text) / var(--accent) 等變數
+       - 不要寫死 #色碼（除了 hero gradient 等品牌色）
+       - 自訂 class 用獨立前綴避免和現有衝突（如 .myp-、.feat- 等）
+       - 區塊對齊用 .page-wrap 的 max-width / padding
        ══════════════════════════════════════════════════ */
-
-    .about-wrap{padding:clamp(2.5rem,5vw,4rem) 2rem;max-width:var(--max-w);margin:0 auto}
-
-    /* Hero: 2-column */
-    .about-hero{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2.5rem,5vw,5rem);margin-bottom:clamp(3rem,6vw,5rem);align-items:start}
-    @media(max-width:768px){.about-hero{grid-template-columns:1fr}}
-
-    /* Identity card */
-    .ab-identity{display:flex;align-items:center;gap:.85rem;margin-bottom:1.5rem}
-    .ab-avatar{height:48px;width:auto;min-width:48px;border-radius:14px;background:var(--bg-elevated);border:1px solid var(--border-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:.3rem .6rem}
-    .ab-logo{height:34px;width:auto}
-    .ab-name{font-size:1rem;font-weight:600;color:var(--text);line-height:1.2}
-    .ab-role{font-size:.78rem;color:var(--text-muted);margin-top:.15rem}
-
-    /* Headline */
-    .ab-headline{font-family:var(--font-sans);font-size:clamp(1.9rem,4.5vw,3.2rem);font-weight:700;line-height:1.15;color:var(--text);margin-bottom:1.1rem;letter-spacing:-.02em}
-    .ab-headline-grad{display:block;background:linear-gradient(135deg,#7370EC 0%,#5B8BF5 60%,#4DA8DA 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-
-    /* Description */
-    .ab-desc{font-size:.95rem;color:var(--text-muted);line-height:1.8;margin-bottom:1.5rem}
-
-    /* Stats */
-    .ab-stats{display:flex;gap:2rem;margin-bottom:1.75rem;flex-wrap:wrap}
-    .ab-stat{display:flex;flex-direction:column;gap:.2rem}
-    .ab-stat-n{font-family:var(--font-sans);font-size:1.5rem;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-.02em}
-    .ab-stat-l{font-family:var(--font-mono);font-size:.63rem;color:var(--text-dim);letter-spacing:.06em}
-
-    /* CTA button */
-    .ab-cta{display:inline-flex;align-items:center;padding:.7rem 1.6rem;background:linear-gradient(135deg,#7370EC,#5B8BF5);color:#fff;font-family:var(--font-sans);font-size:.9rem;font-weight:600;border-radius:10px;text-decoration:none;box-shadow:0 4px 14px rgba(108,110,229,.28);transition:filter .18s ease,transform .18s ease}
-    .ab-cta:hover{filter:brightness(1.08);transform:translateY(-1px)}
-
-    /* Section labels */
-    .ab-section-label{font-family:var(--font-mono);font-size:.82rem;letter-spacing:.12em;color:var(--accent);opacity:.75;margin-bottom:.75rem}
-    .ab-section-sub{font-size:.95rem;color:var(--text-muted);margin-bottom:1.5rem}
-
-    /* Timeline */
-    .about-right{padding-top:.25rem}
-    .ab-timeline{display:flex;flex-direction:column}
-    .tl-row{display:grid;grid-template-columns:3.2rem 18px 1fr;gap:.65rem;align-items:start;padding:.65rem 0;border-bottom:1px solid var(--border-dim);opacity:0;transform:translateX(14px);transition:opacity .5s ease,transform .5s ease}
-    .tl-row.revealed{opacity:1;transform:translateX(0)}
-    .tl-row:last-child{border-bottom:none}
-    .tl-year{font-family:var(--font-mono);font-size:.78rem;font-weight:500;color:var(--accent);padding-top:.15rem;text-align:right;white-space:nowrap}
-    .tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);outline:2px solid var(--accent-dim);outline-offset:2px;flex-shrink:0;margin-top:.3rem;justify-self:center}
-    .tl-text{font-size:.875rem;color:var(--text-muted);line-height:1.65}
-
-    /* Values section */
-    .ab-values-section{border-top:1px solid var(--border-dim);padding-top:clamp(2rem,4vw,3rem);margin-bottom:clamp(2rem,4vw,3rem)}
-    .ab-values-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.1rem;margin-top:.25rem}
-    @media(max-width:900px){.ab-values-grid{grid-template-columns:repeat(2,1fr)}}
-    @media(max-width:480px){.ab-values-grid{grid-template-columns:1fr}}
-    .ab-value-card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;padding:1.25rem;transition:border-color .2s ease}
-    .ab-value-card:hover{border-color:var(--border-bright)}
-    .ab-value-title{font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:.5rem}
-    .ab-value-text{font-size:.8rem;color:var(--text-muted);line-height:1.75}
-
-    /* Skills section */
-    .ab-skills-section{border-top:1px solid var(--border-dim);padding-top:clamp(2rem,4vw,3rem);margin-bottom:clamp(2rem,4vw,3rem)}
-    .ab-skills-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;margin-top:.25rem}
-    @media(max-width:1000px){.ab-skills-grid{grid-template-columns:repeat(3,1fr)}}
-    @media(max-width:600px){.ab-skills-grid{grid-template-columns:repeat(2,1fr)}}
-    .ab-skill-cat{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:10px;padding:1rem;transition:border-color .2s ease}
-    .ab-skill-cat:hover{border-color:var(--accent-dim)}
-    .ab-skill-name{font-family:var(--font-mono);font-size:.7rem;color:var(--accent);margin-bottom:.5rem;letter-spacing:.04em;opacity:.85}
-    .ab-skill-tags{font-size:.78rem;color:var(--text-muted);line-height:1.8}
+    .page-wrap{padding:clamp(2.5rem,5vw,4rem) 2rem;max-width:var(--max-w);margin:0 auto}
+    .page-h1{font-family:var(--font-sans);font-size:clamp(1.9rem,4.5vw,3.2rem);font-weight:700;line-height:1.15;color:var(--text);margin-bottom:1rem;letter-spacing:-.02em}
+    .page-desc{font-size:.95rem;color:var(--text-muted);line-height:1.8;margin-bottom:2rem}
+    section[id]{scroll-margin-top:6rem}
     /* ── Lang dropdown ──────────────────────────────── */
     .sb-footer{position:relative}
     .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
@@ -267,125 +244,32 @@
   <div class="dash-wrap" id="dash-wrap">
 
     <!-- ── Sidebar ── -->
-    {{> sidebar-public-other active="about"}}
+    <!-- TODO: 把 active 改成你頁面對應的導覽項；若無對應則留空字串 -->
+    {{> sidebar-public-other active=""}}
 
     <!-- ── Main ── -->
     <div class="dash-main">
       <main class="dash-content" id="os-content">
 
-        <div class="about-wrap">
+        <!--
+          ─────────────────────────────────────────────────────────────
+          TODO: 把整個 .page-wrap 內容換成你的頁面
+          - 用 CSS 變數（var(--bg) / var(--text) / var(--accent)…）配色
+          - 顯示文字加 data-i18n="key" 並補進下方 LANGS_I18N 4 種語言
+          - 區塊用 <section id="..."> 包；錨點 scroll-margin-top 已預設
+          - data-reveal 屬性會啟用 IntersectionObserver 漸入動畫
+          ─────────────────────────────────────────────────────────────
+        -->
+        <div class="page-wrap">
 
-          <!-- ── Hero: 2-column ── -->
-          <div class="about-hero" data-reveal>
+          <section id="hero" data-reveal>
+            <h1 class="page-h1" data-i18n="page_h1">TODO 頁面主標</h1>
+            <p class="page-desc" data-i18n="page_desc">TODO 頁面副標／導言</p>
+          </section>
 
-            <!-- Left column -->
-            <div class="about-left">
-              <div class="ab-identity">
-                <div class="ab-avatar">
-                  <img src="/images/logo-light.png" alt="chiyigo" class="logo-light ab-logo">
-                  <img src="/images/logo-dark.png"  alt="chiyigo" class="logo-dark ab-logo">
-                </div>
-                <div>
-                  <p class="ab-name">chiyigo</p>
-                  <p class="ab-role" data-i18n="ab_role">獨立系統開發者</p>
-                </div>
-              </div>
-
-              <h1 class="ab-headline">
-                <span data-i18n="ab_headline1">把需求變成</span>
-                <span class="ab-headline-grad" data-i18n="ab_headline2">真正能用的系統</span>
-              </h1>
-
-              <p class="ab-desc" data-i18n="ab_desc">
-                我是一位全端獨立開發者，專注於系統設計、客製化開發與 AI 整合。
-                從需求釐清、架構規劃到系統上線，提供一站式的數位解決方案。
-              </p>
-
-              <div class="ab-stats">
-                <div class="ab-stat">
-                  <span class="ab-stat-n">50+</span>
-                  <span class="ab-stat-l" data-i18n="ab_stat_projects">完成專案</span>
-                </div>
-                <div class="ab-stat">
-                  <span class="ab-stat-n">5yr+</span>
-                  <span class="ab-stat-l" data-i18n="ab_stat_experience">開發經驗</span>
-                </div>
-                <div class="ab-stat">
-                  <span class="ab-stat-n">98%</span>
-                  <span class="ab-stat-l" data-i18n="ab_stat_satisfaction">客戶滿意度</span>
-                </div>
-              </div>
-
-              <a href="requisition.html" class="ab-cta" data-i18n="ab_cta">開始合作 →</a>
-            </div>
-
-            <!-- Right column: Timeline -->
-            <div class="about-right">
-              <p class="ab-section-label" data-i18n="section_history">// 經歷</p>
-              <div class="ab-timeline" id="ab-timeline">
-                <div class="tl-row"><span class="tl-year">2019</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2019">開始接案，主要以網站設計與前端開發為主</span></div>
-                <div class="tl-row"><span class="tl-year">2020</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2020">擴展至後端系統開發，首個企業後台管理系統上線</span></div>
-                <div class="tl-row"><span class="tl-year">2021</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2021">導入 React Native，開始承接 iOS/Android 雙平台開發</span></div>
-                <div class="tl-row"><span class="tl-year">2022</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2022">整合 AI 技術，完成多個 ChatGPT 商業應用專案</span></div>
-                <div class="tl-row"><span class="tl-year">2023</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2023">累積超過 50 個完成專案，專注於系統整合與自動化流程</span></div>
-                <div class="tl-row"><span class="tl-year">2024</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2024">持續精進，專注打造能真正解決業務問題的數位系統</span></div>
-                <div class="tl-row"><span class="tl-year">2025</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2025">正式推出 CHIYIGO IAM 跨平台身份認證服務，Serverless 架構整合 OAuth 社群登入與多站台授權</span></div>
-              </div>
-            </div>
-
-          </div>
-
-          <!-- ── Values ── -->
-          <div class="ab-values-section" data-reveal>
-            <p class="ab-section-label" data-i18n="section_values">// 工作理念</p>
-            <p class="ab-section-sub" data-i18n="section_values_sub">我怎麼看待每一個專案</p>
-            <div class="ab-values-grid">
-              <div class="ab-value-card">
-                <h3 class="ab-value-title" data-i18n="val1_title">需求優先</h3>
-                <p class="ab-value-text" data-i18n="val1_text">不賣技術，賣解法。每個功能都對應真實的業務需求，沒有多餘的複雜度。</p>
-              </div>
-              <div class="ab-value-card">
-                <h3 class="ab-value-title" data-i18n="val2_title">可維護性</h3>
-                <p class="ab-value-text" data-i18n="val2_text">交付的程式碼必須易於理解、擴展與維護，不製造技術債。</p>
-              </div>
-              <div class="ab-value-card">
-                <h3 class="ab-value-title" data-i18n="val3_title">準時交付</h3>
-                <p class="ab-value-text" data-i18n="val3_text">時程透明、進度即時同步，不讓客戶在等待中產生焦慮。</p>
-              </div>
-              <div class="ab-value-card">
-                <h3 class="ab-value-title" data-i18n="val4_title">長期關係</h3>
-                <p class="ab-value-text" data-i18n="val4_text">不是做完就消失。上線後的問題同樣重要，維護與迭代才是真正的服務。</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Skills ── -->
-          <div class="ab-skills-section" data-reveal>
-            <p class="ab-section-label" data-i18n="section_skills">// 技術堆疊</p>
-            <p class="ab-section-sub" data-i18n="section_skills_sub">使用的工具與技術</p>
-            <div class="ab-skills-grid">
-              <div class="ab-skill-cat">
-                <h4 class="ab-skill-name" data-i18n="skill1_name">前端開發</h4>
-                <p class="ab-skill-tags">React, Vue, Astro, TypeScript, Tailwind CSS</p>
-              </div>
-              <div class="ab-skill-cat">
-                <h4 class="ab-skill-name" data-i18n="skill2_name">後端開發</h4>
-                <p class="ab-skill-tags">Node.js, Python, FastAPI, PostgreSQL, Redis</p>
-              </div>
-              <div class="ab-skill-cat">
-                <h4 class="ab-skill-name" data-i18n="skill3_name">行動應用</h4>
-                <p class="ab-skill-tags">React Native, Flutter, iOS, Android</p>
-              </div>
-              <div class="ab-skill-cat">
-                <h4 class="ab-skill-name" data-i18n="skill4_name">AI / 整合</h4>
-                <p class="ab-skill-tags">OpenAI API, LangChain, LINE Bot, Webhook, n8n</p>
-              </div>
-              <div class="ab-skill-cat">
-                <h4 class="ab-skill-name" data-i18n="skill5_name">雲端 / DevOps</h4>
-                <p class="ab-skill-tags">AWS, GCP, Docker, CI/CD, Nginx</p>
-              </div>
-            </div>
-          </div>
+          <section id="content" data-reveal>
+            <p data-i18n="page_body">TODO 頁面內容</p>
+          </section>
 
         </div>
 
@@ -449,7 +333,7 @@
           <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="about.html" class="m-ov-item active" style="--i:4" data-close-overlay>
+        <a href="about.html" class="m-ov-item" style="--i:4" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
           <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -579,11 +463,20 @@
     mThemeBtn?.addEventListener('click', doToggle);
 
     // ── i18n ──────────────────────────────────────────────
+    /* TODO: 在每個語言物件補你頁面用到的 i18n key（page_h1 / page_desc / page_body 已先給範例）
+       規則：
+       - key 名用 snake_case（例：page_h1, feat1_title, feat1_text）
+       - 4 種語言都要補（漏一個會在該語言下顯示 key 字串）
+       - 共通 key（nav_*, cta_*, login, status_open, tooltip_*, footer_*）已經在這裡，不要動 */
     const LANGS_I18N = {
-      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言',footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',ab_role:'獨立系統開發者',ab_headline1:'把需求變成',ab_headline2:'真正能用的系統',ab_desc:'我是一位全端獨立開發者，專注於系統設計、客製化開發與 AI 整合。從需求釐清、架構規劃到系統上線，提供一站式的數位解決方案。',ab_stat_projects:'完成專案',ab_stat_experience:'開發經驗',ab_stat_satisfaction:'客戶滿意度',ab_cta:'開始合作 →',section_history:'// 經歷',section_values:'// 工作理念',section_values_sub:'我怎麼看待每一個專案',section_skills:'// 技術堆疊',section_skills_sub:'使用的工具與技術',tl_2019:'開始接案，主要以網站設計與前端開發為主',tl_2020:'擴展至後端系統開發，首個企業後台管理系統上線',tl_2021:'導入 React Native，開始承接 iOS/Android 雙平台開發',tl_2022:'整合 AI 技術，完成多個 ChatGPT 商業應用專案',tl_2023:'累積超過 50 個完成專案，專注於系統整合與自動化流程',tl_2024:'持續精進，專注打造能真正解決業務問題的數位系統',tl_2025:'正式推出 CHIYIGO IAM 跨平台身份認證服務，Serverless 架構整合 OAuth 社群登入與多站台授權',val1_title:'需求優先',val1_text:'不賣技術，賣解法。每個功能都對應真實的業務需求，沒有多餘的複雜度。',val2_title:'可維護性',val2_text:'交付的程式碼必須易於理解、擴展與維護，不製造技術債。',val3_title:'準時交付',val3_text:'時程透明、進度即時同步，不讓客戶在等待中產生焦慮。',val4_title:'長期關係',val4_text:'不是做完就消失。上線後的問題同樣重要，維護與迭代才是真正的服務。',skill1_name:'前端開發',skill2_name:'後端開發',skill3_name:'行動應用',skill4_name:'AI / 整合',skill5_name:'雲端 / DevOps',footer_contact_title:'聯絡我們'},
-      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",ab_role:'Full-Stack Independent Developer',ab_headline1:'Turn Your Requirements Into',ab_headline2:'Systems That Actually Work',ab_desc:'I\'m a full-stack independent developer focused on system design, custom development, and AI integration. From requirements to launch — end-to-end digital solutions.',ab_stat_projects:'Projects Done',ab_stat_experience:'Dev Experience',ab_stat_satisfaction:'Client Satisfaction',ab_cta:'Start Collaboration →',section_history:'// Experience',section_values:'// Philosophy',section_values_sub:'How I approach every project',section_skills:'// Tech Stack',section_skills_sub:'Tools & technologies',tl_2019:'Started freelancing, focusing on web design and front-end development.',tl_2020:'Expanded into back-end systems; first enterprise admin dashboard launched.',tl_2021:'Adopted React Native and began taking on iOS/Android dual-platform projects.',tl_2022:'Integrated AI — delivered multiple ChatGPT-powered business applications.',tl_2023:'Surpassed 50 completed projects; specializing in system integration and automation.',tl_2024:'Continued growth, focused on building digital systems that truly solve business problems.',tl_2025:'Launched CHIYIGO IAM — cross-platform identity service with Serverless architecture, OAuth social login, and multi-site authorization.',val1_title:'Requirements First',val1_text:"We sell solutions, not technology. Every feature maps to a real business need — no unnecessary complexity.",val2_title:'Maintainability',val2_text:'Delivered code must be easy to understand, extend, and maintain — no technical debt.',val3_title:'On-Time Delivery',val3_text:'Transparent timelines and real-time progress updates — no anxiety-inducing waiting.',val4_title:'Long-Term Partnership',val4_text:"We don't disappear after launch. Post-release issues matter just as much — maintenance and iteration are the real service.",skill1_name:'Front-End',skill2_name:'Back-End',skill3_name:'Mobile Apps',skill4_name:'AI / Integration',skill5_name:'Cloud / DevOps',footer_contact_title:'Contact Us'},
-      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',ab_role:'フルスタック独立開発者',ab_headline1:'要件を',ab_headline2:'本当に使えるシステムへ',ab_desc:'システム設計・カスタム開発・AI 統合に特化したフルスタック独立開発者。要件定義から本番稼働まで、ワンストップで提供します。',ab_stat_projects:'完了案件',ab_stat_experience:'開発経験',ab_stat_satisfaction:'顧客満足度',ab_cta:'コラボを始める →',section_history:'// 経歴',section_values:'// 理念',section_values_sub:'すべてのプロジェクトへのアプローチ',section_skills:'// 技術スタック',section_skills_sub:'使用ツールと技術',tl_2019:'フリーランスを開始。主にWebデザインとフロントエンド開発を担当。',tl_2020:'バックエンド開発に拡張。初の企業向け管理システムをリリース。',tl_2021:'React Nativeを導入し、iOS/Android 両対応のアプリ開発を開始。',tl_2022:'AI技術を統合し、複数のChatGPTビジネスアプリを納品。',tl_2023:'完了案件50件超。システム連携と自動化に注力。',tl_2024:'成長を続け、本当にビジネス課題を解決するデジタルシステムに集中。',tl_2025:'CHIYIGO IAM（クロスプラットフォームID認証サービス）を正式リリース。ServerlessアーキテクチャでOAuth連携と多拠点認証を実現。',val1_title:'要件優先',val1_text:'技術ではなく解決策を提供します。すべての機能は実際のビジネスニーズに対応し、無駄な複雑さはありません。',val2_title:'保守性',val2_text:'納品するコードは理解・拡張・保守しやすくなければなりません。技術的負債は作りません。',val3_title:'期限厳守',val3_text:'スケジュールは透明で、進捗はリアルタイムに共有。お客様を不安にさせません。',val4_title:'長期的な関係',val4_text:'リリース後も消えません。公開後の問題も同様に重要であり、保守と改善が本当のサービスです。',skill1_name:'フロントエンド',skill2_name:'バックエンド',skill3_name:'モバイルアプリ',skill4_name:'AI / 連携',skill5_name:'クラウド / DevOps',footer_contact_title:'お問い合わせ'},
-      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',ab_role:'풀스택 독립 개발자',ab_headline1:'요구사항을',ab_headline2:'실제로 작동하는 시스템으로',ab_desc:'시스템 설계, 맞춤 개발, AI 통합에 특화된 풀스택 독립 개발자입니다. 요구사항 정의부터 시스템 출시까지 원스톱 솔루션을 제공합니다.',ab_stat_projects:'완료 프로젝트',ab_stat_experience:'개발 경력',ab_stat_satisfaction:'고객 만족도',ab_cta:'협업 시작하기 →',section_history:'// 경력',section_values:'// 철학',section_values_sub:'모든 프로젝트에 대한 접근 방식',section_skills:'// 기술 스택',section_skills_sub:'사용 도구 및 기술',tl_2019:'프리랜서 시작. 주로 웹 디자인과 프론트엔드 개발 담당.',tl_2020:'백엔드 개발로 확장. 첫 기업용 관리 시스템 런칭.',tl_2021:'React Native 도입, iOS/Android 양 플랫폼 개발 수주 시작.',tl_2022:'AI 기술 통합, 다수의 ChatGPT 비즈니스 앱 납품.',tl_2023:'완료 프로젝트 50개 돌파, 시스템 통합 및 자동화에 집중.',tl_2024:'지속 성장, 실제 비즈니스 문제를 해결하는 디지털 시스템 구축에 집중.',tl_2025:'CHIYIGO IAM 정식 출시 — Serverless 아키텍처로 OAuth 소셜 로그인과 멀티사이트 인증 통합.',val1_title:'요구사항 우선',val1_text:'기술이 아닌 해결책을 제공합니다. 모든 기능은 실제 비즈니스 필요에 대응하며 불필요한 복잡성이 없습니다.',val2_title:'유지보수성',val2_text:'납품 코드는 이해·확장·유지보수가 쉬워야 합니다. 기술 부채를 만들지 않습니다.',val3_title:'납기 준수',val3_text:'일정은 투명하고 진행 상황은 실시간으로 공유합니다. 고객을 기다림 속에 불안하게 하지 않습니다.',val4_title:'장기적 관계',val4_text:'런칭 후 사라지지 않습니다. 출시 후 문제도 동일하게 중요하며, 유지보수와 반복 개선이 진정한 서비스입니다.',skill1_name:'프론트엔드',skill2_name:'백엔드',skill3_name:'모바일 앱',skill4_name:'AI / 통합',skill5_name:'클라우드 / DevOps',footer_contact_title:'연락하기'},
+      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言',footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',footer_contact_title:'聯絡我們',
+        page_h1:'TODO 頁面主標',page_desc:'TODO 頁面副標／導言',page_body:'TODO 頁面內容'},
+      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",footer_contact_title:'Contact Us',
+        page_h1:'TODO Page Headline',page_desc:'TODO Page subheadline',page_body:'TODO Page body'},
+      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',footer_contact_title:'お問い合わせ',
+        page_h1:'TODO ページ見出し',page_desc:'TODO サブ見出し',page_body:'TODO 本文'},
+      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',footer_contact_title:'연락하기',
+        page_h1:'TODO 페이지 제목',page_desc:'TODO 부제목',page_body:'TODO 본문'},
     };
     let curLangI = localStorage.getItem('lang') || 'zh-TW';
     function applyLangI(lang) {
@@ -618,22 +511,7 @@
     }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
     document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
 
-    // ── Timeline staggered reveal ──────────────────────────────
-    const tlWrap = document.getElementById('ab-timeline');
-    if (tlWrap) {
-      const tlRoot = window.innerWidth > 768 ? osContent : null;
-      const tlObs = new IntersectionObserver(entries => {
-        entries.forEach(e => {
-          if (e.isIntersecting) {
-            tlWrap.querySelectorAll('.tl-row').forEach((row, i) => {
-              setTimeout(() => row.classList.add('revealed'), i * 80);
-            });
-            tlObs.unobserve(e.target);
-          }
-        });
-      }, { root: tlRoot, threshold: 0.1 });
-      tlObs.observe(tlWrap);
-    }
+    // TODO: 若有需要錯位漸入動畫，可仿照 about.html 的 timeline observer 寫類似邏輯
   </script>
 
   <!-- Neural canvas -->
