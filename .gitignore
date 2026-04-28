@@ -5,5 +5,7 @@ dist/
 *.local
 .claude/
 
-# Build output (組裝自 src/pages + src/partials；原始檔在 src/)
-public/*.html
+# 註：public/*.html 是 npm run build 的產物（來源：src/pages + src/partials），
+# 但因 Cloudflare Pages 新版 dashboard UI 無法設 build command，故仍 commit 進 repo。
+# 修改流程：改 src/ → npm run build → commit src/ 與 public/ 一起推。
+# （階段 7 會加 pre-commit hook 自動 build。）

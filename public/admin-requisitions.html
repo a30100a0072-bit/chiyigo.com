@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>諮詢紀錄 — CHIYIGO Admin</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>
+    (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *,*:before,*:after{box-sizing:border-box;margin:0;padding:0}
+
+    :root,.theme-light{
+      --bg:#F0F2FA;--bg-surface:#FFFFFF;--bg-elevated:#FAFAFE;
+      --bg-sidebar:#EAEBF5;--bg-titlebar:#F4F5FC;
+      --border:rgba(0,0,0,.07);--border-dim:rgba(0,0,0,.05);
+      --border-bright:rgba(0,0,0,.14);--border-mid:rgba(0,0,0,.1);
+      --text:#1A1B2E;--text-muted:rgba(26,27,46,.6);--text-dim:rgba(26,27,46,.38);
+      --accent:#6C6EE5;--accent-dim:rgba(108,110,229,.1);--accent-glow:rgba(108,110,229,.18);
+      --hover-overlay:rgba(0,0,0,.05);
+      --neural-r:108;--neural-g:110;--neural-b:229;
+      --neural-node-opacity:.22;--neural-line-opacity:.09;
+      --font-sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+      --font-display:var(--font-sans);--font-mono:"DM Mono","Courier New",monospace;
+      --font-body:var(--font-sans);
+      --max-w:1200px;--pad-x:2rem;--sidebar-w:220px;--titlebar-h:60px;
+    }
+    .theme-dark{
+      --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
+      --bg-sidebar:#0F1424;--bg-titlebar:#0D1120;
+      --border:rgba(255,255,255,.08);--border-dim:rgba(255,255,255,.05);
+      --border-bright:rgba(255,255,255,.14);--border-mid:rgba(255,255,255,.1);
+      --text:#F3F4F6;--text-muted:rgba(243,244,246,.62);--text-dim:rgba(243,244,246,.36);
+      --accent:#7B6CFF;--accent-dim:rgba(123,108,255,.12);--accent-glow:rgba(123,108,255,.25);
+      --hover-overlay:rgba(255,255,255,.06);
+      --neural-r:123;--neural-g:108;--neural-b:255;
+      --neural-node-opacity:.4;--neural-line-opacity:.15;
+    }
+    @media(max-width:768px){:root{--sidebar-w:0px;--titlebar-h:0px;--pad-x:1.25rem}}
+
+    html{font-family:var(--font-sans);background-color:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background-color .3s ease,color .3s ease}
+    body{min-height:100vh;overflow:hidden}
+    @media(max-width:768px){body{overflow:auto}}
+    a{color:inherit;text-decoration:none}
+    ul{list-style:none}
+    img{max-width:100%;height:auto;display:block}
+
+    .logo-dark,.theme-dark .logo-light{display:none!important}
+    .theme-dark .logo-dark{display:block!important}
+
+    #neural-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+    /* ── Layout ── */
+    .dash-wrap{position:fixed;inset:0;z-index:1;display:grid;grid-template-columns:var(--sidebar-w) 1fr;background:var(--bg);overflow:hidden}
+    .dash-sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border-dim);display:flex;flex-direction:column;overflow:hidden;height:100vh}
+    .dash-main{display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
+    .dash-content{flex:1;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;min-height:0}
+    .dash-content::-webkit-scrollbar{width:4px}
+    .dash-content::-webkit-scrollbar-track{background:transparent}
+    .dash-content::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px}
+    .dash-content::-webkit-scrollbar-thumb:hover{background:var(--border-bright)}
+
+    /* ── Sidebar ── */
+    .sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0;text-decoration:none}
+    .sb-logo-img{height:76px;width:auto;display:block;flex-shrink:0}
+    .sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .sb-nav::-webkit-scrollbar{display:none}
+    .sb-item{display:flex;align-items:center;gap:.7rem;padding:.6rem .85rem;border-radius:10px;font-family:var(--font-body);font-size:.875rem;font-weight:400;color:var(--text-muted);text-decoration:none;transition:background .18s ease,color .18s ease}
+    .sb-item:hover{background:#6c6ee512;color:var(--text)}
+    .sb-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500}
+    .sb-item.active .sb-icon{color:var(--accent);opacity:1}
+    .sb-icon{width:16px;height:16px;flex-shrink:0;color:var(--text-dim);opacity:.7;transition:color .18s ease,opacity .18s ease}
+    .sb-item:hover .sb-icon{color:var(--text-muted);opacity:.9}
+    .sb-label{line-height:1;white-space:nowrap}
+    .sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--border-dim)}
+    .sb-cta{background:linear-gradient(140deg,#6c6ee51f,#5b8bf514);border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem;position:relative;overflow:hidden}
+    .sb-cta:before{content:"";position:absolute;top:-12px;right:-12px;width:60px;height:60px;border-radius:50%;background:#6c6ee514;pointer-events:none}
+    .sb-cta-icon{width:28px;height:28px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:.65rem}
+    .sb-cta-icon svg{width:16px;height:16px}
+    .sb-cta-q{font-family:var(--font-body);font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:.3rem;line-height:1.3}
+    .sb-cta-desc{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:.75rem}
+    .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
+    .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .sb-footer{display:flex;align-items:center;gap:.5rem;position:relative}
+    .sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
+    .sb-login-link:hover{color:var(--accent);background:var(--bg-elevated)}
+    .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
+    .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
+    .m-login-btn:hover{color:var(--text)}
+    .m-login-btn svg{width:17px;height:17px}
+    .sb-foot-icons{display:flex;gap:.25rem}
+    .sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
+    .sb-foot-btn svg{width:14px;height:14px}
+    .sb-copyright{font-family:var(--font-mono);font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
+
+    /* ── Mobile topbar ── */
+    .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim);transition:background .3s ease,border-color .3s ease}
+    .m-tb-inner{display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:52px}
+    .m-tb-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none}
+    .m-logo-img{height:68px;width:auto;display:block;flex-shrink:0}
+    .m-tb-right{display:flex;align-items:center;gap:.85rem}
+    .m-theme-btn{width:36px;height:36px;border:1px solid rgba(108,110,229,.14);background:#6c6ee512;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6c6ee5;flex-shrink:0;transition:background .2s ease,border-color .2s ease}
+    .m-theme-btn svg{width:14px;height:14px;display:block}
+    .theme-dark .m-theme-btn{border-color:#ffffff4d;background:#ffffff0f;color:#fff}
+    .m-ham-btn{display:flex;flex-direction:column;justify-content:center;gap:6px;width:36px;height:36px;border:1px solid rgba(108,110,229,.22);background:#6c6ee51a;border-radius:9px;cursor:pointer;padding:0 10px;transition:background .2s ease,border-color .2s ease;flex-shrink:0}
+    .m-ham-line{display:block;width:100%;height:1.5px;background:#6c6ee5;border-radius:2px;transform-origin:center;transition:transform .32s cubic-bezier(.23,1,.32,1)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(1){transform:translateY(3.75px) rotate(45deg)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(2){transform:translateY(-3.75px) rotate(-45deg)}
+    .theme-dark .m-ham-btn{border-color:#ffffff4d;background:#ffffff0f}
+    .theme-dark .m-ham-line{background:#fff}
+
+    /* ── Mobile overlay ── */
+    .m-overlay{display:none;position:fixed;inset:0;z-index:49;background:#0a0c1c00;transition:background .35s ease;pointer-events:none}
+    .m-overlay.is-open{background:#0a0c1c52;pointer-events:auto}
+    .m-ov-wrap{position:absolute;bottom:0;left:0;right:0;background:var(--bg-surface);border-radius:22px 22px 0 0;border:1px solid var(--border);border-bottom:none;box-shadow:0 -4px 24px #6c6ee514;display:flex;flex-direction:column;max-height:88svh;overflow:hidden;transform:translateY(100%);transition:transform .42s cubic-bezier(.22,1,.36,1)}
+    .m-overlay.is-open .m-ov-wrap{transform:translateY(0)}
+    .m-ov-handle{width:36px;height:4px;background:#6c6ee52e;border-radius:100px;margin:12px auto 0;flex-shrink:0}
+    .m-ov-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.4rem .65rem;flex-shrink:0}
+    .m-ov-brand{display:flex;align-items:center;gap:.55rem}
+    .m-ov-logo-img{height:72px;width:auto;display:block}
+    .m-ov-status{display:flex;align-items:center;gap:.4rem;background:#22a86517;border:1px solid rgba(34,168,101,.18);border-radius:100px;padding:.22rem .65rem}
+    .m-ov-status-dot{width:5px;height:5px;border-radius:50%;background:#22a865;flex-shrink:0;animation:dot-pulse 2.5s ease-in-out infinite}
+    .m-ov-status-txt{font-family:var(--font-sans);font-size:.68rem;font-weight:500;color:#22a865}
+    @keyframes dot-pulse{0%,to{opacity:1}50%{opacity:.45}}
+    .m-ov-nav{flex:1;overflow-y:auto;padding:.35rem .75rem .5rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .m-ov-nav::-webkit-scrollbar{display:none}
+    .m-ov-item{display:flex;align-items:center;gap:.75rem;padding:.72rem .85rem;border-radius:12px;text-decoration:none;background:transparent;border:1px solid transparent;opacity:0;transform:translateY(10px);transition:opacity .32s cubic-bezier(.22,1,.36,1),transform .32s cubic-bezier(.22,1,.36,1),background .18s ease,border-color .18s ease;transition-delay:calc(var(--i,0)*.04s + .12s)}
+    .m-overlay.is-open .m-ov-item{opacity:1;transform:translateY(0)}
+    .m-ov-item:active{background:#6c6ee50f;transform:scale(.98)}
+    .m-ov-item.active{background:var(--accent-dim);border-color:#6c6ee524}
+    .m-ov-icon-wrap{width:32px;height:32px;border-radius:9px;background:var(--hover-overlay);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .m-ov-item.active .m-ov-icon-wrap{background:#6c6ee51f;color:var(--accent)}
+    .m-ov-icon{width:15px;height:15px}
+    .m-ov-label{flex:1;font-family:var(--font-sans);font-size:.9rem;font-weight:400;color:var(--text-muted);line-height:1;transition:color .18s ease}
+    .m-ov-item.active .m-ov-label{color:var(--accent);font-weight:500}
+    .m-ov-chevron{width:6px;height:10px;color:var(--text-dim);flex-shrink:0;opacity:.5}
+    .m-ov-cta{flex-shrink:0;padding:.75rem 1.2rem calc(1.25rem + env(safe-area-inset-bottom));border-top:1px solid rgba(108,110,229,.07);opacity:0;transform:translateY(8px);transition:opacity .32s ease .42s,transform .32s ease .42s}
+    .m-overlay.is-open .m-ov-cta{opacity:1;transform:translateY(0)}
+    .m-ov-cta-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:.78rem 1rem;background:linear-gradient(135deg,#7370ec,#5b8bf5);color:#fff;font-family:var(--font-sans);font-size:.9rem;font-weight:600;border-radius:12px;text-decoration:none;box-shadow:0 4px 16px #6c6ee547;transition:filter .18s ease,transform .18s ease}
+    .m-ov-cta-btn:active{filter:brightness(.96);transform:scale(.98)}
+
+    @media(max-width:768px){
+      .dash-wrap{position:relative;display:block;height:auto;min-height:100svh;overflow:visible}
+      .dash-sidebar{display:none}
+      .dash-main{display:block;height:auto;overflow:visible}
+      .dash-content{overflow:visible;height:auto;background:var(--bg);padding-top:52px;padding-bottom:2rem;min-height:100svh}
+      .m-topbar,.m-overlay{display:block}
+    }
+
+    /* ── Footer ── */
+    .footer{border-top:1px solid var(--border-dim);background:var(--bg-titlebar)}
+    .footer-inner{max-width:var(--max-w);margin:0 auto;padding:2.5rem var(--pad-x);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2rem}
+    .footer .logo{height:72px;width:auto;display:block;margin-bottom:.45rem;opacity:.7}
+    .footer .tagline{font-size:.76rem;color:var(--text-dim);max-width:26rem;line-height:1.65}
+    .footer-links{display:flex;gap:2rem}
+    .footer-links a{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);transition:color .2s ease}
+    .footer-links a:hover{color:var(--text-muted)}
+    .footer-contact{display:flex;flex-direction:column;gap:.5rem}
+    .footer-contact-title{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.2rem}
+    .footer-contact-item{display:flex;align-items:center;gap:.45rem;font-size:.76rem;color:var(--text-dim);transition:color .2s ease}
+    .footer-contact-item:hover{color:var(--text-muted)}
+    .footer-contact-item svg{width:13px;height:13px;flex-shrink:0}
+    .copy{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);width:100%;opacity:.6}
+
+    /* ── Lang dropdown ── */
+    .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
+    .lang-dropdown.open{display:flex}
+    .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
+    .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
+    .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
+    .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
+    .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    .m-top-lang-drop{position:fixed;top:58px;right:1.25rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:60;min-width:128px}
+    .m-top-lang-drop.open{display:flex}
+
+    /* ══════════════════════════════════════════════════
+       ADMIN REQUISITIONS PAGE STYLES
+       ══════════════════════════════════════════════════ */
+    .admin-wrap{max-width:var(--max-w);margin:0 auto;padding:clamp(2rem,4vw,3rem) var(--pad-x) 2.5rem}
+    .admin-head{padding-bottom:1.5rem;border-bottom:1px solid var(--border-dim);margin-bottom:1.75rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+    .admin-head .meta{font-family:var(--font-mono);font-size:.72rem;color:var(--accent);letter-spacing:.16em;text-transform:uppercase;margin-bottom:.45rem}
+    .admin-head h1{font-size:clamp(1.5rem,3vw,1.85rem);font-weight:700;color:var(--text);letter-spacing:-.005em}
+    .admin-head .desc{font-size:.85rem;color:var(--text-muted);margin-top:.35rem}
+    .admin-logout{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .85rem;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text-muted);font-size:.78rem;cursor:pointer;transition:color .18s,border-color .18s,background .18s}
+    .admin-logout:hover{color:#e57373;border-color:rgba(229,115,115,.4);background:rgba(229,115,115,.06)}
+    .admin-logout svg{width:14px;height:14px}
+    .admin-state{text-align:center;padding:5rem 1rem;color:var(--text-muted);font-family:var(--font-mono);font-size:.85rem}
+    .admin-state a{color:var(--accent);font-size:.85rem}
+    .admin-state a:hover{text-decoration:underline}
+    .admin-state.error{color:#e57373}
+    .ctrl-row{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin-bottom:1.25rem}
+    .search-wrap{position:relative;flex:1;min-width:220px}
+    .search-wrap svg{position:absolute;left:.85rem;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text-dim);pointer-events:none}
+    .search-input{width:100%;background:var(--bg-surface);border:1px solid var(--border);border-radius:9px;padding:.55rem 1rem .55rem 2.2rem;font-size:.85rem;color:var(--text);font-family:var(--font-sans);transition:border-color .18s}
+    .search-input::placeholder{color:var(--text-dim)}
+    .search-input:focus{outline:none;border-color:var(--accent)}
+    .total-badge{font-family:var(--font-mono);font-size:.72rem;color:var(--text-dim);flex-shrink:0}
+    .table-wrap{overflow:hidden;border-radius:12px;border:1px solid var(--border)}
+    table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
+    .req-table thead tr{background:var(--bg-surface);border-bottom:1px solid var(--border)}
+    .req-table th{text-align:left;padding:.85rem 1rem;font-family:var(--font-mono);font-size:.66rem;font-weight:500;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em}
+    .req-table tbody tr{border-bottom:1px solid var(--border-dim);cursor:pointer;transition:background .18s ease}
+    .req-table tbody tr:last-child{border-bottom:none}
+    .req-table tbody tr:hover{background:var(--hover-overlay)}
+    .req-table td{padding:.85rem 1rem;color:var(--text-muted)}
+    .req-table td .name{color:var(--text);font-weight:500}
+    .req-table td .company{display:block;font-size:.74rem;color:var(--text-dim);margin-top:.15rem}
+    .req-table td.mono{font-family:var(--font-mono);font-size:.74rem}
+    .req-table td.id{font-family:var(--font-mono);font-size:.7rem;color:var(--text-dim);width:42px}
+    .pill{display:inline-flex;align-items:center;padding:.18rem .55rem;border-radius:6px;font-size:.72rem;background:var(--accent-dim);color:var(--accent);border:1px solid rgba(108,110,229,.22)}
+    .req-table .chev{width:14px;height:14px;color:var(--text-dim)}
+    .empty{text-align:center;padding:3rem 1rem;font-family:var(--font-mono);font-size:.78rem;color:var(--text-dim)}
+
+    .cards-wrap{display:none;flex-direction:column;gap:.75rem}
+    .req-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;padding:1rem;cursor:pointer;transition:border-color .18s}
+    .req-card:hover{border-color:var(--accent)}
+    .req-card .row{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem;margin-bottom:.55rem}
+    .req-card .name{font-weight:600;color:var(--text);font-size:.9rem}
+    .req-card .company{font-size:.74rem;color:var(--text-dim);margin-left:.5rem}
+    .req-card .id{font-family:var(--font-mono);font-size:.72rem;color:var(--text-dim)}
+    .req-card .when{font-family:var(--font-mono);font-size:.7rem;color:var(--text-dim);margin-top:.5rem}
+    @media(max-width:768px){.table-wrap{display:none}.cards-wrap{display:flex}}
+
+    .pager{display:flex;align-items:center;justify-content:space-between;margin-top:1.25rem}
+    .pager button{padding:.45rem .85rem;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:.78rem;cursor:pointer;transition:color .18s,border-color .18s}
+    .pager button:hover:not(:disabled){color:var(--text);border-color:var(--border-bright)}
+    .pager button:disabled{opacity:.35;cursor:not-allowed}
+    .pager .stat{font-family:var(--font-mono);font-size:.72rem;color:var(--text-dim)}
+
+    .modal-bd{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:1rem}
+    .modal-bd.open{display:flex}
+    .modal-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.32)}
+    .modal-head{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.4rem;border-bottom:1px solid var(--border-dim)}
+    .modal-head h2{font-size:.9rem;font-weight:600;color:var(--text)}
+    .modal-close{background:none;border:none;color:var(--text-dim);cursor:pointer;padding:.25rem;border-radius:6px;transition:color .18s,background .18s}
+    .modal-close:hover{color:var(--text);background:var(--hover-overlay)}
+    .modal-close svg{width:18px;height:18px;display:block}
+    .modal-body{padding:1.25rem 1.4rem;display:flex;flex-direction:column;gap:.85rem;font-size:.86rem}
+    .modal-row{display:flex;gap:.85rem}
+    .modal-row .lbl{font-size:.74rem;color:var(--text-dim);width:5.5rem;flex-shrink:0;padding-top:.1rem}
+    .modal-row .val{flex:1;color:var(--text)}
+    .modal-row .val.mono{font-family:var(--font-mono)}
+    .modal-meta{display:flex;align-items:center;gap:.5rem;font-family:var(--font-mono);font-size:.72rem;color:var(--text-dim);margin-bottom:.25rem}
+    .msg-block{background:var(--bg-elevated);border:1px solid var(--border-dim);border-radius:10px;padding:.85rem 1rem;color:var(--text);white-space:pre-wrap;line-height:1.6;font-size:.86rem}
+    .msg-label{font-size:.74rem;color:var(--text-dim);margin-bottom:.4rem}
+  </style>
+</head>
+<body>
+
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+
+  <div class="dash-wrap" id="dash-wrap">
+
+    <!-- ── Sidebar ── -->
+    <aside class="dash-sidebar" id="dash-sidebar">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="sb-logo-img logo-dark">
+      </a>
+
+      <nav class="sb-nav" aria-label="主要導覽">
+        <a href="/index.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_home">首頁</span>
+        </a>
+        <a href="/index.html#services" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_services">服務項目</span>
+        </a>
+        <a href="/index.html#process" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
+          <span class="sb-label" data-i18n="nav_process">服務流程</span>
+        </a>
+        <a href="/portfolio.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_portfolio">案例作品</span>
+        </a>
+        <a href="/about.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_about">關於我們</span>
+        </a>
+        <a href="/requisition.html" class="sb-item active">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_contact">接案諮詢</span>
+        </a>
+      </nav>
+
+      <div class="sb-bottom">
+        <div class="sb-cta">
+          <div class="sb-cta-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3" opacity="0.4"></circle><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <p class="sb-cta-q" data-i18n="cta_q">準備好開始專案了嗎？</p>
+          <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="/requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
+        </div>
+        <a href="/dashboard.html" class="sb-login-link" aria-label="會員中心">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+          <span data-i18n="dashboard">會員中心</span>
+        </a>
+        <div class="sb-footer">
+          <div class="lang-dropdown" id="lang-dropdown">
+            <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="lang-opt" data-lang="en">English</button>
+            <button class="lang-opt" data-lang="ja">日本語</button>
+            <button class="lang-opt" data-lang="ko">한국어</button>
+          </div>
+          <div class="sb-foot-icons">
+            <button class="sb-foot-btn" aria-label="切換明暗" id="theme-toggle-btn" title="切換明暗">
+              <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"></circle><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
+              <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+            </button>
+            <button class="sb-foot-btn" aria-label="切換語言" id="lang-toggle-btn" title="切換語言">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <span class="sb-copyright">© 2026 chiyigo</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div class="dash-main">
+      <main class="dash-content" id="os-content">
+
+        <div class="admin-wrap">
+          <div class="admin-head">
+            <div>
+              <p class="meta">// admin panel</p>
+              <h1 data-i18n="page_title">接案諮詢紀錄</h1>
+              <p class="desc" data-i18n="page_desc">來自 chiyigo.com/requisition 的表單提交</p>
+            </div>
+            <button id="logout-btn" class="admin-logout">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
+              <span data-i18n="logout">登出</span>
+            </button>
+          </div>
+
+          <div id="loading" class="admin-state" data-i18n="loading">// 載入中…</div>
+
+          <div id="error-msg" class="admin-state error" style="display:none">
+            <p id="error-text">// error</p>
+            <a href="/login.html" data-i18n="relogin">→ 重新登入</a>
+          </div>
+
+          <div id="content" style="display:none">
+            <div class="ctrl-row">
+              <div class="search-wrap">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+                <input id="search-input" class="search-input" type="text" data-i18n-aria="search_aria" data-i18n-ph="search_ph" aria-label="搜尋需求單" placeholder="搜尋姓名 / 聯絡方式 / 需求…" />
+              </div>
+              <span id="total-badge" class="total-badge"></span>
+            </div>
+
+            <div class="table-wrap">
+              <table class="req-table">
+                <thead>
+                  <tr>
+                    <th class="id">#</th>
+                    <th data-i18n="col_name">姓名 / 公司</th>
+                    <th data-i18n="col_contact">聯絡方式</th>
+                    <th data-i18n="col_service">需求類型</th>
+                    <th data-i18n="col_budget">預算</th>
+                    <th data-i18n="col_timeline">時程</th>
+                    <th data-i18n="col_created">提交時間</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+              </table>
+            </div>
+
+            <div id="cards-container" class="cards-wrap"></div>
+
+            <div id="pagination" class="pager"></div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <div class="footer-inner">
+            <div>
+              <img src="/images/logo-light.png" alt="CHIYIGO" class="logo logo-light">
+              <img src="/images/logo-dark.png"  alt="CHIYIGO" class="logo logo-dark">
+              <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+            </div>
+            <div class="footer-contact">
+              <p class="footer-contact-title" data-i18n="footer_contact_title">聯絡我們</p>
+              <a href="tel:0900542992" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 2.5H3.2C2.5 2.5 2 3 2 3.7c0 5.4 4.4 9.8 9.8 9.8.7 0 1.2-.5 1.2-1.2V10l-2.5-1L9 10.5C7.5 9.7 6.3 8.5 5.5 7L7 5.5 6 3z"/></svg>
+                0900-542-992
+              </a>
+              <a href="https://line.me/ti/p/~chiyigo" target="_blank" rel="noopener" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><path d="M8 4.5C5.5 4.5 3.5 6 3.5 7.8c0 1.6 1.5 2.9 3.5 3.1l.5.9.5-.9c2-.2 3.5-1.5 3.5-3.1C11.5 6 9.5 4.5 8 4.5z"/></svg>
+                LINE: chiyigo
+              </a>
+              <a href="mailto:chiyigo20201208@gmail.com" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><path d="M1 5.5l7 4 7-4"/></svg>
+                chiyigo20201208@gmail.com
+              </a>
+            </div>
+            <nav class="footer-links">
+              <a href="/index.html" data-i18n="nav_home">首頁</a>
+              <a href="/portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+              <a href="/about.html" data-i18n="nav_about">關於我們</a>
+              <a href="/requisition.html" data-i18n="nav_contact">接案諮詢</a>
+            </nav>
+            <p class="copy">© 2026 CHIYIGO</p>
+          </div>
+        </footer>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="modal-bd">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 data-i18n="modal_title">諮詢詳情</h2>
+        <button id="modal-close" class="modal-close" aria-label="close">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Mobile topbar -->
+  <div class="m-topbar" id="m-topbar">
+    <div class="m-tb-inner">
+      <a href="/index.html" class="m-tb-brand">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="m-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="m-logo-img logo-dark">
+      </a>
+      <div class="m-tb-right">
+        <a href="/dashboard.html" class="m-login-btn" aria-label="會員中心">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+        </a>
+        <button class="m-theme-btn" id="m-theme-btn" aria-label="切換主題">
+          <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"></circle><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
+          <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+        </button>
+        <button class="m-theme-btn" id="m-lang-btn" onclick="toggleTopLangDrop(event)" aria-label="切換語言">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+        <button class="m-ham-btn" id="m-ham-btn" aria-label="開啟選單" aria-expanded="false" aria-controls="m-overlay">
+          <span class="m-ham-line"></span>
+          <span class="m-ham-line"></span>
+        </button>
+      </div>
+    </div>
+    <div class="m-top-lang-drop" id="m-top-lang-drop">
+      <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+      <button class="lang-opt" data-lang="en">English</button>
+      <button class="lang-opt" data-lang="ja">日本語</button>
+      <button class="lang-opt" data-lang="ko">한국어</button>
+    </div>
+  </div>
+
+  <!-- Mobile overlay -->
+  <div class="m-overlay" id="m-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="主選單">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle" aria-hidden="true"></div>
+      <div class="m-ov-head">
+        <div class="m-ov-brand">
+          <img src="/images/logo-light.png" alt="CHIYIGO" class="m-ov-logo-img logo-light">
+          <img src="/images/logo-dark.png"  alt="CHIYIGO" class="m-ov-logo-img logo-dark">
+        </div>
+        <div class="m-ov-status">
+          <span class="m-ov-status-dot" aria-hidden="true"></span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
+        </div>
+      </div>
+      <nav class="m-ov-nav" aria-label="主導覽">
+        <a href="/index.html" class="m-ov-item" style="--i:0" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/index.html#services" class="m-ov-item" style="--i:1" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/index.html#process" class="m-ov-item" style="--i:2" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/portfolio.html" class="m-ov-item" style="--i:3" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/about.html" class="m-ov-item" style="--i:4" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/requisition.html" class="m-ov-item active" style="--i:5" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </nav>
+      <div class="m-ov-cta">
+        <a href="/requisition.html" class="m-ov-cta-btn" data-close-overlay data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Mobile overlay ──────────────────────────────────────────
+    const hamBtn  = document.getElementById('m-ham-btn');
+    const overlay = document.getElementById('m-overlay');
+    const topbar  = document.getElementById('m-topbar');
+    function openMenu() { hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open'); overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden'); topbar?.classList.add('menu-open'); document.body.style.overflow='hidden'; }
+    function closeMenu() { hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open'); overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true'); topbar?.classList.remove('menu-open'); document.body.style.overflow=''; }
+    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
+    overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
+    document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+
+    // ── Theme toggle ──────────────────────────────────────────
+    const themeBtn  = document.getElementById('theme-toggle-btn');
+    const mThemeBtn = document.getElementById('m-theme-btn');
+    function applyTheme(dark) {
+      document.documentElement.classList.toggle('theme-dark', dark);
+      document.documentElement.classList.toggle('theme-light', !dark);
+      [themeBtn, mThemeBtn].forEach(btn => {
+        if (!btn) return;
+        const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+        if (sun)  sun.style.display  = dark ? 'none' : '';
+        if (moon) moon.style.display = dark ? ''     : 'none';
+      });
+    }
+    applyTheme(localStorage.getItem('theme') !== 'light');
+    const doToggle = () => { const d = !document.documentElement.classList.contains('theme-dark'); localStorage.setItem('theme', d ? 'dark' : 'light'); applyTheme(d); };
+    themeBtn?.addEventListener('click', doToggle);
+    mThemeBtn?.addEventListener('click', doToggle);
+
+    // ── i18n ───────────────────────────────────────────────────
+    const LANGS_I18N = {
+      'zh-TW':{
+        nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',
+        cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',
+        dashboard:'會員中心',status_open:'接案中',
+        footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',footer_contact_title:'聯絡我們',
+        page_title:'接案諮詢紀錄',page_desc:'來自 chiyigo.com/requisition 的表單提交',
+        logout:'登出',loading:'// 載入中…',relogin:'→ 重新登入',
+        search_aria:'搜尋需求單',search_ph:'搜尋姓名 / 聯絡方式 / 需求…',
+        col_name:'姓名 / 公司',col_contact:'聯絡方式',col_service:'需求類型',col_budget:'預算',col_timeline:'時程',col_created:'提交時間',
+        no_data:'// no data',prev_page:'← 上一頁',next_page:'下一頁 →',page_label:(p,t)=>`第 ${p} / ${t} 頁`,total_label:n=>`共 ${n} 筆`,
+        modal_title:'諮詢詳情',field_name:'姓名',field_company:'公司 / 品牌',field_contact:'聯絡方式',field_service:'需求類型',field_budget:'預算區間',field_timeline:'預計時程',field_message:'需求簡述',
+        err_login_required:'請先登入',err_perm:'權限不足或登入已過期，請確認帳號具有 admin 角色',err_not_logged_in:'尚未登入',err_http:n=>`HTTP ${n}`,
+        st_system:'系統開發 / 內部工具',st_web:'網站建置 / Landing Page',st_integration:'第三方串接 / 自動化',st_interactive:'互動體驗 / 品牌活動',st_branding:'品牌識別 / 視覺設計',st_marketing:'數位行銷 / SEO',st_other:'其他',
+        bd_under30k:'< 30,000',bd_30k80k:'30k–80k',bd_80k200k:'80k–200k',bd_over200k:'> 200,000',bd_flexible:'彈性',
+        tl_asap:'越快越好',tl_1_3m:'1–3 個月',tl_3_6m:'3–6 個月',tl_flexible:'彈性',
+      },
+      'en':{
+        nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',
+        cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',
+        dashboard:'Dashboard',status_open:'Open for Work',
+        footer_tagline:'Not just pretty interfaces — we turn your needs into systems that actually work.',footer_contact_title:'Contact Us',
+        page_title:'Inquiry Records',page_desc:'Submissions from chiyigo.com/requisition',
+        logout:'Logout',loading:'// loading…',relogin:'→ Log in again',
+        search_aria:'Search requisitions',search_ph:'Search name / contact / message…',
+        col_name:'Name / Company',col_contact:'Contact',col_service:'Service Type',col_budget:'Budget',col_timeline:'Timeline',col_created:'Submitted',
+        no_data:'// no data',prev_page:'← Previous',next_page:'Next →',page_label:(p,t)=>`Page ${p} / ${t}`,total_label:n=>`${n} total`,
+        modal_title:'Inquiry Details',field_name:'Name',field_company:'Company / Brand',field_contact:'Contact',field_service:'Service Type',field_budget:'Budget',field_timeline:'Timeline',field_message:'Description',
+        err_login_required:'Please log in first',err_perm:'Insufficient permissions or session expired. The account must have the admin role.',err_not_logged_in:'Not signed in',err_http:n=>`HTTP ${n}`,
+        st_system:'System / Internal Tools',st_web:'Website / Landing Page',st_integration:'Integrations / Automation',st_interactive:'Interactive / Brand Events',st_branding:'Branding / Visual Design',st_marketing:'Digital Marketing / SEO',st_other:'Other',
+        bd_under30k:'< 30,000',bd_30k80k:'30k–80k',bd_80k200k:'80k–200k',bd_over200k:'> 200,000',bd_flexible:'Flexible',
+        tl_asap:'ASAP',tl_1_3m:'1–3 months',tl_3_6m:'3–6 months',tl_flexible:'Flexible',
+      },
+      'ja':{
+        nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',
+        cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',
+        dashboard:'マイページ',status_open:'受注中',
+        footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',footer_contact_title:'お問い合わせ',
+        page_title:'お問い合わせ記録',page_desc:'chiyigo.com/requisition からの送信',
+        logout:'ログアウト',loading:'// 読み込み中…',relogin:'→ 再ログイン',
+        search_aria:'お問い合わせを検索',search_ph:'名前 / 連絡先 / 内容で検索…',
+        col_name:'名前 / 会社',col_contact:'連絡先',col_service:'サービス',col_budget:'予算',col_timeline:'期間',col_created:'送信日時',
+        no_data:'// データなし',prev_page:'← 前へ',next_page:'次へ →',page_label:(p,t)=>`${p} / ${t} ページ`,total_label:n=>`合計 ${n} 件`,
+        modal_title:'問い合わせ詳細',field_name:'名前',field_company:'会社 / ブランド',field_contact:'連絡先',field_service:'サービス',field_budget:'予算',field_timeline:'希望時期',field_message:'内容',
+        err_login_required:'先にログインしてください',err_perm:'権限が不足しているか、セッションが期限切れです。admin 権限のアカウントが必要です。',err_not_logged_in:'ログインしていません',err_http:n=>`HTTP ${n}`,
+        st_system:'システム開発 / 社内ツール',st_web:'ウェブサイト / ランディングページ',st_integration:'API 連携 / 自動化',st_interactive:'インタラクティブ / ブランドイベント',st_branding:'ブランディング / ビジュアル',st_marketing:'デジタルマーケティング / SEO',st_other:'その他',
+        bd_under30k:'< 30,000',bd_30k80k:'30k–80k',bd_80k200k:'80k–200k',bd_over200k:'> 200,000',bd_flexible:'柔軟',
+        tl_asap:'できるだけ早く',tl_1_3m:'1〜3 ヶ月',tl_3_6m:'3〜6 ヶ月',tl_flexible:'柔軟',
+      },
+      'ko':{
+        nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',
+        cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',
+        dashboard:'마이페이지',status_open:'수주 중',
+        footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',footer_contact_title:'연락하기',
+        page_title:'문의 기록',page_desc:'chiyigo.com/requisition에서의 제출',
+        logout:'로그아웃',loading:'// 불러오는 중…',relogin:'→ 다시 로그인',
+        search_aria:'문의 검색',search_ph:'이름 / 연락처 / 내용 검색…',
+        col_name:'이름 / 회사',col_contact:'연락처',col_service:'서비스 유형',col_budget:'예산',col_timeline:'일정',col_created:'제출 일시',
+        no_data:'// 데이터 없음',prev_page:'← 이전',next_page:'다음 →',page_label:(p,t)=>`${p} / ${t} 페이지`,total_label:n=>`총 ${n}건`,
+        modal_title:'문의 상세',field_name:'이름',field_company:'회사 / 브랜드',field_contact:'연락처',field_service:'서비스 유형',field_budget:'예산',field_timeline:'희망 일정',field_message:'요청 내용',
+        err_login_required:'먼저 로그인해 주세요',err_perm:'권한이 부족하거나 세션이 만료되었습니다. admin 역할이 필요합니다.',err_not_logged_in:'로그인하지 않음',err_http:n=>`HTTP ${n}`,
+        st_system:'시스템 개발 / 내부 도구',st_web:'웹사이트 / 랜딩 페이지',st_integration:'외부 연동 / 자동화',st_interactive:'인터랙티브 / 브랜드 이벤트',st_branding:'브랜딩 / 비주얼 디자인',st_marketing:'디지털 마케팅 / SEO',st_other:'기타',
+        bd_under30k:'< 30,000',bd_30k80k:'30k–80k',bd_80k200k:'80k–200k',bd_over200k:'> 200,000',bd_flexible:'유연',
+        tl_asap:'가능한 빨리',tl_1_3m:'1–3개월',tl_3_6m:'3–6개월',tl_flexible:'유연',
+      },
+    };
+    let curLang = localStorage.getItem('lang') || 'zh-TW';
+    function T() { return LANGS_I18N[curLang] || LANGS_I18N['zh-TW']; }
+    function applyLangI(lang) {
+      if (!LANGS_I18N[lang]) return;
+      curLang = lang;
+      const t = T();
+      document.documentElement.lang = lang;
+      document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (typeof t[k] === 'string') el.textContent = t[k]; });
+      document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.dataset.i18nPh; if (typeof t[k] === 'string') el.placeholder = t[k]; });
+      document.querySelectorAll('[data-i18n-aria]').forEach(el => { const k = el.dataset.i18nAria; if (typeof t[k] === 'string') el.setAttribute('aria-label', t[k]); });
+      document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      localStorage.setItem('lang', lang);
+      // re-render dynamic content
+      if (window._lastData) { renderTable(window._lastData.requisitions); renderCards(window._lastData.requisitions); renderPagination(window._lastData.total, window._lastData.page, window._lastData.limit); document.getElementById('total-badge').textContent = t.total_label(window._lastData.total); }
+    }
+    const langTogBtnI = document.getElementById('lang-toggle-btn');
+    const langDropI   = document.getElementById('lang-dropdown');
+    langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
+    document.addEventListener('click', () => langDropI?.classList.remove('open'));
+    langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+    document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+    function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
+    document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
+    document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+    applyLangI(curLang);
+
+    // ══════════════════════════════════════════════════════════
+    //  ADMIN REQUISITIONS LOGIC
+    // ══════════════════════════════════════════════════════════
+    const ACCESS_TOKEN_KEY = 'chiyigo_access_token'
+    let currentPage = 1
+    let currentQ    = ''
+    let debounceTimer
+
+    function getToken() { return sessionStorage.getItem(ACCESS_TOKEN_KEY) }
+
+    async function logout() {
+      const token = getToken()
+      if (token) {
+        await fetch('/api/auth/logout', { method:'POST', credentials:'include', headers: { 'Authorization': `Bearer ${token}` } }).catch(() => {})
+      }
+      sessionStorage.clear()
+      location.href = '/login.html'
+    }
+    document.getElementById('logout-btn').addEventListener('click', logout)
+
+    function showError(msg) {
+      document.getElementById('loading').style.display = 'none'
+      document.getElementById('content').style.display = 'none'
+      document.getElementById('error-msg').style.display = 'block'
+      document.getElementById('error-text').textContent = `// error: ${msg}`
+    }
+
+    function formatServiceType(v) {
+      const t = T()
+      const map = { system:t.st_system, web:t.st_web, integration:t.st_integration, interactive:t.st_interactive, branding:t.st_branding, marketing:t.st_marketing, other:t.st_other }
+      return map[v] ?? v
+    }
+    function formatBudget(v) {
+      const t = T()
+      const map = { under30k:t.bd_under30k, '30k-80k':t.bd_30k80k, '80k-200k':t.bd_80k200k, over200k:t.bd_over200k, flexible:t.bd_flexible }
+      return map[v] ?? v ?? '—'
+    }
+    function formatTimeline(v) {
+      const t = T()
+      const map = { asap:t.tl_asap, '1-3m':t.tl_1_3m, '3-6m':t.tl_3_6m, flexible:t.tl_flexible }
+      return map[v] ?? v ?? '—'
+    }
+    function formatDate(s) {
+      if (!s) return '—'
+      const d = new Date(s.replace(' ', 'T') + 'Z')
+      const localeMap = { 'zh-TW':'zh-TW', 'en':'en-US', 'ja':'ja-JP', 'ko':'ko-KR' }
+      return d.toLocaleString(localeMap[curLang] || 'zh-TW', { timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
+    }
+
+    async function load(page = 1, q = '') {
+      const token = getToken()
+      const t = T()
+      if (!token) { showError(t.err_login_required); return }
+
+      document.getElementById('loading').style.display = 'block'
+      document.getElementById('content').style.display = 'none'
+      document.getElementById('error-msg').style.display = 'none'
+
+      const params = new URLSearchParams({ page, limit: 20 })
+      if (q) params.set('q', q)
+
+      const res = await fetch(`/api/admin/requisitions?${params}`, { headers: { 'Authorization': `Bearer ${token}` } })
+
+      if (res.status === 401 || res.status === 403) { showError(t.err_perm); return }
+      if (!res.ok) { showError(t.err_http(res.status)); return }
+
+      const data = await res.json()
+      window._lastData = data
+      document.getElementById('loading').style.display = 'none'
+      document.getElementById('content').style.display = 'block'
+
+      renderTable(data.requisitions)
+      renderCards(data.requisitions)
+      renderPagination(data.total, data.page, data.limit)
+      document.getElementById('total-badge').textContent = t.total_label(data.total)
+      currentPage = page
+      currentQ    = q
+    }
+
+    function renderTable(rows) {
+      const tbody = document.getElementById('table-body')
+      const t = T()
+      if (!rows.length) { tbody.innerHTML = `<tr><td colspan="8" class="empty">${t.no_data}</td></tr>`; return }
+      tbody.innerHTML = rows.map(r => `
+        <tr onclick="openModal(${r.id})">
+          <td class="id">${r.id}</td>
+          <td>
+            <span class="name">${esc(r.name)}</span>
+            ${r.company ? `<span class="company">${esc(r.company)}</span>` : ''}
+          </td>
+          <td class="mono">${esc(r.contact)}</td>
+          <td><span class="pill">${esc(formatServiceType(r.service_type))}</span></td>
+          <td>${esc(formatBudget(r.budget))}</td>
+          <td>${esc(formatTimeline(r.timeline))}</td>
+          <td class="mono">${formatDate(r.created_at)}</td>
+          <td><svg class="chev" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></td>
+        </tr>`).join('')
+      window._reqData = Object.fromEntries(rows.map(r => [r.id, r]))
+    }
+
+    function renderCards(rows) {
+      const container = document.getElementById('cards-container')
+      const t = T()
+      if (!rows.length) { container.innerHTML = `<p class="empty">${t.no_data}</p>`; return }
+      container.innerHTML = rows.map(r => `
+        <div class="req-card" onclick="openModal(${r.id})">
+          <div class="row">
+            <div>
+              <span class="name">${esc(r.name)}</span>
+              ${r.company ? `<span class="company">${esc(r.company)}</span>` : ''}
+            </div>
+            <span class="id">#${r.id}</span>
+          </div>
+          <span class="pill">${esc(formatServiceType(r.service_type))}</span>
+          <p class="when">${formatDate(r.created_at)}</p>
+        </div>`).join('')
+      if (!window._reqData) window._reqData = {}
+      rows.forEach(r => { window._reqData[r.id] = r })
+    }
+
+    function renderPagination(total, page, limit) {
+      const pages = Math.ceil(total / limit)
+      const el = document.getElementById('pagination')
+      const t = T()
+      if (pages <= 1) { el.innerHTML = ''; return }
+      el.innerHTML = `
+        <button onclick="load(${page - 1}, currentQ)" ${page <= 1 ? 'disabled' : ''}>${t.prev_page}</button>
+        <span class="stat">${t.page_label(page, pages)}</span>
+        <button onclick="load(${page + 1}, currentQ)" ${page >= pages ? 'disabled' : ''}>${t.next_page}</button>`
+    }
+
+    function openModal(id) {
+      const r = window._reqData?.[id]
+      if (!r) return
+      const t = T()
+      const body = document.getElementById('modal-body')
+      body.innerHTML = `
+        <div class="modal-meta">
+          <span>#${r.id}</span><span>·</span><span>${formatDate(r.created_at)}</span>
+        </div>
+        ${field(t.field_name, r.name)}
+        ${r.company ? field(t.field_company, r.company) : ''}
+        ${field(t.field_contact, r.contact, true)}
+        ${field(t.field_service, formatServiceType(r.service_type))}
+        ${r.budget   ? field(t.field_budget, formatBudget(r.budget))     : ''}
+        ${r.timeline ? field(t.field_timeline, formatTimeline(r.timeline)) : ''}
+        <div>
+          <p class="msg-label">${t.field_message}</p>
+          <div class="msg-block">${esc(r.message)}</div>
+        </div>`
+      document.getElementById('modal').classList.add('open')
+    }
+    function field(label, value, mono = false) {
+      return `<div class="modal-row"><span class="lbl">${label}</span><span class="val ${mono ? 'mono' : ''}">${esc(value ?? '—')}</span></div>`
+    }
+    function esc(s) {
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    }
+
+    document.getElementById('modal-close').addEventListener('click', () => document.getElementById('modal').classList.remove('open'))
+    document.getElementById('modal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open') })
+
+    document.getElementById('search-input').addEventListener('input', e => {
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => load(1, e.target.value.trim()), 380)
+    })
+
+    const _initToken = getToken()
+    if (!_initToken) { showError(T().err_not_logged_in) } else { load(1) }
+  </script>
+
+  <!-- Neural canvas -->
+  <script>
+    (function(){
+      const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+      const ctx=canvas.getContext('2d');if(!ctx)return;
+      let W=0,H=0,nodes=[];const DIST=155;
+      function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+      function initNodes(){const n=W<768?48:115;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
+      const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+      let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
+      function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--neural-r').trim()||'108',g:s.getPropertyValue('--neural-g').trim()||'110',b:s.getPropertyValue('--neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--neural-line-opacity').trim()||'.09')}}
+      syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+      function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
+        for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
+        for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
+        requestAnimationFrame(draw)}
+      resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
+    })();
+  </script>
+
+</body>
+</html>

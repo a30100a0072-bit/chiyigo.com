@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>關於我 | CHIYIGO</title>
+  <meta name="description" content="CHIYIGO — 全端獨立開發者，專注於系統設計、客製化開發與 AI 整合。把需求變成真正能用的系統。" />
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://chiyigo.com/about" />
+  <meta property="og:title"       content="關於我 | CHIYIGO" />
+  <meta property="og:description" content="CHIYIGO — 不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。" />
+  <meta property="og:image"       content="https://chiyigo.com/images/chiyigo.jpg" />
+  <meta name="twitter:card"       content="summary_large_image" />
+  <link rel="canonical" href="https://chiyigo.com/about" />
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>
+    (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *,*:before,*:after{box-sizing:border-box;margin:0;padding:0}
+
+    :root,.theme-light{
+      --bg:#F0F2FA;--bg-surface:#FFFFFF;--bg-elevated:#FAFAFE;
+      --bg-sidebar:#EAEBF5;--bg-titlebar:#F4F5FC;
+      --border:rgba(0,0,0,.07);--border-dim:rgba(0,0,0,.05);
+      --border-bright:rgba(0,0,0,.14);--border-mid:rgba(0,0,0,.1);
+      --text:#1A1B2E;--text-muted:rgba(26,27,46,.6);--text-dim:rgba(26,27,46,.38);
+      --accent:#6C6EE5;--accent-dim:rgba(108,110,229,.1);--accent-glow:rgba(108,110,229,.18);
+      --hover-overlay:rgba(0,0,0,.05);
+      --neural-r:108;--neural-g:110;--neural-b:229;
+      --neural-node-opacity:.22;--neural-line-opacity:.09;
+      --font-sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+      --font-display:var(--font-sans);--font-mono:"DM Mono","Courier New",monospace;
+      --font-body:var(--font-sans);
+      --max-w:1200px;--pad-x:2rem;--sidebar-w:220px;--titlebar-h:60px;
+    }
+    .theme-dark{
+      --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
+      --bg-sidebar:#0F1424;--bg-titlebar:#0D1120;
+      --border:rgba(255,255,255,.08);--border-dim:rgba(255,255,255,.05);
+      --border-bright:rgba(255,255,255,.14);--border-mid:rgba(255,255,255,.1);
+      --text:#F3F4F6;--text-muted:rgba(243,244,246,.62);--text-dim:rgba(243,244,246,.36);
+      --accent:#7B6CFF;--accent-dim:rgba(123,108,255,.12);--accent-glow:rgba(123,108,255,.25);
+      --hover-overlay:rgba(255,255,255,.06);
+      --neural-r:123;--neural-g:108;--neural-b:255;
+      --neural-node-opacity:.4;--neural-line-opacity:.15;
+    }
+    @media(max-width:768px){:root{--sidebar-w:0px;--titlebar-h:0px;--pad-x:1.25rem}}
+
+    html{font-family:var(--font-sans);background-color:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background-color .3s ease,color .3s ease}
+    body{min-height:100vh;overflow:hidden}
+    @media(max-width:768px){body{overflow:auto}}
+    a{color:inherit;text-decoration:none}
+    ul{list-style:none}
+    img{max-width:100%;height:auto;display:block}
+
+    .logo-dark,.theme-dark .logo-light{display:none!important}
+    .theme-dark .logo-dark{display:block!important}
+
+    [data-reveal]{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+    [data-reveal].revealed{opacity:1;transform:translateY(0)}
+    [data-reveal-delay="1"]{transition-delay:.08s}
+    [data-reveal-delay="2"]{transition-delay:.16s}
+
+    #neural-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+    /* ── Layout ── */
+    .dash-wrap{position:fixed;inset:0;z-index:1;display:grid;grid-template-columns:var(--sidebar-w) 1fr;background:var(--bg);overflow:hidden}
+    .dash-sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border-dim);display:flex;flex-direction:column;overflow:hidden;height:100vh}
+    .dash-main{display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
+    .dash-content{flex:1;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;min-height:0}
+    .dash-content::-webkit-scrollbar{width:4px}
+    .dash-content::-webkit-scrollbar-track{background:transparent}
+    .dash-content::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px}
+    .dash-content::-webkit-scrollbar-thumb:hover{background:var(--border-bright)}
+
+    /* ── Sidebar ── */
+    .sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0;text-decoration:none}
+    .sb-logo-img{height:76px;width:auto;display:block;flex-shrink:0}
+    .sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .sb-nav::-webkit-scrollbar{display:none}
+    .sb-item{display:flex;align-items:center;gap:.7rem;padding:.6rem .85rem;border-radius:10px;font-family:var(--font-body);font-size:.875rem;font-weight:400;color:var(--text-muted);text-decoration:none;transition:background .18s ease,color .18s ease}
+    .sb-item:hover{background:#6c6ee512;color:var(--text)}
+    .sb-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500}
+    .sb-item.active .sb-icon{color:var(--accent);opacity:1}
+    .sb-icon{width:16px;height:16px;flex-shrink:0;color:var(--text-dim);opacity:.7;transition:color .18s ease,opacity .18s ease}
+    .sb-item:hover .sb-icon{color:var(--text-muted);opacity:.9}
+    .sb-label{line-height:1;white-space:nowrap}
+    .sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--border-dim)}
+    .sb-cta{background:linear-gradient(140deg,#6c6ee51f,#5b8bf514);border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem;position:relative;overflow:hidden}
+    .sb-cta:before{content:"";position:absolute;top:-12px;right:-12px;width:60px;height:60px;border-radius:50%;background:#6c6ee514;pointer-events:none}
+    .sb-cta-icon{width:28px;height:28px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:.65rem}
+    .sb-cta-icon svg{width:16px;height:16px}
+    .sb-cta-q{font-family:var(--font-body);font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:.3rem;line-height:1.3}
+    .sb-cta-desc{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:.75rem}
+    .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
+    .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .sb-footer{display:flex;align-items:center;gap:.5rem}
+    .sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
+    .sb-login-link:hover{color:var(--accent-primary);background:var(--bg-elevated)}
+    .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
+    .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
+    .m-login-btn:hover{color:var(--text-primary)}
+    .m-login-btn svg{width:17px;height:17px}
+    .sb-foot-icons{display:flex;gap:.25rem}
+    .sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
+    .sb-foot-btn svg{width:14px;height:14px}
+    .sb-copyright{font-family:var(--font-mono);font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
+
+    /* ── Mobile topbar ── */
+    .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim);transition:background .3s ease,border-color .3s ease}
+    .m-tb-inner{display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:52px}
+    .m-tb-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none}
+    .m-logo-img{height:68px;width:auto;display:block;flex-shrink:0}
+    .m-tb-right{display:flex;align-items:center;gap:.85rem}
+    .m-theme-btn{width:36px;height:36px;border:1px solid rgba(108,110,229,.14);background:#6c6ee512;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6c6ee5;flex-shrink:0;transition:background .2s ease,border-color .2s ease}
+    .m-theme-btn svg{width:14px;height:14px;display:block}
+    .theme-dark .m-theme-btn{border-color:#ffffff4d;background:#ffffff0f;color:#fff}
+    .m-ham-btn{display:flex;flex-direction:column;justify-content:center;gap:6px;width:36px;height:36px;border:1px solid rgba(108,110,229,.22);background:#6c6ee51a;border-radius:9px;cursor:pointer;padding:0 10px;transition:background .2s ease,border-color .2s ease;flex-shrink:0}
+    .m-ham-line{display:block;width:100%;height:1.5px;background:#6c6ee5;border-radius:2px;transform-origin:center;transition:transform .32s cubic-bezier(.23,1,.32,1)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(1){transform:translateY(3.75px) rotate(45deg)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(2){transform:translateY(-3.75px) rotate(-45deg)}
+    .theme-dark .m-ham-btn{border-color:#ffffff4d;background:#ffffff0f}
+    .theme-dark .m-ham-line{background:#fff}
+
+    /* ── Mobile overlay ── */
+    .m-overlay{display:none;position:fixed;inset:0;z-index:49;background:#0a0c1c00;transition:background .35s ease;pointer-events:none}
+    .m-overlay.is-open{background:#0a0c1c52;pointer-events:auto}
+    .m-ov-wrap{position:absolute;bottom:0;left:0;right:0;background:var(--bg-surface);border-radius:22px 22px 0 0;border:1px solid var(--border);border-bottom:none;box-shadow:0 -4px 24px #6c6ee514;display:flex;flex-direction:column;max-height:88svh;overflow:hidden;transform:translateY(100%);transition:transform .42s cubic-bezier(.22,1,.36,1)}
+    .m-overlay.is-open .m-ov-wrap{transform:translateY(0)}
+    .m-ov-handle{width:36px;height:4px;background:#6c6ee52e;border-radius:100px;margin:12px auto 0;flex-shrink:0}
+    .m-ov-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.4rem .65rem;flex-shrink:0}
+    .m-ov-brand{display:flex;align-items:center;gap:.55rem}
+    .m-ov-logo-img{height:72px;width:auto;display:block}
+    .m-ov-status{display:flex;align-items:center;gap:.4rem;background:#22a86517;border:1px solid rgba(34,168,101,.18);border-radius:100px;padding:.22rem .65rem}
+    .m-ov-status-dot{width:5px;height:5px;border-radius:50%;background:#22a865;flex-shrink:0;animation:dot-pulse 2.5s ease-in-out infinite}
+    .m-ov-status-txt{font-family:var(--font-sans);font-size:.68rem;font-weight:500;color:#22a865}
+    @keyframes dot-pulse{0%,to{opacity:1}50%{opacity:.45}}
+    .m-ov-nav{flex:1;overflow-y:auto;padding:.35rem .75rem .5rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .m-ov-nav::-webkit-scrollbar{display:none}
+    .m-ov-item{display:flex;align-items:center;gap:.75rem;padding:.72rem .85rem;border-radius:12px;text-decoration:none;background:transparent;border:1px solid transparent;opacity:0;transform:translateY(10px);transition:opacity .32s cubic-bezier(.22,1,.36,1),transform .32s cubic-bezier(.22,1,.36,1),background .18s ease,border-color .18s ease;transition-delay:calc(var(--i,0)*.04s + .12s)}
+    .m-overlay.is-open .m-ov-item{opacity:1;transform:translateY(0)}
+    .m-ov-item:active{background:#6c6ee50f;transform:scale(.98)}
+    .m-ov-item.active{background:var(--accent-dim);border-color:#6c6ee524}
+    .m-ov-icon-wrap{width:32px;height:32px;border-radius:9px;background:var(--hover-overlay);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .m-ov-item.active .m-ov-icon-wrap{background:#6c6ee51f;color:var(--accent)}
+    .m-ov-icon{width:15px;height:15px}
+    .m-ov-label{flex:1;font-family:var(--font-sans);font-size:.9rem;font-weight:400;color:var(--text-muted);line-height:1;transition:color .18s ease}
+    .m-ov-item.active .m-ov-label{color:var(--accent);font-weight:500}
+    .m-ov-chevron{width:6px;height:10px;color:var(--text-dim);flex-shrink:0;opacity:.5}
+    .m-ov-cta{flex-shrink:0;padding:.75rem 1.2rem calc(1.25rem + env(safe-area-inset-bottom));border-top:1px solid rgba(108,110,229,.07);opacity:0;transform:translateY(8px);transition:opacity .32s ease .42s,transform .32s ease .42s}
+    .m-overlay.is-open .m-ov-cta{opacity:1;transform:translateY(0)}
+    .m-ov-cta-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:.78rem 1rem;background:linear-gradient(135deg,#7370ec,#5b8bf5);color:#fff;font-family:var(--font-sans);font-size:.9rem;font-weight:600;border-radius:12px;text-decoration:none;box-shadow:0 4px 16px #6c6ee547;transition:filter .18s ease,transform .18s ease}
+    .m-ov-cta-btn:active{filter:brightness(.96);transform:scale(.98)}
+
+    @media(max-width:768px){
+      .dash-wrap{position:relative;display:block;height:auto;min-height:100svh;overflow:visible}
+      .dash-sidebar{display:none}
+      .dash-main{display:block;height:auto;overflow:visible}
+      .dash-content{overflow:visible;height:auto;background:var(--bg);padding-top:52px;padding-bottom:2rem;min-height:100svh}
+      .m-topbar,.m-overlay{display:block}
+    }
+
+    /* ── Footer ── */
+    .footer{border-top:1px solid var(--border-dim);background:var(--bg-titlebar)}
+    .footer-inner{max-width:var(--max-w);margin:0 auto;padding:2.5rem var(--pad-x);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2rem}
+    .footer .logo{height:72px;width:auto;display:block;margin-bottom:.45rem;opacity:.7}
+    .footer .tagline{font-size:.76rem;color:var(--text-dim);max-width:26rem;line-height:1.65}
+    .footer-links{display:flex;gap:2rem}
+    .footer-links a{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);transition:color .2s ease}
+    .footer-links a:hover{color:var(--text-muted)}
+    .footer-contact{display:flex;flex-direction:column;gap:.5rem}
+    .footer-contact-title{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.2rem}
+    .footer-contact-item{display:flex;align-items:center;gap:.45rem;font-size:.76rem;color:var(--text-dim);transition:color .2s ease}
+    .footer-contact-item:hover{color:var(--text-muted)}
+    .footer-contact-item svg{width:13px;height:13px;flex-shrink:0}
+    .copy{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);width:100%;opacity:.6}
+
+    /* ══════════════════════════════════════════════════
+       ABOUT PAGE STYLES
+       ══════════════════════════════════════════════════ */
+
+    .about-wrap{padding:clamp(2.5rem,5vw,4rem) 2rem;max-width:var(--max-w);margin:0 auto}
+
+    /* Hero: 2-column */
+    .about-hero{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2.5rem,5vw,5rem);margin-bottom:clamp(3rem,6vw,5rem);align-items:start}
+    @media(max-width:768px){.about-hero{grid-template-columns:1fr}}
+
+    /* Identity card */
+    .ab-identity{display:flex;align-items:center;gap:.85rem;margin-bottom:1.5rem}
+    .ab-avatar{height:48px;width:auto;min-width:48px;border-radius:14px;background:var(--bg-elevated);border:1px solid var(--border-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:.3rem .6rem}
+    .ab-logo{height:34px;width:auto}
+    .ab-name{font-size:1rem;font-weight:600;color:var(--text);line-height:1.2}
+    .ab-role{font-size:.78rem;color:var(--text-muted);margin-top:.15rem}
+
+    /* Headline */
+    .ab-headline{font-family:var(--font-sans);font-size:clamp(1.9rem,4.5vw,3.2rem);font-weight:700;line-height:1.15;color:var(--text);margin-bottom:1.1rem;letter-spacing:-.02em}
+    .ab-headline-grad{display:block;background:linear-gradient(135deg,#7370EC 0%,#5B8BF5 60%,#4DA8DA 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+    /* Description */
+    .ab-desc{font-size:.95rem;color:var(--text-muted);line-height:1.8;margin-bottom:1.5rem}
+
+    /* Stats */
+    .ab-stats{display:flex;gap:2rem;margin-bottom:1.75rem;flex-wrap:wrap}
+    .ab-stat{display:flex;flex-direction:column;gap:.2rem}
+    .ab-stat-n{font-family:var(--font-sans);font-size:1.5rem;font-weight:700;color:var(--accent);line-height:1;letter-spacing:-.02em}
+    .ab-stat-l{font-family:var(--font-mono);font-size:.63rem;color:var(--text-dim);letter-spacing:.06em}
+
+    /* CTA button */
+    .ab-cta{display:inline-flex;align-items:center;padding:.7rem 1.6rem;background:linear-gradient(135deg,#7370EC,#5B8BF5);color:#fff;font-family:var(--font-sans);font-size:.9rem;font-weight:600;border-radius:10px;text-decoration:none;box-shadow:0 4px 14px rgba(108,110,229,.28);transition:filter .18s ease,transform .18s ease}
+    .ab-cta:hover{filter:brightness(1.08);transform:translateY(-1px)}
+
+    /* Section labels */
+    .ab-section-label{font-family:var(--font-mono);font-size:.82rem;letter-spacing:.12em;color:var(--accent);opacity:.75;margin-bottom:.75rem}
+    .ab-section-sub{font-size:.95rem;color:var(--text-muted);margin-bottom:1.5rem}
+
+    /* Timeline */
+    .about-right{padding-top:.25rem}
+    .ab-timeline{display:flex;flex-direction:column}
+    .tl-row{display:grid;grid-template-columns:3.2rem 18px 1fr;gap:.65rem;align-items:start;padding:.65rem 0;border-bottom:1px solid var(--border-dim);opacity:0;transform:translateX(14px);transition:opacity .5s ease,transform .5s ease}
+    .tl-row.revealed{opacity:1;transform:translateX(0)}
+    .tl-row:last-child{border-bottom:none}
+    .tl-year{font-family:var(--font-mono);font-size:.78rem;font-weight:500;color:var(--accent);padding-top:.15rem;text-align:right;white-space:nowrap}
+    .tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);outline:2px solid var(--accent-dim);outline-offset:2px;flex-shrink:0;margin-top:.3rem;justify-self:center}
+    .tl-text{font-size:.875rem;color:var(--text-muted);line-height:1.65}
+
+    /* Values section */
+    .ab-values-section{border-top:1px solid var(--border-dim);padding-top:clamp(2rem,4vw,3rem);margin-bottom:clamp(2rem,4vw,3rem)}
+    .ab-values-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.1rem;margin-top:.25rem}
+    @media(max-width:900px){.ab-values-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:480px){.ab-values-grid{grid-template-columns:1fr}}
+    .ab-value-card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;padding:1.25rem;transition:border-color .2s ease}
+    .ab-value-card:hover{border-color:var(--border-bright)}
+    .ab-value-title{font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:.5rem}
+    .ab-value-text{font-size:.8rem;color:var(--text-muted);line-height:1.75}
+
+    /* Skills section */
+    .ab-skills-section{border-top:1px solid var(--border-dim);padding-top:clamp(2rem,4vw,3rem);margin-bottom:clamp(2rem,4vw,3rem)}
+    .ab-skills-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;margin-top:.25rem}
+    @media(max-width:1000px){.ab-skills-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:600px){.ab-skills-grid{grid-template-columns:repeat(2,1fr)}}
+    .ab-skill-cat{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:10px;padding:1rem;transition:border-color .2s ease}
+    .ab-skill-cat:hover{border-color:var(--accent-dim)}
+    .ab-skill-name{font-family:var(--font-mono);font-size:.7rem;color:var(--accent);margin-bottom:.5rem;letter-spacing:.04em;opacity:.85}
+    .ab-skill-tags{font-size:.78rem;color:var(--text-muted);line-height:1.8}
+    /* ── Lang dropdown ──────────────────────────────── */
+    .sb-footer{position:relative}
+    .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
+    .lang-dropdown.open{display:flex}
+    .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
+    .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
+    .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
+    .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
+    .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    .m-top-lang-drop{position:fixed;top:58px;right:1.25rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:60;min-width:128px}
+    .m-top-lang-drop.open{display:flex}
+  </style>
+</head>
+<body>
+
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+
+  <div class="dash-wrap" id="dash-wrap">
+
+    <!-- ── Sidebar ── -->
+    <aside class="dash-sidebar" id="dash-sidebar">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
+        <img src="images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
+        <img src="images/logo-dark.png"  alt="CHIYIGO" class="sb-logo-img logo-dark">
+      </a>
+
+      <nav class="sb-nav" aria-label="主要導覽">
+        <a href="index.html" class="sb-item" aria-label="首頁">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_home">首頁</span>
+        </a>
+        <a href="index.html#services" class="sb-item" aria-label="服務項目">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_services">服務項目</span>
+        </a>
+        <a href="index.html#process" class="sb-item" aria-label="服務流程">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
+          <span class="sb-label" data-i18n="nav_process">服務流程</span>
+        </a>
+        <a href="portfolio.html" class="sb-item" aria-label="案例作品">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_portfolio">案例作品</span>
+        </a>
+        <a href="about.html" class="sb-item active" aria-label="關於我們">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_about">關於我們</span>
+        </a>
+        <a href="requisition.html" class="sb-item" aria-label="接案諮詢">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_contact">接案諮詢</span>
+        </a>
+      </nav>
+
+      <div class="sb-bottom">
+        <div class="sb-cta">
+          <div class="sb-cta-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3" opacity="0.4"></circle><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          </div>
+          <p class="sb-cta-q" data-i18n="cta_q">準備好開始專案了嗎？</p>
+          <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
+        </div>
+        <a href="/login.html" class="sb-login-link" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+          <span data-i18n="login">會員登入</span>
+        </a>
+        <div class="sb-footer">
+          <div class="lang-dropdown" id="lang-dropdown">
+            <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="lang-opt" data-lang="en">English</button>
+            <button class="lang-opt" data-lang="ja">日本語</button>
+            <button class="lang-opt" data-lang="ko">한국어</button>
+          </div>
+          <div class="sb-foot-icons">
+            <button class="sb-foot-btn" aria-label="切換明暗" id="theme-toggle-btn" title="切換明暗">
+              <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"></circle><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
+              <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+            </button>
+            <button class="sb-foot-btn" aria-label="切換語言" id="lang-toggle-btn" title="切換語言">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <span class="sb-copyright">© 2026 chiyigo</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div class="dash-main">
+      <main class="dash-content" id="os-content">
+
+        <div class="about-wrap">
+
+          <!-- ── Hero: 2-column ── -->
+          <div class="about-hero" data-reveal>
+
+            <!-- Left column -->
+            <div class="about-left">
+              <div class="ab-identity">
+                <div class="ab-avatar">
+                  <img src="/images/logo-light.png" alt="chiyigo" class="logo-light ab-logo">
+                  <img src="/images/logo-dark.png"  alt="chiyigo" class="logo-dark ab-logo">
+                </div>
+                <div>
+                  <p class="ab-name">chiyigo</p>
+                  <p class="ab-role" data-i18n="ab_role">獨立系統開發者</p>
+                </div>
+              </div>
+
+              <h1 class="ab-headline">
+                <span data-i18n="ab_headline1">把需求變成</span>
+                <span class="ab-headline-grad" data-i18n="ab_headline2">真正能用的系統</span>
+              </h1>
+
+              <p class="ab-desc" data-i18n="ab_desc">
+                我是一位全端獨立開發者，專注於系統設計、客製化開發與 AI 整合。
+                從需求釐清、架構規劃到系統上線，提供一站式的數位解決方案。
+              </p>
+
+              <div class="ab-stats">
+                <div class="ab-stat">
+                  <span class="ab-stat-n">50+</span>
+                  <span class="ab-stat-l" data-i18n="ab_stat_projects">完成專案</span>
+                </div>
+                <div class="ab-stat">
+                  <span class="ab-stat-n">5yr+</span>
+                  <span class="ab-stat-l" data-i18n="ab_stat_experience">開發經驗</span>
+                </div>
+                <div class="ab-stat">
+                  <span class="ab-stat-n">98%</span>
+                  <span class="ab-stat-l" data-i18n="ab_stat_satisfaction">客戶滿意度</span>
+                </div>
+              </div>
+
+              <a href="requisition.html" class="ab-cta" data-i18n="ab_cta">開始合作 →</a>
+            </div>
+
+            <!-- Right column: Timeline -->
+            <div class="about-right">
+              <p class="ab-section-label" data-i18n="section_history">// 經歷</p>
+              <div class="ab-timeline" id="ab-timeline">
+                <div class="tl-row"><span class="tl-year">2019</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2019">開始接案，主要以網站設計與前端開發為主</span></div>
+                <div class="tl-row"><span class="tl-year">2020</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2020">擴展至後端系統開發，首個企業後台管理系統上線</span></div>
+                <div class="tl-row"><span class="tl-year">2021</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2021">導入 React Native，開始承接 iOS/Android 雙平台開發</span></div>
+                <div class="tl-row"><span class="tl-year">2022</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2022">整合 AI 技術，完成多個 ChatGPT 商業應用專案</span></div>
+                <div class="tl-row"><span class="tl-year">2023</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2023">累積超過 50 個完成專案，專注於系統整合與自動化流程</span></div>
+                <div class="tl-row"><span class="tl-year">2024</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2024">持續精進，專注打造能真正解決業務問題的數位系統</span></div>
+                <div class="tl-row"><span class="tl-year">2025</span><span class="tl-dot"></span><span class="tl-text" data-i18n="tl_2025">正式推出 CHIYIGO IAM 跨平台身份認證服務，Serverless 架構整合 OAuth 社群登入與多站台授權</span></div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ── Values ── -->
+          <div class="ab-values-section" data-reveal>
+            <p class="ab-section-label" data-i18n="section_values">// 工作理念</p>
+            <p class="ab-section-sub" data-i18n="section_values_sub">我怎麼看待每一個專案</p>
+            <div class="ab-values-grid">
+              <div class="ab-value-card">
+                <h3 class="ab-value-title" data-i18n="val1_title">需求優先</h3>
+                <p class="ab-value-text" data-i18n="val1_text">不賣技術，賣解法。每個功能都對應真實的業務需求，沒有多餘的複雜度。</p>
+              </div>
+              <div class="ab-value-card">
+                <h3 class="ab-value-title" data-i18n="val2_title">可維護性</h3>
+                <p class="ab-value-text" data-i18n="val2_text">交付的程式碼必須易於理解、擴展與維護，不製造技術債。</p>
+              </div>
+              <div class="ab-value-card">
+                <h3 class="ab-value-title" data-i18n="val3_title">準時交付</h3>
+                <p class="ab-value-text" data-i18n="val3_text">時程透明、進度即時同步，不讓客戶在等待中產生焦慮。</p>
+              </div>
+              <div class="ab-value-card">
+                <h3 class="ab-value-title" data-i18n="val4_title">長期關係</h3>
+                <p class="ab-value-text" data-i18n="val4_text">不是做完就消失。上線後的問題同樣重要，維護與迭代才是真正的服務。</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Skills ── -->
+          <div class="ab-skills-section" data-reveal>
+            <p class="ab-section-label" data-i18n="section_skills">// 技術堆疊</p>
+            <p class="ab-section-sub" data-i18n="section_skills_sub">使用的工具與技術</p>
+            <div class="ab-skills-grid">
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name" data-i18n="skill1_name">前端開發</h4>
+                <p class="ab-skill-tags">React, Vue, Astro, TypeScript, Tailwind CSS</p>
+              </div>
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name" data-i18n="skill2_name">後端開發</h4>
+                <p class="ab-skill-tags">Node.js, Python, FastAPI, PostgreSQL, Redis</p>
+              </div>
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name" data-i18n="skill3_name">行動應用</h4>
+                <p class="ab-skill-tags">React Native, Flutter, iOS, Android</p>
+              </div>
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name" data-i18n="skill4_name">AI / 整合</h4>
+                <p class="ab-skill-tags">OpenAI API, LangChain, LINE Bot, Webhook, n8n</p>
+              </div>
+              <div class="ab-skill-cat">
+                <h4 class="ab-skill-name" data-i18n="skill5_name">雲端 / DevOps</h4>
+                <p class="ab-skill-tags">AWS, GCP, Docker, CI/CD, Nginx</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <footer class="footer">
+          <div class="footer-inner">
+            <div>
+              <img src="images/logo-light.png" alt="CHIYIGO" class="logo logo-light">
+              <img src="images/logo-dark.png"  alt="CHIYIGO" class="logo logo-dark">
+              <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+            </div>
+            <div class="footer-contact">
+              <p class="footer-contact-title" data-i18n="footer_contact_title">聯絡我們</p>
+              <a href="tel:0900542992" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 2.5H3.2C2.5 2.5 2 3 2 3.7c0 5.4 4.4 9.8 9.8 9.8.7 0 1.2-.5 1.2-1.2V10l-2.5-1L9 10.5C7.5 9.7 6.3 8.5 5.5 7L7 5.5 6 3z"/></svg>
+                0900-542-992
+              </a>
+              <a href="https://line.me/ti/p/~chiyigo" target="_blank" rel="noopener" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><path d="M8 4.5C5.5 4.5 3.5 6 3.5 7.8c0 1.6 1.5 2.9 3.5 3.1l.5.9.5-.9c2-.2 3.5-1.5 3.5-3.1C11.5 6 9.5 4.5 8 4.5z"/></svg>
+                LINE: chiyigo
+              </a>
+              <a href="mailto:chiyigo20201208@gmail.com" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><path d="M1 5.5l7 4 7-4"/></svg>
+                chiyigo20201208@gmail.com
+              </a>
+            </div>
+            <nav class="footer-links">
+              <a href="index.html" data-i18n="nav_home">首頁</a>
+              <a href="portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+              <a href="about.html" data-i18n="nav_about">關於我們</a>
+              <a href="requisition.html" data-i18n="nav_contact">接案諮詢</a>
+            </nav>
+            <p class="copy">© 2026 CHIYIGO</p>
+          </div>
+        </footer>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Mobile topbar -->
+  <div class="m-topbar" id="m-topbar">
+    <div class="m-tb-inner">
+      <a href="index.html" class="m-tb-brand">
+        <img src="images/logo-light.png" alt="CHIYIGO" class="m-logo-img logo-light">
+        <img src="images/logo-dark.png"  alt="CHIYIGO" class="m-logo-img logo-dark">
+      </a>
+      <div class="m-tb-right">
+        <a href="/login.html" class="m-login-btn" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+        </a>
+        <button class="m-theme-btn" id="m-theme-btn" aria-label="切換主題">
+          <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"></circle><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
+          <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+        </button>
+        <button class="m-theme-btn" id="m-lang-btn" onclick="toggleTopLangDrop(event)" aria-label="切換語言">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+        <button class="m-ham-btn" id="m-ham-btn" aria-label="開啟選單" aria-expanded="false" aria-controls="m-overlay">
+          <span class="m-ham-line"></span>
+          <span class="m-ham-line"></span>
+        </button>
+      </div>
+    </div>
+    <div class="m-top-lang-drop" id="m-top-lang-drop">
+      <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+      <button class="lang-opt" data-lang="en">English</button>
+      <button class="lang-opt" data-lang="ja">日本語</button>
+      <button class="lang-opt" data-lang="ko">한국어</button>
+    </div>
+  </div>
+
+  <!-- Mobile overlay -->
+  <div class="m-overlay" id="m-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="主選單">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle" aria-hidden="true"></div>
+      <div class="m-ov-head">
+        <div class="m-ov-brand">
+          <img src="images/logo-light.png" alt="CHIYIGO" class="m-ov-logo-img logo-light">
+          <img src="images/logo-dark.png"  alt="CHIYIGO" class="m-ov-logo-img logo-dark">
+        </div>
+        <div class="m-ov-status">
+          <span class="m-ov-status-dot" aria-hidden="true"></span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
+        </div>
+      </div>
+      <nav class="m-ov-nav" aria-label="主導覽">
+        <a href="index.html" class="m-ov-item" style="--i:0" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="index.html#services" class="m-ov-item" style="--i:1" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="index.html#process" class="m-ov-item" style="--i:2" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="portfolio.html" class="m-ov-item" style="--i:3" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="about.html" class="m-ov-item active" style="--i:4" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="requisition.html" class="m-ov-item" style="--i:5" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+      </nav>
+      <div class="m-ov-cta">
+        <a href="requisition.html" class="m-ov-cta-btn" data-close-overlay data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Mobile overlay ──────────────────────────────────────────
+    const hamBtn  = document.getElementById('m-ham-btn');
+    const overlay = document.getElementById('m-overlay');
+    const topbar  = document.getElementById('m-topbar');
+
+    function openMenu() {
+      hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open');
+      overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden');
+      topbar?.classList.add('menu-open'); document.body.style.overflow='hidden';
+    }
+    function closeMenu() {
+      hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open');
+      overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true');
+      topbar?.classList.remove('menu-open'); document.body.style.overflow='';
+    }
+    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
+    overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
+    document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+
+    // ── Drag-to-close (bottom sheet swipe down) ──────────
+    ;(function () {
+      const THRESHOLD = 110
+      let startY = 0, lastY = 0, active = false
+      document.addEventListener('touchstart', function (e) {
+        const ov = document.getElementById('m-overlay')
+        if (!ov || !ov.classList.contains('is-open')) return
+        const wrap = ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        const t = e.touches[0], r = wrap.getBoundingClientRect()
+        if (t.clientY < r.top || t.clientY > r.bottom) return
+        const nav = wrap.querySelector('.m-ov-nav')
+        if (nav && nav.scrollTop > 0) {
+          const nr = nav.getBoundingClientRect()
+          if (t.clientY >= nr.top && t.clientY <= nr.bottom) return
+        }
+        startY = t.clientY; lastY = startY; active = true
+        wrap.style.transition = 'none'
+      }, { passive: true })
+      document.addEventListener('touchmove', function (e) {
+        if (!active) return
+        lastY = e.touches[0].clientY
+        const dy = lastY - startY
+        if (dy <= 0) return
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        wrap.style.transform = `translateY(${dy}px)`
+        const ratio = Math.max(0, 1 - dy / wrap.offsetHeight * 1.5)
+        ov.style.background = `rgba(10,12,28,${(0.32 * ratio).toFixed(3)})`
+        e.preventDefault()
+      }, { passive: false })
+      document.addEventListener('touchend', function () {
+        if (!active) return
+        active = false
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) { startY = 0; lastY = 0; return }
+        const dy = lastY - startY
+        ov.style.background = ''
+        if (dy > THRESHOLD) {
+          wrap.style.transition = 'transform .26s ease'
+          wrap.style.transform = 'translateY(100%)'
+          setTimeout(() => {
+            wrap.style.transform = ''; wrap.style.transition = ''
+            ov.classList.remove('is-open')
+            ov.setAttribute('aria-hidden', 'true')
+            const btn = document.getElementById('m-ham-btn')
+            btn?.classList.remove('is-open')
+            btn?.setAttribute('aria-expanded', 'false')
+            document.getElementById('m-topbar')?.classList.remove('menu-open')
+            document.body.style.overflow = ''
+          }, 260)
+        } else {
+          wrap.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1)'
+          wrap.style.transform = ''
+          setTimeout(() => { wrap.style.transition = '' }, 420)
+        }
+        startY = 0; lastY = 0
+      }, { passive: true })
+    })()
+
+    // ── Theme toggle ──────────────────────────────────────────
+    const themeBtn  = document.getElementById('theme-toggle-btn');
+    const mThemeBtn = document.getElementById('m-theme-btn');
+
+    function applyTheme(dark) {
+      document.documentElement.classList.toggle('theme-dark', dark);
+      document.documentElement.classList.toggle('theme-light', !dark);
+      [themeBtn, mThemeBtn].forEach(btn => {
+        if (!btn) return;
+        const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+        if (sun)  sun.style.display  = dark ? 'none' : '';
+        if (moon) moon.style.display = dark ? ''     : 'none';
+      });
+    }
+    applyTheme(localStorage.getItem('theme') !== 'light');
+    const doToggle = () => {
+      const d = !document.documentElement.classList.contains('theme-dark');
+      localStorage.setItem('theme', d ? 'dark' : 'light');
+      applyTheme(d);
+    };
+    themeBtn?.addEventListener('click', doToggle);
+    mThemeBtn?.addEventListener('click', doToggle);
+
+    // ── i18n ──────────────────────────────────────────────
+    const LANGS_I18N = {
+      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言',footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',ab_role:'獨立系統開發者',ab_headline1:'把需求變成',ab_headline2:'真正能用的系統',ab_desc:'我是一位全端獨立開發者，專注於系統設計、客製化開發與 AI 整合。從需求釐清、架構規劃到系統上線，提供一站式的數位解決方案。',ab_stat_projects:'完成專案',ab_stat_experience:'開發經驗',ab_stat_satisfaction:'客戶滿意度',ab_cta:'開始合作 →',section_history:'// 經歷',section_values:'// 工作理念',section_values_sub:'我怎麼看待每一個專案',section_skills:'// 技術堆疊',section_skills_sub:'使用的工具與技術',tl_2019:'開始接案，主要以網站設計與前端開發為主',tl_2020:'擴展至後端系統開發，首個企業後台管理系統上線',tl_2021:'導入 React Native，開始承接 iOS/Android 雙平台開發',tl_2022:'整合 AI 技術，完成多個 ChatGPT 商業應用專案',tl_2023:'累積超過 50 個完成專案，專注於系統整合與自動化流程',tl_2024:'持續精進，專注打造能真正解決業務問題的數位系統',tl_2025:'正式推出 CHIYIGO IAM 跨平台身份認證服務，Serverless 架構整合 OAuth 社群登入與多站台授權',val1_title:'需求優先',val1_text:'不賣技術，賣解法。每個功能都對應真實的業務需求，沒有多餘的複雜度。',val2_title:'可維護性',val2_text:'交付的程式碼必須易於理解、擴展與維護，不製造技術債。',val3_title:'準時交付',val3_text:'時程透明、進度即時同步，不讓客戶在等待中產生焦慮。',val4_title:'長期關係',val4_text:'不是做完就消失。上線後的問題同樣重要，維護與迭代才是真正的服務。',skill1_name:'前端開發',skill2_name:'後端開發',skill3_name:'行動應用',skill4_name:'AI / 整合',skill5_name:'雲端 / DevOps',footer_contact_title:'聯絡我們'},
+      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",ab_role:'Full-Stack Independent Developer',ab_headline1:'Turn Your Requirements Into',ab_headline2:'Systems That Actually Work',ab_desc:'I\'m a full-stack independent developer focused on system design, custom development, and AI integration. From requirements to launch — end-to-end digital solutions.',ab_stat_projects:'Projects Done',ab_stat_experience:'Dev Experience',ab_stat_satisfaction:'Client Satisfaction',ab_cta:'Start Collaboration →',section_history:'// Experience',section_values:'// Philosophy',section_values_sub:'How I approach every project',section_skills:'// Tech Stack',section_skills_sub:'Tools & technologies',tl_2019:'Started freelancing, focusing on web design and front-end development.',tl_2020:'Expanded into back-end systems; first enterprise admin dashboard launched.',tl_2021:'Adopted React Native and began taking on iOS/Android dual-platform projects.',tl_2022:'Integrated AI — delivered multiple ChatGPT-powered business applications.',tl_2023:'Surpassed 50 completed projects; specializing in system integration and automation.',tl_2024:'Continued growth, focused on building digital systems that truly solve business problems.',tl_2025:'Launched CHIYIGO IAM — cross-platform identity service with Serverless architecture, OAuth social login, and multi-site authorization.',val1_title:'Requirements First',val1_text:"We sell solutions, not technology. Every feature maps to a real business need — no unnecessary complexity.",val2_title:'Maintainability',val2_text:'Delivered code must be easy to understand, extend, and maintain — no technical debt.',val3_title:'On-Time Delivery',val3_text:'Transparent timelines and real-time progress updates — no anxiety-inducing waiting.',val4_title:'Long-Term Partnership',val4_text:"We don't disappear after launch. Post-release issues matter just as much — maintenance and iteration are the real service.",skill1_name:'Front-End',skill2_name:'Back-End',skill3_name:'Mobile Apps',skill4_name:'AI / Integration',skill5_name:'Cloud / DevOps',footer_contact_title:'Contact Us'},
+      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',ab_role:'フルスタック独立開発者',ab_headline1:'要件を',ab_headline2:'本当に使えるシステムへ',ab_desc:'システム設計・カスタム開発・AI 統合に特化したフルスタック独立開発者。要件定義から本番稼働まで、ワンストップで提供します。',ab_stat_projects:'完了案件',ab_stat_experience:'開発経験',ab_stat_satisfaction:'顧客満足度',ab_cta:'コラボを始める →',section_history:'// 経歴',section_values:'// 理念',section_values_sub:'すべてのプロジェクトへのアプローチ',section_skills:'// 技術スタック',section_skills_sub:'使用ツールと技術',tl_2019:'フリーランスを開始。主にWebデザインとフロントエンド開発を担当。',tl_2020:'バックエンド開発に拡張。初の企業向け管理システムをリリース。',tl_2021:'React Nativeを導入し、iOS/Android 両対応のアプリ開発を開始。',tl_2022:'AI技術を統合し、複数のChatGPTビジネスアプリを納品。',tl_2023:'完了案件50件超。システム連携と自動化に注力。',tl_2024:'成長を続け、本当にビジネス課題を解決するデジタルシステムに集中。',tl_2025:'CHIYIGO IAM（クロスプラットフォームID認証サービス）を正式リリース。ServerlessアーキテクチャでOAuth連携と多拠点認証を実現。',val1_title:'要件優先',val1_text:'技術ではなく解決策を提供します。すべての機能は実際のビジネスニーズに対応し、無駄な複雑さはありません。',val2_title:'保守性',val2_text:'納品するコードは理解・拡張・保守しやすくなければなりません。技術的負債は作りません。',val3_title:'期限厳守',val3_text:'スケジュールは透明で、進捗はリアルタイムに共有。お客様を不安にさせません。',val4_title:'長期的な関係',val4_text:'リリース後も消えません。公開後の問題も同様に重要であり、保守と改善が本当のサービスです。',skill1_name:'フロントエンド',skill2_name:'バックエンド',skill3_name:'モバイルアプリ',skill4_name:'AI / 連携',skill5_name:'クラウド / DevOps',footer_contact_title:'お問い合わせ'},
+      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',ab_role:'풀스택 독립 개발자',ab_headline1:'요구사항을',ab_headline2:'실제로 작동하는 시스템으로',ab_desc:'시스템 설계, 맞춤 개발, AI 통합에 특화된 풀스택 독립 개발자입니다. 요구사항 정의부터 시스템 출시까지 원스톱 솔루션을 제공합니다.',ab_stat_projects:'완료 프로젝트',ab_stat_experience:'개발 경력',ab_stat_satisfaction:'고객 만족도',ab_cta:'협업 시작하기 →',section_history:'// 경력',section_values:'// 철학',section_values_sub:'모든 프로젝트에 대한 접근 방식',section_skills:'// 기술 스택',section_skills_sub:'사용 도구 및 기술',tl_2019:'프리랜서 시작. 주로 웹 디자인과 프론트엔드 개발 담당.',tl_2020:'백엔드 개발로 확장. 첫 기업용 관리 시스템 런칭.',tl_2021:'React Native 도입, iOS/Android 양 플랫폼 개발 수주 시작.',tl_2022:'AI 기술 통합, 다수의 ChatGPT 비즈니스 앱 납품.',tl_2023:'완료 프로젝트 50개 돌파, 시스템 통합 및 자동화에 집중.',tl_2024:'지속 성장, 실제 비즈니스 문제를 해결하는 디지털 시스템 구축에 집중.',tl_2025:'CHIYIGO IAM 정식 출시 — Serverless 아키텍처로 OAuth 소셜 로그인과 멀티사이트 인증 통합.',val1_title:'요구사항 우선',val1_text:'기술이 아닌 해결책을 제공합니다. 모든 기능은 실제 비즈니스 필요에 대응하며 불필요한 복잡성이 없습니다.',val2_title:'유지보수성',val2_text:'납품 코드는 이해·확장·유지보수가 쉬워야 합니다. 기술 부채를 만들지 않습니다.',val3_title:'납기 준수',val3_text:'일정은 투명하고 진행 상황은 실시간으로 공유합니다. 고객을 기다림 속에 불안하게 하지 않습니다.',val4_title:'장기적 관계',val4_text:'런칭 후 사라지지 않습니다. 출시 후 문제도 동일하게 중요하며, 유지보수와 반복 개선이 진정한 서비스입니다.',skill1_name:'프론트엔드',skill2_name:'백엔드',skill3_name:'모바일 앱',skill4_name:'AI / 통합',skill5_name:'클라우드 / DevOps',footer_contact_title:'연락하기'},
+    };
+    let curLangI = localStorage.getItem('lang') || 'zh-TW';
+    function applyLangI(lang) {
+      if (!LANGS_I18N[lang]) return;
+      curLangI = lang;
+      const t = LANGS_I18N[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k]; });
+      const tBtn = document.getElementById('theme-toggle-btn');
+      const lBtn = document.getElementById('lang-toggle-btn');
+      if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
+      if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
+      document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      localStorage.setItem('lang', lang);
+    }
+    const langTogBtnI = document.getElementById('lang-toggle-btn');
+    const langDropI   = document.getElementById('lang-dropdown');
+    langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
+    document.addEventListener('click', () => langDropI?.classList.remove('open'));
+    langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+    document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+    function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
+    document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
+    document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+    applyLangI(curLangI);
+
+    // ── Reveal animation ──────────────────────────────────────
+    const osContent = document.getElementById('os-content');
+    const revRoot   = window.innerWidth > 768 ? osContent : null;
+    const revObs    = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); revObs.unobserve(e.target); } });
+    }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
+    document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
+
+    // ── Timeline staggered reveal ──────────────────────────────
+    const tlWrap = document.getElementById('ab-timeline');
+    if (tlWrap) {
+      const tlRoot = window.innerWidth > 768 ? osContent : null;
+      const tlObs = new IntersectionObserver(entries => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            tlWrap.querySelectorAll('.tl-row').forEach((row, i) => {
+              setTimeout(() => row.classList.add('revealed'), i * 80);
+            });
+            tlObs.unobserve(e.target);
+          }
+        });
+      }, { root: tlRoot, threshold: 0.1 });
+      tlObs.observe(tlWrap);
+    }
+  </script>
+
+  <!-- Neural canvas -->
+  <script>
+    (function(){
+      const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+      const ctx=canvas.getContext('2d');if(!ctx)return;
+      let W=0,H=0,nodes=[];const DIST=155;
+      function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+      function initNodes(){const n=W<768?48:115;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
+      const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+      let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
+      function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--neural-r').trim()||'108',g:s.getPropertyValue('--neural-g').trim()||'110',b:s.getPropertyValue('--neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--neural-line-opacity').trim()||'.09')}}
+      syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+      function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
+        for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
+        for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
+        requestAnimationFrame(draw)}
+      resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
+    })();
+  </script>
+
+</body>
+</html>

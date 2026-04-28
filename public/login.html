@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登入 / 註冊 — CHIYIGO</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
+  <!-- 把 URL ?next=/path 寫入 sessionStorage（跨 OAuth flow 也能保留），auth-ui.js 登入成功後會讀此值跳轉 -->
+  <script>(function(){try{var n=new URLSearchParams(location.search).get('next');if(n&&n.charAt(0)==='/'&&n.charAt(1)!=='/'){sessionStorage.setItem('auth_redirect',n)}}catch(_){}})();</script>
+  <!-- 已登入：在 DOM 渲染前同步跳轉，避免閃一下登入表單。
+       規則：有 PKCE / 跨域 redirect / OAuth callback 參數時不攔截，交給 auth-ui.js 處理；其餘場景優先用 ?next= 或 sessionStorage('auth_redirect')，預設 /dashboard.html -->
+  <script>(function(){
+    try{
+      var p = new URLSearchParams(location.search);
+      if (p.get('pkce_key') || p.get('redirect') || p.get('access_token') || p.get('code')) return;
+      var tok = null;
+      try { tok = sessionStorage.getItem('access_token'); } catch(_) {}
+      if (!tok) return;
+      var target = null;
+      try { target = sessionStorage.getItem('auth_redirect'); } catch(_) {}
+      if (!target) {
+        var n = p.get('next');
+        if (n && n.charAt(0)==='/' && n.charAt(1)!=='/') target = n;
+      }
+      target = target || '/dashboard.html';
+      try { sessionStorage.removeItem('auth_redirect'); } catch(_) {}
+      location.replace(target);
+    }catch(_){}
+  })();</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    a{color:inherit;text-decoration:none}
+    button{font-family:inherit}
+
+    :root,.theme-light{
+      --bg:#F0F2FA;--bg-surface:#FFFFFF;--bg-elevated:#FAFAFE;
+      --bg-sidebar:#EAEBF5;--bg-titlebar:#F4F5FC;
+      --border:rgba(0,0,0,.07);--border-dim:rgba(0,0,0,.05);
+      --border-bright:rgba(0,0,0,.14);--border-mid:rgba(0,0,0,.10);
+      --text:#1A1B2E;--text-muted:rgba(26,27,46,.60);--text-dim:rgba(26,27,46,.38);
+      --accent:#6C6EE5;--accent-dim:rgba(108,110,229,.10);--accent-glow:rgba(108,110,229,.18);
+      --hover-overlay:rgba(0,0,0,.05);
+      --font-sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+      --font-mono:"DM Mono","Courier New",monospace;
+      --sidebar-w:220px;--pad-x:2rem;
+    }
+    .theme-dark{
+      --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
+      --bg-sidebar:#0F1424;--bg-titlebar:#0D1120;
+      --border:rgba(255,255,255,.08);--border-dim:rgba(255,255,255,.05);
+      --border-bright:rgba(255,255,255,.14);--border-mid:rgba(255,255,255,.10);
+      --text:#F3F4F6;--text-muted:rgba(243,244,246,.62);--text-dim:rgba(243,244,246,.36);
+      --accent:#7B6CFF;--accent-dim:rgba(123,108,255,.12);--accent-glow:rgba(123,108,255,.25);
+      --hover-overlay:rgba(255,255,255,.06);
+    }
+    @media(max-width:768px){:root{--sidebar-w:0px;--pad-x:1.25rem}}
+
+    html{font-family:var(--font-sans);background-color:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background-color .3s ease,color .3s ease}
+    body{min-height:100vh;overflow:hidden}
+    @media(max-width:768px){body{overflow:auto}}
+
+    .logo-dark,.theme-dark .logo-light{display:none!important}
+    .theme-dark .logo-dark{display:block!important}
+
+    /* ── Layout ── */
+    .dash-wrap{position:fixed;inset:0;z-index:1;display:grid;grid-template-columns:var(--sidebar-w) 1fr;background:var(--bg);overflow:hidden}
+    .dash-sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border-dim);display:flex;flex-direction:column;overflow:hidden;height:100vh}
+    .dash-main{display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
+    .dash-content{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
+    .dash-content::-webkit-scrollbar{width:4px}
+    .dash-content::-webkit-scrollbar-track{background:transparent}
+    .dash-content::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px}
+    .dash-content::-webkit-scrollbar-thumb:hover{background:var(--border-bright)}
+
+    /* ── Sidebar ── */
+    .sb-brand{display:flex;align-items:center;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0;text-decoration:none}
+    .sb-logo-img{height:76px;width:auto;display:block}
+    .sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .sb-nav::-webkit-scrollbar{display:none}
+    .sb-item{display:flex;align-items:center;gap:.7rem;padding:.6rem .85rem;border-radius:10px;font-size:.875rem;font-weight:400;color:var(--text-muted);text-decoration:none;transition:background .18s ease,color .18s ease}
+    .sb-item:hover{background:#6c6ee512;color:var(--text)}
+    .sb-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500}
+    .sb-item.active .sb-icon{color:var(--accent);opacity:1}
+    .sb-icon{width:16px;height:16px;flex-shrink:0;color:var(--text-dim);opacity:.7;transition:color .18s ease,opacity .18s ease}
+    .sb-item:hover .sb-icon{color:var(--text-muted);opacity:.9}
+    .sb-label{line-height:1;white-space:nowrap}
+    .sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--border-dim)}
+    .sb-cta{background:linear-gradient(140deg,#6c6ee51f,#5b8bf514);border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem;position:relative;overflow:hidden}
+    .sb-cta::before{content:"";position:absolute;top:-12px;right:-12px;width:60px;height:60px;border-radius:50%;background:#6c6ee514;pointer-events:none}
+    .sb-cta-icon{width:28px;height:28px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:.65rem}
+    .sb-cta-icon svg{width:16px;height:16px}
+    .sb-cta-q{font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:.3rem;line-height:1.3}
+    .sb-cta-desc{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:.75rem}
+    .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--accent);color:#fff;font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
+    .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .sb-footer{display:flex;align-items:center;gap:.5rem}
+    .sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
+    .sb-login-link:hover{color:var(--accent-primary);background:var(--bg-elevated)}
+    .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
+    .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
+    .m-login-btn:hover{color:var(--text-primary)}
+    .m-login-btn svg{width:17px;height:17px}
+    .sb-foot-icons{display:flex;gap:.25rem}
+    .sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
+    .sb-foot-btn svg{width:14px;height:14px}
+    .sb-copyright{font-family:var(--font-mono);font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
+
+    /* ── Mobile topbar ── */
+    .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border-dim)}
+    .m-tb-inner{display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:52px}
+    .m-tb-brand img{height:48px;width:auto;display:block}
+    .m-tb-right{display:flex;align-items:center;gap:.75rem}
+    .m-theme-btn{width:36px;height:36px;border:1px solid rgba(108,110,229,.14);background:#6c6ee512;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6c6ee5;transition:background .2s ease;padding:0}
+    .m-theme-btn svg{width:14px;height:14px;display:block}
+    .theme-dark .m-theme-btn{border-color:#ffffff4d;background:#ffffff0f;color:#fff}
+    .m-ham-btn{display:flex;flex-direction:column;justify-content:center;gap:6px;width:36px;height:36px;border:1px solid rgba(108,110,229,.22);background:#6c6ee51a;border-radius:9px;cursor:pointer;padding:0 10px;transition:background .2s ease;flex-shrink:0}
+    .m-ham-line{display:block;width:100%;height:1.5px;background:#6c6ee5;border-radius:2px;transform-origin:center;transition:transform .32s cubic-bezier(.23,1,.32,1)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(1){transform:translateY(3.75px) rotate(45deg)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(2){transform:translateY(-3.75px) rotate(-45deg)}
+    .theme-dark .m-ham-btn{border-color:#ffffff4d;background:#ffffff0f}
+    .theme-dark .m-ham-line{background:#fff}
+
+    /* ── Mobile overlay ── */
+    .m-overlay{display:none;position:fixed;inset:0;z-index:49;background:#0a0c1c00;transition:background .35s ease;pointer-events:none}
+    .m-overlay.is-open{background:#0a0c1c52;pointer-events:auto}
+    .m-ov-wrap{position:absolute;bottom:0;left:0;right:0;background:var(--bg-surface);border-radius:22px 22px 0 0;border:1px solid var(--border);border-bottom:none;box-shadow:0 -4px 24px #6c6ee514;display:flex;flex-direction:column;max-height:88svh;overflow:hidden;transform:translateY(100%);transition:transform .42s cubic-bezier(.22,1,.36,1)}
+    .m-overlay.is-open .m-ov-wrap{transform:translateY(0)}
+    .m-ov-handle{width:36px;height:4px;background:#6c6ee52e;border-radius:100px;margin:12px auto 0;flex-shrink:0}
+    .m-ov-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.4rem .65rem;flex-shrink:0}
+    .m-ov-brand{display:flex;align-items:center;gap:.55rem}
+    .m-ov-logo-img{height:56px;width:auto;display:block}
+    .m-ov-status{display:flex;align-items:center;gap:.4rem;background:#22a86517;border:1px solid rgba(34,168,101,.18);border-radius:100px;padding:.22rem .65rem}
+    .m-ov-status-dot{width:5px;height:5px;border-radius:50%;background:#22a865;flex-shrink:0;animation:dot-pulse 2.5s ease-in-out infinite}
+    .m-ov-status-txt{font-family:var(--font-sans);font-size:.68rem;font-weight:500;color:#22a865}
+    @keyframes dot-pulse{0%,to{opacity:1}50%{opacity:.45}}
+    .m-ov-nav{flex:1;overflow-y:auto;padding:.35rem .75rem .5rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .m-ov-nav::-webkit-scrollbar{display:none}
+    .m-ov-item{display:flex;align-items:center;gap:.75rem;padding:.72rem .85rem;border-radius:12px;text-decoration:none;background:transparent;border:1px solid transparent;opacity:0;transform:translateY(10px);transition:opacity .32s cubic-bezier(.22,1,.36,1),transform .32s cubic-bezier(.22,1,.36,1),background .18s ease,border-color .18s ease;transition-delay:calc(var(--i,0)*.04s + .12s)}
+    .m-overlay.is-open .m-ov-item{opacity:1;transform:translateY(0)}
+    .m-ov-item:active{background:#6c6ee50f;transform:scale(.98)}
+    .m-ov-item.active{background:var(--accent-dim);border-color:#6c6ee524}
+    .m-ov-icon-wrap{width:32px;height:32px;border-radius:9px;background:var(--hover-overlay);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .m-ov-item.active .m-ov-icon-wrap{background:#6c6ee51f;color:var(--accent)}
+    .m-ov-icon{width:15px;height:15px}
+    .m-ov-label{flex:1;font-size:.9rem;font-weight:400;color:var(--text-muted);line-height:1;transition:color .18s ease}
+    .m-ov-item.active .m-ov-label{color:var(--accent);font-weight:500}
+    .m-ov-chevron{width:6px;height:10px;color:var(--text-dim);opacity:.5;flex-shrink:0}
+    .m-ov-cta{flex-shrink:0;padding:.75rem 1.2rem calc(1.25rem + env(safe-area-inset-bottom));border-top:1px solid rgba(108,110,229,.07);opacity:0;transform:translateY(8px);transition:opacity .32s ease .42s,transform .32s ease .42s}
+    .m-overlay.is-open .m-ov-cta{opacity:1;transform:translateY(0)}
+    .m-ov-cta-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:.78rem 1rem;background:linear-gradient(135deg,#7370ec,#5b8bf5);color:#fff;font-size:.9rem;font-weight:600;border-radius:12px;text-decoration:none;box-shadow:0 4px 16px #6c6ee547;transition:filter .18s ease,transform .18s ease}
+    .m-ov-cta-btn:active{filter:brightness(.96);transform:scale(.98)}
+
+    @media(max-width:768px){
+      .dash-wrap{position:relative;display:block;height:auto;min-height:100svh;overflow:visible}
+      .dash-sidebar{display:none}
+      .dash-main{display:block;height:auto;overflow:visible}
+      .dash-content{overflow:visible;height:auto;background:var(--bg);padding-top:52px;padding-bottom:2rem;min-height:100svh}
+      .m-topbar,.m-overlay{display:block}
+    }
+
+    /* ── Login page styles ── */
+    .login-center{min-height:100%;display:flex;align-items:center;justify-content:center;padding:2rem 1.5rem}
+    .login-wrap{width:100%;max-width:420px}
+
+    .lp-logo-wrap{text-align:center;margin-bottom:1.75rem}
+    .lp-logo-icon{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:16px;background:var(--accent-dim);border:1px solid rgba(123,108,255,.2);margin-bottom:.85rem}
+    .lp-logo-icon svg{width:26px;height:26px;color:var(--accent)}
+    .lp-title{font-size:1.5rem;font-weight:700;color:var(--text);margin-bottom:.25rem}
+    .lp-subtitle{font-size:.875rem;color:var(--text-muted)}
+
+    .tab-bar{display:flex;border-radius:12px;background:var(--bg-surface);border:1px solid var(--border-dim);padding:4px;margin-bottom:1.25rem}
+    .tab-btn{flex:1;padding:.5rem;border-radius:8px;font-size:.875rem;font-weight:500;text-align:center;cursor:pointer;border:none;background:none;color:var(--text-muted);transition:background .18s ease,color .18s ease}
+    .tab-btn.active{background:var(--accent);color:#fff}
+
+    .card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:16px;padding:1.75rem;box-shadow:0 4px 24px rgba(0,0,0,.1)}
+
+    .panel{display:none}
+    .panel.active{display:block;animation:panelIn .32s ease forwards}
+    @keyframes panelIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+    .msg-box{display:none;margin-bottom:1.25rem;padding:.7rem 1rem;border-radius:10px;font-size:.875rem;font-weight:500;border:1px solid}
+    .msg-error{color:#f87171;background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25)}
+    .msg-success{color:#4ade80;background:rgba(74,222,128,.08);border-color:rgba(74,222,128,.25)}
+
+    .field-wrap{margin-bottom:.875rem}
+    .field-label{display:block;font-size:.75rem;font-weight:500;color:var(--text-muted);margin-bottom:.4rem}
+    .field-label span{color:var(--text-dim);font-weight:400}
+    .field-hint{font-size:.7rem;color:var(--text-dim);line-height:1.5;margin:-.15rem 0 .45rem}
+    .field-input{width:100%;padding:.72rem 1rem;border-radius:10px;background:var(--bg);border:1px solid var(--border-mid);color:var(--text);font-size:.875rem;font-family:var(--font-sans);outline:none;transition:border-color .18s ease,box-shadow .18s ease}
+    .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+    .field-input::placeholder{color:var(--text-dim)}
+    .field-input-wrap{position:relative}
+    .field-input-wrap .field-input{padding-right:2.75rem}
+    input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px var(--bg) inset!important;-webkit-text-fill-color:var(--text)!important}
+
+    .eye-btn{position:absolute;right:.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-dim);padding:.25rem;display:flex;align-items:center;transition:color .18s ease}
+    .eye-btn:hover,.eye-btn.eye-active{color:var(--accent)}
+    .eye-btn svg{width:18px;height:18px}
+
+    .submit-btn{width:100%;margin-top:1.25rem;padding:.78rem;border-radius:10px;background:var(--accent);color:#fff;font-size:.875rem;font-weight:600;border:none;cursor:pointer;transition:filter .18s ease,transform .18s ease}
+    .submit-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .submit-btn:active{transform:scale(.98)}
+    .submit-btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:none!important}
+
+    .forgot-link{display:block;text-align:right;margin-top:.4rem;font-size:.75rem;color:var(--text-dim);transition:color .18s ease}
+    .forgot-link:hover{color:var(--accent)}
+
+    .divider{display:flex;align-items:center;gap:.75rem;margin:1.1rem 0}
+    .divider-line{flex:1;height:1px;background:var(--border-dim)}
+    .divider-text{font-size:.75rem;color:var(--text-dim)}
+
+    .oauth-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
+    @media(max-width:768px){.oauth-grid{grid-template-columns:repeat(2,1fr)}}
+    .oauth-btn{display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.62rem .5rem;border-radius:10px;font-size:.813rem;font-weight:500;text-decoration:none;border:1px solid;transition:filter .18s ease,transform .18s ease}
+    .oauth-btn:hover{filter:brightness(1.12);transform:translateY(-1px)}
+    .oauth-btn svg{width:16px;height:16px;flex-shrink:0}
+    .oauth-discord{background:rgba(88,101,242,.10);border-color:rgba(88,101,242,.25);color:#7289da}
+    .oauth-google{background:var(--hover-overlay);border-color:var(--border);color:var(--text-muted)}
+    .oauth-line{background:rgba(0,185,0,.10);border-color:rgba(0,185,0,.25);color:#06c755}
+    .oauth-facebook{background:rgba(24,119,242,.10);border-color:rgba(24,119,242,.25);color:#1877F2}
+
+    .notice-text{font-size:.75rem;color:var(--text-dim);text-align:center;margin-top:.85rem}
+    .pkce-notice{display:none;text-align:center;font-size:.75rem;color:#f59e0b;margin-top:1rem;border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:.625rem 1rem;background:rgba(245,158,11,.05)}
+
+    .totp-icon-wrap{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--accent-dim);border:1px solid rgba(123,108,255,.2);margin-bottom:.75rem}
+    .totp-icon-wrap svg{width:22px;height:22px;color:var(--accent)}
+    .totp-center{text-align:center;margin-bottom:1.25rem}
+    .totp-desc{font-size:.875rem;color:var(--text-muted);line-height:1.65}
+    .totp-input{text-align:center;letter-spacing:.18em}
+    .totp-back-btn{margin-top:.625rem;width:100%;padding:.5rem;background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--text-dim);transition:color .18s ease}
+    .totp-back-btn:hover{color:var(--text-muted)}
+
+    /* notice banner (before card) */
+    .pre-notice{font-size:.875rem;font-weight:500;padding:.7rem 1rem;border-radius:10px;border:1px solid;margin-bottom:1rem}
+
+    /* ── Lang dropdown (sidebar) ── */
+    .sb-bottom{position:relative}
+    .sb-lang-wrap{position:relative;display:inline-flex}
+    .lang-dropdown{display:none;position:absolute;bottom:calc(100% + .4rem);left:0;z-index:100;background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;padding:.4rem;min-width:130px;box-shadow:0 -4px 20px rgba(0,0,0,.18)}
+    .lang-dropdown.open{display:flex;flex-direction:column;gap:.15rem}
+    .lang-opt{background:none;border:none;padding:.45rem .85rem;border-radius:8px;font-size:.8rem;cursor:pointer;color:var(--text-muted);text-align:left;transition:background .15s ease,color .15s ease;font-family:var(--font-sans)}
+    .lang-opt:hover,.lang-opt.active{background:var(--accent-dim);color:var(--accent)}
+    .m-ov-lang-opt.active{background:var(--accent-dim)!important;color:var(--accent)!important;border-color:rgba(108,110,229,.3)!important}
+
+    /* ── Lang dropdown (mobile topbar) ── */
+    .m-top-lang-drop{display:none;position:fixed;top:58px;right:1.25rem;z-index:200;background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;padding:.4rem;min-width:120px;box-shadow:0 4px 20px rgba(0,0,0,.18)}
+    .m-top-lang-drop.open{display:flex;flex-direction:column;gap:.15rem}
+  </style>
+</head>
+<body>
+
+  <!-- ── Mobile topbar ── -->
+  <header class="m-topbar">
+    <div class="m-tb-inner">
+      <a href="/index.html" class="m-tb-brand">
+        <img src="images/logo-light.png" alt="CHIYIGO" class="logo-light">
+        <img src="images/logo-dark.png"  alt="CHIYIGO" class="logo-dark">
+      </a>
+      <div class="m-tb-right">
+        <a href="/login.html" class="m-login-btn" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+        </a>
+        <button class="m-theme-btn" id="m-theme-btn" aria-label="切換主題">
+          <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        </button>
+        <button class="m-theme-btn" id="m-lang-btn" onclick="toggleTopLangDrop(event)" aria-label="切換語言">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6M8 2c1.5 2 2.5 3.8 2.5 6S9.5 12 8 14M2 8h12" stroke="currentColor" stroke-width="1.3"/></svg>
+        </button>
+        <button class="m-ham-btn" id="m-ham-btn" aria-label="開啟選單" aria-expanded="false">
+          <span class="m-ham-line"></span>
+          <span class="m-ham-line"></span>
+        </button>
+      </div>
+    </div>
+    <div class="m-top-lang-drop" id="m-top-lang-drop">
+      <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+      <button class="lang-opt" data-lang="en">English</button>
+      <button class="lang-opt" data-lang="ja">日本語</button>
+      <button class="lang-opt" data-lang="ko">한국어</button>
+    </div>
+  </header>
+
+  <!-- ── Mobile overlay ── -->
+  <div class="m-overlay" id="m-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="主選單">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle" aria-hidden="true"></div>
+      <div class="m-ov-head">
+        <div class="m-ov-brand">
+          <img src="images/logo-light.png" alt="CHIYIGO" class="m-ov-logo-img logo-light">
+          <img src="images/logo-dark.png"  alt="CHIYIGO" class="m-ov-logo-img logo-dark">
+        </div>
+        <div class="m-ov-status">
+          <span class="m-ov-status-dot" aria-hidden="true"></span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
+        </div>
+      </div>
+      <nav class="m-ov-nav" aria-label="主導覽">
+        <a href="index.html" class="m-ov-item" style="--i:0" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="index.html#services" class="m-ov-item" style="--i:1" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="index.html#process" class="m-ov-item" style="--i:2" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r=".9" fill="currentColor"/><circle cx="2.2" cy="8" r=".9" fill="currentColor"/><circle cx="2.2" cy="11" r=".9" fill="currentColor"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="portfolio.html" class="m-ov-item" style="--i:3" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="about.html" class="m-ov-item" style="--i:4" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="requisition.html" class="m-ov-item" style="--i:5" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </nav>
+      <div class="m-ov-cta">
+        <a href="requisition.html" class="m-ov-cta-btn" data-close-overlay data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row" style="display:flex;gap:.5rem;margin-top:.75rem">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW" style="flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-size:.72rem;color:var(--text-muted);cursor:pointer;text-align:center">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en" style="flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-size:.72rem;color:var(--text-muted);cursor:pointer;text-align:center">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja" style="flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-size:.72rem;color:var(--text-muted);cursor:pointer;text-align:center">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko" style="flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-size:.72rem;color:var(--text-muted);cursor:pointer;text-align:center">한국어</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dash-wrap">
+
+    <!-- ── Sidebar ── -->
+    <aside class="dash-sidebar">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
+        <img src="images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
+        <img src="images/logo-dark.png"  alt="CHIYIGO" class="sb-logo-img logo-dark">
+      </a>
+      <nav class="sb-nav" aria-label="主要導覽">
+        <a href="index.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_home">首頁</span>
+        </a>
+        <a href="index.html#services" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_services">服務項目</span>
+        </a>
+        <a href="index.html#process" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r=".9" fill="currentColor"/><circle cx="2.2" cy="8" r=".9" fill="currentColor"/><circle cx="2.2" cy="11" r=".9" fill="currentColor"/></svg>
+          <span class="sb-label" data-i18n="nav_process">服務流程</span>
+        </a>
+        <a href="portfolio.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_portfolio">案例作品</span>
+        </a>
+        <a href="about.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_about">關於我們</span>
+        </a>
+        <a href="requisition.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_contact">接案諮詢</span>
+        </a>
+      </nav>
+      <div class="sb-bottom">
+        <div class="sb-cta">
+          <div class="sb-cta-icon">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3" opacity=".4"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <p class="sb-cta-q" data-i18n="sb_cta_q">準備好開始專案了嗎？</p>
+          <p class="sb-cta-desc" data-i18n="sb_cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="requisition.html" class="sb-cta-btn" data-i18n="sb_cta_btn">開始諮詢</a>
+        </div>
+        <a href="/login.html" class="sb-login-link" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+          <span data-i18n="sb_login_link">會員登入</span>
+        </a>
+        <div class="sb-footer">
+          <div class="sb-foot-icons">
+            <button class="sb-foot-btn" id="theme-toggle-btn" aria-label="切換主題">
+              <svg viewBox="0 0 16 16" fill="none" class="icon-sun" style="display:none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <svg viewBox="0 0 16 16" fill="none" class="icon-moon"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+            <div class="sb-lang-wrap">
+              <button class="sb-foot-btn" id="sb-lang-btn" onclick="toggleLangDrop(event)" aria-label="切換語言">
+                <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.5 2-2.5 3.8-2.5 6s1 4 2.5 6M8 2c1.5 2 2.5 3.8 2.5 6S9.5 12 8 14M2 8h12" stroke="currentColor" stroke-width="1.3"/></svg>
+              </button>
+              <div class="lang-dropdown" id="lang-drop-i">
+                <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+                <button class="lang-opt" data-lang="en">English</button>
+                <button class="lang-opt" data-lang="ja">日本語</button>
+                <button class="lang-opt" data-lang="ko">한국어</button>
+              </div>
+            </div>
+          </div>
+          <span class="sb-copyright">© 2026 chiyigo</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div class="dash-main">
+      <main class="dash-content">
+        <div class="login-center">
+          <div class="login-wrap">
+
+            <!-- Logo / title -->
+            <div class="lp-logo-wrap">
+              <div class="lp-logo-icon">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg>
+              </div>
+              <h1 class="lp-title" id="form-title">歡迎回來</h1>
+              <p class="lp-subtitle" id="form-subtitle">登入你的 CHIYIGO 帳號</p>
+            </div>
+
+            <!-- Tab bar -->
+            <div class="tab-bar" id="tab-bar">
+              <button id="tab-login"    class="tab-btn active" onclick="switchTab('login')" data-i18n="tab_login">登入</button>
+              <button id="tab-register" class="tab-btn"        onclick="switchTab('register')" data-i18n="tab_register">註冊</button>
+            </div>
+
+            <!-- Card -->
+            <div class="card">
+              <div id="msg-box" class="msg-box"></div>
+
+              <!-- ── 登入表單 ── -->
+              <form id="form-login" class="panel active" onsubmit="handleLogin(event)">
+                <div class="field-wrap">
+                  <label for="login-email" class="field-label" data-i18n="login_email_lbl">電子信箱</label>
+                  <input id="login-email" type="email" autocomplete="email" required placeholder="you@example.com" class="field-input" />
+                </div>
+                <div class="field-wrap">
+                  <label for="login-password" class="field-label" data-i18n="login_pass_lbl">密碼</label>
+                  <div class="field-input-wrap">
+                    <input id="login-password" type="password" autocomplete="current-password" required placeholder="••••••••" class="field-input" />
+                    <button type="button" id="login-eye" onclick="togglePassword('login-password','login-eye')" class="eye-btn">
+                      <svg id="login-eye-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <button type="submit" id="login-btn" class="submit-btn" data-i18n="login_btn">登入</button>
+                <a href="/forgot-password.html" class="forgot-link" data-i18n="forgot_link">忘記密碼？</a>
+                <div class="divider"><div class="divider-line"></div><span class="divider-text" data-i18n="divider_or">或</span><div class="divider-line"></div></div>
+                <div class="oauth-grid">
+                  <a href="/api/auth/oauth/discord/init?platform=web" class="oauth-btn oauth-discord">
+                    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+                    Discord
+                  </a>
+                  <a href="/api/auth/oauth/google/init?platform=web" class="oauth-btn oauth-google">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                    Google
+                  </a>
+                  <a href="/api/auth/oauth/line/init?platform=web" class="oauth-btn oauth-line">
+                    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg>
+                    LINE
+                  </a>
+                  <a href="/api/auth/oauth/facebook/init?platform=web" class="oauth-btn oauth-facebook">
+                    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                    Facebook
+                  </a>
+                </div>
+              </form>
+
+              <!-- ── 註冊表單 ── -->
+              <form id="form-register" class="panel" onsubmit="handleRegister(event)">
+                <div class="field-wrap">
+                  <label for="reg-email" class="field-label" data-i18n="login_email_lbl">電子信箱</label>
+                  <input id="reg-email" type="email" autocomplete="email" required placeholder="you@example.com" class="field-input" />
+                </div>
+                <div class="field-wrap">
+                  <label for="reg-password" class="field-label" data-i18n="reg_pass_lbl">密碼</label>
+                  <p class="field-hint" data-i18n="reg_pass_rule">密碼長度需 ≥12 字元，或 ≥8 字元並包含「大寫字母 / 小寫字母 / 數字 / 符號」其中 3 類。</p>
+                  <div class="field-input-wrap">
+                    <input id="reg-password" type="password" autocomplete="new-password" required minlength="8" placeholder="••••••••" class="field-input" />
+                    <button type="button" id="reg-eye" onclick="togglePassword('reg-password','reg-eye')" class="eye-btn">
+                      <svg id="reg-eye-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="field-wrap">
+                  <label for="reg-confirm" class="field-label" data-i18n="reg_confirm_lbl">確認密碼</label>
+                  <div class="field-input-wrap">
+                    <input id="reg-confirm" type="password" autocomplete="new-password" required minlength="8" placeholder="••••••••" class="field-input" />
+                    <button type="button" id="reg-confirm-eye" onclick="togglePassword('reg-confirm','reg-confirm-eye')" class="eye-btn">
+                      <svg id="reg-confirm-eye-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <button type="submit" id="reg-btn" class="submit-btn" data-i18n="reg_btn">建立帳號</button>
+                <div class="divider"><div class="divider-line"></div><span class="divider-text" data-i18n="divider_or">或</span><div class="divider-line"></div></div>
+                <div class="oauth-grid">
+                  <a href="/api/auth/oauth/discord/init?platform=web" class="oauth-btn oauth-discord">
+                    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+                    Discord
+                  </a>
+                  <a href="/api/auth/oauth/google/init?platform=web" class="oauth-btn oauth-google">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                    Google
+                  </a>
+                  <a href="/api/auth/oauth/line/init?platform=web" class="oauth-btn oauth-line">
+                    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg>
+                    LINE
+                  </a>
+                  <a href="/api/auth/oauth/facebook/init?platform=web" class="oauth-btn oauth-facebook">
+                    <svg fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                    Facebook
+                  </a>
+                </div>
+                <p class="notice-text" data-i18n="reg_notice">建立帳號即代表你同意我們的服務條款與隱私政策。</p>
+              </form>
+
+              <!-- ── 2FA 驗證面板 ── -->
+              <form id="form-totp" class="panel" onsubmit="handleTotp(event)">
+                <div class="totp-center">
+                  <div class="totp-icon-wrap">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+                  </div>
+                  <p class="totp-desc" data-i18n="totp_desc">請輸入驗證器 App 顯示的 6 位數字，或使用備用救援碼。</p>
+                </div>
+                <div class="field-wrap">
+                  <label for="totp-code" class="field-label" data-i18n="totp_code_lbl">驗證碼</label>
+                  <input id="totp-code" type="text" inputmode="numeric" placeholder="000000 或 備用救援碼" autocomplete="one-time-code" class="field-input totp-input" data-i18n-ph="totp_code_ph" />
+                </div>
+                <button type="submit" id="totp-btn" class="submit-btn" data-i18n="totp_btn">驗證</button>
+                <button type="button" onclick="switchTab('login')" class="totp-back-btn" data-i18n="totp_back">← 返回登入</button>
+              </form>
+            </div>
+
+            <!-- PKCE notice -->
+            <p id="pkce-notice" class="pkce-notice" data-i18n="pkce_notice">
+              你正在授權 CHIYIGO 應用程式登入。登入後將自動返回 App。
+            </p>
+
+            <p class="notice-text" style="margin-top:1.5rem" data-i18n="data_notice">你的資料由 CHIYIGO 安全保管，100% 資料主權。</p>
+
+          </div>
+        </div>
+      </main>
+    </div>
+
+  </div>
+
+  <script src="/js/auth-ui.js?v=10"></script>
+  <script>
+    // Query param notifications
+    (function(){
+      const p = new URLSearchParams(location.search);
+      function showNotice(text, type) {
+        const el = document.createElement('div');
+        el.textContent = text;
+        el.className = 'pre-notice ' + (type === 'ok' ? 'msg-success' : 'msg-error');
+        el.style.display = 'block';
+        const card = document.querySelector('.card');
+        if (card) card.insertAdjacentElement('beforebegin', el);
+      }
+      if (p.has('verified')) {
+        showNotice('✓ Email 驗證成功！請登入你的帳號。', 'ok');
+        history.replaceState(null, '', '/login.html');
+      } else if (p.has('verify_error')) {
+        showNotice('驗證連結無效或已過期，請重新申請。', 'err');
+        history.replaceState(null, '', '/login.html');
+      } else if (p.has('password_reset')) {
+        showNotice('✓ 密碼重設成功！請使用新密碼登入。', 'ok');
+        history.replaceState(null, '', '/login.html');
+      }
+    })();
+
+    // Theme toggle
+    function applyTheme(isDark) {
+      document.documentElement.classList.toggle('theme-dark', isDark);
+      document.documentElement.classList.toggle('theme-light', !isDark);
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      const dark = document.documentElement.classList.contains('theme-dark');
+      document.querySelectorAll('.icon-sun').forEach(el => el.style.display = dark ? 'none' : 'block');
+      document.querySelectorAll('.icon-moon').forEach(el => el.style.display = dark ? 'block' : 'none');
+    }
+    (function initIcons() {
+      const dark = document.documentElement.classList.contains('theme-dark');
+      document.querySelectorAll('.icon-sun').forEach(el => el.style.display = dark ? 'none' : 'block');
+      document.querySelectorAll('.icon-moon').forEach(el => el.style.display = dark ? 'block' : 'none');
+    })();
+    document.getElementById('theme-toggle-btn').addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('theme-dark')));
+    document.getElementById('m-theme-btn').addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('theme-dark')));
+
+    // Mobile overlay
+    const hamBtn  = document.getElementById('m-ham-btn');
+    const overlay = document.getElementById('m-overlay');
+    function openMenu() {
+      hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open');
+      overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeMenu() {
+      hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open');
+      overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true');
+      document.body.style.overflow = '';
+    }
+    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
+    overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+
+    // ── i18n ──────────────────────────────────────────────
+    const LANGS_I18N = {
+      'zh-TW': {
+        status_open:'接案中', nav_home:'首頁', nav_services:'服務項目', nav_process:'服務流程',
+        nav_portfolio:'案例作品', nav_about:'關於我們', nav_contact:'接案諮詢',
+        cta_btn_m:'開始諮詢 →', sb_cta_q:'準備好開始專案了嗎？',
+        sb_cta_desc:'讓我一起打造最適合你的數位解決方案！', sb_cta_btn:'開始諮詢',
+        sb_login_link:'會員登入',
+        tab_login:'登入', tab_register:'註冊',
+        login_email_lbl:'電子信箱', login_pass_lbl:'密碼', login_btn:'登入',
+        forgot_link:'忘記密碼？', divider_or:'或',
+        reg_pass_lbl:'密碼', reg_pass_hint:'（最少 8 字元）', reg_confirm_lbl:'確認密碼',
+        reg_pass_rule:'密碼長度需 ≥12 字元，或 ≥8 字元並包含「大寫字母 / 小寫字母 / 數字 / 符號」其中 3 類。',
+        reg_btn:'建立帳號', reg_notice:'建立帳號即代表你同意我們的服務條款與隱私政策。',
+        totp_desc:'請輸入驗證器 App 顯示的 6 位數字，或使用備用救援碼。',
+        totp_code_lbl:'驗證碼', totp_code_ph:'000000 或 備用救援碼',
+        totp_btn:'驗證', totp_back:'← 返回登入',
+        pkce_notice:'你正在授權 CHIYIGO 應用程式登入。登入後將自動返回 App。',
+        data_notice:'你的資料由 CHIYIGO 安全保管，100% 資料主權。',
+        tab_login_title:'歡迎回來', tab_login_sub:'登入你的 CHIYIGO 帳號',
+        tab_register_title:'建立帳號', tab_register_sub:'開始你的 CHIYIGO 旅程',
+        tab_totp_title:'兩步驗證', tab_totp_sub:'請完成身份驗證以繼續',
+      },
+      'en': {
+        status_open:'Available', nav_home:'Home', nav_services:'Services', nav_process:'Process',
+        nav_portfolio:'Portfolio', nav_about:'About', nav_contact:'Contact',
+        cta_btn_m:'Get Started →', sb_cta_q:'Ready to start a project?',
+        sb_cta_desc:"Let's build the perfect digital solution for you!", sb_cta_btn:'Get Started',
+        sb_login_link:'Member Login',
+        tab_login:'Login', tab_register:'Register',
+        login_email_lbl:'Email', login_pass_lbl:'Password', login_btn:'Log In',
+        forgot_link:'Forgot password?', divider_or:'or',
+        reg_pass_lbl:'Password', reg_pass_hint:'(min. 8 chars)', reg_confirm_lbl:'Confirm Password',
+        reg_pass_rule:'Password must be ≥12 chars, or ≥8 chars and contain 3 of: uppercase / lowercase / digit / symbol.',
+        reg_btn:'Create Account', reg_notice:'By creating an account, you agree to our Terms of Service and Privacy Policy.',
+        totp_desc:'Enter the 6-digit code from your authenticator app, or use a backup recovery code.',
+        totp_code_lbl:'Code', totp_code_ph:'000000 or backup code',
+        totp_btn:'Verify', totp_back:'← Back to Login',
+        pkce_notice:"You're authorizing the CHIYIGO app. You'll be redirected back after login.",
+        data_notice:'Your data is securely managed by CHIYIGO, 100% data sovereignty.',
+        tab_login_title:'Welcome Back', tab_login_sub:'Sign in to your CHIYIGO account',
+        tab_register_title:'Create Account', tab_register_sub:'Start your CHIYIGO journey',
+        tab_totp_title:'Two-Step Verification', tab_totp_sub:'Complete verification to continue',
+      },
+      'ja': {
+        status_open:'受付中', nav_home:'ホーム', nav_services:'サービス', nav_process:'流れ',
+        nav_portfolio:'事例', nav_about:'私たちについて', nav_contact:'お問い合わせ',
+        cta_btn_m:'相談を始める →', sb_cta_q:'プロジェクトを始める準備はできていますか？',
+        sb_cta_desc:'あなたに最適なデジタルソリューションを一緒に構築しましょう！', sb_cta_btn:'相談を始める',
+        sb_login_link:'会員ログイン',
+        tab_login:'ログイン', tab_register:'登録',
+        login_email_lbl:'メールアドレス', login_pass_lbl:'パスワード', login_btn:'ログイン',
+        forgot_link:'パスワードをお忘れの方', divider_or:'または',
+        reg_pass_lbl:'パスワード', reg_pass_hint:'（8文字以上）', reg_confirm_lbl:'パスワード確認',
+        reg_pass_rule:'パスワードは12文字以上、または8文字以上で「大文字 / 小文字 / 数字 / 記号」のうち3種を含めてください。',
+        reg_btn:'アカウント作成', reg_notice:'アカウントを作成することで、利用規約とプライバシーポリシーに同意したことになります。',
+        totp_desc:'認証アプリに表示された6桁のコードを入力するか、予備の救援コードを使用してください。',
+        totp_code_lbl:'認証コード', totp_code_ph:'000000 またはバックアップコード',
+        totp_btn:'認証', totp_back:'← ログインに戻る',
+        pkce_notice:'CHIYIGOアプリの認証を行っています。ログイン後、自動的にアプリに戻ります。',
+        data_notice:'あなたのデータはCHIYIGOが安全に管理しています。100%データ主権。',
+        tab_login_title:'おかえりなさい', tab_login_sub:'CHIYIGOアカウントにログイン',
+        tab_register_title:'アカウント作成', tab_register_sub:'CHIYIGOの旅を始めましょう',
+        tab_totp_title:'2段階認証', tab_totp_sub:'認証を完了してください',
+      },
+      'ko': {
+        status_open:'수주 중', nav_home:'홈', nav_services:'서비스', nav_process:'프로세스',
+        nav_portfolio:'포트폴리오', nav_about:'소개', nav_contact:'문의',
+        cta_btn_m:'시작하기 →', sb_cta_q:'프로젝트를 시작할 준비가 되셨나요?',
+        sb_cta_desc:'함께 최적의 디지털 솔루션을 만들어 드리겠습니다!', sb_cta_btn:'시작하기',
+        sb_login_link:'회원 로그인',
+        tab_login:'로그인', tab_register:'회원가입',
+        login_email_lbl:'이메일', login_pass_lbl:'비밀번호', login_btn:'로그인',
+        forgot_link:'비밀번호를 잊으셨나요?', divider_or:'또는',
+        reg_pass_lbl:'비밀번호', reg_pass_hint:'(최소 8자)', reg_confirm_lbl:'비밀번호 확인',
+        reg_pass_rule:'비밀번호는 12자 이상, 또는 8자 이상이며 대문자 / 소문자 / 숫자 / 기호 중 3종을 포함해야 합니다.',
+        reg_btn:'계정 만들기', reg_notice:'계정을 만들면 서비스 약관 및 개인정보 처리방침에 동의하는 것으로 간주됩니다.',
+        totp_desc:'인증 앱에 표시된 6자리 코드를 입력하거나, 백업 복구 코드를 사용하세요.',
+        totp_code_lbl:'인증 코드', totp_code_ph:'000000 또는 백업 코드',
+        totp_btn:'인증', totp_back:'← 로그인으로 돌아가기',
+        pkce_notice:'CHIYIGO 앱을 승인하고 있습니다. 로그인 후 자동으로 앱으로 돌아갑니다.',
+        data_notice:'귀하의 데이터는 CHIYIGO가 안전하게 관리하며, 100% 데이터 주권을 보장합니다.',
+        tab_login_title:'환영합니다', tab_login_sub:'CHIYIGO 계정에 로그인',
+        tab_register_title:'계정 만들기', tab_register_sub:'CHIYIGO 여정을 시작하세요',
+        tab_totp_title:'2단계 인증', tab_totp_sub:'인증을 완료해 주세요',
+      },
+    };
+
+    const TAB_TITLES = {
+      login:    { title: 'tab_login_title',    subtitle: 'tab_login_sub' },
+      register: { title: 'tab_register_title', subtitle: 'tab_register_sub' },
+      totp:     { title: 'tab_totp_title',     subtitle: 'tab_totp_sub' },
+    };
+
+    function applyLangI(lang) {
+      localStorage.setItem('lang', lang);
+      const t = LANGS_I18N[lang] || LANGS_I18N['zh-TW'];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k];
+      });
+      document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+        const k = el.dataset.i18nPh; if (t[k] !== undefined) el.placeholder = t[k];
+      });
+      document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lang === lang);
+      });
+      // patch TAB_CONFIG and re-apply current tab title/subtitle
+      if (typeof TAB_CONFIG !== 'undefined') {
+        TAB_CONFIG.login    = { title: t.tab_login_title,    subtitle: t.tab_login_sub,    showTabs: true };
+        TAB_CONFIG.register = { title: t.tab_register_title, subtitle: t.tab_register_sub, showTabs: true };
+        TAB_CONFIG.totp     = { title: t.tab_totp_title,     subtitle: t.tab_totp_sub,     showTabs: false };
+        const activePanelId = document.querySelector('.panel.active')?.id ?? 'form-login';
+        const tabKey = activePanelId.replace('form-','');
+        const titleEl    = document.getElementById('form-title');
+        const subtitleEl = document.getElementById('form-subtitle');
+        if (titleEl && TAB_CONFIG[tabKey])    titleEl.textContent    = TAB_CONFIG[tabKey].title;
+        if (subtitleEl && TAB_CONFIG[tabKey]) subtitleEl.textContent = TAB_CONFIG[tabKey].subtitle;
+      }
+    }
+
+    const curLangI = localStorage.getItem('lang') || 'zh-TW';
+    applyLangI(curLangI);
+
+    const langDropI = document.getElementById('lang-drop-i');
+    function toggleLangDrop(e) {
+      e.stopPropagation();
+      langDropI?.classList.toggle('open');
+      document.getElementById('m-top-lang-drop')?.classList.remove('open');
+    }
+    function toggleTopLangDrop(e) {
+      e.stopPropagation();
+      document.getElementById('m-top-lang-drop')?.classList.toggle('open');
+      langDropI?.classList.remove('open');
+    }
+    document.addEventListener('click', () => {
+      langDropI?.classList.remove('open');
+      document.getElementById('m-top-lang-drop')?.classList.remove('open');
+    });
+    langDropI?.addEventListener('click', e => {
+      const opt = e.target.closest('.lang-opt'); if (!opt) return;
+      applyLangI(opt.dataset.lang); langDropI.classList.remove('open');
+    });
+    document.getElementById('m-top-lang-drop')?.addEventListener('click', e => {
+      const opt = e.target.closest('.lang-opt'); if (!opt) return;
+      applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open');
+    });
+    document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
+      const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+      applyLangI(opt.dataset.lang);
+    });
+
+    // ── Drag-to-close (bottom sheet swipe down) ──────────
+    ;(function () {
+      const THRESHOLD = 110
+      let startY = 0, lastY = 0, active = false
+      document.addEventListener('touchstart', function (e) {
+        const ov = document.getElementById('m-overlay')
+        if (!ov || !ov.classList.contains('is-open')) return
+        const wrap = ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        const t = e.touches[0], r = wrap.getBoundingClientRect()
+        if (t.clientY < r.top || t.clientY > r.bottom) return
+        const nav = wrap.querySelector('.m-ov-nav')
+        if (nav && nav.scrollTop > 0) {
+          const nr = nav.getBoundingClientRect()
+          if (t.clientY >= nr.top && t.clientY <= nr.bottom) return
+        }
+        startY = t.clientY; lastY = startY; active = true
+        wrap.style.transition = 'none'
+      }, { passive: true })
+      document.addEventListener('touchmove', function (e) {
+        if (!active) return
+        lastY = e.touches[0].clientY
+        const dy = lastY - startY
+        if (dy <= 0) return
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        wrap.style.transform = `translateY(${dy}px)`
+        const ratio = Math.max(0, 1 - dy / wrap.offsetHeight * 1.5)
+        ov.style.background = `rgba(10,12,28,${(0.32 * ratio).toFixed(3)})`
+        e.preventDefault()
+      }, { passive: false })
+      document.addEventListener('touchend', function () {
+        if (!active) return
+        active = false
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) { startY = 0; lastY = 0; return }
+        const dy = lastY - startY
+        ov.style.background = ''
+        if (dy > THRESHOLD) {
+          wrap.style.transition = 'transform .26s ease'
+          wrap.style.transform = 'translateY(100%)'
+          setTimeout(() => {
+            wrap.style.transform = ''; wrap.style.transition = ''
+            ov.classList.remove('is-open')
+            ov.setAttribute('aria-hidden', 'true')
+            const btn = document.getElementById('m-ham-btn')
+            btn?.classList.remove('is-open')
+            btn?.setAttribute('aria-expanded', 'false')
+            document.getElementById('m-topbar')?.classList.remove('menu-open')
+            document.body.style.overflow = ''
+          }, 260)
+        } else {
+          wrap.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1)'
+          wrap.style.transform = ''
+          setTimeout(() => { wrap.style.transition = '' }, 420)
+        }
+        startY = 0; lastY = 0
+      }, { passive: true })
+    })()
+  </script>
+</body>
+</html>

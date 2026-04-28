@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>首頁 | chiyigo</title>
+  <meta name="description" content="不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。系統設計、客製開發、AI 整合、網站設計。" />
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://chiyigo.com/" />
+  <meta property="og:title"       content="首頁 | chiyigo" />
+  <meta property="og:description" content="不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。" />
+  <meta property="og:image"       content="https://chiyigo.com/images/chiyigo.jpg" />
+  <meta name="twitter:card"       content="summary_large_image" />
+  <link rel="canonical" href="https://chiyigo.com/" />
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>
+    (function(){
+      var t = localStorage.getItem('theme');
+      document.documentElement.classList.add(t === 'light' ? 'theme-light' : 'theme-dark');
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    a { color: inherit; text-decoration: none; }
+    ul { list-style: none; }
+    img { max-width: 100%; height: auto; display: block; }
+
+    /* ── Tokens ── */
+    :root, .theme-light {
+      --bg:            #F0F2FA;
+      --bg-surface:    #FFFFFF;
+      --bg-elevated:   #FAFAFE;
+      --bg-sidebar:    #EAEBF5;
+      --bg-titlebar:   #F4F5FC;
+      --border:        rgba(0,0,0,.07);
+      --border-dim:    rgba(0,0,0,.05);
+      --border-bright: rgba(0,0,0,.14);
+      --border-mid:    rgba(0,0,0,.10);
+      --text:          #1A1B2E;
+      --text-muted:    rgba(26,27,46,.60);
+      --text-dim:      rgba(26,27,46,.38);
+      --accent:        #6C6EE5;
+      --accent-dim:    rgba(108,110,229,.10);
+      --accent-glow:   rgba(108,110,229,.18);
+      --hover-overlay: rgba(0,0,0,.05);
+      --neural-r: 108; --neural-g: 110; --neural-b: 229;
+      --neural-node-opacity: .22;
+      --neural-line-opacity: .09;
+      --font-sans: 'Inter','Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;
+      --font-mono: 'DM Mono','Courier New',monospace;
+      --font-body: var(--font-sans);
+      --font-display: var(--font-sans);
+      --max-w:      1200px;
+      --pad-x:      2rem;
+      --section-y:  clamp(2.5rem,5vw,4rem);
+      --titlebar-h: 0px;
+      --sidebar-w:  220px;
+      --os-content-h: calc(100svh - var(--titlebar-h));
+    }
+    .theme-dark {
+      --bg:            #0B0F1A;
+      --bg-surface:    #151B2C;
+      --bg-elevated:   #1A2136;
+      --bg-sidebar:    #0F1424;
+      --bg-titlebar:   #0D1120;
+      --border:        rgba(255,255,255,.08);
+      --border-dim:    rgba(255,255,255,.05);
+      --border-bright: rgba(255,255,255,.14);
+      --border-mid:    rgba(255,255,255,.10);
+      --text:          #F3F4F6;
+      --text-muted:    rgba(243,244,246,.62);
+      --text-dim:      rgba(243,244,246,.36);
+      --accent:        #7B6CFF;
+      --accent-dim:    rgba(123,108,255,.12);
+      --accent-glow:   rgba(123,108,255,.25);
+      --hover-overlay: rgba(255,255,255,.06);
+      --neural-r: 123; --neural-g: 108; --neural-b: 255;
+      --neural-node-opacity: .40;
+      --neural-line-opacity: .15;
+    }
+    @media (max-width:768px) {
+      :root { --os-content-h: 100svh; --titlebar-h: 0px; --sidebar-w: 0px; --pad-x: 1.25rem; }
+    }
+
+    html {
+      font-family: var(--font-sans);
+      background-color: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      transition: background-color .3s ease, color .3s ease;
+    }
+    body { min-height: 100vh; overflow: hidden; }
+    @media (max-width:768px) { body { overflow: auto; } }
+
+    /* ── Logo toggle ── */
+    .logo-dark, .theme-dark .logo-light { display: none !important; }
+    .theme-dark .logo-dark { display: block !important; }
+
+    /* ── Reveal ── */
+    [data-reveal] { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s ease; }
+    [data-reveal].revealed { opacity: 1; transform: translateY(0); }
+    [data-reveal-delay="1"] { transition-delay: .07s; }
+    [data-reveal-delay="2"] { transition-delay: .14s; }
+    [data-reveal-delay="3"] { transition-delay: .22s; }
+    [data-reveal-delay="4"] { transition-delay: .30s; }
+    [data-reveal-delay="5"] { transition-delay: .38s; }
+
+    /* ── Neural canvas ── */
+    #neural-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+
+    /* ── Layout ── */
+    .dash-wrap {
+      position: fixed; inset: 0; z-index: 1;
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .dash-sidebar {
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-dim);
+      display: flex; flex-direction: column;
+      overflow: hidden; height: 100vh;
+    }
+    .sb-brand {
+      display: flex; align-items: center; gap: .6rem;
+      padding: 1.35rem 1.25rem 1.1rem;
+      flex-shrink: 0; text-decoration: none;
+    }
+    .sb-logo-img { height: 76px; width: auto; display: block; flex-shrink: 0; }
+    .sb-nav {
+      flex: 1; overflow-y: auto;
+      padding: .5rem .75rem;
+      display: flex; flex-direction: column; gap: .18rem;
+      scrollbar-width: none;
+    }
+    .sb-nav::-webkit-scrollbar { display: none; }
+    .sb-item {
+      display: flex; align-items: center; gap: .7rem;
+      padding: .6rem .85rem;
+      border-radius: 10px;
+      font-family: var(--font-body);
+      font-size: .875rem; font-weight: 400;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: background .18s ease, color .18s ease;
+    }
+    .sb-item:hover { background: #6c6ee512; color: var(--text); }
+    .sb-item.active { background: var(--accent-dim); color: var(--accent); font-weight: 500; }
+    .sb-item.active .sb-icon { color: var(--accent); opacity: 1; }
+    .sb-icon { width: 16px; height: 16px; flex-shrink: 0; color: var(--text-dim); opacity: .7; transition: color .18s ease, opacity .18s ease; }
+    .sb-item:hover .sb-icon { color: var(--text-muted); opacity: .9; }
+    .sb-label { line-height: 1; white-space: nowrap; }
+    .sb-bottom { flex-shrink: 0; padding: .75rem; border-top: 1px solid var(--border-dim); }
+    .sb-cta {
+      background: linear-gradient(140deg,#6c6ee51f,#5b8bf514);
+      border: 1px solid rgba(108,110,229,.16);
+      border-radius: 14px; padding: 1rem;
+      margin-bottom: .75rem;
+      position: relative; overflow: hidden;
+    }
+    .sb-cta::before {
+      content: ""; position: absolute;
+      top: -12px; right: -12px;
+      width: 60px; height: 60px;
+      border-radius: 50%; background: #6c6ee514; pointer-events: none;
+    }
+    .sb-cta-icon {
+      width: 28px; height: 28px;
+      background: var(--accent); border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; margin-bottom: .65rem;
+    }
+    .sb-cta-icon svg { width: 16px; height: 16px; }
+    .sb-cta-q { font-size: .8rem; font-weight: 600; color: var(--text); margin-bottom: .3rem; line-height: 1.3; }
+    .sb-cta-desc { font-size: .72rem; color: var(--text-muted); line-height: 1.5; margin-bottom: .75rem; }
+    .sb-cta-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 100%; padding: .5rem;
+      background: var(--accent); color: #fff;
+      font-size: .78rem; font-weight: 500; border-radius: 8px;
+      transition: filter .18s ease, transform .18s ease;
+    }
+    .sb-cta-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .sb-footer { display: flex; align-items: center; gap: .5rem; }
+    .sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
+    .sb-login-link:hover{color:var(--accent-primary);background:var(--bg-elevated)}
+    .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
+    .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
+    .m-login-btn:hover{color:var(--text-primary)}
+    .m-login-btn svg{width:17px;height:17px}
+    .sb-foot-icons { display: flex; gap: .25rem; }
+    .sb-foot-btn {
+      width: 30px; height: 30px; border: none; background: none;
+      border-radius: 7px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-dim);
+      transition: background .18s ease, color .18s ease;
+    }
+    .sb-foot-btn:hover { background: var(--hover-overlay); color: var(--text-muted); }
+    .sb-foot-btn svg { width: 14px; height: 14px; }
+    .sb-copyright { font-family: var(--font-mono); font-size: .6rem; color: var(--text-dim); letter-spacing: .04em; margin-left: auto; white-space: nowrap; }
+
+    /* ── Main ── */
+    .dash-main { display: flex; flex-direction: column; height: 100vh; overflow: hidden; min-width: 0; }
+    .dash-content {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      scroll-behavior: smooth; min-height: 0;
+    }
+    .dash-content::-webkit-scrollbar { width: 4px; }
+    .dash-content::-webkit-scrollbar-track { background: transparent; }
+    .dash-content::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 2px; }
+
+    /* ── Anchor scroll offset (clears fixed header on mobile) ── */
+    section[id] { scroll-margin-top: 3rem; }
+
+    /* ── Mobile topbar ── */
+    .m-topbar {
+      display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+      background: color-mix(in srgb, var(--bg-titlebar) 92%, transparent);
+      backdrop-filter: blur(20px) saturate(1.5);
+      -webkit-backdrop-filter: blur(20px) saturate(1.5);
+      border-bottom: 1px solid var(--border-dim);
+      transition: background .3s ease;
+    }
+    .m-tb-inner { display: flex; align-items: center; justify-content: space-between; padding: 0 1.25rem; height: 52px; }
+    .m-tb-brand { display: flex; align-items: center; gap: .55rem; }
+    .m-logo-img { height: 68px; width: auto; display: block; flex-shrink: 0; }
+    .m-tb-right { display: flex; align-items: center; gap: .85rem; }
+    .m-theme-btn {
+      width: 36px; height: 36px;
+      border: 1px solid rgba(108,110,229,.14);
+      background: #6c6ee512; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: #6c6ee5; flex-shrink: 0;
+      transition: background .2s ease;
+    }
+    .m-theme-btn svg { width: 14px; height: 14px; display: block; }
+    .theme-dark .m-theme-btn { border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.06); color: #fff; }
+    .m-ham-btn {
+      display: flex; flex-direction: column; justify-content: center; gap: 6px;
+      width: 36px; height: 36px;
+      border: 1px solid rgba(108,110,229,.22); background: #6c6ee51a;
+      border-radius: 9px; cursor: pointer; padding: 0 10px;
+      transition: background .2s ease;
+      flex-shrink: 0;
+    }
+    .m-ham-line {
+      display: block; width: 100%; height: 1.5px;
+      background: #6c6ee5; border-radius: 2px;
+      transform-origin: center;
+      transition: transform .32s cubic-bezier(.23,1,.32,1);
+    }
+    .m-ham-btn.is-open .m-ham-line:nth-child(1) { transform: translateY(3.75px) rotate(45deg); }
+    .m-ham-btn.is-open .m-ham-line:nth-child(2) { transform: translateY(-3.75px) rotate(-45deg); }
+    .theme-dark .m-ham-btn { border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.06); }
+    .theme-dark .m-ham-line { background: #fff; }
+
+    /* ── Mobile overlay (bottom sheet) ── */
+    .m-overlay {
+      display: none; position: fixed; inset: 0; z-index: 49;
+      background: rgba(10,12,28,0);
+      transition: background .35s ease;
+      pointer-events: none;
+    }
+    .m-overlay.is-open { background: rgba(10,12,28,.32); pointer-events: auto; }
+    .m-ov-wrap {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: var(--bg-surface);
+      border-radius: 22px 22px 0 0;
+      border: 1px solid var(--border); border-bottom: none;
+      box-shadow: 0 -4px 24px #6c6ee514, 0 -1px #6c6ee50f;
+      display: flex; flex-direction: column;
+      max-height: 88svh; overflow: hidden;
+      transform: translateY(100%);
+      transition: transform .42s cubic-bezier(.22,1,.36,1);
+    }
+    .m-overlay.is-open .m-ov-wrap { transform: translateY(0); }
+    .m-ov-handle { width: 36px; height: 4px; background: #6c6ee52e; border-radius: 100px; margin: 12px auto 0; flex-shrink: 0; }
+    .m-ov-head { display: flex; align-items: center; justify-content: space-between; padding: .85rem 1.4rem .65rem; flex-shrink: 0; }
+    .m-ov-brand { display: flex; align-items: center; gap: .55rem; }
+    .m-ov-logo-img { height: 72px; width: auto; display: block; }
+    .m-ov-status {
+      display: flex; align-items: center; gap: .4rem;
+      background: rgba(34,168,101,.10); border: 1px solid rgba(34,168,101,.18);
+      border-radius: 100px; padding: .22rem .65rem;
+    }
+    .m-ov-status-dot { width: 5px; height: 5px; border-radius: 50%; background: #22a865; flex-shrink: 0; animation: dot-pulse 2.5s ease-in-out infinite; }
+    .m-ov-status-txt { font-size: .68rem; font-weight: 500; color: #22a865; }
+    @keyframes dot-pulse { 0%,100% { opacity:1; } 50% { opacity:.45; } }
+    .m-ov-nav { flex: 1; overflow-y: auto; padding: .35rem .75rem .5rem; display: flex; flex-direction: column; gap: .18rem; scrollbar-width: none; }
+    .m-ov-nav::-webkit-scrollbar { display: none; }
+    .m-ov-item {
+      display: flex; align-items: center; gap: .75rem;
+      padding: .72rem .85rem; border-radius: 12px;
+      text-decoration: none; border: 1px solid transparent;
+      opacity: 0; transform: translateY(10px);
+      transition: opacity .32s cubic-bezier(.22,1,.36,1), transform .32s cubic-bezier(.22,1,.36,1), background .18s ease;
+      transition-delay: calc(var(--i,0) * .04s + .12s);
+    }
+    .m-overlay.is-open .m-ov-item { opacity: 1; transform: translateY(0); }
+    .m-ov-item:active { background: #6c6ee50f; }
+    .m-ov-item.active { background: var(--accent-dim); border-color: #6c6ee524; }
+    .m-ov-icon-wrap {
+      width: 32px; height: 32px; border-radius: 9px;
+      background: var(--hover-overlay);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; color: var(--text-dim);
+    }
+    .m-ov-item.active .m-ov-icon-wrap { background: #6c6ee51f; color: var(--accent); }
+    .m-ov-icon { width: 15px; height: 15px; }
+    .m-ov-label { flex: 1; font-size: .9rem; font-weight: 400; color: var(--text-muted); line-height: 1; }
+    .m-ov-item.active .m-ov-label { color: var(--accent); font-weight: 500; }
+    .m-ov-chevron { width: 6px; height: 10px; color: var(--text-dim); flex-shrink: 0; opacity: .5; }
+    .m-ov-cta {
+      flex-shrink: 0; padding: .75rem 1.2rem calc(1.25rem + env(safe-area-inset-bottom));
+      border-top: 1px solid rgba(108,110,229,.07);
+      opacity: 0; transform: translateY(8px);
+      transition: opacity .32s ease .42s, transform .32s ease .42s;
+    }
+    .m-overlay.is-open .m-ov-cta { opacity: 1; transform: translateY(0); }
+    .m-ov-cta-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; padding: .78rem 1rem;
+      background: linear-gradient(135deg,#7370ec,#5b8bf5);
+      color: #fff; font-size: .9rem; font-weight: 600; border-radius: 12px;
+      box-shadow: 0 4px 16px #6c6ee547;
+      transition: filter .18s ease, transform .18s ease;
+    }
+    .m-ov-cta-btn:active { filter: brightness(.96); transform: scale(.98); }
+
+    /* ── Hero ── */
+    .hero {
+      padding: clamp(2rem,4vw,3rem) var(--pad-x);
+      min-height: var(--os-content-h);
+      display: flex; align-items: center; position: relative;
+    }
+    .theme-dark .hero::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 65% 40%,rgba(123,108,255,.1) 0%,transparent 70%),
+                  radial-gradient(ellipse 40% 40% at 20% 60%,rgba(90,167,255,.07) 0%,transparent 65%);
+      pointer-events: none; z-index: 0;
+    }
+    .hero-inner {
+      width: 100%; max-width: var(--max-w); margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1.3fr;
+      gap: clamp(2rem,4vw,4rem); align-items: center;
+      position: relative; z-index: 1;
+    }
+    .hero-text { display: flex; flex-direction: column; }
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: .5rem;
+      background: var(--accent-dim); border: 1px solid rgba(108,110,229,.18);
+      border-radius: 20px; padding: .32rem .85rem;
+      margin-bottom: 1.5rem; width: fit-content;
+      animation: fadeUp .6s ease both;
+    }
+    .eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse-dot 2s ease-in-out infinite; }
+    @keyframes pulse-dot { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+    .eyebrow-label { font-family: var(--font-mono); font-size: .72rem; letter-spacing: .1em; color: var(--accent); }
+    .hero-headline { display: flex; flex-direction: column; gap: .1em; margin-bottom: 1.5rem; }
+    .h-line { display: block; font-family: var(--font-sans); font-size: clamp(1.8rem,4vw,2.5rem); font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
+    .h-dim { color: var(--text-muted); animation: fadeUp .65s .05s ease both; }
+    .h-grad { background: linear-gradient(135deg,#7370ec,#5b8bf5 60%,#4da8da); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: fadeUp .65s .12s ease both; }
+    .hero-desc { font-size: 1rem; line-height: 1.6; color: var(--text-muted); margin-bottom: 1.75rem; max-width: 36ch; animation: fadeUp .65s .20s ease both; }
+    .hero-actions { display: flex; align-items: center; gap: .85rem; flex-wrap: wrap; margin-bottom: 2rem; animation: fadeUp .65s .28s ease both; }
+    .btn-primary {
+      display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+      padding: .65rem 1.4rem; background: var(--accent); color: #fff;
+      font-family: var(--font-body); font-size: .88rem; font-weight: 500;
+      border-radius: 8px; border: none; cursor: pointer;
+      transition: filter .18s ease, transform .18s ease;
+    }
+    .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: .4rem;
+      padding: .65rem 1.2rem; background: var(--bg-surface);
+      color: var(--text-muted); font-family: var(--font-body); font-size: .88rem; font-weight: 400;
+      border-radius: 10px; border: 1px solid var(--border);
+      transition: background .18s ease, border-color .18s ease, color .18s ease;
+    }
+    .btn-ghost:hover { background: var(--bg-elevated); border-color: var(--border-mid); color: var(--text); }
+    .hero-trust { display: flex; align-items: center; gap: 1.25rem; animation: fadeUp .65s .34s ease both; }
+    .trust-item { display: flex; flex-direction: column; gap: .15rem; }
+    .trust-num { font-family: var(--font-sans); font-size: 1.35rem; font-weight: 700; letter-spacing: -.02em; color: var(--text); line-height: 1; }
+    .trust-label { font-family: var(--font-mono); font-size: .62rem; letter-spacing: .08em; color: var(--text-dim); }
+    .trust-sep { width: 1px; height: 28px; background: var(--border); }
+
+    /* ── Hero Mockup ── */
+    .hero-mockup { position: relative; }
+    .mockup-scene { position: relative; width: 100%; aspect-ratio: 4/3; overflow: visible; }
+    .scene-glow { position: absolute; border-radius: 50%; pointer-events: none; z-index: 0; }
+    .gl-1 { width: 65%; aspect-ratio: 1; background: radial-gradient(circle,rgba(108,110,229,.13) 0%,transparent 65%); top: 0%; left: 12%; filter: blur(36px); }
+    .gl-2 { width: 45%; aspect-ratio: 1; background: radial-gradient(circle,rgba(91,139,245,.10) 0%,transparent 65%); bottom: 8%; right: 8%; filter: blur(28px); }
+    .gl-3 { width: 30%; aspect-ratio: 1; background: radial-gradient(circle,rgba(77,168,218,.08) 0%,transparent 65%); top: 30%; right: 20%; filter: blur(20px); }
+
+    /* Laptop */
+    .device-laptop {
+      position: absolute; left: 0; top: 4%; width: 82%; z-index: 1;
+      filter: drop-shadow(0 20px 48px rgba(0,0,0,.12)) drop-shadow(0 4px 12px rgba(0,0,0,.07));
+      animation: laptopReveal .75s .25s cubic-bezier(.22,1,.36,1) both;
+      will-change: transform, opacity;
+    }
+    .laptop-lid {
+      background: linear-gradient(160deg,#d4d6e6,#c8cad8);
+      border-radius: 12px 12px 3px 3px;
+      padding: 7px 7px 4px;
+      border: 1px solid rgba(255,255,255,.7);
+      border-bottom-color: rgba(0,0,0,.08);
+      box-shadow: inset 0 1px rgba(255,255,255,.8), inset 0 -1px rgba(0,0,0,.06);
+    }
+    .laptop-cam { width: 5px; height: 5px; border-radius: 50%; background: rgba(0,0,0,.22); margin: 0 auto 5px; box-shadow: 0 0 0 1.5px rgba(0,0,0,.06), inset 0 0 0 1px rgba(255,255,255,.15); }
+    .laptop-display {
+      background: #f0f2fa; border-radius: 3px;
+      aspect-ratio: 16/10; overflow: hidden; position: relative;
+      font-size: 9px;
+      animation: screenFadeIn .45s .9s ease both;
+    }
+    .laptop-base {
+      background: linear-gradient(180deg,#c4c6d4,#b8bac6);
+      height: 14px; border-radius: 0 0 6px 6px;
+      border: 1px solid rgba(0,0,0,.1);
+      border-top: 1px solid rgba(0,0,0,.05);
+      box-shadow: 0 4px 14px rgba(0,0,0,.10), inset 0 1px rgba(255,255,255,.45);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .laptop-tp { width: 22%; height: 5px; background: rgba(0,0,0,.09); border-radius: 0 0 3px 3px; margin-top: 4px; align-self: flex-end; }
+
+    /* Phone */
+    .device-phone {
+      position: absolute; right: -3%; bottom: 2%; width: 26%; z-index: 2;
+      filter: drop-shadow(0 16px 40px rgba(0,0,0,.16)) drop-shadow(0 4px 10px rgba(108,110,229,.14));
+      animation: phoneReveal .7s .7s cubic-bezier(.22,1,.36,1) both;
+      will-change: transform, opacity;
+    }
+    .phone-frame {
+      background: linear-gradient(160deg,#d4d6e6,#c8cad8);
+      border-radius: 20px; padding: 9px 6px;
+      border: 1px solid rgba(255,255,255,.7);
+      border-bottom-color: rgba(0,0,0,.08);
+      box-shadow: inset 0 1px rgba(255,255,255,.8), inset 0 -1px rgba(0,0,0,.06);
+    }
+    .phone-island { width: 35%; height: 7px; background: rgba(0,0,0,.32); border-radius: 100px; margin: 0 auto 6px; box-shadow: inset 0 1px rgba(0,0,0,.15); }
+    .phone-display {
+      background: #f0f2fa; border-radius: 13px;
+      aspect-ratio: 9/20; overflow: hidden; position: relative;
+      font-size: 7px;
+      animation: screenFadeIn .45s 1.25s ease both;
+    }
+
+    /* Dark mode devices */
+    .theme-dark .laptop-lid,
+    .theme-dark .laptop-base,
+    .theme-dark .phone-frame { background: linear-gradient(160deg,#2a2d3e,#1e2133); border-color: rgba(255,255,255,.10); }
+    .theme-dark .laptop-base { box-shadow: 0 4px 14px rgba(0,0,0,.35), inset 0 1px rgba(255,255,255,.08); }
+    .theme-dark .laptop-display,
+    .theme-dark .phone-display { background: #0d1120; }
+
+    /* Mini laptop UI (em-based off 9px) */
+    .ui-nav { display: flex; align-items: center; justify-content: space-between; padding: .9em 1.2em; background: #fff; border-bottom: 1px solid rgba(0,0,0,.06); gap: 1em; animation: contentSlideUp .4s 1.05s ease both; }
+    .theme-dark .ui-nav { background: #151b2c; border-bottom-color: rgba(255,255,255,.07); }
+    .ui-nav-left { display: flex; align-items: center; gap: .45em; }
+    .ui-logo-img { height: 1.6em; width: auto; display: block; flex-shrink: 0; }
+    .ui-nav-links { display: flex; gap: 1.4em; }
+    .ui-nav-links span { font-family: var(--font-sans); font-size: .95em; color: rgba(26,27,46,.55); }
+    .theme-dark .ui-nav-links span { color: rgba(243,244,246,.45); }
+    .ui-nav-cta { background: #6c6ee5; color: #fff; font-size: .9em; font-weight: 600; padding: .45em 1em; border-radius: 5px; flex-shrink: 0; }
+
+    .ui-hero-area { padding: 1.6em 1.2em 1.2em; background: linear-gradient(160deg,#f6f7fc,#f0f2fa); animation: contentSlideUp .4s 1.15s ease both; }
+    .theme-dark .ui-hero-area { background: linear-gradient(160deg,#111827,#0d1120); }
+    .ui-tag { display: inline-flex; align-items: center; font-size: .82em; color: #6c6ee5; background: rgba(108,110,229,.09); border: 1px solid rgba(108,110,229,.18); border-radius: 20px; padding: .3em .9em; margin-bottom: .85em; }
+    .ui-title { display: flex; flex-direction: column; gap: .08em; margin-bottom: .55em; }
+    .ui-title-a { font-size: 1.7em; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; color: rgba(26,27,46,.55); }
+    .theme-dark .ui-title-a { color: rgba(243,244,246,.45); }
+    .ui-title-b { font-size: 1.7em; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; background: linear-gradient(135deg,#7370ec,#5b8bf5 60%,#4da8da); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .ui-sub { font-size: .95em; color: rgba(26,27,46,.45); margin-bottom: 1em; line-height: 1.5; }
+    .theme-dark .ui-sub { color: rgba(243,244,246,.38); }
+    .ui-btns { display: flex; gap: .6em; align-items: center; }
+    .ui-btn-p { background: linear-gradient(135deg,#7370ec,#5b8bf5); color: #fff; font-size: .88em; font-weight: 600; padding: .55em 1.1em; border-radius: 5px; }
+    .ui-btn-g { color: rgba(26,27,46,.55); font-size: .88em; background: #fff; border: 1px solid rgba(0,0,0,.09); padding: .55em 1em; border-radius: 5px; }
+    .theme-dark .ui-btn-g { color: rgba(243,244,246,.55); background: #1a2136; border-color: rgba(255,255,255,.10); }
+
+    .ui-cards { display: grid; grid-template-columns: repeat(4,1fr); gap: .65em; padding: 1em 1.2em 1.2em; background: #f0f2fa; animation: contentSlideUp .4s 1.25s ease both; }
+    .theme-dark .ui-cards { background: #0d1120; }
+    .ui-card { background: #fff; border: 1px solid rgba(0,0,0,.06); border-radius: 7px; padding: .9em .8em; display: flex; flex-direction: column; gap: .45em; }
+    .theme-dark .ui-card { background: #151b2c; border-color: rgba(255,255,255,.07); }
+    .ui-card-a { background: linear-gradient(140deg,rgba(108,110,229,.07),rgba(91,139,245,.04)); border-color: rgba(108,110,229,.14); }
+    .theme-dark .ui-card-a { background: linear-gradient(140deg,rgba(123,108,255,.10),rgba(91,139,245,.06)); border-color: rgba(123,108,255,.18); }
+    .ui-card-ico { width: 2em; height: 2em; border-radius: 5px; position: relative; }
+    .ui-card-ico::after { content: ""; position: absolute; inset: 25%; border-radius: 2px; background: var(--ic,#6C6EE5); opacity: .7; }
+    .ui-card-lbl { font-size: .88em; font-weight: 600; color: #1a1b2e; }
+    .theme-dark .ui-card-lbl { color: #f3f4f6; }
+    .ui-card-bar { height: .5em; background: rgba(0,0,0,.07); border-radius: 2px; }
+    .theme-dark .ui-card-bar { background: rgba(255,255,255,.08); }
+    .ui-bar-s { width: 65%; }
+
+    /* Mini phone UI (em-based off 7px) */
+    .mob-nav { display: flex; align-items: center; justify-content: space-between; padding: .85em 1.1em .7em; background: #fff; border-bottom: 1px solid rgba(0,0,0,.06); animation: contentSlideUp .35s 1.4s ease both; }
+    .theme-dark .mob-nav { background: #151b2c; border-bottom-color: rgba(255,255,255,.07); }
+    .mob-logo-img { height: 1.8em; width: auto; display: block; }
+    .mob-ham { display: flex; flex-direction: column; gap: .32em; }
+    .mob-ham span { display: block; width: 1.6em; height: .18em; background: rgba(26,27,46,.45); border-radius: 1px; }
+    .theme-dark .mob-ham span { background: rgba(243,244,246,.45); }
+
+    .mob-hero { padding: 1.6em 1.1em 1.2em; background: linear-gradient(160deg,#f6f7fc,#f0f2fa); animation: contentSlideUp .35s 1.5s ease both; }
+    .theme-dark .mob-hero { background: linear-gradient(160deg,#111827,#0d1120); }
+    .mob-tag { display: inline-block; font-size: .88em; color: #6c6ee5; background: rgba(108,110,229,.09); border: 1px solid rgba(108,110,229,.18); border-radius: 20px; padding: .3em .8em; margin-bottom: .9em; }
+    .mob-title { font-size: 2.1em; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; background: linear-gradient(135deg,#7370ec,#5b8bf5 60%,#4da8da); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 1.2em; }
+    .mob-cta { display: inline-block; background: linear-gradient(135deg,#7370ec,#5b8bf5); color: #fff; font-size: 1em; font-weight: 600; padding: .7em 1.4em; border-radius: 6px; }
+
+    .mob-cards { padding: .8em 1.1em; background: #f0f2fa; display: flex; flex-direction: column; animation: contentSlideUp .35s 1.6s ease both; }
+    .theme-dark .mob-cards { background: #0d1120; }
+    .mob-card { background: #fff; border-radius: 7px; margin-bottom: .55em; padding: .8em .85em; }
+    .theme-dark .mob-card { background: #151b2c; }
+    .mob-card-active { background: linear-gradient(135deg,rgba(108,110,229,.08),rgba(91,139,245,.05)); border: 1px solid rgba(108,110,229,.15); }
+    .theme-dark .mob-card-active { background: linear-gradient(135deg,rgba(123,108,255,.12),rgba(91,139,245,.07)); border-color: rgba(123,108,255,.20); }
+    .mob-card-row { display: flex; align-items: center; gap: .65em; }
+    .mob-card-ico { width: 1.8em; height: 1.8em; border-radius: 4px; background: rgba(108,110,229,.10); flex-shrink: 0; position: relative; }
+    .mob-card-ico::after { content: ""; position: absolute; inset: 25%; border-radius: 2px; background: var(--mc,#6C6EE5); opacity: .65; }
+    .mob-card-name { font-size: 1.05em; font-weight: 500; color: #1a1b2e; flex: 1; }
+    .theme-dark .mob-card-name { color: #f3f4f6; }
+    .mob-card-arr { font-size: 1.3em; color: rgba(108,110,229,.55); font-weight: 400; }
+    .mob-card-sep { height: 1px; background: rgba(0,0,0,.05); margin-top: .65em; }
+    .theme-dark .mob-card-sep { background: rgba(255,255,255,.06); }
+
+    /* ── Keyframes ── */
+    @keyframes fadeUp { 0% { opacity:0; transform:translateY(16px); } 100% { opacity:1; transform:translateY(0); } }
+    @keyframes laptopReveal { 0% { opacity:0; transform:translateY(28px) scale(.96); } 100% { opacity:1; transform:translateY(0) scale(1); } }
+    @keyframes phoneReveal { 0% { opacity:0; transform:translateY(20px) translateX(12px) scale(.94); } 100% { opacity:1; transform:translateY(0) translateX(0) scale(1); } }
+    @keyframes screenFadeIn { 0% { opacity:0; } 100% { opacity:1; } }
+    @keyframes contentSlideUp { 0% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
+
+    /* ── Services ── */
+    .services { padding: var(--section-y) var(--pad-x); background: var(--bg); }
+    .svc-inner { max-width: var(--max-w); margin: 0 auto; }
+    .svc-head { margin-bottom: 1.5rem; }
+    .svc-label { font-family: var(--font-sans); font-size: clamp(1.75rem,3.5vw,2.5rem); font-weight: 700; letter-spacing: -.01em; color: var(--text); }
+    .svc-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; }
+    .svc-card {
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 18px; padding: 1.4rem 1.2rem 1.1rem;
+      display: flex; flex-direction: column; gap: .65rem;
+      transition: box-shadow .22s ease, border-color .22s ease, transform .22s ease; cursor: pointer;
+    }
+    a.svc-card { text-decoration: none; color: inherit; }
+    .svc-card:hover { box-shadow: 0 4px 20px #6c6ee51a, 0 1px 4px rgba(0,0,0,.05); border-color: #6c6ee533; transform: translateY(-2px); }
+    .svc-icon-wrap { width: 42px; height: 42px; border-radius: 11px; background: #6c6ee51a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--accent); transition: background .22s ease; }
+    .svc-card:hover .svc-icon-wrap { background: #6c6ee529; }
+    .svc-icon { width: 22px; height: 22px; }
+    .svc-title { font-family: var(--font-body); font-size: .92rem; font-weight: 600; color: var(--text); line-height: 1.2; }
+    .svc-desc { font-size: .8rem; line-height: 1.65; color: var(--text-muted); flex: 1; }
+    .svc-arrow { font-family: var(--font-mono); font-size: .82rem; color: var(--text-dim); align-self: flex-end; transition: color .2s ease, transform .2s ease; }
+    .svc-card:hover .svc-arrow { color: var(--accent); transform: translateX(3px); }
+
+    /* ── Process ── */
+    .process { position: relative; padding: var(--section-y) var(--pad-x); border-top: 1px solid var(--border-dim); overflow: hidden; }
+    .proc-wrap { position: relative; max-width: var(--max-w); margin: 0 auto; z-index: 1; }
+    .bg-num {
+      position: absolute; right: -.05em; top: -.2em;
+      font-family: var(--font-display); font-size: clamp(10rem,22vw,26rem);
+      font-style: italic; color: var(--text); opacity: .018;
+      line-height: 1; pointer-events: none; user-select: none; z-index: 0;
+    }
+    .proc-head { margin-bottom: 3.5rem; }
+    .proc-title { font-family: var(--font-sans); font-size: clamp(1.75rem,3.5vw,2.5rem); font-weight: 700; letter-spacing: -.01em; color: var(--text); }
+    .steps { display: grid; grid-template-columns: repeat(3,1fr); gap: 2.75rem; }
+    .step-top { display: flex; align-items: center; gap: .85rem; margin-bottom: 1.5rem; }
+    .step-badge {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; background: var(--bg-surface);
+      transition: border-color .3s ease, background .3s ease, box-shadow .3s ease;
+    }
+    .step:hover .step-badge { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 0 3px var(--accent-dim); }
+    .step-num { font-family: var(--font-mono); font-size: .72rem; letter-spacing: .08em; color: var(--text-dim); transition: color .3s ease; }
+    .step:hover .step-num { color: var(--accent); }
+    .step-rule { height: 1px; flex: 1; background: var(--border-dim); transition: background .3s ease; }
+    .step:hover .step-rule { background: #6c6ee533; }
+    .step-arrow-wrap { width: 16px; height: 10px; color: var(--border-mid); flex-shrink: 0; transition: color .3s ease, transform .3s ease; display: flex; align-items: center; }
+    .step:hover .step-arrow-wrap { color: #6c6ee566; transform: translateX(2px); }
+    .step-title { font-family: var(--font-display); font-size: 1.7rem; font-weight: 400; color: var(--text); margin-bottom: .85rem; transition: color .2s ease; }
+    .step-desc { font-size: 1rem; color: var(--text-muted); line-height: 1.82; }
+
+    /* ── CTA ── */
+    .cta { background: var(--bg); border-top: 1px solid var(--border-dim); padding: var(--section-y) var(--pad-x); }
+    .cta-wrap { max-width: var(--max-w); margin: 0 auto; }
+    .cta-card {
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      align-items: center; gap: 0 2.5rem;
+      background: var(--bg-surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem 2rem 2rem 0;
+      position: relative; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 0 0 1px #6c6ee50f, 0 8px 32px #6c6ee50f;
+      transition: box-shadow .3s ease;
+    }
+    .cta-card:hover { box-shadow: 0 2px 6px rgba(0,0,0,.06), 0 0 0 1px #6c6ee524, 0 12px 40px #6c6ee51a; }
+    .cta-accent {
+      width: 4px; align-self: stretch;
+      background: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb,var(--accent) 70%,#5B8BF5) 60%, color-mix(in srgb,var(--accent) 20%,transparent) 100%);
+      border-radius: 4px 0 0 4px; flex-shrink: 0; margin-right: .5rem; position: relative;
+    }
+    .accent-orb { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 48px; height: 48px; background: radial-gradient(circle,rgba(108,110,229,.18) 0%,transparent 70%); border-radius: 50%; pointer-events: none; }
+    .cta-copy { min-width: 0; }
+    .cta-badge { display: inline-flex; align-items: center; gap: .45rem; font-size: .72rem; font-weight: 500; color: var(--accent); background: #6c6ee514; border: 1px solid rgba(108,110,229,.16); border-radius: 100px; padding: .28rem .75rem; letter-spacing: .01em; margin-bottom: .85rem; }
+    .badge-dot { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; animation: blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+    .cta-title { font-size: 1.25rem; font-weight: 700; line-height: 1.4; letter-spacing: -.01em; color: var(--text); margin-bottom: .45rem; }
+    .cta-sub { font-size: .875rem; line-height: 1.5; color: var(--text-muted); }
+    .cta-features { list-style: none; display: flex; flex-direction: column; gap: .6rem; }
+    .feat-item { display: flex; align-items: center; gap: .55rem; }
+    .feat-check { width: 18px; height: 18px; flex-shrink: 0; background: #6c6ee51a; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--accent); }
+    .feat-check svg { width: 10px; height: 10px; display: block; }
+    .feat-label { font-size: .82rem; color: var(--text-muted); line-height: 1.4; }
+    .cta-action { display: flex; flex-direction: column; align-items: center; gap: .6rem; flex-shrink: 0; }
+    .action-note { font-size: .72rem; color: var(--text-dim); letter-spacing: .01em; }
+
+    /* ── Footer ── */
+    .site-footer { border-top: 1px solid var(--border-dim); background: var(--bg-titlebar); }
+    .footer-inner { max-width: var(--max-w); margin: 0 auto; padding: 2.5rem var(--pad-x); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 2rem; }
+    .footer-logo { height: 72px; width: auto; display: block; margin-bottom: .45rem; opacity: .7; }
+    .footer-tagline { font-size: .76rem; color: var(--text-dim); max-width: 26rem; line-height: 1.65; }
+    .footer-links { display: flex; gap: 2rem; }
+    .footer-links a { font-family: var(--font-mono); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); transition: color .2s ease; }
+    .footer-links a:hover { color: var(--text-muted); }
+    .footer-contact { display: flex; flex-direction: column; gap: .5rem; }
+    .footer-contact-title { font-family: var(--font-mono); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: .2rem; }
+    .footer-contact-item { display: flex; align-items: center; gap: .45rem; font-size: .76rem; color: var(--text-dim); transition: color .2s ease; }
+    .footer-contact-item:hover { color: var(--text-muted); }
+    .footer-contact-item svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .footer-copy { font-family: var(--font-mono); font-size: .62rem; color: var(--text-dim); width: 100%; opacity: .6; }
+
+    /* ── Responsive ── */
+    @media (max-width:1024px) {
+      .hero-inner { grid-template-columns: 1fr 1fr; gap: 2rem; }
+      .svc-grid { grid-template-columns: repeat(2,1fr); }
+      .cta-card { grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; row-gap: 1.5rem; }
+      .cta-features { grid-column: 2/4; grid-row: 2; flex-direction: row; flex-wrap: wrap; gap: .5rem 1.2rem; }
+      .cta-action { grid-column: 3; grid-row: 1; }
+    }
+    @media (max-width:768px) {
+      .dash-wrap { position: relative; display: block; height: auto; min-height: 100svh; overflow: visible; }
+      .dash-sidebar { display: none; }
+      .dash-main { display: block; height: auto; overflow: visible; }
+      .dash-content { overflow: visible; height: auto; background: var(--bg); padding-top: 52px; padding-bottom: 2rem; min-height: 100svh; }
+      .m-topbar, .m-overlay { display: block; }
+      .hero { padding: 1.5rem var(--pad-x) 2rem; min-height: auto; align-items: flex-start; }
+      .hero-inner { grid-template-columns: 1fr; gap: 2.5rem; }
+      .h-line { font-size: clamp(1.9rem,7vw,2.8rem); }
+      .hero-trust { flex-wrap: wrap; gap: 1rem; }
+      .hero-mockup { max-width: 480px; }
+      .steps { grid-template-columns: 1fr; gap: 0; }
+      .step-arrow-wrap { display: none; }
+      .step { position: relative; padding-bottom: 2.25rem; }
+      .step:last-child { padding-bottom: 0; }
+      .step:not(:last-child)::after { content: ""; position: absolute; left: 16px; top: 34px; bottom: 0; width: 1px; background: var(--border-dim); }
+      .svc-grid { grid-template-columns: repeat(2,1fr); }
+      .cta-card { grid-template-columns: auto 1fr; grid-template-rows: auto auto auto; gap: 1.25rem 1rem; padding: 1.5rem 1.25rem 1.5rem 0; }
+      .cta-accent { grid-row: 1/4; }
+      .cta-copy { grid-column: 2; }
+      .cta-features { grid-column: 2; grid-row: 2; flex-direction: column; }
+      .cta-action { grid-column: 2; grid-row: 3; align-items: flex-start; }
+    }
+    @media (max-width:480px) {
+      .hero-mockup { display: flex; justify-content: center; }
+      .mockup-scene { aspect-ratio: auto; width: 160px; height: auto; }
+      .device-laptop { display: none; }
+      .device-phone { position: static; width: 100%; }
+      .scene-glow { display: none; }
+      .svc-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width:640px) {
+      .cta-card { grid-template-columns: auto 1fr; }
+    }
+    /* ── Lang dropdown ──────────────────────────────── */
+    .sb-footer{position:relative}
+    .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
+    .lang-dropdown.open{display:flex}
+    .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
+    .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
+    .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
+    .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
+    .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    .m-top-lang-drop{position:fixed;top:58px;right:1.25rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:60;min-width:128px}
+    .m-top-lang-drop.open{display:flex}
+  </style>
+</head>
+<body>
+
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+
+  <div class="dash-wrap">
+
+    <!-- Sidebar -->
+    <aside class="dash-sidebar" id="dash-sidebar">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
+        <img class="sb-logo-img logo-light" src="/images/logo-light.png" alt="chiyigo">
+        <img class="sb-logo-img logo-dark"  src="/images/logo-dark.png"  alt="chiyigo">
+      </a>
+      <nav class="sb-nav" id="sidebar-nav" aria-label="主要導覽">
+        <a href="#hero" class="sb-item active" data-section="hero">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_home">首頁</span>
+        </a>
+        <a href="#services" class="sb-item" data-section="services">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_services">服務項目</span>
+        </a>
+        <a href="#process" class="sb-item" data-section="process">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
+          <span class="sb-label" data-i18n="nav_process">服務流程</span>
+        </a>
+        <a href="portfolio.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_portfolio">案例作品</span>
+        </a>
+        <a href="about.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_about">關於我們</span>
+        </a>
+        <a href="requisition.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_contact">接案諮詢</span>
+        </a>
+      </nav>
+      <div class="sb-bottom">
+        <div class="sb-cta">
+          <div class="sb-cta-icon">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3" opacity="0.5"/><path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <p class="sb-cta-q" data-i18n="cta_q">準備好開始專案了嗎？</p>
+          <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
+        </div>
+        <a href="/login.html" class="sb-login-link" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+          <span data-i18n="login">會員登入</span>
+        </a>
+        <div class="sb-footer">
+          <div class="lang-dropdown" id="lang-dropdown">
+            <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="lang-opt" data-lang="en">English</button>
+            <button class="lang-opt" data-lang="ja">日本語</button>
+            <button class="lang-opt" data-lang="ko">한국어</button>
+          </div>
+          <div class="sb-foot-icons">
+            <button class="sb-foot-btn" id="theme-toggle-btn" onclick="toggleTheme()" aria-label="切換明暗" title="切換明暗">
+              <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+            <button class="sb-foot-btn" aria-label="切換語言" id="lang-toggle-btn" title="切換語言">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <span class="sb-copyright">© 2026 chiyigo</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="dash-main">
+      <main class="dash-content" id="dash-content">
+
+        <!-- Hero -->
+        <section id="hero" class="hero">
+          <div class="hero-inner">
+            <div class="hero-text">
+              <div class="hero-eyebrow">
+                <span class="eyebrow-dot" aria-hidden="true"></span>
+                <span class="eyebrow-label" data-i18n="hero_eyebrow">客製化系統開發專家</span>
+              </div>
+              <h1 class="hero-headline">
+                <span class="h-line h-dim" data-i18n="hero_h1">打造專屬於你的</span>
+                <span class="h-line h-grad" data-i18n="hero_h2">數位解決方案</span>
+              </h1>
+              <p class="hero-desc" data-i18n="hero_desc">從需求釐清到系統上線，我們提供一站式客製化服務，協助企業提升效率、優化流程、創造更大價值。</p>
+              <div class="hero-actions">
+                <a href="requisition.html" class="btn-primary" data-i18n="hero_btn1">探索解決方案 →</a>
+                <a href="portfolio.html"   class="btn-ghost" data-i18n="hero_btn2">觀看案例 ▷</a>
+              </div>
+              <div class="hero-trust">
+                <div class="trust-item"><span class="trust-num">50+</span><span class="trust-label" data-i18n="trust_projects">完成專案</span></div>
+                <div class="trust-sep" aria-hidden="true"></div>
+                <div class="trust-item"><span class="trust-num">98%</span><span class="trust-label" data-i18n="trust_satisfaction">客戶滿意度</span></div>
+                <div class="trust-sep" aria-hidden="true"></div>
+                <div class="trust-item"><span class="trust-num">5yr+</span><span class="trust-label" data-i18n="trust_experience">開發經驗</span></div>
+              </div>
+            </div>
+
+            <div class="hero-mockup" aria-hidden="true">
+              <div class="mockup-scene">
+                <div class="scene-glow gl-1"></div>
+                <div class="scene-glow gl-2"></div>
+                <div class="scene-glow gl-3"></div>
+                <!-- Laptop -->
+                <div class="device-laptop">
+                  <div class="laptop-lid">
+                    <div class="laptop-cam"></div>
+                    <div class="laptop-display">
+                      <div class="ui-nav">
+                        <div class="ui-nav-left">
+                          <img src="/images/logo-light.png" alt="" class="ui-logo-img logo-light">
+                          <img src="/images/logo-dark.png"  alt="" class="ui-logo-img logo-dark">
+                        </div>
+                        <div class="ui-nav-links"><span>服務</span><span>案例</span><span>關於</span></div>
+                        <span class="ui-nav-cta">諮詢</span>
+                      </div>
+                      <div class="ui-hero-area">
+                        <span class="ui-tag">客製化系統開發</span>
+                        <div class="ui-title">
+                          <span class="ui-title-a">打造專屬於你的</span>
+                          <span class="ui-title-b">數位解決方案</span>
+                        </div>
+                        <p class="ui-sub">從需求釐清到系統上線，一站式服務</p>
+                        <div class="ui-btns">
+                          <span class="ui-btn-p">探索方案 →</span>
+                          <span class="ui-btn-g">觀看案例</span>
+                        </div>
+                      </div>
+                      <div class="ui-cards">
+                        <div class="ui-card"><div class="ui-card-ico" style="--ic:#6C6EE5"></div><span class="ui-card-lbl">網站設計</span><div class="ui-card-bar"></div><div class="ui-card-bar ui-bar-s"></div></div>
+                        <div class="ui-card"><div class="ui-card-ico" style="--ic:#5B8BF5"></div><span class="ui-card-lbl">系統開發</span><div class="ui-card-bar"></div><div class="ui-card-bar ui-bar-s"></div></div>
+                        <div class="ui-card ui-card-a"><div class="ui-card-ico" style="--ic:#7370EC"></div><span class="ui-card-lbl">AI 整合</span><div class="ui-card-bar"></div><div class="ui-card-bar ui-bar-s"></div></div>
+                        <div class="ui-card"><div class="ui-card-ico" style="--ic:#4DA8DA"></div><span class="ui-card-lbl">App 設計</span><div class="ui-card-bar"></div><div class="ui-card-bar ui-bar-s"></div></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="laptop-base"><div class="laptop-tp"></div></div>
+                </div>
+                <!-- Phone -->
+                <div class="device-phone">
+                  <div class="phone-frame">
+                    <div class="phone-island"></div>
+                    <div class="phone-display">
+                      <div class="mob-nav">
+                        <img src="/images/logo-light.png" alt="" class="mob-logo-img logo-light">
+                        <img src="/images/logo-dark.png"  alt="" class="mob-logo-img logo-dark">
+                        <div class="mob-ham"><span></span><span></span></div>
+                      </div>
+                      <div class="mob-hero">
+                        <span class="mob-tag">開發專家</span>
+                        <div class="mob-title">數位<br>解決方案</div>
+                        <div class="mob-cta">立即諮詢 →</div>
+                      </div>
+                      <div class="mob-cards">
+                        <div class="mob-card"><div class="mob-card-row"><span class="mob-card-ico" style="--mc:#6C6EE5"></span><span class="mob-card-name">網站設計</span><span class="mob-card-arr">›</span></div><div class="mob-card-sep"></div></div>
+                        <div class="mob-card mob-card-active"><div class="mob-card-row"><span class="mob-card-ico" style="--mc:#5B8BF5"></span><span class="mob-card-name">AI 解決方案</span><span class="mob-card-arr">›</span></div><div class="mob-card-sep"></div></div>
+                        <div class="mob-card"><div class="mob-card-row"><span class="mob-card-ico" style="--mc:#4DA8DA"></span><span class="mob-card-name">系統開發</span><span class="mob-card-arr">›</span></div></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Services -->
+        <section id="services" class="services">
+          <div class="svc-inner">
+            <div class="svc-head" data-reveal>
+              <div class="svc-label" data-i18n="svc_title">服務項目</div>
+            </div>
+            <div class="svc-grid">
+              <a class="svc-card" href="portfolio.html?filter=Web" data-reveal data-reveal-delay="1">
+                <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" fill="none"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-linecap="round"/></svg></div>
+                <div class="svc-title" data-i18n="svc1_title">網站設計</div>
+                <div class="svc-desc" data-i18n="svc1_desc">高效能靜態網站與 Serverless 後端，快速、安全、易於維護，讓第一印象成為持久印象。</div>
+                <span class="svc-arrow">→</span>
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=System" data-reveal data-reveal-delay="2">
+                <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor"/></svg></div>
+                <div class="svc-title" data-i18n="svc2_title">系統設計</div>
+                <div class="svc-desc" data-i18n="svc2_desc">從架構規劃到資料庫設計，打造穩健可擴展的系統，確保每個環節都對齊商業目標。</div>
+                <span class="svc-arrow">→</span>
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=AI" data-reveal data-reveal-delay="3">
+                <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M12 2a7 7 0 0 1 4 12.74V17H8v-2.26A7 7 0 0 1 12 2z" fill="none" stroke="currentColor"/><path d="M9 17v1a3 3 0 0 0 6 0v-1M9 21h6" stroke="currentColor" stroke-linecap="round"/></svg></div>
+                <div class="svc-title" data-i18n="svc3_title">AI 解決方案</div>
+                <div class="svc-desc" data-i18n="svc3_desc">將 AI 能力整合進你的工作流程，自動化重複任務，讓團隊專注在真正有價值的事情上。</div>
+                <span class="svc-arrow">→</span>
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=Analytics" data-reveal data-reveal-delay="1">
+                <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                <div class="svc-title" data-i18n="svc4_title">量化數據分析</div>
+                <div class="svc-desc" data-i18n="svc4_desc">以數據驅動決策，打通數據管道、建立儀表板，讓每個商業決策都有根據。</div>
+                <span class="svc-arrow">→</span>
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=App" data-reveal data-reveal-delay="2">
+                <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><rect x="7" y="2" width="10" height="18" rx="2.5" fill="none" stroke="currentColor"/><circle cx="12" cy="17.5" r="0.8" fill="currentColor" stroke="none"/><path d="M10 5.5h4" stroke="currentColor" stroke-linecap="round"/></svg></div>
+                <div class="svc-title" data-i18n="svc5_title">App 設計</div>
+                <div class="svc-desc" data-i18n="svc5_desc">iOS / Android 原生體驗設計，從線框圖到互動原型，確保產品上線即可用。</div>
+                <span class="svc-arrow">→</span>
+              </a>
+              <a class="svc-card" href="portfolio.html?filter=Integration" data-reveal data-reveal-delay="3">
+                <div class="svc-icon-wrap"><svg class="svc-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path d="M3 21V7l9-4 9 4v14" fill="none" stroke="currentColor" stroke-linejoin="round"/><path d="M9 21V15h6v6" stroke="currentColor" stroke-linejoin="round"/><path d="M9 9h2M13 9h2M9 12h2M13 12h2" stroke="currentColor" stroke-linecap="round"/></svg></div>
+                <div class="svc-title" data-i18n="svc6_title">企業應用整合</div>
+                <div class="svc-desc" data-i18n="svc6_desc">串接 ERP、CRM、電商平台等既有系統，消弭資料孤島，提升整體營運效率。</div>
+                <span class="svc-arrow">→</span>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <!-- Process -->
+        <section id="process" class="process">
+          <div class="proc-wrap">
+            <div class="bg-num" aria-hidden="true">03</div>
+            <div class="proc-head" data-reveal>
+              <div class="proc-title" data-i18n="process_title">服務流程</div>
+            </div>
+            <div class="steps">
+              <div class="step" data-reveal data-reveal-delay="1">
+                <div class="step-top">
+                  <div class="step-badge"><span class="step-num">01</span></div>
+                  <div class="step-rule"></div>
+                  <div class="step-arrow-wrap"><svg viewBox="0 0 16 10" fill="none" width="16" height="10"><path d="M0 5h14M10 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                </div>
+                <div class="step-title" data-i18n="proc1_title">需求溝通</div>
+                <div class="step-desc" data-i18n="proc1_desc">深入了解你的業務目標與痛點，制定清晰的專案藍圖與成功標準。</div>
+              </div>
+              <div class="step" data-reveal data-reveal-delay="2">
+                <div class="step-top">
+                  <div class="step-badge"><span class="step-num">02</span></div>
+                  <div class="step-rule"></div>
+                  <div class="step-arrow-wrap"><svg viewBox="0 0 16 10" fill="none" width="16" height="10"><path d="M0 5h14M10 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                </div>
+                <div class="step-title" data-i18n="proc2_title">策略規劃</div>
+                <div class="step-desc" data-i18n="proc2_desc">結合設計美學與技術實踐，提供完整的執行方案、技術選型與時程規劃。</div>
+              </div>
+              <div class="step" data-reveal data-reveal-delay="3">
+                <div class="step-top">
+                  <div class="step-badge"><span class="step-num">03</span></div>
+                </div>
+                <div class="step-title" data-i18n="proc3_title">落地執行</div>
+                <div class="step-desc" data-i18n="proc3_desc">高效開發與設計，確保每個細節都對齊商業目標，準時交付可用的系統。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CTA -->
+        <section class="cta" id="cta">
+          <div class="cta-wrap" data-reveal>
+            <div class="cta-card">
+              <div class="cta-accent"><div class="accent-orb"></div></div>
+              <div class="cta-copy">
+                <div class="cta-badge"><span class="badge-dot"></span><span data-i18n="cta_badge">接受新專案中</span></div>
+                <div class="cta-title" data-i18n="cta_title">準備好開始了嗎？</div>
+                <div class="cta-sub" data-i18n="cta_main_sub">告訴我們你的需求，我們在 48 小時內回覆。</div>
+              </div>
+              <ul class="cta-features">
+                <li class="feat-item"><div class="feat-check"><svg viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="feat-label" data-i18n="feat1">免費初步諮詢</span></li>
+                <li class="feat-item"><div class="feat-check"><svg viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="feat-label" data-i18n="feat2">48 小時內回覆</span></li>
+                <li class="feat-item"><div class="feat-check"><svg viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="feat-label" data-i18n="feat3">客製化解決方案</span></li>
+              </ul>
+              <div class="cta-action">
+                <a href="requisition.html" class="btn-primary" data-i18n="cta_action_btn">立即提交需求 →</a>
+                <span class="action-note" data-i18n="action_note">無需簽約承諾</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="site-footer">
+          <div class="footer-inner">
+            <div>
+              <img src="/images/logo-light.png" alt="chiyigo" class="footer-logo logo-light">
+              <img src="/images/logo-dark.png"  alt="chiyigo" class="footer-logo logo-dark">
+              <p class="footer-tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+            </div>
+            <div class="footer-contact">
+              <p class="footer-contact-title" data-i18n="footer_contact_title">聯絡我們</p>
+              <a href="tel:0900542992" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5.4 2.5H3.2C2.5 2.5 2 3 2 3.7c0 5.4 4.4 9.8 9.8 9.8.7 0 1.2-.5 1.2-1.2V10l-2.5-1L9 10.5C7.5 9.7 6.3 8.5 5.5 7L7 5.5 6 3z"/></svg>
+                0900-542-992
+              </a>
+              <a href="https://line.me/ti/p/~chiyigo" target="_blank" rel="noopener" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><path d="M8 4.5C5.5 4.5 3.5 6 3.5 7.8c0 1.6 1.5 2.9 3.5 3.1l.5.9.5-.9c2-.2 3.5-1.5 3.5-3.1C11.5 6 9.5 4.5 8 4.5z"/></svg>
+                LINE: chiyigo
+              </a>
+              <a href="mailto:chiyigo20201208@gmail.com" class="footer-contact-item">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><path d="M1 5.5l7 4 7-4"/></svg>
+                chiyigo20201208@gmail.com
+              </a>
+            </div>
+            <nav class="footer-links">
+              <a href="#hero" data-i18n="nav_home">首頁</a>
+              <a href="portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+              <a href="about.html" data-i18n="nav_about">關於我們</a>
+              <a href="requisition.html" data-i18n="nav_contact">接案諮詢</a>
+            </nav>
+            <p class="footer-copy">© 2026 CHIYIGO. All rights reserved.</p>
+          </div>
+        </footer>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Mobile topbar -->
+  <div class="m-topbar" id="m-topbar">
+    <div class="m-tb-inner">
+      <a href="#hero" class="m-tb-brand">
+        <img src="/images/logo-light.png" alt="chiyigo" class="m-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="chiyigo" class="m-logo-img logo-dark">
+      </a>
+      <div class="m-tb-right">
+        <a href="/login.html" class="m-login-btn" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+        </a>
+        <button class="m-theme-btn" onclick="toggleTheme()" aria-label="切換主題">
+          <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        </button>
+        <button class="m-theme-btn" id="m-lang-btn" onclick="toggleTopLangDrop(event)" aria-label="切換語言">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+        <button class="m-ham-btn" id="m-ham-btn" onclick="toggleOverlay()" aria-label="開啟選單" aria-expanded="false">
+          <span class="m-ham-line"></span>
+          <span class="m-ham-line"></span>
+        </button>
+      </div>
+    </div>
+    <div class="m-top-lang-drop" id="m-top-lang-drop">
+      <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+      <button class="lang-opt" data-lang="en">English</button>
+      <button class="lang-opt" data-lang="ja">日本語</button>
+      <button class="lang-opt" data-lang="ko">한국어</button>
+    </div>
+  </div>
+
+  <!-- Mobile overlay (bottom sheet) -->
+  <div class="m-overlay" id="m-overlay" onclick="handleOverlayClick(event)">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle"></div>
+      <div class="m-ov-head">
+        <div class="m-ov-brand">
+          <img src="/images/logo-light.png" alt="chiyigo" class="m-ov-logo-img logo-light">
+          <img src="/images/logo-dark.png"  alt="chiyigo" class="m-ov-logo-img logo-dark">
+        </div>
+        <div class="m-ov-status">
+          <span class="m-ov-status-dot"></span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
+        </div>
+      </div>
+      <nav class="m-ov-nav">
+        <a href="#hero"     class="m-ov-item active" style="--i:0" onclick="closeOverlay()">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="#services" class="m-ov-item" style="--i:1" onclick="closeOverlay()">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="#process"  class="m-ov-item" style="--i:2" onclick="closeOverlay()">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="portfolio.html" class="m-ov-item" style="--i:3" onclick="closeOverlay()">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="about.html" class="m-ov-item" style="--i:4" onclick="closeOverlay()">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="requisition.html" class="m-ov-item" style="--i:5" onclick="closeOverlay()">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </nav>
+      <div class="m-ov-cta">
+        <a href="requisition.html" class="m-ov-cta-btn" onclick="closeOverlay()" data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Theme ──
+    function syncThemeIcons() {
+      const dark = document.documentElement.classList.contains('theme-dark')
+      document.querySelectorAll('.icon-moon').forEach(el => el.style.display = dark ? '' : 'none')
+      document.querySelectorAll('.icon-sun' ).forEach(el => el.style.display = dark ? 'none' : '')
+    }
+    function toggleTheme() {
+      const html = document.documentElement
+      const dark = html.classList.contains('theme-dark')
+      html.classList.replace(dark ? 'theme-dark' : 'theme-light', dark ? 'theme-light' : 'theme-dark')
+      localStorage.setItem('theme', dark ? 'light' : 'dark')
+      syncThemeIcons()
+      updateCanvasColors()
+    }
+    syncThemeIcons()
+
+    // ── i18n ──────────────────────────────────────────────
+    const LANGS_I18N = {
+      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言',footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',hero_eyebrow:'客製化系統開發專家',hero_h1:'打造專屬於你的',hero_h2:'數位解決方案',hero_desc:'從需求釐清到系統上線，我們提供一站式客製化服務，協助企業提升效率、優化流程、創造更大價值。',hero_btn1:'探索解決方案 →',hero_btn2:'觀看案例 ▷',trust_projects:'完成專案',trust_satisfaction:'客戶滿意度',trust_experience:'開發經驗',svc_title:'服務項目',svc1_title:'網站設計',svc1_desc:'高效能靜態網站與 Serverless 後端，快速、安全、易於維護，讓第一印象成為持久印象。',svc2_title:'系統設計',svc2_desc:'從架構規劃到資料庫設計，打造穩健可擴展的系統，確保每個環節都對齊商業目標。',svc3_title:'AI 解決方案',svc3_desc:'將 AI 能力整合進你的工作流程，自動化重複任務，讓團隊專注在真正有價值的事情上。',svc4_title:'量化數據分析',svc4_desc:'以數據驅動決策，打通數據管道、建立儀表板，讓每個商業決策都有根據。',svc5_title:'App 設計',svc5_desc:'iOS / Android 原生體驗設計，從線框圖到互動原型，確保產品上線即可用。',svc6_title:'企業應用整合',svc6_desc:'串接 ERP、CRM、電商平台等既有系統，消弭資料孤島，提升整體營運效率。',process_title:'服務流程',proc1_title:'需求溝通',proc1_desc:'深入了解你的業務目標與痛點，制定清晰的專案藍圖與成功標準。',proc2_title:'策略規劃',proc2_desc:'結合設計美學與技術實踐，提供完整的執行方案、技術選型與時程規劃。',proc3_title:'落地執行',proc3_desc:'高效開發與設計，確保每個細節都對齊商業目標，準時交付可用的系統。',cta_badge:'接受新專案中',cta_title:'準備好開始了嗎？',cta_main_sub:'告訴我們你的需求，我們在 48 小時內回覆。',feat1:'免費初步諮詢',feat2:'48 小時內回覆',feat3:'客製化解決方案',cta_action_btn:'立即提交需求 →',action_note:'無需簽約承諾',footer_contact_title:'聯絡我們'},
+      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",hero_eyebrow:'Custom System Development Expert',hero_h1:'Build Your Exclusive',hero_h2:'Digital Solution',hero_desc:'From requirements to launch, we provide one-stop custom services to help businesses boost efficiency, optimize processes, and create greater value.',hero_btn1:'Explore Solutions →',hero_btn2:'View Cases ▷',trust_projects:'Projects Done',trust_satisfaction:'Client Satisfaction',trust_experience:'Dev Experience',svc_title:'Services',svc1_title:'Web Design',svc1_desc:'High-performance static sites with Serverless backend — fast, secure, and maintainable, making first impressions last.',svc2_title:'System Design',svc2_desc:'From architecture to database design, we build robust, scalable systems aligned with your business goals.',svc3_title:'AI Solutions',svc3_desc:'Integrate AI into your workflow to automate repetitive tasks and let your team focus on what truly matters.',svc4_title:'Data Analytics',svc4_desc:'Data-driven decisions through connected pipelines and dashboards — every business choice backed by evidence.',svc5_title:'App Design',svc5_desc:'Native iOS / Android experience design, from wireframes to interactive prototypes, ready to ship.',svc6_title:'Enterprise Integration',svc6_desc:'Connect ERP, CRM, and e-commerce platforms to eliminate data silos and boost operational efficiency.',process_title:'Our Process',proc1_title:'Requirements',proc1_desc:'Deep-dive into your business goals and pain points to define a clear project blueprint and success criteria.',proc2_title:'Strategy',proc2_desc:'Combine design aesthetics with technical best practices to deliver a complete plan, tech stack, and timeline.',proc3_title:'Execution',proc3_desc:'Efficient development and design, aligning every detail with business goals and delivering on time.',cta_badge:'Open for New Projects',cta_title:'Ready to Start?',cta_main_sub:'Tell us your needs — we reply within 48 hours.',feat1:'Free Initial Consultation',feat2:'Reply Within 48 Hours',feat3:'Custom-Tailored Solutions',cta_action_btn:'Submit Your Request →',action_note:'No commitment required',footer_contact_title:'Contact Us'},
+      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',hero_eyebrow:'カスタムシステム開発のエキスパート',hero_h1:'あなた専用の',hero_h2:'デジタルソリューションを',hero_desc:'要件定義からシステム稼働まで、ワンストップのカスタムサービスで企業の効率化・プロセス最適化・価値創造を支援します。',hero_btn1:'ソリューションを探る →',hero_btn2:'事例を見る ▷',trust_projects:'完了案件',trust_satisfaction:'顧客満足度',trust_experience:'開発経験',svc_title:'サービス',svc1_title:'Webデザイン',svc1_desc:'高性能な静的サイトとServerlessバックエンドで、速く・安全・保守しやすいウェブサイトを実現します。',svc2_title:'システム設計',svc2_desc:'アーキテクチャ設計からDB設計まで、ビジネス目標に沿った堅牢でスケーラブルなシステムを構築します。',svc3_title:'AIソリューション',svc3_desc:'AIをワークフローに統合し、繰り返し作業を自動化。チームが本当に重要なことに集中できます。',svc4_title:'データ分析',svc4_desc:'データパイプラインとダッシュボードで意思決定をデータドリブンに。すべてのビジネス判断に根拠を。',svc5_title:'アプリ設計',svc5_desc:'iOS/Androidネイティブ体験設計。ワイヤーフレームからインタラクティブプロトタイプまで対応します。',svc6_title:'システム連携',svc6_desc:'ERP・CRM・ECプラットフォームを連携し、データサイロを解消して業務効率を向上させます。',process_title:'開発プロセス',proc1_title:'要件定義',proc1_desc:'ビジネス目標と課題を深く理解し、明確なプロジェクト計画と成功基準を策定します。',proc2_title:'戦略立案',proc2_desc:'デザインと技術を融合し、完全な実行計画・技術選定・スケジュールを提供します。',proc3_title:'実装・納品',proc3_desc:'効率的な開発・デザインで、すべての細部をビジネス目標に沿わせ、期限通りに納品します。',cta_badge:'新規案件受付中',cta_title:'始める準備はできましたか？',cta_main_sub:'ご要望をお聞かせください。48 時間以内に返信します。',feat1:'無料初回相談',feat2:'48時間以内返信',feat3:'カスタムソリューション',cta_action_btn:'今すぐ依頼する →',action_note:'契約不要',footer_contact_title:'お問い合わせ'},
+      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',hero_eyebrow:'맞춤형 시스템 개발 전문가',hero_h1:'당신만을 위한',hero_h2:'디지털 솔루션 구축',hero_desc:'요구사항 정의부터 시스템 출시까지, 원스톱 맞춤 서비스로 기업의 효율 향상, 프로세스 최적화, 가치 창출을 지원합니다.',hero_btn1:'솔루션 탐색 →',hero_btn2:'사례 보기 ▷',trust_projects:'완료 프로젝트',trust_satisfaction:'고객 만족도',trust_experience:'개발 경력',svc_title:'서비스',svc1_title:'웹 디자인',svc1_desc:'고성능 정적 사이트와 Serverless 백엔드로 빠르고 안전하며 유지보수하기 쉬운 웹사이트를 제공합니다.',svc2_title:'시스템 설계',svc2_desc:'아키텍처 설계부터 DB 설계까지, 비즈니스 목표에 맞는 견고하고 확장 가능한 시스템을 구축합니다.',svc3_title:'AI 솔루션',svc3_desc:'AI를 워크플로에 통합해 반복 작업을 자동화하고, 팀이 진짜 중요한 일에 집중할 수 있게 합니다.',svc4_title:'데이터 분석',svc4_desc:'데이터 파이프라인과 대시보드로 데이터 기반 의사결정을 실현합니다.',svc5_title:'앱 디자인',svc5_desc:'iOS/Android 네이티브 경험 설계. 와이어프레임부터 인터랙티브 프로토타입까지 대응합니다.',svc6_title:'엔터프라이즈 통합',svc6_desc:'ERP, CRM, 이커머스 플랫폼을 연동해 데이터 사일로를 없애고 운영 효율을 높입니다.',process_title:'진행 과정',proc1_title:'요구사항 파악',proc1_desc:'비즈니스 목표와 핵심 과제를 파악해 명확한 프로젝트 청사진과 성공 기준을 수립합니다.',proc2_title:'전략 수립',proc2_desc:'디자인 미학과 기술을 결합해 완전한 실행 방안, 기술 선택, 일정을 제공합니다.',proc3_title:'개발 & 납품',proc3_desc:'효율적인 개발과 디자인으로 모든 세부 사항을 비즈니스 목표에 맞추고 제때 납품합니다.',cta_badge:'새 프로젝트 수주 중',cta_title:'시작할 준비가 되셨나요?',cta_main_sub:'필요한 것을 알려주세요 — 48시간 내에 답변드립니다.',feat1:'무료 초기 상담',feat2:'48시간 내 답변',feat3:'맞춤형 솔루션',cta_action_btn:'지금 의뢰하기 →',action_note:'계약 불필요',footer_contact_title:'연락하기'},
+    };
+    let curLangI = localStorage.getItem('lang') || 'zh-TW';
+    function applyLangI(lang) {
+      if (!LANGS_I18N[lang]) return;
+      curLangI = lang;
+      const t = LANGS_I18N[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k]; });
+      const tBtn = document.getElementById('theme-toggle-btn');
+      const lBtn = document.getElementById('lang-toggle-btn');
+      if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
+      if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
+      document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      localStorage.setItem('lang', lang);
+    }
+    const langTogBtnI = document.getElementById('lang-toggle-btn');
+    const langDropI   = document.getElementById('lang-dropdown');
+    langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
+    document.addEventListener('click', () => langDropI?.classList.remove('open'));
+    langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+    document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+    // Mobile topbar lang dropdown
+    function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
+    document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
+    document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+    applyLangI(curLangI);
+
+    // ── Mobile overlay ──
+    function toggleOverlay() {
+      const ov  = document.getElementById('m-overlay')
+      const btn = document.getElementById('m-ham-btn')
+      const open = ov.classList.contains('is-open')
+      if (open) closeOverlay()
+      else {
+        ov.classList.add('is-open')
+        btn.classList.add('is-open')
+        btn.setAttribute('aria-expanded','true')
+        document.body.style.overflow = 'hidden'
+      }
+    }
+    function closeOverlay() {
+      const ov  = document.getElementById('m-overlay')
+      const btn = document.getElementById('m-ham-btn')
+      ov.classList.remove('is-open')
+      btn.classList.remove('is-open')
+      btn.setAttribute('aria-expanded','false')
+      document.body.style.overflow = ''
+    }
+    function handleOverlayClick(e) {
+      if (e.target === document.getElementById('m-overlay')) closeOverlay()
+    }
+
+    // ── Drag-to-close (bottom sheet swipe down) ──────────
+    ;(function () {
+      const THRESHOLD = 110
+      let startY = 0, lastY = 0, active = false
+      document.addEventListener('touchstart', function (e) {
+        const ov = document.getElementById('m-overlay')
+        if (!ov || !ov.classList.contains('is-open')) return
+        const wrap = ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        const t = e.touches[0], r = wrap.getBoundingClientRect()
+        if (t.clientY < r.top || t.clientY > r.bottom) return
+        const nav = wrap.querySelector('.m-ov-nav')
+        if (nav && nav.scrollTop > 0) {
+          const nr = nav.getBoundingClientRect()
+          if (t.clientY >= nr.top && t.clientY <= nr.bottom) return
+        }
+        startY = t.clientY; lastY = startY; active = true
+        wrap.style.transition = 'none'
+      }, { passive: true })
+      document.addEventListener('touchmove', function (e) {
+        if (!active) return
+        lastY = e.touches[0].clientY
+        const dy = lastY - startY
+        if (dy <= 0) return
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        wrap.style.transform = `translateY(${dy}px)`
+        const ratio = Math.max(0, 1 - dy / wrap.offsetHeight * 1.5)
+        ov.style.background = `rgba(10,12,28,${(0.32 * ratio).toFixed(3)})`
+        e.preventDefault()
+      }, { passive: false })
+      document.addEventListener('touchend', function () {
+        if (!active) return
+        active = false
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) { startY = 0; lastY = 0; return }
+        const dy = lastY - startY
+        ov.style.background = ''
+        if (dy > THRESHOLD) {
+          wrap.style.transition = 'transform .26s ease'
+          wrap.style.transform = 'translateY(100%)'
+          setTimeout(() => {
+            wrap.style.transform = ''; wrap.style.transition = ''
+            ov.classList.remove('is-open')
+            ov.setAttribute('aria-hidden', 'true')
+            const btn = document.getElementById('m-ham-btn')
+            btn?.classList.remove('is-open')
+            btn?.setAttribute('aria-expanded', 'false')
+            document.getElementById('m-topbar')?.classList.remove('menu-open')
+            document.body.style.overflow = ''
+          }, 260)
+        } else {
+          wrap.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1)'
+          wrap.style.transform = ''
+          setTimeout(() => { wrap.style.transition = '' }, 420)
+        }
+        startY = 0; lastY = 0
+      }, { passive: true })
+    })()
+
+    // ── Scroll reveal ──
+    const revealObs = new IntersectionObserver(
+      es => es.forEach(e => { if(e.isIntersecting){ e.target.classList.add('revealed'); revealObs.unobserve(e.target) } }),
+      { threshold: 0.1 }
+    )
+    document.querySelectorAll('[data-reveal]').forEach(el => revealObs.observe(el))
+
+    // ── Sidebar active ──
+    const sectionObs = new IntersectionObserver(
+      es => es.forEach(e => {
+        if (!e.isIntersecting) return
+        document.querySelectorAll('#sidebar-nav .sb-item[data-section]').forEach(a => a.classList.remove('active'))
+        const hit = document.querySelector(`#sidebar-nav [data-section="${e.target.id}"]`)
+        if (hit) hit.classList.add('active')
+      }),
+      { threshold: 0.45 }
+    )
+    ;['hero','services','process','cta'].forEach(id => { const el = document.getElementById(id); if(el) sectionObs.observe(el) })
+
+    // ── Neural canvas ──
+    const cvs = document.getElementById('neural-canvas')
+    const ctx = cvs.getContext('2d')
+    const NODES=55, MAXDIST=145, SPEED=0.28, pts=[]
+    let cc={}
+    function updateCanvasColors() {
+      const s = getComputedStyle(document.documentElement)
+      cc = { r: s.getPropertyValue('--neural-r').trim()||'108', g: s.getPropertyValue('--neural-g').trim()||'110', b: s.getPropertyValue('--neural-b').trim()||'229', node: parseFloat(s.getPropertyValue('--neural-node-opacity'))||0.22, line: parseFloat(s.getPropertyValue('--neural-line-opacity'))||0.09 }
+    }
+    function resizeCvs() { cvs.width=window.innerWidth; cvs.height=window.innerHeight }
+    function initPts() { pts.length=0; for(let i=0;i<NODES;i++) pts.push({x:Math.random()*cvs.width,y:Math.random()*cvs.height,vx:(Math.random()-.5)*SPEED*2,vy:(Math.random()-.5)*SPEED*2,r:Math.random()*1.5+1}) }
+    function draw() {
+      ctx.clearRect(0,0,cvs.width,cvs.height)
+      const {r,g,b,node:nop,line:lop}=cc
+      for(const p of pts){ p.x+=p.vx; p.y+=p.vy; if(p.x<0||p.x>cvs.width)p.vx*=-1; if(p.y<0||p.y>cvs.height)p.vy*=-1 }
+      for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<MAXDIST){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${lop*(1-d/MAXDIST)})`;ctx.lineWidth=0.75;ctx.stroke()}}
+      for(const p of pts){ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${nop})`;ctx.fill()}
+      requestAnimationFrame(draw)
+    }
+    updateCanvasColors(); resizeCvs(); initPts(); draw()
+    window.addEventListener('resize',resizeCvs)
+  </script>
+</body>
+</html>
