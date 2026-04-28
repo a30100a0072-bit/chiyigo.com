@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/build-partials.js",
+    "build:watch": "node scripts/build-partials.js --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:int": "vitest run --config vitest.workers.config.js",
@@ -16,8 +18,10 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.5.40",
+    "chokidar": "^5.0.0",
     "eslint": "^9.39.4",
     "globals": "^15.15.0",
+    "handlebars": "^4.7.9",
     "vitest": "^2.1.9"
   }
 }
