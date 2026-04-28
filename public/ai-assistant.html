@@ -17,14 +17,28 @@
   <script>
     (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();
   </script>
-  <!-- Auth guard：先嘗試以 HttpOnly refresh cookie 換取新 access_token（跨分頁/重整可保持登入），失敗才跳轉登入 -->
+  <!-- Auth guard：
+       1) sessionStorage 已有 access_token → 直接放行（同分頁導覽最常見）
+       2) 沒 token → 非同步呼叫 /api/auth/refresh（HttpOnly cookie 跨分頁有效），成功就寫回 sessionStorage 並繼續
+       3) refresh 失敗 → 跳登入
+       期間用一張 loading splash 蓋住內容，避免閃登入畫面 -->
+  <style>
+    #__authsplash{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#0B0F1A;color:#fff;font-family:"Inter","Noto Sans TC",sans-serif}
+    .theme-light #__authsplash{background:#F0F2FA;color:#1A1B2E}
+    #__authsplash .__sp{width:28px;height:28px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:__spin 0.8s linear infinite;opacity:.6}
+    @keyframes __spin{to{transform:rotate(360deg)}}
+  </style>
   <script>
     (function () {
-      var t = null;
-      try { t = sessionStorage.getItem('access_token'); } catch (_) {}
-      if (t) return;
-      // 阻擋頁面渲染直到 refresh 嘗試完成
-      document.documentElement.style.visibility = 'hidden';
+      var hasTok = false;
+      try { hasTok = !!sessionStorage.getItem('access_token'); } catch (_) {}
+      if (hasTok) return;
+      // 注入 splash（document.write 在 head 階段安全）
+      document.write('<div id="__authsplash"><div class="__sp"></div></div>');
+      var goLogin = function () {
+        try { sessionStorage.setItem('auth_redirect', '/ai-assistant.html'); } catch (_) {}
+        location.replace('/login.html?next=' + encodeURIComponent('/ai-assistant.html'));
+      };
       fetch('/api/auth/refresh', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' }, body: '{}'
@@ -32,16 +46,13 @@
         .then(function (d) {
           if (d && d.access_token) {
             try { sessionStorage.setItem('access_token', d.access_token); } catch (_) {}
-            document.documentElement.style.visibility = '';
+            var el = document.getElementById('__authsplash');
+            if (el) el.parentNode.removeChild(el);
           } else {
-            try { sessionStorage.setItem('auth_redirect', '/ai-assistant.html'); } catch (_) {}
-            location.replace('/login.html?next=' + encodeURIComponent('/ai-assistant.html'));
+            goLogin();
           }
         })
-        .catch(function () {
-          try { sessionStorage.setItem('auth_redirect', '/ai-assistant.html'); } catch (_) {}
-          location.replace('/login.html?next=' + encodeURIComponent('/ai-assistant.html'));
-        });
+        .catch(goLogin);
     })();
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />

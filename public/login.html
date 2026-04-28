@@ -9,6 +9,26 @@
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <!-- 把 URL ?next=/path 寫入 sessionStorage（跨 OAuth flow 也能保留），auth-ui.js 登入成功後會讀此值跳轉 -->
   <script>(function(){try{var n=new URLSearchParams(location.search).get('next');if(n&&n.charAt(0)==='/'&&n.charAt(1)!=='/'){sessionStorage.setItem('auth_redirect',n)}}catch(_){}})();</script>
+  <!-- 已登入：在 DOM 渲染前同步跳轉，避免閃一下登入表單。
+       規則：有 PKCE / 跨域 redirect / OAuth callback 參數時不攔截，交給 auth-ui.js 處理；其餘場景優先用 ?next= 或 sessionStorage('auth_redirect')，預設 /dashboard.html -->
+  <script>(function(){
+    try{
+      var p = new URLSearchParams(location.search);
+      if (p.get('pkce_key') || p.get('redirect') || p.get('access_token') || p.get('code')) return;
+      var tok = null;
+      try { tok = sessionStorage.getItem('access_token'); } catch(_) {}
+      if (!tok) return;
+      var target = null;
+      try { target = sessionStorage.getItem('auth_redirect'); } catch(_) {}
+      if (!target) {
+        var n = p.get('next');
+        if (n && n.charAt(0)==='/' && n.charAt(1)!=='/') target = n;
+      }
+      target = target || '/dashboard.html';
+      try { sessionStorage.removeItem('auth_redirect'); } catch(_) {}
+      location.replace(target);
+    }catch(_){}
+  })();</script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
