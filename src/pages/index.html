@@ -929,7 +929,7 @@
   </div>
 
   <!-- Mobile topbar -->
-  {{> topbar-mobile pathPrefix="/" brandHref="#hero" loginHref="/login.html" loginLabel="會員登入" useInlineHandlers=true}}
+  {{> topbar-mobile pathPrefix="/" brandHref="#hero" loginHref="/login.html" loginLabel="會員登入"}}
 
   <!-- Mobile overlay (bottom sheet) -->
   <div class="m-overlay" id="m-overlay" onclick="handleOverlayClick(event)">
@@ -1005,6 +1005,8 @@
       updateCanvasColors()
     }
     syncThemeIcons()
+    document.getElementById('theme-toggle-btn')?.addEventListener('click', toggleTheme)
+    document.getElementById('m-theme-btn')?.addEventListener('click', toggleTheme)
 
     // ── i18n ──────────────────────────────────────────────
     const LANGS_I18N = {
