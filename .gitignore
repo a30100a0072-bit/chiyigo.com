@@ -4,3 +4,6 @@ node_modules/
 dist/
 *.local
 .claude/
+
+# Build output (組裝自 src/pages + src/partials；原始檔在 src/)
+public/*.html
