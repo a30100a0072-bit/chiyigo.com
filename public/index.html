@@ -1171,6 +1171,9 @@
     function handleOverlayClick(e) {
       if (e.target === document.getElementById('m-overlay')) closeOverlay()
     }
+    document.getElementById('m-ham-btn')?.addEventListener('click', toggleOverlay)
+    document.getElementById('m-overlay')?.addEventListener('click', handleOverlayClick)
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('m-overlay')?.classList.contains('is-open')) closeOverlay() })
 
     // ── Drag-to-close (bottom sheet swipe down) ──────────
     ;(function () {
