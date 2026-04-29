@@ -220,9 +220,11 @@
     .portfolio-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.25rem}
 
     /* Cards */
-    .p-card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;overflow:hidden;opacity:0;transform:translateY(12px);transition:opacity .4s ease,transform .4s ease,border-color .2s ease,box-shadow .2s ease}
+    .p-card{background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;overflow:hidden;opacity:0;transform:translateY(12px);transition:opacity .4s ease,transform .4s ease,border-color .2s ease,box-shadow .2s ease;display:flex;flex-direction:column}
     .p-card.revealed{opacity:1;transform:translateY(0)}
     .p-card:hover{border-color:var(--border-bright);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
+    a.p-card{color:inherit;text-decoration:none;cursor:pointer}
+    a.p-card:hover .p-card-img img{transform:scale(1.04)}
     .p-card-img{aspect-ratio:16/9;background:var(--bg);overflow:hidden;position:relative}
     .p-card-img img{width:100%;height:100%;object-fit:cover;transition:transform .5s ease;display:block}
     .p-card:hover .p-card-img img{transform:scale(1.04)}
@@ -446,29 +448,26 @@
       const imgInner = item.image_url
         ? `<img src="${esc(item.image_url)}" alt="${esc(item.title)}" loading="lazy">`
         : `<div class="p-card-placeholder">${esc((item.category||'?')[0])}</div>`;
-      // 圖片點擊連結至專案
-      const imgWrapper = item.link_url
-        ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card-img">${imgInner}</a>`
-        : `<div class="p-card-img">${imgInner}</div>`;
       const tags = item.tags
         ? item.tags.split(',').map(t => `<span class="p-card-tag">${esc(t.trim())}</span>`).join('')
         : '';
       const linkLabel = (LANGS[curLang] || LANGS['zh-TW']).view_project || '查看專案 →';
-      const link = item.link_url
-        ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card-link">${linkLabel}</a>`
+      const linkText = item.link_url
+        ? `<span class="p-card-link">${linkLabel}</span>`
         : '';
       const badgeLabel = CAT_LABEL[item.category] || esc(item.category);
-      return `
-        <article class="p-card">
-          ${imgWrapper}
+      const inner = `
+          <div class="p-card-img">${imgInner}</div>
           <div class="p-card-body">
             <span class="p-card-badge">${badgeLabel}</span>
             <h3 class="p-card-title">${esc(item.title)}</h3>
             ${item.description ? `<p class="p-card-desc">${esc(item.description)}</p>` : ''}
             ${tags ? `<div class="p-card-tags">${tags}</div>` : ''}
-            ${link}
-          </div>
-        </article>`;
+            ${linkText}
+          </div>`;
+      return item.link_url
+        ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card">${inner}</a>`
+        : `<article class="p-card">${inner}</article>`;
     }
 
     function renderGrid(items) {

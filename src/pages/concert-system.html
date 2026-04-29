@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>音樂會互動系統 | CHIYIGO</title>
+  <meta name="description" content="以 NFC 手環實現全場同步互動，主持人一鍵切換模式，即時抽獎逐位揭曉、任務智慧分配，讓現場活動不只是表演，而是觀眾共同參與的體驗。" />
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://chiyigo.com/concert-system" />
+  <meta property="og:title"       content="音樂會互動系統 | CHIYIGO" />
+  <meta property="og:description" content="NFC 手環單一網址，主持人後台一鍵控制全場，即時抽獎揭曉、任務分配，無需下載 App，觀眾掃描即進入互動。" />
+  <meta property="og:image"       content="https://chiyigo.com/images/portfolio/concert.jpg" />
+  <meta name="twitter:card"       content="summary_large_image" />
+  <link rel="canonical" href="https://chiyigo.com/concert-system" />
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>
+    (function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *,*:before,*:after{box-sizing:border-box;margin:0;padding:0}
+
+    :root,.theme-light{
+      --bg:#F0F2FA;--bg-surface:#FFFFFF;--bg-elevated:#FAFAFE;
+      --bg-sidebar:#EAEBF5;--bg-titlebar:#F4F5FC;
+      --border:rgba(0,0,0,.07);--border-dim:rgba(0,0,0,.05);
+      --border-bright:rgba(0,0,0,.14);--border-mid:rgba(0,0,0,.1);
+      --text:#1A1B2E;--text-muted:rgba(26,27,46,.6);--text-dim:rgba(26,27,46,.38);
+      --accent:#6C6EE5;--accent-dim:rgba(108,110,229,.1);--accent-glow:rgba(108,110,229,.18);
+      --hover-overlay:rgba(0,0,0,.05);
+      --neural-r:108;--neural-g:110;--neural-b:229;
+      --neural-node-opacity:.22;--neural-line-opacity:.09;
+      --font-sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+      --font-display:var(--font-sans);--font-mono:"DM Mono","Courier New",monospace;
+      --font-body:var(--font-sans);
+      --max-w:1200px;--pad-x:2rem;--sidebar-w:220px;--titlebar-h:60px;
+    }
+    .theme-dark{
+      --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
+      --bg-sidebar:#0F1424;--bg-titlebar:#0D1120;
+      --border:rgba(255,255,255,.08);--border-dim:rgba(255,255,255,.05);
+      --border-bright:rgba(255,255,255,.14);--border-mid:rgba(255,255,255,.1);
+      --text:#F3F4F6;--text-muted:rgba(243,244,246,.62);--text-dim:rgba(243,244,246,.36);
+      --accent:#7B6CFF;--accent-dim:rgba(123,108,255,.12);--accent-glow:rgba(123,108,255,.25);
+      --hover-overlay:rgba(255,255,255,.06);
+      --neural-r:123;--neural-g:108;--neural-b:255;
+      --neural-node-opacity:.4;--neural-line-opacity:.15;
+    }
+    @media(max-width:768px){:root{--sidebar-w:0px;--titlebar-h:0px;--pad-x:1.25rem}}
+
+    html{font-family:var(--font-sans);background-color:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background-color .3s ease,color .3s ease}
+    body{min-height:100vh;overflow:hidden}
+    @media(max-width:768px){body{overflow:auto}}
+    a{color:inherit;text-decoration:none}
+    ul{list-style:none}
+    img{max-width:100%;height:auto;display:block}
+
+    .logo-dark,.theme-dark .logo-light{display:none!important}
+    .theme-dark .logo-dark{display:block!important}
+
+    [data-reveal]{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+    [data-reveal].revealed{opacity:1;transform:translateY(0)}
+    [data-reveal-delay="1"]{transition-delay:.08s}
+    [data-reveal-delay="2"]{transition-delay:.16s}
+
+    #neural-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+    /* ── Layout ── */
+    .dash-wrap{position:fixed;inset:0;z-index:1;display:grid;grid-template-columns:var(--sidebar-w) 1fr;background:var(--bg);overflow:hidden}
+    .dash-sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border-dim);display:flex;flex-direction:column;overflow:hidden;height:100vh}
+    .dash-main{display:flex;flex-direction:column;height:100vh;overflow:hidden;min-width:0}
+    .dash-content{flex:1;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth;min-height:0}
+    .dash-content::-webkit-scrollbar{width:4px}
+    .dash-content::-webkit-scrollbar-track{background:transparent}
+    .dash-content::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px}
+    .dash-content::-webkit-scrollbar-thumb:hover{background:var(--border-bright)}
+
+    /* ── Sidebar ── */
+    .sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0;text-decoration:none}
+    .sb-logo-img{height:76px;width:auto;display:block;flex-shrink:0}
+    .sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .sb-nav::-webkit-scrollbar{display:none}
+    .sb-item{display:flex;align-items:center;gap:.7rem;padding:.6rem .85rem;border-radius:10px;font-family:var(--font-body);font-size:.875rem;font-weight:400;color:var(--text-muted);text-decoration:none;transition:background .18s ease,color .18s ease}
+    .sb-item:hover{background:#6c6ee512;color:var(--text)}
+    .sb-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500}
+    .sb-item.active .sb-icon{color:var(--accent);opacity:1}
+    .sb-icon{width:16px;height:16px;flex-shrink:0;color:var(--text-dim);opacity:.7;transition:color .18s ease,opacity .18s ease}
+    .sb-item:hover .sb-icon{color:var(--text-muted);opacity:.9}
+    .sb-label{line-height:1;white-space:nowrap}
+    .sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--border-dim)}
+    .sb-cta{background:linear-gradient(140deg,#6c6ee51f,#5b8bf514);border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem;position:relative;overflow:hidden}
+    .sb-cta:before{content:"";position:absolute;top:-12px;right:-12px;width:60px;height:60px;border-radius:50%;background:#6c6ee514;pointer-events:none}
+    .sb-cta-icon{width:28px;height:28px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:.65rem}
+    .sb-cta-icon svg{width:16px;height:16px}
+    .sb-cta-q{font-family:var(--font-body);font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:.3rem;line-height:1.3}
+    .sb-cta-desc{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:.75rem}
+    .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
+    .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .sb-footer{display:flex;align-items:center;gap:.5rem}
+    .sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
+    .sb-login-link:hover{color:var(--accent-primary);background:var(--bg-elevated)}
+    .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
+    .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
+    .m-login-btn:hover{color:var(--text-primary)}
+    .m-login-btn svg{width:17px;height:17px}
+    .sb-foot-icons{display:flex;gap:.25rem}
+    .sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
+    .sb-foot-btn svg{width:14px;height:14px}
+    .sb-copyright{font-family:var(--font-mono);font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
+
+    /* ── Mobile topbar ── */
+    .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim);transition:background .3s ease,border-color .3s ease}
+    .m-tb-inner{display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:52px}
+    .m-tb-brand{display:flex;align-items:center;gap:.55rem;text-decoration:none}
+    .m-logo-img{height:68px;width:auto;display:block;flex-shrink:0}
+    .m-tb-right{display:flex;align-items:center;gap:.85rem}
+    .m-theme-btn{width:36px;height:36px;border:1px solid rgba(108,110,229,.14);background:#6c6ee512;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#6c6ee5;flex-shrink:0;transition:background .2s ease,border-color .2s ease}
+    .m-theme-btn svg{width:14px;height:14px;display:block}
+    .theme-dark .m-theme-btn{border-color:#ffffff4d;background:#ffffff0f;color:#fff}
+    .m-ham-btn{display:flex;flex-direction:column;justify-content:center;gap:6px;width:36px;height:36px;border:1px solid rgba(108,110,229,.22);background:#6c6ee51a;border-radius:9px;cursor:pointer;padding:0 10px;transition:background .2s ease,border-color .2s ease;flex-shrink:0}
+    .m-ham-line{display:block;width:100%;height:1.5px;background:#6c6ee5;border-radius:2px;transform-origin:center;transition:transform .32s cubic-bezier(.23,1,.32,1)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(1){transform:translateY(3.75px) rotate(45deg)}
+    .m-ham-btn.is-open .m-ham-line:nth-child(2){transform:translateY(-3.75px) rotate(-45deg)}
+    .theme-dark .m-ham-btn{border-color:#ffffff4d;background:#ffffff0f}
+    .theme-dark .m-ham-line{background:#fff}
+
+    /* ── Mobile overlay ── */
+    .m-overlay{display:none;position:fixed;inset:0;z-index:49;background:#0a0c1c00;transition:background .35s ease;pointer-events:none}
+    .m-overlay.is-open{background:#0a0c1c52;pointer-events:auto}
+    .m-ov-wrap{position:absolute;bottom:0;left:0;right:0;background:var(--bg-surface);border-radius:22px 22px 0 0;border:1px solid var(--border);border-bottom:none;box-shadow:0 -4px 24px #6c6ee514;display:flex;flex-direction:column;max-height:88svh;overflow:hidden;transform:translateY(100%);transition:transform .42s cubic-bezier(.22,1,.36,1)}
+    .m-overlay.is-open .m-ov-wrap{transform:translateY(0)}
+    .m-ov-handle{width:36px;height:4px;background:#6c6ee52e;border-radius:100px;margin:12px auto 0;flex-shrink:0}
+    .m-ov-head{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.4rem .65rem;flex-shrink:0}
+    .m-ov-brand{display:flex;align-items:center;gap:.55rem}
+    .m-ov-logo-img{height:72px;width:auto;display:block}
+    .m-ov-status{display:flex;align-items:center;gap:.4rem;background:#22a86517;border:1px solid rgba(34,168,101,.18);border-radius:100px;padding:.22rem .65rem}
+    .m-ov-status-dot{width:5px;height:5px;border-radius:50%;background:#22a865;flex-shrink:0;animation:dot-pulse 2.5s ease-in-out infinite}
+    .m-ov-status-txt{font-family:var(--font-sans);font-size:.68rem;font-weight:500;color:#22a865}
+    @keyframes dot-pulse{0%,to{opacity:1}50%{opacity:.45}}
+    .m-ov-nav{flex:1;overflow-y:auto;padding:.35rem .75rem .5rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
+    .m-ov-nav::-webkit-scrollbar{display:none}
+    .m-ov-item{display:flex;align-items:center;gap:.75rem;padding:.72rem .85rem;border-radius:12px;text-decoration:none;background:transparent;border:1px solid transparent;opacity:0;transform:translateY(10px);transition:opacity .32s cubic-bezier(.22,1,.36,1),transform .32s cubic-bezier(.22,1,.36,1),background .18s ease,border-color .18s ease;transition-delay:calc(var(--i,0)*.04s + .12s)}
+    .m-overlay.is-open .m-ov-item{opacity:1;transform:translateY(0)}
+    .m-ov-item:active{background:#6c6ee50f;transform:scale(.98)}
+    .m-ov-item.active{background:var(--accent-dim);border-color:#6c6ee524}
+    .m-ov-icon-wrap{width:32px;height:32px;border-radius:9px;background:var(--hover-overlay);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+    .m-ov-item.active .m-ov-icon-wrap{background:#6c6ee51f;color:var(--accent)}
+    .m-ov-icon{width:15px;height:15px}
+    .m-ov-label{flex:1;font-family:var(--font-sans);font-size:.9rem;font-weight:400;color:var(--text-muted);line-height:1;transition:color .18s ease}
+    .m-ov-item.active .m-ov-label{color:var(--accent);font-weight:500}
+    .m-ov-chevron{width:6px;height:10px;color:var(--text-dim);flex-shrink:0;opacity:.5}
+    .m-ov-cta{flex-shrink:0;padding:.75rem 1.2rem calc(1.25rem + env(safe-area-inset-bottom));border-top:1px solid rgba(108,110,229,.07);opacity:0;transform:translateY(8px);transition:opacity .32s ease .42s,transform .32s ease .42s}
+    .m-overlay.is-open .m-ov-cta{opacity:1;transform:translateY(0)}
+    .m-ov-cta-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:.78rem 1rem;background:linear-gradient(135deg,#7370ec,#5b8bf5);color:#fff;font-family:var(--font-sans);font-size:.9rem;font-weight:600;border-radius:12px;text-decoration:none;box-shadow:0 4px 16px #6c6ee547;transition:filter .18s ease,transform .18s ease}
+    .m-ov-cta-btn:active{filter:brightness(.96);transform:scale(.98)}
+
+    @media(max-width:768px){
+      .dash-wrap{position:relative;display:block;height:auto;min-height:100svh;overflow:visible}
+      .dash-sidebar{display:none}
+      .dash-main{display:block;height:auto;overflow:visible}
+      .dash-content{overflow:visible;height:auto;background:var(--bg);padding-top:52px;padding-bottom:2rem;min-height:100svh}
+      .m-topbar,.m-overlay{display:block}
+    }
+
+    /* ── Footer ── */
+    .footer{border-top:1px solid var(--border-dim);background:var(--bg-titlebar)}
+    .footer-inner{max-width:var(--max-w);margin:0 auto;padding:2.5rem var(--pad-x);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:2rem}
+    .footer .logo{height:72px;width:auto;display:block;margin-bottom:.45rem;opacity:.7}
+    .footer .tagline{font-size:.76rem;color:var(--text-dim);max-width:26rem;line-height:1.65}
+    .footer-links{display:flex;gap:2rem}
+    .footer-links a{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);transition:color .2s ease}
+    .footer-links a:hover{color:var(--text-muted)}
+    .footer-contact{display:flex;flex-direction:column;gap:.5rem}
+    .footer-contact-title{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:.2rem}
+    .footer-contact-item{display:flex;align-items:center;gap:.45rem;font-size:.76rem;color:var(--text-dim);transition:color .2s ease}
+    .footer-contact-item:hover{color:var(--text-muted)}
+    .footer-contact-item svg{width:13px;height:13px;flex-shrink:0}
+    .copy{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);width:100%;opacity:.6}
+
+    /* ── Lang dropdown ── */
+    .sb-footer{position:relative}
+    .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
+    .lang-dropdown.open{display:flex}
+    .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
+    .lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
+    .lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
+    .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
+    .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
+    .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
+    .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+    .m-top-lang-drop{position:fixed;top:58px;right:1.25rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:60;min-width:128px}
+    .m-top-lang-drop.open{display:flex}
+
+    /* ── Base page layout ── */
+    .page-wrap{padding:clamp(2.5rem,5vw,4rem) 2rem;max-width:var(--max-w);margin:0 auto}
+    .page-h1{font-family:var(--font-sans);font-size:clamp(1.9rem,4.5vw,3.2rem);font-weight:700;line-height:1.15;color:var(--text);margin-bottom:1rem;letter-spacing:-.02em}
+    .page-desc{font-size:.95rem;color:var(--text-muted);line-height:1.8;margin-bottom:2rem}
+    section[id]{scroll-margin-top:6rem}
+
+    /* ══════════════════════════════════════════════════
+       CONCERT SYSTEM PAGE — 頁面專用樣式（前綴 ms-）
+       ══════════════════════════════════════════════════ */
+
+    /* Badge */
+    .ms-badge{display:inline-flex;align-items:center;gap:.45rem;background:var(--accent-dim);border:1px solid rgba(108,110,229,.2);color:var(--accent);font-size:.7rem;font-weight:500;padding:.28rem .85rem;border-radius:100px;margin-bottom:1.5rem;font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase}
+
+    /* Buttons */
+    .ms-btn-p{display:inline-flex;align-items:center;justify-content:center;padding:.7rem 1.6rem;background:var(--accent);color:#fff;font-family:var(--font-sans);font-size:.88rem;font-weight:600;border-radius:10px;text-decoration:none;transition:filter .18s ease,transform .18s ease;white-space:nowrap}
+    .ms-btn-p:hover{filter:brightness(1.1);transform:translateY(-1px)}
+    .ms-btn-s{display:inline-flex;align-items:center;justify-content:center;padding:.7rem 1.6rem;background:transparent;color:var(--text-muted);font-family:var(--font-sans);font-size:.88rem;font-weight:500;border-radius:10px;border:1px solid var(--border-bright);text-decoration:none;transition:background .18s ease,color .18s ease;white-space:nowrap}
+    .ms-btn-s:hover{background:var(--hover-overlay);color:var(--text)}
+    .ms-hero-actions{display:flex;gap:.85rem;flex-wrap:wrap;margin-top:2rem}
+
+    /* Hero image / placeholder */
+    .ms-hero-img{margin-top:3rem;border-radius:16px;overflow:hidden;border:1px solid var(--border)}
+    .ms-placeholder{width:100%;background:var(--bg-elevated);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:var(--text-dim);font-size:.72rem;font-family:var(--font-mono);letter-spacing:.06em;border-radius:inherit;border:1.5px dashed var(--border-bright)}
+    .ms-placeholder-hero{min-height:380px}
+    .ms-placeholder-feat{min-height:200px}
+    .ms-placeholder-label{font-size:.65rem;color:var(--text-dim);opacity:.6}
+
+    /* Section common */
+    .ms-sec{padding:4rem 0 0}
+    .ms-label{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:.55rem;font-weight:500}
+    .ms-h2{font-size:clamp(1.45rem,3.2vw,2rem);font-weight:700;color:var(--text);line-height:1.2;margin-bottom:.8rem;letter-spacing:-.02em}
+    .ms-lead{font-size:.9rem;color:var(--text-muted);line-height:1.8;max-width:560px;margin-bottom:2.5rem}
+
+    /* Pain grid */
+    .ms-pain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin-top:2rem}
+    .ms-pain-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:1.5rem;transition:border-color .18s ease}
+    .ms-pain-card:hover{border-color:var(--border-bright)}
+    .ms-pain-icon{width:36px;height:36px;border-radius:10px;background:var(--bg-elevated);border:1px solid var(--border-dim);display:flex;align-items:center;justify-content:center;color:var(--text-dim);margin-bottom:1rem;flex-shrink:0}
+    .ms-pain-icon svg{width:17px;height:17px}
+    .ms-pain-title{font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:.4rem}
+    .ms-pain-text{font-size:.81rem;color:var(--text-muted);line-height:1.7}
+
+    /* Solution grid */
+    .ms-sol-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2rem}
+    .ms-sol-item{display:flex;gap:1rem;align-items:flex-start}
+    .ms-sol-num{width:30px;height:30px;min-width:30px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:.82rem;display:flex;align-items:center;justify-content:center;margin-top:.1rem}
+    .ms-sol-title{font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:.35rem}
+    .ms-sol-text{font-size:.81rem;color:var(--text-muted);line-height:1.7}
+
+    /* Feature grid */
+    .ms-feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem;margin-top:2rem}
+    .ms-feat-card{background:var(--bg-surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:border-color .18s ease,transform .2s ease;display:flex;flex-direction:column}
+    .ms-feat-card:hover{border-color:var(--border-bright);transform:translateY(-2px)}
+    .ms-feat-img-wrap{border-bottom:1px solid var(--border-dim);aspect-ratio:16/9;overflow:hidden}
+    .ms-feat-img-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    .ms-feat-body{padding:1.25rem;flex:1}
+    .ms-feat-title{font-size:.9rem;font-weight:600;color:var(--text);margin-bottom:.4rem}
+    .ms-feat-text{font-size:.8rem;color:var(--text-muted);line-height:1.7}
+
+
+    /* Steps */
+    .ms-steps{display:flex;flex-direction:column;margin-top:2rem}
+    .ms-step{display:flex;gap:1.5rem;align-items:flex-start;padding:1.5rem 0;border-bottom:1px solid var(--border-dim)}
+    .ms-step:last-child{border-bottom:none}
+    .ms-step-num{width:40px;min-width:40px;height:40px;border-radius:12px;background:var(--accent);color:#fff;font-weight:700;font-size:.95rem;display:flex;align-items:center;justify-content:center}
+    .ms-step-title{font-size:.95rem;font-weight:600;color:var(--text);margin-bottom:.3rem}
+    .ms-step-text{font-size:.82rem;color:var(--text-muted);line-height:1.7}
+
+    /* Trust grid */
+    .ms-trust-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;margin-top:2rem}
+    .ms-trust-item{display:flex;gap:.9rem;align-items:flex-start;padding:1.25rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px}
+    .ms-trust-icon{width:36px;min-width:36px;height:36px;background:var(--accent-dim);border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+    .ms-trust-icon svg{width:17px;height:17px}
+    .ms-trust-title{font-size:.875rem;font-weight:600;color:var(--text);margin-bottom:.25rem}
+    .ms-trust-text{font-size:.78rem;color:var(--text-muted);line-height:1.65}
+
+    /* CTA block */
+    .ms-cta{margin-top:4rem;background:linear-gradient(135deg,var(--accent-dim),var(--bg-elevated));border:1px solid rgba(108,110,229,.18);border-radius:20px;padding:3.5rem 2.5rem;text-align:center}
+    .ms-cta-title{font-size:clamp(1.4rem,3vw,1.9rem);font-weight:700;color:var(--text);margin-bottom:.75rem;letter-spacing:-.02em}
+    .ms-cta-text{font-size:.92rem;color:var(--text-muted);margin-bottom:2rem;line-height:1.8;max-width:460px;margin-left:auto;margin-right:auto}
+    .ms-cta-actions{display:flex;gap:.85rem;justify-content:center;flex-wrap:wrap}
+
+    /* Responsive */
+    @media(max-width:768px){
+      .ms-sol-grid{grid-template-columns:1fr}
+      .ms-feat-grid{grid-template-columns:1fr}
+      .ms-hero-actions{flex-direction:column;align-items:flex-start}
+      .ms-cta{padding:2rem 1.25rem}
+      .ms-cta-actions{flex-direction:column;align-items:center}
+      .ms-cta-text{margin-bottom:1.5rem}
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+
+  <div class="dash-wrap" id="dash-wrap">
+
+    {{> sidebar-public-other active="portfolio"}}
+
+    <div class="dash-main">
+      <main class="dash-content" id="os-content">
+
+        <div class="page-wrap">
+
+          <!-- ── 1. Hero ── -->
+          <section id="hero" data-reveal>
+            <div class="ms-badge">系統案例 · 活動互動</div>
+            <h1 class="page-h1">把音樂會現場，<br>變成觀眾的互動舞台</h1>
+            <p class="page-desc">觀眾入場配戴 NFC 手環，主持人後台一鍵切換互動模式，全場即時抽獎逐位揭曉、任務智慧分配。不需下載 App，不需操作手冊，掃描手環就進場，現場氣氛由你掌控。</p>
+            <div class="ms-hero-actions">
+              <a href="requisition.html" class="ms-btn-p">為您的活動規劃互動方案</a>
+              <a href="#features" class="ms-btn-s">查看功能</a>
+            </div>
+            <div class="ms-hero-img">
+              <img src="/images/portfolio/concert/hero-concert-mockup.jpg" alt="音樂會互動系統 — 觀眾端手機畫面 mockup" />
+            </div>
+          </section>
+
+          <!-- ── 2. 痛點 ── -->
+          <section id="pain" class="ms-sec" data-reveal>
+            <p class="ms-label">活動主辦常見困擾</p>
+            <h2 class="ms-h2">現場互動，說難不難，但容易出亂子</h2>
+            <div class="ms-pain-grid">
+
+              <div class="ms-pain-card">
+                <div class="ms-pain-icon">
+                  <svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="8.5" cy="8.5" r="6" fill="none"/>
+                    <path d="M8.5 5.5v3l2 1.5"/>
+                  </svg>
+                </div>
+                <p class="ms-pain-title">互動橋段難以協調</p>
+                <p class="ms-pain-text">主持人要同時顧台上節目、呼叫工作人員、確認觀眾反應，現場一忙起來互動橋段很容易走樣。</p>
+              </div>
+
+              <div class="ms-pain-card">
+                <div class="ms-pain-icon">
+                  <svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2.5" y="3" width="12" height="11" rx="1.5" fill="none"/>
+                    <path d="M5.5 7l2 2 4-4"/>
+                  </svg>
+                </div>
+                <p class="ms-pain-title">抽獎缺乏公信力</p>
+                <p class="ms-pain-text">現場抽號碼牌或舉手投票，容易被質疑不公平，觀眾對結果缺乏信任感，現場反應冷淡。</p>
+              </div>
+
+              <div class="ms-pain-card">
+                <div class="ms-pain-icon">
+                  <svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 8.5h11M8.5 3v11"/>
+                    <circle cx="8.5" cy="8.5" r="5.5" fill="none"/>
+                  </svg>
+                </div>
+                <p class="ms-pain-title">任務分配耗費人力</p>
+                <p class="ms-pain-text">需要把觀眾分成不同任務組，靠工作人員口頭通知費時費力，觀眾也常搞不清楚自己要做什麼。</p>
+              </div>
+
+              <div class="ms-pain-card">
+                <div class="ms-pain-icon">
+                  <svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="8.5" cy="5.5" r="2.2" fill="none"/>
+                    <path d="M2.5 14.5c0-2.8 2.7-5 6-5s6 2.2 6 5"/>
+                    <path d="M12 2l1.5 1.5M13.5 2L12 3.5"/>
+                  </svg>
+                </div>
+                <p class="ms-pain-title">觀眾不知道該做什麼</p>
+                <p class="ms-pain-text">主持人在台上說，觀眾在台下聽不清楚或忘記，互動指令無法精準傳達到每一位觀眾手中。</p>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- ── 3. 解決方案 ── -->
+          <section id="solution" class="ms-sec" data-reveal>
+            <p class="ms-label">我們的做法</p>
+            <h2 class="ms-h2">一套系統，主持人一鍵掌控全場</h2>
+            <p class="ms-lead">把互動指令直接推送到每一位觀眾的手機上，主持人不用開口，觀眾已知道該做什麼。</p>
+            <div class="ms-sol-grid">
+
+              <div class="ms-sol-item">
+                <div class="ms-sol-num">1</div>
+                <div>
+                  <p class="ms-sol-title">手環取代傳統抽籤道具</p>
+                  <p class="ms-sol-text">觀眾入場時配戴 NFC 手環，感應後自動完成報到並進入互動系統，不需輸入資料、不需下載 App。</p>
+                </div>
+              </div>
+
+              <div class="ms-sol-item">
+                <div class="ms-sol-num">2</div>
+                <div>
+                  <p class="ms-sol-title">後台切換即全場同步</p>
+                  <p class="ms-sol-text">主持人後台一鍵切換互動模式，所有觀眾的手機畫面幾秒內同步變換，現場節奏完全在主持人手上。</p>
+                </div>
+              </div>
+
+              <div class="ms-sol-item">
+                <div class="ms-sol-num">3</div>
+                <div>
+                  <p class="ms-sol-title">逐位揭曉製造現場張力</p>
+                  <p class="ms-sol-text">抽獎結果由主持人逐一揭曉，中獎者手機才亮起，第三位揭曉瞬間全場同步顯示結果，驚喜感最大化。</p>
+                </div>
+              </div>
+
+              <div class="ms-sol-item">
+                <div class="ms-sol-num">4</div>
+                <div>
+                  <p class="ms-sol-title">任務指令直達觀眾手機</p>
+                  <p class="ms-sol-text">系統自動按比例分配三種任務，每位觀眾的手機直接顯示專屬指令，不再靠工作人員逐一通知。</p>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- ── 4. 核心功能 ── -->
+          <section id="features" class="ms-sec" data-reveal>
+            <p class="ms-label">系統功能</p>
+            <h2 class="ms-h2">四個互動模式，現場流程全覆蓋</h2>
+            <div class="ms-feat-grid">
+
+              <div class="ms-feat-card" data-reveal data-reveal-delay="1">
+                <div class="ms-feat-img-wrap">
+                  <img src="/images/portfolio/concert/nfc-mode1.jpg" alt="NFC 手環感應後觀眾端畫面" />
+                </div>
+                <div class="ms-feat-body">
+                  <p class="ms-feat-title">NFC 手環走到底</p>
+                  <p class="ms-feat-text">手環不只可以報到，觀眾感應後還可以進入互動系統。主持人切換模式，手機畫面跟著變；不需換連結，不需重新感應。</p>
+                </div>
+              </div>
+
+              <div class="ms-feat-card" data-reveal data-reveal-delay="2">
+                <div class="ms-feat-img-wrap">
+                  <img src="/images/portfolio/concert/demo-lottery-reveal.gif" alt="即時抽獎逐位揭曉 Demo — 左側主持人後台操作，右側觀眾端即時同步" />
+                </div>
+                <div class="ms-feat-body">
+                  <p class="ms-feat-title">即時抽獎逐位揭曉</p>
+                  <p class="ms-feat-text">全場抽出 3 位，主持人按下揭曉後中獎者手機即時顯示，第三位揭曉瞬間其餘所有人同步看到結果，抽獎過程完全透明、現場反應最強烈。</p>
+                </div>
+              </div>
+
+              <div class="ms-feat-card" data-reveal data-reveal-delay="1">
+                <div class="ms-feat-img-wrap">
+                  <img src="/images/portfolio/concert/task-modes.jpg" alt="任務三態畫面 — 節奏共鳴、星光共鳴、心聲共鳴" />
+                </div>
+                <div class="ms-feat-body">
+                  <p class="ms-feat-title">任務智慧分配</p>
+                  <p class="ms-feat-text">主持人一鍵按下，系統自動洗牌分配三種任務：打拍子、搖手電筒、傳遞快樂。每位觀眾手機直接顯示專屬指令，不再靠廣播通知。</p>
+                </div>
+              </div>
+
+              <div class="ms-feat-card" data-reveal data-reveal-delay="2">
+                <div class="ms-feat-img-wrap">
+                  <img src="/images/portfolio/concert/admin-dashboard.jpg" alt="主持人後台操作介面 — 抽獎 Tab 顯示三位中獎者名單" />
+                </div>
+                <div class="ms-feat-body">
+                  <p class="ms-feat-title">主持人後台遙控器</p>
+                  <p class="ms-feat-text">完全針對 iPhone 單手操作設計，大按鈕、Tab 切換、重要操作二次確認。抽獎可逐位揭曉、單獨重抽，任務可一鍵重新分配，現場突發狀況都能應對。</p>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- ── 5. 使用流程 ── -->
+          <section id="process" class="ms-sec" data-reveal>
+            <p class="ms-label">導入步驟</p>
+            <h2 class="ms-h2">四步驟，活動互動就緒</h2>
+            <p class="ms-lead">從名單建立到活動當天，整個準備流程清楚分工，不需現場臨時應變。</p>
+            <div class="ms-steps">
+
+              <div class="ms-step">
+                <div class="ms-step-num">1</div>
+                <div>
+                  <p class="ms-step-title">建立觀眾名單，燒錄 NFC 手環</p>
+                  <p class="ms-step-text">上傳觀眾名單後，系統自動為每位觀眾產生唯一識別碼，並寫入 NFC 手環網址。每條手環對應一個座位，方便現場對號入座。</p>
+                </div>
+              </div>
+
+              <div class="ms-step">
+                <div class="ms-step-num">2</div>
+                <div>
+                  <p class="ms-step-title">入場時發放手環，感應即報到</p>
+                  <p class="ms-step-text">觀眾入場領取手環，感應後自動完成報到並進入系統待機畫面，顯示節目單導聆。整個流程不需工作人員逐一操作，一人即可顧好整個入場動線。</p>
+                </div>
+              </div>
+
+              <div class="ms-step">
+                <div class="ms-step-num">3</div>
+                <div>
+                  <p class="ms-step-title">活動進行中，主持人一鍵切換模式</p>
+                  <p class="ms-step-text">到抽獎環節，後台切換至「抽獎模式」，全場手機畫面同步變換。抽出名單後，主持人逐位揭曉，現場製造最大張力。到任務環節，一鍵分配，每位觀眾手機即時顯示專屬任務。</p>
+                </div>
+              </div>
+
+              <div class="ms-step">
+                <div class="ms-step-num">4</div>
+                <div>
+                  <p class="ms-step-title">活動結束，中獎紀錄自動歸檔</p>
+                  <p class="ms-step-text">抽獎結果自動同步寫回 Google 試算表，中獎者座位與識別碼完整留存，方便事後核對與禮品發送，不需手動整理。</p>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- ── 6. 技術信任 ── -->
+          <section id="trust" class="ms-sec" data-reveal>
+            <p class="ms-label">為什麼可以信任這套系統</p>
+            <h2 class="ms-h2">現場活動，容不下任何意外</h2>
+            <div class="ms-trust-grid">
+
+              <div class="ms-trust-item">
+                <div class="ms-trust-icon">
+                  <svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2.5" y="7.5" width="12" height="7" rx="1.5" fill="none"/>
+                    <path d="M5.5 7.5V5.5a3 3 0 0 1 6 0v2"/>
+                  </svg>
+                </div>
+                <div>
+                  <p class="ms-trust-title">觀眾無需下載 App</p>
+                  <p class="ms-trust-text">感應手環即開啟網頁，Android 與 iPhone 均支援，不受裝置限制，不怕觀眾說「我不會下載」。</p>
+                </div>
+              </div>
+
+              <div class="ms-trust-item">
+                <div class="ms-trust-icon">
+                  <svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="8.5" cy="8.5" r="6" fill="none"/>
+                    <path d="M8.5 5v3.5l2.5 1.5"/>
+                  </svg>
+                </div>
+                <div>
+                  <p class="ms-trust-title">3 秒內全場畫面同步</p>
+                  <p class="ms-trust-text">系統採用動態輪詢策略，互動模式下 3 秒更新一次，確保主持人按下去的那一刻，全場觀眾幾乎同時看到畫面變化。</p>
+                </div>
+              </div>
+
+              <div class="ms-trust-item">
+                <div class="ms-trust-icon">
+                  <svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8.5 2L15 5v4c0 3.5-2.5 6-6.5 7C4 15 1.5 12.5 1.5 9V5z" fill="none"/>
+                    <path d="M5.5 8.5l2 2 3.5-3.5"/>
+                  </svg>
+                </div>
+                <div>
+                  <p class="ms-trust-title">支援千人同時在線</p>
+                  <p class="ms-trust-text">後端架設在 Cloudflare 全球邊緣網路，天生支援高並發，千人同時輪詢狀態也不卡頓。</p>
+                </div>
+              </div>
+
+              <div class="ms-trust-item">
+                <div class="ms-trust-icon">
+                  <svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="2" width="13" height="13" rx="2" fill="none"/>
+                    <path d="M5.5 8.5l2 2 4-4"/>
+                  </svg>
+                </div>
+                <div>
+                  <p class="ms-trust-title">後台防呆，現場不誤觸</p>
+                  <p class="ms-trust-text">模式切換有二次確認彈窗，重要操作需長按確認，讓主持人在台上緊張操作時也不怕手殘按錯。</p>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- ── 7. CTA ── -->
+          <section id="contact" class="ms-sec" data-reveal>
+            <div class="ms-cta">
+              <h2 class="ms-cta-title">想為您的活動加入互動體驗？</h2>
+              <p class="ms-cta-text">告訴我們您的活動規模與互動需求，我們提供客製化評估，從場景設計到系統部署全程支援。</p>
+              <div class="ms-cta-actions">
+                <a href="requisition.html" class="ms-btn-p">立即諮詢</a>
+                <a href="portfolio.html" class="ms-btn-s">查看更多案例</a>
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+        <footer class="footer">
+          <div class="footer-inner">
+            <div>
+              <img src="images/logo-light.png" alt="CHIYIGO" class="logo logo-light">
+              <img src="images/logo-dark.png"  alt="CHIYIGO" class="logo logo-dark">
+              <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+            </div>
+            {{> footer-contact}}
+            <nav class="footer-links">
+              <a href="index.html" data-i18n="nav_home">首頁</a>
+              <a href="portfolio.html" data-i18n="nav_portfolio">案例作品</a>
+              <a href="about.html" data-i18n="nav_about">關於我們</a>
+              <a href="requisition.html" data-i18n="nav_contact">接案諮詢</a>
+            </nav>
+            <p class="copy">© 2026 CHIYIGO</p>
+          </div>
+        </footer>
+
+      </main>
+    </div>
+  </div>
+
+  {{> topbar-mobile brandHref="index.html" loginHref="/login.html" loginLabel="會員登入"}}
+
+  <div class="m-overlay" id="m-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="主選單">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle" aria-hidden="true"></div>
+      <div class="m-ov-head">
+        <div class="m-ov-brand">
+          <img src="images/logo-light.png" alt="CHIYIGO" class="m-ov-logo-img logo-light">
+          <img src="images/logo-dark.png"  alt="CHIYIGO" class="m-ov-logo-img logo-dark">
+        </div>
+        <div class="m-ov-status">
+          <span class="m-ov-status-dot" aria-hidden="true"></span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
+        </div>
+      </div>
+      <nav class="m-ov-nav" aria-label="主導覽">
+        <a href="index.html" class="m-ov-item" style="--i:0" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="index.html#services" class="m-ov-item" style="--i:1" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="index.html#process" class="m-ov-item" style="--i:2" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="portfolio.html" class="m-ov-item active" style="--i:3" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="about.html" class="m-ov-item" style="--i:4" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+        <a href="requisition.html" class="m-ov-item" style="--i:5" data-close-overlay>
+          <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+      </nav>
+      <div class="m-ov-cta">
+        <a href="requisition.html" class="m-ov-cta-btn" data-close-overlay data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Mobile overlay ──────────────────────────────────────────
+    const hamBtn  = document.getElementById('m-ham-btn');
+    const overlay = document.getElementById('m-overlay');
+    const topbar  = document.getElementById('m-topbar');
+
+    function openMenu() {
+      hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open');
+      overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden');
+      topbar?.classList.add('menu-open'); document.body.style.overflow='hidden';
+    }
+    function closeMenu() {
+      hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open');
+      overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true');
+      topbar?.classList.remove('menu-open'); document.body.style.overflow='';
+    }
+    hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
+    overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+    overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
+    document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+
+    // ── Drag-to-close ──────────────────────────────────────────
+    ;(function () {
+      const THRESHOLD = 110
+      let startY = 0, lastY = 0, active = false
+      document.addEventListener('touchstart', function (e) {
+        const ov = document.getElementById('m-overlay')
+        if (!ov || !ov.classList.contains('is-open')) return
+        const wrap = ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        const t = e.touches[0], r = wrap.getBoundingClientRect()
+        if (t.clientY < r.top || t.clientY > r.bottom) return
+        const nav = wrap.querySelector('.m-ov-nav')
+        if (nav && nav.scrollTop > 0) {
+          const nr = nav.getBoundingClientRect()
+          if (t.clientY >= nr.top && t.clientY <= nr.bottom) return
+        }
+        startY = t.clientY; lastY = startY; active = true
+        wrap.style.transition = 'none'
+      }, { passive: true })
+      document.addEventListener('touchmove', function (e) {
+        if (!active) return
+        lastY = e.touches[0].clientY
+        const dy = lastY - startY
+        if (dy <= 0) return
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) return
+        wrap.style.transform = `translateY(${dy}px)`
+        const ratio = Math.max(0, 1 - dy / wrap.offsetHeight * 1.5)
+        ov.style.background = `rgba(10,12,28,${(0.32 * ratio).toFixed(3)})`
+        e.preventDefault()
+      }, { passive: false })
+      document.addEventListener('touchend', function () {
+        if (!active) return
+        active = false
+        const ov = document.getElementById('m-overlay')
+        const wrap = ov && ov.querySelector('.m-ov-wrap')
+        if (!wrap) { startY = 0; lastY = 0; return }
+        const dy = lastY - startY
+        ov.style.background = ''
+        if (dy > THRESHOLD) {
+          wrap.style.transition = 'transform .26s ease'
+          wrap.style.transform = 'translateY(100%)'
+          setTimeout(() => {
+            wrap.style.transform = ''; wrap.style.transition = ''
+            ov.classList.remove('is-open')
+            ov.setAttribute('aria-hidden', 'true')
+            const btn = document.getElementById('m-ham-btn')
+            btn?.classList.remove('is-open')
+            btn?.setAttribute('aria-expanded', 'false')
+            document.getElementById('m-topbar')?.classList.remove('menu-open')
+            document.body.style.overflow = ''
+          }, 260)
+        } else {
+          wrap.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1)'
+          wrap.style.transform = ''
+          setTimeout(() => { wrap.style.transition = '' }, 420)
+        }
+        startY = 0; lastY = 0
+      }, { passive: true })
+    })()
+
+    // ── Theme toggle ──────────────────────────────────────────
+    const themeBtn  = document.getElementById('theme-toggle-btn');
+    const mThemeBtn = document.getElementById('m-theme-btn');
+
+    function applyTheme(dark) {
+      document.documentElement.classList.toggle('theme-dark', dark);
+      document.documentElement.classList.toggle('theme-light', !dark);
+      [themeBtn, mThemeBtn].forEach(btn => {
+        if (!btn) return;
+        const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+        if (sun)  sun.style.display  = dark ? 'none' : '';
+        if (moon) moon.style.display = dark ? ''     : 'none';
+      });
+    }
+    applyTheme(localStorage.getItem('theme') !== 'light');
+    const doToggle = () => {
+      const d = !document.documentElement.classList.contains('theme-dark');
+      localStorage.setItem('theme', d ? 'dark' : 'light');
+      applyTheme(d);
+    };
+    themeBtn?.addEventListener('click', doToggle);
+    mThemeBtn?.addEventListener('click', doToggle);
+
+    // ── i18n（共用導覽 / footer，頁面內容為固定中文）──────────
+    const LANGS_I18N = {
+      'zh-TW':{nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',tooltip_theme:'切換明暗',tooltip_lang:'切換語言',footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',footer_contact_title:'聯絡我們'},
+      'en':{nav_home:'Home',nav_services:'Services',nav_process:'Process',nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",footer_contact_title:'Contact Us'},
+      'ja':{nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',footer_contact_title:'お問い合わせ'},
+      'ko':{nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',footer_contact_title:'연락하기'},
+    };
+    let curLangI = localStorage.getItem('lang') || 'zh-TW';
+    function applyLangI(lang) {
+      if (!LANGS_I18N[lang]) return;
+      curLangI = lang;
+      const t = LANGS_I18N[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k]; });
+      const tBtn = document.getElementById('theme-toggle-btn');
+      const lBtn = document.getElementById('lang-toggle-btn');
+      if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
+      if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
+      document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+      localStorage.setItem('lang', lang);
+    }
+    const langTogBtnI = document.getElementById('lang-toggle-btn');
+    const langDropI   = document.getElementById('lang-dropdown');
+    langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
+    document.addEventListener('click', () => langDropI?.classList.remove('open'));
+    langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+    document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+    function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
+    document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
+    document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+    applyLangI(curLangI);
+
+    // ── Reveal animation ──────────────────────────────────────
+    const osContent = document.getElementById('os-content');
+    const revRoot   = window.innerWidth > 768 ? osContent : null;
+    const revObs    = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('revealed'); revObs.unobserve(e.target); } });
+    }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
+    document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
+  </script>
+
+  <script>
+    (function(){
+      const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+      const ctx=canvas.getContext('2d');if(!ctx)return;
+      let W=0,H=0,nodes=[];const DIST=155;
+      function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+      function initNodes(){const n=W<768?48:115;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
+      const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
+      let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
+      function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--neural-r').trim()||'108',g:s.getPropertyValue('--neural-g').trim()||'110',b:s.getPropertyValue('--neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--neural-line-opacity').trim()||'.09')}}
+      syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+      function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
+        for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
+        for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
+        requestAnimationFrame(draw)}
+      resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
+    })();
+  </script>
+
+</body>
+</html>
