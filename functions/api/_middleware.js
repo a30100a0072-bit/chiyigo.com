@@ -23,6 +23,20 @@ function genTraceId() {
   return Array.from(a, b => b.toString(16).padStart(2, '0')).join('')
 }
 
+// 從 Authorization: Bearer <jwt> 取出 payload.sub（不驗證簽章，只給 log 標籤用）
+// — handler 仍會用 requireAuth 做真實驗證；status 4xx 表示這個 sub 是「自稱」，
+//   2xx/3xx 表示已被驗證通過。
+function tryDecodeAuthSub(authHeader) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null
+  const parts = authHeader.slice(7).trim().split('.')
+  if (parts.length < 2) return null
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
+    const obj = JSON.parse(atob(b64))
+    return (typeof obj.sub === 'string' || typeof obj.sub === 'number') ? String(obj.sub) : null
+  } catch { return null }
+}
+
 // 把 path 中的數字 / UUID 動態段替換為 :id / :uuid，避免高基數爆炸
 function routePattern(path) {
   return path
@@ -49,8 +63,9 @@ export async function onRequest(context) {
   const traceId = request.headers.get('X-Request-Id') || genTraceId()
   const start   = Date.now()
 
-  // 給下游 handler 掛 metadata
-  data.observe = { traceId, userId: null, extras: null }
+  // 給下游 handler 掛 metadata（先用 JWT 自稱 sub 預填 userId，handler 可覆寫）
+  const claimedSub = tryDecodeAuthSub(request.headers.get('Authorization'))
+  data.observe = { traceId, userId: claimedSub, extras: null }
 
   // ── Content-Type 守門 ─────────────────────────────────────────
   if (method === 'POST'
