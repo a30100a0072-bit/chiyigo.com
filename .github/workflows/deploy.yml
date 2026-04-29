@@ -19,5 +19,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2d2c4b4ddbddec1a5d045533c01d715f
-          command: pages deploy public --project-name chiyigo-com --branch main
+          # 明示 --commit-message / --commit-hash 用 ASCII，避開 wrangler 把
+          # 中文 commit message 傳給 Cloudflare API 時編碼出錯（code 8000111）
+          command: pages deploy public --project-name chiyigo-com --branch main --commit-hash ${{ github.sha }} --commit-message "deploy ${{ github.sha }}"
 
