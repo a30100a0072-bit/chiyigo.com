@@ -648,72 +648,7 @@
       }
     }
     // ── i18n ──────────────────────────────────────────────
-    const LANGS = {
-      'zh-TW':{
-        nav_home:'首頁',nav_services:'服務項目',nav_process:'服務流程',
-        nav_portfolio:'案例作品',nav_about:'關於我們',nav_contact:'接案諮詢',
-        cta_q:'準備好開始專案了嗎？',cta_desc:'讓我一起打造最適合你的數位解決方案！',
-        cta_btn:'開始諮詢',cta_btn_m:'開始諮詢 →',login:'會員登入',status_open:'接案中',
-        eyebrow:'// 案例作品',title1:'每個專案背後',title2:'都是真實需求',
-        subtitle:'從系統開發到品牌活動，用技術解決真正的商業問題。',
-        stat_projects:'完成專案',stat_satisfaction:'客戶滿意度',stat_experience:'開發經驗',
-        filter_all:'全部',
-        err_load:'// error: 載入失敗，請稍後再試',err_empty:'// empty: 此分類尚無作品',
-        footer_tagline:'不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。',
-        tooltip_theme:'切換明暗',tooltip_lang:'切換語言',view_project:'查看專案 →',
-        cat_web:'網站設計',cat_system:'系統設計',cat_ai:'AI解決方案',
-        cat_analytics:'量化數據分析',cat_app:'APP設計',cat_integration:'企業應用整合',cat_game:'遊戲開發',
-        footer_contact_title:'聯絡我們',
-      },
-      'en':{
-        nav_home:'Home',nav_services:'Services',nav_process:'Process',
-        nav_portfolio:'Portfolio',nav_about:'About',nav_contact:'Contact',
-        cta_q:'Ready to Start a Project?',cta_desc:"Let's build the perfect digital solution for you!",
-        cta_btn:'Get in Touch',cta_btn_m:'Get in Touch →',login:'Member Login',status_open:'Open for Work',
-        eyebrow:'// Portfolio',title1:'Every Project',title2:'Starts with Real Needs',
-        subtitle:'From system development to brand campaigns — solving real business problems with technology.',
-        stat_projects:'Projects Done',stat_satisfaction:'Client Satisfaction',stat_experience:'Dev Experience',
-        filter_all:'All',
-        err_load:'// error: Failed to load. Please try again.',err_empty:'// empty: No projects in this category.',
-        footer_tagline:"Not just pretty interfaces — we turn your needs into systems that actually work.",
-        tooltip_theme:'Toggle Theme',tooltip_lang:'Switch Language',view_project:'View Project →',
-        cat_web:'Web Design',cat_system:'System Design',cat_ai:'AI Solutions',
-        cat_analytics:'Data Analytics',cat_app:'App Design',cat_integration:'Enterprise Integration',cat_game:'Game Dev',
-        footer_contact_title:'Contact Us',
-      },
-      'ja':{
-        nav_home:'ホーム',nav_services:'サービス',nav_process:'開発プロセス',
-        nav_portfolio:'実績',nav_about:'私たちについて',nav_contact:'お問い合わせ',
-        cta_q:'プロジェクトを始めませんか？',cta_desc:'最適なデジタルソリューションを一緒に作りましょう！',
-        cta_btn:'相談する',cta_btn_m:'相談する →',login:'ログイン',status_open:'受注中',
-        eyebrow:'// 実績',title1:'すべてのプロジェクトは',title2:'リアルな課題から始まる',
-        subtitle:'システム開発からブランドキャンペーンまで、技術でビジネス課題を解決します。',
-        stat_projects:'完了案件',stat_satisfaction:'顧客満足度',stat_experience:'開発経験',
-        filter_all:'すべて',
-        err_load:'// error: 読み込み失敗。もう一度お試しください。',err_empty:'// empty: このカテゴリには作品がありません。',
-        footer_tagline:'見た目だけでなく、要件を本当に使えるシステムに変えます。',
-        tooltip_theme:'テーマ切替',tooltip_lang:'言語切替',view_project:'プロジェクトを見る →',
-        cat_web:'Webデザイン',cat_system:'システム設計',cat_ai:'AIソリューション',
-        cat_analytics:'データ分析',cat_app:'アプリ設計',cat_integration:'システム連携',cat_game:'ゲーム開発',
-        footer_contact_title:'お問い合わせ',
-      },
-      'ko':{
-        nav_home:'홈',nav_services:'서비스',nav_process:'진행 과정',
-        nav_portfolio:'포트폴리오',nav_about:'소개',nav_contact:'문의하기',
-        cta_q:'프로젝트를 시작할 준비가 되셨나요?',cta_desc:'최적의 디지털 솔루션을 함께 만들어보세요!',
-        cta_btn:'상담 시작',cta_btn_m:'상담 시작 →',login:'회원 로그인',status_open:'수주 중',
-        eyebrow:'// 포트폴리오',title1:'모든 프로젝트는',title2:'실제 필요에서 시작됩니다',
-        subtitle:'시스템 개발부터 브랜드 캠페인까지, 기술로 비즈니스 문제를 해결합니다.',
-        stat_projects:'완료 프로젝트',stat_satisfaction:'고객 만족도',stat_experience:'개발 경력',
-        filter_all:'전체',
-        err_load:'// error: 로드 실패. 다시 시도해주세요.',err_empty:'// empty: 이 카테고리에는 작품이 없습니다.',
-        footer_tagline:'예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.',
-        tooltip_theme:'테마 전환',tooltip_lang:'언어 전환',view_project:'프로젝트 보기 →',
-        cat_web:'웹 디자인',cat_system:'시스템 설계',cat_ai:'AI 솔루션',
-        cat_analytics:'데이터 분석',cat_app:'앱 디자인',cat_integration:'엔터프라이즈 통합',cat_game:'게임 개발',
-        footer_contact_title:'연락하기',
-      },
-    };
+    const LANGS = {"zh-TW":{"nav_home":"首頁","nav_services":"服務項目","nav_process":"服務流程","nav_portfolio":"案例作品","nav_about":"關於我們","nav_contact":"接案諮詢","cta_q":"準備好開始專案了嗎？","cta_desc":"讓我一起打造最適合你的數位解決方案！","cta_btn":"開始諮詢","cta_btn_m":"開始諮詢 →","login":"會員登入","status_open":"接案中","eyebrow":"// 案例作品","title1":"每個專案背後","title2":"都是真實需求","subtitle":"從系統開發到品牌活動，用技術解決真正的商業問題。","stat_projects":"完成專案","stat_satisfaction":"客戶滿意度","stat_experience":"開發經驗","filter_all":"全部","err_load":"// error: 載入失敗，請稍後再試","err_empty":"// empty: 此分類尚無作品","footer_tagline":"不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。","tooltip_theme":"切換明暗","tooltip_lang":"切換語言","view_project":"查看專案 →","cat_web":"網站設計","cat_system":"系統設計","cat_ai":"AI解決方案","cat_analytics":"量化數據分析","cat_app":"APP設計","cat_integration":"企業應用整合","cat_game":"遊戲開發","footer_contact_title":"聯絡我們"},"en":{"nav_home":"Home","nav_services":"Services","nav_process":"Process","nav_portfolio":"Portfolio","nav_about":"About","nav_contact":"Contact","cta_q":"Ready to Start a Project?","cta_desc":"Let's build the perfect digital solution for you!","cta_btn":"Get in Touch","cta_btn_m":"Get in Touch →","login":"Member Login","status_open":"Open for Work","eyebrow":"// Portfolio","title1":"Every Project","title2":"Starts with Real Needs","subtitle":"From system development to brand campaigns — solving real business problems with technology.","stat_projects":"Projects Done","stat_satisfaction":"Client Satisfaction","stat_experience":"Dev Experience","filter_all":"All","err_load":"// error: Failed to load. Please try again.","err_empty":"// empty: No projects in this category.","footer_tagline":"Not just pretty interfaces — we turn your needs into systems that actually work.","tooltip_theme":"Toggle Theme","tooltip_lang":"Switch Language","view_project":"View Project →","cat_web":"Web Design","cat_system":"System Design","cat_ai":"AI Solutions","cat_analytics":"Data Analytics","cat_app":"App Design","cat_integration":"Enterprise Integration","cat_game":"Game Dev","footer_contact_title":"Contact Us"},"ja":{"nav_home":"ホーム","nav_services":"サービス","nav_process":"開発プロセス","nav_portfolio":"実績","nav_about":"私たちについて","nav_contact":"お問い合わせ","cta_q":"プロジェクトを始めませんか？","cta_desc":"最適なデジタルソリューションを一緒に作りましょう！","cta_btn":"相談する","cta_btn_m":"相談する →","login":"ログイン","status_open":"受注中","eyebrow":"// 実績","title1":"すべてのプロジェクトは","title2":"リアルな課題から始まる","subtitle":"システム開発からブランドキャンペーンまで、技術でビジネス課題を解決します。","stat_projects":"完了案件","stat_satisfaction":"顧客満足度","stat_experience":"開発経験","filter_all":"すべて","err_load":"// error: 読み込み失敗。もう一度お試しください。","err_empty":"// empty: このカテゴリには作品がありません。","footer_tagline":"見た目だけでなく、要件を本当に使えるシステムに変えます。","tooltip_theme":"テーマ切替","tooltip_lang":"言語切替","view_project":"プロジェクトを見る →","cat_web":"Webデザイン","cat_system":"システム設計","cat_ai":"AIソリューション","cat_analytics":"データ分析","cat_app":"アプリ設計","cat_integration":"システム連携","cat_game":"ゲーム開発","footer_contact_title":"お問い合わせ"},"ko":{"nav_home":"홈","nav_services":"서비스","nav_process":"진행 과정","nav_portfolio":"포트폴리오","nav_about":"소개","nav_contact":"문의하기","cta_q":"프로젝트를 시작할 준비가 되셨나요?","cta_desc":"최적의 디지털 솔루션을 함께 만들어보세요!","cta_btn":"상담 시작","cta_btn_m":"상담 시작 →","login":"회원 로그인","status_open":"수주 중","eyebrow":"// 포트폴리오","title1":"모든 프로젝트는","title2":"실제 필요에서 시작됩니다","subtitle":"시스템 개발부터 브랜드 캠페인까지, 기술로 비즈니스 문제를 해결합니다.","stat_projects":"완료 프로젝트","stat_satisfaction":"고객 만족도","stat_experience":"개발 경력","filter_all":"전체","err_load":"// error: 로드 실패. 다시 시도해주세요.","err_empty":"// empty: 이 카테고리에는 작품이 없습니다.","footer_tagline":"예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.","tooltip_theme":"테마 전환","tooltip_lang":"언어 전환","view_project":"프로젝트 보기 →","cat_web":"웹 디자인","cat_system":"시스템 설계","cat_ai":"AI 솔루션","cat_analytics":"데이터 분석","cat_app":"앱 디자인","cat_integration":"엔터프라이즈 통합","cat_game":"게임 개발","footer_contact_title":"연락하기"}};
     let curLang = localStorage.getItem('lang') || 'zh-TW';
 
     function applyLang(lang) {

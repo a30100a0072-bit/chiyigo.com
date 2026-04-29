@@ -21,7 +21,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const SRC_PAGES = path.join(ROOT, 'src/pages')
 const SRC_PARTIALS = path.join(ROOT, 'src/partials')
+const SRC_I18N = path.join(ROOT, 'src/i18n')
 const OUT_DIR = path.join(ROOT, 'public')
+
+// 支援任意變數名（LANGS_I18N / LANGS_D / LANGS / ...），sentinel 統一為 /*@i18n@*/{}
+const I18N_SENTINEL = /const (\w+) = \/\*@i18n@\*\/\{\};/g
 
 // ── Helpers ─────────────────────────────────────────────
 Handlebars.registerHelper('eq', (a, b) => a === b)
@@ -49,12 +53,46 @@ async function loadPartials() {
   return count
 }
 
+// ── i18n inject ─────────────────────────────────────────
+// 頁面內以 `const LANGS_I18N = /*@i18n@*/{};` 標記注入點，
+// build 時讀 src/i18n/<page>.json 替換為實際字典。
+async function injectI18n(filename, html) {
+  // 收集所有 sentinel 出現（一頁可能有多個字典，例如 LANGS_I18N + LANGS_D）
+  const matches = [...html.matchAll(I18N_SENTINEL)]
+  const jsonPath = path.join(SRC_I18N, filename.replace(/\.html$/, '.json'))
+  let dict
+  try { dict = JSON.parse(await fs.readFile(jsonPath, 'utf8')) }
+  catch (e) { if (e.code !== 'ENOENT') throw e }
+
+  if (matches.length && !dict)
+    throw new Error(`${filename} has @i18n@ sentinel but ${path.relative(ROOT, jsonPath)} not found`)
+  if (!matches.length && dict)
+    console.warn(`[warn] ${path.relative(ROOT, jsonPath)} exists but ${filename} has no @i18n@ sentinel`)
+  if (!matches.length) return html
+
+  // 多 sentinel 情境：JSON 頂層用變數名分組 { LANGS_I18N: {...}, LANGS_D: {...} }
+  // 單 sentinel 情境：JSON 頂層直接是字典 { 'zh-TW': {...}, ... }
+  const isMulti = matches.length > 1
+  if (isMulti) {
+    for (const [, varName] of matches) {
+      if (!dict[varName])
+        throw new Error(`${filename}: sentinel '${varName}' but ${jsonPath} missing key '${varName}'`)
+    }
+  }
+
+  return html.replace(I18N_SENTINEL, (_, varName) => {
+    const data = isMulti ? dict[varName] : dict
+    return `const ${varName} = ${JSON.stringify(data)};`
+  })
+}
+
 // ── Page build ──────────────────────────────────────────
 async function buildPage(filename) {
   const srcPath = path.join(SRC_PAGES, filename)
   const outPath = path.join(OUT_DIR, filename)
   const raw = await fs.readFile(srcPath, 'utf8')
-  const tpl = Handlebars.compile(raw, { noEscape: true })
+  const withI18n = await injectI18n(filename, raw)
+  const tpl = Handlebars.compile(withI18n, { noEscape: true })
   const out = tpl({})
   await fs.mkdir(path.dirname(outPath), { recursive: true })
   await fs.writeFile(outPath, out, 'utf8')
@@ -82,7 +120,7 @@ async function watch() {
   const { default: chokidar } = await import('chokidar')
   await buildAll()
   console.log('watching src/ for changes...')
-  const watcher = chokidar.watch([SRC_PAGES, SRC_PARTIALS], {
+  const watcher = chokidar.watch([SRC_PAGES, SRC_PARTIALS, SRC_I18N], {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 30 },
   })
