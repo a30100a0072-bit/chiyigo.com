@@ -15,3 +15,10 @@ database_id = "59f73214-1203-44b7-840f-86cb3998fbb6"
 
 [ai]
 binding = "AI"
+
+# Cloudflare Workers Logs / Observability：必啟用，否則 console.log 不會進
+# Dashboard → Observability。Pages 預設關閉（與 Workers 不同），需明示。
+# head_sampling_rate=1 = 100% 取樣，流量小階段這樣設沒成本問題。
+[observability]
+enabled = true
+head_sampling_rate = 1
