@@ -444,6 +444,25 @@
 
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+    // ── Cross-site SSO：對 talo / mbti 子網域附加目前登入 token ──
+    const SSO_HOSTS = new Set(['talo.chiyigo.com', 'mbti.chiyigo.com']);
+    function decodeJwtPayload(token) {
+      try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))); }
+      catch { return {}; }
+    }
+    function ssoifyLink(linkUrl) {
+      if (!linkUrl) return linkUrl;
+      let u;
+      try { u = new URL(linkUrl); } catch { return linkUrl; }
+      if (!SSO_HOSTS.has(u.host)) return linkUrl;
+      const token = sessionStorage.getItem('access_token');
+      if (!token) return linkUrl;
+      const { email } = decodeJwtPayload(token);
+      u.searchParams.set('mbti_token', token);
+      if (email) u.searchParams.set('mbti_email', email);
+      return u.toString();
+    }
+
     function cardHTML(item) {
       const imgInner = item.image_url
         ? `<img src="${esc(item.image_url)}" alt="${esc(item.title)}" loading="lazy">`
@@ -465,8 +484,9 @@
             ${tags ? `<div class="p-card-tags">${tags}</div>` : ''}
             ${linkText}
           </div>`;
-      return item.link_url
-        ? `<a href="${esc(item.link_url)}" target="_blank" rel="noopener" class="p-card">${inner}</a>`
+      const finalUrl = ssoifyLink(item.link_url);
+      return finalUrl
+        ? `<a href="${esc(finalUrl)}" target="_blank" rel="noopener" class="p-card">${inner}</a>`
         : `<article class="p-card">${inner}</article>`;
     }
 
