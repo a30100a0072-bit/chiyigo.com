@@ -186,3 +186,9 @@ body.has-sidebar{overflow:hidden}
 /* Phase D — 抽出原 inline styles */
 .sb-logout-pad { margin: 0 .5rem .35rem; }
 .dash-content-padded { padding: 1.5rem 1rem 0; position: relative; z-index: 1; }
+
+/* 帳號綁定 — provider 顏色 dot (原 inline style="background:${color}" 改 CSS) */
+.bind-dot[data-provider="google"]   { background: #ea4335; }
+.bind-dot[data-provider="discord"]  { background: #5865f2; }
+.bind-dot[data-provider="line"]     { background: #06c755; }
+.bind-dot[data-provider="facebook"] { background: #1877f2; }

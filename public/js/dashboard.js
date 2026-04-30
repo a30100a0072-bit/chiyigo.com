@@ -333,7 +333,7 @@ function renderBindingSection(identities) {
     const linked      = linkedSet.has(id);
     const identity    = (identities ?? []).find(i => i.provider === id);
     const displayName = identity?.display_name ?? '';
-    const dot         = `<span class="inline-block w-2 h-2 rounded-full mr-2" style="background:${color}"></span>`;
+    const dot         = `<span class="inline-block w-2 h-2 rounded-full mr-2 bind-dot" data-provider="${id}"></span>`;
     return `
       <div class="flex items-center justify-between px-5 py-3.5">
         <div class="flex items-center gap-2 min-w-0">
