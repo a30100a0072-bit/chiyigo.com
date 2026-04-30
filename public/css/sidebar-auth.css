@@ -1,11 +1,9 @@
 /* hidden HTML attribute 對特定 sidebar/topbar 元素 force display:none,
-   避免被自身 author rule 覆蓋: .sb-login-link / .m-login-btn 是 display:flex,
-   .icon-sun / .icon-moon 在某些 .m-theme-btn svg 規則下被強制 display:block. */
+   避免被自身 author rule (display:flex) 覆蓋. icon-sun / icon-moon 不在這裡:
+   設計上太陽月亮兩個 svg 永遠同時顯示 (融合成 theme indicator), 不再按 theme 切換. */
 .sb-login-link[hidden],
 .sb-logout-btn[hidden],
-.m-login-btn[hidden],
-.icon-sun[hidden],
-.icon-moon[hidden] { display: none !important; }
+.m-login-btn[hidden] { display: none !important; }
 
 /* 登出按鈕 — 共用樣式 (覆蓋 button reset + 紅色) */
 .sb-logout-btn {
