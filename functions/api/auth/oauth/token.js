@@ -17,7 +17,7 @@
 
 import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
-import { getCorsHeaders } from '../../../utils/cors.js'
+import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 
@@ -80,14 +80,14 @@ export async function onRequestPost({ request, env }) {
     .bind(user.id, refreshTokenHash, refreshExpiresAt)
     .run()
 
-  // 簽發 Access Token（ES256，15 分鐘）
+  // 簽發 Access Token（ES256，15 分鐘） — aud 依 redirect_uri origin 決定
   const accessToken = await signJwt({
     sub:            String(user.id),
     email:          user.email,
     email_verified: user.email_verified === 1,
     role:           user.role,
     status:         user.status,
-  }, '15m', env)
+  }, '15m', env, { audience: resolveAud(redirect_uri) })
 
   return res({
     access_token:  accessToken,

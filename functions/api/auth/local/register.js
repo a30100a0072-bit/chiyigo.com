@@ -13,6 +13,7 @@ import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../.
 import { signJwt } from '../../../utils/jwt.js'
 import { sendVerificationEmail } from '../../../utils/email.js'
 import { validatePassword } from '../../../utils/password.js'
+import { resolveAud } from '../../../utils/cors.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL   = '15m'
@@ -25,7 +26,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { email, password, guest_id, device_uuid } = body ?? {}
+  const { email, password, guest_id, device_uuid, aud } = body ?? {}
+  const audience = resolveAud(aud)
 
   if (!email || !password)
     return res({ error: 'email and password are required' }, 400)
@@ -113,7 +115,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     email_verified: false,
     role:           user.role,
     status:         user.status,
-  }, ACCESS_TOKEN_TTL, env)
+  }, ACCESS_TOKEN_TTL, env, { audience })
 
   // 發送驗證信（fire-and-forget，不阻塞註冊回應；失敗時使用者仍可到 dashboard 重發）
   if (env.RESEND_API_KEY) {

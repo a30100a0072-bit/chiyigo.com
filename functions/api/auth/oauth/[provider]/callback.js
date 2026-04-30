@@ -19,6 +19,7 @@
 import { signJwt } from '../../../../utils/jwt.js'
 import { generateSecureToken, hashToken } from '../../../../utils/crypto.js'
 import { getProvider } from '../../../../utils/oauth-providers.js'
+import { resolveAud } from '../../../../utils/cors.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -242,6 +243,8 @@ async function handle(context) {
   if (userRow.status === 'banned') return htmlError('此帳號已被停用。', 403)
 
   // ── 8. 簽發 Access Token ─────────────────────────────────────
+  // platform=pc 且 client_callback 指向跨 app origin（talo / mbti）→ 簽對應 aud；其餘 chiyigo
+  const audience = (platform === 'pc' && client_callback) ? resolveAud(client_callback) : 'chiyigo'
   const accessToken = await signJwt({
     sub:            String(userId),
     email:          userRow.email,
@@ -249,7 +252,7 @@ async function handle(context) {
     role:           userRow.role,
     status:         userRow.status,
     provider,
-  }, ACCESS_TOKEN_TTL, env)
+  }, ACCESS_TOKEN_TTL, env, { audience })
 
   // ── 9. 依 platform 回傳 ──────────────────────────────────────
   if (platform === 'pc') {

@@ -35,3 +35,36 @@ export function getCorsHeaders(request, env) {
     'Vary':                         'Origin',
   }
 }
+
+// 跨子網域帶 credentials cookie 的端點專用（refresh / logout）
+// 必須回傳具體 origin（不可 *）並加 Allow-Credentials: true
+export function getCorsHeadersForCredentials(request, env) {
+  const base = getCorsHeaders(request, env)
+  if (!base['Access-Control-Allow-Origin']) return {}
+  return {
+    ...base,
+    'Access-Control-Allow-Credentials': 'true',
+  }
+}
+
+// JWT aud claim 白名單：依 redirect / origin 決定 token 受眾
+// 未匹配 → 'chiyigo'（chiyigo.com 自家頁面）
+const AUD_BY_ORIGIN = {
+  'https://talo.chiyigo.com': 'talo',
+  'https://mbti.chiyigo.com': 'mbti',
+}
+
+const AUD_VALID = new Set(['chiyigo', 'talo', 'mbti'])
+
+export function resolveAud(input) {
+  if (!input || typeof input !== 'string') return 'chiyigo'
+  // 直接傳入 aud 字串
+  if (AUD_VALID.has(input)) return input
+  // URL → 比對 origin
+  try {
+    const origin = new URL(input).origin
+    return AUD_BY_ORIGIN[origin] ?? 'chiyigo'
+  } catch {
+    return 'chiyigo'
+  }
+}

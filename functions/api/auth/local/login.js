@@ -14,6 +14,7 @@
 
 import { verifyPassword, generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
+import { resolveAud } from '../../../utils/cors.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -25,7 +26,8 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { email, password, device_uuid, platform } = body ?? {}
+  const { email, password, device_uuid, platform, aud } = body ?? {}
+  const audience = resolveAud(aud)
 
   if (!email || !password)
     return res({ error: 'email and password are required' }, 400)
@@ -116,7 +118,7 @@ export async function onRequestPost({ request, env }) {
     email_verified: record.email_verified === 1,
     role:           record.role,
     status:         record.status,
-  }, ACCESS_TOKEN_TTL, env)
+  }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken    = generateSecureToken()
   const refreshTokenHash = await hashToken(refreshToken)

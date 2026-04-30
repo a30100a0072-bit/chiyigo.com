@@ -19,6 +19,7 @@ import { TOTP, Secret } from 'otpauth'
 import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { requireAuth, res } from '../../../utils/auth.js'
 import { signJwt } from '../../../utils/jwt.js'
+import { resolveAud } from '../../../utils/cors.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -33,9 +34,10 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { otp_code, device_uuid } = body ?? {}
+  const { otp_code, device_uuid, aud } = body ?? {}
   if (!otp_code || typeof otp_code !== 'string')
     return res({ error: 'otp_code is required' }, 400)
+  const audience = resolveAud(aud)
 
   const sanitized = otp_code.replace(/[\s-]/g, '')
 
@@ -67,7 +69,7 @@ export async function onRequestPost({ request, env }) {
     })
     const delta = totp.validate({ token: sanitized, window: 1 })
     if (delta !== null) {
-      return res(await issueToken(userId, record, db, device_uuid, env))
+      return res(await issueToken(userId, record, db, device_uuid, env, audience))
     }
   }
 
@@ -92,7 +94,7 @@ export async function onRequestPost({ request, env }) {
           .run()
 
         if (revoked.meta?.changes > 0) {
-          return res(await issueToken(userId, record, db, device_uuid, env))
+          return res(await issueToken(userId, record, db, device_uuid, env, audience))
         }
       }
     }
@@ -101,14 +103,14 @@ export async function onRequestPost({ request, env }) {
   return res({ error: 'Invalid OTP or backup code' }, 401)
 }
 
-async function issueToken(userId, record, db, deviceUuid, env) {
+async function issueToken(userId, record, db, deviceUuid, env, audience) {
   const accessToken = await signJwt({
     sub:            String(userId),
     email:          record.email,
     email_verified: record.email_verified === 1,
     role:           record.role,
     status:         record.status,
-  }, ACCESS_TOKEN_TTL, env)
+  }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken     = generateSecureToken()
   const refreshTokenHash = await hashToken(refreshToken)

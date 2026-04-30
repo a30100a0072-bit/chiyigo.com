@@ -16,6 +16,7 @@
 import { verifyJwt, signJwt } from '../../../utils/jwt.js'
 import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { getProvider } from '../../../utils/oauth-providers.js'
+import { resolveAud } from '../../../utils/cors.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -30,7 +31,8 @@ export async function onRequestPost(context) {
     return res({ error: '無效的請求格式' }, 400)
   }
 
-  const { token, email } = body ?? {}
+  const { token, email, aud } = body ?? {}
+  const audience = resolveAud(aud)
 
   if (!token || !email) return res({ error: '缺少必要欄位' }, 400)
 
@@ -129,7 +131,7 @@ export async function onRequestPost(context) {
     role:           userRow.role,
     status:         userRow.status,
     provider,
-  }, ACCESS_TOKEN_TTL, env)
+  }, ACCESS_TOKEN_TTL, env, { audience })
 
   // ── 7. 建立 Refresh Token ──────────────────────────────────────
   const refreshToken     = generateSecureToken()
