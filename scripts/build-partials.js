@@ -23,8 +23,10 @@ const SRC_PAGES = path.join(ROOT, 'src/pages')
 const SRC_PARTIALS = path.join(ROOT, 'src/partials')
 const SRC_I18N = path.join(ROOT, 'src/i18n')
 const SRC_JS = path.join(ROOT, 'src/js')
+const SRC_CSS = path.join(ROOT, 'src/css')
 const OUT_DIR = path.join(ROOT, 'public')
 const OUT_JS = path.join(OUT_DIR, 'js')
+const OUT_CSS = path.join(OUT_DIR, 'css')
 
 // 支援任意變數名（LANGS_I18N / LANGS_D / LANGS / ...），sentinel 統一為 /*@i18n@*/{}
 const I18N_SENTINEL = /const (\w+) = \/\*@i18n@\*\/\{\};/g
@@ -122,6 +124,27 @@ async function buildJs() {
   return count
 }
 
+// ── CSS copy ────────────────────────────────────────────
+// 把 src/css/*.css 直接 copy 到 public/css/，排除 tailwind.css 入口
+// (那個由 tailwind CLI 透過 npm run build:css 處理)
+async function buildCss() {
+  let count = 0
+  try {
+    const files = await fs.readdir(SRC_CSS)
+    await fs.mkdir(OUT_CSS, { recursive: true })
+    for (const f of files) {
+      if (!f.endsWith('.css')) continue
+      if (f === 'tailwind.css') continue
+      const src = await fs.readFile(path.join(SRC_CSS, f), 'utf8')
+      await fs.writeFile(path.join(OUT_CSS, f), src, 'utf8')
+      count++
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e
+  }
+  return count
+}
+
 async function buildAll() {
   const partialCount = await loadPartials()
   let pageCount = 0
@@ -136,8 +159,9 @@ async function buildAll() {
     if (e.code !== 'ENOENT') throw e
   }
   const jsCount = await buildJs()
+  const cssCount = await buildCss()
   const ts = new Date().toLocaleTimeString()
-  console.log(`[${ts}] built ${pageCount} pages, ${jsCount} js files, ${partialCount} partials`)
+  console.log(`[${ts}] built ${pageCount} pages, ${jsCount} js, ${cssCount} css, ${partialCount} partials`)
 }
 
 // ── Watch mode ──────────────────────────────────────────
@@ -145,7 +169,7 @@ async function watch() {
   const { default: chokidar } = await import('chokidar')
   await buildAll()
   console.log('watching src/ for changes...')
-  const watcher = chokidar.watch([SRC_PAGES, SRC_PARTIALS, SRC_I18N, SRC_JS], {
+  const watcher = chokidar.watch([SRC_PAGES, SRC_PARTIALS, SRC_I18N, SRC_JS, SRC_CSS], {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 30 },
   })
