@@ -12,13 +12,19 @@
 
 import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-providers.js'
 import { requireAuth } from '../../../../utils/auth.js'
+import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit.js'
 
 const STATE_BYTES       = 16   // 128 bits
 const VERIFIER_BYTES    = 32   // 256 bits
 const STATE_TTL_MINUTES = 10
+const OAUTH_RL_WINDOW   = 60   // 1 分鐘
+const OAUTH_RL_MAX      = 10   // 每 IP 每分鐘 10 次 init
 
 // Facebook 不支援 PKCE，其餘均支援
 const PKCE_UNSUPPORTED = new Set(['facebook'])
+
+// OIDC providers — 會回傳 id_token，套用 nonce 防 replay
+const OIDC_PROVIDERS = new Set(['google', 'line', 'apple'])
 
 // ── PKCE 工具 ─────────────────────────────────────────────────────
 
@@ -68,6 +74,21 @@ export async function onRequestGet(context) {
   if (!cfg?.clientId)
     return res({ error: `${provider} 尚未設定，請稍後再試` }, 503)
 
+  // ── per-IP rate limit（防 oauth_states 表灌爆）──────────────
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
+  if (ip) {
+    const { blocked } = await checkRateLimit(env.chiyigo_db, {
+      kind:           'oauth_init',
+      ip,
+      windowSeconds:  OAUTH_RL_WINDOW,
+      max:            OAUTH_RL_MAX,
+    })
+    if (blocked) {
+      return res({ error: 'Too many OAuth init requests. Please wait a moment.', code: 'RATE_LIMITED' }, 429)
+    }
+    await recordRateLimit(env.chiyigo_db, { kind: 'oauth_init', ip })
+  }
+
   // Apple 需要特殊處理（form_post + JWT client_secret），目前預留
   if (provider === 'apple')
     return res({ error: 'Apple 登入尚未開放' }, 503)
@@ -90,12 +111,14 @@ export async function onRequestGet(context) {
     bindingUserId = Number(user.sub)
   }
 
-  // ── 2. State（CSRF）+ PKCE ──────────────────────────────────
+  // ── 2. State（CSRF）+ PKCE + nonce（OIDC）──────────────────
   const state = randomHex(STATE_BYTES)
   const usePkce = !PKCE_UNSUPPORTED.has(provider)
   const { code_verifier, code_challenge } = usePkce
     ? await generatePkce()
     : { code_verifier: '', code_challenge: '' }
+  // OIDC nonce：綁定 id_token 與此次授權 session，防止 id_token 被換到別的 session
+  const nonce = OIDC_PROVIDERS.has(provider) ? randomHex(STATE_BYTES) : null
 
   // ── 3. 平台回呼 URI ─────────────────────────────────────────
   let client_callback
@@ -137,16 +160,14 @@ export async function onRequestGet(context) {
   const expires_at = new Date(Date.now() + STATE_TTL_MINUTES * 60_000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
-  const ip = request.headers.get('CF-Connecting-IP') ?? null
-
   try {
     await env.chiyigo_db
       .prepare(`
         INSERT INTO oauth_states
-          (state_token, code_verifier, redirect_uri, platform, client_callback, expires_at, ip_address, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          (state_token, code_verifier, nonce, redirect_uri, platform, client_callback, expires_at, ip_address, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `)
-      .bind(state, code_verifier, redirect_uri, platform, client_callback ?? '', expires_at, ip)
+      .bind(state, code_verifier, nonce, redirect_uri, platform, client_callback ?? '', expires_at, ip)
       .run()
   } catch {
     return res({ error: 'OAuth 狀態儲存失敗，請重試' }, 500)
@@ -164,6 +185,8 @@ export async function onRequestGet(context) {
     authUrl.searchParams.set('code_challenge',        code_challenge)
     authUrl.searchParams.set('code_challenge_method', 'S256')
   }
+
+  if (nonce) authUrl.searchParams.set('nonce', nonce)
 
   // provider 特定參數
   if (provider === 'discord') authUrl.searchParams.set('prompt', 'consent')
