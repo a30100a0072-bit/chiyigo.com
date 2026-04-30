@@ -62,7 +62,7 @@ applyLangI(curLang);
 // ══════════════════════════════════════════════════════════
 //  ADMIN REQUISITIONS LOGIC
 // ══════════════════════════════════════════════════════════
-const ACCESS_TOKEN_KEY = 'chiyigo_access_token'
+const ACCESS_TOKEN_KEY = 'access_token'
 let currentPage = 1
 let currentQ    = ''
 let debounceTimer

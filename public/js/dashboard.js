@@ -344,11 +344,11 @@ function renderBindingSection(identities) {
             : ''}
         </div>
         ${linked
-          ? `<button id="unbind-btn-${id}" onclick="unbindProvider('${id}')"
+          ? `<button id="unbind-btn-${id}" onclick="unbindProvider('${id}')" data-i18n="unbind_btn"
                class="shrink-0 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
                ${T('unbind_btn')}
              </button>`
-          : `<button id="bind-btn-${id}" onclick="bindProvider('${id}')"
+          : `<button id="bind-btn-${id}" onclick="bindProvider('${id}')" data-i18n="bind_btn"
                class="shrink-0 px-3 py-1.5 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
                ${T('bind_btn')}
              </button>`
