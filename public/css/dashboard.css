@@ -99,9 +99,6 @@ body.has-sidebar{overflow:hidden}
 .sb-label{line-height:1;white-space:nowrap}
 .sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--as-border-dim)}
 .sb-cta{background:linear-gradient(140deg,rgba(108,110,229,.12),rgba(91,139,245,.08));border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem}
-.sb-cta-icon{width:28px;height:28px;background:var(--as-accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;margin-bottom:.65rem}
-.sb-cta-icon svg{width:16px;height:16px}
-.sb-cta-q{font-size:.8rem;font-weight:600;color:var(--as-text);margin-bottom:.3rem;line-height:1.3}
 .sb-cta-desc{font-size:.72rem;color:var(--as-text-muted);line-height:1.5;margin-bottom:.75rem}
 .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--as-accent);color:#fff;font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
 .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}

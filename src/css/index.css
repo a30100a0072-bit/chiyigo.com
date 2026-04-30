@@ -146,14 +146,6 @@ body { min-height: 100vh; overflow: hidden; }
   width: 60px; height: 60px;
   border-radius: 50%; background: #6c6ee514; pointer-events: none;
 }
-.sb-cta-icon {
-  width: 28px; height: 28px;
-  background: var(--accent); border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; margin-bottom: .65rem;
-}
-.sb-cta-icon svg { width: 16px; height: 16px; }
-.sb-cta-q { font-size: .8rem; font-weight: 600; color: var(--text); margin-bottom: .3rem; line-height: 1.3; }
 .sb-cta-desc { font-size: .72rem; color: var(--text-muted); line-height: 1.5; margin-bottom: .75rem; }
 .sb-cta-btn {
   display: inline-flex; align-items: center; justify-content: center;
