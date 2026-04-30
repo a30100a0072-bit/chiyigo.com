@@ -193,7 +193,6 @@
 | www.chiyigo.com 重導向 | | Cloudflare DNS 驗證後自動生效 |
 | Android App Link SHA-256 | | 待 App 建立後更新 |
 | Cloudflare Turnstile（AI 助手）| | 設 `TURNSTILE_SECRET`（Pages env）+ 在 `ai-assistant.html` 填 `TURNSTILE_SITEKEY`，目前條件式跳過 |
-| **talo `web/script.js` 部署** | 🔴 立即 | commit `3195ac8` silent SSO 修復已在 talo 本地，需 `wrangler pages deploy talo/web --project-name=talo` 上線 |
 
 ### 安全待辦（Security Backlog，2026-04-25 審查）
 
