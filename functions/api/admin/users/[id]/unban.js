@@ -16,6 +16,7 @@
  */
 
 import { requireRole } from '../../../../utils/requireRole.js'
+import { appendAuditLog } from '../../../../utils/audit-log.js'
 
 const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 
@@ -45,19 +46,17 @@ export async function onRequestPost({ request, env, params }) {
     .bind(targetId)
     .run()
 
-  // ── 稽核日誌（table 不存在時靜默跳過）───────────────────────
+  // ── 稽核日誌（hash chain；table / 欄位不存在時靜默跳過）─────
   try {
-    await db.prepare(`
-      INSERT INTO admin_audit_log (admin_id, admin_email, action, target_id, target_email, ip_address)
-      VALUES (?, ?, 'unban', ?, ?, ?)
-    `).bind(
-      Number(user.sub),
-      user.email,
-      targetId,
-      target.email,
-      request.headers.get('CF-Connecting-IP') ?? null,
-    ).run()
-  } catch { /* migration 0003 not yet applied */ }
+    await appendAuditLog(db, {
+      admin_id:     Number(user.sub),
+      admin_email:  user.email,
+      action:       'unban',
+      target_id:    targetId,
+      target_email: target.email,
+      ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
+    })
+  } catch { /* migration 0003/0012 not yet applied */ }
 
   return res({ message: 'User unbanned', user_id: targetId, status: 'active' })
 }
