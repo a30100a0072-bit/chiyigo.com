@@ -75,7 +75,7 @@ export async function onRequestPost({ request, env }) {
   // ── 3. 取得用戶最新狀態 ──────────────────────────────────────
   const user = await db
     .prepare(`
-      SELECT id, email, email_verified, role, status
+      SELECT id, email, email_verified, role, status, token_version
       FROM users
       WHERE id = ? AND deleted_at IS NULL
     `)
@@ -107,6 +107,7 @@ export async function onRequestPost({ request, env }) {
     email_verified: user.email_verified === 1,
     role:           user.role,
     status:         user.status,
+    ver:            user.token_version ?? 0,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   // Web → 新 Cookie；App → JSON body

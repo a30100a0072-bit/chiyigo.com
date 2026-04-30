@@ -20,6 +20,10 @@ import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils
 import { requireAuth, res } from '../../../utils/auth.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
+import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
+
+const TOTP_RL_WINDOW_SEC = 5 * 60
+const TOTP_RL_MAX        = 5
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -43,11 +47,28 @@ export async function onRequestPost({ request, env }) {
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
+  const ip     = request.headers.get('CF-Connecting-IP') ?? null
+
+  // ── 2.5 Rate Limit（per-user 5 次 / 5 分鐘）──────────────────
+  // pre_auth_token 短效 5min，但攻擊者仍可在 5 分鐘內暴力試 6 位數 / 20-hex
+  // 失敗 ≥5 次直接 429，必須等 window 過或重新登入觸發新 pre_auth
+  const { blocked } = await checkRateLimit(db, {
+    kind:           '2fa',
+    userId,
+    windowSeconds:  TOTP_RL_WINDOW_SEC,
+    max:            TOTP_RL_MAX,
+  })
+  if (blocked) {
+    return res({
+      error: 'Too many 2FA attempts. Please re-login and try again.',
+      code:  'RATE_LIMITED',
+    }, 429)
+  }
 
   // ── 3. 取得帳號資料 ──────────────────────────────────────────
   const record = await db
     .prepare(`
-      SELECT u.email, u.email_verified, u.role, u.status,
+      SELECT u.email, u.email_verified, u.role, u.status, u.token_version,
              la.totp_secret, la.totp_enabled
       FROM users u
       JOIN local_accounts la ON la.user_id = u.id
@@ -69,6 +90,7 @@ export async function onRequestPost({ request, env }) {
     })
     const delta = totp.validate({ token: sanitized, window: 1 })
     if (delta !== null) {
+      await clearRateLimit(db, { kind: '2fa', userId })
       return res(await issueToken(userId, record, db, device_uuid, env, audience))
     }
   }
@@ -94,12 +116,15 @@ export async function onRequestPost({ request, env }) {
           .run()
 
         if (revoked.meta?.changes > 0) {
+          await clearRateLimit(db, { kind: '2fa', userId })
           return res(await issueToken(userId, record, db, device_uuid, env, audience))
         }
       }
     }
   }
 
+  // 失敗：寫一筆記錄（user 維度），下次 check 會 +1
+  await recordRateLimit(db, { kind: '2fa', userId, ip })
   return res({ error: 'Invalid OTP or backup code' }, 401)
 }
 
@@ -110,6 +135,7 @@ async function issueToken(userId, record, db, deviceUuid, env, audience) {
     email_verified: record.email_verified === 1,
     role:           record.role,
     status:         record.status,
+    ver:            record.token_version ?? 0,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken     = generateSecureToken()

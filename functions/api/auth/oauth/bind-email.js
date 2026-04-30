@@ -116,7 +116,7 @@ export async function onRequestPost(context) {
 
   // ── 5. 查詢 role / status ──────────────────────────────────────
   const userRow = await db
-    .prepare('SELECT email, email_verified, role, status FROM users WHERE id = ?')
+    .prepare('SELECT email, email_verified, role, status, token_version FROM users WHERE id = ?')
     .bind(userId)
     .first()
 
@@ -130,6 +130,7 @@ export async function onRequestPost(context) {
     email_verified: userRow.email_verified === 1,
     role:           userRow.role,
     status:         userRow.status,
+    ver:            userRow.token_version ?? 0,
     provider,
   }, ACCESS_TOKEN_TTL, env, { audience })
 

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified  INTEGER NOT NULL DEFAULT 0,
   role            TEXT    NOT NULL DEFAULT 'player',
   status          TEXT    NOT NULL DEFAULT 'active',
+  token_version   INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   deleted_at      TEXT
 );
@@ -50,6 +51,8 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   ip         TEXT,
   email      TEXT,
+  kind       TEXT    NOT NULL DEFAULT 'login',
+  user_id    INTEGER,
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -65,12 +68,26 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   state_token     TEXT    NOT NULL UNIQUE,
   code_verifier   TEXT,
+  nonce           TEXT,
   redirect_uri    TEXT,
   platform        TEXT,
   client_callback TEXT,
   ip_address      TEXT,
   expires_at      TEXT    NOT NULL,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  admin_id     INTEGER NOT NULL,
+  admin_email  TEXT    NOT NULL,
+  action       TEXT    NOT NULL,
+  target_id    INTEGER NOT NULL,
+  target_email TEXT    NOT NULL,
+  ip_address   TEXT,
+  prev_hash    TEXT,
+  row_hash     TEXT,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS user_identities (

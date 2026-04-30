@@ -13,6 +13,38 @@ export async function resetDb() {
   for (const s of stmts) {
     await env.chiyigo_db.prepare(s).run()
   }
+  // Idempotent column patches: tests may share D1 with migrations.test.js
+  // which builds from _base.sql (older schema). Add columns introduced after _base.
+  try {
+    await env.chiyigo_db.prepare(
+      `ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0`
+    ).run()
+  } catch { /* column already present */ }
+  try {
+    await env.chiyigo_db.prepare(
+      `ALTER TABLE oauth_states ADD COLUMN nonce TEXT`
+    ).run()
+  } catch { /* column already present */ }
+  try {
+    await env.chiyigo_db.prepare(
+      `ALTER TABLE login_attempts ADD COLUMN kind TEXT NOT NULL DEFAULT 'login'`
+    ).run()
+  } catch { /* column already present */ }
+  try {
+    await env.chiyigo_db.prepare(
+      `ALTER TABLE login_attempts ADD COLUMN user_id INTEGER`
+    ).run()
+  } catch { /* column already present */ }
+  try {
+    await env.chiyigo_db.prepare(
+      `ALTER TABLE admin_audit_log ADD COLUMN prev_hash TEXT`
+    ).run()
+  } catch { /* column already present */ }
+  try {
+    await env.chiyigo_db.prepare(
+      `ALTER TABLE admin_audit_log ADD COLUMN row_hash TEXT`
+    ).run()
+  } catch { /* column already present */ }
   await env.chiyigo_db.batch([
     env.chiyigo_db.prepare('DELETE FROM refresh_tokens'),
     env.chiyigo_db.prepare('DELETE FROM email_verifications'),
@@ -23,6 +55,7 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM requisition'),
     env.chiyigo_db.prepare('DELETE FROM user_identities'),
     env.chiyigo_db.prepare('DELETE FROM oauth_states'),
+    env.chiyigo_db.prepare('DELETE FROM admin_audit_log'),
   ])
 }
 

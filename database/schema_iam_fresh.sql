@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified  INTEGER NOT NULL DEFAULT 0,
   role            TEXT    NOT NULL DEFAULT 'player',
   status          TEXT    NOT NULL DEFAULT 'active',
+  token_version   INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
   deleted_at      TEXT
 );
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE TABLE IF NOT EXISTS oauth_states (
   state_token     TEXT PRIMARY KEY,
   code_verifier   TEXT NOT NULL,
+  nonce           TEXT,
   redirect_uri    TEXT NOT NULL,
   platform        TEXT NOT NULL DEFAULT 'web',
   client_callback TEXT,

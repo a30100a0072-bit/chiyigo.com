@@ -19,6 +19,7 @@ import {
   verifyBackupCode,
 } from '../../../utils/crypto.js'
 import { validatePassword } from '../../../utils/password.js'
+import { bumpTokenVersion } from '../../../utils/auth.js'
 
 export async function onRequestPost({ request, env }) {
   let body
@@ -141,11 +142,12 @@ export async function onRequestPost({ request, env }) {
     .bind(userId, newHash, newSalt)
     .run()
 
-  // ── 6. 撤銷所有 refresh_tokens（登出所有裝置）───────────────
+  // ── 6. 撤銷所有 refresh_tokens + bump token_version（access token 全域失效）─
   await db
     .prepare('DELETE FROM refresh_tokens WHERE user_id = ?')
     .bind(userId)
     .run()
+  await bumpTokenVersion(db, userId)
 
   return res({ message: 'Password reset successfully. Please log in again.' })
 }

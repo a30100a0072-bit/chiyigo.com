@@ -23,6 +23,10 @@ import up0005 from '../../migrations/0005_pkce_sessions_audit.sql?raw'
 import up0006 from '../../migrations/0006_requisition_ip.sql?raw'
 import up0007 from '../../migrations/0007_email_verifications_delete_account.sql?raw'
 import up0008 from '../../migrations/0008_ai_audit.sql?raw'
+import up0009 from '../../migrations/0009_users_token_version.sql?raw'
+import up0010 from '../../migrations/0010_oauth_states_nonce.sql?raw'
+import up0011 from '../../migrations/0011_login_attempts_kind.sql?raw'
+import up0012 from '../../migrations/0012_admin_audit_hash_chain.sql?raw'
 import down0001 from '../../migrations/down/0001_requisition_upgrade.down.sql?raw'
 import down0002 from '../../migrations/down/0002_login_attempts.down.sql?raw'
 import down0003 from '../../migrations/down/0003_admin_audit_log.down.sql?raw'
@@ -31,9 +35,13 @@ import down0005 from '../../migrations/down/0005_pkce_sessions_audit.down.sql?ra
 import down0006 from '../../migrations/down/0006_requisition_ip.down.sql?raw'
 import down0007 from '../../migrations/down/0007_email_verifications_delete_account.down.sql?raw'
 import down0008 from '../../migrations/down/0008_ai_audit.down.sql?raw'
+import down0009 from '../../migrations/down/0009_users_token_version.down.sql?raw'
+import down0010 from '../../migrations/down/0010_oauth_states_nonce.down.sql?raw'
+import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?raw'
+import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
-const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008]
-const DOWNS = [down0001, down0002, down0003, down0004, down0005, down0006, down0007, down0008]
+const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
+const DOWNS = [down0001, down0002, down0003, down0004, down0005, down0006, down0007, down0008, down0009, down0010, down0011, down0012]
 
 // 每個 .sql 檔切成獨立 statements 後逐條執行（D1 不支援多 statement prepare）
 // 先剝除「整行 -- 註解」再切分，避免註解開頭的 statement 被誤判為空
@@ -130,6 +138,13 @@ describe('migrations smoke', () => {
 
     expect(await tableExists('ai_audit')).toBe(true)                        // 0008
     expect(await indexExists('idx_ai_audit_ip_time')).toBe(true)            // 0008
+    expect(await columnExists('users', 'token_version')).toBe(true)         // 0009
+    expect(await columnExists('oauth_states', 'nonce')).toBe(true)          // 0010
+    expect(await columnExists('login_attempts', 'kind')).toBe(true)         // 0011
+    expect(await columnExists('login_attempts', 'user_id')).toBe(true)      // 0011
+    expect(await indexExists('idx_login_attempts_kind_time')).toBe(true)    // 0011
+    expect(await columnExists('admin_audit_log', 'prev_hash')).toBe(true)   // 0012
+    expect(await columnExists('admin_audit_log', 'row_hash')).toBe(true)    // 0012
   })
 
   it('down 0008..0001 逆序執行全部成功 + schema 回到 _base 核心形狀', async () => {
@@ -138,6 +153,17 @@ describe('migrations smoke', () => {
       await execAll(sql)
     }
 
+    // 0012.down → admin_audit_log prev_hash / row_hash 應該不存在
+    expect(await columnExists('admin_audit_log', 'prev_hash')).toBe(false)
+    expect(await columnExists('admin_audit_log', 'row_hash')).toBe(false)
+    // 0011.down → login_attempts kind / user_id / 索引 應該不存在
+    expect(await columnExists('login_attempts', 'kind')).toBe(false)
+    expect(await columnExists('login_attempts', 'user_id')).toBe(false)
+    expect(await indexExists('idx_login_attempts_kind_time')).toBe(false)
+    // 0010.down → oauth_states.nonce 應該不存在
+    expect(await columnExists('oauth_states', 'nonce')).toBe(false)
+    // 0009.down → users.token_version 應該不存在
+    expect(await columnExists('users', 'token_version')).toBe(false)
     // 0008.down → ai_audit 應該不存在
     expect(await tableExists('ai_audit')).toBe(false)
     // 0006.down → source_ip / 索引應該不存在

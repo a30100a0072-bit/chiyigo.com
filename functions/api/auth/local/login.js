@@ -39,10 +39,10 @@ export async function onRequestPost({ request, env }) {
   // ── 2. Rate Limit（15 分鐘視窗：同 IP ≤ 20 次，同 email ≤ 10 次）──
   const [ipRow, emailRow] = await Promise.all([
     db.prepare(`SELECT COUNT(*) AS cnt FROM login_attempts
-                WHERE ip = ? AND created_at > datetime('now', '-15 minutes')`)
+                WHERE kind = 'login' AND ip = ? AND created_at > datetime('now', '-15 minutes')`)
       .bind(ip).first(),
     db.prepare(`SELECT COUNT(*) AS cnt FROM login_attempts
-                WHERE email = ? AND created_at > datetime('now', '-15 minutes')`)
+                WHERE kind = 'login' AND email = ? AND created_at > datetime('now', '-15 minutes')`)
       .bind(emailNorm).first(),
   ])
   if ((ipRow?.cnt ?? 0) >= 20 || (emailRow?.cnt ?? 0) >= 10) {
@@ -58,6 +58,7 @@ export async function onRequestPost({ request, env }) {
         u.email_verified,
         u.role,
         u.status,
+        u.token_version,
         u.deleted_at,
         la.password_hash,
         la.password_salt,
@@ -94,7 +95,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   // 密碼驗證通過：清除此 email 的失敗記錄（fire-and-forget）
-  db.prepare(`DELETE FROM login_attempts WHERE email = ?`).bind(emailNorm).run()
+  db.prepare(`DELETE FROM login_attempts WHERE kind = 'login' AND email = ?`).bind(emailNorm).run()
 
   // ── 6a. 需要 2FA → 回傳受限 pre_auth_token（ES256）───────────
   if (record.totp_enabled) {
@@ -103,6 +104,7 @@ export async function onRequestPost({ request, env }) {
       scope:  'pre_auth',
       role:   record.role,
       status: record.status,
+      ver:    record.token_version ?? 0,
     }, PRE_AUTH_TOKEN_TTL, env)
 
     return res({
@@ -118,6 +120,7 @@ export async function onRequestPost({ request, env }) {
     email_verified: record.email_verified === 1,
     role:           record.role,
     status:         record.status,
+    ver:            record.token_version ?? 0,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken    = generateSecureToken()

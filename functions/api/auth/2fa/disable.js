@@ -8,7 +8,7 @@
  */
 
 import { TOTP, Secret } from 'otpauth'
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, bumpTokenVersion, res } from '../../../utils/auth.js'
 import { verifyBackupCode } from '../../../utils/crypto.js'
 
 export async function onRequestPost({ request, env }) {
@@ -68,6 +68,9 @@ export async function onRequestPost({ request, env }) {
     db.prepare('UPDATE local_accounts SET totp_enabled = 0, totp_secret = NULL WHERE user_id = ?').bind(userId),
     db.prepare('DELETE FROM backup_codes WHERE user_id = ?').bind(userId),
   ])
+
+  // 強制下線：所有 access token 立即失效，refresh token 全撤銷
+  await bumpTokenVersion(db, userId)
 
   return res({ message: '2FA disabled successfully' })
 }

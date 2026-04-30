@@ -13,6 +13,7 @@
  */
 
 import { requireRole } from '../../../../utils/requireRole.js'
+import { appendAuditLog } from '../../../../utils/audit-log.js'
 
 const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 
@@ -38,28 +39,27 @@ export async function onRequestPost({ request, env, params }) {
 
   if (target.status === 'banned') return res({ error: 'User is already banned' }, 400)
 
-  // ── 原子：更新 status + 撤銷所有 refresh_token ───────────────
+  // ── 原子：更新 status + bump token_version + 撤銷所有 refresh_token ───
+  // bump token_version 使所有 access token 立即失效（不必等 15m 過期）
   await db.batch([
-    db.prepare(`UPDATE users SET status = 'banned' WHERE id = ?`).bind(targetId),
+    db.prepare(`UPDATE users SET status = 'banned', token_version = token_version + 1 WHERE id = ?`).bind(targetId),
     db.prepare(`
       UPDATE refresh_tokens SET revoked_at = datetime('now')
       WHERE user_id = ? AND revoked_at IS NULL
     `).bind(targetId),
   ])
 
-  // ── 稽核日誌（table 不存在時靜默跳過）───────────────────────
+  // ── 稽核日誌（hash chain 防竄改；table / 欄位不存在時靜默跳過）─
   try {
-    await db.prepare(`
-      INSERT INTO admin_audit_log (admin_id, admin_email, action, target_id, target_email, ip_address)
-      VALUES (?, ?, 'ban', ?, ?, ?)
-    `).bind(
-      Number(user.sub),
-      user.email,
-      targetId,
-      target.email,
-      request.headers.get('CF-Connecting-IP') ?? null,
-    ).run()
-  } catch { /* migration 0003 not yet applied */ }
+    await appendAuditLog(db, {
+      admin_id:     Number(user.sub),
+      admin_email:  user.email,
+      action:       'ban',
+      target_id:    targetId,
+      target_email: target.email,
+      ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
+    })
+  } catch { /* migration 0003/0012 not yet applied */ }
 
   return res({ message: 'User banned', user_id: targetId, status: 'banned' })
 }

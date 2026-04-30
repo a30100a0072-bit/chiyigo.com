@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { generateKeyPair, exportJWK } from 'jose'
-import { signJwt, verifyJwt, getPublicJwk } from '../functions/utils/jwt.js'
+import { signJwt, verifyJwt, getPublicJwk, getPublicJwks, _resetJwtCache } from '../functions/utils/jwt.js'
 
 let env
 
@@ -46,6 +46,12 @@ describe('signJwt / verifyJwt', () => {
     expect(payload.aud).toBe('talo')
   })
 
+  it('passes through ver claim (token_version)', async () => {
+    const token = await signJwt({ sub: 'u', ver: 7 }, '5m', env)
+    const payload = await verifyJwt(token, env)
+    expect(payload.ver).toBe(7)
+  })
+
   it('omits aud when audience option not provided', async () => {
     const token = await signJwt({ sub: 'u' }, '5m', env)
     const payload = await verifyJwt(token, env)
@@ -72,5 +78,62 @@ describe('getPublicJwk', () => {
     expect(jwk.use).toBe('sig')
     expect(jwk.alg).toBe('ES256')
     expect(jwk.d).toBeUndefined()
+  })
+})
+
+describe('JWKS multi-key verification', () => {
+  it('JWT_PUBLIC_KEYS 陣列 → 用對應 kid 驗證舊 token', async () => {
+    // 先簽一個 token（kid=test-key）
+    const oldToken = await signJwt({ sub: 'rotate-old' }, '5m', env)
+
+    // 模擬 rotation：active 改為 new-key，但保留 test-key 在驗章陣列
+    const { privateKey: newPriv, publicKey: newPub } = await generateKeyPair('ES256', { extractable: true })
+    const newPrivJwk = await exportJWK(newPriv)
+    const newPubJwk  = await exportJWK(newPub)
+    newPrivJwk.kid = newPubJwk.kid = 'new-key'
+    newPrivJwk.alg = newPubJwk.alg = 'ES256'
+    newPubJwk.use  = 'sig'
+
+    const oldPubJwk = JSON.parse(env.JWT_PUBLIC_KEY)
+    const rotatedEnv = {
+      JWT_PRIVATE_KEY: JSON.stringify(newPrivJwk),
+      JWT_PUBLIC_KEYS: JSON.stringify([newPubJwk, oldPubJwk]),
+    }
+    _resetJwtCache()
+
+    // 1. 舊 token (kid=test-key) 仍可被驗
+    const p1 = await verifyJwt(oldToken, rotatedEnv)
+    expect(p1.sub).toBe('rotate-old')
+
+    // 2. 新簽的 token (kid=new-key) 也可被驗
+    const newToken = await signJwt({ sub: 'rotate-new' }, '5m', rotatedEnv)
+    const p2 = await verifyJwt(newToken, rotatedEnv)
+    expect(p2.sub).toBe('rotate-new')
+
+    // 3. 從 keys map 移除舊 kid → 舊 token 應失敗
+    _resetJwtCache()
+    const noOldEnv = {
+      JWT_PRIVATE_KEY: JSON.stringify(newPrivJwk),
+      JWT_PUBLIC_KEYS: JSON.stringify([newPubJwk]),
+    }
+    await expect(verifyJwt(oldToken, noOldEnv)).rejects.toThrow()
+
+    // restore module cache to original keys for subsequent tests
+    _resetJwtCache()
+  })
+
+  it('getPublicJwks 回傳陣列，每筆只含公鑰欄位', () => {
+    _resetJwtCache()
+    const keys = getPublicJwks(env)
+    expect(Array.isArray(keys)).toBe(true)
+    expect(keys).toHaveLength(1)
+    expect(keys[0].d).toBeUndefined()
+    expect(keys[0].kid).toBe('test-key')
+  })
+
+  it('JWT_PUBLIC_KEYS 為非陣列 → throw', () => {
+    _resetJwtCache()
+    expect(() => getPublicJwks({ JWT_PUBLIC_KEYS: '{"single": true}' })).toThrow()
+    _resetJwtCache()
   })
 })

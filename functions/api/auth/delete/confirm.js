@@ -55,8 +55,9 @@ export async function onRequestPost({ request, env }) {
     db.prepare('DELETE FROM user_identities     WHERE user_id = ?').bind(userId),
     db.prepare(`
       UPDATE users
-      SET email      = 'deleted_' || id || '@deleted.invalid',
-          deleted_at = datetime('now')
+      SET email         = 'deleted_' || id || '@deleted.invalid',
+          deleted_at    = datetime('now'),
+          token_version = token_version + 1
       WHERE id = ?
     `).bind(userId),
   ])

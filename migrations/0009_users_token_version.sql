@@ -1,0 +1,11 @@
+-- Migration 0009: users.token_version — 全域 access token revoke 機制
+--
+-- JWT 內 `ver` claim 與此欄位比對；不符即拒絕。
+-- 觸發 +1 的事件：
+--   - 密碼變更 (reset-password)
+--   - 2FA 停用 (2fa/disable)
+--   - 帳號封禁 (admin ban)
+--
+-- 既有 access token（無 ver claim）→ 視為 ver=0，與初始值相符繼續有效，
+-- 直至首次 bump 後失效（15m 內自然過期）。
+ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;

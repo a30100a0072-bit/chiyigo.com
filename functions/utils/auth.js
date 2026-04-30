@@ -52,7 +52,52 @@ export async function requireAuth(request, env, requiredScope = null) {
     return { user: null, error: res({ error: 'Forbidden: pre_auth token cannot access this resource' }, 403) }
   }
 
+  // token_version 全域 revoke 比對：
+  //   - JWT 簽發時嵌入 user.token_version 為 ver claim
+  //   - 任何「強制下線」事件（密碼變更 / 2FA 停用 / 封禁）會 +1
+  //   - DB 端 ver 高於 JWT → access token 立即失效
+  //   - JWT 缺 ver claim（舊 token）→ 視為 0，與初始值相容
+  // 為降低 DB 壓力，僅在有 chiyigo_db binding 時執行（測試環境可省略）
+  if (env?.chiyigo_db && payload.sub) {
+    const userId = Number(payload.sub)
+    if (Number.isFinite(userId)) {
+      const row = await env.chiyigo_db
+        .prepare('SELECT token_version FROM users WHERE id = ?')
+        .bind(userId)
+        .first()
+      const dbVer  = row?.token_version ?? 0
+      const jwtVer = Number.isFinite(payload.ver) ? payload.ver : 0
+      if (jwtVer < dbVer) {
+        return { user: null, error: res({ error: 'Token revoked', code: 'TOKEN_REVOKED' }, 401) }
+      }
+    }
+  }
+
   return { user: payload, error: null }
+}
+
+/**
+ * 將 user.token_version +1，使該用戶所有 access token 立即失效。
+ * 並同步撤銷其所有未過期 refresh token。
+ *
+ * 呼叫時機：
+ *   - 密碼變更（reset-password）
+ *   - 2FA 停用
+ *   - 帳號封禁
+ *   - 帳號刪除
+ *
+ * @param {D1Database} db
+ * @param {number}     userId
+ * @returns {Promise<void>}
+ */
+export async function bumpTokenVersion(db, userId) {
+  await db.batch([
+    db.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').bind(userId),
+    db.prepare(`
+      UPDATE refresh_tokens SET revoked_at = datetime('now')
+      WHERE user_id = ? AND revoked_at IS NULL
+    `).bind(userId),
+  ])
 }
 
 export function res(data, status = 200) {

@@ -73,14 +73,14 @@ async function handle(context) {
     .prepare(`
       DELETE FROM oauth_states
       WHERE state_token = ? AND expires_at > datetime('now')
-      RETURNING code_verifier, redirect_uri, platform, client_callback
+      RETURNING code_verifier, nonce, redirect_uri, platform, client_callback
     `)
     .bind(state)
     .first()
 
   if (!stateRow) return htmlError('登入階段已過期或無效，請重新登入。')
 
-  const { code_verifier, redirect_uri, platform, client_callback } = stateRow
+  const { code_verifier, nonce: expectedNonce, redirect_uri, platform, client_callback } = stateRow
   const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
 
   // ── 3. 換取 access_token ─────────────────────────────────────
@@ -93,10 +93,10 @@ async function handle(context) {
     return htmlError(`無法向 ${provider} 換取 Token：${err.message}`)
   }
 
-  // ── 4. 取得並正規化 profile ──────────────────────────────────
+  // ── 4. 取得並正規化 profile（含 OIDC nonce 驗證）─────────────
   let profile
   try {
-    const rawProfile = await fetchProfile(provider, cfg, providerTokens)
+    const rawProfile = await fetchProfile(provider, cfg, providerTokens, expectedNonce)
     profile = cfg.normalizeProfile(rawProfile)
   } catch (err) {
     return htmlError(`無法取得 ${provider} 用戶資料：${err.message}`)
@@ -235,7 +235,7 @@ async function handle(context) {
 
   // ── 7. 查詢 role / status ────────────────────────────────────
   const userRow = await db
-    .prepare('SELECT email, email_verified, role, status FROM users WHERE id = ?')
+    .prepare('SELECT email, email_verified, role, status, token_version FROM users WHERE id = ?')
     .bind(userId)
     .first()
 
@@ -251,6 +251,7 @@ async function handle(context) {
     email_verified: userRow.email_verified === 1,
     role:           userRow.role,
     status:         userRow.status,
+    ver:            userRow.token_version ?? 0,
     provider,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
@@ -352,19 +353,27 @@ async function exchangeCode({ cfg, code, code_verifier, redirect_uri }) {
 
 // ── Profile 取得（provider 差異處理）────────────────────────────
 
-async function fetchProfile(provider, cfg, tokens) {
+async function fetchProfile(provider, cfg, tokens, expectedNonce) {
   // Apple：user info 在 id_token 內，無 userInfoUrl
   if (provider === 'apple') {
-    return decodeJwtPayload(tokens.id_token)
+    const payload = decodeJwtPayload(tokens.id_token)
+    // OIDC nonce 必須與授權階段儲存的值一致，否則為 replay
+    if (expectedNonce && payload.nonce !== expectedNonce) {
+      throw new Error('id_token nonce mismatch')
+    }
+    return payload
   }
 
   // LINE：email 在 id_token 內（scope 包含 email 時），驗 HMAC-SHA256 簽名
+  // 注意：LINE id_token 簽章驗證失敗 / nonce 不符均視為硬性失敗（不再降級為「忽略 email」），
+  // 否則攻擊者可注入未驗簽 id_token 取得本不應持有的 email。
   let lineEmail = null
   if (provider === 'line' && tokens.id_token) {
-    try {
-      const payload = await verifyLineIdToken(tokens.id_token, cfg.clientSecret)
-      lineEmail = payload.email ?? null
-    } catch { /* 驗簽失敗或 token 過期，忽略 id_token email */ }
+    const payload = await verifyLineIdToken(tokens.id_token, cfg.clientSecret)
+    if (expectedNonce && payload.nonce !== expectedNonce) {
+      throw new Error('id_token nonce mismatch')
+    }
+    lineEmail = payload.email ?? null
   }
 
   const res = await fetch(cfg.userInfoUrl, {
