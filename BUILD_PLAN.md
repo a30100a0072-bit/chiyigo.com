@@ -6,6 +6,27 @@
 
 ---
 
+## 近期重大進度（2026-05-01）
+
+### UI bug 修復 + 預防性 lint（commits `4997901` `2352d95` `354f505`；talo 端 `3195ac8` 本地）
+
+| Commit | 範圍 | 主題 |
+|---|---|---|
+| `4997901` | chiyigo `src/js/login.js` | 地球儀按鈕無法開啟翻譯選單：`toggleLangDrop` / `toggleTopLangDrop` 函式定義了但漏綁 `addEventListener` |
+| `2352d95` | chiyigo `src/js/admin-requisitions.js` | 同樣 bug 模式：手機版地球儀漏綁 `m-lang-btn` |
+| `354f505` | chiyigo `scripts/lint-handlers.js` | 預防性 linter：偵測「函式定義但全檔僅出現 1 次」+「`*-btn` id 在 HTML 上但 JS 未引用」；`type="submit"` 自動跳過；掛在 `npm run build` 末段 warn-only |
+| `3195ac8` (talo) | talo `web/script.js` | silent SSO 失效：(a) refresh 缺 `Content-Type: application/json` 被 chiyigo middleware 415 擋下；(b) 首次進站不觸發 refresh，永遠未登入。修法：補 Content-Type、無條件嘗試 refresh、從 JWT payload 解 email 寫 localStorage |
+
+**全站稽核**（lint 跑出來 0 warning ✅）：
+- 13 公開頁 sidebar `lang-toggle-btn` — 全綁
+- dashboard `db-globe-btn` / login `sb-lang-btn` — 全綁
+- 11 頁手機版 `m-lang-btn` — 全綁
+- 5 頁純 auth 表單頁（bind-email / forgot-password / reset-password / verify-email / confirm-delete）— 無地球儀按鈕，不需綁
+
+> **talo `3195ac8` 仍待手動部署**（talo repo 無 git remote）：`wrangler pages deploy talo/web --project-name=talo`
+
+---
+
 ## 近期重大進度（2026-04-30）
 
 ### IAM 安全控制面強化 — 5 個 PR 完工（commits `9a0bbc9`→`4c799c2`，加 deploy hotfix `0c3b1c8` `a744d26`）
@@ -172,6 +193,7 @@
 | www.chiyigo.com 重導向 | | Cloudflare DNS 驗證後自動生效 |
 | Android App Link SHA-256 | | 待 App 建立後更新 |
 | Cloudflare Turnstile（AI 助手）| | 設 `TURNSTILE_SECRET`（Pages env）+ 在 `ai-assistant.html` 填 `TURNSTILE_SITEKEY`，目前條件式跳過 |
+| **talo `web/script.js` 部署** | 🔴 立即 | commit `3195ac8` silent SSO 修復已在 talo 本地，需 `wrangler pages deploy talo/web --project-name=talo` 上線 |
 
 ### 安全待辦（Security Backlog，2026-04-25 審查）
 
