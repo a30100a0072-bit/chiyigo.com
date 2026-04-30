@@ -13,11 +13,14 @@
 import { requireAuth } from '../../../utils/auth.js'
 import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { sendVerificationEmail } from '../../../utils/email.js'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 
-const COOLDOWN_SECONDS = 60
-const TOKEN_TTL_HOURS  = 1
-const IP_HOURLY_LIMIT  = 10
-const FETCH_TIMEOUT_MS = 8000  // 防 Resend 卡住把 Worker 拖進 524
+const COOLDOWN_SECONDS    = 60
+const TOKEN_TTL_HOURS     = 1
+const IP_HOURLY_LIMIT     = 10   // 既有：每 IP 每小時 10 次（email_verifications 表）
+const SHORT_WINDOW_SEC    = 60   // 新：login_attempts kind='email_send' 短視窗
+const SHORT_WINDOW_MAX    = 3    //      每 IP 每分鐘 3 次
+const FETCH_TIMEOUT_MS    = 8000  // 防 Resend 卡住把 Worker 拖進 524
 
 export async function onRequestPost(ctx) {
   try {
@@ -36,6 +39,16 @@ async function handle({ request, env }) {
   const ip = request.headers.get('CF-Connecting-IP') ?? null
 
   if (ip) {
+    // 短視窗（1min ≥ 3）+ 長視窗（1h ≥ 10）雙層
+    const { blocked: shortBlocked } = await checkRateLimit(db, {
+      kind:           'email_send',
+      ip,
+      windowSeconds:  SHORT_WINDOW_SEC,
+      max:            SHORT_WINDOW_MAX,
+    })
+    if (shortBlocked)
+      return res({ error: 'Too many requests. Please try again later.', code: 'RATE_LIMITED' }, 429)
+
     const ipCount = await db
       .prepare(`
         SELECT COUNT(*) AS cnt FROM email_verifications
@@ -45,6 +58,9 @@ async function handle({ request, env }) {
       .first()
     if ((ipCount?.cnt ?? 0) >= IP_HOURLY_LIMIT)
       return res({ error: 'Too many requests. Please try again later.' }, 429)
+
+    // 通過 → 寫入短視窗計數（成功 / 失敗都算一次嘗試）
+    await recordRateLimit(db, { kind: 'email_send', ip, userId: Number(user.sub) })
   }
 
   const userRow = await db
