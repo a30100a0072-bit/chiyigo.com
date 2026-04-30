@@ -314,3 +314,6 @@ document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
     requestAnimationFrame(draw)}
   resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
 })();
+
+// ── Phase C-3 m-lang-btn wire ──
+document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);

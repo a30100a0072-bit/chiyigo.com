@@ -217,3 +217,13 @@ function startCountdown() {
     if (sec <= 0) { clearInterval(iv); location.href = '/login.html?password_reset=1'; }
   }, 1000);
 }
+
+// ── Phase C-3 listener wiring ──
+document.getElementById('panel-password')?.addEventListener('submit', handlePasswordSubmit);
+document.getElementById('panel-2fa')?.addEventListener('submit', handle2faSubmit);
+document.querySelectorAll('[data-toggle-pwd]').forEach(btn => {
+  btn.addEventListener('click', () => togglePwd(btn.dataset.togglePwd, btn.dataset.toggleEye));
+});
+document.querySelectorAll('[data-show-panel]').forEach(btn => {
+  btn.addEventListener('click', () => showPanel(btn.dataset.showPanel));
+});

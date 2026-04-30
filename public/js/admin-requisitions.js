@@ -143,7 +143,7 @@ function renderTable(rows) {
   const t = T()
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="8" class="empty">${t.no_data}</td></tr>`; return }
   tbody.innerHTML = rows.map(r => `
-    <tr onclick="openModal(${r.id})">
+    <tr data-open-modal="${r.id}">
       <td class="id">${r.id}</td>
       <td>
         <span class="name">${esc(r.name)}</span>
@@ -164,7 +164,7 @@ function renderCards(rows) {
   const t = T()
   if (!rows.length) { container.innerHTML = `<p class="empty">${t.no_data}</p>`; return }
   container.innerHTML = rows.map(r => `
-    <div class="req-card" onclick="openModal(${r.id})">
+    <div class="req-card" data-open-modal="${r.id}">
       <div class="row">
         <div>
           <span class="name">${esc(r.name)}</span>
@@ -185,9 +185,9 @@ function renderPagination(total, page, limit) {
   const t = T()
   if (pages <= 1) { el.innerHTML = ''; return }
   el.innerHTML = `
-    <button onclick="load(${page - 1}, currentQ)" ${page <= 1 ? 'disabled' : ''}>${t.prev_page}</button>
+    <button data-load-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>${t.prev_page}</button>
     <span class="stat">${fmt(t.page_label, {p: page, t: pages})}</span>
-    <button onclick="load(${page + 1}, currentQ)" ${page >= pages ? 'disabled' : ''}>${t.next_page}</button>`
+    <button data-load-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>${t.next_page}</button>`
 }
 
 function openModal(id) {
@@ -246,3 +246,11 @@ if (!_initToken) { showError(T().err_not_logged_in) } else { load(1) }
     requestAnimationFrame(draw)}
   resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
 })();
+
+// ── Phase C-3 dynamic-content delegation ──
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-open-modal], [data-load-page]')
+  if (!t) return
+  if (t.dataset.openModal) openModal(Number(t.dataset.openModal))
+  else if (t.dataset.loadPage) load(Number(t.dataset.loadPage), currentQ)
+})

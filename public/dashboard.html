@@ -239,7 +239,7 @@
           <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
           <a href="/requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
         </div>
-        <button type="button" class="sb-item danger" onclick="logout()" style="margin:0 .5rem .35rem">
+        <button type="button" class="sb-item danger" data-action="logout" style="margin:0 .5rem .35rem">
           <svg class="sb-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
           <span class="sb-label" data-i18n="logout_header">登出</span>
         </button>
@@ -329,11 +329,11 @@
 
           <!-- 啟用 / 停用按鈕 -->
           <div class="border-t border-[#2a2a35] px-5 py-3 flex gap-2">
-            <button id="tfa-enable-btn" onclick="startSetup2FA()"
+            <button id="tfa-enable-btn"
               class="hidden px-4 py-2 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
               <span data-i18n="tfa_enable_btn">啟用 2FA</span>
             </button>
-            <button id="tfa-disable-btn" onclick="showDisablePanel()"
+            <button id="tfa-disable-btn"
               class="hidden px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
               <span data-i18n="tfa_disable_btn">停用 2FA</span>
             </button>
@@ -352,7 +352,7 @@
             <div class="flex gap-2">
               <input id="tfa-otp-input" type="text" inputmode="numeric" maxlength="6" aria-label="2FA 驗證碼（啟用）" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph"
                 class="flex-1 bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-500/50 tracking-widest text-center" />
-              <button onclick="confirmEnable2FA()"
+              <button data-action="confirm-enable-2fa"
                 class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all">
                 <span data-i18n="tfa_confirm_enable">確認啟用</span>
               </button>
@@ -366,7 +366,7 @@
             <div class="flex gap-2">
               <input id="tfa-disable-input" type="text" inputmode="numeric" maxlength="6" aria-label="2FA 驗證碼（停用）" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph"
                 class="flex-1 bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/50 tracking-widest text-center" />
-              <button onclick="confirmDisable2FA()"
+              <button data-action="confirm-disable-2fa"
                 class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-all">
                 <span data-i18n="tfa_confirm_disable">確認停用</span>
               </button>
@@ -381,7 +381,7 @@
               <p class="text-xs text-amber-300" data-i18n-html="tfa_backup_warn">請立即抄下這 10 組備用碼，之後<strong>無法再次查看</strong>。每組只能使用一次。</p>
             </div>
             <div id="tfa-backup-codes" class="grid grid-cols-2 gap-1.5"></div>
-            <button onclick="closeTfaBackup()"
+            <button data-action="close-tfa-backup"
               class="w-full py-2 rounded-lg bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-400 text-xs font-semibold transition-all">
               <span data-i18n="tfa_backup_done">我已抄寫完畢</span>
             </button>
@@ -418,7 +418,7 @@
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="setpw_subtitle">你目前透過第三方帳號登入。設定密碼後，將擁有後備登入方式，並可執行刪帳等敏感操作。</p>
           </div>
           <div class="px-5 py-4">
-            <button id="setpw-btn" onclick="sendSetPasswordEmail()"
+            <button id="setpw-btn"
               class="w-full py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
               <span data-i18n="setpw_btn">寄送設定密碼信</span>
             </button>
@@ -433,7 +433,7 @@
               <p class="text-sm font-medium text-amber-300" data-i18n="email_unverified">Email 尚未驗證</p>
               <p class="text-xs text-gray-500 mt-0.5" data-i18n="email_unverified_sub">驗證後可使用完整帳號功能</p>
             </div>
-            <button id="resend-btn" onclick="sendVerification()"
+            <button id="resend-btn"
               class="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
               <span data-i18n="resend_btn">重發驗證信</span>
             </button>
@@ -442,7 +442,7 @@
         </div>
 
         <!-- 登出按鈕 -->
-        <button onclick="logout()"
+        <button data-action="logout"
           class="w-full py-3 rounded-xl border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-400 font-semibold text-sm transition-all hover:scale-[1.01] active:scale-[0.99]">
           <span data-i18n="logout_btn">登出帳號</span>
         </button>
@@ -455,7 +455,7 @@
           </div>
           <div class="px-5 py-4">
             <div id="del-stage1" class="space-y-3">
-              <button id="del-open-btn" onclick="showDeleteForm()"
+              <button id="del-open-btn"
                 class="w-full py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 <span id="del-open-label" data-i18n="del_open_btn">我要刪除帳號</span>
               </button>
@@ -470,11 +470,11 @@
                 class="w-full px-4 py-2.5 rounded-xl bg-[#0f0f14] border border-red-500/20 focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
               <p id="del-msg" class="hidden text-xs"></p>
               <div class="flex gap-2">
-                <button onclick="hideDeleteForm()"
+                <button data-action="hide-delete-form"
                   class="flex-1 py-2.5 rounded-xl border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 font-semibold text-sm transition-all">
                   <span data-i18n="del_cancel_btn">取消</span>
                 </button>
-                <button id="del-submit-btn" onclick="submitDeleteAccount()"
+                <button id="del-submit-btn"
                   class="flex-1 py-2.5 rounded-xl border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                   <span data-i18n="del_send_btn">送出刪除確認信</span>
                 </button>
@@ -591,7 +591,7 @@
           <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="3" y="7" width="10" height="7" rx="1.3" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
           <span data-i18n="nav_setpw">設定密碼</span>
         </button>
-        <button type="button" class="m-ov-item danger" onclick="logout()" data-close-overlay>
+        <button type="button" class="m-ov-item danger" data-action="logout" data-close-overlay>
           <span class="m-ov-icon-wrap"><svg viewBox="0 0 24 24" fill="none" class="m-ov-icon" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg></span>
           <span data-i18n="logout_header">登出</span>
         </button>

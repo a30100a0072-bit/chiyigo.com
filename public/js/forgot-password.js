@@ -111,3 +111,6 @@ function setMsg(text, type = 'error') {
     ? 'mb-5 px-4 py-3 rounded-lg text-sm font-medium bg-red-500/10 border border-red-500/20 text-red-400'
     : 'mb-5 px-4 py-3 rounded-lg text-sm font-medium bg-green-500/10 border border-green-500/20 text-green-400';
 }
+
+// ── Phase C-3 listener wiring ──
+document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit);

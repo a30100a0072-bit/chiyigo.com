@@ -227,7 +227,7 @@ function renderRequisitions(list) {
         <div class="flex items-center gap-2 shrink-0">
           <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${s.cls}">${s.text}</span>
           ${r.status === 'pending'
-            ? `<button id="revoke-btn-${r.id}" data-armed="0" onclick="armRevoke(${r.id})"
+            ? `<button id="revoke-btn-${r.id}" data-armed="0" data-revoke-id="${r.id}"
                  class="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
                  ${T('btn_revoke')}
                </button>`
@@ -344,11 +344,11 @@ function renderBindingSection(identities) {
             : ''}
         </div>
         ${linked
-          ? `<button id="unbind-btn-${id}" onclick="unbindProvider('${id}')" data-i18n="unbind_btn"
+          ? `<button id="unbind-btn-${id}" data-unbind="${id}" data-i18n="unbind_btn"
                class="shrink-0 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
                ${T('unbind_btn')}
              </button>`
-          : `<button id="bind-btn-${id}" onclick="bindProvider('${id}')" data-i18n="bind_btn"
+          : `<button id="bind-btn-${id}" data-bind="${id}" data-i18n="bind_btn"
                class="shrink-0 px-3 py-1.5 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
                ${T('bind_btn')}
              </button>`
@@ -832,3 +832,30 @@ async function submitDeleteAccount() {
     requestAnimationFrame(draw)}
   resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
 })();
+
+// ── Phase C-3 listener wiring ──
+document.getElementById('tfa-enable-btn')?.addEventListener('click', startSetup2FA);
+document.getElementById('tfa-disable-btn')?.addEventListener('click', showDisablePanel);
+document.getElementById('setpw-btn')?.addEventListener('click', sendSetPasswordEmail);
+document.getElementById('resend-btn')?.addEventListener('click', sendVerification);
+document.getElementById('del-open-btn')?.addEventListener('click', showDeleteForm);
+document.getElementById('del-submit-btn')?.addEventListener('click', submitDeleteAccount);
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const a = btn.dataset.action;
+  if      (a === 'logout')              logout();
+  else if (a === 'confirm-enable-2fa')  confirmEnable2FA();
+  else if (a === 'confirm-disable-2fa') confirmDisable2FA();
+  else if (a === 'close-tfa-backup')    closeTfaBackup();
+  else if (a === 'hide-delete-form')    hideDeleteForm();
+});
+
+// ── Phase C-3 dynamic-content delegation ──
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-revoke-id], [data-unbind], [data-bind]');
+  if (!t) return;
+  if      (t.dataset.revokeId)  armRevoke(Number(t.dataset.revokeId));
+  else if (t.dataset.unbind)    unbindProvider(t.dataset.unbind);
+  else if (t.dataset.bind)      bindProvider(t.dataset.bind);
+});

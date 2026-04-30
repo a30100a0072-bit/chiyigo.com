@@ -339,3 +339,6 @@ btnConf?.addEventListener('click', async () => {
   resize(); initNodes(); draw();
   window.addEventListener('resize', () => { resize(); initNodes(); });
 })();
+
+// ── Phase C-3 m-lang-btn wire ──
+document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);

@@ -174,3 +174,11 @@ function draw() {
 }
 updateCanvasColors(); resizeCvs(); initPts(); draw()
 window.addEventListener('resize',resizeCvs)
+
+// ── Phase C-3 listener wiring ──
+document.querySelectorAll('.m-ov-item, .m-ov-cta-btn').forEach(el => {
+  el.addEventListener('click', closeOverlay)
+})
+
+// ── Phase C-3 m-lang-btn wire ──
+document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);

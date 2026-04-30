@@ -154,3 +154,6 @@ async function handleSubmit(e) {
     btn.textContent = T('btn_submit')
   }
 }
+
+// ── Phase C-3 listener wiring ──
+document.getElementById('panel-form')?.addEventListener('submit', handleSubmit);

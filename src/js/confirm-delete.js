@@ -193,3 +193,6 @@ function startCountdown() {
     if (sec <= 0) { clearInterval(iv); location.href = '/login.html' }
   }, 1000)
 }
+
+// ── Phase C-3 listener wiring ──
+document.getElementById('confirm-btn')?.addEventListener('click', confirmDelete);
