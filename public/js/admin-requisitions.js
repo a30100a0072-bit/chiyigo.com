@@ -55,6 +55,7 @@ document.addEventListener('click', () => langDropI?.classList.remove('open'));
 langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
 document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
 function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
+document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
 document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
 document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
 applyLangI(curLang);
