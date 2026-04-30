@@ -6,18 +6,60 @@
 
 ---
 
+## 近期重大進度（2026-04-30）
+
+### Talo Cross-App SSO Phase 1+2 強化（chiyigo IAM + talo 雙端完工 + 部署）
+
+| Commit | 內容 |
+|---|---|
+| `9133d02` | JWT 永遠帶 `iss=https://chiyigo.com` + 新增 `audience` 選項（`signJwt` 第 4 參數） |
+| `4cd6fb0` | 各簽發點依 redirect/origin 簽 `aud`；新增 `resolveAud()` 白名單對照（talo/mbti/chiyigo） |
+| `fa599e8` | 跨站 redirect token 從 query 改 fragment（不進 Referer / log）；登入 fetch body 帶 aud |
+| `3df9f41` | `/api/auth/refresh` & `/logout` 加 credentials CORS + OPTIONS preflight + aud 透傳 |
+| `04698a6` | hotfix：`functions/api/auth/_middleware.js` OPTIONS short-circuit 改用 `getCorsHeadersForCredentials`，解決 route-level `onRequestOptions` 被 middleware 吃掉的問題 |
+
+**talo 端對應 commit（已部署）**：
+- `a5f5fd1`（worker）：強制 `payload.iss === "https://chiyigo.com"` + `payload.aud` 含或等於 `"talo"`
+- `d3ce145`（web）：access token 只放 memory、apiFetch 401 → in-flight refresh promise 重試、登出呼叫 chiyigo logout、清除舊 localStorage.mbti_jwt_token
+
+**部署**：talo-worker（`wrangler deploy`）+ talo-web Pages（`--branch=main`）+ chiyigo Pages（git push 自動）+ mbti Pages（fragment 雙讀相容）
+
+### P2 技術債歸零（commits `09e13ae` `020068d` `5a1a1ae`）
+
+| Task | Commit | 說明 |
+|---|---|---|
+| Migration 0001-0008 down.sql + smoke test | `09e13ae` | 8 個 down.sql + `migrations/_base.sql` + `tests/integration/migrations.test.js` workerd D1 跑 _base→up→down→re-up；CI 自動把關 |
+| Test coverage 80% threshold | `020068d` | 加 @vitest/coverage-v8、`vitest.config.js` 80% threshold（`functions/utils/*`）；新增 50 個單元測試（cors 12 / oauth-providers 13 / auth 17 / email 8）；實際 99.69% Stmts；CI 改跑 `npm run test:cov` |
+| `data-i18n-html` 全清 | `5a1a1ae` | dashboard `tfa_backup_warn` split _pre/_em/_post + 結構 HTML；forgot/reset 改 `\n` + `whitespace-pre-line`；3 支 JS 移除 `[data-i18n-html]` 迴圈；全站零 innerHTML 注入 |
+
+### Dead code 清理（commit `fced26b`）
+
+- 12 個 i18n JSON 移 `cta_q` + login.json 移 `sb_cta_q`（4 lang × N keys）
+- 12 個 src/css 移 `.sb-cta-icon` / `.sb-cta-icon svg` / `.sb-cta-q` 三條 rule
+- 48 files changed, +12 / -142 行；起源是 CSP Phase D 1e6cff6 sidebar CTA 卡片精簡的殘留
+
+### 測試規模
+
+- 單元：74（+50 vs 之前的 24）
+- 整合：58（+3 migration smoke）
+- 總計：132，全綠
+
+---
+
 ## 整體進度快照（2026-04-26 更新）
 
 ### Cross-App SSO
 
 | 子網域 | 狀態 | 說明 |
 |--------|------|------|
-| mbti.chiyigo.com | ✅ 整合 | 共用 chiyigo.com IAM ES256 JWT；PKCE 完整替換 |
-| talo.chiyigo.com | ✅ 整合 | redirect SSO 模式；login.html?redirect=ORIGIN |
+| mbti.chiyigo.com | ✅ 整合 + Phase 1 強化 | 共用 chiyigo.com IAM ES256 JWT；PKCE 完整替換；fragment 雙讀相容 |
+| talo.chiyigo.com | ✅ 整合 + Phase 1+2 強化 | redirect SSO 模式；access token memory-only + 401 自動 refresh + iss/aud 強制檢查 |
 
-**SSO 流程**：子網域 → `chiyigo.com/login.html?redirect=ORIGIN` → 登入後帶 JWT 跳回  
-**白名單**（`auth-ui.js` `_CROSS_APP_WHITELIST`）：`talo.chiyigo.com`、`mbti.chiyigo.com`  
-**CORS**（`functions/utils/cors.js` `DEFAULT_ORIGINS`）：已加入兩個子網域  
+**SSO 流程**：子網域 → `chiyigo.com/login.html?redirect=ORIGIN&aud=talo` → 登入後帶 JWT 走 fragment 跳回（`#mbti_token=...`，避免 Referer / log）  
+**JWT claims**：`iss=https://chiyigo.com`（永遠）+ `aud='talo'/'mbti'/'chiyigo'`（依來源） + `kid`（依 JWK）  
+**白名單**（`auth-ui.js` `_CROSS_APP_WHITELIST` + `_ORIGIN_TO_AUD`）：`talo.chiyigo.com`→`talo`、`mbti.chiyigo.com`→`mbti`  
+**CORS**（`functions/utils/cors.js`）：`DEFAULT_ORIGINS` 含兩子網域；`getCorsHeadersForCredentials()` 給 `/api/auth/*` 帶 `Allow-Credentials: true`  
+**Refresh 機制**：`refresh_tokens` 表 + rotation；`/api/auth/refresh` & `/logout` 跨子網域 OPTIONS preflight 已支援  
 **OAuth 支援**：登入前將 `_crossAppOrigin` 存入 sessionStorage；callback bridge 讀取後直接跳回子網域
 
 ---
@@ -219,7 +261,8 @@ npx wrangler pages deploy public/ --project-name mental-modeling-assessment-v1  
 
 | 平台 | Access Token | Refresh Token | TTL |
 |------|-------------|---------------|-----|
-| Web | `sessionStorage` | HttpOnly Cookie（Server 管理）| 15 min / 7 天 |
+| Web (chiyigo dashboard) | `sessionStorage` | HttpOnly Cookie（Server 管理）| 15 min / 7 天 |
+| Web (talo subdomain) | **memory only**（XSS 偷不到）| chiyigo .chiyigo.com HttpOnly Cookie + 401 自動 refresh | 15 min / 7 天 |
 | iOS / Android | Keychain / Keystore | 同左 | 15 min / 30 天 |
 | Unity / Unreal | PlayerPrefs 加密 | 同左 | 15 min / 90 天 |
 
