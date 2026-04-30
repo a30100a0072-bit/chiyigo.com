@@ -105,6 +105,8 @@ function toggleTopLangDrop(e) {
   document.getElementById('m-top-lang-drop')?.classList.toggle('open');
   langDropI?.classList.remove('open');
 }
+document.getElementById('sb-lang-btn')?.addEventListener('click', toggleLangDrop);
+document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
 document.addEventListener('click', () => {
   langDropI?.classList.remove('open');
   document.getElementById('m-top-lang-drop')?.classList.remove('open');
