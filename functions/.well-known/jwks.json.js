@@ -18,7 +18,7 @@
  *  - 金鑰輪換時建議同步更新 kid，子系統可依 kid 快取選鍵。
  */
 
-import { getPublicJwk } from '../utils/jwt.js'
+import { getPublicJwks } from '../utils/jwt.js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
@@ -27,9 +27,9 @@ const CORS_HEADERS = {
 }
 
 export async function onRequestGet({ env }) {
-  let jwk
+  let keys
   try {
-    jwk = getPublicJwk(env)
+    keys = getPublicJwks(env)
   } catch {
     return new Response(
       JSON.stringify({ error: 'Public key not configured' }),
@@ -37,9 +37,7 @@ export async function onRequestGet({ env }) {
     )
   }
 
-  const jwks = { keys: [jwk] }
-
-  return new Response(JSON.stringify(jwks), {
+  return new Response(JSON.stringify({ keys }), {
     headers: {
       'Content-Type':  'application/json',
       'Cache-Control': 'public, max-age=3600',
