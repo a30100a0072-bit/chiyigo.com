@@ -5,7 +5,10 @@
       <img src="{{pathPrefix}}images/logo-dark.png"  alt="CHIYIGO" class="m-logo-img logo-dark">
     </a>
     <div class="m-tb-right">
-      <a href="{{loginHref}}" class="m-login-btn" aria-label="{{loginLabel}}">
+      <a href="{{loginHref}}" class="m-login-btn" data-auth="guest" aria-label="{{loginLabel}}">
+        <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+      </a>
+      <a href="/dashboard.html" class="m-login-btn" data-auth="member" style="display:none" aria-label="會員中心">
         <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
       </a>
       <button class="m-theme-btn"{{#if useInlineHandlers}} onclick="toggleTheme()"{{else}} id="m-theme-btn"{{/if}} aria-label="切換主題">

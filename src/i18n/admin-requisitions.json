@@ -59,7 +59,8 @@
     "tl_asap": "越快越好",
     "tl_1_3m": "1–3 個月",
     "tl_3_6m": "3–6 個月",
-    "tl_flexible": "彈性"
+    "tl_flexible": "彈性",
+    "member_center": "會員中心"
   },
   "en": {
     "nav_home": "Home",
@@ -78,7 +79,7 @@
     "footer_contact_title": "Contact Us",
     "page_title": "Inquiry Records",
     "page_desc": "Submissions from chiyigo.com/requisition",
-    "logout": "Logout",
+    "logout": "Sign Out",
     "loading": "// loading…",
     "relogin": "→ Log in again",
     "search_aria": "Search requisitions",
@@ -121,7 +122,8 @@
     "tl_asap": "ASAP",
     "tl_1_3m": "1–3 months",
     "tl_3_6m": "3–6 months",
-    "tl_flexible": "Flexible"
+    "tl_flexible": "Flexible",
+    "member_center": "Member Center"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -183,7 +185,8 @@
     "tl_asap": "できるだけ早く",
     "tl_1_3m": "1〜3 ヶ月",
     "tl_3_6m": "3〜6 ヶ月",
-    "tl_flexible": "柔軟"
+    "tl_flexible": "柔軟",
+    "member_center": "メンバーセンター"
   },
   "ko": {
     "nav_home": "홈",
@@ -245,6 +248,7 @@
     "tl_asap": "가능한 빨리",
     "tl_1_3m": "1–3개월",
     "tl_3_6m": "3–6개월",
-    "tl_flexible": "유연"
+    "tl_flexible": "유연",
+    "member_center": "회원 센터"
   }
 }
