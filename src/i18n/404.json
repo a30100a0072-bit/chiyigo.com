@@ -23,7 +23,9 @@
     "nf_back": "返回上一頁",
     "nf_back_label": "返回上一頁",
     "nf_links_title": "熱門連結",
-    "nf_link_privacy": "隱私政策"
+    "nf_link_privacy": "隱私政策",
+    "member_center": "會員中心",
+    "logout": "登出"
   },
   "en": {
     "nav_home": "Home",
@@ -49,7 +51,9 @@
     "nf_back": "Go Back",
     "nf_back_label": "Go Back",
     "nf_links_title": "Popular Links",
-    "nf_link_privacy": "Privacy Policy"
+    "nf_link_privacy": "Privacy Policy",
+    "member_center": "Member Center",
+    "logout": "Sign Out"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -75,7 +79,9 @@
     "nf_back": "前のページへ",
     "nf_back_label": "前のページへ",
     "nf_links_title": "人気のリンク",
-    "nf_link_privacy": "プライバシーポリシー"
+    "nf_link_privacy": "プライバシーポリシー",
+    "member_center": "メンバーセンター",
+    "logout": "ログアウト"
   },
   "ko": {
     "nav_home": "홈",
@@ -101,6 +107,8 @@
     "nf_back": "이전 페이지",
     "nf_back_label": "이전 페이지",
     "nf_links_title": "인기 링크",
-    "nf_link_privacy": "개인정보 처리방침"
+    "nf_link_privacy": "개인정보 처리방침",
+    "member_center": "회원 센터",
+    "logout": "로그아웃"
   }
 }

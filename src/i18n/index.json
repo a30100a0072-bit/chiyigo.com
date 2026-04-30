@@ -52,7 +52,9 @@
     "feat3": "客製化解決方案",
     "cta_action_btn": "立即提交需求 →",
     "action_note": "無需簽約承諾",
-    "footer_contact_title": "聯絡我們"
+    "footer_contact_title": "聯絡我們",
+    "member_center": "會員中心",
+    "logout": "登出"
   },
   "en": {
     "nav_home": "Home",
@@ -107,7 +109,9 @@
     "feat3": "Custom-Tailored Solutions",
     "cta_action_btn": "Submit Your Request →",
     "action_note": "No commitment required",
-    "footer_contact_title": "Contact Us"
+    "footer_contact_title": "Contact Us",
+    "member_center": "Member Center",
+    "logout": "Sign Out"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -162,7 +166,9 @@
     "feat3": "カスタムソリューション",
     "cta_action_btn": "今すぐ依頼する →",
     "action_note": "契約不要",
-    "footer_contact_title": "お問い合わせ"
+    "footer_contact_title": "お問い合わせ",
+    "member_center": "メンバーセンター",
+    "logout": "ログアウト"
   },
   "ko": {
     "nav_home": "홈",
@@ -217,6 +223,8 @@
     "feat3": "맞춤형 솔루션",
     "cta_action_btn": "지금 의뢰하기 →",
     "action_note": "계약 불필요",
-    "footer_contact_title": "연락하기"
+    "footer_contact_title": "연락하기",
+    "member_center": "회원 센터",
+    "logout": "로그아웃"
   }
 }

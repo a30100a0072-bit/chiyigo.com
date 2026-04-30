@@ -48,7 +48,9 @@
     "skill3_name": "行動應用",
     "skill4_name": "AI / 整合",
     "skill5_name": "雲端 / DevOps",
-    "footer_contact_title": "聯絡我們"
+    "footer_contact_title": "聯絡我們",
+    "member_center": "會員中心",
+    "logout": "登出"
   },
   "en": {
     "nav_home": "Home",
@@ -99,7 +101,9 @@
     "skill3_name": "Mobile Apps",
     "skill4_name": "AI / Integration",
     "skill5_name": "Cloud / DevOps",
-    "footer_contact_title": "Contact Us"
+    "footer_contact_title": "Contact Us",
+    "member_center": "Member Center",
+    "logout": "Sign Out"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -150,7 +154,9 @@
     "skill3_name": "モバイルアプリ",
     "skill4_name": "AI / 連携",
     "skill5_name": "クラウド / DevOps",
-    "footer_contact_title": "お問い合わせ"
+    "footer_contact_title": "お問い合わせ",
+    "member_center": "メンバーセンター",
+    "logout": "ログアウト"
   },
   "ko": {
     "nav_home": "홈",
@@ -201,6 +207,8 @@
     "skill3_name": "모바일 앱",
     "skill4_name": "AI / 통합",
     "skill5_name": "클라우드 / DevOps",
-    "footer_contact_title": "연락하기"
+    "footer_contact_title": "연락하기",
+    "member_center": "회원 센터",
+    "logout": "로그아웃"
   }
 }

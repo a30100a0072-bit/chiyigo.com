@@ -19,7 +19,9 @@
     "privacy_h1": "隱私政策",
     "privacy_updated": "最後更新日期：2026-04-26",
     "privacy_back": "← 返回首頁",
-    "privacy_disclaimer": ""
+    "privacy_disclaimer": "",
+    "member_center": "會員中心",
+    "logout": "登出"
   },
   "en": {
     "nav_home": "Home",
@@ -41,7 +43,9 @@
     "privacy_h1": "Privacy Policy",
     "privacy_updated": "Last updated: 2026-04-26",
     "privacy_back": "← Back to Home",
-    "privacy_disclaimer": "⚠ The full text of this privacy policy is currently available in Traditional Chinese only. An English translation will be provided in a future update."
+    "privacy_disclaimer": "⚠ The full text of this privacy policy is currently available in Traditional Chinese only. An English translation will be provided in a future update.",
+    "member_center": "Member Center",
+    "logout": "Sign Out"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -63,7 +67,9 @@
     "privacy_h1": "プライバシーポリシー",
     "privacy_updated": "最終更新日：2026-04-26",
     "privacy_back": "← ホームへ戻る",
-    "privacy_disclaimer": "⚠ このプライバシーポリシーの本文は現在、繁体字中国語版のみのご提供となります。日本語訳は今後のアップデートで対応予定です。"
+    "privacy_disclaimer": "⚠ このプライバシーポリシーの本文は現在、繁体字中国語版のみのご提供となります。日本語訳は今後のアップデートで対応予定です。",
+    "member_center": "メンバーセンター",
+    "logout": "ログアウト"
   },
   "ko": {
     "nav_home": "홈",
@@ -85,6 +91,8 @@
     "privacy_h1": "개인정보 처리방침",
     "privacy_updated": "최종 업데이트: 2026-04-26",
     "privacy_back": "← 홈으로 돌아가기",
-    "privacy_disclaimer": "⚠ 이 개인정보 처리방침의 본문은 현재 번체 중국어로만 제공됩니다. 한국어 번역은 향후 업데이트에서 제공될 예정입니다."
+    "privacy_disclaimer": "⚠ 이 개인정보 처리방침의 본문은 현재 번체 중국어로만 제공됩니다. 한국어 번역은 향후 업데이트에서 제공될 예정입니다.",
+    "member_center": "회원 센터",
+    "logout": "로그아웃"
   }
 }

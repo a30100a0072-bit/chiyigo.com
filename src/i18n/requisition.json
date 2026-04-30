@@ -60,7 +60,9 @@
     "stat_free_val": "免費",
     "stat_unit_consult": "初步諮詢",
     "info_current_status": "// 目前狀態",
-    "footer_contact_title": "聯絡我們"
+    "footer_contact_title": "聯絡我們",
+    "member_center": "會員中心",
+    "logout": "登出"
   },
   "en": {
     "nav_home": "Home",
@@ -123,7 +125,9 @@
     "stat_free_val": "Free",
     "stat_unit_consult": "Initial Consult",
     "info_current_status": "// Current Status",
-    "footer_contact_title": "Contact Us"
+    "footer_contact_title": "Contact Us",
+    "member_center": "Member Center",
+    "logout": "Sign Out"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -186,7 +190,9 @@
     "stat_free_val": "無料",
     "stat_unit_consult": "初回相談",
     "info_current_status": "// 現在の状況",
-    "footer_contact_title": "お問い合わせ"
+    "footer_contact_title": "お問い合わせ",
+    "member_center": "メンバーセンター",
+    "logout": "ログアウト"
   },
   "ko": {
     "nav_home": "홈",
@@ -249,6 +255,8 @@
     "stat_free_val": "무료",
     "stat_unit_consult": "초기 상담",
     "info_current_status": "// 현재 상태",
-    "footer_contact_title": "연락하기"
+    "footer_contact_title": "연락하기",
+    "member_center": "회원 센터",
+    "logout": "로그아웃"
   }
 }

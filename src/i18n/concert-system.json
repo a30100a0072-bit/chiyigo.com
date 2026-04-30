@@ -77,7 +77,9 @@
     "cs_cta_title": "想為您的活動加入互動體驗？",
     "cs_cta_text": "告訴我們您的活動規模與互動需求，我們提供客製化評估，從場景設計到系統部署全程支援。",
     "cs_cta_btn1": "立即諮詢",
-    "cs_cta_btn2": "查看更多案例"
+    "cs_cta_btn2": "查看更多案例",
+    "member_center": "會員中心",
+    "logout": "登出"
   },
   "en": {
     "nav_home": "Home",
@@ -157,7 +159,9 @@
     "cs_cta_title": "Want to bring this kind of interaction to your event?",
     "cs_cta_text": "Tell us your event size and what you want the audience to feel — we'll do a custom assessment, from scene design to deployment, end to end.",
     "cs_cta_btn1": "Get in Touch",
-    "cs_cta_btn2": "See More Cases"
+    "cs_cta_btn2": "See More Cases",
+    "member_center": "Member Center",
+    "logout": "Sign Out"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -237,7 +241,9 @@
     "cs_cta_title": "あなたのイベントにこのインタラクションを？",
     "cs_cta_text": "規模とご要望をお聞かせください、シーン設計からシステム導入まで、カスタム提案でフル支援します。",
     "cs_cta_btn1": "今すぐ相談",
-    "cs_cta_btn2": "他の事例を見る"
+    "cs_cta_btn2": "他の事例を見る",
+    "member_center": "メンバーセンター",
+    "logout": "ログアウト"
   },
   "ko": {
     "nav_home": "홈",
@@ -317,6 +323,8 @@
     "cs_cta_title": "이런 인터랙션을 행사에 도입하시겠어요?",
     "cs_cta_text": "행사 규모와 인터랙션 요구를 알려주세요. 시나리오 설계부터 시스템 배포까지 맞춤 평가와 전 과정을 지원합니다.",
     "cs_cta_btn1": "지금 상담",
-    "cs_cta_btn2": "더 많은 사례 보기"
+    "cs_cta_btn2": "더 많은 사례 보기",
+    "member_center": "회원 센터",
+    "logout": "로그아웃"
   }
 }

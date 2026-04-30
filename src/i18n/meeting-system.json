@@ -77,7 +77,9 @@
     "ms_cta_title": "想為您的活動導入這套系統？",
     "ms_cta_text": "告訴我們您的活動規模與需求，我們提供客製化評估與報價，從部署到使用全程支援。",
     "ms_cta_btn1": "立即諮詢",
-    "ms_cta_btn2": "查看更多案例"
+    "ms_cta_btn2": "查看更多案例",
+    "member_center": "會員中心",
+    "logout": "登出"
   },
   "en": {
     "nav_home": "Home",
@@ -157,7 +159,9 @@
     "ms_cta_title": "Want to bring this system to your event?",
     "ms_cta_text": "Tell us your event size and needs — we'll provide a custom assessment and quote, with end-to-end support from deployment to operation.",
     "ms_cta_btn1": "Get in Touch",
-    "ms_cta_btn2": "See More Cases"
+    "ms_cta_btn2": "See More Cases",
+    "member_center": "Member Center",
+    "logout": "Sign Out"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -237,7 +241,9 @@
     "ms_cta_title": "あなたのイベントにこのシステムを？",
     "ms_cta_text": "規模とご要望をお聞かせください。導入から運用までカスタム評価・お見積もり、フル支援します。",
     "ms_cta_btn1": "今すぐ相談",
-    "ms_cta_btn2": "他の事例を見る"
+    "ms_cta_btn2": "他の事例を見る",
+    "member_center": "メンバーセンター",
+    "logout": "ログアウト"
   },
   "ko": {
     "nav_home": "홈",
@@ -317,6 +323,8 @@
     "ms_cta_title": "행사에 이 시스템을 도입하시겠어요?",
     "ms_cta_text": "행사 규모와 요구를 알려주세요. 도입부터 운영까지 맞춤 평가와 견적을 제공해 전 과정을 지원합니다.",
     "ms_cta_btn1": "지금 상담",
-    "ms_cta_btn2": "더 많은 사례 보기"
+    "ms_cta_btn2": "더 많은 사례 보기",
+    "member_center": "회원 센터",
+    "logout": "로그아웃"
   }
 }

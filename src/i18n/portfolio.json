@@ -33,7 +33,9 @@
     "cat_app": "APP設計",
     "cat_integration": "企業應用整合",
     "cat_game": "遊戲開發",
-    "footer_contact_title": "聯絡我們"
+    "footer_contact_title": "聯絡我們",
+    "member_center": "會員中心",
+    "logout": "登出"
   },
   "en": {
     "nav_home": "Home",
@@ -69,7 +71,9 @@
     "cat_app": "App Design",
     "cat_integration": "Enterprise Integration",
     "cat_game": "Game Dev",
-    "footer_contact_title": "Contact Us"
+    "footer_contact_title": "Contact Us",
+    "member_center": "Member Center",
+    "logout": "Sign Out"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -105,7 +109,9 @@
     "cat_app": "アプリ設計",
     "cat_integration": "システム連携",
     "cat_game": "ゲーム開発",
-    "footer_contact_title": "お問い合わせ"
+    "footer_contact_title": "お問い合わせ",
+    "member_center": "メンバーセンター",
+    "logout": "ログアウト"
   },
   "ko": {
     "nav_home": "홈",
@@ -141,6 +147,8 @@
     "cat_app": "앱 디자인",
     "cat_integration": "엔터프라이즈 통합",
     "cat_game": "게임 개발",
-    "footer_contact_title": "연락하기"
+    "footer_contact_title": "연락하기",
+    "member_center": "회원 센터",
+    "logout": "로그아웃"
   }
 }
