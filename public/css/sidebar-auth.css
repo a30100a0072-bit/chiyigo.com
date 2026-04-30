@@ -1,6 +1,9 @@
-/* hidden HTML attribute 強制 display:none (避免被 .sb-login-link / .m-login-btn 等
-   author rule 的 display:flex 覆蓋) */
-[hidden] { display: none !important; }
+/* hidden HTML attribute 對特定 sidebar/topbar 元素 force display:none,
+   避免被自身 author rule (display:flex) 覆蓋。
+   不用全域 [hidden] rule, 以免影響 svg.icon-moon[hidden] 等其他元素的預期行為。 */
+.sb-login-link[hidden],
+.sb-logout-btn[hidden],
+.m-login-btn[hidden] { display: none !important; }
 
 /* 登出按鈕 — 共用樣式 (覆蓋 button reset + 紅色) */
 .sb-logout-btn {
