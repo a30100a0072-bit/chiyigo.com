@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["./public/**/*.{html,js}"],
+  content: ["./public/**/*.html", "./public/js/**/*.js"],
   theme: {
     extend: {
       colors: {
@@ -22,12 +22,17 @@ module.exports = {
         sans: ["Inter", "Noto Sans TC", "sans-serif"],
       },
       animation: {
-        "fade-up": "fadeUp 0.6s ease forwards",
+        "fade-up": "fadeUp 0.5s ease forwards",
+        "fade-in": "fadeIn 0.3s ease forwards",
       },
       keyframes: {
         fadeUp: {
-          "0%":   { opacity: "0", transform: "translateY(24px)" },
+          "0%":   { opacity: "0", transform: "translateY(20px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        fadeIn: {
+          "0%":   { opacity: "0" },
+          "100%": { opacity: "1" },
         },
       },
     },
