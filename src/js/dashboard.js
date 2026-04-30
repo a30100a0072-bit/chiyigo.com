@@ -12,9 +12,6 @@ function applyLangD(lang) {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k];
   });
-  document.querySelectorAll('[data-i18n-html]').forEach(el => {
-    const k = el.dataset.i18nHtml; if (t[k] !== undefined) el.innerHTML = t[k];
-  });
   document.querySelectorAll('[data-i18n-ph]').forEach(el => {
     const k = el.dataset.i18nPh; if (t[k] !== undefined) el.placeholder = t[k];
   });

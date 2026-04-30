@@ -5,7 +5,7 @@ const I18N = {
     lbl_new_pwd:'新密碼', lbl_confirm_pwd:'確認新密碼',
     pwd_rule:'密碼需 ≥12 字元，或 ≥8 字元並包含「大寫、小寫、數字、符號」其中任 3 類。',
     btn_reset:'重設密碼', btn_verify_reset:'驗證並重設密碼', btn_back_pwd:'← 重新輸入新密碼',
-    tfa_hint:'此帳號已啟用雙重驗證<br/>請輸入驗證碼後繼續重設密碼',
+    tfa_hint:'此帳號已啟用雙重驗證\n請輸入驗證碼後繼續重設密碼',
     lbl_otp:'驗證碼', ph_otp:'000000 或 備用救援碼',
     success_title:'密碼重設成功', success_desc:'所有裝置的登入階段已撤銷，請重新登入。', countdown_suffix:'秒後自動跳轉…',
     invalid_title:'連結無效或已過期', invalid_desc:'重設連結僅能使用一次，且有效期為 1 小時。', btn_request_new:'重新申請重設連結',
@@ -19,7 +19,7 @@ const I18N = {
     lbl_new_pwd:'New password', lbl_confirm_pwd:'Confirm new password',
     pwd_rule:'Password must be ≥12 chars, or ≥8 chars with 3 of: uppercase / lowercase / digit / symbol.',
     btn_reset:'Reset password', btn_verify_reset:'Verify & reset password', btn_back_pwd:'← Re-enter new password',
-    tfa_hint:'This account has 2FA enabled.<br/>Enter your code to continue.',
+    tfa_hint:'This account has 2FA enabled.\nEnter your code to continue.',
     lbl_otp:'Verification code', ph_otp:'000000 or backup code',
     success_title:'Password reset successful', success_desc:'All sessions have been revoked. Please log in again.', countdown_suffix:'sec, redirecting…',
     invalid_title:'Link invalid or expired', invalid_desc:'Reset links are single-use and valid for 1 hour.', btn_request_new:'Request a new link',
@@ -33,7 +33,7 @@ const I18N = {
     lbl_new_pwd:'新しいパスワード', lbl_confirm_pwd:'新しいパスワード（確認）',
     pwd_rule:'パスワードは12文字以上、または8文字以上で大文字／小文字／数字／記号のうち3種を含めてください。',
     btn_reset:'パスワードを再設定', btn_verify_reset:'認証して再設定', btn_back_pwd:'← パスワードを再入力',
-    tfa_hint:'このアカウントは2段階認証が有効です。<br/>認証コードを入力して続行してください。',
+    tfa_hint:'このアカウントは2段階認証が有効です。\n認証コードを入力して続行してください。',
     lbl_otp:'認証コード', ph_otp:'000000 またはバックアップコード',
     success_title:'パスワードを再設定しました', success_desc:'すべてのセッションが取り消されました。再度ログインしてください。', countdown_suffix:'秒後に自動移動…',
     invalid_title:'リンクが無効または期限切れです', invalid_desc:'再設定リンクは1回限り、有効期限は1時間です。', btn_request_new:'新しいリンクを申請',
@@ -47,7 +47,7 @@ const I18N = {
     lbl_new_pwd:'새 비밀번호', lbl_confirm_pwd:'새 비밀번호 확인',
     pwd_rule:'비밀번호는 12자 이상이거나, 8자 이상이며 대문자/소문자/숫자/기호 중 3종을 포함해야 합니다.',
     btn_reset:'비밀번호 재설정', btn_verify_reset:'인증 후 재설정', btn_back_pwd:'← 새 비밀번호 다시 입력',
-    tfa_hint:'이 계정은 2단계 인증이 활성화되어 있습니다.<br/>인증 코드를 입력하여 계속하세요.',
+    tfa_hint:'이 계정은 2단계 인증이 활성화되어 있습니다.\n인증 코드를 입력하여 계속하세요.',
     lbl_otp:'인증 코드', ph_otp:'000000 또는 백업 코드',
     success_title:'비밀번호 재설정 완료', success_desc:'모든 세션이 해지되었습니다. 다시 로그인해 주세요.', countdown_suffix:'초 후 이동…',
     invalid_title:'링크가 유효하지 않거나 만료됨', invalid_desc:'재설정 링크는 1회만 사용 가능하며 유효기간은 1시간입니다.', btn_request_new:'새 링크 요청',
@@ -89,9 +89,6 @@ function applyLang(lang) {
   const dict = I18N[lang] || I18N['zh-TW'];
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const k = el.dataset.i18n; if (dict[k] != null) el.textContent = dict[k];
-  });
-  document.querySelectorAll('[data-i18n-html]').forEach(el => {
-    const k = el.dataset.i18nHtml; if (dict[k] != null) el.innerHTML = dict[k];
   });
   document.querySelectorAll('[data-i18n-ph]').forEach(el => {
     const k = el.dataset.i18nPh; if (dict[k] != null) el.placeholder = dict[k];

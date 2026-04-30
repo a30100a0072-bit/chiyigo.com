@@ -197,7 +197,7 @@
           <div id="tfa-backup-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-3">
             <div class="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 p-3">
               <svg class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
-              <p class="text-xs text-amber-300" data-i18n-html="tfa_backup_warn">請立即抄下這 10 組備用碼，之後<strong>無法再次查看</strong>。每組只能使用一次。</p>
+              <p class="text-xs text-amber-300"><span data-i18n="tfa_backup_warn_pre">請立即抄下這 10 組備用碼，之後</span><strong data-i18n="tfa_backup_warn_em">無法再次查看</strong><span data-i18n="tfa_backup_warn_post">。每組只能使用一次。</span></p>
             </div>
             <div id="tfa-backup-codes" class="grid grid-cols-2 gap-1.5"></div>
             <button data-action="close-tfa-backup"
