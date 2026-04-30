@@ -833,29 +833,28 @@ async function submitDeleteAccount() {
   resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
 })();
 
-// ── Phase C-3 listener wiring ──
-document.getElementById('tfa-enable-btn')?.addEventListener('click', startSetup2FA);
-document.getElementById('tfa-disable-btn')?.addEventListener('click', showDisablePanel);
-document.getElementById('setpw-btn')?.addEventListener('click', sendSetPasswordEmail);
-document.getElementById('resend-btn')?.addEventListener('click', sendVerification);
-document.getElementById('del-open-btn')?.addEventListener('click', showDeleteForm);
-document.getElementById('del-submit-btn')?.addEventListener('click', submitDeleteAccount);
+// ── Phase C-3 unified click delegation ──
+// 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
+// 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
 document.addEventListener('click', e => {
-  const btn = e.target.closest('[data-action]');
-  if (!btn) return;
-  const a = btn.dataset.action;
-  if      (a === 'logout')              logout();
-  else if (a === 'confirm-enable-2fa')  confirmEnable2FA();
-  else if (a === 'confirm-disable-2fa') confirmDisable2FA();
-  else if (a === 'close-tfa-backup')    closeTfaBackup();
-  else if (a === 'hide-delete-form')    hideDeleteForm();
-});
-
-// ── Phase C-3 dynamic-content delegation ──
-document.addEventListener('click', e => {
-  const t = e.target.closest('[data-revoke-id], [data-unbind], [data-bind]');
+  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page]');
   if (!t) return;
-  if      (t.dataset.revokeId)  armRevoke(Number(t.dataset.revokeId));
-  else if (t.dataset.unbind)    unbindProvider(t.dataset.unbind);
-  else if (t.dataset.bind)      bindProvider(t.dataset.bind);
+  // 靜態按鈕 by id
+  if (t.id === 'tfa-enable-btn')   return startSetup2FA();
+  if (t.id === 'tfa-disable-btn')  return showDisablePanel();
+  if (t.id === 'setpw-btn')        return sendSetPasswordEmail();
+  if (t.id === 'resend-btn')       return sendVerification();
+  if (t.id === 'del-open-btn')     return showDeleteForm();
+  if (t.id === 'del-submit-btn')   return submitDeleteAccount();
+  // data-action
+  const a = t.dataset.action;
+  if (a === 'logout')              return logout();
+  if (a === 'confirm-enable-2fa')  return confirmEnable2FA();
+  if (a === 'confirm-disable-2fa') return confirmDisable2FA();
+  if (a === 'close-tfa-backup')    return closeTfaBackup();
+  if (a === 'hide-delete-form')    return hideDeleteForm();
+  // dynamic content
+  if (t.dataset.revokeId) return armRevoke(Number(t.dataset.revokeId));
+  if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);
+  if (t.dataset.bind)     return bindProvider(t.dataset.bind);
 });
