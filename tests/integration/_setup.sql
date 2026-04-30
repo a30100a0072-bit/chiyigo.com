@@ -77,6 +77,21 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS ai_audit (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      INTEGER,
+  ip           TEXT,
+  fingerprint  TEXT,
+  session_id   TEXT,
+  prompt       TEXT NOT NULL,
+  response     TEXT,
+  model        TEXT,
+  status       TEXT NOT NULL,
+  block_reason TEXT,
+  duration_ms  INTEGER,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS admin_audit_log (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   admin_id     INTEGER NOT NULL,

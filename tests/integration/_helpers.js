@@ -56,6 +56,7 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM user_identities'),
     env.chiyigo_db.prepare('DELETE FROM oauth_states'),
     env.chiyigo_db.prepare('DELETE FROM admin_audit_log'),
+    env.chiyigo_db.prepare('DELETE FROM ai_audit'),
   ])
 }
 

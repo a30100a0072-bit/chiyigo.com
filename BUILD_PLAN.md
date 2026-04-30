@@ -183,9 +183,9 @@
 
 | 項目 | 優先 | 說明 |
 |------|---|------|
-| **JWT key rotation（含 kid 換新）** | 🔴 1 週內 | 2026-04-30 修 kid bug 時對話誤貼 `d` 私鑰分量，需 rotate；步驟見 memory `project_jwt_key_rotation_pending.md`（3-Phase：雙鑰並存 → 切 active → 7 天後清退）。利用 PR-E 多 key 機制無縫切換 |
-| **JWKS rotation 腳本** | 🟡 P2 | `scripts/rotate-jwt-keys.mjs` — 生新 keypair、輸出供 wrangler secret 用、更新 `JWT_PUBLIC_KEYS` 陣列；rotate 時減少手工錯誤 |
-| **觀測性 metrics** | 🟡 P2 | login success rate / refresh count / 2FA fail ratio / oauth_init 限流命中率，從 `login_attempts` + `_middleware` log 萃取上 Logpush |
+| ~~JWT key rotation~~ | ✅ 結案 | 2026-05-01 評估：私鑰只進 Anthropic API 非公開通道，未明文外洩，決定不 rotate；步驟保留 memory 供未來必要時用 |
+| ~~觀測性 metrics~~ | ✅ 結案 | 2026-05-01 上線：`/api/admin/metrics` 從 D1 直接聚合 users / auth / sessions / audit chain integrity / AI 用量；admin role 限制；4 條整合測試 |
+| **JWKS rotation 腳本** | 🟡 P2 | `scripts/rotate-jwt-keys.mjs` — 生新 keypair、輸出供 wrangler secret 用、更新 `JWT_PUBLIC_KEYS` 陣列；未來真要 rotate 時減少手工錯誤 |
 | **E2E（Playwright）** | 🟢 P3 | OAuth 完整流程 + 2FA 鎖定 + token revoke 立即生效 + admin ban 後 access token 失效 |
 | 作品集圖片（非 MBTI 項目）| | 提供截圖後依相同流程更新 |
 | iOS Universal Link | | 需 Apple Developer 帳號（$99/yr）|
