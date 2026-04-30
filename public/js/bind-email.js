@@ -79,8 +79,6 @@ function applyTheme(isLight) {
   document.documentElement.classList.toggle('theme-light', isLight);
   document.documentElement.classList.toggle('theme-dark', !isLight);
   try { localStorage.setItem('theme', isLight ? 'light' : 'dark') } catch {}
-  document.getElementById('theme-icon-dark').classList.toggle('hidden', isLight);
-  document.getElementById('theme-icon-light').classList.toggle('hidden', !isLight);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
