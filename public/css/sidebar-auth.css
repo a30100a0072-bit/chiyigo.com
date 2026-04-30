@@ -20,6 +20,15 @@
   color: #e57373 !important;
 }
 
+/* footer 三欄 grid layout 在 mobile 改垂直堆疊 (避免韓文長字串擠破版) */
+@media (max-width: 768px) {
+  .footer-inner,
+  .as-footer-inner {
+    grid-template-columns: 1fr !important;
+    gap: 1.75rem !important;
+  }
+}
+
 /* m-ov-item 進場動畫 stagger — 各 item 不同 delay */
 [data-stagger="0"] { --i: 0; }
 [data-stagger="1"] { --i: 1; }
