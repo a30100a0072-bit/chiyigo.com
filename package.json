@@ -10,6 +10,7 @@
     "build:watch": "node scripts/build-partials.js --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
     "test:int": "vitest run --config vitest.workers.config.js",
     "test:all": "npm test && npm run test:int",
     "lint": "eslint functions tests"
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.5.40",
+    "@vitest/coverage-v8": "^2.1.9",
     "chokidar": "^5.0.0",
     "eslint": "^9.39.4",
     "globals": "^15.15.0",

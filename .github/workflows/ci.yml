@@ -23,10 +23,10 @@ jobs:
       - name: Lint (ESLint)
         run: npm run lint
 
-      - name: Run unit tests
-        run: npm test
+      - name: Run unit tests with coverage (functions/utils ≥ 80%)
+        run: npm run test:cov
 
-      - name: Run integration tests (workerd + D1)
+      - name: Run integration tests (workerd + D1, includes migration smoke)
         run: npm run test:int
 
       - name: npm audit (production deps, high+)
