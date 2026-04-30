@@ -27,13 +27,13 @@ function applyTheme(isDark) {
   document.documentElement.classList.toggle('theme-light', !isDark);
   localStorage.setItem('theme', isDark ? 'dark' : 'light');
   const dark = document.documentElement.classList.contains('theme-dark');
-  document.querySelectorAll('.icon-sun').forEach(el => el.style.display = dark ? 'none' : 'block');
-  document.querySelectorAll('.icon-moon').forEach(el => el.style.display = dark ? 'block' : 'none');
+  document.querySelectorAll('.icon-sun').forEach(el => el.hidden = dark);
+  document.querySelectorAll('.icon-moon').forEach(el => el.hidden = !dark);
 }
 (function initIcons() {
   const dark = document.documentElement.classList.contains('theme-dark');
-  document.querySelectorAll('.icon-sun').forEach(el => el.style.display = dark ? 'none' : 'block');
-  document.querySelectorAll('.icon-moon').forEach(el => el.style.display = dark ? 'block' : 'none');
+  document.querySelectorAll('.icon-sun').forEach(el => el.hidden = dark);
+  document.querySelectorAll('.icon-moon').forEach(el => el.hidden = !dark);
 })();
 document.getElementById('theme-toggle-btn').addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('theme-dark')));
 document.getElementById('m-theme-btn').addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('theme-dark')));

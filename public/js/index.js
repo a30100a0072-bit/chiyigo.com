@@ -1,8 +1,8 @@
 // ── Theme ──
 function syncThemeIcons() {
   const dark = document.documentElement.classList.contains('theme-dark')
-  document.querySelectorAll('.icon-moon').forEach(el => el.style.display = dark ? '' : 'none')
-  document.querySelectorAll('.icon-sun' ).forEach(el => el.style.display = dark ? 'none' : '')
+  document.querySelectorAll('.icon-moon').forEach(el => el.hidden = !dark)
+  document.querySelectorAll('.icon-sun' ).forEach(el => el.hidden = dark)
 }
 function toggleTheme() {
   const html = document.documentElement

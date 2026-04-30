@@ -787,8 +787,8 @@ async function submitDeleteAccount() {
     const dark = document.documentElement.classList.contains('theme-dark');
     const sun  = mTheme?.querySelector('.icon-sun');
     const moon = mTheme?.querySelector('.icon-moon');
-    if (sun)  sun.style.display  = dark ? 'none' : '';
-    if (moon) moon.style.display = dark ? ''     : 'none';
+    if (sun)  sun.hidden = dark;
+    if (moon) moon.hidden = !dark;
   }
   syncMTheme();
   new MutationObserver(syncMTheme).observe(document.documentElement, { attributes:true, attributeFilter:['class'] });

@@ -216,3 +216,18 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px var(--bg) inset!important;-
 /* ── Lang dropdown (mobile topbar) ── */
 .m-top-lang-drop{display:none;position:fixed;top:58px;right:1.25rem;z-index:200;background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:12px;padding:.4rem;min-width:120px;box-shadow:0 4px 20px rgba(0,0,0,.18)}
 .m-top-lang-drop.open{display:flex;flex-direction:column;gap:.15rem}
+
+/* Phase D — 抽出原 inline styles */
+.m-ov-lang-row { display: flex; gap: .5rem; margin-top: .75rem; }
+.m-ov-lang-opt {
+  flex: 1;
+  padding: .42rem .2rem;
+  border: 1px solid var(--border-dim);
+  background: transparent;
+  border-radius: 8px;
+  font-size: .72rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+}
+.notice-text-spaced { margin-top: 1.5rem; }

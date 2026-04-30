@@ -7,10 +7,10 @@
     var hasTok = false;
     try { hasTok = !!sessionStorage.getItem('access_token'); } catch (_) {}
     document.querySelectorAll('[data-auth="guest"]').forEach(function (el) {
-      el.style.display = hasTok ? 'none' : '';
+      el.hidden = hasTok;
     });
     document.querySelectorAll('[data-auth="member"]').forEach(function (el) {
-      el.style.display = hasTok ? '' : 'none';
+      el.hidden = !hasTok;
     });
   }
 

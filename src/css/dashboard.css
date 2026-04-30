@@ -182,3 +182,7 @@ body.has-sidebar{overflow:hidden}
 .theme-light .logo-dark  { display: none  !important; }
 .theme-dark  .logo-light { display: none  !important; }
 .theme-dark  .logo-dark  { display: block !important; }
+
+/* Phase D — 抽出原 inline styles */
+.sb-logout-pad { margin: 0 .5rem .35rem; }
+.dash-content-padded { padding: 1.5rem 1rem 0; position: relative; z-index: 1; }

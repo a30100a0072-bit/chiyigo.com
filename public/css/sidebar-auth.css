@@ -1,2 +1,27 @@
-.sb-logout-btn { color: rgba(229, 115, 115, .9) !important; }
-.sb-logout-btn:hover { background: rgba(229, 115, 115, .08) !important; color: #e57373 !important; }
+/* hidden HTML attribute 強制 display:none (避免被 .sb-login-link / .m-login-btn 等
+   author rule 的 display:flex 覆蓋) */
+[hidden] { display: none !important; }
+
+/* 登出按鈕 — 共用樣式 (覆蓋 button reset + 紅色) */
+.sb-logout-btn {
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: rgba(229, 115, 115, .9) !important;
+}
+.sb-logout-btn:hover {
+  background: rgba(229, 115, 115, .08) !important;
+  color: #e57373 !important;
+}
+
+/* m-ov-item 進場動畫 stagger — 各 item 不同 delay */
+[data-stagger="0"] { --i: 0; }
+[data-stagger="1"] { --i: 1; }
+[data-stagger="2"] { --i: 2; }
+[data-stagger="3"] { --i: 3; }
+[data-stagger="4"] { --i: 4; }
+[data-stagger="5"] { --i: 5; }
+

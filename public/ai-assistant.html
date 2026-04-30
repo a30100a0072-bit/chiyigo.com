@@ -104,11 +104,11 @@
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
           <span data-i18n="login">會員登入</span>
         </a>
-        <a href="/dashboard.html" class="sb-login-link" data-auth="member" style="display:none" aria-label="會員中心">
+        <a href="/dashboard.html" class="sb-login-link" data-auth="member" hidden aria-label="會員中心">
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
           <span data-i18n="member_center">會員中心</span>
         </a>
-        <button type="button" class="sb-login-link sb-logout-btn" data-auth="member" data-logout style="display:none;background:none;border:none;width:100%;text-align:left;cursor:pointer;font:inherit" aria-label="登出">
+        <button type="button" class="sb-login-link sb-logout-btn" data-auth="member" data-logout hidden aria-label="登出">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
           <span data-i18n="logout">登出</span>
         </button>
@@ -122,7 +122,7 @@
           <div class="sb-foot-icons">
             <button class="sb-foot-btn" aria-label="切換明暗" id="theme-toggle-btn" title="切換明暗">
               <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"></circle><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
-              <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+              <svg viewBox="0 0 16 16" fill="none" class="icon-moon" hidden><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
             </button>
             <button class="sb-foot-btn" aria-label="切換語言" id="lang-toggle-btn" title="切換語言">
               <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -175,7 +175,7 @@
 
           <!-- Step 2: 結果 -->
           <div class="ai-card ai-result" id="ai-result" data-reveal data-reveal-delay="3">
-            <p class="ai-card-label"><span class="dot" style="background:#22a865"></span><span data-i18n="ai_step2">Step 2 — 確認 AI 拆解結果</span></p>
+            <p class="ai-card-label"><span class="dot dot-success"></span><span data-i18n="ai_step2">Step 2 — 確認 AI 拆解結果</span></p>
             <div class="ai-result-grid">
               <div class="ai-field">
                 <span class="ai-field-label" data-i18n="ai_field_service">SERVICE_TYPE</span>
@@ -207,9 +207,9 @@
 
           <!-- Step 3: 完成 -->
           <div class="ai-card ai-result" id="ai-success" data-reveal data-reveal-delay="3">
-            <p class="ai-card-label"><span class="dot" style="background:#22a865"></span>// transmission_complete</p>
-            <h3 style="font-size:1.4rem;margin-bottom:.65rem" data-i18n="ai_success_title">收到了，謝謝你</h3>
-            <p style="color:var(--text-muted);line-height:1.7" data-i18n="ai_success_body">我會在 1–2 個工作天內回覆你。若有急件請直接 LINE / Email 聯絡我。</p>
+            <p class="ai-card-label"><span class="dot dot-success"></span>// transmission_complete</p>
+            <h3 class="ai-success-title" data-i18n="ai_success_title">收到了，謝謝你</h3>
+            <p class="ai-success-body" data-i18n="ai_success_body">我會在 1–2 個工作天內回覆你。若有急件請直接 LINE / Email 聯絡我。</p>
             <p class="ai-disclaimer" id="ai-success-ref"></p>
             <div class="ai-actions">
               <a href="portfolio.html" class="btn-secondary" data-i18n="ai_btn_back_portfolio">返回案例作品</a>
@@ -265,12 +265,12 @@
         <a href="/login.html" class="m-login-btn" data-auth="guest" aria-label="會員登入">
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
         </a>
-        <a href="/dashboard.html" class="m-login-btn" data-auth="member" style="display:none" aria-label="會員中心">
+        <a href="/dashboard.html" class="m-login-btn" data-auth="member" hidden aria-label="會員中心">
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
         </a>
         <button class="m-theme-btn" id="m-theme-btn" aria-label="切換主題">
           <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"></circle><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg>
-          <svg viewBox="0 0 16 16" fill="none" class="icon-moon" style="display:none"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
+          <svg viewBox="0 0 16 16" fill="none" class="icon-moon" hidden><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>
         </button>
         <button class="m-theme-btn" id="m-lang-btn" aria-label="切換語言">
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
@@ -303,32 +303,32 @@
         </div>
       </div>
       <nav class="m-ov-nav" aria-label="主導覽">
-        <a href="index.html" class="m-ov-item" style="--i:0" data-close-overlay>
+        <a href="index.html" class="m-ov-item" data-stagger="0" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></span>
           <span class="m-ov-label" data-i18n="nav_home">首頁</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="index.html#services" class="m-ov-item" style="--i:1" data-close-overlay>
+        <a href="index.html#services" class="m-ov-item" data-stagger="1" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
           <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="index.html#process" class="m-ov-item" style="--i:2" data-close-overlay>
+        <a href="index.html#process" class="m-ov-item" data-stagger="2" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></span>
           <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="portfolio.html" class="m-ov-item active" style="--i:3" data-close-overlay>
+        <a href="portfolio.html" class="m-ov-item active" data-stagger="3" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
           <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="about.html" class="m-ov-item" style="--i:4" data-close-overlay>
+        <a href="about.html" class="m-ov-item" data-stagger="4" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
           <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>
         </a>
-        <a href="requisition.html" class="m-ov-item" style="--i:5" data-close-overlay>
+        <a href="requisition.html" class="m-ov-item" data-stagger="5" data-close-overlay>
           <span class="m-ov-icon-wrap" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
           <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
           <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none" aria-hidden="true"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>

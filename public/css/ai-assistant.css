@@ -224,3 +224,8 @@ img{max-width:100%;height:auto;display:block}
 
 .turnstile-wrap{margin:1rem 0 0}
 .turnstile-wrap:empty{display:none}
+
+/* Phase D — 抽出原 inline styles */
+.dot-success { background: #22a865; }
+.ai-success-title { font-size: 1.4rem; margin-bottom: .65rem; }
+.ai-success-body { color: var(--text-muted); line-height: 1.7; }

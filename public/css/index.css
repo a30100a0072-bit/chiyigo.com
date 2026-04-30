@@ -665,3 +665,12 @@ a.svc-card { text-decoration: none; color: inherit; }
 .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
 .m-top-lang-drop{position:fixed;top:58px;right:1.25rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:60;min-width:128px}
 .m-top-lang-drop.open{display:flex}
+
+/* Phase D — service icon 顏色 (原 inline --ic / --mc) */
+.ui-card-ico[data-ic="A"]{--ic:#6C6EE5}
+.ui-card-ico[data-ic="B"]{--ic:#5B8BF5}
+.ui-card-ico[data-ic="V"]{--ic:#7370EC}
+.ui-card-ico[data-ic="C"]{--ic:#4DA8DA}
+.mob-card-ico[data-mc="A"]{--mc:#6C6EE5}
+.mob-card-ico[data-mc="B"]{--mc:#5B8BF5}
+.mob-card-ico[data-mc="C"]{--mc:#4DA8DA}

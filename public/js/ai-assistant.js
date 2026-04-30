@@ -23,8 +23,8 @@ function applyTheme(dark) {
     if (!btn) return;
     const sun  = btn.querySelector('.icon-sun');
     const moon = btn.querySelector('.icon-moon');
-    if (sun)  sun.style.display  = dark ? 'none' : '';
-    if (moon) moon.style.display = dark ? ''     : 'none';
+    if (sun)  sun.hidden = dark;
+    if (moon) moon.hidden = !dark;
   });
 }
 applyTheme(localStorage.getItem('theme') !== 'light');
