@@ -95,6 +95,11 @@ const _CROSS_APP_WHITELIST = new Set([
   'https://mbti.chiyigo.com',
 ]);
 
+const _ORIGIN_TO_AUD = {
+  'https://talo.chiyigo.com': 'talo',
+  'https://mbti.chiyigo.com': 'mbti',
+};
+
 const _crossAppOrigin = (() => {
   const r = new URLSearchParams(location.search).get('redirect');
   if (!r) return null;
@@ -103,6 +108,9 @@ const _crossAppOrigin = (() => {
     return _CROSS_APP_WHITELIST.has(origin) ? origin : null;
   } catch { return null; }
 })();
+
+// 對應 JWT aud claim — 跨 app 登入時帶給後端，後端據此簽 aud
+const _crossAppAud = _crossAppOrigin ? _ORIGIN_TO_AUD[_crossAppOrigin] : null;
 
 function _decodeJwtPayload(token) {
   try {
@@ -114,7 +122,8 @@ function handleCrossAppRedirect(accessToken) {
   const { email } = _decodeJwtPayload(accessToken);
   const params = new URLSearchParams({ mbti_token: accessToken });
   if (email) params.set('mbti_email', email);
-  window.location.href = `${_crossAppOrigin}?${params}`;
+  // 用 fragment 而非 query：避免 token 進入 Referer / server log / 瀏覽器歷史
+  window.location.href = `${_crossAppOrigin}/#${params}`;
 }
 
 // ── guest_id 管理 ────────────────────────────────────────────────
@@ -343,7 +352,7 @@ async function handleLogin(event) {
       method:      'POST',
       credentials: 'include',
       headers:     { 'Content-Type': 'application/json' },
-      body:        JSON.stringify({ email, password }),
+      body:        JSON.stringify({ email, password, aud: _crossAppAud ?? undefined }),
     });
 
     const data = await res.json();
@@ -403,7 +412,7 @@ async function handleRegister(event) {
       method:      'POST',
       credentials: 'include',
       headers:     { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, password, guest_id }),
+      body:    JSON.stringify({ email, password, guest_id, aud: _crossAppAud ?? undefined }),
     });
 
     const data = await res.json();
@@ -457,7 +466,7 @@ async function handleTotp(event) {
         'Content-Type':  'application/json',
         'Authorization': 'Bearer ' + _preAuthToken,
       },
-      body: JSON.stringify({ otp_code }),
+      body: JSON.stringify({ otp_code, aud: _crossAppAud ?? undefined }),
     });
 
     const data = await res.json();
