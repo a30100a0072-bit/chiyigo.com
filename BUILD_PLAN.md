@@ -8,6 +8,35 @@
 
 ## 近期重大進度（2026-04-30）
 
+### IAM 安全控制面強化 — 5 個 PR 完工（commits `9a0bbc9`→`4c799c2`，加 deploy hotfix `0c3b1c8` `a744d26`）
+
+對照 GPT《Edge Auth 強化報告》逐項落地，補齊 P0/P1：
+
+| Commit | PR | 主題 |
+|---|---|---|
+| `9a0bbc9` | PR-A | `users.token_version` 全域 revoke 機制（含 JWT `ver` claim） |
+| `eaab248` | PR-B | OAuth/OIDC nonce 驗證（Apple / LINE id_token 防 replay） |
+| `7405626` | PR-C | `login_attempts.kind` 統一限流（2FA / email_send / oauth_init） |
+| `31fa0f8` | PR-D | `admin_audit_log` hash chain 防竄改 |
+| `4c799c2` | PR-E | JWKS 多 key 驗證能力（rotation 預備） |
+
+**migration**：0009-0012（生產 D1 已套用；0004-0008 補登 `d1_migrations` 因過去用 `schema_iam_fresh.sql` bootstrap）
+
+**核心成果**：
+- 強制下線即時生效（修密碼 / 停 2FA / 封禁 / 刪帳 → access token 立即失效，不必等 15min 過期）
+- OAuth id_token replay 防禦（Apple/LINE nonce 比對；LINE 同步收緊驗簽 try/catch 容錯）
+- 統一限流表 `login_attempts` + `kind` 欄位：2FA per-user 5min×5、oauth_init per-IP 1min×10、email_send per-IP 1min×3
+- audit log 雜湊鏈（prev_hash + row_hash），中間列竄改 / 刪除可被偵測
+- JWKS 端點回 `{ keys: [...] }`，子系統 talo 原生支援多 key 切換、mbti 走 introspection 不受影響
+
+**驗證**：登入 → access_token 含 `ver: 0`、kid 配對成功；75 unit + 85 integration 全綠。
+
+### 部署期 Hotfix：JWT_PRIVATE_KEY kid 前導空格 bug
+
+舊 secret `JWT_PRIVATE_KEY` 內 `"kid":"  Yfl05aZg"`（兩個前導空格）→ JWT header.kid 跟 JWKS 公開的 `Yfl05aZg` 不一致 → talo 子系統 `keys.find(k => k.kid === ...)` 配對失敗。
+
+**修法**：`wrangler pages secret put JWT_PRIVATE_KEY` 重設正確 JWK；之後解出來的 token header 確認 `kid: "Yfl05aZg"` 無空格。
+
 ### Talo Cross-App SSO Phase 1+2 強化（chiyigo IAM + talo 雙端完工 + 部署）
 
 | Commit | 內容 |
@@ -40,9 +69,9 @@
 
 ### 測試規模
 
-- 單元：74（+50 vs 之前的 24）
-- 整合：58（+3 migration smoke）
-- 總計：132，全綠
+- 單元：78（+3 JWKS 多 key + 1 ver claim）
+- 整合：85（+6 token-version + 8 oauth-nonce + 7 rate-limit + 6 audit-log）
+- 總計：163，全綠
 
 ---
 
@@ -131,14 +160,18 @@
 
 ### 待辦
 
-| 項目 | 說明 |
-|------|------|
-| 作品集圖片（非 MBTI 項目）| 提供截圖後依相同流程更新 |
-| iOS Universal Link | 需 Apple Developer 帳號（$99/yr）|
-| ~~Facebook OAuth~~ | ✅ 完成（移至核心系統）|
-| www.chiyigo.com 重導向 | Cloudflare DNS 驗證後自動生效 |
-| Android App Link SHA-256 | 待 App 建立後更新 |
-| Cloudflare Turnstile（AI 助手）| 設 `TURNSTILE_SECRET`（Pages env）+ 在 `ai-assistant.html` 填 `TURNSTILE_SITEKEY`，目前條件式跳過 |
+| 項目 | 優先 | 說明 |
+|------|---|------|
+| **JWT key rotation（含 kid 換新）** | 🔴 1 週內 | 2026-04-30 修 kid bug 時對話誤貼 `d` 私鑰分量，需 rotate；步驟見 memory `project_jwt_key_rotation_pending.md`（3-Phase：雙鑰並存 → 切 active → 7 天後清退）。利用 PR-E 多 key 機制無縫切換 |
+| **JWKS rotation 腳本** | 🟡 P2 | `scripts/rotate-jwt-keys.mjs` — 生新 keypair、輸出供 wrangler secret 用、更新 `JWT_PUBLIC_KEYS` 陣列；rotate 時減少手工錯誤 |
+| **觀測性 metrics** | 🟡 P2 | login success rate / refresh count / 2FA fail ratio / oauth_init 限流命中率，從 `login_attempts` + `_middleware` log 萃取上 Logpush |
+| **E2E（Playwright）** | 🟢 P3 | OAuth 完整流程 + 2FA 鎖定 + token revoke 立即生效 + admin ban 後 access token 失效 |
+| 作品集圖片（非 MBTI 項目）| | 提供截圖後依相同流程更新 |
+| iOS Universal Link | | 需 Apple Developer 帳號（$99/yr）|
+| ~~Facebook OAuth~~ | | ✅ 完成（移至核心系統）|
+| www.chiyigo.com 重導向 | | Cloudflare DNS 驗證後自動生效 |
+| Android App Link SHA-256 | | 待 App 建立後更新 |
+| Cloudflare Turnstile（AI 助手）| | 設 `TURNSTILE_SECRET`（Pages env）+ 在 `ai-assistant.html` 填 `TURNSTILE_SITEKEY`，目前條件式跳過 |
 
 ### 安全待辦（Security Backlog，2026-04-25 審查）
 
@@ -153,6 +186,18 @@
 | 🟡 Medium | 2FA 備用碼無 UI 重新生成 | `functions/api/auth/2fa/` | ✅ 已修復 |
 
 > 全部 7 項安全待辦已於 2026-04-25 修復完畢。`migrations/0003_admin_audit_log.sql` 已於 2026-04-25 套用至正式 D1。
+
+### 安全控制面強化（2026-04-30，對照 GPT《Edge Auth 強化報告》）
+
+| 嚴重度 | 項目 | 解法 | 狀態 |
+|--------|------|------|------|
+| 🔴 P0 | JWT 無 revoke 機制 → 被盜 token 15min 內全有效 | PR-A `users.token_version` + `bumpTokenVersion` 在密碼變更 / 2FA 停用 / 封禁 / 刪帳事件觸發 | ✅ |
+| 🔴 P0 | OAuth id_token replay（Apple/LINE 缺 nonce） | PR-B `oauth_states.nonce` + init.js 注入 + callback 比對 | ✅ |
+| 🔴 P0 | 2FA verify 端缺 rate limit → pre_auth 5min 內可暴力試 | PR-C `login_attempts.kind='2fa'` per-user 5min×5 | ✅ |
+| 🟡 P1 | admin_audit_log 可被竄改 | PR-D `prev_hash + row_hash` 雜湊鏈 + `verifyAuditChain()` | ✅ |
+| 🟡 P1 | JWKS rotation 能力（多 key 驗證） | PR-E `JWT_PUBLIC_KEYS` 陣列 + 依 kid 查找 | ✅ |
+| 🟡 P1 | email send / oauth init 缺限流 | PR-C 統一限流框架補上 | ✅ |
+| 🔧 Ops | `JWT_PRIVATE_KEY` secret kid 前導空格 | wrangler secret put 重設 | ✅ 2026-04-30 |
 
 ---
 
