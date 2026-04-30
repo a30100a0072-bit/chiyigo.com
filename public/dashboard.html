@@ -152,14 +152,15 @@
           <!-- 啟用 / 停用按鈕 -->
           <div class="border-t border-[#2a2a35] px-5 py-3 flex gap-2">
             <button id="tfa-enable-btn"
-              class="hidden px-4 py-2 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
-              <span data-i18n="tfa_enable_btn">啟用 2FA</span>
+              class="hidden px-4 py-2 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <span id="tfa-enable-label" data-i18n="tfa_enable_btn">啟用 2FA</span>
             </button>
             <button id="tfa-disable-btn"
               class="hidden px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
               <span data-i18n="tfa_disable_btn">停用 2FA</span>
             </button>
           </div>
+          <p id="tfa-need-pw" class="hidden px-5 pb-3 text-xs text-amber-400" data-i18n="tfa_need_pw">請先到上方「設定登入密碼」完成密碼設定，才能啟用 2FA。</p>
 
           <!-- Setup 面板（啟用流程）-->
           <div id="tfa-setup-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-4">

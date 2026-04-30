@@ -34,9 +34,14 @@ function applyLangD(lang) {
   if (createdEl?.dataset.raw) createdEl.textContent = formatDate(createdEl.dataset.raw);
   // 需求單列表：以最後一次 fetch 結果重畫（變數宣告在後段，用 window 規避 TDZ）
   if (window._lastRequisitions) renderRequisitions(window._lastRequisitions);
-  // 刪帳按鈕 label 隨 hasPassword 動態切換，需在 i18n 套用後重畫
-  if (typeof renderDeleteSection === 'function' && typeof window.__hasPassword !== 'undefined') {
-    renderDeleteSection(window.__hasPassword);
+  // 刪帳按鈕 / 2FA enable label 隨 hasPassword 動態切換，需在 i18n 套用後重畫
+  if (typeof window.__hasPassword !== 'undefined') {
+    if (typeof renderDeleteSection === 'function') renderDeleteSection(window.__hasPassword);
+    // 重畫 2FA 區塊以同步「需先設密碼」label 的語系
+    const tfaBadgeForRedraw = document.getElementById('tfa-badge');
+    if (tfaBadgeForRedraw && tfaBadgeForRedraw.dataset.tfaState !== undefined) {
+      render2FASection(tfaBadgeForRedraw.dataset.tfaState === 'on', window.__hasPassword);
+    }
   }
 }
 
@@ -143,7 +148,7 @@ async function loadProfile() {
     providersEl.innerHTML = icons.join('');
 
     // 2FA 區塊
-    render2FASection(data.totp_enabled ?? false);
+    render2FASection(data.totp_enabled ?? false, !!data.has_password);
 
     // 帳號綁定區塊
     renderBindingSection(data.identities ?? []);
@@ -419,23 +424,37 @@ function showBindToast(msg, type) {
 
 // ── 2FA 管理 ─────────────────────────────────────────────────
 
-function render2FASection(enabled) {
+function render2FASection(enabled, hasPw) {
   document.getElementById('tfa-section').classList.remove('hidden');
-  const badge = document.getElementById('tfa-badge');
-  const text  = document.getElementById('tfa-status-text');
+  const badge      = document.getElementById('tfa-badge');
+  const text       = document.getElementById('tfa-status-text');
+  const enableBtn  = document.getElementById('tfa-enable-btn');
+  const enableLbl  = document.getElementById('tfa-enable-label');
+  const disableBtn = document.getElementById('tfa-disable-btn');
+  const needPw     = document.getElementById('tfa-need-pw');
   badge.dataset.tfaState = enabled ? 'on' : 'off';
   if (enabled) {
     badge.textContent  = T('tfa_badge_on');
     badge.className    = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-green-500/15 text-green-300 border border-green-500/20';
     text.textContent   = T('tfa_text_on');
-    document.getElementById('tfa-enable-btn').classList.add('hidden');
-    document.getElementById('tfa-disable-btn').classList.remove('hidden');
+    enableBtn.classList.add('hidden');
+    disableBtn.classList.remove('hidden');
+    needPw.classList.add('hidden');
   } else {
     badge.textContent  = T('tfa_badge_off');
     badge.className    = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-500/15 text-gray-400 border border-gray-500/20';
     text.textContent   = T('tfa_text_off');
-    document.getElementById('tfa-enable-btn').classList.remove('hidden');
-    document.getElementById('tfa-disable-btn').classList.add('hidden');
+    enableBtn.classList.remove('hidden');
+    disableBtn.classList.add('hidden');
+    if (hasPw) {
+      enableBtn.disabled    = false;
+      enableLbl.textContent = T('tfa_enable_btn');
+      needPw.classList.add('hidden');
+    } else {
+      enableBtn.disabled    = true;
+      enableLbl.textContent = T('tfa_need_pw_local');
+      needPw.classList.remove('hidden');
+    }
   }
   document.getElementById('tfa-setup-panel').classList.add('hidden');
   document.getElementById('tfa-disable-panel').classList.add('hidden');

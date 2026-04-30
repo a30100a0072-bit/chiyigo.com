@@ -114,7 +114,9 @@
     "cta_q": "準備好開始專案了嗎？",
     "cta_desc": "讓我一起打造最適合你的數位解決方案！",
     "cta_btn": "開始諮詢",
-    "cta_btn_m": "開始諮詢 →"
+    "cta_btn_m": "開始諮詢 →",
+    "tfa_need_pw_local": "需先設定登入密碼",
+    "tfa_need_pw": "請先到上方「設定登入密碼」完成密碼設定，才能啟用 2FA。"
   },
   "en": {
     "back_home": "Back to Home",
@@ -231,7 +233,9 @@
     "cta_q": "Ready to Start a Project?",
     "cta_desc": "Let's build the perfect digital solution for you!",
     "cta_btn": "Get in Touch",
-    "cta_btn_m": "Get in Touch →"
+    "cta_btn_m": "Get in Touch →",
+    "tfa_need_pw_local": "Set a login password first",
+    "tfa_need_pw": "Please use \"Set Login Password\" above first before you can enable 2FA."
   },
   "ja": {
     "back_home": "ホームに戻る",
@@ -348,7 +352,9 @@
     "cta_q": "プロジェクトを始めませんか？",
     "cta_desc": "最適なデジタルソリューションを一緒に作りましょう！",
     "cta_btn": "相談する",
-    "cta_btn_m": "相談する →"
+    "cta_btn_m": "相談する →",
+    "tfa_need_pw_local": "先にログインパスワードを設定してください",
+    "tfa_need_pw": "2FAを有効化するには、上の「ログインパスワードの設定」を先に完了してください。"
   },
   "ko": {
     "back_home": "홈으로 돌아가기",
@@ -465,6 +471,8 @@
     "cta_q": "프로젝트를 시작할 준비가 되셨나요?",
     "cta_desc": "최적의 디지털 솔루션을 함께 만들어보세요!",
     "cta_btn": "상담 시작",
-    "cta_btn_m": "상담 시작 →"
+    "cta_btn_m": "상담 시작 →",
+    "tfa_need_pw_local": "먼저 로그인 비밀번호를 설정하세요",
+    "tfa_need_pw": "2FA를 활성화하려면 위의 \"로그인 비밀번호 설정\"을 먼저 완료하세요."
   }
 }
