@@ -12,7 +12,7 @@
   width: 100%;
   text-align: left;
   cursor: pointer;
-  font: inherit;
+  font-family: inherit;
   color: rgba(229, 115, 115, .9) !important;
 }
 .sb-logout-btn:hover {
