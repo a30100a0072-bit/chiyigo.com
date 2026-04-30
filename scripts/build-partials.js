@@ -22,7 +22,9 @@ const ROOT = path.resolve(__dirname, '..')
 const SRC_PAGES = path.join(ROOT, 'src/pages')
 const SRC_PARTIALS = path.join(ROOT, 'src/partials')
 const SRC_I18N = path.join(ROOT, 'src/i18n')
+const SRC_JS = path.join(ROOT, 'src/js')
 const OUT_DIR = path.join(ROOT, 'public')
+const OUT_JS = path.join(OUT_DIR, 'js')
 
 // 支援任意變數名（LANGS_I18N / LANGS_D / LANGS / ...），sentinel 統一為 /*@i18n@*/{}
 const I18N_SENTINEL = /const (\w+) = \/\*@i18n@\*\/\{\};/g
@@ -59,7 +61,7 @@ async function loadPartials() {
 async function injectI18n(filename, html) {
   // 收集所有 sentinel 出現（一頁可能有多個字典，例如 LANGS_I18N + LANGS_D）
   const matches = [...html.matchAll(I18N_SENTINEL)]
-  const jsonPath = path.join(SRC_I18N, filename.replace(/\.html$/, '.json'))
+  const jsonPath = path.join(SRC_I18N, filename.replace(/\.(html|js)$/, '.json'))
   let dict
   try { dict = JSON.parse(await fs.readFile(jsonPath, 'utf8')) }
   catch (e) { if (e.code !== 'ENOENT') throw e }
@@ -98,6 +100,28 @@ async function buildPage(filename) {
   await fs.writeFile(outPath, out, 'utf8')
 }
 
+// ── JS build ────────────────────────────────────────────
+// 把 src/js/*.js 注入 i18n sentinel 後 copy 到 public/js/。
+// 與 page 相同的字典（src/i18n/<name>.json）會被引用，例如
+// src/js/login.js 對應 src/i18n/login.json。
+async function buildJs() {
+  let count = 0
+  try {
+    const files = await fs.readdir(SRC_JS)
+    await fs.mkdir(OUT_JS, { recursive: true })
+    for (const f of files) {
+      if (!f.endsWith('.js')) continue
+      const src = await fs.readFile(path.join(SRC_JS, f), 'utf8')
+      const out = await injectI18n(f, src)
+      await fs.writeFile(path.join(OUT_JS, f), out, 'utf8')
+      count++
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e
+  }
+  return count
+}
+
 async function buildAll() {
   const partialCount = await loadPartials()
   let pageCount = 0
@@ -111,8 +135,9 @@ async function buildAll() {
   } catch (e) {
     if (e.code !== 'ENOENT') throw e
   }
+  const jsCount = await buildJs()
   const ts = new Date().toLocaleTimeString()
-  console.log(`[${ts}] built ${pageCount} pages with ${partialCount} partials`)
+  console.log(`[${ts}] built ${pageCount} pages, ${jsCount} js files, ${partialCount} partials`)
 }
 
 // ── Watch mode ──────────────────────────────────────────
@@ -120,7 +145,7 @@ async function watch() {
   const { default: chokidar } = await import('chokidar')
   await buildAll()
   console.log('watching src/ for changes...')
-  const watcher = chokidar.watch([SRC_PAGES, SRC_PARTIALS, SRC_I18N], {
+  const watcher = chokidar.watch([SRC_PAGES, SRC_PARTIALS, SRC_I18N, SRC_JS], {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 30 },
   })
