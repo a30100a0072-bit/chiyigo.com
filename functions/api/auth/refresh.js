@@ -21,11 +21,17 @@
 
 import { generateSecureToken, hashToken } from '../../utils/crypto.js'
 import { signJwt } from '../../utils/jwt.js'
+import { getCorsHeadersForCredentials, resolveAud } from '../../utils/cors.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
 
+export async function onRequestOptions({ request, env }) {
+  return new Response(null, { status: 204, headers: getCorsHeadersForCredentials(request, env) })
+}
+
 export async function onRequestPost({ request, env }) {
+  const cors = getCorsHeadersForCredentials(request, env)
   // Cookie 優先（Web），其次 JSON body（App）
   const cookieToken = parseCookieHeader(request.headers.get('Cookie'), 'chiyigo_refresh')
 
@@ -33,12 +39,13 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { body = {} }
 
-  const { device_uuid } = body ?? {}
+  const { device_uuid, aud } = body ?? {}
   const refresh_token   = cookieToken ?? body?.refresh_token
   const isWeb           = !!cookieToken
+  const audience        = resolveAud(aud)
 
   if (!refresh_token || typeof refresh_token !== 'string')
-    return res({ error: 'refresh_token is required' }, 400)
+    return res({ error: 'refresh_token is required' }, 400, cors)
 
   const db = env.chiyigo_db
 
@@ -54,15 +61,15 @@ export async function onRequestPost({ request, env }) {
     .first()
 
   if (!tokenRow)
-    return res({ error: 'Invalid or expired refresh token' }, 401)
+    return res({ error: 'Invalid or expired refresh token' }, 401, cors)
 
   if (tokenRow.revoked_at)
-    return res({ error: 'Refresh token has been revoked' }, 401)
+    return res({ error: 'Refresh token has been revoked' }, 401, cors)
 
   // ── 2. device_uuid 驗證 ──────────────────────────────────────
   if (tokenRow.device_uuid !== null && tokenRow.device_uuid !== '') {
     if (tokenRow.device_uuid !== (device_uuid ?? ''))
-      return res({ error: 'Device mismatch' }, 401)
+      return res({ error: 'Device mismatch' }, 401, cors)
   }
 
   // ── 3. 取得用戶最新狀態 ──────────────────────────────────────
@@ -75,8 +82,8 @@ export async function onRequestPost({ request, env }) {
     .bind(tokenRow.user_id)
     .first()
 
-  if (!user) return res({ error: 'User not found' }, 401)
-  if (user.status === 'banned') return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
+  if (!user) return res({ error: 'User not found' }, 401, cors)
+  if (user.status === 'banned') return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403, cors)
 
   // ── 4. Refresh Token Rotation（原子輪換）─────────────────────
   const newPlainToken    = generateSecureToken()
@@ -100,7 +107,7 @@ export async function onRequestPost({ request, env }) {
     email_verified: user.email_verified === 1,
     role:           user.role,
     status:         user.status,
-  }, ACCESS_TOKEN_TTL, env)
+  }, ACCESS_TOKEN_TTL, env, { audience })
 
   // Web → 新 Cookie；App → JSON body
   if (isWeb) {
@@ -109,6 +116,7 @@ export async function onRequestPost({ request, env }) {
       headers: {
         'Content-Type': 'application/json',
         'Set-Cookie': refreshCookie(newPlainToken, REFRESH_TOKEN_DAYS * 86400),
+        ...cors,
       },
     })
   }
@@ -116,7 +124,7 @@ export async function onRequestPost({ request, env }) {
   return res({
     access_token:  accessToken,
     refresh_token: newPlainToken,
-  })
+  }, 200, cors)
 }
 
 function parseCookieHeader(header, name) {
@@ -129,9 +137,9 @@ function refreshCookie(token, maxAge) {
   return `chiyigo_refresh=${token}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
 }
 
-function res(data, status = 200) {
+function res(data, status = 200, cors = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...cors },
   })
 }

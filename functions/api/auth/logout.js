@@ -15,10 +15,16 @@
  */
 
 import { hashToken } from '../../utils/crypto.js'
+import { getCorsHeadersForCredentials } from '../../utils/cors.js'
 
 const CLEAR_COOKIE = 'chiyigo_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=0'
 
+export async function onRequestOptions({ request, env }) {
+  return new Response(null, { status: 204, headers: getCorsHeadersForCredentials(request, env) })
+}
+
 export async function onRequestPost({ request, env }) {
+  const cors = getCorsHeadersForCredentials(request, env)
   // Cookie 優先（Web），其次 JSON body（App）
   const cookieToken = parseCookieHeader(request.headers.get('Cookie'), 'chiyigo_refresh')
 
@@ -34,7 +40,7 @@ export async function onRequestPost({ request, env }) {
   const clearCookieHeader = { 'Set-Cookie': CLEAR_COOKIE }
   if (!refresh_token) {
     return new Response(JSON.stringify({ message: 'Logged out' }), {
-      headers: { 'Content-Type': 'application/json', ...clearCookieHeader },
+      headers: { 'Content-Type': 'application/json', ...clearCookieHeader, ...cors },
     })
   }
 
