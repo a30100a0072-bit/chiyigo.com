@@ -56,15 +56,19 @@ async function getVerifyingKey(env) {
  * @param {object} payload   JWT claims（sub, email, scope 等）
  * @param {string} expiresIn 有效期，例如 '15m', '5m', '7d'
  * @param {object} env       Cloudflare env（含 JWT_PRIVATE_KEY）
+ * @param {object} [opts]
+ * @param {string} [opts.audience]  受眾識別（'talo' / 'mbti' / 'chiyigo'）— 缺省不寫入 aud claim，過渡相容
  * @returns {Promise<string>} JWT 字串
  */
-export async function signJwt(payload, expiresIn, env) {
+export async function signJwt(payload, expiresIn, env, opts = {}) {
   const { key, kid } = await getSigningKey(env)
-  return new SignJWT(payload)
+  const builder = new SignJWT(payload)
     .setProtectedHeader({ alg: 'ES256', kid })
+    .setIssuer('https://chiyigo.com')
     .setIssuedAt()
     .setExpirationTime(expiresIn)
-    .sign(key)
+  if (opts.audience) builder.setAudience(opts.audience)
+  return builder.sign(key)
 }
 
 /**

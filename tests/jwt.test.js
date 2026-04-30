@@ -33,6 +33,32 @@ describe('signJwt / verifyJwt', () => {
     const tampered = token.slice(0, -2) + (token.endsWith('A') ? 'B' : 'A') + token.slice(-1)
     await expect(verifyJwt(tampered, env)).rejects.toThrow()
   })
+
+  it('always sets iss=https://chiyigo.com', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env)
+    const payload = await verifyJwt(token, env)
+    expect(payload.iss).toBe('https://chiyigo.com')
+  })
+
+  it('sets aud when audience option provided', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env, { audience: 'talo' })
+    const payload = await verifyJwt(token, env)
+    expect(payload.aud).toBe('talo')
+  })
+
+  it('omits aud when audience option not provided', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env)
+    const payload = await verifyJwt(token, env)
+    expect(payload.aud).toBeUndefined()
+  })
+
+  it('header includes kid', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env)
+    const headerB64 = token.split('.')[0]
+    const header = JSON.parse(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')))
+    expect(header.alg).toBe('ES256')
+    expect(header.kid).toBe('test-key')
+  })
 })
 
 describe('getPublicJwk', () => {
