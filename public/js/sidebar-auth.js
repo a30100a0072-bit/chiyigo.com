@@ -28,7 +28,18 @@
     location.href = '/';
   }
 
+  function injectLogoutStyle() {
+    if (document.getElementById('sb-logout-style')) return;
+    var s = document.createElement('style');
+    s.id = 'sb-logout-style';
+    s.textContent =
+      '.sb-logout-btn{color:rgba(229,115,115,.9)!important}' +
+      '.sb-logout-btn:hover{background:rgba(229,115,115,.08)!important;color:#e57373!important}';
+    document.head.appendChild(s);
+  }
+
   function init() {
+    injectLogoutStyle();
     applyAuthState();
     document.querySelectorAll('[data-logout]').forEach(function (btn) {
       btn.addEventListener('click', doLogout);
