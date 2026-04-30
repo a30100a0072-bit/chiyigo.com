@@ -6,14 +6,15 @@
   "scripts": {
     "build:partials": "node scripts/build-partials.js",
     "build:css": "tailwindcss -c tailwind.config.cjs -i src/css/tailwind.css -o public/css/tailwind.css --minify",
-    "build": "npm run build:partials && npm run build:css",
+    "build": "npm run build:partials && npm run build:css && npm run lint:handlers",
     "build:watch": "node scripts/build-partials.js --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:int": "vitest run --config vitest.workers.config.js",
     "test:all": "npm test && npm run test:int",
-    "lint": "eslint functions tests"
+    "lint": "eslint functions tests",
+    "lint:handlers": "node scripts/lint-handlers.js"
   },
   "dependencies": {
     "jose": "^5.9.6",
