@@ -312,3 +312,75 @@ a.info-card-value:hover,.info-card-btn:hover{color:var(--accent)}
 .m-ov-lang-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
 .m-top-lang-drop{position:fixed;top:58px;right:1.25rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:60;min-width:128px}
 .m-top-lang-drop.open{display:flex}
+
+/* ── AI 需求單助手 CTA ───────────────────────────────── */
+.ai-helper-cta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border-mid);
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent-dim), transparent);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color .2s ease, transform .2s ease, background .2s ease;
+}
+.ai-helper-cta:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, var(--accent-dim), var(--bg-elevated));
+}
+.ai-helper-cta-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  flex-shrink: 0;
+}
+.ai-helper-cta-icon svg { width: 18px; height: 18px; }
+.ai-helper-cta-body {
+  display: flex;
+  flex-direction: column;
+  gap: .15rem;
+  flex: 1;
+  min-width: 0;
+}
+.ai-helper-cta-title {
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.ai-helper-cta-desc {
+  font-size: .78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.ai-helper-cta-badge {
+  font-family: var(--font-mono);
+  font-size: .65rem;
+  letter-spacing: .04em;
+  padding: .25rem .55rem;
+  border-radius: 6px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ai-helper-cta-arrow {
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.ai-helper-cta:hover .ai-helper-cta-arrow { color: var(--accent); transform: translateX(2px); }
+@media (max-width: 640px) {
+  .ai-helper-cta { flex-wrap: wrap; }
+  .ai-helper-cta-badge { order: 3; margin-left: auto; }
+}

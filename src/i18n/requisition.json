@@ -62,7 +62,10 @@
     "info_current_status": "// 目前狀態",
     "footer_contact_title": "聯絡我們",
     "member_center": "會員中心",
-    "logout": "登出"
+    "logout": "登出",
+    "ai_helper_btn": "用 AI 需求單助手快速生成",
+    "ai_helper_desc": "先和 AI 對話釐清需求，再自動產出表單。",
+    "ai_helper_badge": "需會員登入"
   },
   "en": {
     "nav_home": "Home",
@@ -127,7 +130,10 @@
     "info_current_status": "// Current Status",
     "footer_contact_title": "Contact Us",
     "member_center": "Member Center",
-    "logout": "Sign Out"
+    "logout": "Sign Out",
+    "ai_helper_btn": "Use the AI Requisition Assistant",
+    "ai_helper_desc": "Chat with AI to clarify your needs, then auto-fill the form.",
+    "ai_helper_badge": "Login required"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -192,7 +198,10 @@
     "info_current_status": "// 現在の状況",
     "footer_contact_title": "お問い合わせ",
     "member_center": "メンバーセンター",
-    "logout": "ログアウト"
+    "logout": "ログアウト",
+    "ai_helper_btn": "AI依頼アシスタントで素早く作成",
+    "ai_helper_desc": "AIと対話して要望を整理してからフォームに自動反映。",
+    "ai_helper_badge": "ログインが必要"
   },
   "ko": {
     "nav_home": "홈",
@@ -257,6 +266,9 @@
     "info_current_status": "// 현재 상태",
     "footer_contact_title": "연락하기",
     "member_center": "회원 센터",
-    "logout": "로그아웃"
+    "logout": "로그아웃",
+    "ai_helper_btn": "AI 요청서 도우미로 빠르게 작성",
+    "ai_helper_desc": "AI와 대화하며 요구를 정리한 후 자동으로 폼에 입력합니다.",
+    "ai_helper_badge": "로그인 필요"
   }
 }
