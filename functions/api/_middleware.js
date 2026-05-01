@@ -48,6 +48,36 @@ function emit(line) {
   try { console.log(JSON.stringify(line)) } catch { /* never throw from logger */ }
 }
 
+// 同 path 1 分鐘內只發一次告警，避免單一壞 endpoint 連發洗版
+// （per-isolate 記憶體，多 isolate 下不保證 100% 去重，但夠用）
+const ALERT_COOLDOWN_MS = 60_000
+const alertLastSentAt = new Map()
+
+function shouldAlert(pathPattern) {
+  const now = Date.now()
+  const last = alertLastSentAt.get(pathPattern) ?? 0
+  if (now - last < ALERT_COOLDOWN_MS) return false
+  alertLastSentAt.set(pathPattern, now)
+  return true
+}
+
+async function sendAlert(webhookUrl, payload) {
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content:
+          `🔴 5xx on chiyigo\n` +
+          `\`${payload.method} ${payload.path}\` → ${payload.status}\n` +
+          `traceId: \`${payload.traceId}\`\n` +
+          `ms: ${payload.ms}` +
+          (payload.errName ? `\nerr: \`${payload.errName}: ${payload.errMessage}\`` : ''),
+      }),
+    })
+  } catch { /* never throw from alerter */ }
+}
+
 function levelFor(status, hasError) {
   if (hasError || status >= 500) return 'error'
   if (status >= 400) return 'warn'
@@ -55,7 +85,7 @@ function levelFor(status, hasError) {
 }
 
 export async function onRequest(context) {
-  const { request, env, next, data } = context
+  const { request, env, next, data, waitUntil } = context
   const url     = new URL(request.url)
   const path    = url.pathname
   const method  = request.method
@@ -106,13 +136,15 @@ export async function onRequest(context) {
   const cf     = request.cf ?? {}
   const status = caught ? 500 : (response?.status ?? 0)
 
+  const pathPattern = routePattern(path)
+
   emit({
     ts:      new Date().toISOString(),
     level:   levelFor(status, !!caught),
     msg:     'http',
     traceId,
     method,
-    path:    routePattern(path),
+    path:    pathPattern,
     status,
     ms,
     ip:      request.headers.get('CF-Connecting-IP') ?? null,
@@ -127,6 +159,19 @@ export async function onRequest(context) {
       stack:   (caught.stack ?? '').split('\n').slice(0, 5).join('\n'),
     } : null,
   })
+
+  // 5xx 告警 → Discord webhook（節流：同 path 60s 一次）
+  if (status >= 500 && env.ALERT_WEBHOOK_URL && shouldAlert(pathPattern)) {
+    waitUntil(sendAlert(env.ALERT_WEBHOOK_URL, {
+      method,
+      path: pathPattern,
+      status,
+      traceId,
+      ms,
+      errName:    caught?.name ?? null,
+      errMessage: caught?.message ?? null,
+    }))
+  }
 
   if (caught) {
     const corsHeaders = getCorsHeaders(request, env)
