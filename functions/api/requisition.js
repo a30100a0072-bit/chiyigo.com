@@ -11,6 +11,10 @@ import { requireAuth, res } from '../utils/auth.js'
 
 const REQUIRED = ['name', 'contact', 'service_type', 'message']
 
+const SERVICE_TYPES = ['system', 'web', 'game', 'integration', 'interactive', 'branding', 'marketing', 'other']
+const BUDGETS       = ['under30k', '30k-80k', '80k-200k', '200k-1m', 'flexible']
+const TIMELINES     = ['asap', '1-3m', '3-6m', 'flexible']
+
 function validate(body) {
   for (const key of REQUIRED) {
     if (!body[key]?.trim()) return `Missing field: ${key}`
@@ -20,7 +24,13 @@ function validate(body) {
   const isPhone = /^09\d{8}$/.test(v)
   const isLine  = /^[a-zA-Z0-9._\-@]{4,}$/.test(v)
   if (!isEmail && !isPhone && !isLine) return 'Invalid contact format'
+  if (body.name.trim().length > 50) return 'Name too long'
+  if (body.contact.trim().length > 100) return 'Contact too long'
+  if (body.company && body.company.length > 100) return 'Company too long'
   if (body.message.length > 2000) return 'Message too long'
+  if (!SERVICE_TYPES.includes(body.service_type.trim())) return 'Invalid service_type'
+  if (body.budget && !BUDGETS.includes(body.budget.trim())) return 'Invalid budget'
+  if (body.timeline && !TIMELINES.includes(body.timeline.trim())) return 'Invalid timeline'
   return null
 }
 
