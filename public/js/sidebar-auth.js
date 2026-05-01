@@ -85,18 +85,15 @@
     await doRefresh();
   }
 
-  async function doLogout() {
-    var token = readToken();
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
-      });
-    } catch (_) {}
+  // OIDC RP-Initiated Logout：跳 chiyigo end_session_endpoint，
+  // 它會撤所有 refresh + 嵌 iframe 同步登出 mbti / talo（front-channel logout）
+  // 沒有 id_token_hint 也能跑（cookie token 還是會被撤）
+  function doLogout() {
     writeToken(null);
     broadcastLogout();
-    location.href = '/';
+    var url = '/api/auth/oauth/end-session?post_logout_redirect_uri=' +
+              encodeURIComponent('https://chiyigo.com/');
+    location.href = url;
   }
 
   function init() {
@@ -122,7 +119,13 @@
     }
 
     // localStorage 跨分頁同步 fallback（舊瀏覽器 / BroadcastChannel disabled）
+    // 也監聽 OIDC Front-Channel Logout 訊號（其他子站登出 → 同源主頁分頁立刻清狀態）
     window.addEventListener('storage', function (e) {
+      if (e.key === 'oidc_logout_at') {
+        writeToken(null);
+        applyAuthState();
+        return;
+      }
       if (e.key === TOKEN_KEY || e.key === null) applyAuthState();
     });
 

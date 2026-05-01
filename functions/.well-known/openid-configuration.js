@@ -28,8 +28,9 @@ const CONFIG = {
   token_endpoint:          `${ISSUER}/api/auth/oauth/token`,
   userinfo_endpoint:        `${ISSUER}/api/auth/userinfo`,
   jwks_uri:                `${ISSUER}/.well-known/jwks.json`,
-  // Discovery 不公告 logout endpoint，因為現行 /api/auth/logout 是自家 cookie/refresh 撤銷，
-  // 不是 OIDC RP-Initiated Logout（spec 1.0 §3）。未來補完整 RP-Initiated Logout 再加。
+  end_session_endpoint:    `${ISSUER}/api/auth/oauth/end-session`,
+  frontchannel_logout_supported:          true,
+  frontchannel_logout_session_supported:  false,
 
   response_types_supported:               ['code'],
   subject_types_supported:                ['public'],
