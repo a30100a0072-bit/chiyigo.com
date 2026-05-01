@@ -188,14 +188,9 @@ function reqStatus(key) {
 window._lastRequisitions = null;
 
 async function loadRequisitions() {
-  const token = sessionStorage.getItem('access_token')
-  if (!token) return
+  if (!sessionStorage.getItem('access_token')) return
   try {
-    const r = await fetch('/api/requisition/me', {
-      headers: { 'Authorization': 'Bearer ' + token },
-    })
-    if (!r.ok) return
-    const { requisitions } = await r.json()
+    const { requisitions } = await apiFetch('/api/requisition/me')
     renderRequisitions(requisitions)
   } catch { /* 非必要區塊，靜默失敗 */ }
 }
@@ -272,26 +267,19 @@ function armRevoke(id) {
 }
 
 async function revokeRequisition(id) {
-  const token = sessionStorage.getItem('access_token')
-  const btn   = document.getElementById(`revoke-btn-${id}`)
+  const btn = document.getElementById(`revoke-btn-${id}`)
   if (_revokeArmTimer) { clearTimeout(_revokeArmTimer); _revokeArmTimer = null }
   if (btn) { btn.disabled = true; btn.textContent = T('btn_processing') }
   try {
-    const r    = await fetch('/api/requisition/revoke', {
-      method:  'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ requisition_id: id }),
+    await apiFetch('/api/requisition/revoke', {
+      method: 'POST',
+      body:   JSON.stringify({ requisition_id: id }),
     })
-    const data = await r.json()
-    if (!r.ok) {
-      showBindToast(data.error ?? T('msg_revoke_fail'), 'err')
-      if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
-      return
-    }
     showBindToast(T('msg_revoke_success').replace('${id}', id), 'ok')
     loadRequisitions()
-  } catch {
-    showBindToast(T('net_err'), 'err')
+  } catch (e) {
+    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('msg_revoke_fail')) : T('net_err')
+    showBindToast(formatApiError(e, base), 'err')
     if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
   }
 }
@@ -361,46 +349,40 @@ function renderBindingSection(identities) {
 }
 
 async function bindProvider(provider) {
-  const token = sessionStorage.getItem('access_token');
-  const btn   = document.getElementById(`bind-btn-${provider}`);
+  const btn = document.getElementById(`bind-btn-${provider}`);
   if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
   try {
-    const res  = await fetch(`/api/auth/oauth/${provider}/init?is_binding=true`, {
-      headers: { 'Authorization': 'Bearer ' + token },
-    });
-    const data = await res.json();
-    if (!res.ok || !data.redirect_url) {
-      showBindToast(data.error ?? T('bind_fail'), 'err');
+    const data = await apiFetch(`/api/auth/oauth/${provider}/init?is_binding=true`);
+    if (!data?.redirect_url) {
+      showBindToast(T('bind_fail'), 'err');
+      if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); }
       return;
     }
     window.location.href = data.redirect_url;
-  } catch {
-    showBindToast(T('net_err'), 'err');
+  } catch (e) {
+    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('bind_fail')) : T('net_err');
+    showBindToast(formatApiError(e, base), 'err');
     if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); }
   }
 }
 
 async function unbindProvider(provider) {
-  const token = sessionStorage.getItem('access_token');
-  const btn   = document.getElementById(`unbind-btn-${provider}`);
+  const btn = document.getElementById(`unbind-btn-${provider}`);
   if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
   try {
-    const res  = await fetch('/api/auth/identity/unbind', {
-      method:  'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ provider }),
+    await apiFetch('/api/auth/identity/unbind', {
+      method: 'POST',
+      body:   JSON.stringify({ provider }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      const msg = res.status === 400 ? T('unbind_last_method') : (data.error ?? T('unbind_fail'));
-      showBindToast(msg, res.status === 400 ? 'warn' : 'err');
-      if (btn) { btn.disabled = false; btn.textContent = T('unbind_btn'); }
-      return;
-    }
     showBindToast(T('unbind_success').replace('${p}', provider), 'ok');
     loadProfile();
-  } catch {
-    showBindToast(T('net_err'), 'err');
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 400) {
+      showBindToast(formatApiError(e, T('unbind_last_method')), 'warn');
+    } else {
+      const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('unbind_fail')) : T('net_err');
+      showBindToast(formatApiError(e, base), 'err');
+    }
     if (btn) { btn.disabled = false; btn.textContent = T('unbind_btn'); }
   }
 }
@@ -459,39 +441,31 @@ function render2FASection(enabled, hasPw) {
 }
 
 async function startSetup2FA() {
-  const token = sessionStorage.getItem('access_token');
-  const btn   = document.getElementById('tfa-enable-btn');
+  const btn = document.getElementById('tfa-enable-btn');
   btn.disabled = true; btn.querySelector('[data-i18n]').textContent = T('btn_loading');
   try {
-    const res  = await fetch('/api/auth/2fa/setup', {
-      method:  'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body:    '{}',
-    });
-    const data = await res.json();
-    if (!res.ok) { alert(data.error ?? T('setup_fail')); btn.disabled = false; btn.querySelector('[data-i18n]').textContent = T('tfa_enable_btn'); return; }
+    const data = await apiFetch('/api/auth/2fa/setup', { method: 'POST', body: '{}' });
     document.getElementById('tfa-secret').textContent = data.secret;
     await QRCode.toCanvas(document.getElementById('tfa-qr'), data.otpauth_uri, { width: 180, margin: 1 });
     document.getElementById('tfa-setup-panel').classList.remove('hidden');
     document.getElementById('tfa-otp-input').value = '';
     document.getElementById('tfa-setup-msg').classList.add('hidden');
-  } catch { alert(T('net_err')); }
+  } catch (e) {
+    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('setup_fail')) : T('net_err');
+    alert(formatApiError(e, base));
+  }
   btn.disabled = false; btn.querySelector('[data-i18n]').textContent = T('tfa_enable_btn');
 }
 
 async function confirmEnable2FA() {
-  const token = sessionStorage.getItem('access_token');
-  const otp   = document.getElementById('tfa-otp-input').value.trim();
-  const msg   = document.getElementById('tfa-setup-msg');
+  const otp = document.getElementById('tfa-otp-input').value.trim();
+  const msg = document.getElementById('tfa-setup-msg');
   if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); return; }
   try {
-    const res  = await fetch('/api/auth/2fa/activate', {
-      method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ otp_code: otp }),
+    const data = await apiFetch('/api/auth/2fa/activate', {
+      method: 'POST',
+      body:   JSON.stringify({ otp_code: otp }),
     });
-    const data = await res.json();
-    if (!res.ok) { showTfaMsg(msg, data.error ?? T('enable_fail'), 'err'); return; }
-    // 顯示備用碼
     const codesEl = document.getElementById('tfa-backup-codes');
     codesEl.innerHTML = data.backup_codes.map(c =>
       `<code class="block text-center text-xs font-mono bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-2 py-1.5 text-gray-300 select-all">${c}</code>`
@@ -499,7 +473,10 @@ async function confirmEnable2FA() {
     render2FASection(true);
     document.getElementById('tfa-setup-panel').classList.add('hidden');
     document.getElementById('tfa-backup-panel').classList.remove('hidden');
-  } catch { showTfaMsg(msg, T('net_err'), 'err'); }
+  } catch (e) {
+    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('enable_fail')) : T('net_err');
+    showTfaMsg(msg, formatApiError(e, base), 'err');
+  }
 }
 
 function closeTfaBackup() {
@@ -514,19 +491,19 @@ function showDisablePanel() {
 }
 
 async function confirmDisable2FA() {
-  const token = sessionStorage.getItem('access_token');
-  const otp   = document.getElementById('tfa-disable-input').value.trim();
-  const msg   = document.getElementById('tfa-disable-msg');
+  const otp = document.getElementById('tfa-disable-input').value.trim();
+  const msg = document.getElementById('tfa-disable-msg');
   if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); return; }
   try {
-    const res  = await fetch('/api/auth/2fa/disable', {
-      method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ otp_code: otp }),
+    await apiFetch('/api/auth/2fa/disable', {
+      method: 'POST',
+      body:   JSON.stringify({ otp_code: otp }),
     });
-    const data = await res.json();
-    if (!res.ok) { showTfaMsg(msg, data.error ?? T('disable_fail'), 'err'); return; }
     render2FASection(false);
-  } catch { showTfaMsg(msg, T('net_err'), 'err'); }
+  } catch (e) {
+    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('disable_fail')) : T('net_err');
+    showTfaMsg(msg, formatApiError(e, base), 'err');
+  }
 }
 
 function showTfaMsg(el, text, type) {
@@ -536,46 +513,30 @@ function showTfaMsg(el, text, type) {
 
 async function sendVerification() {
   const btn = document.getElementById('resend-btn');
-  const msg = document.getElementById('resend-msg');
-  const token = sessionStorage.getItem('access_token');
-  if (!token) { window.location.href = '/login.html'; return; }
+  if (!sessionStorage.getItem('access_token')) { window.location.href = '/login.html'; return; }
 
   btn.disabled = true;
   btn.querySelector('[data-i18n]').textContent = T('btn_sending');
-  msg.className = 'hidden text-xs mt-2';
+  document.getElementById('resend-msg').className = 'hidden text-xs mt-2';
 
   try {
-    const res  = await fetch('/api/auth/email/send-verification', {
-      method:  'POST',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Content-Type':  'application/json',
-      },
-      body: '{}',
-    });
-    const data = await res.json().catch(() => ({}));
-
-    if (res.ok) {
-      showResendMsg(T('resend_sent'), 'ok');
-      startResendCooldown(60);
-      return;
-    }
-    if (res.status === 400) {
+    await apiFetch('/api/auth/email/send-verification', { method: 'POST', body: '{}' });
+    showResendMsg(T('resend_sent'), 'ok');
+    startResendCooldown(60);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 400) {
       // email 已驗證，重新載入資料更新 UI
       loadProfile();
       return;
     }
-    if (res.status === 429) {
-      const wait = data.retry_after ?? 60;
+    if (e instanceof ApiError && e.status === 429) {
+      const wait = e.body?.retry_after ?? 60;
       showResendMsg(T('resend_wait'), 'warn');
       startResendCooldown(wait);
       return;
     }
-    showResendMsg(data.error ?? T('resend_fail'), 'err');
-    btn.disabled = false;
-    btn.querySelector('[data-i18n]').textContent = T('resend_btn');
-  } catch {
-    showResendMsg(T('net_err'), 'err');
+    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('resend_fail')) : T('net_err');
+    showResendMsg(formatApiError(e, base), 'err');
     btn.disabled = false;
     btn.querySelector('[data-i18n]').textContent = T('resend_btn');
   }
@@ -649,25 +610,18 @@ async function sendSetPasswordEmail() {
   msg.textContent = '';
   btn.disabled = true;
   try {
-    const r = await fetch('/api/auth/local/forgot-password', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email: window.__userEmail }),
+    await apiFetch('/api/auth/local/forgot-password', {
+      method: 'POST',
+      body:   JSON.stringify({ email: window.__userEmail }),
     });
-    if (!r.ok) {
-      msg.textContent = T('setpw_fail');
-      msg.className = 'text-xs text-red-400';
-      msg.classList.remove('hidden');
-      btn.disabled = false;
-      return;
-    }
     msg.innerHTML = T('setpw_sent').replace('${email}', esc(window.__userEmail));
     msg.className = 'text-xs text-emerald-400';
     msg.classList.remove('hidden');
     // 60 秒冷卻保護
     setTimeout(() => { btn.disabled = false; }, 60000);
   } catch (e) {
-    msg.textContent = T('net_err');
+    const base = (e instanceof ApiError && e.status > 0) ? T('setpw_fail') : T('net_err');
+    msg.textContent = formatApiError(e, base);
     msg.className = 'text-xs text-red-400';
     msg.classList.remove('hidden');
     btn.disabled = false;
@@ -728,29 +682,23 @@ async function submitDeleteAccount() {
   }
   btn.disabled = true;
   try {
-    const tk = sessionStorage.getItem('access_token');
-    const r  = await fetch('/api/auth/delete', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tk },
-      body:    JSON.stringify({ password: pw }),
+    await apiFetch('/api/auth/delete', {
+      method: 'POST',
+      body:   JSON.stringify({ password: pw }),
     });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      const k = DEL_ERR_MAP[data.error];
-      msg.textContent = k ? T(k) : T('del_err_generic').replace('${status}', r.status);
-      msg.className = 'text-xs text-red-400';
-      msg.classList.remove('hidden');
-      btn.disabled = false;
-      // 開發者除錯：把後端原始訊息一起印到 console，方便診斷
-      console.warn('[delete-account]', r.status, data, 'detail=', data.detail);
-      return;
-    }
     msg.innerHTML = T('del_sent');
     msg.className = 'text-xs text-emerald-400';
     msg.classList.remove('hidden');
     document.getElementById('del-password').value = '';
   } catch (e) {
-    msg.textContent = T('net_err');
+    if (e instanceof ApiError && e.status > 0) {
+      const k = DEL_ERR_MAP[e.body?.error];
+      const base = k ? T(k) : T('del_err_generic').replace('${status}', e.status);
+      msg.textContent = formatApiError(e, base);
+      console.warn('[delete-account]', e.status, e.body, 'traceId=', e.traceId);
+    } else {
+      msg.textContent = T('net_err');
+    }
     msg.className = 'text-xs text-red-400';
     msg.classList.remove('hidden');
     btn.disabled = false;
