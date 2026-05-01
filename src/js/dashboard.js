@@ -90,7 +90,9 @@ async function loadProfile() {
 
     // access_token 過期 → 嘗試靜默刷新一次，成功後重試
     if (res.status === 401) {
+      console.warn('[loadProfile] 401 first hit, traceId=', res.headers.get('X-Request-Id'));
       const ok = await refreshAccessToken();
+      console.warn('[loadProfile] refresh result=', ok);
       if (!ok) {
         sessionStorage.removeItem('access_token');
         window.location.href = '/login.html';
@@ -99,6 +101,14 @@ async function loadProfile() {
       res = await fetch('/api/auth/me', {
         headers: { 'Authorization': 'Bearer ' + sessionStorage.getItem('access_token') },
       });
+      if (res.status === 401) {
+        console.warn('[loadProfile] 401 after refresh, traceId=', res.headers.get('X-Request-Id'));
+        const body = await res.json().catch(() => ({}));
+        console.warn('[loadProfile] 401 body=', body);
+        sessionStorage.removeItem('access_token');
+        window.location.href = '/login.html';
+        return;
+      }
     }
 
     if (res.status === 403) {
@@ -107,7 +117,11 @@ async function loadProfile() {
       return;
     }
 
-    if (!res.ok) throw new Error('Server error');
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      console.warn('[loadProfile] non-ok', res.status, body, 'traceId=', res.headers.get('X-Request-Id'));
+      throw new Error(body.error || ('HTTP ' + res.status));
+    }
 
     const data = await res.json();
 
@@ -162,10 +176,12 @@ async function loadProfile() {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('user-card').classList.remove('hidden');
 
-  } catch {
+  } catch (e) {
+    console.warn('[loadProfile] catch', e);
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('error-card').classList.remove('hidden');
-    document.getElementById('error-msg').textContent = T('err_profile');
+    const detail = e?.message ? `${T('err_profile')}（${e.message}）` : T('err_profile');
+    document.getElementById('error-msg').textContent = detail;
   }
 }
 
@@ -173,6 +189,26 @@ loadProfile();
 
 // ── HTML 轉義 helper（防 XSS）────────────────────────────────
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+
+// ── 後端英文錯誤訊息 → i18n key（dashboard 共用映射）──────────
+const BACKEND_ERR_MAP = {
+  'Invalid OTP code':            'err_invalid_otp',
+  'Invalid OTP or backup code':  'err_invalid_otp',
+  'Token revoked':               'err_token_revoked',
+  'Unauthorized':                'err_unauthorized',
+  'Too many requests':           'err_too_many',
+  'Too many requests. Please try again later.': 'err_too_many',
+  'Account is banned':           'err_account_banned',
+  'Incorrect password':          'err_invalid_password',
+  'Account not found':           'err_user_not_found',
+}
+// 把 ApiError 翻成本地化 + traceId 字串；非 ApiError 退回 fallback
+function tApiError(e, fallback) {
+  if (!(e instanceof ApiError) || e.status === 0) return fallback
+  const k    = BACKEND_ERR_MAP[e.body?.error]
+  const base = k ? T(k) : (e.message ?? fallback)
+  return e.traceId ? `${base}（#${e.traceId}）` : base
+}
 
 // ── 需求單 ───────────────────────────────────────────────────
 
@@ -278,8 +314,7 @@ async function revokeRequisition(id) {
     showBindToast(T('msg_revoke_success').replace('${id}', id), 'ok')
     loadRequisitions()
   } catch (e) {
-    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('msg_revoke_fail')) : T('net_err')
-    showBindToast(formatApiError(e, base), 'err')
+    showBindToast(tApiError(e, T('net_err')), 'err')
     if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
   }
 }
@@ -360,8 +395,7 @@ async function bindProvider(provider) {
     }
     window.location.href = data.redirect_url;
   } catch (e) {
-    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('bind_fail')) : T('net_err');
-    showBindToast(formatApiError(e, base), 'err');
+    showBindToast(tApiError(e, T('net_err')), 'err');
     if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); }
   }
 }
@@ -378,10 +412,10 @@ async function unbindProvider(provider) {
     loadProfile();
   } catch (e) {
     if (e instanceof ApiError && e.status === 400) {
-      showBindToast(formatApiError(e, T('unbind_last_method')), 'warn');
+      const msg = e.traceId ? `${T('unbind_last_method')}（#${e.traceId}）` : T('unbind_last_method');
+      showBindToast(msg, 'warn');
     } else {
-      const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('unbind_fail')) : T('net_err');
-      showBindToast(formatApiError(e, base), 'err');
+      showBindToast(tApiError(e, T('net_err')), 'err');
     }
     if (btn) { btn.disabled = false; btn.textContent = T('unbind_btn'); }
   }
@@ -451,8 +485,7 @@ async function startSetup2FA() {
     document.getElementById('tfa-otp-input').value = '';
     document.getElementById('tfa-setup-msg').classList.add('hidden');
   } catch (e) {
-    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('setup_fail')) : T('net_err');
-    alert(formatApiError(e, base));
+    alert(tApiError(e, T('net_err')));
   }
   btn.disabled = false; btn.querySelector('[data-i18n]').textContent = T('tfa_enable_btn');
 }
@@ -474,8 +507,7 @@ async function confirmEnable2FA() {
     document.getElementById('tfa-setup-panel').classList.add('hidden');
     document.getElementById('tfa-backup-panel').classList.remove('hidden');
   } catch (e) {
-    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('enable_fail')) : T('net_err');
-    showTfaMsg(msg, formatApiError(e, base), 'err');
+    showTfaMsg(msg, tApiError(e, T('net_err')), 'err');
   }
 }
 
@@ -501,8 +533,7 @@ async function confirmDisable2FA() {
     });
     render2FASection(false);
   } catch (e) {
-    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('disable_fail')) : T('net_err');
-    showTfaMsg(msg, formatApiError(e, base), 'err');
+    showTfaMsg(msg, tApiError(e, T('net_err')), 'err');
   }
 }
 
@@ -535,8 +566,7 @@ async function sendVerification() {
       startResendCooldown(wait);
       return;
     }
-    const base = (e instanceof ApiError && e.status > 0) ? (e.message ?? T('resend_fail')) : T('net_err');
-    showResendMsg(formatApiError(e, base), 'err');
+    showResendMsg(tApiError(e, T('net_err')), 'err');
     btn.disabled = false;
     btn.querySelector('[data-i18n]').textContent = T('resend_btn');
   }
@@ -620,8 +650,7 @@ async function sendSetPasswordEmail() {
     // 60 秒冷卻保護
     setTimeout(() => { btn.disabled = false; }, 60000);
   } catch (e) {
-    const base = (e instanceof ApiError && e.status > 0) ? T('setpw_fail') : T('net_err');
-    msg.textContent = formatApiError(e, base);
+    msg.textContent = tApiError(e, T('net_err'));
     msg.className = 'text-xs text-red-400';
     msg.classList.remove('hidden');
     btn.disabled = false;
@@ -692,9 +721,10 @@ async function submitDeleteAccount() {
     document.getElementById('del-password').value = '';
   } catch (e) {
     if (e instanceof ApiError && e.status > 0) {
-      const k = DEL_ERR_MAP[e.body?.error];
+      // 先試 delete 專用映射，再退回全域 BACKEND_ERR_MAP
+      const k = DEL_ERR_MAP[e.body?.error] || BACKEND_ERR_MAP[e.body?.error];
       const base = k ? T(k) : T('del_err_generic').replace('${status}', e.status);
-      msg.textContent = formatApiError(e, base);
+      msg.textContent = e.traceId ? `${base}（#${e.traceId}）` : base;
       console.warn('[delete-account]', e.status, e.body, 'traceId=', e.traceId);
     } else {
       msg.textContent = T('net_err');

@@ -62,7 +62,7 @@ export async function onRequestPost({ request, env }) {
 
   // 取用戶資料
   const user = await db
-    .prepare(`SELECT id, email, email_verified, role, status FROM users WHERE id = ? AND deleted_at IS NULL`)
+    .prepare(`SELECT id, email, email_verified, role, status, token_version FROM users WHERE id = ? AND deleted_at IS NULL`)
     .bind(authCode.user_id)
     .first()
 
@@ -87,6 +87,7 @@ export async function onRequestPost({ request, env }) {
     email_verified: user.email_verified === 1,
     role:           user.role,
     status:         user.status,
+    ver:            user.token_version ?? 0,
   }, '15m', env, { audience: resolveAud(redirect_uri) })
 
   return res({
