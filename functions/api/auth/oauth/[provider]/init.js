@@ -13,6 +13,7 @@
 import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-providers.js'
 import { requireAuth } from '../../../../utils/auth.js'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit.js'
+import { resolveAud } from '../../../../utils/cors.js'
 
 const STATE_BYTES       = 16   // 128 bits
 const VERIFIER_BYTES    = 32   // 256 bits
@@ -99,6 +100,9 @@ export async function onRequestGet(context) {
   const pkceReturn = url.searchParams.get('pkce_key')
   const isBinding  = url.searchParams.get('is_binding') === 'true'
   const nextPath   = url.searchParams.get('next')
+  const audInput   = url.searchParams.get('aud')
+  // resolveAud 對未識別字串 fallback 'chiyigo'；綁定模式的 token 永遠 chiyigo（內部 binding 不跨域）
+  const audience   = isBinding ? 'chiyigo' : resolveAud(audInput)
 
   if (!['web', 'pc', 'mobile'].includes(platform))
     return res({ error: 'platform 必須為 web、pc 或 mobile' }, 400)
@@ -164,10 +168,10 @@ export async function onRequestGet(context) {
     await env.chiyigo_db
       .prepare(`
         INSERT INTO oauth_states
-          (state_token, code_verifier, nonce, redirect_uri, platform, client_callback, expires_at, ip_address, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          (state_token, code_verifier, nonce, redirect_uri, platform, client_callback, expires_at, ip_address, aud, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `)
-      .bind(state, code_verifier, nonce, redirect_uri, platform, client_callback ?? '', expires_at, ip)
+      .bind(state, code_verifier, nonce, redirect_uri, platform, client_callback ?? '', expires_at, ip, audience)
       .run()
   } catch {
     return res({ error: 'OAuth 狀態儲存失敗，請重試' }, 500)

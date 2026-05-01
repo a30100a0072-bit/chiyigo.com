@@ -27,6 +27,11 @@ export async function resetDb() {
   } catch { /* column already present */ }
   try {
     await env.chiyigo_db.prepare(
+      `ALTER TABLE oauth_states ADD COLUMN aud TEXT`
+    ).run()
+  } catch { /* column already present */ }
+  try {
+    await env.chiyigo_db.prepare(
       `ALTER TABLE login_attempts ADD COLUMN kind TEXT NOT NULL DEFAULT 'login'`
     ).run()
   } catch { /* column already present */ }

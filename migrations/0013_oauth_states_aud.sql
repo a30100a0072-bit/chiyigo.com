@@ -1,0 +1,14 @@
+-- Migration 0013: oauth_states.aud — 跨子網域 OAuth 入口記錄目標 aud
+--
+-- 緣起：
+--   talo.chiyigo.com / mbti.chiyigo.com 透過 chiyigo.com login.html?redirect=...
+--   走 cross-app SSO；若使用者點 Google/LINE/Discord 等 OAuth 登入，OAuth callback
+--   原本 web platform 直接簽 aud='chiyigo'，造成回到 talo / mbti 後 worker 驗 aud
+--   不符而拒收 token。
+--
+-- 修法：
+--   init.js  → 讀 ?aud= 參數（white-list talo / mbti / chiyigo），寫入此欄
+--   callback → 讀此欄作為 signJwt 的 audience（web platform 也適用）
+--
+-- 舊資料：欄位 NULL → 視同 'chiyigo'，保持向後相容。
+ALTER TABLE oauth_states ADD COLUMN aud TEXT;

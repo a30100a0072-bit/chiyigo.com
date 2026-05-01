@@ -73,14 +73,14 @@ async function handle(context) {
     .prepare(`
       DELETE FROM oauth_states
       WHERE state_token = ? AND expires_at > datetime('now')
-      RETURNING code_verifier, nonce, redirect_uri, platform, client_callback
+      RETURNING code_verifier, nonce, redirect_uri, platform, client_callback, aud
     `)
     .bind(state)
     .first()
 
   if (!stateRow) return htmlError('登入階段已過期或無效，請重新登入。')
 
-  const { code_verifier, nonce: expectedNonce, redirect_uri, platform, client_callback } = stateRow
+  const { code_verifier, nonce: expectedNonce, redirect_uri, platform, client_callback, aud: storedAud } = stateRow
   const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
 
   // ── 3. 換取 access_token ─────────────────────────────────────
@@ -243,8 +243,11 @@ async function handle(context) {
   if (userRow.status === 'banned') return htmlError('此帳號已被停用。', 403)
 
   // ── 8. 簽發 Access Token ─────────────────────────────────────
-  // platform=pc 且 client_callback 指向跨 app origin（talo / mbti）→ 簽對應 aud；其餘 chiyigo
-  const audience = (platform === 'pc' && client_callback) ? resolveAud(client_callback) : 'chiyigo'
+  // 優先用 init 階段寫入的 aud（跨子網域 talo / mbti 走 web platform 也能正確簽）；
+  // 缺值時 fallback：platform=pc 改看 client_callback origin；其餘 chiyigo（向後相容舊 row）
+  const audience = storedAud
+    ? resolveAud(storedAud)
+    : ((platform === 'pc' && client_callback) ? resolveAud(client_callback) : 'chiyigo')
   const accessToken = await signJwt({
     sub:            String(userId),
     email:          userRow.email,

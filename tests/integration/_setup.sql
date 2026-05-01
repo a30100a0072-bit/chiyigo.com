@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   platform        TEXT,
   client_callback TEXT,
   ip_address      TEXT,
+  aud             TEXT,
   expires_at      TEXT    NOT NULL,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
