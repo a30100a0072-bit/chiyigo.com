@@ -45,6 +45,23 @@ export async function resetDb() {
       `ALTER TABLE admin_audit_log ADD COLUMN row_hash TEXT`
     ).run()
   } catch { /* column already present */ }
+  // requisition columns from migrations 0001 + 0006 (post _base)
+  for (const sql of [
+    `ALTER TABLE requisition ADD COLUMN user_id INTEGER`,
+    `ALTER TABLE requisition ADD COLUMN name TEXT`,
+    `ALTER TABLE requisition ADD COLUMN company TEXT`,
+    `ALTER TABLE requisition ADD COLUMN contact TEXT`,
+    `ALTER TABLE requisition ADD COLUMN service_type TEXT`,
+    `ALTER TABLE requisition ADD COLUMN budget TEXT`,
+    `ALTER TABLE requisition ADD COLUMN timeline TEXT`,
+    `ALTER TABLE requisition ADD COLUMN message TEXT`,
+    `ALTER TABLE requisition ADD COLUMN source_ip TEXT`,
+    `ALTER TABLE requisition ADD COLUMN tg_message_id INTEGER`,
+    `ALTER TABLE requisition ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'`,
+    `ALTER TABLE requisition ADD COLUMN deleted_at TEXT`,
+  ]) {
+    try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
+  }
   await env.chiyigo_db.batch([
     env.chiyigo_db.prepare('DELETE FROM refresh_tokens'),
     env.chiyigo_db.prepare('DELETE FROM email_verifications'),

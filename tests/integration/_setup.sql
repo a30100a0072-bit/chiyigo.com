@@ -56,11 +56,23 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
--- Minimal requisition schema (only columns register.js' guest-upgrade UPDATE touches)
+-- Full requisition schema (post-migration 0001 + 0006). Legacy owner_* 留給 register guest-upgrade UPDATE
 CREATE TABLE IF NOT EXISTS requisition (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   owner_guest_id  TEXT,
   owner_user_id   INTEGER,
+  user_id         INTEGER,
+  name            TEXT,
+  company         TEXT,
+  contact         TEXT,
+  service_type    TEXT,
+  budget          TEXT,
+  timeline        TEXT,
+  message         TEXT,
+  source_ip       TEXT,
+  tg_message_id   INTEGER,
+  status          TEXT    NOT NULL DEFAULT 'pending',
+  deleted_at      TEXT,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
