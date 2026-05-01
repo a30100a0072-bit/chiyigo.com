@@ -147,12 +147,23 @@ export function getPublicJwk(env) {
  * 取得所有公鑰 JWK 陣列（供 JWKS 端點使用）。
  * 僅回傳公鑰欄位，私鑰分量 `d` 不會出現。
  *
+ * 防護：x / y / kid 必為純 base64url（^[A-Za-z0-9_-]+$）。env secret 在貼上時可能
+ * 混入空格 / 換行 / tab；node-jose 與 Cloudflare Worker 的 importJWK 寬容會吃掉，
+ * 但瀏覽器 Web Crypto 嚴格拒絕 → talo-web / mbti login 端會驗失敗。這裡統一 strip。
+ *
  * @param {object} env
  * @returns {Array<{ kty, crv, x, y, kid, use, alg }>}
  */
 export function getPublicJwks(env) {
+  const stripWs = s => typeof s === 'string' ? s.replace(/\s+/g, '') : s
   return readPublicJwks(env).map(({ kty, crv, x, y, kid, use, alg }) => ({
-    kty, crv, x, y, kid, use: use ?? 'sig', alg: alg ?? 'ES256',
+    kty,
+    crv,
+    x:   stripWs(x),
+    y:   stripWs(y),
+    kid: stripWs(kid),
+    use: use ?? 'sig',
+    alg: alg ?? 'ES256',
   }))
 }
 
