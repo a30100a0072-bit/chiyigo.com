@@ -33,6 +33,7 @@ const ALLOWED_REDIRECT_URIS = new Set([
   'https://chiyigo.com/callback',               // Web SPA
   'https://chiyigo.com/app/callback',           // iOS Universal Link（預留）
   'https://mbti.chiyigo.com/login.html',        // mbti sub-domain
+  'https://talo.chiyigo.com/',                  // talo sub-domain (SPA root)
 ])
 
 function isAllowedRedirectUri(uri) {
