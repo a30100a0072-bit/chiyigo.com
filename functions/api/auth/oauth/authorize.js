@@ -1,8 +1,8 @@
 /**
  * GET /api/auth/oauth/authorize
  *
- * PKCE 授權流程入口（IAM 作為 Authorization Server）。
- * 遊戲 / App 端在系統瀏覽器開啟此 URL；IAM 驗參數後存 PKCE session，
+ * PKCE / OIDC 授權流程入口（IAM 作為 Authorization Server / OpenID Provider）。
+ * 遊戲 / App / 子站 在系統瀏覽器開啟此 URL；IAM 驗參數後存 PKCE session，
  * 重導向至 login.html?pkce_key=... 讓用戶完成登入。
  *
  * 必填參數：
@@ -11,6 +11,12 @@
  *  code_challenge        — BASE64URL(SHA-256(code_verifier))
  *  code_challenge_method = "S256"
  *  state                 — 客戶端自行生成的隨機值（防 CSRF，原樣回傳）
+ *
+ * 選填參數（OIDC 擴充）：
+ *  scope                 — 空白分隔 scope list；含 'openid' 才走完整 OIDC
+ *                          支援值：openid / profile / email
+ *  nonce                 — client 生成的隨機值，會被嵌入 id_token，client 驗 nonce 防 replay
+ *                          當 scope 含 openid 時建議帶
  *
  * 回傳：
  *  302 → /login.html?pkce_key=SESSION_KEY
@@ -36,6 +42,15 @@ function isAllowedRedirectUri(uri) {
   return false
 }
 
+// OIDC 支援的 scope 值（其他傳入會被忽略而非報錯，避免破壞既有 client）
+const KNOWN_SCOPES = new Set(['openid', 'profile', 'email'])
+
+function normalizeScope(raw) {
+  if (!raw) return null
+  const tokens = raw.split(/\s+/).filter(Boolean).filter(s => KNOWN_SCOPES.has(s))
+  return tokens.length ? tokens.join(' ') : null
+}
+
 export async function onRequestGet({ request, env }) {
   const url    = new URL(request.url)
   const params = url.searchParams
@@ -45,6 +60,8 @@ export async function onRequestGet({ request, env }) {
   const codeChallenge         = params.get('code_challenge')
   const codeChallengeMethod   = params.get('code_challenge_method')
   const state                 = params.get('state')
+  const scope                 = normalizeScope(params.get('scope'))
+  const nonce                 = params.get('nonce')  // 透傳，無格式限制
 
   if (responseType !== 'code')
     return res({ error: 'Only response_type=code is supported' }, 400)
@@ -64,10 +81,10 @@ export async function onRequestGet({ request, env }) {
   await env.chiyigo_db
     .prepare(`
       INSERT INTO pkce_sessions
-        (session_key, state, code_challenge, redirect_uri, expires_at, ip_address, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+        (session_key, state, code_challenge, redirect_uri, scope, nonce, expires_at, ip_address, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `)
-    .bind(sessionKey, state, codeChallenge, redirectUri, expiresAt, ip)
+    .bind(sessionKey, state, codeChallenge, redirectUri, scope, nonce, expiresAt, ip)
     .run()
 
   // 重導至登入頁，帶上 session key

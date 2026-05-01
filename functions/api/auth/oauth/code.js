@@ -38,7 +38,7 @@ export async function onRequestPost({ request, env }) {
     .prepare(`
       DELETE FROM pkce_sessions
       WHERE session_key = ? AND expires_at > datetime('now')
-      RETURNING state, code_challenge, redirect_uri
+      RETURNING state, code_challenge, redirect_uri, scope, nonce
     `)
     .bind(pkce_key)
     .first()
@@ -51,12 +51,13 @@ export async function onRequestPost({ request, env }) {
   const expiresAt  = new Date(Date.now() + CODE_TTL_MS)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // scope/nonce 從 pkce_session 透傳到 auth_code，token endpoint 取用簽 id_token
   await db
     .prepare(`
-      INSERT INTO auth_codes (code_hash, user_id, code_challenge, redirect_uri, state, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO auth_codes (code_hash, user_id, code_challenge, redirect_uri, state, scope, nonce, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    .bind(codeHash, Number(user.sub), session.code_challenge, session.redirect_uri, session.state, expiresAt)
+    .bind(codeHash, Number(user.sub), session.code_challenge, session.redirect_uri, session.state, session.scope ?? null, session.nonce ?? null, expiresAt)
     .run()
 
   // 組裝 redirect_url（支援 custom scheme、https、loopback）

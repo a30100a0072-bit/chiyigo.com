@@ -129,3 +129,31 @@ CREATE TABLE IF NOT EXISTS user_identities (
   updated_at   TEXT,
   UNIQUE(provider, provider_id)
 );
+
+-- PKCE sessions: chiyigo IAM acts as Authorization Server (RFC 7636 + OIDC)
+CREATE TABLE IF NOT EXISTS pkce_sessions (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_key     TEXT    NOT NULL UNIQUE,
+  state           TEXT    NOT NULL,
+  code_challenge  TEXT    NOT NULL,
+  redirect_uri    TEXT    NOT NULL,
+  scope           TEXT,
+  nonce           TEXT,
+  expires_at      TEXT    NOT NULL,
+  ip_address      TEXT,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One-time authorization codes (consumed atomically by /token)
+CREATE TABLE IF NOT EXISTS auth_codes (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  code_hash       TEXT    NOT NULL UNIQUE,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_challenge  TEXT    NOT NULL,
+  redirect_uri    TEXT    NOT NULL,
+  state           TEXT    NOT NULL,
+  scope           TEXT,
+  nonce           TEXT,
+  expires_at      TEXT    NOT NULL,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+);

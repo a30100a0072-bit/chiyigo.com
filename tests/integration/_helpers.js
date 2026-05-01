@@ -50,6 +50,15 @@ export async function resetDb() {
       `ALTER TABLE admin_audit_log ADD COLUMN row_hash TEXT`
     ).run()
   } catch { /* column already present */ }
+  // pkce_sessions / auth_codes OIDC columns (migration 0014)
+  for (const sql of [
+    `ALTER TABLE pkce_sessions ADD COLUMN scope TEXT`,
+    `ALTER TABLE pkce_sessions ADD COLUMN nonce TEXT`,
+    `ALTER TABLE auth_codes ADD COLUMN scope TEXT`,
+    `ALTER TABLE auth_codes ADD COLUMN nonce TEXT`,
+  ]) {
+    try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
+  }
   // requisition columns from migrations 0001 + 0006 (post _base)
   for (const sql of [
     `ALTER TABLE requisition ADD COLUMN user_id INTEGER`,
@@ -79,6 +88,8 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM oauth_states'),
     env.chiyigo_db.prepare('DELETE FROM admin_audit_log'),
     env.chiyigo_db.prepare('DELETE FROM ai_audit'),
+    env.chiyigo_db.prepare('DELETE FROM pkce_sessions'),
+    env.chiyigo_db.prepare('DELETE FROM auth_codes'),
   ])
 }
 

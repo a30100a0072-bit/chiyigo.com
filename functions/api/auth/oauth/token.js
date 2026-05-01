@@ -10,9 +10,16 @@
  *  3. PKCE 驗證：BASE64URL(SHA-256(code_verifier)) == 儲存的 code_challenge
  *
  * 回傳：
- *  200 → { access_token, refresh_token, token_type, expires_in, user_id, role, status }
+ *  200 → { access_token, refresh_token, token_type, expires_in, user_id, role, status, scope?, id_token? }
  *  400 → 參數缺失 / code 無效過期 / redirect_uri 不符 / PKCE 驗證失敗
  *  403 → 帳號被封禁
+ *
+ * OIDC：
+ *  - 若 authorize 階段帶 scope=openid，則加發 id_token（含 sub/email/email_verified/aud/exp/iat/nonce）
+ *  - id_token 與 access_token 共用 signing key，但語義不同：
+ *      access_token 用於 resource server（chiyigo IAM API / mbti worker / talo worker）
+ *      id_token     僅供 client 驗證使用者身份（不應送 resource server）
+ *  - scope 不含 openid：行為與舊 PKCE 完全相同（向後相容）
  */
 
 import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto.js'
@@ -45,7 +52,7 @@ export async function onRequestPost({ request, env }) {
     .prepare(`
       DELETE FROM auth_codes
       WHERE code_hash = ? AND expires_at > datetime('now')
-      RETURNING user_id, code_challenge, redirect_uri, state
+      RETURNING user_id, code_challenge, redirect_uri, state, scope, nonce
     `)
     .bind(codeHash)
     .first()
@@ -81,6 +88,7 @@ export async function onRequestPost({ request, env }) {
     .run()
 
   // 簽發 Access Token（ES256，15 分鐘） — aud 依 redirect_uri origin 決定
+  const aud = resolveAud(redirect_uri)
   const accessToken = await signJwt({
     sub:            String(user.id),
     email:          user.email,
@@ -88,9 +96,13 @@ export async function onRequestPost({ request, env }) {
     role:           user.role,
     status:         user.status,
     ver:            user.token_version ?? 0,
-  }, '15m', env, { audience: resolveAud(redirect_uri) })
+  }, '15m', env, { audience: aud })
 
-  return res({
+  // OIDC：scope 含 openid → 加發 id_token
+  const scopes = (authCode.scope ?? '').split(/\s+/).filter(Boolean)
+  const isOidc = scopes.includes('openid')
+
+  const responseBody = {
     access_token:  accessToken,
     refresh_token: refreshToken,
     token_type:    'Bearer',
@@ -98,7 +110,29 @@ export async function onRequestPost({ request, env }) {
     user_id:       user.id,
     role:          user.role,
     status:        user.status,
-  }, 200, cors)
+  }
+  if (authCode.scope) responseBody.scope = authCode.scope
+
+  if (isOidc) {
+    // id_token claims：
+    //   iss/iat/exp 由 signJwt 注入；aud 與 access_token 同（resolveAud(redirect_uri)）
+    //   sub/email/email_verified 來自 user
+    //   nonce 來自 client 在 authorize 階段傳入，client 驗證 nonce 防 replay
+    //   auth_time = iat（簡化；未來若做 prompt=login 才需獨立追蹤）
+    const idTokenPayload = {
+      sub:            String(user.id),
+      auth_time:      Math.floor(Date.now() / 1000),
+    }
+    if (scopes.includes('email')) {
+      idTokenPayload.email          = user.email
+      idTokenPayload.email_verified = user.email_verified === 1
+    }
+    if (authCode.nonce) idTokenPayload.nonce = authCode.nonce
+
+    responseBody.id_token = await signJwt(idTokenPayload, '15m', env, { audience: aud })
+  }
+
+  return res(responseBody, 200, cors)
 }
 
 function res(data, status = 200, corsHeaders = {}) {
