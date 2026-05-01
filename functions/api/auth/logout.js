@@ -17,7 +17,7 @@
 import { hashToken } from '../../utils/crypto.js'
 import { getCorsHeadersForCredentials } from '../../utils/cors.js'
 
-const CLEAR_COOKIE = 'chiyigo_refresh=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=0'
+const CLEAR_COOKIE = 'chiyigo_refresh=; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=0'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeadersForCredentials(request, env) })

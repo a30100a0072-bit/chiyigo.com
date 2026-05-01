@@ -24,16 +24,35 @@
 
 import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
-import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
+import { getCorsHeaders, getCorsHeadersForCredentials, resolveAud } from '../../../utils/cors.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
+const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）
+
+// Web client（chiyigo.com 子網域）→ cookie 模式：refresh_token 改種 HttpOnly cookie，
+// body 不回傳 refresh_token。Mobile / app（無 Origin）→ body 模式維持。
+function isWebClient(request) {
+  const origin = request.headers.get('Origin') || ''
+  try {
+    const host = new URL(origin).host
+    return host === 'chiyigo.com' || host.endsWith('.chiyigo.com')
+  } catch { return false }
+}
+
+function refreshCookie(token, maxAge) {
+  return `chiyigo_refresh=${token}; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
+}
 
 export async function onRequestOptions({ request, env }) {
-  return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
+  const cors = isWebClient(request)
+    ? getCorsHeadersForCredentials(request, env)
+    : getCorsHeaders(request, env)
+  return new Response(null, { status: 204, headers: cors })
 }
 
 export async function onRequestPost({ request, env }) {
-  const cors = getCorsHeaders(request, env)
+  const isWeb = isWebClient(request)
+  const cors  = isWeb ? getCorsHeadersForCredentials(request, env) : getCorsHeaders(request, env)
 
   let body
   try { body = await request.json() }
@@ -104,13 +123,14 @@ export async function onRequestPost({ request, env }) {
 
   const responseBody = {
     access_token:  accessToken,
-    refresh_token: refreshToken,
     token_type:    'Bearer',
     expires_in:    900,
     user_id:       user.id,
     role:          user.role,
     status:        user.status,
   }
+  // Web cookie 模式不回 refresh_token；mobile/app body 模式維持向後相容
+  if (!isWeb) responseBody.refresh_token = refreshToken
   if (authCode.scope) responseBody.scope = authCode.scope
 
   if (isOidc) {
@@ -132,6 +152,16 @@ export async function onRequestPost({ request, env }) {
     responseBody.id_token = await signJwt(idTokenPayload, '15m', env, { audience: aud })
   }
 
+  if (isWeb) {
+    return new Response(JSON.stringify(responseBody), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie':   refreshCookie(refreshToken, REFRESH_COOKIE_DAYS * 86400),
+        ...cors,
+      },
+    })
+  }
   return res(responseBody, 200, cors)
 }
 
