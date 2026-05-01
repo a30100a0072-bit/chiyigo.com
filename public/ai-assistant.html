@@ -35,20 +35,44 @@
         try { sessionStorage.setItem('auth_redirect', '/ai-assistant.html'); } catch (_) {}
         location.replace('/login.html?next=' + encodeURIComponent('/ai-assistant.html'));
       };
-      fetch('/api/auth/refresh', {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }, body: '{}'
-      }).then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (d) {
-          if (d && d.access_token) {
-            try { sessionStorage.setItem('access_token', d.access_token); } catch (_) {}
-            var el = document.getElementById('__authsplash');
-            if (el) el.parentNode.removeChild(el);
-          } else {
-            goLogin();
-          }
-        })
-        .catch(goLogin);
+      var removeSplash = function () {
+        var el = document.getElementById('__authsplash');
+        if (el) el.parentNode.removeChild(el);
+      };
+      var refreshOnce = function () {
+        return fetch('/api/auth/refresh', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }, body: '{}'
+        }).then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) {
+            if (d && d.access_token) {
+              try { sessionStorage.setItem('access_token', d.access_token); } catch (_) {}
+              try {
+                if ('BroadcastChannel' in window) {
+                  var ch = new BroadcastChannel('chiyigo-auth');
+                  ch.postMessage({ type: 'login', token: d.access_token });
+                  ch.close();
+                }
+              } catch (_) {}
+              removeSplash();
+              return true;
+            }
+            return false;
+          });
+      };
+      var run = function () {
+        // 與 sidebar-auth.js 共用同一把 lock，避免多分頁 / sidebar-auth.js 自己的 silentRefresh 重複 rotate
+        if ('locks' in navigator) {
+          return navigator.locks.request('chiyigo-auth-refresh', { mode: 'exclusive' }, function () {
+            var tok = null;
+            try { tok = sessionStorage.getItem('access_token'); } catch (_) {}
+            if (tok) { removeSplash(); return true; }
+            return refreshOnce();
+          });
+        }
+        return refreshOnce();
+      };
+      run().then(function (ok) { if (!ok) goLogin(); }).catch(goLogin);
     })();
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
