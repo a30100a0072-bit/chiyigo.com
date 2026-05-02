@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "description": "Cloudflare Pages routes — 哪些 path 走 Pages Function（其餘走 static asset）。手動覆寫 wrangler auto-gen 漏 path 的 bug（2026-05-02：wrangler@3.90.0 沒抓到 /frontchannel-logout 導致整個 functions routing 失效）。",
+  "include": [
+    "/api/*",
+    "/.well-known/openid-configuration",
+    "/.well-known/jwks.json",
+    "/frontchannel-logout"
+  ],
+  "exclude": []
+}
