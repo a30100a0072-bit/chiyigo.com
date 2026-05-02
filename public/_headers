@@ -6,15 +6,5 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
   Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-HQVL9ZtQi61h6+naMUxUh406EClPyDH/CF/mrXvLaw0=' 'sha256-GytXgLiTyCHP273hI190siYtzX+uu5rFbPbb5yhCC6k=' 'sha256-JOib5NGd+iYyaWZZKsw9JlHbYX/A9nBNcI1vCLJBPUo=' 'sha256-3B+ssl0nCOnfxGQJox70ruTdSDfVTeZb8lOWwEMY8Nw=' 'sha256-IVHsvfKzSahpnygmA9hhIsoEPuYGqi2658mM1CanhMk=' 'sha256-/FNQPk0MnSuaNhIZ8yJYqugIiDEkHyo2LMFvL/RFqWk=' https://cdn.jsdelivr.net https://static.cloudflareinsights.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://cloudflareinsights.com https://*.cloudflareinsights.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
 
-# OIDC Front-Channel Logout iframe：覆寫全站嚴格 CSP / X-Frame-Options，
-# 允許 chiyigo end_session_endpoint 把這頁嵌成 iframe；inline script 鎖在這頁 only
-# 兩種路徑都 cover：Cloudflare Pretty URLs 預設把 .html 308 strip 到 canonical URL
-/frontchannel-logout
-  ! X-Frame-Options
-  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; frame-ancestors https://chiyigo.com
-  Cache-Control: no-store
-
-/frontchannel-logout.html
-  ! X-Frame-Options
-  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; frame-ancestors https://chiyigo.com
-  Cache-Control: no-store
+# /frontchannel-logout：由 functions/frontchannel-logout.js 動態回應，
+# 自帶完整 response header（不需要 _headers 路徑覆寫）
