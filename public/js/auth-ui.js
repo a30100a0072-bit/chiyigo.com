@@ -173,23 +173,28 @@ async function refreshAccessToken() {
 
 // ── 登出 ──────────────────────────────────────────────────────────
 
-async function logout() {
-  // 先清除本地 session（無論 API 是否成功）
+// OIDC RP-Initiated Logout：跳 chiyigo end_session_endpoint
+// chiyigo 會撤所有 refresh + 嵌 iframe 同步登出 mbti / talo（front-channel logout）
+function logout() {
   sessionStorage.removeItem(TOKEN_KEY);
   clearGuestId();
-
-  // 通知伺服器撤銷 refresh_token（Cookie 由 Server 端 Set-Cookie Max-Age=0 清除）
-  try {
-    await fetch(API.logout, {
-      method:      'POST',
-      credentials: 'include',
-    });
-  } catch {
-    // 網路失敗不阻擋登出流程
-  }
-
-  window.location.href = '/login.html';
+  const url = '/api/auth/oauth/end-session?post_logout_redirect_uri=' +
+              encodeURIComponent('https://chiyigo.com/login');
+  window.location.href = url;
 }
+
+// OIDC Front-Channel Logout 訊號：其他子站登出 → dashboard / 私密頁立刻清 token + 跳登入頁
+// 監聽同源 localStorage 'oidc_logout_at' key 變化（由 frontchannel-logout.html iframe 寫入觸發）
+window.addEventListener('storage', e => {
+  if (e.key !== 'oidc_logout_at') return;
+  sessionStorage.removeItem(TOKEN_KEY);
+  // 已在 login / 公開頁就不再跳；私密頁（dashboard / admin / bind-email …）跳登入
+  const path = location.pathname;
+  const isPublic = path === '/' || path === '' || path.startsWith('/login') ||
+                   path.startsWith('/index') || path.startsWith('/forgot-password') ||
+                   path.startsWith('/reset-password') || path.startsWith('/verify-email');
+  if (!isPublic) location.href = '/login.html';
+});
 
 // ── 成功後跳轉 ───────────────────────────────────────────────────
 
