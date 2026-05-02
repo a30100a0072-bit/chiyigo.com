@@ -31,10 +31,12 @@ const ALLOWED_POST_LOGOUT_REDIRECT = new Set([
   'https://talo.chiyigo.com/',
 ])
 
+// Cloudflare Pages Pretty URLs：`.html` 會被自動 strip 成 canonical URL。
+// 直接用 canonical URL 避免 308 redirect，否則 _headers 路徑規則套不到 → X-Frame-Options DENY 擋住 iframe。
 const FRONTCHANNEL_IFRAMES = [
-  'https://chiyigo.com/frontchannel-logout.html',
-  'https://mbti.chiyigo.com/frontchannel-logout.html',
-  'https://talo.chiyigo.com/frontchannel-logout.html',
+  'https://chiyigo.com/frontchannel-logout',
+  'https://mbti.chiyigo.com/frontchannel-logout',
+  'https://talo.chiyigo.com/frontchannel-logout',
 ]
 
 function escAttr(s) {

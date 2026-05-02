@@ -136,9 +136,9 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     const html = await res.text()
 
     expect(res.headers.get('Content-Type')).toMatch(/text\/html/)
-    expect(html).toContain('https://chiyigo.com/frontchannel-logout.html')
-    expect(html).toContain('https://mbti.chiyigo.com/frontchannel-logout.html')
-    expect(html).toContain('https://talo.chiyigo.com/frontchannel-logout.html')
+    expect(html).toContain('https://chiyigo.com/frontchannel-logout')
+    expect(html).toContain('https://mbti.chiyigo.com/frontchannel-logout')
+    expect(html).toContain('https://talo.chiyigo.com/frontchannel-logout')
     expect(html).toMatch(/<meta http-equiv="refresh"[^>]*url=https:\/\/mbti\.chiyigo\.com\//)
 
     const setCookie = res.headers.get('Set-Cookie')

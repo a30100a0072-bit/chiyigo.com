@@ -8,6 +8,12 @@
 
 # OIDC Front-Channel Logout iframe：覆寫全站嚴格 CSP / X-Frame-Options，
 # 允許 chiyigo end_session_endpoint 把這頁嵌成 iframe；inline script 鎖在這頁 only
+# 兩種路徑都 cover：Cloudflare Pretty URLs 預設把 .html 308 strip 到 canonical URL
+/frontchannel-logout
+  ! X-Frame-Options
+  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; frame-ancestors https://chiyigo.com
+  Cache-Control: no-store
+
 /frontchannel-logout.html
   ! X-Frame-Options
   Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; frame-ancestors https://chiyigo.com
