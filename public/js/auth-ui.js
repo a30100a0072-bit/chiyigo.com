@@ -500,6 +500,23 @@ async function handleTotp(event) {
   // 只在登入頁執行重導向邏輯（dashboard 等頁面載入此 js 只需 logout()）
   if (!document.getElementById('form-login')) return;
 
+  // ── DOM event 綁定（HTML 用 data-* 宣告意圖，這裡集中綁 handler）─────
+  // tab 切換：登入 / 註冊 / 2FA「← 返回登入」
+  document.querySelectorAll('[data-switch-tab]').forEach(btn => {
+    btn.addEventListener('click', e => { e.preventDefault(); switchTab(btn.dataset.switchTab); });
+  });
+  // 顯示密碼眼睛
+  document.querySelectorAll('[data-toggle-pwd]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      togglePassword(btn.dataset.togglePwd, btn.dataset.toggleEye);
+    });
+  });
+  // form submit
+  document.getElementById('form-login')   ?.addEventListener('submit', handleLogin);
+  document.getElementById('form-register')?.addEventListener('submit', handleRegister);
+  document.getElementById('form-totp')    ?.addEventListener('submit', handleTotp);
+
   // Discord OAuth 回傳：URL 帶有 ?access_token=...
   const _urlToken = new URLSearchParams(location.search).get('access_token');
   if (_urlToken) {

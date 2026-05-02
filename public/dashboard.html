@@ -284,20 +284,23 @@
               <p class="text-xs text-gray-400 leading-relaxed" data-i18n="del_stage2_hint">
                 為防誤刪，請輸入登入密碼確認。送出後會寄送一封確認信到你的信箱，點擊信中連結後帳號才會真的被刪除（連結有效 15 分鐘）。
               </p>
-              <input id="del-password" type="password" autocomplete="current-password"
-                placeholder="登入密碼" data-i18n-ph="del_pw_ph"
-                class="w-full px-4 py-2.5 rounded-xl bg-[#0f0f14] border border-red-500/20 focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
-              <p id="del-msg" class="hidden text-xs"></p>
-              <div class="flex gap-2">
-                <button data-action="hide-delete-form"
-                  class="flex-1 py-2.5 rounded-xl border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 font-semibold text-sm transition-all">
-                  <span data-i18n="del_cancel_btn">取消</span>
-                </button>
-                <button id="del-submit-btn"
-                  class="flex-1 py-2.5 rounded-xl border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                  <span data-i18n="del_send_btn">送出刪除確認信</span>
-                </button>
-              </div>
+              <!-- 包進 form 給瀏覽器 / password manager 正確語意（autocomplete=current-password 才被認）-->
+              <form id="del-form" onsubmit="return false">
+                <input id="del-password" type="password" autocomplete="current-password"
+                  placeholder="登入密碼" data-i18n-ph="del_pw_ph"
+                  class="w-full px-4 py-2.5 rounded-xl bg-[#0f0f14] border border-red-500/20 focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
+                <p id="del-msg" class="hidden text-xs mt-3"></p>
+                <div class="flex gap-2 mt-3">
+                  <button type="button" data-action="hide-delete-form"
+                    class="flex-1 py-2.5 rounded-xl border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 font-semibold text-sm transition-all">
+                    <span data-i18n="del_cancel_btn">取消</span>
+                  </button>
+                  <button type="button" id="del-submit-btn"
+                    class="flex-1 py-2.5 rounded-xl border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span data-i18n="del_send_btn">送出刪除確認信</span>
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -433,7 +436,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
   <script src="/js/api.js?v=1"></script>
-  <script src="/js/auth-ui.js?v=11"></script>
+  <script src="/js/auth-ui.js?v=12"></script>
 
   <!-- ── Sidebar layout bridge ────────────────────────────────── -->
 

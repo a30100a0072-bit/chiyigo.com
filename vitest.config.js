@@ -15,6 +15,8 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'text-summary'],
       include:  ['functions/utils/**'],
+      // audit-log / rate-limit 是 D1-dependent helper，由整合測試把關（同 auth endpoint）
+      exclude:  ['functions/utils/audit-log.js', 'functions/utils/rate-limit.js'],
       thresholds: {
         statements: 80,
         branches:   80,
