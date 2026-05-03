@@ -108,7 +108,7 @@
 **SSO 流程**：子網域 → `chiyigo.com/login.html?redirect=ORIGIN&aud=talo` → 登入後帶 JWT 走 fragment 跳回（`#mbti_token=...`，避免 Referer / log）  
 **JWT claims**：`iss=https://chiyigo.com`（永遠）+ `aud='talo'/'mbti'/'chiyigo'`（依來源） + `kid`（依 JWK）  
 **白名單**（`auth-ui.js` `_CROSS_APP_WHITELIST` + `_ORIGIN_TO_AUD`）：`talo.chiyigo.com`→`talo`、`mbti.chiyigo.com`→`mbti`  
-**CORS**（`functions/utils/cors.js`）：`DEFAULT_ORIGINS` 含兩子網域；`getCorsHeadersForCredentials()` 給 `/api/auth/*` 帶 `Allow-Credentials: true`  
+**CORS**（`functions/utils/cors.js`）：`DEFAULT_ORIGINS` 含兩子網域；`getCorsHeaders(req, env, { credentials: true })` 給 `/api/auth/*` 帶 `Allow-Credentials: true`  
 **Refresh 機制**：`refresh_tokens` 表 + rotation；`/api/auth/refresh` & `/logout` 跨子網域 OPTIONS preflight 已支援  
 **OAuth 支援**：登入前將 `_crossAppOrigin` 存入 sessionStorage；callback bridge 讀取後直接跳回子網域
 
