@@ -1,0 +1,30 @@
+name: Cron — D1 Cleanup
+
+# 每天 03:00 UTC（台灣 11:00）跑一次，清 D1 過期 row
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:        # 也允許手動觸發
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call cleanup endpoint
+        run: |
+          set -euo pipefail
+          response=$(curl -sS -w "\n%{http_code}" \
+            -X POST https://chiyigo.com/api/admin/cron/cleanup \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+
+          echo "Status: $status"
+          echo "Body:   $body"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::cleanup endpoint returned $status"
+            exit 1
+          fi

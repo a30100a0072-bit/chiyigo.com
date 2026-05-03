@@ -13,6 +13,16 @@ binding = "chiyigo_db"
 database_name = "chiyigo_db"
 database_id = "59f73214-1203-44b7-840f-86cb3998fbb6"
 
+# KV cache（read-heavy hot path，非 source of truth）
+# 用途：JWKS / revoked_jti / oauth_clients 等 lookup 快取
+# 建立步驟：
+#   wrangler kv namespace create CHIYIGO_KV
+#   把回傳的 id 填入下方，並在 Cloudflare Pages dashboard
+#   Settings → Functions → KV namespace bindings 也加同一組
+[[kv_namespaces]]
+binding = "CHIYIGO_KV"
+id      = "PLACEHOLDER_FILL_AFTER_WRANGLER_CREATE"
+
 [ai]
 binding = "AI"
 

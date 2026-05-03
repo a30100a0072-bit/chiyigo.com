@@ -11,6 +11,7 @@
 
 import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { sendPasswordResetEmail } from '../../../utils/email.js'
+import { verifyTurnstile } from '../../../utils/turnstile.js'
 
 const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_HOURS   = 1
@@ -23,6 +24,10 @@ export async function onRequestPost({ request, env }) {
 
   const { email } = body ?? {}
   if (!email) return res({ error: 'email is required' }, 400)
+
+  // Turnstile（key 未設時 skip）
+  const ts = await verifyTurnstile(request, body, env)
+  if (!ts.ok) return res({ error: 'captcha_failed', code: 'CAPTCHA_FAILED', reason: ts.reason }, 403)
 
   const db = env.chiyigo_db
   const ip = request.headers.get('CF-Connecting-IP') ?? null

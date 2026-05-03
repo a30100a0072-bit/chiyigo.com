@@ -15,6 +15,7 @@
 import { verifyPassword, generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
+import { verifyTurnstile } from '../../../utils/turnstile.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -31,6 +32,10 @@ export async function onRequestPost({ request, env }) {
 
   if (!email || !password)
     return res({ error: 'email and password are required' }, 400)
+
+  // Turnstile（key 未設時 verifyTurnstile 會 skip，不破壞既有流程）
+  const ts = await verifyTurnstile(request, body, env)
+  if (!ts.ok) return res({ error: 'captcha_failed', code: 'CAPTCHA_FAILED', reason: ts.reason }, 403)
 
   const db        = env.chiyigo_db
   const ip        = request.headers.get('CF-Connecting-IP') ?? 'unknown'

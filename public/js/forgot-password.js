@@ -76,10 +76,11 @@ async function handleSubmit(e) {
   btn.textContent = T('loading');
 
   try {
+    const tsToken = document.querySelector('#form-forgot [name="cf-turnstile-response"]')?.value || '';
     const res = await fetch('/api/auth/local/forgot-password', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email }),
+      body:    JSON.stringify({ email, 'cf-turnstile-response': tsToken }),
     });
 
     if (res.ok) {

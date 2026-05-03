@@ -353,11 +353,16 @@ async function handleLogin(event) {
   setLoading('login-btn', true);
 
   try {
+    const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
     const res = await fetch(API.login, {
       method:      'POST',
       credentials: 'include',
       headers:     { 'Content-Type': 'application/json' },
-      body:        JSON.stringify({ email, password, aud: _crossAppAud ?? undefined }),
+      body:        JSON.stringify({
+        email, password,
+        aud: _crossAppAud ?? undefined,
+        'cf-turnstile-response': tsToken,
+      }),
     });
 
     const data = await res.json();
@@ -413,11 +418,16 @@ async function handleRegister(event) {
   setLoading('reg-btn', true);
 
   try {
+    const tsToken = document.querySelector('#form-register [name="cf-turnstile-response"]')?.value || '';
     const res = await fetch(API.register, {
       method:      'POST',
       credentials: 'include',
       headers:     { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, password, guest_id, aud: _crossAppAud ?? undefined }),
+      body:    JSON.stringify({
+        email, password, guest_id,
+        aud: _crossAppAud ?? undefined,
+        'cf-turnstile-response': tsToken,
+      }),
     });
 
     const data = await res.json();

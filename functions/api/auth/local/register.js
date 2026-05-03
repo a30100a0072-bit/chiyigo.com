@@ -14,6 +14,7 @@ import { signJwt } from '../../../utils/jwt.js'
 import { sendVerificationEmail } from '../../../utils/email.js'
 import { validatePassword } from '../../../utils/password.js'
 import { resolveAud } from '../../../utils/cors.js'
+import { verifyTurnstile } from '../../../utils/turnstile.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL   = '15m'
@@ -35,6 +36,10 @@ export async function onRequestPost({ request, env, waitUntil }) {
     return res({ error: 'Invalid email format' }, 400)
   const pwCheck = validatePassword(password)
   if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
+
+  // Turnstile（key 未設時 skip，不破壞既有流程）
+  const ts = await verifyTurnstile(request, body, env)
+  if (!ts.ok) return res({ error: 'captcha_failed', code: 'CAPTCHA_FAILED', reason: ts.reason }, 403)
 
   const db = env.chiyigo_db
 
