@@ -18,6 +18,7 @@ import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { getProvider } from '../../../utils/oauth-providers.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
+import { refreshCookie } from '../../../utils/cookies.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -155,7 +156,4 @@ export async function onRequestPost(context) {
   })
 }
 
-function refreshCookie(token, maxAge) {
-  return `chiyigo_refresh=${token}; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
-}
 

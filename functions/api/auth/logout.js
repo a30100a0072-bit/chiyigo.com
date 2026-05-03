@@ -16,8 +16,7 @@
 
 import { hashToken } from '../../utils/crypto.js'
 import { getCorsHeaders } from '../../utils/cors.js'
-
-const CLEAR_COOKIE = 'chiyigo_refresh=; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=0'
+import { CLEAR_REFRESH_COOKIE } from '../../utils/cookies.js'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -37,7 +36,7 @@ export async function onRequestPost({ request, env }) {
   const refresh_token = cookieToken ?? bodyToken
 
   // 無 token：仍清除 Cookie（冪等），不視為錯誤
-  const clearCookieHeader = { 'Set-Cookie': CLEAR_COOKIE }
+  const clearCookieHeader = { 'Set-Cookie': CLEAR_REFRESH_COOKIE }
   if (!refresh_token) {
     return new Response(JSON.stringify({ message: 'Logged out' }), {
       headers: { 'Content-Type': 'application/json', ...clearCookieHeader, ...cors },

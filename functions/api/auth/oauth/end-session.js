@@ -22,6 +22,7 @@
 import { decodeProtectedHeader, jwtVerify, importJWK } from 'jose'
 import { hashToken } from '../../../utils/crypto.js'
 import { getPublicJwks } from '../../../utils/jwt.js'
+import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies.js'
 
 const ALLOWED_POST_LOGOUT_REDIRECT = new Set([
   'https://chiyigo.com/',
@@ -134,7 +135,7 @@ ${iframes}
     headers: {
       'Content-Type':  'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
-      'Set-Cookie':    'chiyigo_refresh=; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=0',
+      'Set-Cookie':    CLEAR_REFRESH_COOKIE,
       // 寬鬆 CSP 給這頁：允許 iframe 嵌三個子站，禁絕其他
       'Content-Security-Policy':
         "default-src 'none'; style-src 'unsafe-inline'; " +

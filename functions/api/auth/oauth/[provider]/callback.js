@@ -20,6 +20,7 @@ import { signJwt } from '../../../../utils/jwt.js'
 import { generateSecureToken, hashToken } from '../../../../utils/crypto.js'
 import { getProvider } from '../../../../utils/oauth-providers.js'
 import { resolveAud } from '../../../../utils/cors.js'
+import { refreshCookie } from '../../../../utils/cookies.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -425,10 +426,6 @@ function decodeJwtPayload(token) {
   const part = token.split('.')[1]
   const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'))
   return JSON.parse(json)
-}
-
-function refreshCookie(token, maxAge) {
-  return `chiyigo_refresh=${token}; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
 }
 
 function escapeHtml(s) {

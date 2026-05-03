@@ -23,6 +23,7 @@ import { generateSecureToken, hashToken } from '../../utils/crypto.js'
 import { signJwt } from '../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../utils/cors.js'
 import { res } from '../../utils/auth.js'
+import { refreshCookie } from '../../utils/cookies.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -135,7 +136,4 @@ function parseCookieHeader(header, name) {
   return match ? match[1] : null
 }
 
-function refreshCookie(token, maxAge) {
-  return `chiyigo_refresh=${token}; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
-}
 

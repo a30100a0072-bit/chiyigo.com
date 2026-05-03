@@ -26,6 +26,7 @@ import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypt
 import { signJwt } from '../../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
+import { refreshCookie } from '../../../utils/cookies.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）
@@ -40,9 +41,6 @@ function isWebClient(request) {
   } catch { return false }
 }
 
-function refreshCookie(token, maxAge) {
-  return `chiyigo_refresh=${token}; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
-}
 
 export async function onRequestOptions({ request, env }) {
   const cors = isWebClient(request)

@@ -17,6 +17,7 @@ import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
+import { refreshCookie } from '../../../utils/cookies.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -181,6 +182,3 @@ async function fakeHashDelay() {
 }
 
 
-function refreshCookie(token, maxAge) {
-  return `chiyigo_refresh=${token}; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
-}
