@@ -21,7 +21,7 @@ database_id = "59f73214-1203-44b7-840f-86cb3998fbb6"
 #   Settings → Functions → KV namespace bindings 也加同一組
 [[kv_namespaces]]
 binding = "CHIYIGO_KV"
-id      = "PLACEHOLDER_FILL_AFTER_WRANGLER_CREATE"
+id = "e3ca0c13ce5a4ec9aee7d550b0596e04"
 
 [ai]
 binding = "AI"
