@@ -31,25 +31,12 @@
 
 ---
 
-## 3. Phase 0 Migrations 套用到 D1 ⚠ 高優先（待做）
+## 3. Phase 0 Migrations 套用到 D1 ✅ 已完成（2026-05-03）
 
-**現況**：Migrations 0015–0018 已 commit 但**還沒跑**到 prod D1
-
-### 步驟
-
-```bash
-# 對 production D1 套用
-wrangler d1 execute chiyigo_db --remote --file=migrations/0015_oauth_clients.sql
-wrangler d1 execute chiyigo_db --remote --file=migrations/0016_revoked_jti.sql
-wrangler d1 execute chiyigo_db --remote --file=migrations/0017_audit_log.sql
-wrangler d1 execute chiyigo_db --remote --file=migrations/0018_users_public_sub.sql
-```
-
-驗證：
-```bash
-wrangler d1 execute chiyigo_db --remote --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-# 應該看到 oauth_clients / revoked_jti / audit_log
-```
+- 0015 `oauth_clients` ✅（表已存在 schema drift，IF NOT EXISTS 安全跑過）
+- 0016 `revoked_jti` ✅ 新建成功（含 index）
+- 0017 `audit_log` ✅（表已存在 schema drift，IF NOT EXISTS 安全跑過）
+- 0018 `users.public_sub` ✅（欄位已存在，ALTER 安全跑過）
 
 ---
 
@@ -88,15 +75,11 @@ GitHub repo → Settings → Secrets and variables → Actions → New repositor
 
 ---
 
-## 5. Cloudflare Access — Admin 保護 🟡 中等優先（待做）
+## 5. Cloudflare Access — Admin 保護 ✅ 已完成（2026-05-03）
 
-詳細步驟見 `docs/runbooks/access-admin-setup.md`
-
-**重點**：
-- 免費 50 user 額度
-- 套到 `/admin*` 路徑
-- **務必** 設 `/api/admin/cron/*` Bypass policy（否則 GitHub Actions cron 會被擋）
-- 白名單 email：`a3010030100a@gmail.com`
+- App `chiyigo-admin` 建立，保護 `chiyigo.com/admin*`
+- Policy `Allow owner`：email `a30100a0072@gmail.com`
+- `/api/admin/cron/*` 開頭是 `/api/` 不符合 `/admin*`，無需 Bypass policy
 
 ---
 
@@ -114,3 +97,5 @@ GitHub repo → Settings → Secrets and variables → Actions → New repositor
 |---|---|
 | 2026-05-03 | 初版（KV / Turnstile / Cron / Access / Migration 5 項）|
 | 2026-05-03 | KV ✅ 完成、Turnstile ✅ 完成；剩 Migrations / Cron / Access |
+| 2026-05-03 | Cron ✅ 完成、Access ✅ 完成；剩 Migrations |
+| 2026-05-03 | Migrations 0015–0018 ✅ 全部完成 → MANUAL_TODO 全項打勾 |
