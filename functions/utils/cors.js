@@ -24,27 +24,25 @@ function isAllowedOrigin(origin, env) {
   return false
 }
 
-export function getCorsHeaders(request, env) {
+/**
+ * @param {Request} request
+ * @param {object}  env
+ * @param {object}  [opts]
+ * @param {boolean} [opts.credentials] 跨子網域帶 cookie 的端點（refresh / logout / web token）
+ *                                     傳 true 會加 Access-Control-Allow-Credentials: true
+ */
+export function getCorsHeaders(request, env, opts = {}) {
   const origin = request.headers.get('Origin') ?? ''
   if (!isAllowedOrigin(origin, env)) return {}
-  return {
+  const headers = {
     'Access-Control-Allow-Origin':  origin,
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age':       '86400',
     'Vary':                         'Origin',
   }
-}
-
-// 跨子網域帶 credentials cookie 的端點專用（refresh / logout）
-// 必須回傳具體 origin（不可 *）並加 Allow-Credentials: true
-export function getCorsHeadersForCredentials(request, env) {
-  const base = getCorsHeaders(request, env)
-  if (!base['Access-Control-Allow-Origin']) return {}
-  return {
-    ...base,
-    'Access-Control-Allow-Credentials': 'true',
-  }
+  if (opts.credentials) headers['Access-Control-Allow-Credentials'] = 'true'
+  return headers
 }
 
 // JWT aud claim 白名單：依 redirect / origin 決定 token 受眾

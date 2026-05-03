@@ -21,18 +21,18 @@
 
 import { generateSecureToken, hashToken } from '../../utils/crypto.js'
 import { signJwt } from '../../utils/jwt.js'
-import { getCorsHeadersForCredentials, resolveAud } from '../../utils/cors.js'
+import { getCorsHeaders, resolveAud } from '../../utils/cors.js'
 import { res } from '../../utils/auth.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
 
 export async function onRequestOptions({ request, env }) {
-  return new Response(null, { status: 204, headers: getCorsHeadersForCredentials(request, env) })
+  return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
 export async function onRequestPost({ request, env }) {
-  const cors = getCorsHeadersForCredentials(request, env)
+  const cors = getCorsHeaders(request, env, { credentials: true })
   // Cookie 優先（Web），其次 JSON body（App）
   const cookieToken = parseCookieHeader(request.headers.get('Cookie'), 'chiyigo_refresh')
 

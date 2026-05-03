@@ -24,7 +24,7 @@
 
 import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
-import { getCorsHeaders, getCorsHeadersForCredentials, resolveAud } from '../../../utils/cors.js'
+import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
@@ -46,14 +46,14 @@ function refreshCookie(token, maxAge) {
 
 export async function onRequestOptions({ request, env }) {
   const cors = isWebClient(request)
-    ? getCorsHeadersForCredentials(request, env)
+    ? getCorsHeaders(request, env, { credentials: true })
     : getCorsHeaders(request, env)
   return new Response(null, { status: 204, headers: cors })
 }
 
 export async function onRequestPost({ request, env }) {
   const isWeb = isWebClient(request)
-  const cors  = isWeb ? getCorsHeadersForCredentials(request, env) : getCorsHeaders(request, env)
+  const cors  = isWeb ? getCorsHeaders(request, env, { credentials: true }) : getCorsHeaders(request, env)
 
   let body
   try { body = await request.json() }

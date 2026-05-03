@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCorsHeaders, getCorsHeadersForCredentials, resolveAud } from '../functions/utils/cors.js'
+import { getCorsHeaders, resolveAud } from '../functions/utils/cors.js'
 
 function req(origin) {
   return new Request('http://x/', { headers: origin ? { Origin: origin } : {} })
@@ -66,15 +66,19 @@ describe('getCorsHeaders', () => {
   })
 })
 
-describe('getCorsHeadersForCredentials', () => {
+describe('getCorsHeaders with { credentials: true }', () => {
   it('白名單 origin → 帶 Allow-Credentials: true', () => {
-    const h = getCorsHeadersForCredentials(req('https://talo.chiyigo.com'), {})
+    const h = getCorsHeaders(req('https://talo.chiyigo.com'), {}, { credentials: true })
     expect(h['Access-Control-Allow-Origin']).toBe('https://talo.chiyigo.com')
     expect(h['Access-Control-Allow-Credentials']).toBe('true')
     expect(h['Vary']).toBe('Origin')
   })
+  it('預設不帶 Allow-Credentials', () => {
+    const h = getCorsHeaders(req('https://talo.chiyigo.com'), {})
+    expect(h['Access-Control-Allow-Credentials']).toBeUndefined()
+  })
   it('非白名單 → 空物件（不帶 Allow-Credentials 避免 wildcard 被瀏覽器拒）', () => {
-    expect(getCorsHeadersForCredentials(req('https://evil.com'), {})).toEqual({})
-    expect(getCorsHeadersForCredentials(req(null), {})).toEqual({})
+    expect(getCorsHeaders(req('https://evil.com'), {}, { credentials: true })).toEqual({})
+    expect(getCorsHeaders(req(null), {}, { credentials: true })).toEqual({})
   })
 })

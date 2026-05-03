@@ -9,12 +9,12 @@
  *  其他              → 呼叫後續 handler 後，在回應上附加 CORS 標頭
  */
 
-import { getCorsHeadersForCredentials } from '../../utils/cors.js'
+import { getCorsHeaders } from '../../utils/cors.js'
 
 export async function onRequest({ request, env, next }) {
   // 全 /api/auth/* 都可能帶 cookie / Authorization，統一加 Allow-Credentials: true
   // （瀏覽器只在客戶端 credentials:'include' 時才送，所以這裡放寬不會自動帶憑證）
-  const corsHeaders = getCorsHeadersForCredentials(request, env)
+  const corsHeaders = getCorsHeaders(request, env, { credentials: true })
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders })
