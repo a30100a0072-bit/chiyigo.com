@@ -30,14 +30,18 @@ const ALLOWED_POST_LOGOUT_REDIRECT = new Set([
   'https://mbti.chiyigo.com/',
   'https://mbti.chiyigo.com/login.html',
   'https://talo.chiyigo.com/',
+  'https://sport-app-web.pages.dev/',
+  'https://sport-app-admin.pages.dev/',
 ])
 
 // chiyigo 自己用 /api/ 子路徑（避開 root level single function 觸發 Pages bundle bug）；
-// mbti / talo 是獨立 Pages project，沒這個雷，仍用 /frontchannel-logout
+// 其他子站皆獨立 Pages project，沒這個雷，仍用 /frontchannel-logout
 const FRONTCHANNEL_IFRAMES = [
   'https://chiyigo.com/api/frontchannel-logout',
   'https://mbti.chiyigo.com/frontchannel-logout',
   'https://talo.chiyigo.com/frontchannel-logout',
+  'https://sport-app-web.pages.dev/frontchannel-logout',
+  'https://sport-app-admin.pages.dev/frontchannel-logout',
 ]
 
 function escAttr(s) {
@@ -139,7 +143,8 @@ ${iframes}
       // 寬鬆 CSP 給這頁：允許 iframe 嵌三個子站，禁絕其他
       'Content-Security-Policy':
         "default-src 'none'; style-src 'unsafe-inline'; " +
-        "frame-src https://chiyigo.com https://mbti.chiyigo.com https://talo.chiyigo.com",
+        "frame-src https://chiyigo.com https://mbti.chiyigo.com https://talo.chiyigo.com " +
+        "https://sport-app-web.pages.dev https://sport-app-admin.pages.dev",
       'Referrer-Policy': 'no-referrer',
     },
   })

@@ -10,11 +10,15 @@ describe('resolveAud', () => {
     expect(resolveAud('https://talo.chiyigo.com')).toBe('talo')
     expect(resolveAud('https://mbti.chiyigo.com')).toBe('mbti')
     expect(resolveAud('https://talo.chiyigo.com/path?x=1')).toBe('talo')
+    expect(resolveAud('https://sport-app-web.pages.dev')).toBe('sport-app')
+    expect(resolveAud('https://sport-app-admin.pages.dev')).toBe('sport-app')
+    expect(resolveAud('https://sport-app-web.pages.dev/auth/callback')).toBe('sport-app')
   })
   it('aud 字串直接回傳', () => {
     expect(resolveAud('talo')).toBe('talo')
     expect(resolveAud('mbti')).toBe('mbti')
     expect(resolveAud('chiyigo')).toBe('chiyigo')
+    expect(resolveAud('sport-app')).toBe('sport-app')
   })
   it('未知 / 無效 / undefined → chiyigo', () => {
     expect(resolveAud('https://evil.com')).toBe('chiyigo')
@@ -40,6 +44,12 @@ describe('getCorsHeaders', () => {
       .toBe('https://chiyigo.com')
     expect(getCorsHeaders(req('https://mbti.chiyigo.com'), env)['Access-Control-Allow-Origin'])
       .toBe('https://mbti.chiyigo.com')
+  })
+  it('sport-app web / admin 預設白名單', () => {
+    expect(getCorsHeaders(req('https://sport-app-web.pages.dev'), env)['Access-Control-Allow-Origin'])
+      .toBe('https://sport-app-web.pages.dev')
+    expect(getCorsHeaders(req('https://sport-app-admin.pages.dev'), env)['Access-Control-Allow-Origin'])
+      .toBe('https://sport-app-admin.pages.dev')
   })
   it('非白名單 origin → 空物件', () => {
     expect(getCorsHeaders(req('https://evil.com'), env)).toEqual({})

@@ -30,11 +30,13 @@ const SESSION_TTL_MS = 10 * 60 * 1000 // 10 分鐘完成登入
 
 // redirect_uri 白名單（明確列舉，不接受 pattern 匹配 chiyigo.com 任意路徑）
 const ALLOWED_REDIRECT_URIS = new Set([
-  'chiyigo://auth/callback',                    // Unity / Unreal / mobile custom scheme
-  'https://chiyigo.com/callback',               // Web SPA
-  'https://chiyigo.com/app/callback',           // iOS Universal Link（預留）
-  'https://mbti.chiyigo.com/login.html',        // mbti sub-domain
-  'https://talo.chiyigo.com/',                  // talo sub-domain (SPA root)
+  'chiyigo://auth/callback',                          // Unity / Unreal / mobile custom scheme
+  'https://chiyigo.com/callback',                     // Web SPA
+  'https://chiyigo.com/app/callback',                 // iOS Universal Link（預留）
+  'https://mbti.chiyigo.com/login.html',              // mbti sub-domain
+  'https://talo.chiyigo.com/',                        // talo sub-domain (SPA root)
+  'https://sport-app-web.pages.dev/auth/callback',    // sport-app web (Cloudflare Pages)
+  'https://sport-app-admin.pages.dev/auth/callback',  // sport-app admin (Cloudflare Pages)
 ])
 
 function isAllowedRedirectUri(uri) {

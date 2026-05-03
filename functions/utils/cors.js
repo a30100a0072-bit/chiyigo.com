@@ -7,7 +7,13 @@
  *  - 不在白名單的 Origin：回傳空物件（不加 CORS 標頭，瀏覽器自行攔截）
  */
 
-const DEFAULT_ORIGINS = ['https://chiyigo.com', 'https://mbti.chiyigo.com', 'https://talo.chiyigo.com']
+const DEFAULT_ORIGINS = [
+  'https://chiyigo.com',
+  'https://mbti.chiyigo.com',
+  'https://talo.chiyigo.com',
+  'https://sport-app-web.pages.dev',
+  'https://sport-app-admin.pages.dev',
+]
 
 function getAllowedOrigins(env) {
   const extras = env.ALLOWED_ORIGINS
@@ -48,11 +54,13 @@ export function getCorsHeaders(request, env, opts = {}) {
 // JWT aud claim 白名單：依 redirect / origin 決定 token 受眾
 // 未匹配 → 'chiyigo'（chiyigo.com 自家頁面）
 const AUD_BY_ORIGIN = {
-  'https://talo.chiyigo.com': 'talo',
-  'https://mbti.chiyigo.com': 'mbti',
+  'https://talo.chiyigo.com':            'talo',
+  'https://mbti.chiyigo.com':            'mbti',
+  'https://sport-app-web.pages.dev':     'sport-app',
+  'https://sport-app-admin.pages.dev':   'sport-app',
 }
 
-const AUD_VALID = new Set(['chiyigo', 'talo', 'mbti'])
+const AUD_VALID = new Set(['chiyigo', 'talo', 'mbti', 'sport-app'])
 
 export function resolveAud(input) {
   if (!input || typeof input !== 'string') return 'chiyigo'

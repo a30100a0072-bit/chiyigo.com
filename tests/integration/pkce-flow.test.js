@@ -100,6 +100,23 @@ describe('GET /api/auth/oauth/authorize — PKCE entry point', () => {
     expect(res.status).toBe(400)
   })
 
+  it('redirect_uri 白名單接受 sport-app web/admin', async () => {
+    for (const redirectUri of [
+      'https://sport-app-web.pages.dev/auth/callback',
+      'https://sport-app-admin.pages.dev/auth/callback',
+    ]) {
+      const { challenge } = await newPkcePair()
+      const url = new URL(`${ORIGIN}/api/auth/oauth/authorize`)
+      url.searchParams.set('response_type', 'code')
+      url.searchParams.set('redirect_uri', redirectUri)
+      url.searchParams.set('code_challenge', challenge)
+      url.searchParams.set('code_challenge_method', 'S256')
+      url.searchParams.set('state', 'st')
+      const res = await authorizeGet({ request: new Request(url.toString()), env })
+      expect(res.status).toBe(302)
+    }
+  })
+
   it('redirect_uri 不在白名單 → 400（防 open redirect）', async () => {
     const { challenge } = await newPkcePair()
     const url = new URL(`${ORIGIN}/api/auth/oauth/authorize`)
@@ -255,6 +272,42 @@ describe('POST /api/auth/oauth/token — code exchange', () => {
 
     const payload = await verifyAccessToken(body.access_token)
     expect(payload.aud).toBe('mbti')
+  })
+
+  it('aud claim: sport-app-web.pages.dev → aud=sport-app', async () => {
+    const user = await seedUser({ email: 'aud-sport-web@example.com' })
+    const { verifier, challenge } = await newPkcePair()
+    const redirectUri = 'https://sport-app-web.pages.dev/auth/callback'
+    const code = await seedAuthCode({ userId: user.id, codeChallenge: challenge, redirectUri })
+
+    const req = new Request(`${ORIGIN}/api/auth/oauth/token`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, code_verifier: verifier, redirect_uri: redirectUri }),
+    })
+    const res  = await tokenPost({ request: req, env })
+    const body = await res.json()
+    expect(res.status).toBe(200)
+
+    const payload = await verifyAccessToken(body.access_token)
+    expect(payload.aud).toBe('sport-app')
+  })
+
+  it('aud claim: sport-app-admin.pages.dev → aud=sport-app', async () => {
+    const user = await seedUser({ email: 'aud-sport-admin@example.com' })
+    const { verifier, challenge } = await newPkcePair()
+    const redirectUri = 'https://sport-app-admin.pages.dev/auth/callback'
+    const code = await seedAuthCode({ userId: user.id, codeChallenge: challenge, redirectUri })
+
+    const req = new Request(`${ORIGIN}/api/auth/oauth/token`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, code_verifier: verifier, redirect_uri: redirectUri }),
+    })
+    const res  = await tokenPost({ request: req, env })
+    const body = await res.json()
+    expect(res.status).toBe(200)
+
+    const payload = await verifyAccessToken(body.access_token)
+    expect(payload.aud).toBe('sport-app')
   })
 
   it('aud claim: chiyigo://auth/callback (App custom scheme) → 預設 aud=chiyigo', async () => {

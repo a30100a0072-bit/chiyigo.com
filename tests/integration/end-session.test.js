@@ -129,7 +129,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     expect(res.status).toBe(200)
   })
 
-  it('回 HTML：含三站 frontchannel iframe + meta refresh + clear cookie', async () => {
+  it('回 HTML：含全站 frontchannel iframe + meta refresh + clear cookie', async () => {
     const url = `${ORIGIN}/api/auth/oauth/end-session` +
                 `?post_logout_redirect_uri=${encodeURIComponent('https://mbti.chiyigo.com/')}`
     const res  = await endSessionGet({ request: new Request(url), env })
@@ -139,6 +139,8 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     expect(html).toContain('https://chiyigo.com/api/frontchannel-logout')
     expect(html).toContain('https://mbti.chiyigo.com/frontchannel-logout')
     expect(html).toContain('https://talo.chiyigo.com/frontchannel-logout')
+    expect(html).toContain('https://sport-app-web.pages.dev/frontchannel-logout')
+    expect(html).toContain('https://sport-app-admin.pages.dev/frontchannel-logout')
     expect(html).toMatch(/<meta http-equiv="refresh"[^>]*url=https:\/\/mbti\.chiyigo\.com\//)
 
     const setCookie = res.headers.get('Set-Cookie')
@@ -148,6 +150,22 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
 
     const csp = res.headers.get('Content-Security-Policy')
     expect(csp).toContain('frame-src https://chiyigo.com https://mbti.chiyigo.com https://talo.chiyigo.com')
+    expect(csp).toContain('https://sport-app-web.pages.dev')
+    expect(csp).toContain('https://sport-app-admin.pages.dev')
+  })
+
+  it('post_logout_redirect_uri 接受 sport-app web/admin', async () => {
+    for (const target of [
+      'https://sport-app-web.pages.dev/',
+      'https://sport-app-admin.pages.dev/',
+    ]) {
+      const url = `${ORIGIN}/api/auth/oauth/end-session` +
+                  `?post_logout_redirect_uri=${encodeURIComponent(target)}`
+      const res = await endSessionGet({ request: new Request(url), env })
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).toMatch(new RegExp(`<meta http-equiv="refresh"[^>]*url=${target.replace(/\//g, '\\/').replace(/\./g, '\\.')}`))
+    }
   })
 
   it('state 參數透傳到 post_logout_redirect_uri', async () => {
