@@ -12,6 +12,7 @@
  *  - 不可封禁角色層級 ≥ 自己的用戶（admin 不可封禁 admin 或 developer）
  */
 
+import { res } from '../../../../utils/auth.js'
 import { requireRole } from '../../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
 
@@ -64,9 +65,3 @@ export async function onRequestPost({ request, env, params }) {
   return res({ message: 'User banned', user_id: targetId, status: 'banned' })
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

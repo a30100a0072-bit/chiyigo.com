@@ -15,6 +15,7 @@ import { sendVerificationEmail } from '../../../utils/email.js'
 import { validatePassword } from '../../../utils/password.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
+import { res } from '../../../utils/auth.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL   = '15m'
@@ -140,9 +141,3 @@ export async function onRequestPost({ request, env, waitUntil }) {
   }, 201)
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

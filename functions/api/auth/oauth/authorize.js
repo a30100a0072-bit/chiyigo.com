@@ -24,6 +24,7 @@
  */
 
 import { generateSecureToken } from '../../../utils/crypto.js'
+import { res } from '../../../utils/auth.js'
 
 const SESSION_TTL_MS = 10 * 60 * 1000 // 10 分鐘完成登入
 
@@ -95,9 +96,3 @@ export async function onRequestGet({ request, env }) {
   return Response.redirect(loginUrl.toString(), 302)
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

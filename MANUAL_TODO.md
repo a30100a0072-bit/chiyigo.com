@@ -40,10 +40,13 @@
 
 ---
 
-## 4. Cron — D1 Cleanup ⚠ 高優先（待做）
+## 4. Cron — D1 Cleanup ✅ 已完成（2026-05-03）
 
-**現況**：endpoint `/api/admin/cron/cleanup` 已寫，GitHub Actions workflow 已加
-**目前狀態**：CRON_SECRET 未設 → endpoint 回 500、workflow 會 fail（看得見的失敗）
+- `CRON_SECRET` 已設於 Pages env var（Production，encrypted）與 GitHub repo secret（兩端一致）
+- endpoint `/api/admin/cron/cleanup` 已串通，GitHub Actions workflow `Cron — D1 Cleanup` 可正常執行
+
+<details>
+<summary>原始設定步驟（保留供未來重建參考）</summary>
 
 ### 步驟
 
@@ -72,6 +75,8 @@ GitHub repo → Settings → Secrets and variables → Actions → New repositor
    Status: 200
    Body: {"ok":true,"totalDeleted":N,"results":[...]}
    ```
+
+</details>
 
 ---
 

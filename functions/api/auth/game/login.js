@@ -25,6 +25,8 @@
  *  400 → { error: string }
  */
 
+import { res } from '../../../utils/auth.js'
+
 const SUPPORTED_PROVIDERS = ['discord']
 
 const PROVIDER_INIT_PATHS = {
@@ -59,9 +61,3 @@ export async function onRequestGet({ request, env }) {
   return res({ provider, platform, url: initUrl.toString() })
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

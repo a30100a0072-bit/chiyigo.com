@@ -7,6 +7,7 @@
  */
 
 import { hashToken } from '../../../utils/crypto.js'
+import { res } from '../../../utils/auth.js'
 
 export async function onRequestGet({ request }) {
   const url   = new URL(request.url)
@@ -52,9 +53,3 @@ export async function onRequestPost({ request, env }) {
   return res({ message: 'Email verified successfully' })
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

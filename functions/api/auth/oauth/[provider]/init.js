@@ -11,7 +11,7 @@
  */
 
 import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-providers.js'
-import { requireAuth } from '../../../../utils/auth.js'
+import { requireAuth, res } from '../../../../utils/auth.js'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit.js'
 import { resolveAud } from '../../../../utils/cors.js'
 
@@ -204,9 +204,3 @@ export async function onRequestGet(context) {
   return Response.redirect(authUrl.toString(), 302)
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

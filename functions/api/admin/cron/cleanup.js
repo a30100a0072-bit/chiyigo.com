@@ -16,6 +16,8 @@
  *   - 各表保留期見下面註釋
  */
 
+import { res } from '../../../utils/auth.js'
+
 const TASKS = [
   // pkce_sessions: 5min TTL，過期就沒用
   { name: 'pkce_sessions',       sql: `DELETE FROM pkce_sessions       WHERE expires_at < datetime('now')` },
@@ -72,9 +74,3 @@ export async function onRequestPost({ request, env }) {
   return res({ ok: true, totalDeleted, results })
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

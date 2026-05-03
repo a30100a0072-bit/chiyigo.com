@@ -15,6 +15,7 @@
  *  404 → 用戶不存在
  */
 
+import { res } from '../../../../utils/auth.js'
 import { requireRole } from '../../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
 
@@ -61,9 +62,3 @@ export async function onRequestPost({ request, env, params }) {
   return res({ message: 'User unbanned', user_id: targetId, status: 'active' })
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

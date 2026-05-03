@@ -10,7 +10,7 @@
  *  500 → 內部錯誤（DB / Resend 交握失敗）
  */
 
-import { requireAuth } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth.js'
 import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { sendVerificationEmail } from '../../../utils/email.js'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
@@ -118,9 +118,3 @@ async function handle({ request, env }) {
   return res({ message: 'Verification email sent' })
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

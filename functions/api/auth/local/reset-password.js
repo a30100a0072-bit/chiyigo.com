@@ -19,7 +19,7 @@ import {
   verifyBackupCode,
 } from '../../../utils/crypto.js'
 import { validatePassword } from '../../../utils/password.js'
-import { bumpTokenVersion } from '../../../utils/auth.js'
+import { bumpTokenVersion, res } from '../../../utils/auth.js'
 
 export async function onRequestPost({ request, env }) {
   let body
@@ -152,9 +152,3 @@ export async function onRequestPost({ request, env }) {
   return res({ message: 'Password reset successfully. Please log in again.' })
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

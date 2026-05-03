@@ -14,7 +14,7 @@
  *  401 → access_token 無效
  */
 
-import { requireAuth }               from '../../../utils/auth.js'
+import { requireAuth, res }          from '../../../utils/auth.js'
 import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 
 const CODE_TTL_MS = 5 * 60 * 1000 // auth code 5 分鐘有效
@@ -67,9 +67,3 @@ export async function onRequestPost({ request, env }) {
   return res({ redirect_url: redirectUrl })
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

@@ -17,6 +17,7 @@ import { verifyJwt, signJwt } from '../../../utils/jwt.js'
 import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { getProvider } from '../../../utils/oauth-providers.js'
 import { resolveAud } from '../../../utils/cors.js'
+import { res } from '../../../utils/auth.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -158,9 +159,3 @@ function refreshCookie(token, maxAge) {
   return `chiyigo_refresh=${token}; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=${maxAge}`
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}

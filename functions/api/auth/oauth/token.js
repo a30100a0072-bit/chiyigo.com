@@ -25,6 +25,7 @@
 import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { getCorsHeaders, getCorsHeadersForCredentials, resolveAud } from '../../../utils/cors.js'
+import { res } from '../../../utils/auth.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）
@@ -165,9 +166,3 @@ export async function onRequestPost({ request, env }) {
   return res(responseBody, 200, cors)
 }
 
-function res(data, status = 200, corsHeaders = {}) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders },
-  })
-}

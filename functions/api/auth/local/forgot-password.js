@@ -12,6 +12,7 @@
 import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { sendPasswordResetEmail } from '../../../utils/email.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
+import { res } from '../../../utils/auth.js'
 
 const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_HOURS   = 1
@@ -114,9 +115,3 @@ async function fakeHashDelay() {
   )
 }
 
-function res(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
-}
