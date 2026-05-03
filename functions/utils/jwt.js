@@ -40,7 +40,12 @@ async function getSigningKey(env) {
   if (!env.JWT_PRIVATE_KEY)
     throw new Error('JWT_PRIVATE_KEY is not configured. Run: node scripts/generate-jwt-keys.mjs')
 
-  const jwk      = JSON.parse(env.JWT_PRIVATE_KEY)
+  let jwk
+  try {
+    jwk = JSON.parse(env.JWT_PRIVATE_KEY)
+  } catch (e) {
+    throw new Error(`JWT_PRIVATE_KEY is not valid JSON: ${e.message}. Re-run: node scripts/generate-jwt-keys.mjs`)
+  }
   _signingKey    = await importJWK(jwk, 'ES256')
   _cachedKid     = jwk.kid ?? 'key-1'
   return { key: _signingKey, kid: _cachedKid }
@@ -54,13 +59,22 @@ async function getSigningKey(env) {
  */
 function readPublicJwks(env) {
   if (env.JWT_PUBLIC_KEYS) {
-    const arr = JSON.parse(env.JWT_PUBLIC_KEYS)
+    let arr
+    try {
+      arr = JSON.parse(env.JWT_PUBLIC_KEYS)
+    } catch (e) {
+      throw new Error(`JWT_PUBLIC_KEYS is not valid JSON: ${e.message}`)
+    }
     if (!Array.isArray(arr) || arr.length === 0)
       throw new Error('JWT_PUBLIC_KEYS must be a non-empty JSON array')
     return arr
   }
   if (env.JWT_PUBLIC_KEY) {
-    return [JSON.parse(env.JWT_PUBLIC_KEY)]
+    try {
+      return [JSON.parse(env.JWT_PUBLIC_KEY)]
+    } catch (e) {
+      throw new Error(`JWT_PUBLIC_KEY is not valid JSON: ${e.message}`)
+    }
   }
   throw new Error('JWT_PUBLIC_KEY(S) is not configured')
 }
