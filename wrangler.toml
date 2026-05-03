@@ -5,6 +5,8 @@ pages_build_output_dir = "public"
 # 注意：Cloudflare Pages 不會合併 wrangler.toml [vars] 與 dashboard 設的環境變數，
 # 同 key 衝突時部署會失敗。其他 env vars (IAM_BASE_URL / MAIL_FROM_ADDRESS /
 # RESEND_API_KEY 等) 由 Pages dashboard 管理。
+# ENVIRONMENT 在本機跑 `wrangler pages dev` 時會被 .dev.vars 覆寫成 development，
+# 兩處同名但值刻意不同，分別給 prod / local 用，請勿合併或刪除任一邊。
 [vars]
 ENVIRONMENT = "production"
 
