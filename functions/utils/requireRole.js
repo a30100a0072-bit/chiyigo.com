@@ -11,8 +11,6 @@
 
 import { requireAuth, res } from './auth.js'
 
-export { res }
-
 const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 
 /**
