@@ -113,12 +113,32 @@ export async function onRequestGet({ request, env, waitUntil }) {
   }
 
   // 2. 也撤 cookie 的 token（id_token_hint 缺失 / sub 不可解時的 fallback）
+  // chiyigo 自己 sidebar 的登出按鈕走 end-session 時不帶 id_token_hint，
+  // sub 上面解不出來，但 cookie 還在 — 從 cookie 反查 user_id 後也補上
+  // backchannel dispatch，否則 sport-app 永遠收不到 logout 通知。
   const cookieToken = parseCookieHeader(request.headers.get('Cookie'), 'chiyigo_refresh')
   if (cookieToken) {
     const tokenHash = await hashToken(cookieToken)
+    const row = await env.chiyigo_db
+      .prepare(`SELECT user_id FROM refresh_tokens WHERE token_hash = ? LIMIT 1`)
+      .bind(tokenHash).first()
     await env.chiyigo_db
       .prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE token_hash = ? AND revoked_at IS NULL`)
       .bind(tokenHash).run()
+
+    // 若 path 1（id_token_hint）沒 dispatch 過，這裡補一次。撤該 user 的所有
+    // refresh + 通知 cross-site RP。
+    if (!sub && row?.user_id) {
+      const userId = row.user_id
+      await env.chiyigo_db
+        .prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL`)
+        .bind(userId).run()
+      if (typeof waitUntil === 'function') {
+        waitUntil(dispatchBackchannelLogout(env, userId))
+      } else {
+        await dispatchBackchannelLogout(env, userId)
+      }
+    }
   }
 
   // 3. 拼最終 redirect（state 透傳）
