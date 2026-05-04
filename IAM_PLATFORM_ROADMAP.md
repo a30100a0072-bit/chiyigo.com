@@ -64,7 +64,7 @@ Phase F：金流 / 虛擬貨幣對接（KYC/AML hook + 簽章驗證）          
 ```
 
 > **獨立軸：Silent SSO**（不在 Phase A–F 編號內，避免與 Phase B 撞名）
-> - **Phase 1**（2026-05-04 動工）：cookie session check + auto auth_code + `prompt=none`/`prompt=login`
+> - ✅ **Phase 1**（2026-05-04 完工 + 實機 PASS）：cookie session check + auto auth_code + `prompt=none`/`prompt=login`
 > - **Phase 2**：consent UI + `max_age` + `id_token_hint` re-auth
 > - **Phase 3**：multi-account picker
 > 詳見 memory `project_silent_sso.md`。
