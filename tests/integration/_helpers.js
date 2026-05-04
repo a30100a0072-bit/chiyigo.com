@@ -9,6 +9,13 @@ import {
 
 /** Apply schema (idempotent via IF NOT EXISTS) and truncate tables. */
 export async function resetDb() {
+  // pkce_sessions / auth_codes 在 _base.sql（migrations test 用）schema 與
+  // _setup.sql（authoritative）有 column rename + 新增（pkce_key→session_key、
+  // state、redirect_uri 都沒對應 migration），CREATE IF NOT EXISTS 跳過會吃舊 schema。
+  // 直接 drop 重建，內容反正都是 ephemeral test data。
+  await env.chiyigo_db.prepare('DROP TABLE IF EXISTS pkce_sessions').run()
+  await env.chiyigo_db.prepare('DROP TABLE IF EXISTS auth_codes').run()
+
   const stmts = setupSql.split(';').map(s => s.trim()).filter(Boolean)
   for (const s of stmts) {
     await env.chiyigo_db.prepare(s).run()
