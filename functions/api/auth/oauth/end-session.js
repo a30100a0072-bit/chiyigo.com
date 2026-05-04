@@ -23,6 +23,7 @@ import { decodeProtectedHeader, jwtVerify, importJWK } from 'jose'
 import { hashToken } from '../../../utils/crypto.js'
 import { getPublicJwks } from '../../../utils/jwt.js'
 import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies.js'
+import { dispatchBackchannelLogout } from '../../../utils/backchannel.js'
 
 const ALLOWED_POST_LOGOUT_REDIRECT = new Set([
   'https://chiyigo.com/',
@@ -79,7 +80,7 @@ function parseCookieHeader(header, name) {
   return m ? m[1] : null
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env, waitUntil }) {
   const url = new URL(request.url)
   const idTokenHint            = url.searchParams.get('id_token_hint')
   const postLogoutRedirectUri  = url.searchParams.get('post_logout_redirect_uri') || 'https://chiyigo.com/'
@@ -97,6 +98,17 @@ export async function onRequestGet({ request, env }) {
       await env.chiyigo_db
         .prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL`)
         .bind(userId).run()
+    }
+
+    // OIDC Back-Channel Logout — 平行 fire-and-forget 通知所有 cross-site RP
+    // （sport-app 等）。frontchannel iframe 在 storage partitioning 下對 cross-site
+    // 失效，靠這條 server-to-server 路徑兜底。waitUntil 確保 fetch 在 response
+    // 已回給瀏覽器後仍能完成，不阻塞 user redirect。
+    if (typeof waitUntil === 'function') {
+      waitUntil(dispatchBackchannelLogout(env, sub))
+    } else {
+      // dev fallback：沒 waitUntil 就同步等
+      await dispatchBackchannelLogout(env, sub)
     }
   }
 

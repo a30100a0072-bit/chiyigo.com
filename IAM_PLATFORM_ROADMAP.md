@@ -373,7 +373,8 @@ Week 11+:    Phase F — 對接時做
 ## 11. Regression 守門（每 Phase 必跑）
 
 - [ ] chiyigo / mbti / talo 三站 SSO 全綠
-- [ ] front-channel logout 三站同步
+- [ ] front-channel logout 三站（chiyigo/mbti/talo same-site）同步
+- [ ] **back-channel logout（OIDC 1.0）對 sport-app（cross-site）同步** — 2026-05-04 加入，補 storage partitioning 切斷 frontchannel 的洞
 - [ ] refresh rotation 正常
 - [ ] OIDC Discovery + JWKS 200
 - [ ] vitest 全綠
@@ -403,4 +404,5 @@ Week 11+:    Phase F — 對接時做
 | 日期 | 事件 |
 |---|---|
 | 2026-05-02 | 初版（5 Phase，限 OIDC 多 App） |
+| 2026-05-04 | 加入 OIDC Back-Channel Logout 1.0 為跨 site RP（sport-app on pages.dev）SSO 登出機制；併行 frontchannel 不取代，作雙保險 |
 | 2026-05-02 | 大改版：擴張到金融級平台（金流 + 虛擬貨幣 + 真錢遊戲），新增 Phase 0 / Phase E / Phase F |
