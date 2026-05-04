@@ -405,4 +405,5 @@ Week 11+:    Phase F — 對接時做
 |---|---|
 | 2026-05-02 | 初版（5 Phase，限 OIDC 多 App） |
 | 2026-05-04 | 加入 OIDC Back-Channel Logout 1.0 為跨 site RP（sport-app on pages.dev）SSO 登出機制；併行 frontchannel 不取代，作雙保險 |
+| 2026-05-04 | 加入 oauth_clients 通用 RP 註冊機制需求；Phase 1 in-code registry 集中現有 5 處 hardcode；Phase 2 D1 表化排在本路線圖 Phase C；目標：新增 RP 從改 5 個檔變成跑 1 條 SQL |
 | 2026-05-02 | 大改版：擴張到金融級平台（金流 + 虛擬貨幣 + 真錢遊戲），新增 Phase 0 / Phase E / Phase F |
