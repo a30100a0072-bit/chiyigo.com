@@ -25,23 +25,17 @@
 
 import { generateSecureToken } from '../../../utils/crypto.js'
 import { res } from '../../../utils/auth.js'
+import { ALLOWED_REDIRECT_URIS } from '../../../utils/oauth-clients.js'
 
 const SESSION_TTL_MS = 10 * 60 * 1000 // 10 分鐘完成登入
 
-// redirect_uri 白名單（明確列舉，不接受 pattern 匹配 chiyigo.com 任意路徑）
-const ALLOWED_REDIRECT_URIS = new Set([
-  'chiyigo://auth/callback',                          // Unity / Unreal / mobile custom scheme
-  'https://chiyigo.com/callback',                     // Web SPA
-  'https://chiyigo.com/app/callback',                 // iOS Universal Link（預留）
-  'https://mbti.chiyigo.com/login.html',              // mbti sub-domain
-  'https://talo.chiyigo.com/',                        // talo sub-domain (SPA root)
-  'https://sport-app-web.pages.dev/auth/callback',    // sport-app web (Cloudflare Pages)
-  'https://sport-app-admin.pages.dev/auth/callback',  // sport-app admin (Cloudflare Pages)
-])
+// redirect_uri 白名單來自 oauth-clients registry（單一 source of truth）
+// 加 RP 改 functions/utils/oauth-clients.js，不在此處加。
+const ALLOWED_REDIRECT_URI_SET = new Set(ALLOWED_REDIRECT_URIS)
 
 function isAllowedRedirectUri(uri) {
-  if (ALLOWED_REDIRECT_URIS.has(uri)) return true
-  // Loopback（Desktop Launcher，RFC 8252）
+  if (ALLOWED_REDIRECT_URI_SET.has(uri)) return true
+  // Loopback（Desktop Launcher，RFC 8252）— 動態 port，不在 registry
   if (/^http:\/\/127\.0\.0\.1:\d{1,5}\/callback$/.test(uri)) return true
   return false
 }

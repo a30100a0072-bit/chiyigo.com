@@ -7,19 +7,13 @@
  *  - 不在白名單的 Origin：回傳空物件（不加 CORS 標頭，瀏覽器自行攔截）
  */
 
-const DEFAULT_ORIGINS = [
-  'https://chiyigo.com',
-  'https://mbti.chiyigo.com',
-  'https://talo.chiyigo.com',
-  'https://sport-app-web.pages.dev',
-  'https://sport-app-admin.pages.dev',
-]
+import { ALLOWED_CORS_ORIGINS, AUD_BY_ORIGIN, VALID_AUDS } from './oauth-clients.js'
 
 function getAllowedOrigins(env) {
   const extras = env.ALLOWED_ORIGINS
     ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
     : []
-  return [...DEFAULT_ORIGINS, ...extras]
+  return [...ALLOWED_CORS_ORIGINS, ...extras]
 }
 
 function isAllowedOrigin(origin, env) {
@@ -51,22 +45,12 @@ export function getCorsHeaders(request, env, opts = {}) {
   return headers
 }
 
-// JWT aud claim 白名單：依 redirect / origin 決定 token 受眾
+// JWT aud claim 解析：依 redirect / origin 決定 token 受眾
+// AUD_BY_ORIGIN / VALID_AUDS 來自 oauth-clients registry
 // 未匹配 → 'chiyigo'（chiyigo.com 自家頁面）
-const AUD_BY_ORIGIN = {
-  'https://talo.chiyigo.com':            'talo',
-  'https://mbti.chiyigo.com':            'mbti',
-  'https://sport-app-web.pages.dev':     'sport-app',
-  'https://sport-app-admin.pages.dev':   'sport-app',
-}
-
-const AUD_VALID = new Set(['chiyigo', 'talo', 'mbti', 'sport-app'])
-
 export function resolveAud(input) {
   if (!input || typeof input !== 'string') return 'chiyigo'
-  // 直接傳入 aud 字串
-  if (AUD_VALID.has(input)) return input
-  // URL → 比對 origin
+  if (VALID_AUDS.has(input)) return input
   try {
     const origin = new URL(input).origin
     return AUD_BY_ORIGIN[origin] ?? 'chiyigo'

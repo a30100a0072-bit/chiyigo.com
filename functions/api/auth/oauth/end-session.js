@@ -24,26 +24,13 @@ import { hashToken } from '../../../utils/crypto.js'
 import { getPublicJwks } from '../../../utils/jwt.js'
 import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies.js'
 import { dispatchBackchannelLogout } from '../../../utils/backchannel.js'
+import {
+  ALLOWED_POST_LOGOUT_URIS,
+  FRONTCHANNEL_LOGOUT_URIS,
+  FRONTCHANNEL_FRAME_ORIGINS,
+} from '../../../utils/oauth-clients.js'
 
-const ALLOWED_POST_LOGOUT_REDIRECT = new Set([
-  'https://chiyigo.com/',
-  'https://chiyigo.com/login',
-  'https://mbti.chiyigo.com/',
-  'https://mbti.chiyigo.com/login.html',
-  'https://talo.chiyigo.com/',
-  'https://sport-app-web.pages.dev/',
-  'https://sport-app-admin.pages.dev/',
-])
-
-// chiyigo 自己用 /api/ 子路徑（避開 root level single function 觸發 Pages bundle bug）；
-// 其他子站皆獨立 Pages project，沒這個雷，仍用 /frontchannel-logout
-const FRONTCHANNEL_IFRAMES = [
-  'https://chiyigo.com/api/frontchannel-logout',
-  'https://mbti.chiyigo.com/frontchannel-logout',
-  'https://talo.chiyigo.com/frontchannel-logout',
-  'https://sport-app-web.pages.dev/frontchannel-logout',
-  'https://sport-app-admin.pages.dev/frontchannel-logout',
-]
+const ALLOWED_POST_LOGOUT_REDIRECT = new Set(ALLOWED_POST_LOGOUT_URIS)
 
 function escAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -147,9 +134,11 @@ export async function onRequestGet({ request, env, waitUntil }) {
     : postLogoutRedirectUri
 
   // 4. 回 HTML：嵌入 frontchannel iframe + meta refresh
-  const iframes = FRONTCHANNEL_IFRAMES
+  const iframes = FRONTCHANNEL_LOGOUT_URIS
     .map(u => `<iframe src="${escAttr(u)}" sandbox="allow-scripts allow-same-origin" style="display:none" aria-hidden="true"></iframe>`)
     .join('\n')
+
+  const cspFrameSrc = FRONTCHANNEL_FRAME_ORIGINS.join(' ')
 
   const html = `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -172,11 +161,10 @@ ${iframes}
       'Content-Type':  'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
       'Set-Cookie':    CLEAR_REFRESH_COOKIE,
-      // 寬鬆 CSP 給這頁：允許 iframe 嵌三個子站，禁絕其他
+      // 寬鬆 CSP 給這頁：frame-src 來自 oauth-clients registry（去重 origin），禁絕其他
       'Content-Security-Policy':
         "default-src 'none'; style-src 'unsafe-inline'; " +
-        "frame-src https://chiyigo.com https://mbti.chiyigo.com https://talo.chiyigo.com " +
-        "https://sport-app-web.pages.dev https://sport-app-admin.pages.dev",
+        `frame-src ${cspFrameSrc}`,
       'Referrer-Policy': 'no-referrer',
     },
   })
