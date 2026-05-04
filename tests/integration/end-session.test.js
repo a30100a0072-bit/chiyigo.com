@@ -99,10 +99,13 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     expect(await countActiveTokens(user.id)).toBe(1) // 沒撤（簽章偽造，cookie 也沒帶）
   })
 
-  it('cookie fallback: 無 id_token_hint，cookie 有 → 撤 cookie 對應的 token', async () => {
+  it('cookie fallback: 無 id_token_hint，cookie 有 → 撤該 user 所有 active token（single sign-out）', async () => {
+    // 與 id_token_hint path 行為一致：end-session 是 single sign-out，撤光該 user
+    // 所有裝置 session（也讓 backchannel dispatch 通知所有 RP）。commit 411972b
+    // 修正之前 cookie fallback 只撤對應 token、跨 RP 沒同步登出的 bug。
     const user = await seedUser()
     const t1 = await seedRefreshToken(user.id)
-    const t2 = await seedRefreshToken(user.id)
+    const _t2 = await seedRefreshToken(user.id)
     expect(await countActiveTokens(user.id)).toBe(2)
 
     const url = `${ORIGIN}/api/auth/oauth/end-session` +
@@ -113,7 +116,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     })
 
     expect(res.status).toBe(200)
-    expect(await countActiveTokens(user.id)).toBe(1) // 只撤 t1（cookie 對應），t2 還在
+    expect(await countActiveTokens(user.id)).toBe(0)
   })
 
   it('post_logout_redirect_uri 不在白名單 → 400', async () => {
