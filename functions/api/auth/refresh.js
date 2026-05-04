@@ -55,7 +55,7 @@ export async function onRequestPost({ request, env }) {
   const tokenHash = await hashToken(refresh_token)
   const tokenRow  = await db
     .prepare(`
-      SELECT id, user_id, device_uuid, revoked_at
+      SELECT id, user_id, device_uuid, revoked_at, auth_time
       FROM refresh_tokens
       WHERE token_hash = ? AND expires_at > datetime('now')
     `)
@@ -93,13 +93,16 @@ export async function onRequestPost({ request, env }) {
   const newExpiresAt     = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // Rotation 保留原本的 auth_time（silent refresh 不算重新互動式認證，
+  // OIDC max_age 才有意義）。舊 row 沒 auth_time 時用 NOW 當保守 fallback。
+  const preservedAuthTime = tokenRow.auth_time ?? new Date().toISOString().replace('T', ' ').slice(0, 19)
   await db.batch([
     db.prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE id = ?`)
       .bind(tokenRow.id),
     db.prepare(`
-      INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at)
-      VALUES (?, ?, ?, ?)
-    `).bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt),
+      INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime),
   ])
 
   // ── 5. 簽發新 Access Token ───────────────────────────────────

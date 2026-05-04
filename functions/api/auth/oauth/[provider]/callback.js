@@ -281,8 +281,8 @@ async function handle(context) {
     .toISOString().replace('T', ' ').slice(0, 19)
 
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at)
-    VALUES (?, ?, NULL, ?)
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
+    VALUES (?, ?, NULL, ?, datetime('now'))
   `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
 
   // PKCE 模式（從 mbti.chiyigo.com 發起）：回到登入頁讓 auth-ui.js 完成授權碼交換

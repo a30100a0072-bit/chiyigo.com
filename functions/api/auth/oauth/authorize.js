@@ -21,6 +21,9 @@
  *                          none  → 沒 session 時不顯示 UI，回 redirect_uri?error=login_required
  *                          login → 強制顯示 login UI，跳過 silent SSO
  *                          省略  → 有 session 走 silent，沒 session 走 login UI
+ *  max_age               — OIDC: 上次互動式認證距今秒數上限。
+ *                          超出 → silent 不命中，fall through 到 /login.html
+ *                          （搭 prompt=none 則回 login_required）。0 等同強制重認。
  *
  * Silent SSO：當瀏覽器帶有 active 的 chiyigo_refresh cookie，
  * 直接 issue auth_code 並 302 到 redirect_uri，跳過 /login.html。
@@ -41,6 +44,7 @@ import {
   findActiveUserByRefreshCookie,
   issueAuthCodeAndBuildRedirect,
   buildLoginRequiredRedirect,
+  isWithinMaxAge,
 } from '../../../utils/oauth-session.js'
 
 const SESSION_TTL_MS = 10 * 60 * 1000 // 10 分鐘完成登入
@@ -77,6 +81,14 @@ export async function onRequestGet({ request, env }) {
   const scope                 = normalizeScope(params.get('scope'))
   const nonce                 = params.get('nonce')  // 透傳，無格式限制
   const prompt                = params.get('prompt') // OIDC: none / login / consent
+  const maxAgeRaw             = params.get('max_age')
+  // OIDC §3.1.2.1 max_age: non-negative integer 秒數。
+  // 解析失敗（NaN / 負值 / 非整數）→ 視為未指定（忽略，向後相容）。
+  let maxAge = null
+  if (maxAgeRaw !== null) {
+    const n = Number(maxAgeRaw)
+    if (Number.isInteger(n) && n >= 0) maxAge = n
+  }
 
   if (responseType !== 'code')
     return res({ error: 'Only response_type=code is supported' }, 400)
@@ -94,14 +106,17 @@ export async function onRequestGet({ request, env }) {
     const refreshToken = readRefreshCookie(request.headers.get('Cookie'))
     if (refreshToken) {
       const user = await findActiveUserByRefreshCookie(env, refreshToken)
-      if (user) {
+      // max_age 命中失敗 → 視同無 active session：fall through 走 /login.html
+      // （prompt=none 走下方 login_required 分支，符合 OIDC spec）
+      if (user && isWithinMaxAge(user.auth_time, maxAge)) {
         const redirectUrl = await issueAuthCodeAndBuildRedirect(env, {
           userId: user.id, redirectUri, codeChallenge, state, scope, nonce,
+          authTime: user.auth_time,
         })
         return Response.redirect(redirectUrl, 302)
       }
     }
-    // 沒 cookie 或失效 — 若 RP 要求 prompt=none，依 OIDC spec 回 login_required
+    // 沒 cookie 或失效（含 max_age 超出）— 若 RP 要求 prompt=none，依 OIDC spec 回 login_required
     if (prompt === 'none') {
       return Response.redirect(buildLoginRequiredRedirect(redirectUri, state), 302)
     }

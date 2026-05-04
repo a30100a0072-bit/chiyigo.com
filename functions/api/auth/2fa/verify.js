@@ -144,8 +144,8 @@ async function issueToken(userId, record, db, deviceUuid, env, audience) {
     .toISOString().replace('T', ' ').slice(0, 19)
 
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
+    VALUES (?, ?, ?, ?, datetime('now'))
   `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt).run()
 
   return {

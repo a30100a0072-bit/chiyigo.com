@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   token_hash  TEXT    NOT NULL UNIQUE,
   device_uuid TEXT,
   expires_at  TEXT    NOT NULL,
-  revoked_at  TEXT
+  revoked_at  TEXT,
+  auth_time   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS login_attempts (
@@ -154,6 +155,7 @@ CREATE TABLE IF NOT EXISTS auth_codes (
   state           TEXT    NOT NULL,
   scope           TEXT,
   nonce           TEXT,
+  auth_time       TEXT,
   expires_at      TEXT    NOT NULL,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );

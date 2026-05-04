@@ -143,8 +143,8 @@ export async function onRequestPost(context) {
     .toISOString().replace('T', ' ').slice(0, 19)
 
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at)
-    VALUES (?, ?, NULL, ?)
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
+    VALUES (?, ?, NULL, ?, datetime('now'))
   `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
 
   return new Response(JSON.stringify({ access_token: accessToken }), {

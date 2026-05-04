@@ -52,10 +52,11 @@ export async function onRequestPost({ request, env }) {
     .toISOString().replace('T', ' ').slice(0, 19)
 
   // scope/nonce 從 pkce_session 透傳到 auth_code，token endpoint 取用簽 id_token
+  // auth_time = NOW：user 剛在 /login.html 完成互動式登入
   await db
     .prepare(`
-      INSERT INTO auth_codes (code_hash, user_id, code_challenge, redirect_uri, state, scope, nonce, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO auth_codes (code_hash, user_id, code_challenge, redirect_uri, state, scope, nonce, auth_time, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
     `)
     .bind(codeHash, Number(user.sub), session.code_challenge, session.redirect_uri, session.state, session.scope ?? null, session.nonce ?? null, expiresAt)
     .run()

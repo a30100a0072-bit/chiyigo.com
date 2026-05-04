@@ -192,3 +192,122 @@ describe('Silent SSO Phase 1', () => {
     expect(row.nonce).toBe('n-abc-123')
   })
 })
+
+// ── Phase 2: max_age 行為 ─────────────────────────────────────────
+async function setAuthTime(userId, secondsAgo) {
+  const t = new Date(Date.now() - secondsAgo * 1000).toISOString().replace('T', ' ').slice(0, 19)
+  await env.chiyigo_db
+    .prepare(`UPDATE refresh_tokens SET auth_time = ? WHERE user_id = ?`)
+    .bind(t, userId).run()
+  return t
+}
+
+describe('Silent SSO Phase 2 — max_age', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('max_age 大於 elapsed → silent 命中', async () => {
+    const { id } = await seedUser({ email: 'ma-ok@example.com' })
+    const token = await seedRefreshToken(id)
+    await setAuthTime(id, 60) // 60 秒前互動式登入
+
+    const resp = await callFunction(
+      onRequestGet,
+      makeRequest(authorizeUrl({ max_age: '600' }), token),
+    )
+
+    expect(resp.status).toBe(302)
+    expect(resp.headers.get('Location')).toMatch(/^https:\/\/sport-app-web\.pages\.dev\/auth\/callback\?code=/)
+  })
+
+  it('max_age 小於 elapsed → fall through 到 /login.html', async () => {
+    const { id } = await seedUser({ email: 'ma-stale@example.com' })
+    const token = await seedRefreshToken(id)
+    await setAuthTime(id, 3600) // 1 小時前
+
+    const resp = await callFunction(
+      onRequestGet,
+      makeRequest(authorizeUrl({ max_age: '300' }), token),
+    )
+
+    expect(resp.status).toBe(302)
+    expect(resp.headers.get('Location')).toMatch(/\/login\.html\?pkce_key=/)
+  })
+
+  it('max_age=0 → 強制重認，永遠 fall through', async () => {
+    const { id } = await seedUser({ email: 'ma-zero@example.com' })
+    const token = await seedRefreshToken(id)
+    await setAuthTime(id, 1) // 1 秒前剛登入也擋
+
+    const resp = await callFunction(
+      onRequestGet,
+      makeRequest(authorizeUrl({ max_age: '0' }), token),
+    )
+
+    expect(resp.status).toBe(302)
+    expect(resp.headers.get('Location')).toMatch(/\/login\.html\?pkce_key=/)
+  })
+
+  it('max_age 指定但 auth_time 為 NULL（舊資料）→ 保守 fall through', async () => {
+    const { id } = await seedUser({ email: 'ma-null@example.com' })
+    const token = await seedRefreshToken(id)
+    // 不設 auth_time（保持 NULL）
+
+    const resp = await callFunction(
+      onRequestGet,
+      makeRequest(authorizeUrl({ max_age: '600' }), token),
+    )
+
+    expect(resp.status).toBe(302)
+    expect(resp.headers.get('Location')).toMatch(/\/login\.html\?pkce_key=/)
+  })
+
+  it('max_age 超出 + prompt=none → login_required', async () => {
+    const { id } = await seedUser({ email: 'ma-pnone@example.com' })
+    const token = await seedRefreshToken(id)
+    await setAuthTime(id, 3600)
+
+    const resp = await callFunction(
+      onRequestGet,
+      makeRequest(authorizeUrl({ max_age: '300', prompt: 'none' }), token),
+    )
+
+    expect(resp.status).toBe(302)
+    const loc = resp.headers.get('Location')
+    expect(loc).toMatch(/^https:\/\/sport-app-web\.pages\.dev\/auth\/callback\?/)
+    expect(loc).toContain('error=login_required')
+  })
+
+  it('max_age 非法值（負數 / 非數字）→ 視為未指定，silent 照常命中', async () => {
+    const { id } = await seedUser({ email: 'ma-bad@example.com' })
+    const token = await seedRefreshToken(id)
+    // 不設 auth_time；若 max_age 沒被忽略，會 fall through
+    const resp = await callFunction(
+      onRequestGet,
+      makeRequest(authorizeUrl({ max_age: 'abc' }), token),
+    )
+    expect(resp.headers.get('Location')).toMatch(/^https:\/\/sport-app-web\.pages\.dev\/auth\/callback\?code=/)
+
+    const resp2 = await callFunction(
+      onRequestGet,
+      makeRequest(authorizeUrl({ max_age: '-5' }), token),
+    )
+    expect(resp2.headers.get('Location')).toMatch(/^https:\/\/sport-app-web\.pages\.dev\/auth\/callback\?code=/)
+  })
+
+  it('silent 命中時 auth_codes.auth_time 從 refresh_tokens 透傳', async () => {
+    const { id } = await seedUser({ email: 'ma-pass@example.com' })
+    const token = await seedRefreshToken(id)
+    const expected = await setAuthTime(id, 120)
+
+    await callFunction(
+      onRequestGet,
+      makeRequest(authorizeUrl({ max_age: '600' }), token),
+    )
+
+    const row = await env.chiyigo_db
+      .prepare(`SELECT auth_time FROM auth_codes WHERE state = ?`)
+      .bind(STATE).first()
+    expect(row.auth_time).toBe(expected)
+  })
+})

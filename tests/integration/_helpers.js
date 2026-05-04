@@ -63,6 +63,8 @@ export async function resetDb() {
     `ALTER TABLE pkce_sessions ADD COLUMN nonce TEXT`,
     `ALTER TABLE auth_codes ADD COLUMN scope TEXT`,
     `ALTER TABLE auth_codes ADD COLUMN nonce TEXT`,
+    `ALTER TABLE refresh_tokens ADD COLUMN auth_time TEXT`, // migration 0019
+    `ALTER TABLE auth_codes ADD COLUMN auth_time TEXT`,     // migration 0019
   ]) {
     try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
   }

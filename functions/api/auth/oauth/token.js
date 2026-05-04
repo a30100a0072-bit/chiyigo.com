@@ -70,7 +70,7 @@ export async function onRequestPost({ request, env }) {
     .prepare(`
       DELETE FROM auth_codes
       WHERE code_hash = ? AND expires_at > datetime('now')
-      RETURNING user_id, code_challenge, redirect_uri, state, scope, nonce
+      RETURNING user_id, code_challenge, redirect_uri, state, scope, nonce, auth_time
     `)
     .bind(codeHash)
     .first()
@@ -100,9 +100,13 @@ export async function onRequestPost({ request, env }) {
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // refresh_tokens.auth_time 用 auth_codes 透傳的（silent SSO 保留原 auth_time，
+  // 互動式登入則由 code.js 寫成 NOW）。fallback NOW 防 silent 鏈路 auth_time 為 null。
+  const newAuthTime = authCode.auth_time ?? new Date().toISOString().replace('T', ' ').slice(0, 19)
   await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)`)
-    .bind(user.id, refreshTokenHash, refreshExpiresAt)
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at, auth_time)
+              VALUES (?, ?, ?, ?)`)
+    .bind(user.id, refreshTokenHash, refreshExpiresAt, newAuthTime)
     .run()
 
   // 簽發 Access Token（ES256，15 分鐘） — aud 依 redirect_uri origin 決定
@@ -137,10 +141,13 @@ export async function onRequestPost({ request, env }) {
     //   iss/iat/exp 由 signJwt 注入；aud 與 access_token 同（resolveAud(redirect_uri)）
     //   sub/email/email_verified 來自 user
     //   nonce 來自 client 在 authorize 階段傳入，client 驗證 nonce 防 replay
-    //   auth_time = iat（簡化；未來若做 prompt=login 才需獨立追蹤）
+    //   auth_time：實際互動式認證時間（從 auth_codes 透傳），給 RP 評估 max_age
+    const authTimeSec = authCode.auth_time
+      ? Math.floor(Date.parse(authCode.auth_time.replace(' ', 'T') + 'Z') / 1000)
+      : Math.floor(Date.now() / 1000)
     const idTokenPayload = {
       sub:            String(user.id),
-      auth_time:      Math.floor(Date.now() / 1000),
+      auth_time:      authTimeSec,
     }
     if (scopes.includes('email')) {
       idTokenPayload.email          = user.email
