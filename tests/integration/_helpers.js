@@ -128,6 +128,7 @@ export async function seedUser({
   password = 'OldPass#1234',
   emailVerified = 1,
   deletedAt = null,
+  role = null,
 } = {}) {
   const salt = generateSalt()
   const hash = await hashPassword(password, salt)
@@ -136,6 +137,9 @@ export async function seedUser({
     .bind(email, emailVerified, deletedAt)
     .run()
   const id = r.meta.last_row_id
+  if (role) {
+    await env.chiyigo_db.prepare('UPDATE users SET role = ? WHERE id = ?').bind(role, id).run()
+  }
   await env.chiyigo_db
     .prepare('INSERT INTO local_accounts (user_id, password_hash, password_salt) VALUES (?, ?, ?)')
     .bind(id, hash, salt)
