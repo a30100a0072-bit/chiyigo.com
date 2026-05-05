@@ -190,6 +190,10 @@ async function loadProfile() {
 
     // Phase F-2 wave 3：付款 / 充值
     loadPayments();
+    // 從綠界分頁付款完切回來 → 自動重抓 intent list（不用 user 手動 F5）
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) loadPayments();
+    });
 
     // requisition.html 帶 ?req=N 跳來時，自動開充值表單 + 預填編號
     const reqParam = new URL(window.location.href).searchParams.get('req');
@@ -1703,6 +1707,8 @@ function redirectToEcpay(url, fields) {
   form.action = url;
   form.method = 'POST';
   form.acceptCharset = 'UTF-8';
+  form.target = '_blank';
+  form.rel = 'noopener';
   form.style.display = 'none';
   for (const [k, v] of Object.entries(fields)) {
     const input = document.createElement('input');
