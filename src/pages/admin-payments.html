@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>金流對帳 — CHIYIGO Admin</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"be8c93305dda4f16b57c925bc681b2f6"}'></script>
+  <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/admin-requisitions.css" />
+</head>
+<body>
+
+  <div class="dash-wrap" id="dash-wrap">
+
+    <!-- ── Sidebar ── -->
+    <aside class="dash-sidebar">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="sb-logo-img logo-dark">
+      </a>
+
+      <nav class="sb-nav" aria-label="主要導覽">
+        <a href="/admin-requisitions.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_requisitions">接案諮詢</span>
+        </a>
+        <a href="/admin-payments.html" class="sb-item active">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 5h12v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5l1.5-2h9L14 5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/><path d="M5 9h2M9 9h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_payments">金流對帳</span>
+        </a>
+        <a href="/dashboard.html" class="sb-item">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_member">會員中心</span>
+        </a>
+      </nav>
+
+      <div class="sb-bottom">
+        <div class="sb-footer">
+          <div class="lang-dropdown" id="lang-dropdown">
+            <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="lang-opt" data-lang="en">English</button>
+            <button class="lang-opt" data-lang="ja">日本語</button>
+            <button class="lang-opt" data-lang="ko">한국어</button>
+          </div>
+          <div class="sb-foot-icons">
+            <button class="sb-foot-btn" aria-label="切換明暗" id="theme-toggle-btn" title="切換明暗">
+              <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg><svg viewBox="0 0 16 16" fill="none" class="icon-moon"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+            <button class="sb-foot-btn" aria-label="切換語言" id="lang-toggle-btn" title="切換語言">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <span class="sb-copyright">© 2026 chiyigo</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div class="dash-main">
+      <main class="dash-content">
+        <div class="admin-wrap">
+          <div class="admin-head">
+            <div>
+              <p class="meta">// admin panel</p>
+              <h1 data-i18n="page_title">金流對帳</h1>
+              <p class="desc" data-i18n="page_desc">payment_intents — 含 ECPay / mock vendor 全部交易</p>
+            </div>
+            <button id="logout-btn" class="admin-logout">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
+              <span data-i18n="logout">登出</span>
+            </button>
+          </div>
+
+          <div id="loading" class="admin-state" data-i18n="loading">// 載入中…</div>
+
+          <div id="error-msg" class="admin-state error" hidden>
+            <p id="error-text">// error</p>
+            <a href="/login.html" data-i18n="relogin">→ 重新登入</a>
+          </div>
+
+          <div id="content" hidden>
+            <!-- Filters -->
+            <div class="filter-bar">
+              <select id="f-status">
+                <option value="" data-i18n="filter_status_all">所有狀態</option>
+                <option value="pending"    data-i18n="status_pending">等待付款</option>
+                <option value="processing" data-i18n="status_processing">處理中</option>
+                <option value="succeeded"  data-i18n="status_succeeded">已成功</option>
+                <option value="failed"     data-i18n="status_failed">失敗</option>
+                <option value="canceled"   data-i18n="status_canceled">已取消</option>
+                <option value="refunded"   data-i18n="status_refunded">已退款</option>
+              </select>
+              <select id="f-vendor">
+                <option value="" data-i18n="filter_vendor_all">所有 vendor</option>
+                <option value="ecpay">ECPay</option>
+                <option value="mock">mock</option>
+              </select>
+              <input id="f-user-id" type="number" min="1" placeholder="user_id" data-i18n-ph="filter_user_id_ph" />
+              <input id="f-from" type="date" data-i18n-aria="filter_from_aria" />
+              <input id="f-to"   type="date" data-i18n-aria="filter_to_aria" />
+              <button id="f-apply" data-i18n="filter_apply">套用</button>
+              <button id="f-clear" class="clear-btn" data-i18n="filter_clear">清除</button>
+            </div>
+
+            <!-- Totals -->
+            <div id="totals" class="totals-row"></div>
+
+            <!-- Table -->
+            <div class="table-wrap">
+              <table class="req-table">
+                <thead>
+                  <tr>
+                    <th class="id">#</th>
+                    <th data-i18n="col_user">使用者</th>
+                    <th data-i18n="col_vendor">Vendor</th>
+                    <th data-i18n="col_kind">類型</th>
+                    <th data-i18n="col_amount">金額</th>
+                    <th data-i18n="col_status">狀態</th>
+                    <th data-i18n="col_created">建立時間</th>
+                    <th data-i18n="col_actions">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+              </table>
+            </div>
+
+            <div id="cards-container" class="cards-wrap"></div>
+
+            <div id="pagination" class="pager"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Detail modal -->
+  <div id="modal-detail" class="modal-bd">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 data-i18n="modal_detail_title">交易詳情</h2>
+        <button class="modal-close" data-modal-close="modal-detail" aria-label="close">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="modal-detail-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Refund modal -->
+  <div id="modal-refund" class="modal-bd">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 data-i18n="modal_refund_title">退款確認</h2>
+        <button class="modal-close" data-modal-close="modal-refund" aria-label="close">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body refund-modal-body">
+        <p id="refund-summary" class="msg-block"></p>
+        <p data-i18n="refund_otp_label" class="msg-label">請輸入 6 位 2FA 驗證碼以執行退款（會記錄至 audit_log）</p>
+        <input id="refund-otp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" />
+        <input id="refund-reason" type="text" maxlength="200" placeholder="退款原因（選填）" data-i18n-ph="refund_reason_ph" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem" />
+        <p id="refund-msg" class="refund-msg"></p>
+        <div class="refund-actions">
+          <button class="cancel" data-modal-close="modal-refund" data-i18n="refund_cancel">取消</button>
+          <button id="refund-confirm-btn" class="confirm" data-i18n="refund_confirm">確認退款</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admin-payments.js" defer></script>
+
+</body>
+</html>

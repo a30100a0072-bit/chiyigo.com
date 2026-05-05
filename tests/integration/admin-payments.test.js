@@ -39,10 +39,11 @@ async function playerToken(userId) {
 }
 
 async function adminStepUpToken(userId, forAction = 'refund_payment') {
-  // step-up token：scope=elevated:payment + admin:payments + for_action
+  // step-up token 真實 shape：scope **只有** elevated:payment（不帶 admin:*）；
+  // role=admin → effectiveScopesFromJwt fallback 自動補 admin:payments。
   return signJwt(
     { sub: String(userId), role: 'admin', status: 'active', ver: 0,
-      scope: `${SCOPES.ELEVATED_PAYMENT} ${SCOPES.ADMIN_PAYMENTS}`,
+      scope: SCOPES.ELEVATED_PAYMENT,
       for_action: forAction,
       amr: ['pwd', 'totp'], acr: 'urn:chiyigo:loa:2' },
     '5m', env,

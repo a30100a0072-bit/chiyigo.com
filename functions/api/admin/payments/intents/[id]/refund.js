@@ -25,9 +25,9 @@
  *   409 → 狀態不允許退款
  */
 
-import { res, requireScope, requireStepUp } from '../../../../../utils/auth.js'
+import { res, requireStepUp } from '../../../../../utils/auth.js'
 import { getCorsHeaders } from '../../../../../utils/cors.js'
-import { SCOPES } from '../../../../../utils/scopes.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes.js'
 import {
   getPaymentIntent, updatePaymentStatus, PAYMENT_STATUS,
 } from '../../../../../utils/payments.js'
@@ -52,9 +52,11 @@ export async function onRequestPost({ request, env, params }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_PAYMENT, 'refund_payment')
   if (stepCheck.error) return stepCheck.error
 
-  // 確認 step-up token 同時帶 admin:payments（防 elevated:payment 被一般 user 拿來退別人款）
-  const tokenScopes = String(stepCheck.user.scope || '').split(' ').filter(Boolean)
-  if (!tokenScopes.includes(SCOPES.ADMIN_PAYMENTS)) {
+  // 確認 user 有 admin:payments 權限。step-up token scope 純 elevated:*，
+  // 但 token 帶 role 可走 effectiveScopesFromJwt fallback：admin/developer 自動有 admin:payments。
+  // 一般 player role 即使 step-up 拿到 elevated:payment 也不會有 admin:payments → 403（防越權退別人款）。
+  const effective = effectiveScopesFromJwt(stepCheck.user)
+  if (!effective.has(SCOPES.ADMIN_PAYMENTS)) {
     return res({ error: 'admin:payments scope required' }, 403, cors)
   }
 

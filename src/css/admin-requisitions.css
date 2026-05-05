@@ -233,3 +233,56 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .modal-meta{display:flex;align-items:center;gap:.5rem;font-family:var(--font-mono);font-size:.72rem;color:var(--text-dim);margin-bottom:.25rem}
 .msg-block{background:var(--bg-elevated);border:1px solid var(--border-dim);border-radius:10px;padding:.85rem 1rem;color:var(--text);white-space:pre-wrap;line-height:1.6;font-size:.86rem}
 .msg-label{font-size:.74rem;color:var(--text-dim);margin-bottom:.4rem}
+
+/* ── Payment status badges (admin-payments page) ── */
+.pay-badge{display:inline-flex;align-items:center;padding:.18rem .55rem;border-radius:6px;font-size:.7rem;font-weight:500;border:1px solid;white-space:nowrap}
+.pay-badge.pending   {background:rgba(245,158,11,.1); color:#d97706; border-color:rgba(245,158,11,.32)}
+.pay-badge.processing{background:rgba(14,165,233,.1); color:#0284c7; border-color:rgba(14,165,233,.32)}
+.pay-badge.succeeded {background:rgba(16,185,129,.1); color:#059669; border-color:rgba(16,185,129,.32)}
+.pay-badge.failed    {background:rgba(239,68,68,.1);  color:#dc2626; border-color:rgba(239,68,68,.32)}
+.pay-badge.canceled  {background:rgba(107,114,128,.1);color:#6b7280; border-color:rgba(107,114,128,.32)}
+.pay-badge.refunded  {background:rgba(107,114,128,.1);color:#6b7280; border-color:rgba(107,114,128,.32)}
+.theme-dark .pay-badge.pending   {color:#fbbf24}
+.theme-dark .pay-badge.processing{color:#38bdf8}
+.theme-dark .pay-badge.succeeded {color:#34d399}
+.theme-dark .pay-badge.failed    {color:#f87171}
+.theme-dark .pay-badge.canceled,
+.theme-dark .pay-badge.refunded  {color:#9ca3af}
+
+.filter-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;margin-bottom:1.25rem}
+.filter-bar select,.filter-bar input{background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;font-size:.8rem;color:var(--text);font-family:var(--font-sans);transition:border-color .18s}
+.filter-bar select:focus,.filter-bar input:focus{outline:none;border-color:var(--accent)}
+.filter-bar input{width:140px}
+.filter-bar button{padding:.45rem .85rem;background:var(--accent);border:1px solid var(--accent);border-radius:8px;color:#fff;font-size:.78rem;cursor:pointer;transition:filter .18s}
+.filter-bar button:hover{filter:brightness(1.08)}
+.filter-bar .clear-btn{background:transparent;color:var(--text-muted);border-color:var(--border)}
+.filter-bar .clear-btn:hover{color:var(--text);border-color:var(--border-bright);filter:none}
+
+.totals-row{display:flex;flex-wrap:wrap;gap:1.5rem;padding:1rem 1.2rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;margin-bottom:1.25rem}
+.totals-cell{display:flex;flex-direction:column;gap:.2rem}
+.totals-cell .lbl{font-family:var(--font-mono);font-size:.66rem;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase}
+.totals-cell .val{font-size:1.05rem;font-weight:600;color:var(--text);font-family:var(--font-mono)}
+.totals-cell .val.accent{color:var(--accent)}
+
+.pay-action-btn{display:inline-flex;align-items:center;padding:.3rem .65rem;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.06);color:#dc2626;border-radius:7px;font-size:.72rem;font-weight:500;cursor:pointer;transition:background .15s,color .15s}
+.pay-action-btn:hover{background:rgba(239,68,68,.12)}
+.theme-dark .pay-action-btn{color:#f87171}
+
+.modal-info-block{background:var(--bg-elevated);border:1px solid var(--border-dim);border-radius:10px;padding:.75rem 1rem;font-family:var(--font-mono);font-size:.78rem}
+.modal-info-block .info-line{display:flex;gap:.65rem;align-items:baseline;margin-bottom:.3rem}
+.modal-info-block .info-line:last-child{margin-bottom:0}
+.modal-info-block .info-line .k{color:var(--text-dim);width:5rem;flex-shrink:0}
+.modal-info-block .info-line .v{color:var(--text);user-select:all;word-break:break-all}
+
+.refund-modal-body input[type="text"]{width:100%;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:.6rem .85rem;font-size:.95rem;color:var(--text);font-family:var(--font-mono);letter-spacing:.18em;text-align:center}
+.refund-modal-body input[type="text"]:focus{outline:none;border-color:var(--accent)}
+.refund-modal-body .refund-msg{font-size:.78rem;min-height:1.1rem}
+.refund-modal-body .refund-msg.err{color:#dc2626}
+.refund-modal-body .refund-msg.ok{color:#059669}
+.refund-modal-body .refund-actions{display:flex;gap:.6rem;margin-top:.5rem}
+.refund-modal-body .refund-actions button{flex:1;padding:.55rem;border-radius:8px;font-size:.85rem;font-weight:500;cursor:pointer;border:1px solid;transition:filter .15s,background .15s}
+.refund-modal-body .refund-actions .cancel{background:transparent;border-color:var(--border);color:var(--text-muted)}
+.refund-modal-body .refund-actions .cancel:hover{color:var(--text);border-color:var(--border-bright)}
+.refund-modal-body .refund-actions .confirm{background:#dc2626;border-color:#dc2626;color:#fff}
+.refund-modal-body .refund-actions .confirm:hover{filter:brightness(1.08)}
+.refund-modal-body .refund-actions .confirm:disabled{opacity:.5;cursor:not-allowed}
