@@ -386,6 +386,22 @@ async function openRequisitionDetail(id) {
   const msgHtml = row.message
     ? `<div class="mt-2"><p class="text-xs text-gray-500 mb-1">需求說明</p><p class="text-sm text-white whitespace-pre-wrap break-words bg-[#0a0a10] border border-[#2a2a35] rounded-lg px-3 py-2">${esc(row.message)}</p></div>`
     : '';
+  // 串付款狀態
+  const payments = row.linked_payments ?? [];
+  const payHtml = payments.length === 0
+    ? `<div class="mt-3"><p class="text-xs text-gray-500 mb-1">付款紀錄</p><p class="text-xs text-gray-600">尚無付款</p></div>`
+    : `<div class="mt-3"><p class="text-xs text-gray-500 mb-1">付款紀錄</p>
+         <div class="space-y-1.5">${payments.map(p => {
+           const cls = PAY_STATUS_COLOR[p.status] || PAY_STATUS_COLOR.pending;
+           const lbl = T('payment_status_' + p.status) || p.status;
+           const amt = p.amount_subunit != null ? `${p.amount_subunit.toLocaleString()} ${esc(p.currency || 'TWD')}` : '—';
+           const when = p.created_at ? formatRelative(p.created_at) : '';
+           return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[#0a0a10] border border-[#2a2a35] text-xs">
+             <span class="text-gray-400">#${p.id} · ${esc(p.vendor)}</span>
+             <span class="text-white font-mono">${amt}</span>
+             <span class="px-2 py-0.5 rounded-full text-xs font-semibold border ${cls}">${esc(lbl)}</span>
+           </div>`;
+         }).join('')}</div></div>`;
   const delBtn = row.status === 'revoked'
     ? `<button id="req-perm-del-btn" data-armed="0" data-req-id="${row.id}"
          class="px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-semibold transition-all">永久刪除</button>`
@@ -401,6 +417,7 @@ async function openRequisitionDetail(id) {
       </div>
       <div class="space-y-2">${rowsHtml}</div>
       ${msgHtml}
+      ${payHtml}
       <p class="text-xs text-gray-500 mt-3">建立時間 ${date}</p>
       <div class="flex justify-end gap-2 mt-4">
         ${delBtn}
