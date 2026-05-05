@@ -299,6 +299,12 @@ function renderRequisitions(list) {
                  ${T('btn_revoke')}
                </button>`
             : ''}
+          ${r.status === 'revoked'
+            ? `<button id="reqdel-btn-${r.id}" data-armed="0" data-req-del-id="${r.id}"
+                 class="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
+                 永久刪除
+               </button>`
+            : ''}
         </div>
       </div>`
   }).join('')
@@ -434,6 +440,43 @@ async function armOrConfirmReqPermDelete(id) {
     btn.dataset.armed = '0';
     btn.textContent = '永久刪除';
     btn.className = 'px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-semibold transition-all';
+  }, 4000);
+}
+
+// ── List 上直接刪 revoked 需求單（兩段式）──
+let _reqListDelTimer = null;
+async function armOrConfirmReqListDelete(id) {
+  const btn = document.getElementById(`reqdel-btn-${id}`);
+  if (!btn) return;
+  if (btn.dataset.armed === '1') {
+    if (_reqListDelTimer) { clearTimeout(_reqListDelTimer); _reqListDelTimer = null; }
+    btn.disabled = true; btn.textContent = '刪除中…';
+    try {
+      await apiFetch(`/api/requisition/${id}`, { method: 'DELETE' });
+      showBindToast(`需求單 #${id} 已永久刪除`, 'ok');
+      loadRequisitions();
+    } catch (e) {
+      showBindToast(tApiError(e, T('net_err')), 'err');
+      btn.disabled = false; btn.textContent = '永久刪除'; btn.dataset.armed = '0';
+    }
+    return;
+  }
+  document.querySelectorAll('[data-req-del-id]').forEach(b => {
+    if (b !== btn && b.dataset.armed === '1') {
+      b.dataset.armed = '0';
+      b.textContent = '永久刪除';
+      b.className = 'px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all';
+    }
+  });
+  btn.dataset.armed = '1';
+  btn.textContent = '確認刪除';
+  btn.className = 'px-2.5 py-1 rounded-lg bg-red-500/30 hover:bg-red-500/40 border border-red-500/50 text-red-200 text-xs font-semibold transition-all';
+  if (_reqListDelTimer) clearTimeout(_reqListDelTimer);
+  _reqListDelTimer = setTimeout(() => {
+    if (!btn.isConnected) return;
+    btn.dataset.armed = '0';
+    btn.textContent = '永久刪除';
+    btn.className = 'px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all';
   }, 4000);
 }
 
@@ -1856,9 +1899,11 @@ function redirectToEcpay(url, fields) {
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
 document.addEventListener('click', e => {
-  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-req-open-id]');
+  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-req-open-id]');
   if (!t) return;
-  // 點需求單 row 跳明細（點到撤銷按鈕例外，已被前面 closest 抓到 button）
+  // List 上的 revoked 永久刪除按鈕（要在 reqOpenId 之前，因為按鈕在 row 內）
+  if (t.dataset.reqDelId) return armOrConfirmReqListDelete(Number(t.dataset.reqDelId));
+  // 點需求單 row 跳明細（點到撤銷/刪除按鈕例外，已被前面 closest 抓到 button）
   if (t.dataset.reqOpenId) {
     return openRequisitionDetail(Number(t.dataset.reqOpenId));
   }
