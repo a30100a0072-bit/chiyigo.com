@@ -89,7 +89,8 @@ export async function onRequestPost({ request, env }) {
   const returnUrl     = env?.ECPAY_RETURN_URL     || `${origin}/api/webhooks/payments/ecpay`
   const clientBackUrl = body?.client_back_url     || env?.ECPAY_CLIENT_BACK_URL || `${origin}/dashboard/payment-result.html`
 
-  const { checkout_url, fields } = await buildEcpayCheckoutFields(env, {
+  const debugFlag = new URL(request.url).searchParams.get('debug') === '1'
+  const { checkout_url, fields, _debug } = await buildEcpayCheckoutFields(env, {
     merchantTradeNo,
     totalAmount:    amount,
     tradeDesc:      body?.trade_desc || 'chiyigo deposit',
@@ -110,5 +111,6 @@ export async function onRequestPost({ request, env }) {
     vendor_intent_id: merchantTradeNo,
     checkout_url,
     fields,
+    ...(debugFlag ? { _debug } : {}),
   }, 200, cors)
 }

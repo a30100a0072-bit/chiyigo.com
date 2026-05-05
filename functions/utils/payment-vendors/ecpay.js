@@ -250,15 +250,36 @@ export async function buildEcpayCheckoutFields(env, payload) {
   if (payload.clientBackUrl) fields.ClientBackURL = payload.clientBackUrl
   if (payload.orderResultUrl) fields.OrderResultURL = payload.orderResultUrl
 
-  fields.CheckMacValue = await ecpayCheckMacValue(fields, hashKey, hashIV)
-  return { checkout_url: checkoutUrl, fields }
+  const { mac, raw } = await ecpayCheckMacValueDebug(fields, hashKey, hashIV)
+  fields.CheckMacValue = mac
+  return { checkout_url: checkoutUrl, fields, _debug: { raw_to_hash: raw, mac } }
 }
 
 function formatTradeDate(d) {
-  // ECPay 規定格式："yyyy/MM/dd HH:mm:ss"（本地時間，會跟 server tz 走）
+  // ECPay 規定格式："yyyy/MM/dd HH:mm:ss" + 必須是 TW 時區（UTC+8）。
+  // Workers runtime 是 UTC，必須手動加 8 小時，否則綠界端時間異常。
+  const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000)
   const pad = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} `
-    + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  return `${tw.getUTCFullYear()}/${pad(tw.getUTCMonth() + 1)}/${pad(tw.getUTCDate())} `
+    + `${pad(tw.getUTCHours())}:${pad(tw.getUTCMinutes())}:${pad(tw.getUTCSeconds())}`
+}
+
+// debug 版本：回傳算 hash 用的 raw concat string，給 /checkout?debug=1 對拍 ECPay 官方驗算工具用
+async function ecpayCheckMacValueDebug(params, hashKey, hashIV) {
+  const filtered = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (k === 'CheckMacValue') continue
+    if (v === undefined || v === null) continue
+    filtered[k] = v
+  }
+  const sortedKeys = Object.keys(filtered).sort((a, b) => a.localeCompare(b))
+  const pairs = sortedKeys.map(k => `${k}=${filtered[k]}`)
+  const raw = `HashKey=${hashKey}&${pairs.join('&')}&HashIV=${hashIV}`
+  const encoded = String(encodeURIComponent(raw))
+    .replace(/~/g, '%7e').replace(/%20/g, '+').toLowerCase()
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded))
+  const mac = Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+  return { mac, raw, encoded }
 }
 
 function truncate(s, max) {
