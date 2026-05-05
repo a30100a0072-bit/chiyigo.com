@@ -161,10 +161,14 @@ export async function refreshClientsCache(env, force = false) {
         }
         return
       }
-    } catch { /* fallthrough */ }
+      // D1 表存在但無 active row → 視為「合法的空 registry」，回 in-code 預設
+      // （比保留前次 stale 值安全；測試 resetDb 之後也能拿到乾淨狀態）
+      _currentClients = IN_CODE_CLIENTS
+      return
+    } catch { /* D1 query 噴錯：保留上次 _currentClients（防衛 D1 暫時失效）*/ }
   }
 
-  // 3. fallback：保持 _currentClients 為上次值（如果都 fail 且首次，仍是 in-code）
+  // 3. fallback：env 缺 binding → 保持 _currentClients 為上次值
 }
 
 /** Admin CRUD 寫入後呼叫：清 KV，下次 middleware refresh 會立即從 D1 抓新資料 */

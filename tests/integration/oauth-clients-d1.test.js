@@ -178,17 +178,19 @@ describe('oauth-clients D1 cache + sync getters', () => {
     expect(map['https://b.example']).toBe('aud-B')
   })
 
-  it('D1 失效 → 維持上次 cache（不會回 in-code 撞掉現有 D1 cache）', async () => {
+  it('D1 表存在但無 active row → fallback 回 in-code（避免 stale cache 跨測試污染）', async () => {
     await seedRP({ client_id: 'cached-rp' })
     await refreshClientsCache(env)
     expect(getAllClients()[0].client_id).toBe('cached-rp')
 
-    // 模擬 D1 fail：把 KV cache 也清掉，env.chiyigo_db 還在但 oauth_clients 表撈不到（is_active 改 0）
+    // 把所有 row 設成 inactive
     await env.chiyigo_db.prepare(`UPDATE oauth_clients SET is_active = 0`).run()
     await invalidateClientsCache(env)
     await refreshClientsCache(env)
 
-    // D1 回 0 row → fallthrough（沒覆寫 _currentClients），cache 仍是上次 cached-rp
-    expect(getAllClients()[0].client_id).toBe('cached-rp')
+    // 應該回 in-code 4 個 RP（不是維持 stale cached-rp）
+    expect(getAllClients().length).toBe(IN_CODE_CLIENTS.length)
+    expect(getAllClients().some(c => c.client_id === 'chiyigo')).toBe(true)
+    expect(getAllClients().some(c => c.client_id === 'cached-rp')).toBe(false)
   })
 })

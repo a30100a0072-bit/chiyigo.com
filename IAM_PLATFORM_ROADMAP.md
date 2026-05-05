@@ -418,4 +418,5 @@ Week 11+:    Phase F — 對接時做
 | 2026-05-05 | 2FA disable UX bug 修復：dashboard 主動清 token + 跳 login.html?tfa_disabled=1 |
 | 2026-05-05 | Phase C-1 Wave 1（oauth_clients D1 化）：migration 0020 補欄位 + seed 4 RP；oauth-clients.js 加 async getAllClients/getClient/getValidAuds（KV cache + D1 + in-code fallback）；既有 sync exports 保留向後相容；待 Wave 2 切 consumers / Wave 3 admin CRUD |
 | 2026-05-05 | Phase C-1 Wave 2（consumers 切 sync getter）：cors / authorize / end-session / backchannel 全切到 sync getter（讀 module-level cache）；`_middleware.js` 觸發 `refreshClientsCache(env)`（per-isolate 60s throttle）；走 sync 而非 async cascade，避免改 ~14 處 handler；待 Wave 3 admin CRUD 即可零 deploy 加 RP |
+| 2026-05-05 | Phase C-1 Wave 3（admin CRUD）：POST/GET/PATCH/DELETE /api/admin/oauth-clients[/:id]；寫入後 invalidateClientsCache + admin_audit_log（hash chain）；refreshClientsCache 微調為 D1 空表 fallback 回 in-code（避免測試跨檔污染）；249 整合測試全綠；**Phase C-1 全部結案**：新 RP 從改 5 檔變成跑一條 admin POST，不必 deploy code |
 | 2026-05-02 | 大改版：擴張到金融級平台（金流 + 虛擬貨幣 + 真錢遊戲），新增 Phase 0 / Phase E / Phase F |

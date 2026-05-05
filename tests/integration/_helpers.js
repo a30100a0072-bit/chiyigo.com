@@ -6,6 +6,7 @@ import {
   hashPassword,
   hashToken,
 } from '../../functions/utils/crypto.js'
+import { _resetCacheForTests, invalidateClientsCache } from '../../functions/utils/oauth-clients.js'
 
 /** Apply schema (idempotent via IF NOT EXISTS) and truncate tables. */
 export async function resetDb() {
@@ -103,6 +104,10 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM audit_log'),
     env.chiyigo_db.prepare('DELETE FROM oauth_clients'),
   ])
+
+  // oauth-clients 模組級 cache 也歸零（避免跨 test file 撞資料）
+  _resetCacheForTests()
+  await invalidateClientsCache(env)
 }
 
 /** Generate ES256 test keypair and inject into env (idempotent module-cached). */
