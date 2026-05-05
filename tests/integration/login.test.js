@@ -177,9 +177,9 @@ describe('POST /api/auth/local/login — rate limiting', () => {
     expect(body.code).toBe('RATE_LIMITED')
   })
 
-  it('同 IP 在 15 分鐘內 ≥ 20 次失敗 → 429 RATE_LIMITED', async () => {
+  it('同 IP 在 1 分鐘內 ≥ 5 次失敗 → 429 RATE_LIMITED（Phase E3）', async () => {
     await seedUser({ email: 'ip@b.com', password: 'GoodPass#1234' })
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 5; i++) {
       await env.chiyigo_db.prepare(
         'INSERT INTO login_attempts (ip, email) VALUES (?, ?)',
       ).bind('20.20.20.20', `dummy${i}@x.com`).run()

@@ -18,18 +18,20 @@
  *
  * @param {D1Database} db
  * @param {object} opts
- * @param {string}        opts.kind          'login' | '2fa' | 'email_send' | 'oauth_init'
+ * @param {string}        opts.kind          'login' | '2fa' | 'email_send' | 'oauth_init' | 'oauth_token' | 'refresh' | 'step_up'
  * @param {string|null}   opts.ip            null = 不以 ip 計數
  * @param {number|null}   opts.userId        null = 不以 user_id 計數
+ * @param {string|null}   opts.email         null = 不以 email 計數（Phase E3 加，credential stuffing 防護用）
  * @param {number}        opts.windowSeconds 計數視窗（秒）
  * @param {number}        opts.max           上限（含），超過 → 拒絕
  * @returns {Promise<{ blocked: boolean, count: number }>}
  */
-export async function checkRateLimit(db, { kind, ip = null, userId = null, windowSeconds, max }) {
+export async function checkRateLimit(db, { kind, ip = null, userId = null, email = null, windowSeconds, max }) {
   const where = ['kind = ?', `created_at > datetime('now', ?)`]
   const binds = [kind, `-${windowSeconds} seconds`]
   if (ip)     { where.push('ip = ?');      binds.push(ip) }
   if (userId) { where.push('user_id = ?'); binds.push(userId) }
+  if (email)  { where.push('email = ?');   binds.push(email) }
 
   const row = await db
     .prepare(`SELECT COUNT(*) AS cnt FROM login_attempts WHERE ${where.join(' AND ')}`)

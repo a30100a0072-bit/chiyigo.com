@@ -51,8 +51,9 @@ import { safeUserAudit } from '../../utils/user-audit.js'
 const STEP_UP_TTL = '5m'
 const STEP_UP_TTL_SECONDS = 300
 
-const RL_WINDOW_SEC = 5 * 60
-const RL_MAX        = 5
+// Phase E3：原 5/5min 改 3/min（緊一點，金融操作前的 OTP 爆破防護要嚴）
+const RL_WINDOW_SEC = 60
+const RL_MAX        = 3
 
 export async function onRequestPost({ request, env }) {
   const { user, error } = await requireAuth(request, env)

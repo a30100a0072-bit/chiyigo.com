@@ -29,6 +29,7 @@ import { res } from '../../utils/auth.js'
 import { refreshCookie } from '../../utils/cookies.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
 import { buildTokenScope } from '../../utils/scopes.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -80,6 +81,21 @@ export async function onRequestPost({ request, env }) {
     await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'reuse_detected' } })
     return res({ error: 'Refresh token has been revoked' }, 401, cors)
   }
+
+  // ── 1.5 Rate limit（Phase E3）─ 30/user/min；spec 寫 per-token，per-user 涵蓋更廣（持多 token 不能繞）
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
+  const { blocked: rlBlocked } = await checkRateLimit(db, {
+    kind: 'refresh', userId: tokenRow.user_id, windowSeconds: 60, max: 30,
+  })
+  if (rlBlocked) {
+    await safeUserAudit(env, {
+      event_type: 'auth.refresh.rate_limited', severity: 'warn',
+      user_id: tokenRow.user_id, request,
+    })
+    return res({ error: 'Too many refresh attempts. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+  }
+  // 記錄本次 call（無論成功/失敗皆記入計數）
+  await recordRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, ip })
 
   // ── 2. device_uuid 驗證（Phase D1 強綁）─────────────────────
   if (tokenRow.device_uuid !== null && tokenRow.device_uuid !== '') {

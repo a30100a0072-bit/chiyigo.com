@@ -29,6 +29,7 @@ import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）
@@ -65,6 +66,22 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'code, code_verifier, and redirect_uri are required' }, 400, cors)
 
   const db       = env.chiyigo_db
+  const ip       = request.headers.get('CF-Connecting-IP') ?? null
+
+  // Rate limit（Phase E3）— 10/IP/min；防 PKCE code 暴力嘗試
+  if (ip) {
+    const { blocked } = await checkRateLimit(db, {
+      kind: 'oauth_token', ip, windowSeconds: 60, max: 10,
+    })
+    if (blocked) {
+      await safeUserAudit(env, {
+        event_type: 'oauth.token.rate_limited', severity: 'warn', request,
+      })
+      return res({ error: 'Too many token requests. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+    }
+    await recordRateLimit(db, { kind: 'oauth_token', ip })
+  }
+
   const codeHash = await hashToken(code)
 
   // 原子消費 auth code（一次性，防重放）

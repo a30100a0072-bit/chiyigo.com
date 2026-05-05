@@ -21,6 +21,7 @@ import { refreshCookie } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
+import { checkRateLimit } from '../../../utils/rate-limit.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -46,17 +47,17 @@ export async function onRequestPost({ request, env }) {
   const ip        = request.headers.get('CF-Connecting-IP') ?? 'unknown'
   const emailNorm = email.toLowerCase()
 
-  // ── 2. Rate Limit（15 分鐘視窗：同 IP ≤ 20 次，同 email ≤ 10 次）──
-  const [ipRow, emailRow] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) AS cnt FROM login_attempts
-                WHERE kind = 'login' AND ip = ? AND created_at > datetime('now', '-15 minutes')`)
-      .bind(ip).first(),
-    db.prepare(`SELECT COUNT(*) AS cnt FROM login_attempts
-                WHERE kind = 'login' AND email = ? AND created_at > datetime('now', '-15 minutes')`)
-      .bind(emailNorm).first(),
+  // ── 2. Rate Limit（Phase E3）──
+  // spec：5/IP/min；額外保留 10/email/15min 防 credential stuffing（針對具體 email 撞密碼）
+  const [ipShort, emailLong] = await Promise.all([
+    checkRateLimit(db, { kind: 'login', ip,             windowSeconds: 60,   max: 5 }),
+    checkRateLimit(db, { kind: 'login', email: emailNorm, windowSeconds: 900, max: 10 }),
   ])
-  if ((ipRow?.cnt ?? 0) >= 20 || (emailRow?.cnt ?? 0) >= 10) {
-    await safeUserAudit(env, { event_type: 'auth.login.rate_limited', severity: 'warn', request })
+  if (ipShort.blocked || emailLong.blocked) {
+    await safeUserAudit(env, {
+      event_type: 'auth.login.rate_limited', severity: 'warn', request,
+      data: { reason: ipShort.blocked ? 'ip' : 'email' },
+    })
     return res({ error: 'Too many login attempts, please try again later.', code: 'RATE_LIMITED' }, 429)
   }
 

@@ -139,11 +139,11 @@ describe('POST /api/auth/step-up', () => {
     expect(row.used_at).not.toBeNull()
   })
 
-  it('Rate limit：5 次失敗後 429', async () => {
+  it('Rate limit：3 次失敗後 429（Phase E3 改 3/min）', async () => {
     const u = await seedUser({ email: 'rl@x' })
     await enableTotp(u.id, TEST_TOTP_SECRET)
     const tok = await userTokenWithScope(u.id)
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       const r = await callStepUp(tok, { scope: SCOPES.ELEVATED_ACCOUNT, otp_code: '000000' })
       expect(r.status).toBe(401)
     }
