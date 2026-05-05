@@ -28,6 +28,10 @@ body { background-color: #0e0e12; color: #e4e4ef; }
 .theme-light .bg-\[\#0e0e12\]\/80{background-color:rgba(247,247,251,.8)!important}
 .theme-light .bg-\[\#0e0e12\]{background-color:#f7f7fb!important}
 .theme-light .bg-\[\#16161d\]{background-color:#ffffff!important}
+/* 補：F-2 wave 6 modal/卡片用的更深色變體 — 光模式統一給白底 */
+.theme-light .bg-\[\#0f0f14\]{background-color:#ffffff!important}
+.theme-light .bg-\[\#0e0e16\]{background-color:#ffffff!important}
+.theme-light .bg-\[\#0a0a10\]{background-color:#f3f3f7!important}
 .theme-light .border-\[\#2a2a35\]{border-color:#e3e3ec!important}
 .theme-light .divide-\[\#2a2a35\]>:not([hidden])~:not([hidden]){border-color:#e3e3ec!important}
 .theme-light .text-white{color:#1a1a24!important}
