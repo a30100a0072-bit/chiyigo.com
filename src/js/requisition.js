@@ -85,6 +85,12 @@ form?.addEventListener('submit', async (e) => {
     if (formSucc) formSucc.classList.add('visible');
     const ref = document.getElementById('success-ref');
     if (ref && json.id) ref.textContent = `// ref: #${json.id}`;
+    // 已登入 user → 顯示「立即付款」連結，帶 requisition_id 進 payment 表單
+    const payLink = document.getElementById('success-pay-link');
+    if (payLink && json.id && _token) {
+      payLink.href = `/dashboard.html?req=${encodeURIComponent(json.id)}#payments-section`;
+      payLink.classList.remove('hidden');
+    }
   } catch (err) {
     showErr('// error: 送出失敗，請稍後再試，或直接 LINE / Email 聯絡我');
     setLoading(false);

@@ -88,11 +88,120 @@ GitHub repo → Settings → Secrets and variables → Actions → New repositor
 
 ---
 
-## 6. 完成後可以刪掉這份檔
+## 6. ECPay 綠界金流 — 申請正式商店（沒申請仍可用沙箱不會壞）
+
+**現況**：env 沒設 `ECPAY_*` 時 fallback 沙箱公開 creds（MerchantID `2000132`），prod 部署照樣能跑但走測試環境 → **不會誤扣真錢**，只是真用戶付不了款。
+
+### 6.1 申請特店帳號（個人戶可開，免月費）
+- 去 https://www.ecpay.com.tw → 申請特店
+- **個人戶**（自然人）即可開，不用公司行號
+- 提供：身份證 + 銀行存摺 + 自拍持證件照
+- 審核時間：3–7 個工作日
+- **零月費 + 零 setup fee**，純抽成（信用卡 2.6–2.8%）
+
+### 6.2 拿到後設定 Pages secret（未申請前可跳過）
+```bash
+wrangler pages secret put ECPAY_MERCHANT_ID  --project-name chiyigo-com
+wrangler pages secret put ECPAY_HASH_KEY     --project-name chiyigo-com
+wrangler pages secret put ECPAY_HASH_IV      --project-name chiyigo-com
+wrangler pages secret put ECPAY_MODE         --project-name chiyigo-com   # 填 prod
+```
+
+### 6.3 ECPay 後台設 ReturnURL 白名單
+- ECPay 商家後台 → 系統開發管理 → 系統介接設定
+- ReturnURL = `https://chiyigo.com/api/webhooks/payments/ecpay`
+- ClientBackURL（建議）= `https://chiyigo.com/dashboard/payment-result.html`
+
+### 6.4 跑一筆 10 TWD 真實測試
+- 自己用真信用卡刷 10 元
+- 看 dashboard intent 是否變 `succeeded`
+- 看 ECPay 後台金額是否進帳
+- 對齊兩邊 = 整合驗收 PASS
+
+---
+
+## 7. （選擇性、有支出）規模到達才做
+
+> **原則**：$0 成本最大化。下列項目**有金錢成本或公司流程成本**，等真規模到了才動。
+
+### 7.1 Stripe Atlas — 海外公司（500 USD 一次性）
+
+**成本**：USD 500 一次性 + 每年 USD 100 維運（Delaware franchise tax）+ 美國銀行帳戶月費 ~USD 20
+
+**何時做**：
+- 要收**海外用戶**付款（不是台灣 user）
+- 投資人 / pitch deck 場合需要美國公司身份
+- 月跨境流水 ≥ USD 5000（Stripe 跨境費 1% + 匯損 1–2% 才划算）
+
+**不做**：純台灣 C2C / 國內接案 → 走 ECPay 就夠
+
+**做的步驟**：
+1. https://stripe.com/atlas 填表 + 付 USD 500
+2. 1–2 週收到 EIN（美國稅號）+ Delaware C-Corp 註冊文件 + Stripe 帳號
+3. Mercury / Brex 開美國銀行帳戶
+4. 跟我說「Atlas 開好了」→ 我接 Stripe adapter（1–2 天）
+
+### 7.2 TapPay 接入 — 台灣高 UX 信用卡（要公司行號）
+
+**成本**：申請月費（部分方案）+ 月最低交易量門檻（部分方案）+ 公司行號設立成本（個人 → 公司：~NT$ 5000 + 維運稅務 ~NT$ 30000/年）
+
+**何時做**：
+- 月信用卡流水 ≥ NT$ 50 萬（量壓 ECPay 費率 0.6% 以上才有 ROI）
+- 接案案件單筆 ≥ NT$ 30 萬（UX 摩擦顯著）
+- 已有公司行號
+
+**不做**：個人接案 / 散戶 → ECPay 全包通路更實用
+
+### 7.3 PCI-DSS SAQ-A 自評（規模化 + 合規硬要求才做）
+
+**成本**：ASV 季掃 ~USD 100/year（Trustwave / SecurityMetrics 等）+ 自評時間 2–4 hr/year
+
+**何時做**：
+- 月信用卡流水 ≥ USD 10000
+- 接 B2B 客戶要看合規證明
+- 法務正式提起
+
+**現況**：走 PSP（ECPay/Stripe）一律不存卡號，技術上已是 SAQ-A 範圍最低，沒填 SAQ-A 表也不違規（但若被稽核要拿得出來）
+
+### 7.4 payment_ledger 雙記帳對帳（金融級必備）
+
+**成本**：開發 1 週 + D1 寫入量增加 ~30%（每筆 intent = 2 筆 ledger row）
+
+**何時做**：
+- 月流水 ≥ NT$ 50 萬
+- 開始有退款 / chargeback 爭議
+- 接會計師事務所做帳時
+
+**現況**：靠 `payment_intents.status` + `audit_log` 暫代，散戶級足夠
+
+### 7.5 Cloudflare Workers Paid 升級（$5/月）
+
+**目前**：Pages Functions 免費版 = 10 萬 req/day（chiyigo 估 ~5000 req/day，遠未到）
+
+**何時做**：
+- 日 req > 8 萬（80% 用量）
+- 要用 Durable Objects / Queues（免費版不支援）
+- Cron Triggers > 5 min interval（免費版限制）
+
+**不做**：目前用量遠低於免費額度
+
+### 7.6 Resend 信件 Paid 升級（$20/月）
+
+**目前**：免費版 100 封/天 / 3000 封/月
+
+**何時做**：
+- 月註冊 user > 1500（每人平均 2 封驗證/重設信）
+- 要寄 marketing campaign
+
+**不做**：個人接案站不會有 1500 個月新註冊
+
+---
+
+## 8. 完成後可以刪掉這份檔
 
 全部設好 + 驗證通過 → `git rm MANUAL_TODO.md`
 
-或保留作為 onboarding 文件（未來重建環境時參考）。
+或保留作為 onboarding 文件（未來重建環境時參考）。F-2 ECPay + Atlas 等項目本身是「規模到達才做」永久 reference，建議保留。
 
 ---
 
@@ -104,3 +213,4 @@ GitHub repo → Settings → Secrets and variables → Actions → New repositor
 | 2026-05-03 | KV ✅ 完成、Turnstile ✅ 完成；剩 Migrations / Cron / Access |
 | 2026-05-03 | Cron ✅ 完成、Access ✅ 完成；剩 Migrations |
 | 2026-05-03 | Migrations 0015–0018 ✅ 全部完成 → MANUAL_TODO 全項打勾 |
+| 2026-05-05 | 加入第 6 段（ECPay 申請特店）+ 第 7 段（規模到達才做：Atlas / TapPay / PCI / ledger / Workers Paid / Resend Paid）|

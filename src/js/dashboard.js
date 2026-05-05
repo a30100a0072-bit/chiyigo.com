@@ -36,6 +36,7 @@ function applyLangD(lang) {
   if (window._lastPasskeys) renderPasskeys(window._lastPasskeys);
   // Phase F-3 wallet
   if (window._lastWallets)  renderWallets(window._lastWallets);
+  if (window._lastPayments) renderPayments(window._lastPayments);
   // 刪帳按鈕 / 2FA enable label 隨 hasPassword 動態切換，需在 i18n 套用後重畫
   if (typeof window.__hasPassword !== 'undefined') {
     if (typeof renderDeleteSection === 'function') renderDeleteSection(window.__hasPassword);
@@ -186,6 +187,20 @@ async function loadProfile() {
 
     // Phase F-3：錢包
     loadWallets();
+
+    // Phase F-2 wave 3：付款 / 充值
+    loadPayments();
+
+    // requisition.html 帶 ?req=N 跳來時，自動開充值表單 + 預填編號
+    const reqParam = new URL(window.location.href).searchParams.get('req');
+    if (reqParam && /^\d+$/.test(reqParam)) {
+      setTimeout(() => {
+        openPaymentForm();
+        const reqInput = document.getElementById('payment-requisition');
+        if (reqInput) reqInput.value = reqParam;
+        document.getElementById('payments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 200);
+    }
 
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('user-card').classList.remove('hidden');
@@ -1526,6 +1541,156 @@ async function addWallet() {
   }
 }
 
+// ── Phase F-2 wave 3：付款 / 充值 ──
+
+const PAY_STATUS_COLOR = {
+  pending:    'bg-amber-500/15 border-amber-500/30 text-amber-300',
+  processing: 'bg-sky-500/15 border-sky-500/30 text-sky-300',
+  succeeded:  'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
+  failed:     'bg-red-500/15 border-red-500/30 text-red-300',
+  canceled:   'bg-gray-500/15 border-gray-500/30 text-gray-400',
+  refunded:   'bg-gray-500/15 border-gray-500/30 text-gray-400',
+};
+
+async function loadPayments() {
+  const sec  = document.getElementById('payments-section');
+  const list = document.getElementById('payments-list');
+  if (!sec || !list) return;
+  sec.classList.remove('hidden');
+  try {
+    const data = await apiFetch('/api/auth/payments/intents?limit=50');
+    window._lastPayments = data?.items ?? [];
+    renderPayments(window._lastPayments);
+  } catch (e) {
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+  }
+}
+
+function renderPayments(items) {
+  const list = document.getElementById('payments-list');
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML = `<p class="text-xs text-gray-500">${T('payments_empty')}</p>`;
+    return;
+  }
+  list.innerHTML = items.map(p => {
+    const statusClass = PAY_STATUS_COLOR[p.status] || PAY_STATUS_COLOR.pending;
+    const statusLabel = T('payment_status_' + p.status) || p.status;
+    const kindLabel   = T('payment_kind_' + p.kind) || p.kind;
+    const amount = p.amount_subunit != null
+      ? `${p.amount_subunit.toLocaleString()} ${esc(p.currency || 'TWD')}`
+      : (p.amount_raw ? `${esc(p.amount_raw)} ${esc(p.currency || '')}` : '—');
+    let metaParsed = null;
+    if (p.metadata) {
+      try { metaParsed = typeof p.metadata === 'string' ? JSON.parse(p.metadata) : p.metadata; }
+      catch { /* keep null */ }
+    }
+    const reqId = metaParsed?.requisition_id;
+    const reqLine = reqId
+      ? `<p class="text-xs text-gray-500 mt-0.5">${T('payment_for_requisition')} #${esc(reqId)}</p>`
+      : '';
+    const when = p.created_at ? formatRelative(p.created_at) : '—';
+    return `
+      <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium text-white">${esc(kindLabel)} · ${amount}</p>
+            <p class="text-xs text-gray-500 mt-0.5">${esc(p.vendor)} · ${esc(when)}</p>
+            ${reqLine}
+          </div>
+          <span class="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusClass}">${esc(statusLabel)}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openPaymentForm() {
+  document.getElementById('payment-form')?.classList.remove('hidden');
+  document.getElementById('payment-amount')?.focus();
+}
+
+function cancelPaymentForm() {
+  document.getElementById('payment-form')?.classList.add('hidden');
+  ['payment-amount', 'payment-desc', 'payment-requisition'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const msg = document.getElementById('payment-form-msg');
+  if (msg) { msg.classList.add('hidden'); msg.textContent = ''; }
+}
+
+async function submitPaymentCheckout() {
+  const amountEl = document.getElementById('payment-amount');
+  const descEl   = document.getElementById('payment-desc');
+  const reqEl    = document.getElementById('payment-requisition');
+  const msg      = document.getElementById('payment-form-msg');
+  const btn      = document.getElementById('payment-submit-btn');
+  const label    = document.getElementById('payment-submit-label');
+
+  const showMsg = (text, type) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-emerald-400');
+    msg.classList.remove('hidden');
+  };
+
+  const amount = Number(amountEl?.value);
+  if (!Number.isFinite(amount) || amount < 1 || amount > 200000 || amount !== Math.floor(amount)) {
+    showMsg(T('payment_amount_invalid'), 'err');
+    return;
+  }
+
+  const metadata = {};
+  const reqId = Number(reqEl?.value);
+  if (Number.isFinite(reqId) && reqId > 0) metadata.requisition_id = reqId;
+
+  if (btn) btn.disabled = true;
+  if (label) label.textContent = T('payment_submitting');
+  try {
+    const resp = await apiFetch('/api/auth/payments/checkout/ecpay', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount,
+        trade_desc: (descEl?.value || '').trim() || undefined,
+        item_name:  (descEl?.value || '').trim() || undefined,
+        metadata:   Object.keys(metadata).length ? metadata : undefined,
+      }),
+    });
+    if (!resp?.checkout_url || !resp?.fields) {
+      showMsg(T('payment_create_fail'), 'err');
+      if (btn) btn.disabled = false;
+      if (label) label.textContent = T('payment_submit_btn');
+      return;
+    }
+    if (label) label.textContent = T('payment_redirecting');
+    redirectToEcpay(resp.checkout_url, resp.fields);
+  } catch (e) {
+    const fallback = e?.code === 'KYC_REQUIRED'
+      ? T('payment_kyc_required')
+      : T('payment_create_fail');
+    showMsg(tApiError(e, fallback), 'err');
+    if (btn) btn.disabled = false;
+    if (label) label.textContent = T('payment_submit_btn');
+  }
+}
+
+// 動態建 form 並 submit。CSP 不允許 inline script，所以用 DOM API 不用 innerHTML+eval。
+function redirectToEcpay(url, fields) {
+  const form = document.createElement('form');
+  form.action = url;
+  form.method = 'POST';
+  form.style.display = 'none';
+  for (const [k, v] of Object.entries(fields)) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = k;
+    input.value = String(v);
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
+}
+
 // ── Phase C-3 unified click delegation ──
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
@@ -1541,6 +1706,8 @@ document.addEventListener('click', e => {
   if (t.id === 'del-submit-btn')   return submitDeleteAccount();
   if (t.id === 'passkey-add-btn')  return addPasskey();
   if (t.id === 'wallet-add-btn')   return addWallet();
+  if (t.id === 'payment-add-btn')  return openPaymentForm();
+  if (t.id === 'payment-submit-btn') return submitPaymentCheckout();
   // data-action
   const a = t.dataset.action;
   if (a === 'logout')              return logout();
@@ -1560,6 +1727,7 @@ document.addEventListener('click', e => {
   if (a === 'wallet-remove-open')      return openWalletRemove(t.dataset.walletId);
   if (a === 'wallet-remove-cancel')    return cancelWalletRemove(t.dataset.walletId);
   if (a === 'wallet-remove-confirm')   return confirmWalletRemove(t.dataset.walletId);
+  if (a === 'payment-form-cancel')     return cancelPaymentForm();
   // dynamic content
   if (t.dataset.revokeId) return armRevoke(Number(t.dataset.revokeId));
   if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);
