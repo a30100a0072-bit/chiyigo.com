@@ -11,6 +11,7 @@ export default defineWorkersConfig({
           compatibilityDate: '2024-09-23',
           compatibilityFlags: ['nodejs_compat'],
           d1Databases: ['chiyigo_db'],
+          kvNamespaces: ['CHIYIGO_KV'],
           bindings: {
             ENVIRONMENT: 'test',
             IAM_BASE_URL: 'http://localhost:8788',

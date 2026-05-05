@@ -146,6 +146,31 @@ CREATE TABLE IF NOT EXISTS pkce_sessions (
 );
 
 -- One-time authorization codes (consumed atomically by /token)
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  client_id                    TEXT    PRIMARY KEY,
+  client_name                  TEXT    NOT NULL,
+  client_secret_hash           TEXT,
+  app_type                     TEXT    NOT NULL DEFAULT 'web',
+  allowed_redirect_uris        TEXT    NOT NULL,
+  allowed_scopes               TEXT    NOT NULL,
+  allowed_grant_types          TEXT    NOT NULL DEFAULT '["authorization_code","refresh_token"]',
+  require_pkce                 INTEGER NOT NULL DEFAULT 1,
+  token_endpoint_auth_method   TEXT    NOT NULL DEFAULT 'none',
+  post_logout_redirect_uris    TEXT,
+  frontchannel_logout_uri      TEXT,
+  frontchannel_logout_uris     TEXT,
+  backchannel_logout_uri       TEXT,
+  cors_origins                 TEXT,
+  aud                          TEXT,
+  logo_uri                     TEXT,
+  client_uri                   TEXT,
+  policy_uri                   TEXT,
+  tos_uri                      TEXT,
+  is_active                    INTEGER NOT NULL DEFAULT 1,
+  created_at                   TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at                   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   event_type  TEXT    NOT NULL,
