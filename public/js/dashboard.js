@@ -1881,8 +1881,10 @@ function redirectToEcpay(url, fields) {
   form.action = url;
   form.method = 'POST';
   form.acceptCharset = 'UTF-8';
-  form.target = '_blank';
-  form.rel = 'noopener';
+  // 同分頁跳轉：先前嘗試 target="_blank" 開新分頁，但 ECPay 沙箱對 popup
+  // 的 3D-Secure 流程會在「交易成功」後直接 window.close()，造成
+  // ClientBackURL 沒跳轉、server-to-server ReturnURL 也不發送，整個鏈路斷。
+  // 改回同分頁讓 ECPay 完整 redirect → payment-result.html → 自動回 dashboard。
   form.style.display = 'none';
   for (const [k, v] of Object.entries(fields)) {
     const input = document.createElement('input');
