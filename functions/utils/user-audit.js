@@ -84,8 +84,10 @@ export async function safeUserAudit(env, entry) {
       .run()
 
     if (severity === 'critical') {
-      // fire-and-forget；webhook URL 缺值即 noop
-      notifyCritical(env, { ...entry, severity, ipHash, traceId }).catch(() => {})
+      // 必須 await：Cloudflare Worker 對未 await 的 fetch 會在 handler return 時 kill，
+      // 沒 ctx.waitUntil 鉤點時只能同步等。critical 事件量極低（mfa.disable / account.delete），
+      // 多 ~100ms 延遲可接受；webhook URL 缺值 / Discord 失敗都吞掉不擋主流程。
+      try { await notifyCritical(env, { ...entry, severity, ipHash, traceId }) } catch { /* swallow */ }
     }
   } catch { /* 表不存在 / D1 暫時失效 — 不擋主流程 */ }
 }
