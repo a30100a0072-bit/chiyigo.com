@@ -674,6 +674,14 @@ function renderChangePasswordSection(hasPw, totpEnabled) {
   if (!sec) return;
   sec.classList.toggle('hidden', !hasPw);
 
+  // OAuth-only（無密碼）使用者點「修改密碼」nav → 動態改 data-scroll 指向 setpw-section
+  // 引導他們先「設定密碼」。一般有密碼帳號則照常指向 changepw-section。
+  const navTarget = hasPw ? 'changepw-section' : 'setpw-section'
+  const sbBtn = document.getElementById('sb-nav-changepw')
+  const mBtn  = document.getElementById('m-ov-changepw')
+  if (sbBtn) sbBtn.dataset.scroll = navTarget
+  if (mBtn)  mBtn.dataset.scroll  = navTarget
+
   const need2faHint = document.getElementById('changepw-need-2fa');
   const form        = document.getElementById('changepw-form');
   if (!need2faHint || !form) return;
@@ -893,19 +901,15 @@ async function submitDeleteAccount() {
   new MutationObserver(sync).observe(sec, { attributes:true, attributeFilter:['class'] });
 })();
 
-// Sync changepw nav item visibility with section visibility
+// changepw nav 永遠顯示（即使 changepw-section 隱藏）—
+// 對 OAuth-only user 而言「修改密碼」仍是有意義的入口；
+// renderChangePasswordSection 會把 nav 的 data-scroll 動態指向 setpw-section。
+// 因此這裡不像 setpw nav 那樣綁定 hidden 狀態。
 (function() {
-  const sec = document.getElementById('changepw-section');
   const sbBtn = document.getElementById('sb-nav-changepw');
   const mBtn  = document.getElementById('m-ov-changepw');
-  if (!sec) return;
-  function sync() {
-    const hidden = sec.classList.contains('hidden');
-    if (sbBtn) sbBtn.hidden = hidden;
-    if (mBtn)  mBtn.hidden  = hidden;
-  }
-  sync();
-  new MutationObserver(sync).observe(sec, { attributes:true, attributeFilter:['class'] });
+  if (sbBtn) sbBtn.hidden = false;
+  if (mBtn)  mBtn.hidden  = false;
 })();
 
 // ── block 3/3 ──
