@@ -24,6 +24,10 @@ Object.assign(LANGS_D['zh-TW'], {
   passkey_remove_confirm: '確認移除', passkey_remove_cancel: '取消',
   passkey_remove_success: '✓ 已移除', passkey_remove_fail: '移除失敗',
   passkey_remove_need_2fa: '請先啟用 2FA 才能移除 passkey',
+  passkey_rename_btn: '改名', passkey_rename_ph: '為這支 passkey 取個名字',
+  passkey_rename_save: '儲存', passkey_rename_cancel: '取消',
+  passkey_rename_success: '✓ 已更新名稱', passkey_rename_fail: '改名失敗',
+  passkey_rename_empty: '請輸入名稱',
 });
 Object.assign(LANGS_D['en'], {
   nav_devices: 'My Devices', nav_passkeys: 'Passkeys',
@@ -46,6 +50,10 @@ Object.assign(LANGS_D['en'], {
   passkey_remove_confirm: 'Confirm', passkey_remove_cancel: 'Cancel',
   passkey_remove_success: '✓ Removed', passkey_remove_fail: 'Removal failed',
   passkey_remove_need_2fa: 'Enable 2FA first to remove a passkey',
+  passkey_rename_btn: 'Rename', passkey_rename_ph: 'Give this passkey a name',
+  passkey_rename_save: 'Save', passkey_rename_cancel: 'Cancel',
+  passkey_rename_success: '✓ Name updated', passkey_rename_fail: 'Rename failed',
+  passkey_rename_empty: 'Please enter a name',
 });
 Object.assign(LANGS_D['ja'], {
   nav_devices: 'マイデバイス', nav_passkeys: 'パスキー',
@@ -68,6 +76,10 @@ Object.assign(LANGS_D['ja'], {
   passkey_remove_confirm: '確認', passkey_remove_cancel: 'キャンセル',
   passkey_remove_success: '✓ 削除しました', passkey_remove_fail: '削除に失敗しました',
   passkey_remove_need_2fa: 'パスキーを削除するには先に2FAを有効化してください',
+  passkey_rename_btn: '名前変更', passkey_rename_ph: 'このパスキーに名前を付ける',
+  passkey_rename_save: '保存', passkey_rename_cancel: 'キャンセル',
+  passkey_rename_success: '✓ 名前を更新しました', passkey_rename_fail: '名前変更に失敗しました',
+  passkey_rename_empty: '名前を入力してください',
 });
 Object.assign(LANGS_D['ko'], {
   nav_devices: '내 기기', nav_passkeys: 'Passkey',
@@ -90,6 +102,10 @@ Object.assign(LANGS_D['ko'], {
   passkey_remove_confirm: '확인', passkey_remove_cancel: '취소',
   passkey_remove_success: '✓ 제거됨', passkey_remove_fail: '제거 실패',
   passkey_remove_need_2fa: 'Passkey를 제거하려면 먼저 2FA를 활성화하세요',
+  passkey_rename_btn: '이름 변경', passkey_rename_ph: '이 passkey의 이름을 입력하세요',
+  passkey_rename_save: '저장', passkey_rename_cancel: '취소',
+  passkey_rename_success: '✓ 이름이 변경되었습니다', passkey_rename_fail: '이름 변경 실패',
+  passkey_rename_empty: '이름을 입력해주세요',
 });
 
 let curLangD = localStorage.getItem('lang') || 'zh-TW';
@@ -1178,13 +1194,35 @@ function renderPasskeys(creds) {
       <div id="pk-row-${c.id}" class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium text-white truncate">${esc(nickname)}</p>
+            <p class="text-sm font-medium text-white truncate" id="pk-nickname-${c.id}">${esc(nickname)}</p>
             <p class="text-xs text-gray-500 mt-0.5">${T('passkey_last_used_label')}：${esc(lastUsed)} · ${esc(transports)}</p>
           </div>
-          <button type="button" data-action="passkey-remove-open" data-passkey-id="${c.id}"
-            class="shrink-0 px-3 py-1.5 rounded-lg border border-red-500/25 bg-red-500/5 hover:bg-red-500/10 text-red-300 text-xs font-semibold transition-all">
-            ${T('passkey_remove_btn')}
-          </button>
+          <div class="shrink-0 flex gap-2">
+            <button type="button" data-action="passkey-rename-open" data-passkey-id="${c.id}"
+              class="px-3 py-1.5 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-300 text-xs font-semibold transition-all">
+              ${T('passkey_rename_btn')}
+            </button>
+            <button type="button" data-action="passkey-remove-open" data-passkey-id="${c.id}"
+              class="px-3 py-1.5 rounded-lg border border-red-500/25 bg-red-500/5 hover:bg-red-500/10 text-red-300 text-xs font-semibold transition-all">
+              ${T('passkey_remove_btn')}
+            </button>
+          </div>
+        </div>
+        <div id="pk-rename-${c.id}" class="hidden mt-3 space-y-2">
+          <input id="pk-name-${c.id}" type="text" maxlength="64" value="${esc(nickname)}"
+            placeholder="${T('passkey_rename_ph')}"
+            class="w-full px-3 py-2 rounded-lg bg-[#0a0a12] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40" />
+          <p id="pk-rename-msg-${c.id}" class="hidden text-xs"></p>
+          <div class="flex gap-2">
+            <button type="button" data-action="passkey-rename-cancel" data-passkey-id="${c.id}"
+              class="flex-1 py-2 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
+              ${T('passkey_rename_cancel')}
+            </button>
+            <button type="button" data-action="passkey-rename-save" data-passkey-id="${c.id}"
+              class="flex-1 py-2 rounded-lg border border-violet-500/40 bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              ${T('passkey_rename_save')}
+            </button>
+          </div>
         </div>
         <div id="pk-remove-${c.id}" class="hidden mt-3 space-y-2">
           <p class="text-xs text-amber-300">${T('passkey_remove_hint')}</p>
@@ -1207,6 +1245,52 @@ function renderPasskeys(creds) {
   }).join('');
 }
 
+// Rename — 一般 access_token 即可（PATCH 不要 step-up），inline 展開輸入框
+function openPasskeyRename(id) {
+  // 兩個 panel 互斥：開 rename 就關 remove
+  document.getElementById(`pk-remove-${id}`)?.classList.add('hidden');
+  document.getElementById(`pk-rename-${id}`)?.classList.remove('hidden');
+  const inp = document.getElementById(`pk-name-${id}`);
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+function cancelPasskeyRename(id) {
+  document.getElementById(`pk-rename-${id}`)?.classList.add('hidden');
+  document.getElementById(`pk-rename-msg-${id}`)?.classList.add('hidden');
+}
+
+async function savePasskeyRename(id) {
+  const inp = document.getElementById(`pk-name-${id}`);
+  const msg = document.getElementById(`pk-rename-msg-${id}`);
+  const btns = document.querySelectorAll(`[data-passkey-id="${id}"]`);
+  const showMsg = (text, type) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-green-400');
+    msg.classList.remove('hidden');
+  };
+  const nickname = (inp?.value ?? '').trim();
+  if (!nickname) { showMsg(T('passkey_rename_empty'), 'err'); return; }
+
+  btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = true; });
+  try {
+    await apiFetch(`/api/auth/webauthn/credentials/${id}`, {
+      method: 'PATCH',
+      body:   JSON.stringify({ nickname }),
+    });
+    // 成功 → 更新本地 cache + 重畫
+    if (Array.isArray(window._lastPasskeys)) {
+      const idx = window._lastPasskeys.findIndex(c => String(c.id) === String(id));
+      if (idx >= 0) window._lastPasskeys[idx] = { ...window._lastPasskeys[idx], nickname };
+      renderPasskeys(window._lastPasskeys);
+    }
+    showBindToast(T('passkey_rename_success'), 'ok');
+  } catch (e) {
+    btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; });
+    showMsg(tApiError(e, T('passkey_rename_fail')), 'err');
+  }
+}
+
 function openPasskeyRemove(id) {
   // 沒啟用 2FA → step-up 一定 fail，提早攔截 + 滾到 2FA 區塊引導開啟
   if (!window.__totpEnabled) {
@@ -1215,6 +1299,8 @@ function openPasskeyRemove(id) {
     if (tfa) tfa.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
+  // 兩個 panel 互斥：開 remove 就關 rename
+  document.getElementById(`pk-rename-${id}`)?.classList.add('hidden');
   const panel = document.getElementById(`pk-remove-${id}`);
   panel?.classList.remove('hidden');
   const otp = document.getElementById(`pk-otp-${id}`);
@@ -1375,6 +1461,9 @@ document.addEventListener('click', e => {
   if (a === 'passkey-remove-open')     return openPasskeyRemove(t.dataset.passkeyId);
   if (a === 'passkey-remove-cancel')   return cancelPasskeyRemove(t.dataset.passkeyId);
   if (a === 'passkey-remove-confirm')  return confirmPasskeyRemove(t.dataset.passkeyId);
+  if (a === 'passkey-rename-open')     return openPasskeyRename(t.dataset.passkeyId);
+  if (a === 'passkey-rename-cancel')   return cancelPasskeyRename(t.dataset.passkeyId);
+  if (a === 'passkey-rename-save')     return savePasskeyRename(t.dataset.passkeyId);
   // dynamic content
   if (t.dataset.revokeId) return armRevoke(Number(t.dataset.revokeId));
   if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);

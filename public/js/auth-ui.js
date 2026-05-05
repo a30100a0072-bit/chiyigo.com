@@ -51,6 +51,11 @@ const UI_I18N = {
   err_network:    { 'zh-TW':'網路錯誤，請檢查連線後重試', en:'Network error, please check your connection and retry', ja:'ネットワークエラーです。接続を確認してもう一度お試しください', ko:'네트워크 오류입니다. 연결을 확인하고 다시 시도해주세요' },
   err_pkce:       { 'zh-TW':'PKCE 授權失敗，請重試', en:'PKCE authorization failed, please try again', ja:'PKCE認可に失敗しました。もう一度お試しください', ko:'PKCE 인증에 실패했습니다. 다시 시도해주세요' },
   err_captcha_pending: { 'zh-TW':'人機驗證尚未完成，請稍候再點一次', en:'Captcha is still verifying, please wait and try again', ja:'ボット認証が完了していません。少々お待ちください', ko:'봇 검증이 아직 완료되지 않았습니다. 잠시만 기다려 주세요' },
+  // Phase D-3c：passkey 登入入口
+  login_passkey_btn: { 'zh-TW':'用 Passkey 登入', en:'Sign in with Passkey', ja:'パスキーでログイン', ko:'Passkey로 로그인' },
+  passkey_logging_in: { 'zh-TW':'請依瀏覽器提示完成驗證…', en:'Follow the browser prompt to continue…', ja:'ブラウザの指示に従って認証してください…', ko:'브라우저 안내에 따라 인증을 완료하세요…' },
+  passkey_login_cancelled: { 'zh-TW':'已取消', en:'Cancelled', ja:'キャンセルしました', ko:'취소되었습니다' },
+  passkey_login_fail: { 'zh-TW':'Passkey 登入失敗', en:'Passkey login failed', ja:'パスキーログインに失敗しました', ko:'Passkey 로그인 실패' },
 }
 
 function getLang() {
@@ -604,6 +609,127 @@ async function handleTotp(event) {
       }, { once: true });
     });
   }
+})();
+
+// ── Phase D-3c：Passkey 登入入口 ─────────────────────────────────
+
+function passkeySupported() {
+  return typeof window.PublicKeyCredential === 'function' && window.isSecureContext !== false;
+}
+
+function pkB64urlToBuf(s) {
+  const pad = '='.repeat((4 - s.length % 4) % 4);
+  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+function pkBufToB64url(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function showPasskeyMsg(text, type) {
+  const el = document.getElementById('passkey-login-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = type === 'err' ? '#f87171' : '#94a3b8';
+  el.hidden = false;
+}
+
+async function handlePasskeyLogin() {
+  if (!passkeySupported()) return;
+  const btn   = document.getElementById('passkey-login-btn');
+  const email = document.getElementById('login-email')?.value?.trim() || undefined;
+
+  if (btn) btn.disabled = true;
+  showPasskeyMsg(uiT('passkey_logging_in'), 'ok');
+  clearMsg();
+
+  try {
+    // 1) login-options（email 帶值就 narrow allowCredentials；不帶 = usernameless）
+    const opts = await fetch('/api/auth/webauthn/login-options', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(email ? { email } : {}),
+    }).then(r => r.json());
+
+    const publicKey = {
+      ...opts,
+      challenge: pkB64urlToBuf(opts.challenge),
+      allowCredentials: (opts.allowCredentials ?? []).map(c => ({
+        ...c, id: pkB64urlToBuf(c.id),
+      })),
+    };
+
+    let cred;
+    try {
+      cred = await navigator.credentials.get({ publicKey });
+    } catch (e) {
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+        showPasskeyMsg(uiT('passkey_login_cancelled'), 'err');
+      } else {
+        showPasskeyMsg(`${uiT('passkey_login_fail')}：${e?.message ?? e}`, 'err');
+      }
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    const r = cred.response;
+    const responseJson = {
+      id:    cred.id,
+      rawId: pkBufToB64url(cred.rawId),
+      type:  cred.type,
+      response: {
+        clientDataJSON:    pkBufToB64url(r.clientDataJSON),
+        authenticatorData: pkBufToB64url(r.authenticatorData),
+        signature:         pkBufToB64url(r.signature),
+        userHandle:        r.userHandle ? pkBufToB64url(r.userHandle) : null,
+      },
+      clientExtensionResults: typeof cred.getClientExtensionResults === 'function'
+        ? cred.getClientExtensionResults() : {},
+      authenticatorAttachment: cred.authenticatorAttachment ?? undefined,
+    };
+
+    // 2) login-verify
+    const verifyRes = await fetch('/api/auth/webauthn/login-verify', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        response: responseJson,
+        aud: _crossAppAud ?? undefined,
+      }),
+    });
+    const data = await verifyRes.json();
+    if (!verifyRes.ok) {
+      showPasskeyMsg(t(data.error) || uiT('passkey_login_fail'), 'err');
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    // 3) 成功 → 儲 token + 跳轉（鏡射 handleLogin 後段）
+    saveToken(data.access_token);
+    if (_pkceKey)        { await handlePkceRedirect(data.access_token); return; }
+    if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
+    redirectAfterAuth();
+  } catch (e) {
+    showPasskeyMsg(`${uiT('passkey_login_fail')}：${e?.message ?? e}`, 'err');
+    if (btn) btn.disabled = false;
+  }
+}
+
+// 不支援的瀏覽器 → 隱藏按鈕；否則 unhide + bind click
+;(function setupPasskeyLoginButton() {
+  const btn = document.getElementById('passkey-login-btn');
+  if (!btn) return;
+  if (!passkeySupported()) return;            // 維持 hidden
+  btn.hidden = false;
+  btn.addEventListener('click', handlePasskeyLogin);
 })();
 
 // bfcache 還原時：已登入 → 直接跳回 dashboard；未登入 → 清空欄位並重置到登入分頁

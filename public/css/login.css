@@ -186,6 +186,11 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px var(--bg) inset!important;-
 .oauth-google{background:var(--hover-overlay);border-color:var(--border);color:var(--text-muted)}
 .oauth-line{background:rgba(0,185,0,.10);border-color:rgba(0,185,0,.25);color:#06c755}
 .oauth-facebook{background:rgba(24,119,242,.10);border-color:rgba(24,119,242,.25);color:#1877F2}
+/* Phase D-3c：passkey login 按鈕（full-width，紫色系，視覺優先於 OAuth grid）*/
+.passkey-btn{width:100%;cursor:pointer;font-size:.875rem;padding:.75rem .5rem;background:rgba(139,92,246,.10);border-color:rgba(139,92,246,.30);color:#a78bfa;margin-bottom:.75rem}
+.passkey-btn:hover{filter:brightness(1.12);transform:translateY(-1px)}
+.passkey-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.passkey-btn svg{width:20px;height:20px}
 
 .notice-text{font-size:.75rem;color:var(--text-dim);text-align:center;margin-top:.85rem}
 .pkce-notice{display:none;text-align:center;font-size:.75rem;color:#f59e0b;margin-top:1rem;border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:.625rem 1rem;background:rgba(245,158,11,.05)}
