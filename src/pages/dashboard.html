@@ -63,6 +63,10 @@
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="8" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M9 8h5M12 8v2.5M14 8v1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           <span class="sb-label" data-i18n="nav_passkeys">Passkey</span>
         </button>
+        <button type="button" class="sb-item" data-scroll="wallets-section">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 6h12" stroke="currentColor" stroke-width="1.4"/><circle cx="11" cy="9.5" r="0.9" fill="currentColor"/></svg>
+          <span class="sb-label" data-i18n="nav_wallets">錢包</span>
+        </button>
       </nav>
 
       <div class="sb-bottom">
@@ -318,6 +322,27 @@
           </div>
         </div>
 
+        <!-- 錢包綁定（Phase F-3）-->
+        <div id="wallets-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[#2a2a35] flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-white" data-i18n="wallets_title">錢包 / Web3</p>
+              <p class="text-xs text-gray-500 mt-0.5" data-i18n="wallets_subtitle">綁定 Ethereum 地址（非託管 — 我們不存私鑰）。未來金流 / NFT 場景使用。</p>
+            </div>
+            <button id="wallet-add-btn"
+              class="shrink-0 px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+              <span data-i18n="wallet_add_btn">＋ 連結錢包</span>
+            </button>
+          </div>
+          <div class="px-5 py-4">
+            <p id="wallet-unsupported" class="hidden text-xs text-amber-400" data-i18n="wallet_unsupported">未偵測到瀏覽器錢包（請安裝 MetaMask / Rabby / Coinbase Wallet 等）。</p>
+            <p id="wallet-add-msg" class="hidden text-xs"></p>
+            <div id="wallets-list" class="space-y-2 mt-2">
+              <p class="text-xs text-gray-500" data-i18n="wallets_loading">載入中…</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Email 未驗證提示 -->
         <div id="email-banner" class="hidden mb-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-5 py-4">
           <div class="flex items-center justify-between gap-4">
@@ -479,6 +504,10 @@
         <button type="button" class="m-ov-item" data-scroll="passkeys-section" data-close-overlay>
           <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="6" cy="8" r="3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M9 8h5M12 8v2.5M14 8v1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
           <span data-i18n="nav_passkeys">Passkey</span>
+        </button>
+        <button type="button" class="m-ov-item" data-scroll="wallets-section" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="4" width="12" height="9" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 6h12" stroke="currentColor" stroke-width="1.4"/></svg></span>
+          <span data-i18n="nav_wallets">錢包</span>
         </button>
         <button type="button" class="m-ov-item danger" data-action="logout" data-close-overlay>
           <span class="m-ov-icon-wrap"><svg viewBox="0 0 24 24" fill="none" class="m-ov-icon" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg></span>

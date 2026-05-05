@@ -34,6 +34,8 @@ function applyLangD(lang) {
   // Phase D-3 動態 row 切語系跟著重畫
   if (window._lastDevices)  renderDevices(window._lastDevices);
   if (window._lastPasskeys) renderPasskeys(window._lastPasskeys);
+  // Phase F-3 wallet
+  if (window._lastWallets)  renderWallets(window._lastWallets);
   // 刪帳按鈕 / 2FA enable label 隨 hasPassword 動態切換，需在 i18n 套用後重畫
   if (typeof window.__hasPassword !== 'undefined') {
     if (typeof renderDeleteSection === 'function') renderDeleteSection(window.__hasPassword);
@@ -181,6 +183,9 @@ async function loadProfile() {
     window.__totpEnabled = !!data.totp_enabled;
     loadDevices();
     loadPasskeys();
+
+    // Phase F-3：錢包
+    loadWallets();
 
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('user-card').classList.remove('hidden');
@@ -1273,6 +1278,254 @@ async function addPasskey() {
   }
 }
 
+// ── Phase F-3：錢包綁定（SIWE）──────────────────────────────
+
+function shortAddr(addr) {
+  if (!addr || addr.length < 10) return addr ?? '—';
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function chainLabel(id) {
+  const map = { 1: 'Ethereum', 10: 'Optimism', 137: 'Polygon', 8453: 'Base', 42161: 'Arbitrum' };
+  return map[id] ?? `Chain ${id}`;
+}
+
+function walletProvider() {
+  // 偵測 EIP-1193 provider；MetaMask / Rabby / Coinbase Wallet 等都注入到 window.ethereum
+  return typeof window !== 'undefined' && window.ethereum ? window.ethereum : null;
+}
+
+async function loadWallets() {
+  const sec    = document.getElementById('wallets-section');
+  const list   = document.getElementById('wallets-list');
+  const unsup  = document.getElementById('wallet-unsupported');
+  const addBtn = document.getElementById('wallet-add-btn');
+  if (!sec || !list) return;
+  sec.classList.remove('hidden');
+
+  if (!walletProvider()) {
+    if (unsup) unsup.classList.remove('hidden');
+    if (addBtn) addBtn.disabled = true;
+  }
+
+  try {
+    const { wallets } = await apiFetch('/api/auth/wallet');
+    window._lastWallets = wallets ?? [];
+    renderWallets(window._lastWallets);
+  } catch (e) {
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+  }
+}
+
+function renderWallets(wallets) {
+  const list = document.getElementById('wallets-list');
+  if (!list) return;
+  if (!wallets.length) {
+    list.innerHTML = `<p class="text-xs text-gray-500">${T('wallets_empty')}</p>`;
+    return;
+  }
+  list.innerHTML = wallets.map(w => {
+    const display = w.nickname ? `${esc(w.nickname)} · ${esc(shortAddr(w.address))}` : esc(w.address);
+    const signedAt = w.signed_at ? formatRelative(w.signed_at) : '—';
+    return `
+      <div id="wl-row-${w.id}" class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium text-white truncate font-mono">${display}</p>
+            <p class="text-xs text-gray-500 mt-0.5">${esc(chainLabel(w.chain_id))} · ${T('wallet_signed_at_label')}：${esc(signedAt)}</p>
+          </div>
+          <button type="button" data-action="wallet-remove-open" data-wallet-id="${w.id}"
+            class="shrink-0 px-3 py-1.5 rounded-lg border border-red-500/25 bg-red-500/5 hover:bg-red-500/10 text-red-300 text-xs font-semibold transition-all">
+            ${T('wallet_remove_btn')}
+          </button>
+        </div>
+        <div id="wl-remove-${w.id}" class="hidden mt-3 space-y-2">
+          <p class="text-xs text-amber-300">${T('wallet_remove_hint')}</p>
+          <input id="wl-otp-${w.id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
+            placeholder="${T('wallet_remove_otp_ph')}"
+            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
+          <p id="wl-msg-${w.id}" class="hidden text-xs"></p>
+          <div class="flex gap-2">
+            <button type="button" data-action="wallet-remove-cancel" data-wallet-id="${w.id}"
+              class="flex-1 py-2 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
+              ${T('wallet_remove_cancel')}
+            </button>
+            <button type="button" data-action="wallet-remove-confirm" data-wallet-id="${w.id}"
+              class="flex-1 py-2 rounded-lg border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-300 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              ${T('wallet_remove_confirm')}
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openWalletRemove(id) {
+  if (!window.__totpEnabled) {
+    showBindToast(T('wallet_remove_need_2fa'), 'err');
+    const tfa = document.getElementById('tfa-section');
+    if (tfa) tfa.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  document.getElementById(`wl-remove-${id}`)?.classList.remove('hidden');
+  document.getElementById(`wl-otp-${id}`)?.focus();
+}
+
+function cancelWalletRemove(id) {
+  document.getElementById(`wl-remove-${id}`)?.classList.add('hidden');
+  const otp = document.getElementById(`wl-otp-${id}`);
+  if (otp) otp.value = '';
+  document.getElementById(`wl-msg-${id}`)?.classList.add('hidden');
+}
+
+async function confirmWalletRemove(id) {
+  const otpEl = document.getElementById(`wl-otp-${id}`);
+  const msg   = document.getElementById(`wl-msg-${id}`);
+  const btns  = document.querySelectorAll(`[data-wallet-id="${id}"]`);
+  const otp   = (otpEl?.value || '').trim();
+  const showMsg = (text, type) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-green-400');
+    msg.classList.remove('hidden');
+  };
+  if (!/^\d{6}$/.test(otp)) { showMsg(T('totp_err6'), 'err'); return; }
+  btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = true; });
+  try {
+    const stepRes = await apiFetch('/api/auth/step-up', {
+      method: 'POST',
+      body: JSON.stringify({ scope: 'elevated:account', for_action: 'unbind_wallet', otp_code: otp }),
+    });
+    const stepUpToken = stepRes?.step_up_token;
+    if (!stepUpToken) { showMsg(T('net_err'), 'err'); btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; }); return; }
+    await apiFetch(`/api/auth/wallet/${id}`, {
+      method:  'DELETE',
+      headers: { Authorization: 'Bearer ' + stepUpToken },
+    });
+    showBindToast(T('wallet_remove_success'), 'ok');
+    loadWallets();
+  } catch (e) {
+    btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; });
+    showMsg(tApiError(e, T('wallet_remove_fail')), 'err');
+  }
+}
+
+// 用 server 回的欄位拼 SIWE message（spec EIP-4361 嚴格格式）
+function buildSiweMessageClient({ domain, address, uri, chainId, nonce, expiresAt }) {
+  const issuedAt = new Date().toISOString();
+  // server 給的 expires_at 是 'YYYY-MM-DD HH:MM:SS' UTC，轉 ISO
+  const expirationTime = expiresAt
+    ? new Date(expiresAt.replace(' ', 'T') + 'Z').toISOString()
+    : new Date(Date.now() + 5 * 60_000).toISOString();
+  return [
+    `${domain} wants you to sign in with your Ethereum account:`,
+    address,
+    '',
+    'Sign in with Ethereum to chiyigo.',
+    '',
+    `URI: ${uri}`,
+    `Version: 1`,
+    `Chain ID: ${chainId}`,
+    `Nonce: ${nonce}`,
+    `Issued At: ${issuedAt}`,
+    `Expiration Time: ${expirationTime}`,
+  ].join('\n');
+}
+
+async function addWallet() {
+  const provider = walletProvider();
+  if (!provider) return;
+
+  const btn = document.getElementById('wallet-add-btn');
+  const msg = document.getElementById('wallet-add-msg');
+  const showMsg = (text, type) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-green-400');
+    msg.classList.remove('hidden');
+  };
+
+  if (btn) btn.disabled = true;
+  showMsg(T('wallet_connecting'), 'ok');
+
+  try {
+    // 1) 連線 wallet 拿 address
+    let accounts;
+    try {
+      accounts = await provider.request({ method: 'eth_requestAccounts' });
+    } catch (e) {
+      // user reject → 4001
+      if (e?.code === 4001 || e?.name === 'AbortError') {
+        showMsg(T('wallet_add_cancelled'), 'err');
+      } else {
+        showMsg(`${T('wallet_add_fail')}：${e?.message ?? e}`, 'err');
+      }
+      if (btn) btn.disabled = false;
+      return;
+    }
+    const address = accounts?.[0];
+    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      showMsg(T('wallet_add_fail'), 'err');
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    // 2) 拿 nonce + server domain/uri/chain_id
+    let nonceRes;
+    try {
+      nonceRes = await apiFetch('/api/auth/wallet/nonce', {
+        method: 'POST',
+        body:   JSON.stringify({ address }),
+      });
+    } catch (e) {
+      if (e?.code === 'ALREADY_BOUND') showMsg(T('wallet_already_bound'), 'err');
+      else showMsg(tApiError(e, T('wallet_add_fail')), 'err');
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    // 3) 組 SIWE message + 請 wallet 簽
+    const messageRaw = buildSiweMessageClient({
+      domain:    nonceRes.domain,
+      address,
+      uri:       nonceRes.uri,
+      chainId:   nonceRes.chain_id,
+      nonce:     nonceRes.nonce,
+      expiresAt: nonceRes.expires_at,
+    });
+
+    showMsg(T('wallet_signing'), 'ok');
+    let signature;
+    try {
+      signature = await provider.request({
+        method: 'personal_sign',
+        params: [messageRaw, address],
+      });
+    } catch (e) {
+      if (e?.code === 4001 || e?.name === 'AbortError') {
+        showMsg(T('wallet_add_cancelled'), 'err');
+      } else {
+        showMsg(`${T('wallet_add_fail')}：${e?.message ?? e}`, 'err');
+      }
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    // 4) verify + bind
+    await apiFetch('/api/auth/wallet/verify', {
+      method: 'POST',
+      body:   JSON.stringify({ message: messageRaw, signature }),
+    });
+
+    showMsg(T('wallet_add_success'), 'ok');
+    loadWallets();
+  } catch (e) {
+    showMsg(tApiError(e, T('wallet_add_fail')), 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ── Phase C-3 unified click delegation ──
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
@@ -1287,6 +1540,7 @@ document.addEventListener('click', e => {
   if (t.id === 'del-open-btn')     return showDeleteForm();
   if (t.id === 'del-submit-btn')   return submitDeleteAccount();
   if (t.id === 'passkey-add-btn')  return addPasskey();
+  if (t.id === 'wallet-add-btn')   return addWallet();
   // data-action
   const a = t.dataset.action;
   if (a === 'logout')              return logout();
@@ -1303,6 +1557,9 @@ document.addEventListener('click', e => {
   if (a === 'passkey-rename-open')     return openPasskeyRename(t.dataset.passkeyId);
   if (a === 'passkey-rename-cancel')   return cancelPasskeyRename(t.dataset.passkeyId);
   if (a === 'passkey-rename-save')     return savePasskeyRename(t.dataset.passkeyId);
+  if (a === 'wallet-remove-open')      return openWalletRemove(t.dataset.walletId);
+  if (a === 'wallet-remove-cancel')    return cancelWalletRemove(t.dataset.walletId);
+  if (a === 'wallet-remove-confirm')   return confirmWalletRemove(t.dataset.walletId);
   // dynamic content
   if (t.dataset.revokeId) return armRevoke(Number(t.dataset.revokeId));
   if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);
