@@ -117,6 +117,9 @@ function applyLangD(lang) {
   if (createdEl?.dataset.raw) createdEl.textContent = formatDate(createdEl.dataset.raw);
   // 需求單列表：以最後一次 fetch 結果重畫（變數宣告在後段，用 window 規避 TDZ）
   if (window._lastRequisitions) renderRequisitions(window._lastRequisitions);
+  // Phase D-3 動態 row（裝置 / passkey）也要跟著重畫，否則切語系後 row 內字串卡死
+  if (window._lastDevices)  renderDevices(window._lastDevices);
+  if (window._lastPasskeys) renderPasskeys(window._lastPasskeys);
   // 刪帳按鈕 / 2FA enable label 隨 hasPassword 動態切換，需在 i18n 套用後重畫
   if (typeof window.__hasPassword !== 'undefined') {
     if (typeof renderDeleteSection === 'function') renderDeleteSection(window.__hasPassword);
@@ -1063,7 +1066,8 @@ async function loadDevices() {
   sec.classList.remove('hidden');
   try {
     const { devices } = await apiFetch('/api/auth/devices');
-    renderDevices(devices ?? []);
+    window._lastDevices = devices ?? [];
+    renderDevices(window._lastDevices);
   } catch (e) {
     list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
   }
@@ -1097,13 +1101,29 @@ function renderDevices(devices) {
 
 async function logoutDevice(deviceUuidAttr) {
   // empty string = web (device_uuid IS NULL)
-  const device_uuid = deviceUuidAttr === '' ? null : deviceUuidAttr;
+  const isWeb = deviceUuidAttr === '';
+  const device_uuid = isWeb ? null : deviceUuidAttr;
   try {
     await apiFetch('/api/auth/devices/logout', {
       method: 'POST',
       body:   JSON.stringify({ device_uuid }),
     });
     showBindToast(T('device_logout_success'), 'ok');
+
+    if (isWeb) {
+      // 撤的就是當下這個 web session → 必須把自己也清掉並踢回 login
+      // （access_token 仍 valid 到 15min TTL，不主動清的話用戶還能繼續逛 dashboard，
+      //   會誤以為「沒登出成功」；refresh cookie 已被 server 撤，下次 silent refresh 會 401）
+      try { sessionStorage.removeItem('access_token'); } catch (_) {}
+      try {
+        if ('BroadcastChannel' in window) {
+          new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' });
+        }
+      } catch (_) {}
+      setTimeout(() => { location.replace('/login.html?logout=device'); }, 800);
+      return;
+    }
+    // 撤的是別台 App → 留在 dashboard，只刷新 list
     loadDevices();
   } catch (e) {
     showBindToast(tApiError(e, T('net_err')), 'err');
@@ -1130,7 +1150,8 @@ async function loadPasskeys() {
 
   try {
     const { credentials } = await apiFetch('/api/auth/webauthn/credentials');
-    renderPasskeys(credentials ?? []);
+    window._lastPasskeys = credentials ?? [];
+    renderPasskeys(window._lastPasskeys);
   } catch (e) {
     list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
   }
