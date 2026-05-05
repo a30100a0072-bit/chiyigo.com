@@ -189,3 +189,18 @@ body.has-sidebar{overflow:hidden}
 .bind-dot[data-provider="discord"]  { background: #5865f2; }
 .bind-dot[data-provider="line"]     { background: #06c755; }
 .bind-dot[data-provider="facebook"] { background: #1877f2; }
+
+/* Chrome / Safari 的 autofill 預設會把 input 背景塗白、文字塗黑，
+   導致 dashboard 暗色 UI 變成白底白字（password / OTP 框看不見字）。
+   用「inset box-shadow」蓋過 autofill bg；text-fill-color 強制白字。
+   transition 5000s 是業界 hack：Chrome autofill 觸發時有 ~150ms
+   動畫期間還是露出白底，用超長 transition 把那段壓掉。 */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0 1000px #0e0e16 inset !important;
+  caret-color: #ffffff !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
