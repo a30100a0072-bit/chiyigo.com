@@ -17,7 +17,9 @@ import { getCorsHeaders } from '../utils/cors.js'
 import { refreshClientsCache } from '../utils/oauth-clients.js'
 
 const CT_EXEMPT_EXACT   = new Set(['/api/auth/logout'])
-const CT_EXEMPT_PATTERN = /^\/api\/auth\/oauth\/[^/]+\/callback$/
+// 第三方 webhook 多用 application/x-www-form-urlencoded（ECPay、PSP 等）；
+// /api/webhooks/* 全段豁免 Content-Type 守門，由各 vendor adapter 自行解析+驗章。
+const CT_EXEMPT_PATTERN = /^\/api\/auth\/oauth\/[^/]+\/callback$|^\/api\/webhooks\//
 
 function genTraceId() {
   const a = crypto.getRandomValues(new Uint8Array(8))
