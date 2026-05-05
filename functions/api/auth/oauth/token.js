@@ -28,6 +28,7 @@ import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
+import { buildTokenScope } from '../../../utils/scopes.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）
@@ -127,6 +128,7 @@ export async function onRequestPost({ request, env }) {
     role:           user.role,
     status:         user.status,
     ver:            user.token_version ?? 0,
+    scope:          buildTokenScope(user.role, authCode.scope),
   }, '15m', env, { audience: aud })
 
   // OIDC：scope 含 openid → 加發 id_token

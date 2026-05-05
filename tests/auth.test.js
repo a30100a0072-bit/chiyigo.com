@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { generateKeyPair, exportJWK } from 'jose'
 import { signJwt } from '../functions/utils/jwt.js'
-import { requireAuth, res } from '../functions/utils/auth.js'
+import { requireAuth, requireScope, res } from '../functions/utils/auth.js'
 import { requireRole } from '../functions/utils/requireRole.js'
+import { SCOPES } from '../functions/utils/scopes.js'
 
 let env
 
@@ -105,6 +106,56 @@ describe('requireAuth', () => {
       401,
       { error: 'Unauthorized' },
     )
+  })
+})
+
+describe('requireScope', () => {
+  it('JWT scope claim 含所需 → 通過', async () => {
+    const tok = await signJwt(
+      { sub: '1', role: 'player', status: 'active', scope: 'admin:audit' },
+      '5m', env,
+    )
+    const { user, error } = await requireScope(reqWithAuth(tok), env, SCOPES.ADMIN_AUDIT)
+    expect(error).toBeNull()
+    expect(user.sub).toBe('1')
+  })
+
+  it('JWT 沒 scope claim 但 role 推得出來 → 通過（向後相容舊 token）', async () => {
+    const tok = await signJwt(
+      { sub: '1', role: 'admin', status: 'active' },
+      '5m', env,
+    )
+    const { error } = await requireScope(reqWithAuth(tok), env, SCOPES.ADMIN_AUDIT)
+    expect(error).toBeNull()
+  })
+
+  it('scope 不夠 → 403 INSUFFICIENT_SCOPE + missing 列表', async () => {
+    const tok = await signJwt(
+      { sub: '1', role: 'player', status: 'active', scope: 'read:profile' },
+      '5m', env,
+    )
+    const r = await requireScope(reqWithAuth(tok), env, SCOPES.ADMIN_AUDIT)
+    expect(r.user).toBeNull()
+    expect(r.error.status).toBe(403)
+    const body = await r.error.json()
+    expect(body.code).toBe('INSUFFICIENT_SCOPE')
+    expect(body.missing).toContain(SCOPES.ADMIN_AUDIT)
+  })
+
+  it('多 scope（AND）：缺一即 403，回報缺哪個', async () => {
+    const tok = await signJwt(
+      { sub: '1', role: 'player', status: 'active', scope: 'admin:audit' },
+      '5m', env,
+    )
+    const r = await requireScope(reqWithAuth(tok), env, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_REVOKE)
+    expect(r.error.status).toBe(403)
+    const body = await r.error.json()
+    expect(body.missing).toEqual([SCOPES.ADMIN_REVOKE])
+  })
+
+  it('沒 token → 401（透傳 requireAuth）', async () => {
+    const r = await requireScope(reqWithAuth(null), env, SCOPES.ADMIN_AUDIT)
+    expect(r.error.status).toBe(401)
   })
 })
 

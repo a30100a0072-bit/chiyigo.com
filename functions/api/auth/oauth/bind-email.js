@@ -20,6 +20,7 @@ import { resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
+import { buildTokenScope } from '../../../utils/scopes.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -134,6 +135,7 @@ export async function onRequestPost(context) {
     role:           userRow.role,
     status:         userRow.status,
     ver:            userRow.token_version ?? 0,
+    scope:          buildTokenScope(userRow.role),
     provider,
   }, ACCESS_TOKEN_TTL, env, { audience })
 

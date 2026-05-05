@@ -19,6 +19,7 @@ import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
+import { buildTokenScope } from '../../../utils/scopes.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -133,6 +134,7 @@ export async function onRequestPost({ request, env }) {
     role:           record.role,
     status:         record.status,
     ver:            record.token_version ?? 0,
+    scope:          buildTokenScope(record.role),
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken    = generateSecureToken()

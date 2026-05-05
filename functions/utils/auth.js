@@ -14,6 +14,7 @@
 import { verifyJwt } from './jwt.js'
 import { isJtiRevoked } from './revocation.js'
 import { safeUserAudit } from './user-audit.js'
+import { hasAllScopes, effectiveScopesFromJwt } from './scopes.js'
 
 /**
  * @param {Request}     request
@@ -116,6 +117,42 @@ export async function bumpTokenVersion(db, userId) {
       WHERE user_id = ? AND revoked_at IS NULL
     `).bind(userId),
   ])
+}
+
+/**
+ * Scope 守門：通過 requireAuth + 檢查 JWT 帶有所有指定 scope。
+ *
+ * 規則：
+ *   - JWT scope claim 是 OIDC 慣例的空白分隔字串
+ *   - 缺 scope claim（舊 token / 非 IAM 簽）→ effectiveScopesFromJwt 從 role 推 fallback
+ *   - 所有 required scope 都得在；任一缺 → 403 INSUFFICIENT_SCOPE
+ *
+ * 使用方式：
+ *   const { user, error } = await requireScope(request, env, 'admin:audit')
+ *   if (error) return error
+ *
+ * 多 scope（AND）：requireScope(request, env, 'admin:users', 'admin:revoke')
+ *
+ * @param {Request} request
+ * @param {object}  env
+ * @param  {...string} requiredScopes
+ */
+export async function requireScope(request, env, ...requiredScopes) {
+  const { user, error } = await requireAuth(request, env)
+  if (error) return { user: null, error }
+
+  if (!hasAllScopes(user, requiredScopes)) {
+    const eff = effectiveScopesFromJwt(user)
+    return {
+      user: null,
+      error: res({
+        error:   'Forbidden',
+        code:    'INSUFFICIENT_SCOPE',
+        missing: requiredScopes.filter(s => !eff.has(s)),
+      }, 403),
+    }
+  }
+  return { user, error: null }
 }
 
 export function res(data, status = 200, extraHeaders = {}) {

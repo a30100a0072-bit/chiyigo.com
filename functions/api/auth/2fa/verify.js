@@ -22,6 +22,7 @@ import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
+import { buildTokenScope } from '../../../utils/scopes.js'
 
 const TOTP_RL_WINDOW_SEC = 5 * 60
 const TOTP_RL_MAX        = 5
@@ -140,6 +141,7 @@ async function issueToken(userId, record, db, deviceUuid, env, audience) {
     role:           record.role,
     status:         record.status,
     ver:            record.token_version ?? 0,
+    scope:          buildTokenScope(record.role),
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken     = generateSecureToken()

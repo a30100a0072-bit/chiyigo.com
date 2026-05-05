@@ -40,6 +40,9 @@ describe('POST /api/auth/local/login — happy path & failures', () => {
     const { payload } = await jwtVerify(body.access_token, pub, { algorithms: ['ES256'] })
     expect(payload.sub).toBe(String(u.id))
     expect(payload.email).toBe('a@b.com')
+    // Phase C-2 regression：access_token 必有 scope claim（role 推導出來）
+    expect(payload.scope).toBeTypeOf('string')
+    expect(payload.scope.split(' ')).toContain('read:profile')
 
     // refresh_tokens DB row 存在
     const rt = await env.chiyigo_db.prepare(

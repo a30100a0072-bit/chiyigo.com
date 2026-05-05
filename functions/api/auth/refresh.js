@@ -25,6 +25,7 @@ import { getCorsHeaders, resolveAud } from '../../utils/cors.js'
 import { res } from '../../utils/auth.js'
 import { refreshCookie } from '../../utils/cookies.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
+import { buildTokenScope } from '../../utils/scopes.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -121,6 +122,7 @@ export async function onRequestPost({ request, env }) {
     role:           user.role,
     status:         user.status,
     ver:            user.token_version ?? 0,
+    scope:          buildTokenScope(user.role),
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   // Web → 新 Cookie；App → JSON body

@@ -22,13 +22,15 @@
  * Step-up 鎖：未來 Phase C 上線後再要求 step_up_token；目前只 requireRole admin。
  */
 
-import { res } from '../../utils/auth.js'
-import { requireRole } from '../../utils/requireRole.js'
+import { res, requireScope } from '../../utils/auth.js'
+import { SCOPES } from '../../utils/scopes.js'
 
 const VALID_SEVERITY = new Set(['info', 'warn', 'critical'])
 
 export async function onRequestGet({ request, env }) {
-  const { error } = await requireRole(request, env, 'admin')
+  // Phase C-2 PoC：用 scope 守門取代 requireRole。`admin:audit` 同時內建在
+  // admin/developer 的 ROLE_BASE_SCOPES，所以行為對既有 admin 完全相容。
+  const { error } = await requireScope(request, env, SCOPES.ADMIN_AUDIT)
   if (error) return error
 
   const url   = new URL(request.url)
