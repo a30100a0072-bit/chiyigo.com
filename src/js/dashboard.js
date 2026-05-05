@@ -202,6 +202,7 @@ const BACKEND_ERR_MAP = {
   'Account is banned':           'err_account_banned',
   'Incorrect password':          'err_invalid_password',
   'Account not found':           'err_user_not_found',
+  'captcha_failed':              'err_captcha',
 }
 // 把 ApiError 翻成本地化 + traceId 字串；非 ApiError 退回 fallback
 function tApiError(e, fallback) {

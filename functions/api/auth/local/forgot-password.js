@@ -13,6 +13,7 @@ import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { sendPasswordResetEmail } from '../../../utils/email.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
+import { verifyJwt } from '../../../utils/jwt.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const COOLDOWN_SECONDS  = 60
@@ -26,10 +27,27 @@ export async function onRequestPost({ request, env }) {
 
   const { email } = body ?? {}
   if (!email) return res({ error: 'email is required' }, 400)
+  const emailLower = email.toLowerCase().trim()
 
-  // Turnstile（key 未設時 skip）
-  const ts = await verifyTurnstile(request, body, env)
-  if (!ts.ok) return res({ error: 'captcha_failed', code: 'CAPTCHA_FAILED', reason: ts.reason }, 403)
+  // Turnstile：匿名請求（login 頁的 forgot-password）必驗。
+  // 已登入 user 對「自己的 email」發起重設（dashboard 的 setpw / change-password 流程）
+  // 跳過 turnstile — user 已驗證身份且只能對自己的 email 操作；後續 IP 限流 + 60s 冷卻
+  // 仍生效。對「他人 email」發起者一律走匿名路徑驗 captcha 防 enumeration / spam。
+  let skipTurnstile = false
+  const authHeader = request.headers.get('Authorization') ?? ''
+  if (authHeader.startsWith('Bearer ')) {
+    try {
+      const payload = await verifyJwt(authHeader.slice(7).trim(), env)
+      if (payload.email && String(payload.email).toLowerCase() === emailLower) {
+        skipTurnstile = true
+      }
+    } catch { /* 簽章 / 過期 invalid → 走匿名路徑 */ }
+  }
+
+  if (!skipTurnstile) {
+    const ts = await verifyTurnstile(request, body, env)
+    if (!ts.ok) return res({ error: 'captcha_failed', code: 'CAPTCHA_FAILED', reason: ts.reason }, 403)
+  }
 
   const db = env.chiyigo_db
   const ip = request.headers.get('CF-Connecting-IP') ?? null
