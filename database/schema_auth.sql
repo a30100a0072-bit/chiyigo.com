@@ -201,3 +201,34 @@ CREATE TABLE IF NOT EXISTS ip_blacklist (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ip_blacklist_expires ON ip_blacklist(expires_at);
+
+-- =============================================
+-- 錢包綁定（migration 0023，Phase F-3 SIWE）
+-- =============================================
+
+CREATE TABLE IF NOT EXISTS user_wallets (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  address       TEXT    NOT NULL,
+  chain_id      INTEGER NOT NULL DEFAULT 1,
+  nickname      TEXT,
+  signed_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+  last_used_at  TEXT,
+  UNIQUE(user_id, address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_wallets_user      ON user_wallets(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_wallets_address   ON user_wallets(address);
+
+CREATE TABLE IF NOT EXISTS wallet_nonces (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  nonce        TEXT    NOT NULL UNIQUE,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  address      TEXT    NOT NULL,
+  chain_id     INTEGER NOT NULL DEFAULT 1,
+  expires_at   TEXT    NOT NULL,
+  consumed_at  TEXT,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_wallet_nonces_expires  ON wallet_nonces(expires_at);

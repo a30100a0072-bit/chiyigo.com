@@ -17,6 +17,8 @@
     "lint:handlers": "node scripts/lint-handlers.js"
   },
   "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0",
     "@simplewebauthn/server": "^13.3.0",
     "jose": "^5.9.6",
     "otpauth": "^9.3.6"

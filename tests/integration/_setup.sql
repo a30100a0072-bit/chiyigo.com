@@ -188,6 +188,28 @@ CREATE TABLE IF NOT EXISTS revoked_jti (
   revoked_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS user_wallets (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  address       TEXT    NOT NULL,
+  chain_id      INTEGER NOT NULL DEFAULT 1,
+  nickname      TEXT,
+  signed_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+  last_used_at  TEXT,
+  UNIQUE(user_id, address)
+);
+
+CREATE TABLE IF NOT EXISTS wallet_nonces (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  nonce        TEXT    NOT NULL UNIQUE,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  address      TEXT    NOT NULL,
+  chain_id     INTEGER NOT NULL DEFAULT 1,
+  expires_at   TEXT    NOT NULL,
+  consumed_at  TEXT,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS ip_blacklist (
   ip          TEXT    PRIMARY KEY,
   reason      TEXT    NOT NULL,

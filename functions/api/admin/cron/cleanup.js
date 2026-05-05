@@ -49,6 +49,9 @@ const TASKS = [
 
   // ip_blacklist: 過期即刪（Phase E-4；24hr TTL，過期 row 對 query 無意義）
   { name: 'ip_blacklist',        sql: `DELETE FROM ip_blacklist        WHERE expires_at < datetime('now')` },
+
+  // wallet_nonces: 過期即刪（Phase F-3；5min TTL，consumed 也跟著清）
+  { name: 'wallet_nonces',       sql: `DELETE FROM wallet_nonces       WHERE expires_at < datetime('now')` },
 ]
 
 export async function onRequestPost({ request, env }) {
