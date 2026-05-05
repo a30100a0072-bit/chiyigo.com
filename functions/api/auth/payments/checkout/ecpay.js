@@ -94,7 +94,8 @@ export async function onRequestPost({ request, env }) {
   // server-to-server 並列）。沒設的話 ECPay 停在自家成功頁等 user 點「回商店」(ClientBackURL)。
   // 沙箱很多 user 看到自家頁就關掉 → 不會走 ClientBackURL → 我方 payment-result.html
   // 從未被觸發。設這個讓 ECPay 自動跳 → user 不需點任何東西。
-  const orderResultUrl = body?.order_result_url || env?.ECPAY_ORDER_RESULT_URL || `${origin}/payment-result.html`
+  // OrderResultURL 必須走 Function（接 POST → 303 redirect），不能直接給 static .html（POST 會 405）
+  const orderResultUrl = body?.order_result_url || env?.ECPAY_ORDER_RESULT_URL || `${origin}/payment-return/ecpay`
   const { checkout_url, fields, _debug } = await buildEcpayCheckoutFields(env, {
     merchantTradeNo,
     totalAmount:    amount,
