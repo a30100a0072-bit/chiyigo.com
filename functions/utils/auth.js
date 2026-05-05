@@ -12,6 +12,7 @@
  */
 
 import { verifyJwt } from './jwt.js'
+import { isJtiRevoked } from './revocation.js'
 
 /**
  * @param {Request}     request
@@ -45,6 +46,12 @@ export async function requireAuth(request, env, requiredScope = null, opts = {})
   // 封禁帳號：無論任何 scope，一律阻斷
   if (payload.status === 'banned') {
     return { user: null, error: res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403) }
+  }
+
+  // jti 黑名單（精準 revoke）：KV 正向快取 + D1 為 source of truth
+  // 舊 token 沒 jti claim → 跳過此檢查（仍受下方 token_version 守門）
+  if (payload.jti && await isJtiRevoked(env, payload.jti)) {
+    return { user: null, error: res({ error: 'Token revoked', code: 'TOKEN_REVOKED' }, 401) }
   }
 
   // scope 檢查：若要求特定 scope 但 JWT 不符，拒絕存取

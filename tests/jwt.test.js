@@ -69,6 +69,27 @@ describe('signJwt / verifyJwt', () => {
     expect(payload.aud).toBe('whatever')
   })
 
+  it('signJwt 自動補 jti（Phase B 精準 revoke）', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env)
+    const payload = await verifyJwt(token, env)
+    expect(payload.jti).toBeTypeOf('string')
+    expect(payload.jti.length).toBeGreaterThan(10) // randomUUID 是 36 字元
+  })
+
+  it('signJwt jti 每次 unique', async () => {
+    const t1 = await signJwt({ sub: 'u' }, '5m', env)
+    const t2 = await signJwt({ sub: 'u' }, '5m', env)
+    const p1 = await verifyJwt(t1, env)
+    const p2 = await verifyJwt(t2, env)
+    expect(p1.jti).not.toBe(p2.jti)
+  })
+
+  it('caller 自帶 jti 時 signJwt 不覆寫', async () => {
+    const token = await signJwt({ sub: 'u', jti: 'fixed-jti-123' }, '5m', env)
+    const payload = await verifyJwt(token, env)
+    expect(payload.jti).toBe('fixed-jti-123')
+  })
+
   it('passes through ver claim (token_version)', async () => {
     const token = await signJwt({ sub: 'u', ver: 7 }, '5m', env)
     const payload = await verifyJwt(token, env)

@@ -118,7 +118,9 @@ async function getVerifyingKey(env, kid) {
  */
 export async function signJwt(payload, expiresIn, env, opts = {}) {
   const { key, kid } = await getSigningKey(env)
-  const builder = new SignJWT(payload)
+  // 自動補 jti（Phase B：精準 revoke 用）。caller 已自帶 jti 則尊重之。
+  const enriched = payload.jti ? payload : { ...payload, jti: crypto.randomUUID() }
+  const builder = new SignJWT(enriched)
     .setProtectedHeader({ alg: 'ES256', kid })
     .setIssuer('https://chiyigo.com')
     .setIssuedAt()
