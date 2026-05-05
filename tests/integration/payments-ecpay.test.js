@@ -144,6 +144,60 @@ describe('ecpayPaymentAdapter.parseWebhook', () => {
     expect(parsed.failure_reason).toContain('額度不足')
   })
 
+  it('ATM 取號成功 → status=processing + payment_info.method=atm', async () => {
+    const params = {
+      MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_atm',
+      RtnCode: '2', RtnMsg: 'ATM 取號成功',
+      TradeNo: 'TN_ATM', TradeAmt: '500',
+      BankCode: '004', vAccount: '9990001234567890',
+      ExpireDate: '2026/01/15',
+      PaymentType: 'ATM_TAISHIN', TradeDate: '2026/01/01 12:00:00',
+    }
+    params.CheckMacValue = await ecpayCheckMacValue(params, SANDBOX.HashKey, SANDBOX.HashIV)
+    const parsed = await ecpayPaymentAdapter.parseWebhook(ecpayWebhookReq(params), env)
+    expect(parsed.ok).toBe(true)
+    expect(parsed.status).toBe(PAYMENT_STATUS.PROCESSING)
+    expect(parsed.payment_info?.method).toBe('atm')
+    expect(parsed.payment_info?.bank_code).toBe('004')
+    expect(parsed.payment_info?.v_account).toBe('9990001234567890')
+    expect(parsed.payment_info?.expire_date).toBe('2026/01/15')
+    expect(parsed.failure_reason).toBeNull()
+  })
+
+  it('CVS 取號成功 → status=processing + payment_info.method=cvs', async () => {
+    const params = {
+      MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_cvs',
+      RtnCode: '10100073', RtnMsg: 'CVS 取號成功',
+      TradeNo: 'TN_CVS', TradeAmt: '300',
+      PaymentNo: 'LLL12345678',
+      ExpireDate: '2026/01/10 23:59:59',
+      PaymentType: 'CVS_CVS', TradeDate: '2026/01/01 12:00:00',
+    }
+    params.CheckMacValue = await ecpayCheckMacValue(params, SANDBOX.HashKey, SANDBOX.HashIV)
+    const parsed = await ecpayPaymentAdapter.parseWebhook(ecpayWebhookReq(params), env)
+    expect(parsed.ok).toBe(true)
+    expect(parsed.status).toBe(PAYMENT_STATUS.PROCESSING)
+    expect(parsed.payment_info?.method).toBe('cvs')
+    expect(parsed.payment_info?.payment_no).toBe('LLL12345678')
+  })
+
+  it('Barcode 取號成功 → payment_info.method=barcode + 三段條碼', async () => {
+    const params = {
+      MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_bc',
+      RtnCode: '10100073', RtnMsg: 'Barcode 取號成功',
+      TradeNo: 'TN_BC', TradeAmt: '200',
+      Barcode1: 'BC1XX', Barcode2: 'BC2YY', Barcode3: 'BC3ZZ',
+      ExpireDate: '2026/01/10',
+      PaymentType: 'BARCODE_BARCODE', TradeDate: '2026/01/01 12:00:00',
+    }
+    params.CheckMacValue = await ecpayCheckMacValue(params, SANDBOX.HashKey, SANDBOX.HashIV)
+    const parsed = await ecpayPaymentAdapter.parseWebhook(ecpayWebhookReq(params), env)
+    expect(parsed.ok).toBe(true)
+    expect(parsed.payment_info?.method).toBe('barcode')
+    expect(parsed.payment_info?.barcode_1).toBe('BC1XX')
+    expect(parsed.payment_info?.barcode_3).toBe('BC3ZZ')
+  })
+
   it('successResponse 是 plain text "1|OK"', async () => {
     const r = ecpayPaymentAdapter.successResponse()
     expect(r.headers.get('Content-Type')).toContain('text/plain')
@@ -273,6 +327,35 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
       `SELECT COUNT(*) AS c FROM audit_log WHERE event_type = 'payment.status.change' AND user_id = ?`,
     ).bind(u.id).first()
     expect(cnt.c).toBe(1)
+  })
+
+  it('checkout → ATM 取號 webhook → metadata.payment_info 寫進 intent', async () => {
+    const u = await seedUser({ email: 'atm-e2e@x' })
+    await setUserKycStatus(env, u.id, { status: KYC_STATUS.VERIFIED, vendor: 'mock' })
+    const tok = await userToken(u.id)
+    const co = await checkoutHandler({
+      request: bearerJson('POST', 'https://chiyigo.com/api/auth/payments/checkout/ecpay', tok,
+        { amount: 500 }), env,
+    })
+    const { vendor_intent_id, intent_id } = await co.json()
+
+    const params = {
+      MerchantID: '2000132', MerchantTradeNo: vendor_intent_id,
+      RtnCode: '2', RtnMsg: 'ATM 取號成功', TradeNo: 'TN_ATM_E2E',
+      TradeAmt: '500', BankCode: '004', vAccount: '9990001234567890',
+      ExpireDate: '2026/01/15',
+      PaymentType: 'ATM_TAISHIN', TradeDate: '2026/01/01 12:00:00',
+    }
+    params.CheckMacValue = await ecpayCheckMacValue(params, SANDBOX.HashKey, SANDBOX.HashIV)
+    const wh = await webhookHandler({
+      request: ecpayWebhookReq(params), env, params: { vendor: 'ecpay' },
+    })
+    expect(await wh.text()).toBe('1|OK')
+
+    const intent = await getPaymentIntent(env, { id: intent_id })
+    expect(intent.status).toBe(PAYMENT_STATUS.PROCESSING)
+    expect(intent.metadata?.payment_info?.method).toBe('atm')
+    expect(intent.metadata?.payment_info?.v_account).toBe('9990001234567890')
   })
 
   it('簽章錯 → 回 "0|signature_invalid" + audit warn', async () => {

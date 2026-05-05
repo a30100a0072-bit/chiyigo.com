@@ -117,22 +117,64 @@ export const ecpayPaymentAdapter = {
     }
 
     const rtnCode = String(params.RtnCode ?? '')
+
+    // ── 取號通知（PaymentInfoURL 場景）vs 付款結果通知（ReturnURL 場景）── //
+    //
+    // ECPay AIO 同一個 URL 可同時作 ReturnURL + PaymentInfoURL，依 payload 區分：
+    //
+    //  - 付款成功（信用卡 / 已完成 ATM/CVS 付款）：RtnCode=1
+    //  - ATM 取號成功（user 選 ATM、ECPay 配 V 帳號 → 等待繳費）：
+    //      RtnCode=2     + BankCode + vAccount + ExpireDate
+    //  - CVS 代碼取號成功：
+    //      RtnCode=10100073 + PaymentNo + ExpireDate
+    //  - Barcode 取號成功：
+    //      RtnCode=10100073 + Barcode1/Barcode2/Barcode3 + ExpireDate
+    //  - 失敗：其他 RtnCode
+
+    const hasAtmInfo     = !!(params.BankCode && params.vAccount)
+    const hasCvsInfo     = !!params.PaymentNo
+    const hasBarcodeInfo = !!params.Barcode1
+    const isCodeIssued   = rtnCode === '2' || rtnCode === '10100073'
+                          || hasAtmInfo || hasCvsInfo || hasBarcodeInfo
+
     let status
     if (rtnCode === '1') {
       status = PAYMENT_STATUS.SUCCEEDED
-    } else if (rtnCode === '10100073' || rtnCode === '2') {
-      // 10100073 = ATM/CVS 第一階段已取號等待付款（PaymentInfoURL 通知）
-      // 2 = 部分系統回 processing
+    } else if (isCodeIssued) {
       status = PAYMENT_STATUS.PROCESSING
     } else {
       status = PAYMENT_STATUS.FAILED
     }
 
-    // event_id：TradeNo（ECPay 唯一交易編號）；retry 同 TradeNo → UNIQUE dedup
-    // 沒 TradeNo（極少數 ATM 取號通知）→ 退回 MerchantTradeNo + RtnCode 組合
-    const eventId = params.TradeNo
-      ? String(params.TradeNo)
-      : `${params.MerchantTradeNo}_${rtnCode}`
+    // 取號類事件 → 把繳款資訊抽成 payment_info（給 webhook handler 寫進 metadata）
+    let paymentInfo = null
+    if (status === PAYMENT_STATUS.PROCESSING) {
+      paymentInfo = {}
+      if (hasAtmInfo) {
+        paymentInfo.method      = 'atm'
+        paymentInfo.bank_code   = String(params.BankCode)
+        paymentInfo.v_account   = String(params.vAccount)
+      } else if (hasCvsInfo) {
+        paymentInfo.method      = 'cvs'
+        paymentInfo.payment_no  = String(params.PaymentNo)
+      } else if (hasBarcodeInfo) {
+        paymentInfo.method      = 'barcode'
+        paymentInfo.barcode_1   = String(params.Barcode1 ?? '')
+        paymentInfo.barcode_2   = String(params.Barcode2 ?? '')
+        paymentInfo.barcode_3   = String(params.Barcode3 ?? '')
+      }
+      if (params.ExpireDate) paymentInfo.expire_date = String(params.ExpireDate)
+    }
+
+    // event_id：付款成功用 TradeNo；取號通知用 MerchantTradeNo + RtnCode（避免跟付款 TradeNo 撞）
+    let eventId
+    if (status === PAYMENT_STATUS.SUCCEEDED && params.TradeNo) {
+      eventId = String(params.TradeNo)
+    } else if (params.TradeNo) {
+      eventId = `${params.TradeNo}_${rtnCode}`
+    } else {
+      eventId = `${params.MerchantTradeNo}_${rtnCode}`
+    }
 
     return {
       ok:               true,
@@ -143,7 +185,10 @@ export const ecpayPaymentAdapter = {
       amount_subunit:   params.TradeAmt != null ? Number(params.TradeAmt) : null,
       amount_raw:       null,
       currency:         'TWD',
-      failure_reason:   rtnCode === '1' ? null : (params.RtnMsg ? String(params.RtnMsg) : `RtnCode=${rtnCode}`),
+      failure_reason:   (status === PAYMENT_STATUS.FAILED)
+        ? (params.RtnMsg ? String(params.RtnMsg) : `RtnCode=${rtnCode}`)
+        : null,
+      payment_info:     paymentInfo,
       raw_body:         rawBody,
     }
   },
@@ -219,6 +264,67 @@ function formatTradeDate(d) {
 function truncate(s, max) {
   s = String(s ?? '')
   return s.length > max ? s.slice(0, max) : s
+}
+
+// ── 退款（信用卡）───────────────────────────────────────────────
+//
+// ECPay AIO 信用卡退款走 `/CreditDetail/DoAction`，**只支援信用卡**。
+// ATM/CVS 退款必須 ECPay 後台手動處理（沒 API），不在本 helper 範圍。
+//
+// Action 類型：
+//   - C  ─ 取消授權（user 還沒請款）
+//   - R  ─ 退刷（user 已請款 → 全額退）
+//   - E  ─ 放棄（已請款但未撥款，部分情境）
+//
+// 我們提供 status=succeeded 的 intent 統一走 R（退刷）；ECPay 內部會選對 C 還是 E。
+
+const ECPAY_REFUND_STAGE_URL = 'https://payment-stage.ecpay.com.tw/CreditDetail/DoAction'
+const ECPAY_REFUND_PROD_URL  = 'https://payment.ecpay.com.tw/CreditDetail/DoAction'
+
+/**
+ * 對 ECPay call refund API。
+ *
+ * @param {object} env
+ * @param {object} args
+ * @param {string} args.merchantTradeNo  我方 unique（payment_intents.vendor_intent_id）
+ * @param {string} args.tradeNo          ECPay 唯一交易編號（從 metadata 或 audit log 撈）
+ * @param {number} args.totalAmount      退款金額（整數 TWD），通常 = TradeAmt 全額
+ * @param {string} [args.action='R']     C / R / E
+ *
+ * @returns {Promise<{ ok: boolean, rtn_code?: string, rtn_msg?: string, raw?: string }>}
+ */
+export async function ecpayRefund(env, { merchantTradeNo, tradeNo, totalAmount, action = 'R' }) {
+  const { merchantId, hashKey, hashIV, isProd } = getCreds(env)
+  const url = isProd ? ECPAY_REFUND_PROD_URL : ECPAY_REFUND_STAGE_URL
+
+  const fields = {
+    MerchantID:       merchantId,
+    MerchantTradeNo:  String(merchantTradeNo),
+    TradeNo:          String(tradeNo),
+    Action:           action,
+    TotalAmount:      String(Math.round(Number(totalAmount))),
+    PlatformID:       '',  // ECPay 子商店欄位，留空
+  }
+  fields.CheckMacValue = await ecpayCheckMacValue(fields, hashKey, hashIV)
+
+  const body = new URLSearchParams(fields).toString()
+  const r = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+  const text = await r.text()
+
+  // ECPay 回 form-urlencoded：RtnCode=1&RtnMsg=xxx 或純文字 1|XXX 視 endpoint 而定
+  // /CreditDetail/DoAction 回的是 form-urlencoded
+  const rtn = Object.fromEntries(new URLSearchParams(text))
+  const rtnCode = String(rtn.RtnCode ?? '')
+  return {
+    ok:        rtnCode === '1',
+    rtn_code:  rtnCode,
+    rtn_msg:   rtn.RtnMsg ? String(rtn.RtnMsg) : null,
+    raw:       text,
+  }
 }
 
 /**

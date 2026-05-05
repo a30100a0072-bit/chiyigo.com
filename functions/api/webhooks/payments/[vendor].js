@@ -103,6 +103,11 @@ export async function onRequestPost({ request, env, params }) {
     })
   }
 
+  // 若 adapter 回了 payment_info（ATM V 帳號 / CVS 代碼 / 條碼）→ merge 到 metadata.payment_info
+  if (parsed.payment_info && intent?.id) {
+    await mergeMetadata(env, intent.id, { payment_info: parsed.payment_info })
+  }
+
   await safeUserAudit(env, {
     event_type: 'payment.status.change',
     severity:   'critical',
@@ -121,6 +126,20 @@ export async function onRequestPost({ request, env, params }) {
   })
 
   return successFn()
+}
+
+async function mergeMetadata(env, intentId, patch) {
+  const row = await env.chiyigo_db
+    .prepare(`SELECT metadata FROM payment_intents WHERE id = ?`)
+    .bind(intentId).first()
+  let current = {}
+  if (row?.metadata) {
+    try { current = JSON.parse(row.metadata) ?? {} } catch { current = {} }
+  }
+  const merged = { ...current, ...patch }
+  await env.chiyigo_db
+    .prepare(`UPDATE payment_intents SET metadata = ?, updated_at = datetime('now') WHERE id = ?`)
+    .bind(JSON.stringify(merged), intentId).run()
 }
 
 async function sha256Hex(s) {

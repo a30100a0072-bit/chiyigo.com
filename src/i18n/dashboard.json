@@ -231,7 +231,12 @@
     "payment_kind_subscription": "訂閱",
     "payment_kind_withdraw": "提款",
     "payment_kind_refund": "退款",
-    "payment_for_requisition": "對應接案"
+    "payment_for_requisition": "對應接案",
+    "payment_info_atm_bank": "銀行代號",
+    "payment_info_atm_account": "虛擬帳號",
+    "payment_info_cvs_no": "超商繳費代碼",
+    "payment_info_barcode": "超商條碼",
+    "payment_info_expire": "繳費期限"
   },
   "en": {
     "back_home": "Back to Home",
@@ -465,7 +470,12 @@
     "payment_kind_subscription": "Subscription",
     "payment_kind_withdraw": "Withdraw",
     "payment_kind_refund": "Refund",
-    "payment_for_requisition": "For requisition"
+    "payment_for_requisition": "For requisition",
+    "payment_info_atm_bank": "Bank code",
+    "payment_info_atm_account": "Virtual account",
+    "payment_info_cvs_no": "CVS payment code",
+    "payment_info_barcode": "CVS barcode",
+    "payment_info_expire": "Expires"
   },
   "ja": {
     "back_home": "ホームに戻る",
@@ -699,7 +709,12 @@
     "payment_kind_subscription": "サブスク",
     "payment_kind_withdraw": "出金",
     "payment_kind_refund": "返金",
-    "payment_for_requisition": "対応案件"
+    "payment_for_requisition": "対応案件",
+    "payment_info_atm_bank": "銀行コード",
+    "payment_info_atm_account": "仮想口座",
+    "payment_info_cvs_no": "コンビニ支払コード",
+    "payment_info_barcode": "コンビニバーコード",
+    "payment_info_expire": "支払期限"
   },
   "ko": {
     "back_home": "홈으로 돌아가기",
@@ -933,6 +948,11 @@
     "payment_kind_subscription": "구독",
     "payment_kind_withdraw": "출금",
     "payment_kind_refund": "환불",
-    "payment_for_requisition": "대응 의뢰"
+    "payment_for_requisition": "대응 의뢰",
+    "payment_info_atm_bank": "은행 코드",
+    "payment_info_atm_account": "가상 계좌",
+    "payment_info_cvs_no": "편의점 결제 코드",
+    "payment_info_barcode": "편의점 바코드",
+    "payment_info_expire": "납부 기한"
   }
 }

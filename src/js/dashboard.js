@@ -1590,6 +1590,28 @@ function renderPayments(items) {
       ? `<p class="text-xs text-gray-500 mt-0.5">${T('payment_for_requisition')} #${esc(reqId)}</p>`
       : '';
     const when = p.created_at ? formatRelative(p.created_at) : '—';
+
+    // ATM/CVS/條碼 取號資訊（status=processing 才會有）
+    let infoBlock = '';
+    const info = metaParsed?.payment_info;
+    if (info && p.status === 'processing') {
+      let lines = '';
+      if (info.method === 'atm' && info.bank_code && info.v_account) {
+        lines = `<p>${T('payment_info_atm_bank')}：<span class="font-mono text-amber-300">${esc(info.bank_code)}</span></p>`
+              + `<p>${T('payment_info_atm_account')}：<span class="font-mono text-amber-300 select-all">${esc(info.v_account)}</span></p>`;
+      } else if (info.method === 'cvs' && info.payment_no) {
+        lines = `<p>${T('payment_info_cvs_no')}：<span class="font-mono text-amber-300 select-all">${esc(info.payment_no)}</span></p>`;
+      } else if (info.method === 'barcode') {
+        lines = `<p>${T('payment_info_barcode')}：</p>`
+              + `<p class="font-mono text-amber-300 select-all break-all">${esc(info.barcode_1 || '')}</p>`
+              + `<p class="font-mono text-amber-300 select-all break-all">${esc(info.barcode_2 || '')}</p>`
+              + `<p class="font-mono text-amber-300 select-all break-all">${esc(info.barcode_3 || '')}</p>`;
+      }
+      if (lines) {
+        const expire = info.expire_date ? `<p class="text-gray-500">${T('payment_info_expire')}：${esc(info.expire_date)}</p>` : '';
+        infoBlock = `<div class="mt-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs space-y-1">${lines}${expire}</div>`;
+      }
+    }
     return `
       <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
@@ -1600,6 +1622,7 @@ function renderPayments(items) {
           </div>
           <span class="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusClass}">${esc(statusLabel)}</span>
         </div>
+        ${infoBlock}
       </div>`;
   }).join('');
 }

@@ -38,7 +38,8 @@ export const SCOPES = Object.freeze({
   ADMIN_USERS:   'admin:users',
   ADMIN_REVOKE:  'admin:revoke',
   ADMIN_AUDIT:   'admin:audit',
-  ADMIN_CLIENTS: 'admin:clients',  // oauth_clients CRUD（Phase C-1 Wave 3 用）
+  ADMIN_CLIENTS:  'admin:clients',  // oauth_clients CRUD（Phase C-1 Wave 3 用）
+  ADMIN_PAYMENTS: 'admin:payments', // 金流對帳 + 退款（Phase F-2 wave 4 用）
 
   // 高權限（Phase C-3）— **絕對不出現在 ROLE_BASE_SCOPES**，只能透過 step-up flow 取得
   ELEVATED_ACCOUNT:   'elevated:account',     // 改密碼 / 改 email / 刪帳號
@@ -75,11 +76,11 @@ const ROLE_BASE_SCOPES = {
   moderator: [SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE],
   admin: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
-    SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS,
+    SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
   ],
   developer: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
-    SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS,
+    SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
   ],
 }
 
