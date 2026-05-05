@@ -28,6 +28,7 @@
     "globals": "^15.15.0",
     "handlebars": "^4.7.9",
     "tailwindcss": "^3.4.17",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "wrangler": "^4.87.0"
   }
 }
