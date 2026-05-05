@@ -55,6 +55,9 @@ const TASKS = [
 
   // kyc_webhook_events: 留 90 天（dedupe 視窗 — vendor 重送窗口都不會這麼長）
   { name: 'kyc_webhook_events',  sql: `DELETE FROM kyc_webhook_events  WHERE processed_at < datetime('now', '-90 days')` },
+
+  // payment_webhook_events: 留 90 天（dedupe + 對帳追溯；同 KYC pattern）
+  { name: 'payment_webhook_events', sql: `DELETE FROM payment_webhook_events WHERE processed_at < datetime('now', '-90 days')` },
 ]
 
 export async function onRequestPost({ request, env }) {

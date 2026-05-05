@@ -268,6 +268,35 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS payment_intents (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  vendor              TEXT    NOT NULL,
+  vendor_intent_id    TEXT    NOT NULL,
+  kind                TEXT    NOT NULL DEFAULT 'deposit',
+  status              TEXT    NOT NULL DEFAULT 'pending',
+  amount_subunit      INTEGER,
+  amount_raw          TEXT,
+  currency            TEXT    NOT NULL,
+  metadata            TEXT,
+  failure_reason      TEXT,
+  created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(vendor, vendor_intent_id)
+);
+
+CREATE TABLE IF NOT EXISTS payment_webhook_events (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor        TEXT    NOT NULL,
+  event_id      TEXT    NOT NULL,
+  intent_id     INTEGER REFERENCES payment_intents(id) ON DELETE SET NULL,
+  user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status_to     TEXT,
+  payload_hash  TEXT,
+  processed_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(vendor, event_id)
+);
+
 CREATE TABLE IF NOT EXISTS auth_codes (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   code_hash       TEXT    NOT NULL UNIQUE,
