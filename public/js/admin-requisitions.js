@@ -70,12 +70,13 @@ let debounceTimer
 
 function getToken() { return sessionStorage.getItem(ACCESS_TOKEN_KEY) }
 
-// OIDC RP-Initiated Logout：跳 chiyigo end_session_endpoint（同 auth-ui.js）
-function logout() {
+async function logout() {
+  const token = getToken()
+  if (token) {
+    await fetch('/api/auth/logout', { method:'POST', credentials:'include', headers: { 'Authorization': `Bearer ${token}` } }).catch(() => {})
+  }
   sessionStorage.clear()
-  const url = '/api/auth/oauth/end-session?post_logout_redirect_uri=' +
-              encodeURIComponent('https://chiyigo.com/login')
-  location.href = url
+  location.href = '/login.html'
 }
 document.getElementById('logout-btn').addEventListener('click', logout)
 

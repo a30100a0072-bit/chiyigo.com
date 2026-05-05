@@ -38,6 +38,7 @@ const BTN_IGNORE_PATTERNS = [
   /^cancel-/i,                  // form cancel button
   /^close-modal-/i,             // bootstrap-style close button
   /-skeleton-btn$/i,            // skeleton loader 假按鈕
+  /^passkey-login-btn$/,        // handler 在 auth-ui.js（非 login.js）
 ]
 
 const warnings = []

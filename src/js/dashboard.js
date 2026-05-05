@@ -31,6 +31,9 @@ function applyLangD(lang) {
   if (createdEl?.dataset.raw) createdEl.textContent = formatDate(createdEl.dataset.raw);
   // 需求單列表：以最後一次 fetch 結果重畫（變數宣告在後段，用 window 規避 TDZ）
   if (window._lastRequisitions) renderRequisitions(window._lastRequisitions);
+  // Phase D-3 動態 row 切語系跟著重畫
+  if (window._lastDevices)  renderDevices(window._lastDevices);
+  if (window._lastPasskeys) renderPasskeys(window._lastPasskeys);
   // 刪帳按鈕 / 2FA enable label 隨 hasPassword 動態切換，需在 i18n 套用後重畫
   if (typeof window.__hasPassword !== 'undefined') {
     if (typeof renderDeleteSection === 'function') renderDeleteSection(window.__hasPassword);
@@ -173,6 +176,11 @@ async function loadProfile() {
 
     // 需求單區塊
     loadRequisitions();
+
+    // Phase D-3：裝置 + Passkey
+    window.__totpEnabled = !!data.totp_enabled;
+    loadDevices();
+    loadPasskeys();
 
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('user-card').classList.remove('hidden');
@@ -506,6 +514,7 @@ async function confirmEnable2FA() {
       `<code class="block text-center text-xs font-mono bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-2 py-1.5 text-gray-300 select-all">${c}</code>`
     ).join('');
     render2FASection(true);
+    window.__totpEnabled = true;
     document.getElementById('tfa-setup-panel').classList.add('hidden');
     document.getElementById('tfa-backup-panel').classList.remove('hidden');
   } catch (e) {
@@ -931,6 +940,339 @@ async function submitDeleteAccount() {
   resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
 })();
 
+// ── Phase D-3：裝置 + Passkey 區塊 ──────────────────────────
+
+// base64url <-> ArrayBuffer（瀏覽器 WebAuthn ceremony 用，不引入 lib）
+function b64urlToBuf(s) {
+  const pad = '='.repeat((4 - s.length % 4) % 4);
+  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+function bufToB64url(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function formatRelative(iso) {
+  if (!iso) return '—';
+  const t = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
+  if (Number.isNaN(t.getTime())) return iso;
+  const diffMs = Date.now() - t.getTime();
+  const min = Math.round(diffMs / 60000);
+  if (min < 1)  return curLangD === 'zh-TW' ? '剛剛'    : curLangD === 'ja' ? 'たった今' : curLangD === 'ko' ? '방금'    : 'just now';
+  if (min < 60) return curLangD === 'zh-TW' ? `${min} 分鐘前` : curLangD === 'ja' ? `${min}分前`  : curLangD === 'ko' ? `${min}분 전` : `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24)  return curLangD === 'zh-TW' ? `${hr} 小時前` : curLangD === 'ja' ? `${hr}時間前` : curLangD === 'ko' ? `${hr}시간 전`: `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  if (day < 30) return curLangD === 'zh-TW' ? `${day} 天前`  : curLangD === 'ja' ? `${day}日前`  : curLangD === 'ko' ? `${day}일 전` : `${day}d ago`;
+  return formatDate(iso);
+}
+
+async function loadDevices() {
+  const sec  = document.getElementById('devices-section');
+  const list = document.getElementById('devices-list');
+  if (!sec || !list) return;
+  sec.classList.remove('hidden');
+  try {
+    const { devices } = await apiFetch('/api/auth/devices');
+    window._lastDevices = devices ?? [];
+    renderDevices(window._lastDevices);
+  } catch (e) {
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+  }
+}
+
+function renderDevices(devices) {
+  const list = document.getElementById('devices-list');
+  if (!list) return;
+  if (!devices.length) {
+    list.innerHTML = `<p class="text-xs text-gray-500">${T('devices_empty')}</p>`;
+    return;
+  }
+  list.innerHTML = devices.map(d => {
+    const isWeb = d.device_uuid === null || d.device_uuid === undefined;
+    const label = isWeb ? T('device_label_web') : `${T('device_label_app')} · ${esc(String(d.device_uuid).slice(0, 8))}`;
+    const last  = formatRelative(d.last_seen);
+    const dataAttr = isWeb ? 'data-device-uuid=""' : `data-device-uuid="${esc(d.device_uuid)}"`;
+    return `
+      <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3 flex items-center justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-white truncate">${label}</p>
+          <p class="text-xs text-gray-500 mt-0.5">${T('device_last_seen_label')}：${esc(last)} · ${d.active_count} ${T('device_active_label')}</p>
+        </div>
+        <button type="button" data-action="logout-device" ${dataAttr}
+          class="shrink-0 px-3 py-1.5 rounded-lg border border-red-500/25 bg-red-500/5 hover:bg-red-500/10 text-red-300 text-xs font-semibold transition-all">
+          ${T('device_logout_btn')}
+        </button>
+      </div>`;
+  }).join('');
+}
+
+async function logoutDevice(deviceUuidAttr) {
+  const isWeb = deviceUuidAttr === '';
+  const device_uuid = isWeb ? null : deviceUuidAttr;
+  try {
+    await apiFetch('/api/auth/devices/logout', {
+      method: 'POST',
+      body:   JSON.stringify({ device_uuid }),
+    });
+    showBindToast(T('device_logout_success'), 'ok');
+    if (isWeb) {
+      // 撤的就是當下 web session → 自己也清掉
+      try { sessionStorage.removeItem('access_token'); } catch (_) {}
+      try { if ('BroadcastChannel' in window) new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' }); } catch (_) {}
+      setTimeout(() => { location.replace('/login.html?logout=device'); }, 800);
+      return;
+    }
+    loadDevices();
+  } catch (e) {
+    showBindToast(tApiError(e, T('net_err')), 'err');
+  }
+}
+
+function passkeySupported() {
+  return typeof window.PublicKeyCredential === 'function' && window.isSecureContext !== false;
+}
+
+async function loadPasskeys() {
+  const sec  = document.getElementById('passkeys-section');
+  const list = document.getElementById('passkeys-list');
+  const unsup = document.getElementById('passkey-unsupported');
+  const addBtn = document.getElementById('passkey-add-btn');
+  if (!sec || !list) return;
+  sec.classList.remove('hidden');
+
+  if (!passkeySupported()) {
+    if (unsup) unsup.classList.remove('hidden');
+    if (addBtn) addBtn.disabled = true;
+  }
+
+  try {
+    const { credentials } = await apiFetch('/api/auth/webauthn/credentials');
+    window._lastPasskeys = credentials ?? [];
+    renderPasskeys(window._lastPasskeys);
+  } catch (e) {
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+  }
+}
+
+function renderPasskeys(creds) {
+  const list = document.getElementById('passkeys-list');
+  if (!list) return;
+  if (!creds.length) {
+    list.innerHTML = `<p class="text-xs text-gray-500">${T('passkeys_empty')}</p>`;
+    return;
+  }
+  list.innerHTML = creds.map(c => {
+    const nickname = c.nickname || T('passkey_default_nickname');
+    const lastUsed = c.last_used_at ? formatRelative(c.last_used_at) : T('passkey_never_used');
+    const transports = (c.transports ?? []).join(', ') || '—';
+    return `
+      <div id="pk-row-${c.id}" class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium text-white truncate" id="pk-nickname-${c.id}">${esc(nickname)}</p>
+            <p class="text-xs text-gray-500 mt-0.5">${T('passkey_last_used_label')}：${esc(lastUsed)} · ${esc(transports)}</p>
+          </div>
+          <div class="shrink-0 flex gap-2">
+            <button type="button" data-action="passkey-rename-open" data-passkey-id="${c.id}"
+              class="px-3 py-1.5 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-300 text-xs font-semibold transition-all">
+              ${T('passkey_rename_btn')}
+            </button>
+            <button type="button" data-action="passkey-remove-open" data-passkey-id="${c.id}"
+              class="px-3 py-1.5 rounded-lg border border-red-500/25 bg-red-500/5 hover:bg-red-500/10 text-red-300 text-xs font-semibold transition-all">
+              ${T('passkey_remove_btn')}
+            </button>
+          </div>
+        </div>
+        <div id="pk-rename-${c.id}" class="hidden mt-3 space-y-2">
+          <input id="pk-name-${c.id}" type="text" maxlength="64" value="${esc(nickname)}"
+            placeholder="${T('passkey_rename_ph')}"
+            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40" />
+          <p id="pk-rename-msg-${c.id}" class="hidden text-xs"></p>
+          <div class="flex gap-2">
+            <button type="button" data-action="passkey-rename-cancel" data-passkey-id="${c.id}"
+              class="flex-1 py-2 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
+              ${T('passkey_rename_cancel')}
+            </button>
+            <button type="button" data-action="passkey-rename-save" data-passkey-id="${c.id}"
+              class="flex-1 py-2 rounded-lg border border-violet-500/40 bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              ${T('passkey_rename_save')}
+            </button>
+          </div>
+        </div>
+        <div id="pk-remove-${c.id}" class="hidden mt-3 space-y-2">
+          <p class="text-xs text-amber-300">${T('passkey_remove_hint')}</p>
+          <input id="pk-otp-${c.id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
+            placeholder="${T('passkey_remove_otp_ph')}"
+            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
+          <p id="pk-msg-${c.id}" class="hidden text-xs"></p>
+          <div class="flex gap-2">
+            <button type="button" data-action="passkey-remove-cancel" data-passkey-id="${c.id}"
+              class="flex-1 py-2 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
+              ${T('passkey_remove_cancel')}
+            </button>
+            <button type="button" data-action="passkey-remove-confirm" data-passkey-id="${c.id}"
+              class="flex-1 py-2 rounded-lg border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-300 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              ${T('passkey_remove_confirm')}
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openPasskeyRename(id) {
+  document.getElementById(`pk-remove-${id}`)?.classList.add('hidden');
+  document.getElementById(`pk-rename-${id}`)?.classList.remove('hidden');
+  const inp = document.getElementById(`pk-name-${id}`);
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+function cancelPasskeyRename(id) {
+  document.getElementById(`pk-rename-${id}`)?.classList.add('hidden');
+  document.getElementById(`pk-rename-msg-${id}`)?.classList.add('hidden');
+}
+
+async function savePasskeyRename(id) {
+  const inp = document.getElementById(`pk-name-${id}`);
+  const msg = document.getElementById(`pk-rename-msg-${id}`);
+  const btns = document.querySelectorAll(`[data-passkey-id="${id}"]`);
+  const showMsg = (text, type) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-green-400');
+    msg.classList.remove('hidden');
+  };
+  const nickname = (inp?.value ?? '').trim();
+  if (!nickname) { showMsg(T('passkey_rename_empty'), 'err'); return; }
+  btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = true; });
+  try {
+    await apiFetch(`/api/auth/webauthn/credentials/${id}`, {
+      method: 'PATCH',
+      body:   JSON.stringify({ nickname }),
+    });
+    if (Array.isArray(window._lastPasskeys)) {
+      const idx = window._lastPasskeys.findIndex(c => String(c.id) === String(id));
+      if (idx >= 0) window._lastPasskeys[idx] = { ...window._lastPasskeys[idx], nickname };
+      renderPasskeys(window._lastPasskeys);
+    }
+    showBindToast(T('passkey_rename_success'), 'ok');
+  } catch (e) {
+    btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; });
+    showMsg(tApiError(e, T('passkey_rename_fail')), 'err');
+  }
+}
+
+function openPasskeyRemove(id) {
+  if (!window.__totpEnabled) {
+    showBindToast(T('passkey_remove_need_2fa'), 'err');
+    const tfa = document.getElementById('tfa-section');
+    if (tfa) tfa.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  document.getElementById(`pk-rename-${id}`)?.classList.add('hidden');
+  const panel = document.getElementById(`pk-remove-${id}`);
+  panel?.classList.remove('hidden');
+  document.getElementById(`pk-otp-${id}`)?.focus();
+}
+
+function cancelPasskeyRemove(id) {
+  document.getElementById(`pk-remove-${id}`)?.classList.add('hidden');
+  const otp = document.getElementById(`pk-otp-${id}`);
+  if (otp) otp.value = '';
+  document.getElementById(`pk-msg-${id}`)?.classList.add('hidden');
+}
+
+async function confirmPasskeyRemove(id) {
+  const otpEl = document.getElementById(`pk-otp-${id}`);
+  const msg   = document.getElementById(`pk-msg-${id}`);
+  const btns  = document.querySelectorAll(`[data-passkey-id="${id}"]`);
+  const otp   = (otpEl?.value || '').trim();
+  const showMsg = (text, type) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-green-400');
+    msg.classList.remove('hidden');
+  };
+  if (!/^\d{6}$/.test(otp)) { showMsg(T('totp_err6'), 'err'); return; }
+  btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = true; });
+  try {
+    const stepRes = await apiFetch('/api/auth/step-up', {
+      method: 'POST',
+      body: JSON.stringify({ scope: 'elevated:account', for_action: 'remove_passkey', otp_code: otp }),
+    });
+    const stepUpToken = stepRes?.step_up_token;
+    if (!stepUpToken) { showMsg(T('net_err'), 'err'); btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; }); return; }
+    await apiFetch(`/api/auth/webauthn/credentials/${id}`, {
+      method:  'DELETE',
+      headers: { Authorization: 'Bearer ' + stepUpToken },
+    });
+    showBindToast(T('passkey_remove_success'), 'ok');
+    loadPasskeys();
+  } catch (e) {
+    btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; });
+    showMsg(tApiError(e, T('passkey_remove_fail')), 'err');
+  }
+}
+
+async function addPasskey() {
+  if (!passkeySupported()) return;
+  const btn = document.getElementById('passkey-add-btn');
+  const msg = document.getElementById('passkey-add-msg');
+  const showMsg = (text, type) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-green-400');
+    msg.classList.remove('hidden');
+  };
+  if (btn) btn.disabled = true;
+  showMsg(T('passkey_adding'), 'ok');
+  try {
+    const opts = await apiFetch('/api/auth/webauthn/register-options', { method: 'POST', body: '{}' });
+    const publicKey = {
+      ...opts,
+      challenge: b64urlToBuf(opts.challenge),
+      user: { ...opts.user, id: b64urlToBuf(opts.user.id) },
+      excludeCredentials: (opts.excludeCredentials ?? []).map(c => ({ ...c, id: b64urlToBuf(c.id) })),
+    };
+    let cred;
+    try { cred = await navigator.credentials.create({ publicKey }); }
+    catch (e) {
+      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') showMsg(T('passkey_add_cancelled'), 'err');
+      else showMsg(`${T('passkey_add_fail')}：${e?.message ?? e}`, 'err');
+      if (btn) btn.disabled = false;
+      return;
+    }
+    const r = cred.response;
+    const responseJson = {
+      id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
+      response: {
+        clientDataJSON: bufToB64url(r.clientDataJSON),
+        attestationObject: bufToB64url(r.attestationObject),
+        transports: typeof r.getTransports === 'function' ? r.getTransports() : [],
+      },
+      clientExtensionResults: typeof cred.getClientExtensionResults === 'function' ? cred.getClientExtensionResults() : {},
+      authenticatorAttachment: cred.authenticatorAttachment ?? undefined,
+    };
+    await apiFetch('/api/auth/webauthn/register-verify', {
+      method: 'POST',
+      body:   JSON.stringify({ response: responseJson, nickname: T('passkey_default_nickname') }),
+    });
+    showMsg(T('passkey_add_success'), 'ok');
+    loadPasskeys();
+  } catch (e) {
+    showMsg(tApiError(e, T('passkey_add_fail')), 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ── Phase C-3 unified click delegation ──
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
@@ -944,6 +1286,7 @@ document.addEventListener('click', e => {
   if (t.id === 'resend-btn')       return sendVerification();
   if (t.id === 'del-open-btn')     return showDeleteForm();
   if (t.id === 'del-submit-btn')   return submitDeleteAccount();
+  if (t.id === 'passkey-add-btn')  return addPasskey();
   // data-action
   const a = t.dataset.action;
   if (a === 'logout')              return logout();
@@ -952,6 +1295,14 @@ document.addEventListener('click', e => {
   if (a === 'close-tfa-backup')    return closeTfaBackup();
   if (a === 'hide-delete-form')    return hideDeleteForm();
   if (a === 'submit-change-password') return submitChangePassword();
+  // Phase D-3
+  if (a === 'logout-device')           return logoutDevice(t.dataset.deviceUuid ?? '');
+  if (a === 'passkey-remove-open')     return openPasskeyRemove(t.dataset.passkeyId);
+  if (a === 'passkey-remove-cancel')   return cancelPasskeyRemove(t.dataset.passkeyId);
+  if (a === 'passkey-remove-confirm')  return confirmPasskeyRemove(t.dataset.passkeyId);
+  if (a === 'passkey-rename-open')     return openPasskeyRename(t.dataset.passkeyId);
+  if (a === 'passkey-rename-cancel')   return cancelPasskeyRename(t.dataset.passkeyId);
+  if (a === 'passkey-rename-save')     return savePasskeyRename(t.dataset.passkeyId);
   // dynamic content
   if (t.dataset.revokeId) return armRevoke(Number(t.dataset.revokeId));
   if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);

@@ -32,9 +32,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/login.css" />
   <link rel="stylesheet" href="/css/sidebar-auth.css" />
-  <!-- Turnstile (反 bot)：sitekey 預設用 Cloudflare 測試 key（永遠通過），
-       上正式 key 後改 data-sitekey 即可（見 MANUAL_TODO.md）-->
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 
@@ -243,12 +240,11 @@
                     </button>
                   </div>
                 </div>
-                <div class="cf-turnstile" data-sitekey="0x4AAAAAADISz6kSGZRC94TQ" data-theme="auto"></div>
                 <button type="submit" id="login-btn" class="submit-btn" data-i18n="login_btn">登入</button>
                 <a href="/forgot-password.html" class="forgot-link" data-i18n="forgot_link">忘記密碼？</a>
                 <div class="divider"><div class="divider-line"></div><span class="divider-text" data-i18n="divider_or">或</span><div class="divider-line"></div></div>
                 <button type="button" id="passkey-login-btn" class="oauth-btn passkey-btn" hidden>
-                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" style="width:20px;height:20px;flex-shrink:0">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/>
                   </svg>
                   <span data-i18n="login_passkey_btn">用 Passkey 登入</span>
@@ -299,7 +295,6 @@
                     </button>
                   </div>
                 </div>
-                <div class="cf-turnstile" data-sitekey="0x4AAAAAADISz6kSGZRC94TQ" data-theme="auto"></div>
                 <button type="submit" id="reg-btn" class="submit-btn" data-i18n="reg_btn">建立帳號</button>
                 <div class="divider"><div class="divider-line"></div><span class="divider-text" data-i18n="divider_or">或</span><div class="divider-line"></div></div>
                 <div class="oauth-grid">
