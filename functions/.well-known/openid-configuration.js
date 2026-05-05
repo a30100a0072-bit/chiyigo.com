@@ -42,10 +42,33 @@ const CONFIG = {
   claims_supported: [
     'sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'auth_time',
     'email', 'email_verified', 'name',
+    // Phase C-3：step_up_token 帶的 claim
+    'acr', 'amr', 'for_action', 'scope',
   ],
+
+  // Phase C-3 — Step-up authentication context references
+  // chiyigo 簽 step_up_token 時帶 acr=urn:chiyigo:loa:2 (pwd + TOTP)
+  // 未來 LOA-3 = pwd + WebAuthn passkey；LOA-1 = 純 pwd（暫未發行 acr 的常態 token）
+  acr_values_supported: ['urn:chiyigo:loa:2'],
+
+  // **不**支援 OIDC §5.5 claims request parameter（per-request claim 選擇）
+  // 我們的 id_token claim 由 scope 控制（profile / email），無 fine-grained 選擇
+  claims_parameter_supported:             false,
+
   // 標明本端點不支援的可選功能（client 不要嘗試）
   request_parameter_supported:            false,
   request_uri_parameter_supported:        false,
+
+  // ── 自訂 metadata（非 OIDC 標準，chiyigo 擴充）─────────────
+  // Phase C-3 step-up flow endpoint；RP 取得 step_up_token 用
+  // OIDC spec 沒定義這欄位，但發布給 RP 知道在哪要 elevated token
+  'urn:chiyigo:step_up_endpoint': `${ISSUER}/api/auth/step-up`,
+  'urn:chiyigo:step_up_scopes_supported': [
+    'elevated:account',
+    'elevated:payment',
+    'elevated:withdraw',
+    'elevated:wallet_op',
+  ],
 }
 
 export async function onRequestGet() {
