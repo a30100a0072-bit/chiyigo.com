@@ -18,6 +18,9 @@
   } else if (p.has('password_reset')) {
     showNotice('✓ 密碼重設成功！請使用新密碼登入。', 'ok');
     history.replaceState(null, '', '/login.html');
+  } else if (p.has('tfa_disabled')) {
+    showNotice('✓ 2FA 已停用。為了安全，所有裝置已登出，請重新登入。', 'ok');
+    history.replaceState(null, '', '/login.html');
   }
 })();
 

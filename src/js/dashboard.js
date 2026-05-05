@@ -531,7 +531,17 @@ async function confirmDisable2FA() {
       method: 'POST',
       body:   JSON.stringify({ otp_code: otp }),
     });
-    render2FASection(false);
+    // disable.js 後端會 bumpTokenVersion 撤所有 token；後續 API 必 401。
+    // 顯示 success 訊息 + 清 sessionStorage + broadcast logout（同步其他分頁），
+    // 再跳 login.html，由 login.js 接 ?tfa_disabled=1 顯示提示。
+    showTfaMsg(msg, T('disable_success'), 'ok');
+    try { sessionStorage.removeItem('access_token'); } catch (_) {}
+    try {
+      if ('BroadcastChannel' in window) {
+        new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' });
+      }
+    } catch (_) {}
+    setTimeout(() => { location.replace('/login.html?tfa_disabled=1'); }, 1500);
   } catch (e) {
     showTfaMsg(msg, tApiError(e, T('net_err')), 'err');
   }
