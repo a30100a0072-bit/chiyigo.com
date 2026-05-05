@@ -34,10 +34,12 @@ const ECPAY_STAGE_URL = 'https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/
 const ECPAY_PROD_URL  = 'https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5'
 
 // 沙箱公開 creds（env 沒設時 fallback）
+// ECPay 文件 v5：https://developers.ecpay.com.tw/?p=2856
+// 舊 creds 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被棄用 → 一律 CheckMacValue Error
 const SANDBOX_CREDS = {
-  merchantId: '2000132',
-  hashKey:    '5294y0726k67Nck0',
-  hashIV:     'v77hoKGq4kWxNNIS',
+  merchantId: '3002607',
+  hashKey:    'pwFHCqoQZGmho4w6',
+  hashIV:     'EkRm7iFT261dpevs',
 }
 
 function getCreds(env) {
