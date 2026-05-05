@@ -46,6 +46,9 @@ const TASKS = [
 
   // audit_log: 90 天（金流前未啟動，保險用）
   { name: 'audit_log',           sql: `DELETE FROM audit_log           WHERE created_at < datetime('now', '-90 days')` },
+
+  // ip_blacklist: 過期即刪（Phase E-4；24hr TTL，過期 row 對 query 無意義）
+  { name: 'ip_blacklist',        sql: `DELETE FROM ip_blacklist        WHERE expires_at < datetime('now')` },
 ]
 
 export async function onRequestPost({ request, env }) {

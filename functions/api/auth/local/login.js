@@ -22,6 +22,11 @@ import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
 import { checkRateLimit } from '../../../utils/rate-limit.js'
+import {
+  isIpBlacklisted,
+  getUserCooldownSeconds,
+  detectAndBlacklistCrossUserScan,
+} from '../../../utils/brute-force.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -47,6 +52,19 @@ export async function onRequestPost({ request, env }) {
   const ip        = request.headers.get('CF-Connecting-IP') ?? 'unknown'
   const emailNorm = email.toLowerCase()
 
+  // ── 1.5 IP 黑名單（Phase E-4）— 24hr 內被偵測 cross-user scan 的 IP 直接擋
+  const blacklisted = await isIpBlacklisted(db, ip)
+  if (blacklisted) {
+    await safeUserAudit(env, {
+      event_type: 'auth.login.ip_blacklisted', severity: 'critical', request,
+      data: { reason: blacklisted.reason, expires_at: blacklisted.expires_at },
+    })
+    return res({
+      error: 'Your IP is temporarily blocked due to suspicious activity.',
+      code: 'IP_BLOCKED',
+    }, 429)
+  }
+
   // ── 2. Rate Limit（Phase E3）──
   // spec：5/IP/min；額外保留 10/email/15min 防 credential stuffing（針對具體 email 撞密碼）
   const [ipShort, emailLong] = await Promise.all([
@@ -59,6 +77,20 @@ export async function onRequestPost({ request, env }) {
       data: { reason: ipShort.blocked ? 'ip' : 'email' },
     })
     return res({ error: 'Too many login attempts, please try again later.', code: 'RATE_LIMITED' }, 429)
+  }
+
+  // ── 2.5 漸進 cooldown（Phase E-4）— 連續失敗 ≥3 次後逐級加長等待時間
+  const cooldownSec = await getUserCooldownSeconds(db, emailNorm)
+  if (cooldownSec > 0) {
+    await safeUserAudit(env, {
+      event_type: 'auth.login.cooldown', severity: 'warn', request,
+      data: { seconds: cooldownSec },
+    })
+    return res({
+      error: `Please wait ${cooldownSec} seconds before retrying.`,
+      code: 'COOLDOWN',
+      retry_after: cooldownSec,
+    }, 429)
   }
 
   // ── 3. 查詢 user + local_account（一次 JOIN）─────────────────
@@ -91,6 +123,17 @@ export async function onRequestPost({ request, env }) {
         .bind(ip, emailNorm).run(),
     ])
     await safeUserAudit(env, { event_type: 'auth.login.fail', severity: 'warn', request, data: { reason_code: 'unknown_user' } })
+
+    // Phase E-4：未知 user 也要計入 cross-user scan（攻擊者可能撞不存在 email）
+    if (ip && ip !== 'unknown') {
+      const blacklisted = await detectAndBlacklistCrossUserScan(db, ip)
+      if (blacklisted) {
+        await safeUserAudit(env, {
+          event_type: 'auth.login.ip_blacklist_added', severity: 'critical', request,
+          data: { reason: 'cross_user_scan', ttl_hours: 24 },
+        })
+      }
+    }
     return res({ error: 'Invalid credentials' }, 401)
   }
 
@@ -100,6 +143,19 @@ export async function onRequestPost({ request, env }) {
     await db.prepare(`INSERT INTO login_attempts (ip, email) VALUES (?, ?)`)
       .bind(ip, emailNorm).run()
     await safeUserAudit(env, { event_type: 'auth.login.fail', severity: 'warn', user_id: record.user_id, request, data: { reason_code: 'bad_password' } })
+
+    // Phase E-4：偵測 cross-user scan（同 IP 在 1hr 內撞 ≥10 個 distinct email）
+    // → 寫入 24hr 黑名單；下次該 IP 任何 login 進不來
+    if (ip && ip !== 'unknown') {
+      const blacklisted = await detectAndBlacklistCrossUserScan(db, ip)
+      if (blacklisted) {
+        await safeUserAudit(env, {
+          event_type: 'auth.login.ip_blacklist_added', severity: 'critical',
+          user_id: record.user_id, request,
+          data: { reason: 'cross_user_scan', ttl_hours: 24 },
+        })
+      }
+    }
     return res({ error: 'Invalid credentials' }, 401)
   }
 

@@ -188,6 +188,14 @@ CREATE TABLE IF NOT EXISTS revoked_jti (
   revoked_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS ip_blacklist (
+  ip          TEXT    PRIMARY KEY,
+  reason      TEXT    NOT NULL,
+  blocked_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  expires_at  TEXT    NOT NULL,
+  hit_count   INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS user_webauthn_credentials (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

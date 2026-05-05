@@ -187,3 +187,17 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
 
 CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires
   ON webauthn_challenges(expires_at);
+
+-- =============================================
+-- IP 黑名單（migration 0022，Phase E-4 brute force 強化）
+-- =============================================
+
+CREATE TABLE IF NOT EXISTS ip_blacklist (
+  ip          TEXT    PRIMARY KEY,
+  reason      TEXT    NOT NULL,
+  blocked_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  expires_at  TEXT    NOT NULL,
+  hit_count   INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_ip_blacklist_expires ON ip_blacklist(expires_at);

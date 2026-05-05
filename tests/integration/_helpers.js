@@ -105,6 +105,7 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM oauth_clients'),
     env.chiyigo_db.prepare('DELETE FROM user_webauthn_credentials'),
     env.chiyigo_db.prepare('DELETE FROM webauthn_challenges'),
+    env.chiyigo_db.prepare('DELETE FROM ip_blacklist'),
   ])
 
   // oauth-clients 模組級 cache 也歸零（避免跨 test file 撞資料）
