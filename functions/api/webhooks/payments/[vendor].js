@@ -33,11 +33,20 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   const parsed = await adapter.parseWebhook(request, env)
+
+  // success/dedup 都要照 vendor 規格回（ECPay 要 plain text "1|OK"，否則 retry）
+  const successFn = typeof adapter.successResponse === 'function'
+    ? (extra) => adapter.successResponse(extra)
+    : (extra = {}) => res({ ok: true, ...(extra.deduplicated ? { deduplicated: true } : {}) })
+
   if (!parsed.ok) {
     await safeUserAudit(env, {
       event_type: 'payment.webhook.fail', severity: 'warn', request,
       data: { vendor, reason: parsed.error },
     })
+    if (typeof adapter.failureResponse === 'function') {
+      return adapter.failureResponse(parsed.error)
+    }
     return res({ error: 'Webhook validation failed' }, 401)
   }
 
@@ -61,7 +70,7 @@ export async function onRequestPost({ request, env, params }) {
       .run()
   } catch (e) {
     if (String(e?.message ?? e).includes('UNIQUE')) {
-      return res({ ok: true, deduplicated: true })
+      return successFn({ deduplicated: true })
     }
     throw e
   }
@@ -111,7 +120,7 @@ export async function onRequestPost({ request, env, params }) {
     },
   })
 
-  return res({ ok: true })
+  return successFn()
 }
 
 async function sha256Hex(s) {

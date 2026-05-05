@@ -188,12 +188,13 @@ export async function requirePaymentAccess(request, env, opts = {}) {
 // 目前只 ship `mock` adapter 給 tests + scaffold smoke test。
 
 import { mockPaymentAdapter } from './payment-vendors/mock.js'
+import { ecpayPaymentAdapter } from './payment-vendors/ecpay.js'
 
 const ADAPTERS = {
-  mock: mockPaymentAdapter,
+  mock:  mockPaymentAdapter,
+  ecpay: ecpayPaymentAdapter,
   // stripe: () => import('./payment-vendors/stripe.js').then(m => m.stripePaymentAdapter),
   // tappay: () => import('./payment-vendors/tappay.js').then(m => m.tappayPaymentAdapter),
-  // ecpay:  () => import('./payment-vendors/ecpay.js').then(m => m.ecpayPaymentAdapter),
 }
 
 export function resolvePaymentAdapter(vendor) {
