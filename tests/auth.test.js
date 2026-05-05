@@ -90,6 +90,22 @@ describe('requireAuth', () => {
     const tok = await signJwt({ sub: '1', scope: 'pre_auth' }, '5m', env)
     await expectError(requireAuth(reqWithAuth(tok), env), 403, { error: /pre_auth token cannot access/ })
   })
+
+  it('opts.audience 吻合 → 通過', async () => {
+    const tok = await signJwt({ sub: '1', role: 'player', status: 'active' }, '5m', env, { audience: 'chiyigo' })
+    const { user, error } = await requireAuth(reqWithAuth(tok), env, null, { audience: 'chiyigo' })
+    expect(error).toBeNull()
+    expect(user.aud).toBe('chiyigo')
+  })
+
+  it('opts.audience 不符 → 401（aud=mbti token 給 chiyigo IAM 端點被擋）', async () => {
+    const tok = await signJwt({ sub: '1', role: 'player', status: 'active' }, '5m', env, { audience: 'mbti' })
+    await expectError(
+      requireAuth(reqWithAuth(tok), env, null, { audience: 'chiyigo' }),
+      401,
+      { error: 'Unauthorized' },
+    )
+  })
 })
 
 describe('requireRole', () => {

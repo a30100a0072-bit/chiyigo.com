@@ -17,9 +17,12 @@ import { verifyJwt } from './jwt.js'
  * @param {Request}     request
  * @param {object}      env
  * @param {string|null} requiredScope  若指定，則 JWT payload.scope 必須吻合
+ * @param {object}      [opts]
+ * @param {string|string[]} [opts.audience]  若指定，jwtVerify 會強制驗 aud claim
+ *                                            （chiyigo IAM resource server 端點建議帶 'chiyigo'）
  * @returns {{ user: object, error: null } | { user: null, error: Response }}
  */
-export async function requireAuth(request, env, requiredScope = null) {
+export async function requireAuth(request, env, requiredScope = null, opts = {}) {
   const authHeader = request.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) {
     return { user: null, error: res({ error: 'Unauthorized' }, 401) }
@@ -32,7 +35,9 @@ export async function requireAuth(request, env, requiredScope = null) {
 
   let payload
   try {
-    payload = await verifyJwt(token, env)
+    const verifyOpts = {}
+    if (opts.audience !== undefined) verifyOpts.audience = opts.audience
+    payload = await verifyJwt(token, env, verifyOpts)
   } catch {
     return { user: null, error: res({ error: 'Unauthorized' }, 401) }
   }

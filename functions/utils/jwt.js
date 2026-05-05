@@ -133,17 +133,24 @@ export async function signJwt(payload, expiresIn, env, opts = {}) {
  *
  * @param {string} token JWT 字串
  * @param {object} env   Cloudflare env（含 JWT_PUBLIC_KEYS / JWT_PUBLIC_KEY）
+ * @param {object} [opts]
+ * @param {string|string[]} [opts.audience]  受眾驗證；缺省則不驗 aud（向後相容）
+ * @param {string} [opts.issuer]             簽發者驗證；缺省驗 'https://chiyigo.com'
  * @returns {Promise<object>} JWT payload
- * @throws 驗證失敗 / 過期 / 找不到對應 kid 時拋出例外
+ * @throws 驗證失敗 / 過期 / aud / iss 不符 / 找不到對應 kid 時拋出例外
  */
-export async function verifyJwt(token, env) {
+export async function verifyJwt(token, env, opts = {}) {
   let kid = null
   try { kid = decodeProtectedHeader(token).kid ?? null } catch { /* malformed → 下方 verify 會 throw */ }
 
   const key = await getVerifyingKey(env, kid)
   if (!key) throw new Error(`No public key matches kid=${kid}`)
 
-  const { payload } = await jwtVerify(token, key, { algorithms: ['ES256'] })
+  const verifyOpts = { algorithms: ['ES256'] }
+  if (opts.audience !== undefined) verifyOpts.audience = opts.audience
+  if (opts.issuer !== undefined)   verifyOpts.issuer   = opts.issuer
+
+  const { payload } = await jwtVerify(token, key, verifyOpts)
   return payload
 }
 

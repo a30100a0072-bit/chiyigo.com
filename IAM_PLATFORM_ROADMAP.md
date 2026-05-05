@@ -208,11 +208,11 @@ GDPR「右遺忘」 vs audit 不可變的衝突：
 
 合進 Phase 0 期間做完，不另開 sprint。
 
-- [ ] `verifyJwt` 加 audience 驗證
-- [ ] Refresh cookie `Path=/api/auth/refresh`
-- [ ] CSP 加 `object-src 'none'`
-- [ ] grep 確認 access_token 不在 localStorage
-- [ ] CSP 計畫移除 `'unsafe-inline'`（長期）
+- [x] `verifyJwt` 加 audience 驗證能力（opt-in `opts.audience`，2026-05-05）；`requireAuth` 同步加 `opts.audience` 透傳；resource server 端點可逐一 opt in
+- [x] Refresh cookie 路徑收緊：實際 Path=`/api/auth`（覆蓋 refresh / end-session / authorize silent SSO 三條都讀 cookie；窄到 `/api/auth/refresh` 會打死 silent SSO + cookie fallback logout，roadmap 條目原意已滿足）
+- [x] CSP 加 `object-src 'none'`（2026-05-05）
+- [x] grep 確認 access_token 不在 localStorage（2026-05-05 全站 0 命中）
+- [x] CSP 移除 `'unsafe-inline'`（CSP Phase A→D 2026-04-30 已完成）
 
 ---
 
@@ -413,4 +413,5 @@ Week 11+:    Phase F — 對接時做
 | 2026-05-02 | 初版（5 Phase，限 OIDC 多 App） |
 | 2026-05-04 | 加入 OIDC Back-Channel Logout 1.0 為跨 site RP（sport-app on pages.dev）SSO 登出機制；併行 frontchannel 不取代，作雙保險 |
 | 2026-05-04 | 加入 oauth_clients 通用 RP 註冊機制需求；Phase 1 in-code registry 集中現有 5 處 hardcode；Phase 2 D1 表化排在本路線圖 Phase C；目標：新增 RP 從改 5 個檔變成跑 1 條 SQL |
+| 2026-05-05 | Phase A 全部結案：verifyJwt/requireAuth 加 opt-in audience；CSP 加 `object-src 'none'`；refresh cookie path 維持 `/api/auth`（窄到 `/api/auth/refresh` 會打死 silent SSO + end-session cookie fallback） |
 | 2026-05-02 | 大改版：擴張到金融級平台（金流 + 虛擬貨幣 + 真錢遊戲），新增 Phase 0 / Phase E / Phase F |

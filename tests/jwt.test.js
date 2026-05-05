@@ -46,6 +46,29 @@ describe('signJwt / verifyJwt', () => {
     expect(payload.aud).toBe('talo')
   })
 
+  it('verifyJwt accepts matching audience', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env, { audience: 'chiyigo' })
+    const payload = await verifyJwt(token, env, { audience: 'chiyigo' })
+    expect(payload.aud).toBe('chiyigo')
+  })
+
+  it('verifyJwt rejects mismatched audience', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env, { audience: 'mbti' })
+    await expect(verifyJwt(token, env, { audience: 'chiyigo' })).rejects.toThrow()
+  })
+
+  it('verifyJwt audience accepts array of valid auds', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env, { audience: 'sport-app' })
+    const payload = await verifyJwt(token, env, { audience: ['chiyigo', 'sport-app'] })
+    expect(payload.aud).toBe('sport-app')
+  })
+
+  it('verifyJwt without audience opt does NOT verify aud (backward compat)', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env, { audience: 'whatever' })
+    const payload = await verifyJwt(token, env)
+    expect(payload.aud).toBe('whatever')
+  })
+
   it('passes through ver claim (token_version)', async () => {
     const token = await signJwt({ sub: 'u', ver: 7 }, '5m', env)
     const payload = await verifyJwt(token, env)
