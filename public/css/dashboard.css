@@ -204,3 +204,31 @@ input:-webkit-autofill:active {
   caret-color: #ffffff !important;
   transition: background-color 5000s ease-in-out 0s !important;
 }
+
+/* ── Phase D-3 修：Light mode 下 dashboard 內 input 一律覆蓋 ─────────
+   原因：dashboard.html / dashboard.js 動態 row 用 hardcoded
+   bg-[#0e0e16] / bg-[#0e0e12] / bg-[#0f0f14] + text-white，
+   切到光模式變成「黑底白字」很突兀。
+   覆蓋成 var(--bg-elevated) / var(--text) 讓它跟著主題走。 */
+.theme-light .dash-content input[class*="bg-[#0e0e1"],
+.theme-light .dash-content input[class*="bg-[#0f0f1"],
+.theme-light .dash-content input[class*="bg-[#0a0a1"] {
+  background-color: var(--bg-elevated) !important;
+  color: var(--text) !important;
+  border-color: var(--border-bright) !important;
+  caret-color: var(--text) !important;
+}
+.theme-light .dash-content input[class*="bg-[#0e0e1"]::placeholder,
+.theme-light .dash-content input[class*="bg-[#0f0f1"]::placeholder,
+.theme-light .dash-content input[class*="bg-[#0a0a1"]::placeholder {
+  color: var(--text-dim) !important;
+}
+/* autofill 的 light mode 變體（蓋掉前面 dark mode 的 !important）*/
+.theme-light input:-webkit-autofill,
+.theme-light input:-webkit-autofill:hover,
+.theme-light input:-webkit-autofill:focus,
+.theme-light input:-webkit-autofill:active {
+  -webkit-text-fill-color: #1A1B2E !important;
+  -webkit-box-shadow: 0 0 0 1000px #FAFAFE inset !important;
+  caret-color: #1A1B2E !important;
+}
