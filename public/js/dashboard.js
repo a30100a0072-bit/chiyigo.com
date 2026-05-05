@@ -23,6 +23,7 @@ Object.assign(LANGS_D['zh-TW'], {
   passkey_remove_otp_ph: '6 位 2FA 驗證碼',
   passkey_remove_confirm: '確認移除', passkey_remove_cancel: '取消',
   passkey_remove_success: '✓ 已移除', passkey_remove_fail: '移除失敗',
+  passkey_remove_need_2fa: '請先啟用 2FA 才能移除 passkey',
 });
 Object.assign(LANGS_D['en'], {
   nav_devices: 'My Devices', nav_passkeys: 'Passkeys',
@@ -44,6 +45,7 @@ Object.assign(LANGS_D['en'], {
   passkey_remove_otp_ph: '6-digit 2FA code',
   passkey_remove_confirm: 'Confirm', passkey_remove_cancel: 'Cancel',
   passkey_remove_success: '✓ Removed', passkey_remove_fail: 'Removal failed',
+  passkey_remove_need_2fa: 'Enable 2FA first to remove a passkey',
 });
 Object.assign(LANGS_D['ja'], {
   nav_devices: 'マイデバイス', nav_passkeys: 'パスキー',
@@ -65,6 +67,7 @@ Object.assign(LANGS_D['ja'], {
   passkey_remove_otp_ph: '2FA 6桁コード',
   passkey_remove_confirm: '確認', passkey_remove_cancel: 'キャンセル',
   passkey_remove_success: '✓ 削除しました', passkey_remove_fail: '削除に失敗しました',
+  passkey_remove_need_2fa: 'パスキーを削除するには先に2FAを有効化してください',
 });
 Object.assign(LANGS_D['ko'], {
   nav_devices: '내 기기', nav_passkeys: 'Passkey',
@@ -86,6 +89,7 @@ Object.assign(LANGS_D['ko'], {
   passkey_remove_otp_ph: '2FA 6자리 코드',
   passkey_remove_confirm: '확인', passkey_remove_cancel: '취소',
   passkey_remove_success: '✓ 제거됨', passkey_remove_fail: '제거 실패',
+  passkey_remove_need_2fa: 'Passkey를 제거하려면 먼저 2FA를 활성화하세요',
 });
 
 let curLangD = localStorage.getItem('lang') || 'zh-TW';
@@ -255,6 +259,7 @@ async function loadProfile() {
 
     // 設密碼 / 刪帳號：依是否設過密碼決定 UI
     window.__hasPassword = !!data.has_password;
+    window.__totpEnabled = !!data.totp_enabled;
     window.__userEmail   = data.email;
     renderSetPasswordSection(window.__hasPassword);
     renderChangePasswordSection(window.__hasPassword, !!data.totp_enabled);
@@ -599,6 +604,7 @@ async function confirmEnable2FA() {
       `<code class="block text-center text-xs font-mono bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-2 py-1.5 text-gray-300 select-all">${c}</code>`
     ).join('');
     render2FASection(true);
+    window.__totpEnabled = true;
     document.getElementById('tfa-setup-panel').classList.add('hidden');
     document.getElementById('tfa-backup-panel').classList.remove('hidden');
   } catch (e) {
@@ -1202,6 +1208,13 @@ function renderPasskeys(creds) {
 }
 
 function openPasskeyRemove(id) {
+  // 沒啟用 2FA → step-up 一定 fail，提早攔截 + 滾到 2FA 區塊引導開啟
+  if (!window.__totpEnabled) {
+    showBindToast(T('passkey_remove_need_2fa'), 'err');
+    const tfa = document.getElementById('tfa-section');
+    if (tfa) tfa.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
   const panel = document.getElementById(`pk-remove-${id}`);
   panel?.classList.remove('hidden');
   const otp = document.getElementById(`pk-otp-${id}`);
