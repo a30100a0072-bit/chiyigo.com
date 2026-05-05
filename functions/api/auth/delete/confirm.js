@@ -4,6 +4,7 @@
 
 import { hashToken } from '../../../utils/crypto.js'
 import { res } from '../../../utils/auth.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 export async function onRequestPost({ request, env }) {
   // ── 1. 解析 Body ─────────────────────────────────────────────
@@ -70,5 +71,7 @@ export async function onRequestPost({ request, env }) {
       .run()
   } catch { /* column may not exist yet */ }
 
+  // audit 在 user 被匿名化前帶 user_id；critical → Discord webhook（若設定）
+  await safeUserAudit(env, { event_type: 'account.delete', severity: 'critical', user_id: userId, request })
   return res({ message: 'Account deleted successfully' })
 }

@@ -18,6 +18,7 @@ import { resolveAud } from '../../../utils/cors.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -53,6 +54,7 @@ export async function onRequestPost({ request, env }) {
       .bind(emailNorm).first(),
   ])
   if ((ipRow?.cnt ?? 0) >= 20 || (emailRow?.cnt ?? 0) >= 10) {
+    await safeUserAudit(env, { event_type: 'auth.login.rate_limited', severity: 'warn', request })
     return res({ error: 'Too many login attempts, please try again later.', code: 'RATE_LIMITED' }, 429)
   }
 
@@ -85,6 +87,7 @@ export async function onRequestPost({ request, env }) {
       db.prepare(`INSERT INTO login_attempts (ip, email) VALUES (?, ?)`)
         .bind(ip, emailNorm).run(),
     ])
+    await safeUserAudit(env, { event_type: 'auth.login.fail', severity: 'warn', request, data: { reason_code: 'unknown_user' } })
     return res({ error: 'Invalid credentials' }, 401)
   }
 
@@ -93,11 +96,13 @@ export async function onRequestPost({ request, env }) {
   if (!valid) {
     await db.prepare(`INSERT INTO login_attempts (ip, email) VALUES (?, ?)`)
       .bind(ip, emailNorm).run()
+    await safeUserAudit(env, { event_type: 'auth.login.fail', severity: 'warn', user_id: record.user_id, request, data: { reason_code: 'bad_password' } })
     return res({ error: 'Invalid credentials' }, 401)
   }
 
   // ── 5.5 封禁帳號：密碼正確但帳號已被封禁，禁止取得新 token ──
   if (record.status === 'banned') {
+    await safeUserAudit(env, { event_type: 'auth.login.banned_attempt', severity: 'warn', user_id: record.user_id, request })
     return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
   }
 
@@ -148,6 +153,8 @@ export async function onRequestPost({ request, env }) {
     role:           record.role,
     status:         record.status,
   }
+
+  await safeUserAudit(env, { event_type: 'auth.login.success', user_id: record.user_id, request })
 
   // Web 瀏覽器（無 device_uuid 且非明確 App 平台）→ Cookie
   const isWeb = !device_uuid && (!platform || platform === 'web')

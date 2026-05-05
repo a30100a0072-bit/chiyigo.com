@@ -13,6 +13,7 @@
  */
 
 import { requireAuth, res } from '../../../utils/auth.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const ALLOWED_PROVIDERS = new Set(['google', 'discord', 'line', 'facebook'])
 
@@ -68,5 +69,6 @@ export async function onRequestPost({ request, env }) {
     .bind(userId, provider, provider_id, display_name ?? null, avatar_url ?? null)
     .run()
 
+  await safeUserAudit(env, { event_type: 'oauth.identity.bind', user_id: userId, request, data: { provider } })
   return res({ ok: true, provider, provider_id })
 }

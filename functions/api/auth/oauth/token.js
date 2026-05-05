@@ -27,6 +27,7 @@ import { signJwt } from '../../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）
@@ -75,15 +76,23 @@ export async function onRequestPost({ request, env }) {
     .bind(codeHash)
     .first()
 
-  if (!authCode) return res({ error: 'Invalid or expired authorization code' }, 400, cors)
+  if (!authCode) {
+    await safeUserAudit(env, { event_type: 'oauth.code.exchange.fail', severity: 'warn', request, data: { reason_code: 'invalid_or_expired_code' } })
+    return res({ error: 'Invalid or expired authorization code' }, 400, cors)
+  }
 
   // redirect_uri 必須完全吻合（RFC 6749 §4.1.3）
-  if (authCode.redirect_uri !== redirect_uri)
+  if (authCode.redirect_uri !== redirect_uri) {
+    await safeUserAudit(env, { event_type: 'oauth.code.exchange.fail', severity: 'warn', user_id: authCode.user_id, request, data: { reason_code: 'redirect_mismatch' } })
     return res({ error: 'redirect_uri mismatch' }, 400, cors)
+  }
 
   // PKCE 驗證
   const pkceOk = await pkceVerify(code_verifier, authCode.code_challenge)
-  if (!pkceOk) return res({ error: 'PKCE verification failed' }, 400, cors)
+  if (!pkceOk) {
+    await safeUserAudit(env, { event_type: 'oauth.code.exchange.fail', severity: 'warn', user_id: authCode.user_id, request, data: { reason_code: 'pkce_failed' } })
+    return res({ error: 'PKCE verification failed' }, 400, cors)
+  }
 
   // 取用戶資料
   const user = await db
@@ -157,6 +166,8 @@ export async function onRequestPost({ request, env }) {
 
     responseBody.id_token = await signJwt(idTokenPayload, '15m', env, { audience: aud })
   }
+
+  await safeUserAudit(env, { event_type: 'oauth.code.exchange.success', user_id: user.id, request, data: { aud } })
 
   if (isWeb) {
     return new Response(JSON.stringify(responseBody), {

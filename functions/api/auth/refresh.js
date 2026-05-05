@@ -24,6 +24,7 @@ import { signJwt } from '../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../utils/cors.js'
 import { res } from '../../utils/auth.js'
 import { refreshCookie } from '../../utils/cookies.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -62,16 +63,23 @@ export async function onRequestPost({ request, env }) {
     .bind(tokenHash)
     .first()
 
-  if (!tokenRow)
+  if (!tokenRow) {
+    await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', request, data: { reason_code: 'invalid_or_expired' } })
     return res({ error: 'Invalid or expired refresh token' }, 401, cors)
+  }
 
-  if (tokenRow.revoked_at)
+  if (tokenRow.revoked_at) {
+    // 已撤銷 token 重放 = 高度可疑（refresh rotation 設計下偷 token 必中此分支）
+    await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'reuse_detected' } })
     return res({ error: 'Refresh token has been revoked' }, 401, cors)
+  }
 
   // ── 2. device_uuid 驗證 ──────────────────────────────────────
   if (tokenRow.device_uuid !== null && tokenRow.device_uuid !== '') {
-    if (tokenRow.device_uuid !== (device_uuid ?? ''))
+    if (tokenRow.device_uuid !== (device_uuid ?? '')) {
+      await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'device_mismatch' } })
       return res({ error: 'Device mismatch' }, 401, cors)
+    }
   }
 
   // ── 3. 取得用戶最新狀態 ──────────────────────────────────────

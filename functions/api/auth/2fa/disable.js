@@ -10,6 +10,7 @@
 import { TOTP, Secret } from 'otpauth'
 import { requireAuth, bumpTokenVersion, res } from '../../../utils/auth.js'
 import { verifyBackupCode } from '../../../utils/crypto.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 export async function onRequestPost({ request, env }) {
   const { user, error } = await requireAuth(request, env)
@@ -72,5 +73,6 @@ export async function onRequestPost({ request, env }) {
   // 強制下線：所有 access token 立即失效，refresh token 全撤銷
   await bumpTokenVersion(db, userId)
 
+  await safeUserAudit(env, { event_type: 'mfa.totp.disable', severity: 'critical', user_id: userId, request })
   return res({ message: '2FA disabled successfully' })
 }

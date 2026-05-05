@@ -13,6 +13,7 @@ import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { sendPasswordResetEmail } from '../../../utils/email.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_HOURS   = 1
@@ -57,6 +58,8 @@ export async function onRequestPost({ request, env }) {
 
   if (!userRow) {
     await fakeHashDelay()
+    // 仍記 audit（user_id=null）— 偵測信箱枚舉樣態
+    await safeUserAudit(env, { event_type: 'account.password.reset_request', request, data: { reason_code: 'unknown_email' } })
     return res({ message: 'If that email is registered, a reset link has been sent.' })
   }
 
@@ -99,6 +102,7 @@ export async function onRequestPost({ request, env }) {
       .run()
   }
 
+  await safeUserAudit(env, { event_type: 'account.password.reset_request', user_id: userRow.id, request })
   return res({ message: 'If that email is registered, a reset link has been sent.' })
 }
 

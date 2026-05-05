@@ -17,6 +17,7 @@
 import { hashToken } from '../../utils/crypto.js'
 import { getCorsHeaders } from '../../utils/cors.js'
 import { CLEAR_REFRESH_COOKIE } from '../../utils/cookies.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -47,14 +48,18 @@ export async function onRequestPost({ request, env }) {
   const tokenHash = await hashToken(refresh_token)
 
   // 只撤銷尚未撤銷的 token；不存在或已撤銷均靜默成功（冪等）
-  await db
+  const result = await db
     .prepare(`
       UPDATE refresh_tokens
       SET revoked_at = datetime('now')
       WHERE token_hash = ? AND revoked_at IS NULL
+      RETURNING user_id
     `)
     .bind(tokenHash)
-    .run()
+    .first()
+  if (result?.user_id) {
+    await safeUserAudit(env, { event_type: 'auth.logout', user_id: result.user_id, request })
+  }
 
   return new Response(JSON.stringify({ message: 'Logged out' }), {
     headers: { 'Content-Type': 'application/json', ...clearCookieHeader },

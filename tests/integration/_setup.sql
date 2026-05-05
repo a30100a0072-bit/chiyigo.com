@@ -146,6 +146,17 @@ CREATE TABLE IF NOT EXISTS pkce_sessions (
 );
 
 -- One-time authorization codes (consumed atomically by /token)
+CREATE TABLE IF NOT EXISTS audit_log (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type  TEXT    NOT NULL,
+  severity    TEXT    NOT NULL DEFAULT 'info',
+  user_id     INTEGER,
+  client_id   TEXT,
+  ip_hash     TEXT,
+  event_data  TEXT,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS revoked_jti (
   jti        TEXT    PRIMARY KEY,
   expires_at TEXT    NOT NULL,

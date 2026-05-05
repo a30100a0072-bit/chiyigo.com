@@ -8,6 +8,7 @@
 
 import { hashToken } from '../../../utils/crypto.js'
 import { res } from '../../../utils/auth.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 export async function onRequestGet({ request }) {
   const url   = new URL(request.url)
@@ -50,6 +51,7 @@ export async function onRequestPost({ request, env }) {
     .bind(row.user_id)
     .run()
 
+  await safeUserAudit(env, { event_type: 'account.email.verify', user_id: row.user_id, request })
   return res({ message: 'Email verified successfully' })
 }
 

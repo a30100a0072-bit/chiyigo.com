@@ -5,6 +5,7 @@
 import { TOTP, Secret } from 'otpauth'
 import { generateBackupCodes, verifyBackupCode } from '../../../../utils/crypto.js'
 import { requireAuth, res } from '../../../../utils/auth.js'
+import { safeUserAudit } from '../../../../utils/user-audit.js'
 
 export async function onRequestPost({ request, env }) {
   // ── 1. JWT 驗證 ───────────────────────────────────────────────
@@ -75,5 +76,6 @@ export async function onRequestPost({ request, env }) {
     ...insertCodes,
   ])
 
+  await safeUserAudit(env, { event_type: 'mfa.backup_code.regenerate', user_id: userId, request })
   return res({ backup_codes: plain })
 }

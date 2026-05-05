@@ -21,6 +21,7 @@ import { requireAuth, res } from '../../../utils/auth.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const TOTP_RL_WINDOW_SEC = 5 * 60
 const TOTP_RL_MAX        = 5
@@ -91,6 +92,7 @@ export async function onRequestPost({ request, env }) {
     const delta = totp.validate({ token: sanitized, window: 1 })
     if (delta !== null) {
       await clearRateLimit(db, { kind: '2fa', userId })
+      await safeUserAudit(env, { event_type: 'mfa.totp.verify.success', user_id: userId, request })
       return res(await issueToken(userId, record, db, device_uuid, env, audience))
     }
   }
@@ -117,6 +119,7 @@ export async function onRequestPost({ request, env }) {
 
         if (revoked.meta?.changes > 0) {
           await clearRateLimit(db, { kind: '2fa', userId })
+          await safeUserAudit(env, { event_type: 'mfa.backup_code.use', severity: 'warn', user_id: userId, request })
           return res(await issueToken(userId, record, db, device_uuid, env, audience))
         }
       }
@@ -125,6 +128,7 @@ export async function onRequestPost({ request, env }) {
 
   // 失敗：寫一筆記錄（user 維度），下次 check 會 +1
   await recordRateLimit(db, { kind: '2fa', userId, ip })
+  await safeUserAudit(env, { event_type: 'mfa.totp.verify.fail', severity: 'warn', user_id: userId, request })
   return res({ error: 'Invalid OTP or backup code' }, 401)
 }
 

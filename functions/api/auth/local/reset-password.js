@@ -20,6 +20,7 @@ import {
 } from '../../../utils/crypto.js'
 import { validatePassword } from '../../../utils/password.js'
 import { bumpTokenVersion, res } from '../../../utils/auth.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 export async function onRequestPost({ request, env }) {
   let body
@@ -149,6 +150,7 @@ export async function onRequestPost({ request, env }) {
     .run()
   await bumpTokenVersion(db, userId)
 
+  await safeUserAudit(env, { event_type: 'account.password.change', severity: 'warn', user_id: userId, request })
   return res({ message: 'Password reset successfully. Please log in again.' })
 }
 

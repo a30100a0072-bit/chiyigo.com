@@ -19,6 +19,7 @@ import { getProvider } from '../../../utils/oauth-providers.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -146,6 +147,8 @@ export async function onRequestPost(context) {
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
     VALUES (?, ?, NULL, ?, datetime('now'))
   `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
+
+  await safeUserAudit(env, { event_type: 'oauth.bind_email.success', user_id: userId, request, data: { provider } })
 
   return new Response(JSON.stringify({ access_token: accessToken }), {
     status: 200,

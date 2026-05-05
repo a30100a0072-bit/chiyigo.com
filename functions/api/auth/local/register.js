@@ -16,6 +16,7 @@ import { validatePassword } from '../../../utils/password.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL   = '15m'
@@ -123,6 +124,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
     role:           user.role,
     status:         user.status,
   }, ACCESS_TOKEN_TTL, env, { audience })
+
+  await safeUserAudit(env, { event_type: 'account.register', user_id: user.id, request })
 
   // 發送驗證信（fire-and-forget，不阻塞註冊回應；失敗時使用者仍可到 dashboard 重發）
   if (env.RESEND_API_KEY) {

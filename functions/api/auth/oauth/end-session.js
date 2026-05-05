@@ -24,6 +24,7 @@ import { hashToken } from '../../../utils/crypto.js'
 import { getPublicJwks } from '../../../utils/jwt.js'
 import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies.js'
 import { dispatchBackchannelLogout } from '../../../utils/backchannel.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 import {
   ALLOWED_POST_LOGOUT_URIS,
   FRONTCHANNEL_LOGOUT_URIS,
@@ -85,6 +86,8 @@ export async function onRequestGet({ request, env, waitUntil }) {
       await env.chiyigo_db
         .prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL`)
         .bind(userId).run()
+      await safeUserAudit(env, { event_type: 'oauth.end_session', user_id: userId, request, data: { via: 'id_token_hint' } })
+      await safeUserAudit(env, { event_type: 'oauth.backchannel.dispatch', user_id: userId, request })
     }
 
     // OIDC Back-Channel Logout — 平行 fire-and-forget 通知所有 cross-site RP
@@ -120,6 +123,8 @@ export async function onRequestGet({ request, env, waitUntil }) {
       await env.chiyigo_db
         .prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE user_id = ? AND revoked_at IS NULL`)
         .bind(userId).run()
+      await safeUserAudit(env, { event_type: 'oauth.end_session', user_id: userId, request, data: { via: 'cookie_fallback' } })
+      await safeUserAudit(env, { event_type: 'oauth.backchannel.dispatch', user_id: userId, request })
       if (typeof waitUntil === 'function') {
         waitUntil(dispatchBackchannelLogout(env, userId))
       } else {

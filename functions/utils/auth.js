@@ -13,6 +13,7 @@
 
 import { verifyJwt } from './jwt.js'
 import { isJtiRevoked } from './revocation.js'
+import { safeUserAudit } from './user-audit.js'
 
 /**
  * @param {Request}     request
@@ -51,6 +52,11 @@ export async function requireAuth(request, env, requiredScope = null, opts = {})
   // jti 黑名單（精準 revoke）：KV 正向快取 + D1 為 source of truth
   // 舊 token 沒 jti claim → 跳過此檢查（仍受下方 token_version 守門）
   if (payload.jti && await isJtiRevoked(env, payload.jti)) {
+    await safeUserAudit(env, {
+      event_type: 'auth.token_revoked', severity: 'warn',
+      user_id: Number(payload.sub), request,
+      data: { reason_code: 'jti_blacklist', jti: payload.jti.slice(0, 12) },
+    })
     return { user: null, error: res({ error: 'Token revoked', code: 'TOKEN_REVOKED' }, 401) }
   }
 

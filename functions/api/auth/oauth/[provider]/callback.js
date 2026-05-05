@@ -21,6 +21,7 @@ import { generateSecureToken, hashToken } from '../../../../utils/crypto.js'
 import { getProvider } from '../../../../utils/oauth-providers.js'
 import { resolveAud } from '../../../../utils/cors.js'
 import { refreshCookie } from '../../../../utils/cookies.js'
+import { safeUserAudit } from '../../../../utils/user-audit.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -79,7 +80,10 @@ async function handle(context) {
     .bind(state)
     .first()
 
-  if (!stateRow) return htmlError('登入階段已過期或無效，請重新登入。')
+  if (!stateRow) {
+    await safeUserAudit(env, { event_type: 'oauth.callback.fail', severity: 'warn', request, data: { provider, reason_code: 'invalid_state' } })
+    return htmlError('登入階段已過期或無效，請重新登入。')
+  }
 
   const { code_verifier, nonce: expectedNonce, redirect_uri, platform, client_callback, aud: storedAud } = stateRow
   const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
@@ -91,6 +95,7 @@ async function handle(context) {
       cfg, code, code_verifier, redirect_uri,
     })
   } catch (err) {
+    await safeUserAudit(env, { event_type: 'oauth.callback.fail', severity: 'warn', request, data: { provider, reason_code: 'token_exchange_failed' } })
     return htmlError(`無法向 ${provider} 換取 Token：${err.message}`)
   }
 
@@ -100,6 +105,7 @@ async function handle(context) {
     const rawProfile = await fetchProfile(provider, cfg, providerTokens, expectedNonce)
     profile = cfg.normalizeProfile(rawProfile)
   } catch (err) {
+    await safeUserAudit(env, { event_type: 'oauth.callback.fail', severity: 'warn', request, data: { provider, reason_code: 'profile_fetch_failed' } })
     return htmlError(`無法取得 ${provider} 用戶資料：${err.message}`)
   }
 

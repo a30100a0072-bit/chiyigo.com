@@ -16,6 +16,7 @@
 import { TOTP, Secret } from 'otpauth'
 import { generateBackupCodes } from '../../../utils/crypto.js'
 import { requireAuth, res } from '../../../utils/auth.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 
 export async function onRequestPost({ request, env }) {
   // ── 1. 驗證 JWT ──────────────────────────────────────────────
@@ -75,5 +76,6 @@ export async function onRequestPost({ request, env }) {
     ...insertCodes,
   ])
 
+  await safeUserAudit(env, { event_type: 'mfa.totp.activate', user_id: userId, request })
   return res({ backup_codes: plain })
 }

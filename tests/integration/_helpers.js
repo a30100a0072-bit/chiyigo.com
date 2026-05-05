@@ -100,6 +100,7 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM pkce_sessions'),
     env.chiyigo_db.prepare('DELETE FROM auth_codes'),
     env.chiyigo_db.prepare('DELETE FROM revoked_jti'),
+    env.chiyigo_db.prepare('DELETE FROM audit_log'),
   ])
 }
 
