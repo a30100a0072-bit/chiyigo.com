@@ -22,6 +22,7 @@ import { getProvider } from '../../../../utils/oauth-providers.js'
 import { resolveAud } from '../../../../utils/cors.js'
 import { refreshCookie } from '../../../../utils/cookies.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { safeAlertAnomalies } from '../../../../utils/device-alerts.js'
 import { buildTokenScope } from '../../../../utils/scopes.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
@@ -292,6 +293,17 @@ async function handle(context) {
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
     VALUES (?, ?, NULL, ?, datetime('now'))
   `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
+
+  // Phase D-4：登入 audit + 異常裝置警示（OAuth 永遠 web，device_uuid=NULL → new device 自動跳過，
+  // 只跑 country jump 偵測）
+  await safeUserAudit(env, {
+    event_type: 'auth.login.success',
+    user_id: userId, request,
+    data: { method: `oauth:${provider}`, country: request?.cf?.country ?? null },
+  })
+  await safeAlertAnomalies(env, request, {
+    userId, email: userRow.email, deviceUuid: null,
+  })
 
   // PKCE 模式（從 mbti.chiyigo.com 發起）：回到登入頁讓 auth-ui.js 完成授權碼交換
   let postLoginUrl = '/dashboard.html'

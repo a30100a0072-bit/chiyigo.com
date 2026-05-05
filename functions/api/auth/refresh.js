@@ -9,8 +9,11 @@
  *  - 同時簽發新 refresh_token（TTL 重置），返回給客戶端
  *  - 若舊 token 已被 revoked → 可能為重放攻擊，回傳 401
  *
- * device_uuid 驗證：
- *  - 若 DB 中該 token 綁定了 device_uuid，請求中的值必須完全相符
+ * device_uuid 驗證（Phase D1）：
+ *  - 優先讀 `X-Device-Id` header；回退到 body.device_uuid（保留舊 client 相容）
+ *  - DB 中該 token 綁定了 device_uuid → 請求中的值必須完全相符
+ *  - 不符 = 高度可疑（token 被搬到別台機器）→ 撤銷該 device 在該 user 下的整個
+ *    refresh_tokens 家族 + 寫 critical audit（會觸發 Discord webhook）
  *  - Web 端（device_uuid=null）的 token 不做裝置驗證
  *
  * 回傳：
@@ -43,7 +46,10 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { body = {} }
 
-  const { device_uuid, aud } = body ?? {}
+  const { aud } = body ?? {}
+  // Phase D1：header 優先，body 保留向後相容（舊 App build 還在送 body.device_uuid）
+  const headerDeviceId  = request.headers.get('X-Device-Id') ?? request.headers.get('x-device-id')
+  const device_uuid     = (headerDeviceId && headerDeviceId.trim()) || body?.device_uuid || null
   const refresh_token   = cookieToken ?? body?.refresh_token
   const isWeb           = !!cookieToken
   const audience        = resolveAud(aud)
@@ -75,10 +81,29 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Refresh token has been revoked' }, 401, cors)
   }
 
-  // ── 2. device_uuid 驗證 ──────────────────────────────────────
+  // ── 2. device_uuid 驗證（Phase D1 強綁）─────────────────────
   if (tokenRow.device_uuid !== null && tokenRow.device_uuid !== '') {
     if (tokenRow.device_uuid !== (device_uuid ?? '')) {
-      await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'device_mismatch' } })
+      // Token 被搬到不同裝置：撤銷整個 (user, device) 家族，避免攻擊者用同 chain 其他 token 續命
+      await db
+        .prepare(`
+          UPDATE refresh_tokens
+             SET revoked_at = datetime('now')
+           WHERE user_id = ? AND device_uuid = ? AND revoked_at IS NULL
+        `)
+        .bind(tokenRow.user_id, tokenRow.device_uuid)
+        .run()
+      await safeUserAudit(env, {
+        event_type: 'auth.refresh.device_mismatch',
+        severity:   'critical',
+        user_id:    tokenRow.user_id,
+        request,
+        data: {
+          reason_code:    'device_mismatch',
+          bound_device:   tokenRow.device_uuid.slice(0, 8),
+          claimed_device: (device_uuid ?? '').slice(0, 8),
+        },
+      })
       return res({ error: 'Device mismatch' }, 401, cors)
     }
   }

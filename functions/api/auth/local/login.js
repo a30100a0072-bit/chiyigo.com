@@ -20,6 +20,7 @@ import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
+import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -156,7 +157,16 @@ export async function onRequestPost({ request, env }) {
     status:         record.status,
   }
 
-  await safeUserAudit(env, { event_type: 'auth.login.success', user_id: record.user_id, request })
+  await safeUserAudit(env, {
+    event_type: 'auth.login.success',
+    user_id: record.user_id, request,
+    data: { method: 'password', country: request?.cf?.country ?? null },
+  })
+  await safeAlertAnomalies(env, request, {
+    userId:     record.user_id,
+    email:      record.email,
+    deviceUuid: device_uuid ?? null,
+  })
 
   // Web 瀏覽器（無 device_uuid 且非明確 App 平台）→ Cookie
   const isWeb = !device_uuid && (!platform || platform === 'web')

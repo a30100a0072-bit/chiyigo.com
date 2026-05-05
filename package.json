@@ -17,6 +17,7 @@
     "lint:handlers": "node scripts/lint-handlers.js"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^13.3.0",
     "jose": "^5.9.6",
     "otpauth": "^9.3.6"
   },

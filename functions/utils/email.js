@@ -148,3 +148,57 @@ export async function sendPasswordResetEmail(apiKey, to, token, env) {
     html,
   });
 }
+
+/**
+ * Phase D-4：新裝置首次登入提醒。
+ * 不可逆操作不需要連結；只是通知 + 引導到 dashboard 處置。
+ *
+ * @param {string} apiKey  RESEND_API_KEY
+ * @param {string} to      使用者信箱
+ * @param {object} info    { deviceUuidPrefix, country, when }
+ * @param {object} env
+ */
+export async function sendNewDeviceAlertEmail(apiKey, to, info, env) {
+  const BASE_URL = baseUrlOf(env)
+  const dash = `${BASE_URL}/dashboard.html`
+  const devLabel = info.deviceUuidPrefix ? `App 裝置 ${info.deviceUuidPrefix}…` : '新裝置'
+  const country  = info.country ?? '未知'
+  const when     = info.when ?? new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
+
+  const html = `
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif;color:#e2e8f0">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:40px auto">
+    <tr><td style="padding:32px;background:#1e293b;border-radius:12px">
+      <h1 style="margin:0 0 8px;font-size:22px;color:#f8fafc">📱 新裝置登入提醒</h1>
+      <p style="margin:0 0 16px;color:#94a3b8;font-size:14px">
+        我們偵測到你的 Chiyigo 帳號被一個沒看過的裝置登入：
+      </p>
+      <table style="margin:0 0 20px;color:#e2e8f0;font-size:14px;line-height:1.6">
+        <tr><td style="color:#94a3b8;padding-right:16px">裝置</td><td>${devLabel}</td></tr>
+        <tr><td style="color:#94a3b8;padding-right:16px">地區</td><td>${country}</td></tr>
+        <tr><td style="color:#94a3b8;padding-right:16px">時間</td><td>${when}</td></tr>
+      </table>
+      <p style="margin:0 0 20px;color:#fbbf24;font-size:13px;font-weight:600">
+        若不是你本人，請立即至 dashboard 登出此裝置並修改密碼。
+      </p>
+      <a href="${dash}"
+         style="display:inline-block;padding:12px 24px;background:#6366f1;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px">
+        開啟 Dashboard
+      </a>
+      <p style="margin:24px 0 0;color:#475569;font-size:12px">
+        若是你本人，可忽略此通知。Chiyigo 不會透過 email 索取密碼或 2FA 驗證碼。
+      </p>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim()
+
+  return sendEmail(apiKey, env, {
+    to,
+    subject: '⚠ Chiyigo 新裝置登入提醒',
+    html,
+  })
+}

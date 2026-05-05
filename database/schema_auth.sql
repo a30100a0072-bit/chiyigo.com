@@ -153,3 +153,37 @@ ALTER TABLE oauth_states ADD COLUMN platform        TEXT NOT NULL DEFAULT 'web';
 ALTER TABLE oauth_states ADD COLUMN client_callback TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_device ON refresh_tokens(device_uuid);
+
+-- =============================================
+-- WebAuthn / Passkeys（migration 0021，Phase D-2）
+-- =============================================
+
+CREATE TABLE IF NOT EXISTS user_webauthn_credentials (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  credential_id     TEXT    NOT NULL UNIQUE,
+  public_key        TEXT    NOT NULL,
+  counter           INTEGER NOT NULL DEFAULT 0,
+  transports        TEXT,
+  aaguid            TEXT,
+  nickname          TEXT,
+  backup_eligible   INTEGER NOT NULL DEFAULT 0,
+  backup_state      INTEGER NOT NULL DEFAULT 0,
+  created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
+  last_used_at      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_webauthn_credentials_user
+  ON user_webauthn_credentials(user_id);
+
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  challenge    TEXT    NOT NULL UNIQUE,
+  user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  ceremony     TEXT    NOT NULL,
+  expires_at   TEXT    NOT NULL,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires
+  ON webauthn_challenges(expires_at);

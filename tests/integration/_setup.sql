@@ -188,6 +188,30 @@ CREATE TABLE IF NOT EXISTS revoked_jti (
   revoked_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS user_webauthn_credentials (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  credential_id     TEXT    NOT NULL UNIQUE,
+  public_key        TEXT    NOT NULL,
+  counter           INTEGER NOT NULL DEFAULT 0,
+  transports        TEXT,
+  aaguid            TEXT,
+  nickname          TEXT,
+  backup_eligible   INTEGER NOT NULL DEFAULT 0,
+  backup_state      INTEGER NOT NULL DEFAULT 0,
+  created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
+  last_used_at      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  challenge    TEXT    NOT NULL UNIQUE,
+  user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  ceremony     TEXT    NOT NULL,
+  expires_at   TEXT    NOT NULL,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS auth_codes (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   code_hash       TEXT    NOT NULL UNIQUE,

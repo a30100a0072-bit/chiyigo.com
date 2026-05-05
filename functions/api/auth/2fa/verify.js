@@ -23,6 +23,7 @@ import { resolveAud } from '../../../utils/cors.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
+import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
 
 const TOTP_RL_WINDOW_SEC = 5 * 60
 const TOTP_RL_MAX        = 5
@@ -94,7 +95,7 @@ export async function onRequestPost({ request, env }) {
     if (delta !== null) {
       await clearRateLimit(db, { kind: '2fa', userId })
       await safeUserAudit(env, { event_type: 'mfa.totp.verify.success', user_id: userId, request })
-      return res(await issueToken(userId, record, db, device_uuid, env, audience))
+      return res(await issueToken(userId, record, db, device_uuid, env, audience, request, 'totp'))
     }
   }
 
@@ -121,7 +122,7 @@ export async function onRequestPost({ request, env }) {
         if (revoked.meta?.changes > 0) {
           await clearRateLimit(db, { kind: '2fa', userId })
           await safeUserAudit(env, { event_type: 'mfa.backup_code.use', severity: 'warn', user_id: userId, request })
-          return res(await issueToken(userId, record, db, device_uuid, env, audience))
+          return res(await issueToken(userId, record, db, device_uuid, env, audience, request, 'backup_code'))
         }
       }
     }
@@ -133,7 +134,7 @@ export async function onRequestPost({ request, env }) {
   return res({ error: 'Invalid OTP or backup code' }, 401)
 }
 
-async function issueToken(userId, record, db, deviceUuid, env, audience) {
+async function issueToken(userId, record, db, deviceUuid, env, audience, request, method) {
   const accessToken = await signJwt({
     sub:            String(userId),
     email:          record.email,
@@ -153,6 +154,18 @@ async function issueToken(userId, record, db, deviceUuid, env, audience) {
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
     VALUES (?, ?, ?, ?, datetime('now'))
   `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt).run()
+
+  // Phase D-4：登入完成 audit + 異常裝置警示
+  if (request) {
+    await safeUserAudit(env, {
+      event_type: 'auth.login.success',
+      user_id: userId, request,
+      data: { method: method ?? 'totp', country: request?.cf?.country ?? null },
+    })
+    await safeAlertAnomalies(env, request, {
+      userId, email: record.email, deviceUuid: deviceUuid ?? null,
+    })
+  }
 
   return {
     access_token:   accessToken,
