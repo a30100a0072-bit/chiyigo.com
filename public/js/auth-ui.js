@@ -31,6 +31,7 @@ const ERROR_I18N = {
   '2FA is already enabled':                 { 'zh-TW':'雙重驗證已啟用', en:'Two-factor authentication is already enabled', ja:'2段階認証は既に有効です', ko:'2단계 인증이 이미 활성화되어 있습니다' },
   'Invalid request':                        { 'zh-TW':'請求無效，請重新登入', en:'Invalid request, please log in again', ja:'リクエストが無効です。もう一度ログインしてください', ko:'요청이 유효하지 않습니다. 다시 로그인해주세요' },
   'Invalid or expired PKCE session':        { 'zh-TW':'授權階段已失效或過期，請重新登入', en:'Authorization session is invalid or expired, please log in again', ja:'認可セッションが無効または期限切れです。もう一度ログインしてください', ko:'인증 세션이 유효하지 않거나 만료되었습니다. 다시 로그인해주세요' },
+  'captcha_failed':                         { 'zh-TW':'人機驗證未通過，請重新整理頁面再試', en:'Captcha verification failed, please refresh the page and try again', ja:'ボット認証に失敗しました。ページを再読み込みしてからお試しください', ko:'봇 검증에 실패했습니다. 페이지를 새로고침한 후 다시 시도하세요' },
 }
 
 // 前端內嵌 UI 字串
@@ -49,6 +50,7 @@ const UI_I18N = {
   err_otp_invalid:{ 'zh-TW':'驗證碼錯誤，請重試', en:'Invalid code, please try again', ja:'認証コードが正しくありません。もう一度お試しください', ko:'인증 코드가 올바르지 않습니다. 다시 시도해주세요' },
   err_network:    { 'zh-TW':'網路錯誤，請檢查連線後重試', en:'Network error, please check your connection and retry', ja:'ネットワークエラーです。接続を確認してもう一度お試しください', ko:'네트워크 오류입니다. 연결을 확인하고 다시 시도해주세요' },
   err_pkce:       { 'zh-TW':'PKCE 授權失敗，請重試', en:'PKCE authorization failed, please try again', ja:'PKCE認可に失敗しました。もう一度お試しください', ko:'PKCE 인증에 실패했습니다. 다시 시도해주세요' },
+  err_captcha_pending: { 'zh-TW':'人機驗證尚未完成，請稍候再點一次', en:'Captcha is still verifying, please wait and try again', ja:'ボット認証が完了していません。少々お待ちください', ko:'봇 검증이 아직 완료되지 않았습니다. 잠시만 기다려 주세요' },
 }
 
 function getLang() {
@@ -350,10 +352,17 @@ async function handleLogin(event) {
   const btn      = document.getElementById('login-btn');
   btn.dataset.label = uiT('btn_login');
 
+  const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
+  // Turnstile widget 在頁面有掛但用戶搶在驗證完成前點 → 給本地 i18n 提示，不送 request
+  const hasTsWidget = !!document.querySelector('#form-login .cf-turnstile');
+  if (hasTsWidget && !tsToken) {
+    showMsg(uiT('err_captcha_pending'));
+    return;
+  }
+
   setLoading('login-btn', true);
 
   try {
-    const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
     const res = await fetch(API.login, {
       method:      'POST',
       credentials: 'include',
@@ -415,10 +424,16 @@ async function handleRegister(event) {
     return;
   }
 
+  const tsToken = document.querySelector('#form-register [name="cf-turnstile-response"]')?.value || '';
+  const hasTsWidget = !!document.querySelector('#form-register .cf-turnstile');
+  if (hasTsWidget && !tsToken) {
+    showMsg(uiT('err_captcha_pending'));
+    return;
+  }
+
   setLoading('reg-btn', true);
 
   try {
-    const tsToken = document.querySelector('#form-register [name="cf-turnstile-response"]')?.value || '';
     const res = await fetch(API.register, {
       method:      'POST',
       credentials: 'include',
