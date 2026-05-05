@@ -14,7 +14,7 @@
  * 前端：建 <form action={checkout_url} method="POST">，把 fields 全部塞 hidden input，submit。
  * ECPay 完成後：
  *   - server-to-server → ReturnURL = /api/webhooks/payments/ecpay
- *   - browser redirect → ClientBackURL = /dashboard/payment-result.html（前端 UI 之後做）
+ *   - browser redirect → ClientBackURL = /payment-result.html（前端 UI 之後做）
  *
  * Body：
  *   {
@@ -87,9 +87,14 @@ export async function onRequestPost({ request, env }) {
   // 組 ECPay form
   const origin = new URL(request.url).origin
   const returnUrl     = env?.ECPAY_RETURN_URL     || `${origin}/api/webhooks/payments/ecpay`
-  const clientBackUrl = body?.client_back_url     || env?.ECPAY_CLIENT_BACK_URL || `${origin}/dashboard/payment-result.html`
+  const clientBackUrl = body?.client_back_url     || env?.ECPAY_CLIENT_BACK_URL || `${origin}/payment-result.html`
 
   const debugFlag = new URL(request.url).searchParams.get('debug') === '1'
+  // OrderResultURL：付款成功後 ECPay 主動 POST 到此 URL（瀏覽器層級，跟 ReturnURL
+  // server-to-server 並列）。沒設的話 ECPay 停在自家成功頁等 user 點「回商店」(ClientBackURL)。
+  // 沙箱很多 user 看到自家頁就關掉 → 不會走 ClientBackURL → 我方 payment-result.html
+  // 從未被觸發。設這個讓 ECPay 自動跳 → user 不需點任何東西。
+  const orderResultUrl = body?.order_result_url || env?.ECPAY_ORDER_RESULT_URL || `${origin}/payment-result.html`
   const { checkout_url, fields, _debug } = await buildEcpayCheckoutFields(env, {
     merchantTradeNo,
     totalAmount:    amount,
@@ -97,6 +102,7 @@ export async function onRequestPost({ request, env }) {
     itemName:       body?.item_name  || body?.trade_desc || 'chiyigo deposit',
     returnUrl,
     clientBackUrl,
+    orderResultUrl,
     choosePayment:  body?.choose_payment || 'ALL',
   })
 
