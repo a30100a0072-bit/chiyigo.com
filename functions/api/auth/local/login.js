@@ -27,6 +27,8 @@ import {
   getUserCooldownSeconds,
   detectAndBlacklistCrossUserScan,
 } from '../../../utils/brute-force.js'
+import { computeRiskScore, hashUa, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score.js'
+import { sendRiskBlockedAlertEmail } from '../../../utils/email.js'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
@@ -165,6 +167,36 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
   }
 
+  // ── 5.7 Phase E-2 risk score ─────────────────────────────────
+  // 密碼正確 + 未 ban 後算分。clear login_attempts 必須**之後**做，否則 recent_fails 永遠 0
+  const risk = await computeRiskScore(env, request, { userId: record.user_id, email: emailNorm })
+  if (shouldDenyByRisk(risk.score)) {
+    await safeUserAudit(env, {
+      event_type: 'auth.risk.blocked', severity: 'critical',
+      user_id: record.user_id, request,
+      data: { score: risk.score, factors: risk.factors, country: risk.country },
+    })
+    if (env.RESEND_API_KEY) {
+      try {
+        await sendRiskBlockedAlertEmail(env.RESEND_API_KEY, record.email, {
+          score: risk.score, factors: risk.factors, country: risk.country,
+          when: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
+        }, env)
+      } catch { /* swallow */ }
+    }
+    return res({
+      error: 'High risk login blocked. Check your email for details.',
+      code: 'RISK_BLOCKED',
+    }, 403)
+  }
+  if (isRiskMedium(risk.score)) {
+    await safeUserAudit(env, {
+      event_type: 'auth.risk.medium', severity: 'warn',
+      user_id: record.user_id, request,
+      data: { score: risk.score, factors: risk.factors, country: risk.country },
+    })
+  }
+
   // 密碼驗證通過：清除此 email 的失敗記錄（fire-and-forget）
   db.prepare(`DELETE FROM login_attempts WHERE kind = 'login' AND email = ?`).bind(emailNorm).run()
 
@@ -217,7 +249,13 @@ export async function onRequestPost({ request, env }) {
   await safeUserAudit(env, {
     event_type: 'auth.login.success',
     user_id: record.user_id, request,
-    data: { method: 'password', country: request?.cf?.country ?? null },
+    data: {
+      method: 'password',
+      country: risk.country,
+      ua_hash: risk.ua_hash,
+      risk_score: risk.score,
+      risk_factors: risk.factors,
+    },
   })
   await safeAlertAnomalies(env, request, {
     userId:     record.user_id,

@@ -24,6 +24,7 @@ import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
+import { computeRiskScore, hashUa } from '../../../utils/risk-score.js'
 
 const TOTP_RL_WINDOW_SEC = 5 * 60
 const TOTP_RL_MAX        = 5
@@ -156,11 +157,17 @@ async function issueToken(userId, record, db, deviceUuid, env, audience, request
   `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt).run()
 
   // Phase D-4：登入完成 audit + 異常裝置警示
+  // Phase E-2：寫 ua_hash 到 audit（risk check 已在 local/login.js password 階段做過，此處不重複）
   if (request) {
+    const uaHash = await hashUa(request.headers.get('User-Agent') ?? '').catch(() => null)
     await safeUserAudit(env, {
       event_type: 'auth.login.success',
       user_id: userId, request,
-      data: { method: method ?? 'totp', country: request?.cf?.country ?? null },
+      data: {
+        method: method ?? 'totp',
+        country: request?.cf?.country ?? null,
+        ua_hash: uaHash,
+      },
     })
     await safeAlertAnomalies(env, request, {
       userId, email: record.email, deviceUuid: deviceUuid ?? null,

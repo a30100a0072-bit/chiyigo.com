@@ -202,3 +202,68 @@ export async function sendNewDeviceAlertEmail(apiKey, to, info, env) {
     html,
   })
 }
+
+/**
+ * Phase E-2：高風險登入被擋下提醒。
+ * caller 在 risk score ≥ 70 時呼叫；email 用於告知本人「我們擋了一次嫌疑登入」。
+ *
+ * @param {string} apiKey
+ * @param {string} to
+ * @param {object} info  { score, factors:[...], country, when }
+ * @param {object} env
+ */
+export async function sendRiskBlockedAlertEmail(apiKey, to, info, env) {
+  const BASE_URL = baseUrlOf(env)
+  const dash = `${BASE_URL}/dashboard.html`
+  const reset = `${BASE_URL}/forgot-password.html`
+  const score = info.score ?? '?'
+  const factors = (info.factors ?? []).join(', ') || '—'
+  const country = info.country ?? '未知'
+  const when = info.when ?? new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC'
+
+  const html = `
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif;color:#e2e8f0">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:40px auto">
+    <tr><td style="padding:32px;background:#1e293b;border-radius:12px">
+      <h1 style="margin:0 0 8px;font-size:22px;color:#f87171">🚨 高風險登入已被擋下</h1>
+      <p style="margin:0 0 16px;color:#94a3b8;font-size:14px">
+        我們偵測到一次風險評分過高的登入嘗試，已主動擋下：
+      </p>
+      <table style="margin:0 0 20px;color:#e2e8f0;font-size:14px;line-height:1.6">
+        <tr><td style="color:#94a3b8;padding-right:16px">風險分數</td><td style="color:#fbbf24;font-weight:600">${score} / 100</td></tr>
+        <tr><td style="color:#94a3b8;padding-right:16px">觸發原因</td><td>${factors}</td></tr>
+        <tr><td style="color:#94a3b8;padding-right:16px">地區</td><td>${country}</td></tr>
+        <tr><td style="color:#94a3b8;padding-right:16px">時間</td><td>${when}</td></tr>
+      </table>
+      <p style="margin:0 0 20px;color:#fbbf24;font-size:13px;font-weight:600">
+        如果這次嘗試**就是你本人**（VPN / 出國 / 換新裝置半夜登入等），
+        恢復常態後再試一次即可，不需要其他動作。
+      </p>
+      <p style="margin:0 0 20px;color:#f87171;font-size:13px;font-weight:600">
+        如果**不是你**，請立即重設密碼並檢查綁定的裝置 / passkey：
+      </p>
+      <a href="${reset}"
+         style="display:inline-block;padding:12px 24px;background:#ef4444;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;margin-right:8px">
+        立即重設密碼
+      </a>
+      <a href="${dash}"
+         style="display:inline-block;padding:12px 24px;background:#374151;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px">
+        查看裝置列表
+      </a>
+      <p style="margin:24px 0 0;color:#475569;font-size:12px">
+        Chiyigo 不會透過 email 索取密碼或 2FA 驗證碼。
+      </p>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim()
+
+  return sendEmail(apiKey, env, {
+    to,
+    subject: '🚨 Chiyigo 高風險登入已被擋下',
+    html,
+  })
+}

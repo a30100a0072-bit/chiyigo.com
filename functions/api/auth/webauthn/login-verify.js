@@ -41,6 +41,8 @@ import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn.js'
 import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
+import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score.js'
+import { sendRiskBlockedAlertEmail } from '../../../utils/email.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -160,6 +162,35 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403, cors)
   }
 
+  // 4.5 Phase E-2 risk score（Passkey 分支）
+  const risk = await computeRiskScore(env, request, { userId: cred.user_id, email: cred.email })
+  if (shouldDenyByRisk(risk.score)) {
+    await safeUserAudit(env, {
+      event_type: 'auth.risk.blocked', severity: 'critical',
+      user_id: cred.user_id, request,
+      data: { score: risk.score, factors: risk.factors, country: risk.country, method: 'webauthn' },
+    })
+    if (env.RESEND_API_KEY && cred.email) {
+      try {
+        await sendRiskBlockedAlertEmail(env.RESEND_API_KEY, cred.email, {
+          score: risk.score, factors: risk.factors, country: risk.country,
+          when: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
+        }, env)
+      } catch { /* swallow */ }
+    }
+    return res({
+      error: 'High risk login blocked. Check your email for details.',
+      code: 'RISK_BLOCKED',
+    }, 403, cors)
+  }
+  if (isRiskMedium(risk.score)) {
+    await safeUserAudit(env, {
+      event_type: 'auth.risk.medium', severity: 'warn',
+      user_id: cred.user_id, request,
+      data: { score: risk.score, factors: risk.factors, country: risk.country, method: 'webauthn' },
+    })
+  }
+
   const newCounter = verification.authenticationInfo.newCounter ?? 0
   const userVerified = verification.authenticationInfo.userVerified === true
 
@@ -207,7 +238,10 @@ export async function onRequestPost({ request, env }) {
       amr,
       credential_id_prefix: credentialId.slice(0, 12),
       user_verified: userVerified,
-      country: request?.cf?.country ?? null,
+      country: risk.country,
+      ua_hash: risk.ua_hash,
+      risk_score: risk.score,
+      risk_factors: risk.factors,
     },
   })
 

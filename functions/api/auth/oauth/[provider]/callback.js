@@ -23,6 +23,8 @@ import { resolveAud } from '../../../../utils/cors.js'
 import { refreshCookie } from '../../../../utils/cookies.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
 import { safeAlertAnomalies } from '../../../../utils/device-alerts.js'
+import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../../utils/risk-score.js'
+import { sendRiskBlockedAlertEmail } from '../../../../utils/email.js'
 import { buildTokenScope } from '../../../../utils/scopes.js'
 
 const ACCESS_TOKEN_TTL   = '15m'
@@ -251,6 +253,32 @@ async function handle(context) {
   if (!userRow) return htmlError('帳號建立後無法查詢，請稍後重試。')
   if (userRow.status === 'banned') return htmlError('此帳號已被停用。', 403)
 
+  // ── 7.5 Phase E-2 risk score（OAuth 分支）──
+  const risk = await computeRiskScore(env, request, { userId, email: userRow.email })
+  if (shouldDenyByRisk(risk.score)) {
+    await safeUserAudit(env, {
+      event_type: 'auth.risk.blocked', severity: 'critical',
+      user_id: userId, request,
+      data: { score: risk.score, factors: risk.factors, country: risk.country, method: `oauth:${provider}` },
+    })
+    if (env.RESEND_API_KEY && userRow.email) {
+      try {
+        await sendRiskBlockedAlertEmail(env.RESEND_API_KEY, userRow.email, {
+          score: risk.score, factors: risk.factors, country: risk.country,
+          when: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
+        }, env)
+      } catch { /* swallow */ }
+    }
+    return htmlError('登入嘗試被風控擋下，已寄信至你的信箱請查收。', 403)
+  }
+  if (isRiskMedium(risk.score)) {
+    await safeUserAudit(env, {
+      event_type: 'auth.risk.medium', severity: 'warn',
+      user_id: userId, request,
+      data: { score: risk.score, factors: risk.factors, country: risk.country, method: `oauth:${provider}` },
+    })
+  }
+
   // ── 8. 簽發 Access Token ─────────────────────────────────────
   // 優先用 init 階段寫入的 aud（跨子網域 talo / mbti 走 web platform 也能正確簽）；
   // 缺值時 fallback：platform=pc 改看 client_callback origin；其餘 chiyigo（向後相容舊 row）
@@ -299,7 +327,13 @@ async function handle(context) {
   await safeUserAudit(env, {
     event_type: 'auth.login.success',
     user_id: userId, request,
-    data: { method: `oauth:${provider}`, country: request?.cf?.country ?? null },
+    data: {
+      method: `oauth:${provider}`,
+      country: risk.country,
+      ua_hash: risk.ua_hash,
+      risk_score: risk.score,
+      risk_factors: risk.factors,
+    },
   })
   await safeAlertAnomalies(env, request, {
     userId, email: userRow.email, deviceUuid: null,
