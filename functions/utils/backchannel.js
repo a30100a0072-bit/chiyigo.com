@@ -23,14 +23,13 @@
  */
 
 import { SignJWT, importJWK } from 'jose'
-import { BACKCHANNEL_LOGOUT_ENDPOINTS } from './oauth-clients.js'
+import { getBackchannelEndpoints } from './oauth-clients.js'
 
 const LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout'
 
-// RP backchannel endpoint 來自 oauth-clients registry — 該 RP 的
-// `backchannel_logout_uri` 為 null 即不會被 dispatch。mbti/talo 等待對等
-// endpoint 實作後在 registry 補 URL 自動生效。
-export { BACKCHANNEL_LOGOUT_ENDPOINTS as BACKCHANNEL_LOGOUT_URIS }
+// RP backchannel endpoint 來自 oauth-clients registry（D1 + KV cache）—
+// 該 RP 的 `backchannel_logout_uri` 為 null 即不會被 dispatch。mbti/talo
+// 等待對等 endpoint 實作後在 registry 補 URL 自動生效。
 
 function randomJti() {
   const buf = crypto.getRandomValues(new Uint8Array(16))
@@ -67,7 +66,7 @@ async function signLogoutToken(sub, aud, env) {
  */
 export async function dispatchBackchannelLogout(env, sub) {
   if (!sub) return
-  await Promise.allSettled(BACKCHANNEL_LOGOUT_ENDPOINTS.map(async ({ aud, url }) => {
+  await Promise.allSettled(getBackchannelEndpoints().map(async ({ aud, url }) => {
     try {
       const token = await signLogoutToken(sub, aud, env)
       const body = new URLSearchParams({ logout_token: token }).toString()

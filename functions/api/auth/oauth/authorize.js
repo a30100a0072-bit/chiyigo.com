@@ -38,7 +38,7 @@
 
 import { generateSecureToken } from '../../../utils/crypto.js'
 import { res } from '../../../utils/auth.js'
-import { ALLOWED_REDIRECT_URIS } from '../../../utils/oauth-clients.js'
+import { getAllowedRedirectUris } from '../../../utils/oauth-clients.js'
 import {
   readRefreshCookie,
   findActiveUserByRefreshCookie,
@@ -49,12 +49,10 @@ import {
 
 const SESSION_TTL_MS = 10 * 60 * 1000 // 10 分鐘完成登入
 
-// redirect_uri 白名單來自 oauth-clients registry（單一 source of truth）
-// 加 RP 改 functions/utils/oauth-clients.js，不在此處加。
-const ALLOWED_REDIRECT_URI_SET = new Set(ALLOWED_REDIRECT_URIS)
-
+// redirect_uri 白名單來自 oauth-clients registry（D1 + KV cache + in-code fallback）
+// 加 RP 走 D1（admin CRUD 或 SQL）；middleware 每請求 refresh cache（throttle 60s）。
 function isAllowedRedirectUri(uri) {
-  if (ALLOWED_REDIRECT_URI_SET.has(uri)) return true
+  if (getAllowedRedirectUris().includes(uri)) return true
   // Loopback（Desktop Launcher，RFC 8252）— 動態 port，不在 registry
   if (/^http:\/\/127\.0\.0\.1:\d{1,5}\/callback$/.test(uri)) return true
   return false

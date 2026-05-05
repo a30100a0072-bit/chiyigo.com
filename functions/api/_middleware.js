@@ -14,6 +14,7 @@
 //    data.observe.extras = { feature: 'requisition_revoke', id }
 
 import { getCorsHeaders } from '../utils/cors.js'
+import { refreshClientsCache } from '../utils/oauth-clients.js'
 
 const CT_EXEMPT_EXACT   = new Set(['/api/auth/logout'])
 const CT_EXEMPT_PATTERN = /^\/api\/auth\/oauth\/[^/]+\/callback$/
@@ -96,6 +97,11 @@ export async function onRequest(context) {
   // 給下游 handler 掛 metadata（先用 JWT 自稱 sub 預填 userId，handler 可覆寫）
   const claimedSub = tryDecodeAuthSub(request.headers.get('Authorization'))
   data.observe = { traceId, userId: claimedSub, extras: null }
+
+  // OAuth client registry refresh（per-isolate 60s throttle，內部 try/catch 不擋請求）
+  // 讓 cors.js / authorize.js 等同步 consumer 讀到最新 D1 內容；首次 cold start
+  // 仍能 fallback 到 in-code，所以這裡不 await 也不要緊，但 await 較好（一致性高）
+  try { await refreshClientsCache(env) } catch { /* 不擋請求 */ }
 
   // ── Content-Type 守門 ─────────────────────────────────────────
   if (method === 'POST'

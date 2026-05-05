@@ -7,13 +7,13 @@
  *  - 不在白名單的 Origin：回傳空物件（不加 CORS 標頭，瀏覽器自行攔截）
  */
 
-import { ALLOWED_CORS_ORIGINS, AUD_BY_ORIGIN, VALID_AUDS } from './oauth-clients.js'
+import { getAllowedCorsOrigins, getAudByOrigin, getValidAuds } from './oauth-clients.js'
 
 function getAllowedOrigins(env) {
   const extras = env.ALLOWED_ORIGINS
     ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
     : []
-  return [...ALLOWED_CORS_ORIGINS, ...extras]
+  return [...getAllowedCorsOrigins(), ...extras]
 }
 
 function isAllowedOrigin(origin, env) {
@@ -46,14 +46,14 @@ export function getCorsHeaders(request, env, opts = {}) {
 }
 
 // JWT aud claim 解析：依 redirect / origin 決定 token 受眾
-// AUD_BY_ORIGIN / VALID_AUDS 來自 oauth-clients registry
+// 從 oauth-clients registry 動態讀（middleware refresh 後反映 D1 最新內容）
 // 未匹配 → 'chiyigo'（chiyigo.com 自家頁面）
 export function resolveAud(input) {
   if (!input || typeof input !== 'string') return 'chiyigo'
-  if (VALID_AUDS.has(input)) return input
+  if (getValidAuds().has(input)) return input
   try {
     const origin = new URL(input).origin
-    return AUD_BY_ORIGIN[origin] ?? 'chiyigo'
+    return getAudByOrigin()[origin] ?? 'chiyigo'
   } catch {
     return 'chiyigo'
   }

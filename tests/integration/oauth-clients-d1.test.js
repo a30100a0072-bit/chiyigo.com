@@ -1,11 +1,12 @@
 /**
- * Phase C-1 Wave 1 — oauth_clients D1 backed 整合測試
+ * Phase C-1 Wave 2 — oauth_clients D1 backed 整合測試
  *
- * 驗證 functions/utils/oauth-clients.js 新 async API：
- *  - getAllClients：D1 → KV cache → in-code fallback 三層
- *  - getClient：依 client_id 取
- *  - getValidAuds：aud Set
- *  - invalidateClientsCache：清 KV
+ * 驗證 functions/utils/oauth-clients.js：
+ *  - refreshClientsCache：D1 → KV cache → in-code fallback 三層
+ *  - sync getters（getAllClients / getClient / getValidAuds / ...）
+ *    讀取 module-level cache（中間人 middleware 觸發 refresh）
+ *  - 60s throttle 行為
+ *  - invalidateClientsCache 清 KV + 強制下次 refresh
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
@@ -13,10 +14,14 @@ import { env } from 'cloudflare:test'
 import { resetDb } from './_helpers.js'
 import {
   IN_CODE_CLIENTS,
+  refreshClientsCache,
   getAllClients,
   getClient,
   getValidAuds,
+  getAllowedRedirectUris,
+  getAudByOrigin,
   invalidateClientsCache,
+  _resetCacheForTests,
 } from '../../functions/utils/oauth-clients.js'
 
 async function seedRP({ client_id, aud, redirect_uris = [], origins = [], post_logout = [], frontchannel = [], backchannel = null }) {
@@ -43,48 +48,47 @@ async function seedRP({ client_id, aud, redirect_uris = [], origins = [], post_l
     .run()
 }
 
-describe('oauth-clients D1 async API', () => {
+describe('oauth-clients D1 cache + sync getters', () => {
   beforeAll(async () => { await resetDb() })
   beforeEach(async () => {
     await resetDb()
-    await invalidateClientsCache(env) // 確保每個 test 從乾淨 KV 開始
+    _resetCacheForTests()                 // module state
+    await invalidateClientsCache(env)     // KV
   })
 
-  it('D1 空表 → fallback in-code 4 個 RP', async () => {
-    const all = await getAllClients(env)
-    expect(all.length).toBe(IN_CODE_CLIENTS.length)
-    expect(all.map(c => c.client_id).sort()).toEqual(['chiyigo', 'mbti', 'sport-app', 'talo'])
+  it('未 refresh 過 → sync getter 讀到 in-code（4 個 RP）', () => {
+    expect(getAllClients().length).toBe(IN_CODE_CLIENTS.length)
+    expect(getValidAuds().has('chiyigo')).toBe(true)
   })
 
-  it('D1 有 row → 回 D1 內容（不再用 in-code）', async () => {
+  it('refreshClientsCache 後 D1 有 row → 讀到 D1 內容', async () => {
     await seedRP({
-      client_id: 'test-rp',
-      origins: ['https://test.example.com'],
-      redirect_uris: ['https://test.example.com/cb'],
+      client_id: 'd1-only-rp',
+      origins: ['https://d1only.example'],
+      redirect_uris: ['https://d1only.example/cb'],
     })
-    const all = await getAllClients(env)
-    // D1 只有 1 個 row → in-code 不出現（因為 D1 path hit 後直接 return）
+    await refreshClientsCache(env)
+
+    const all = getAllClients()
     expect(all.length).toBe(1)
-    expect(all[0].client_id).toBe('test-rp')
-    expect(all[0].origins).toEqual(['https://test.example.com'])
+    expect(all[0].client_id).toBe('d1-only-rp')
   })
 
-  it('JSON column 解析正確（redirect_uris 是 array 不是 string）', async () => {
+  it('JSON column 正確解析成 array', async () => {
     await seedRP({
       client_id: 'multi-rp',
       redirect_uris: ['https://a.com/cb', 'https://b.com/cb'],
       origins: ['https://a.com', 'https://b.com'],
       backchannel: 'https://a.com/bc',
     })
-    const all = await getAllClients(env)
-    const c = all[0]
+    await refreshClientsCache(env)
+
+    const c = getAllClients()[0]
     expect(c.redirect_uris).toEqual(['https://a.com/cb', 'https://b.com/cb'])
-    expect(c.origins.length).toBe(2)
     expect(c.backchannel_logout_uri).toBe('https://a.com/bc')
   })
 
-  it('壞 JSON column → 該欄位 fallback 空陣列，不擋整體', async () => {
-    // 直接寫一筆 redirect_uris 是壞 JSON
+  it('壞 JSON column → 該欄位 fallback []，不擋整體', async () => {
     await env.chiyigo_db
       .prepare(`
         INSERT INTO oauth_clients (
@@ -93,27 +97,29 @@ describe('oauth-clients D1 async API', () => {
           is_active, created_at, updated_at
         ) VALUES ('broken-rp', 'Broken', 'web', 'NOT_JSON', '[]', 1, datetime('now'), datetime('now'))
       `).run()
-    const all = await getAllClients(env)
-    expect(all.length).toBe(1)
-    expect(all[0].redirect_uris).toEqual([])  // fallback
-    expect(all[0].client_id).toBe('broken-rp')
+    await refreshClientsCache(env)
+
+    const c = getAllClients()[0]
+    expect(c.client_id).toBe('broken-rp')
+    expect(c.redirect_uris).toEqual([])
   })
 
-  it('aud 缺值（NULL）→ fallback = client_id', async () => {
+  it('aud 欄位 NULL → fallback = client_id', async () => {
     await env.chiyigo_db
       .prepare(`
         INSERT INTO oauth_clients (
           client_id, client_name, app_type,
-          allowed_redirect_uris, allowed_scopes,
-          aud,
+          allowed_redirect_uris, allowed_scopes, aud,
           is_active, created_at, updated_at
         ) VALUES ('no-aud', 'No Aud', 'web', '[]', '[]', NULL, 1, datetime('now'), datetime('now'))
       `).run()
-    const c = await getClient(env, 'no-aud')
+    await refreshClientsCache(env)
+
+    const c = getClient('no-aud')
     expect(c.aud).toBe('no-aud')
   })
 
-  it('is_active = 0 → 不出現在 getAllClients', async () => {
+  it('is_active = 0 → 不出現', async () => {
     await env.chiyigo_db
       .prepare(`
         INSERT INTO oauth_clients (
@@ -122,68 +128,67 @@ describe('oauth-clients D1 async API', () => {
           is_active, created_at, updated_at
         ) VALUES ('disabled-rp', 'Disabled', 'web', '[]', '[]', 0, datetime('now'), datetime('now'))
       `).run()
-    // is_active=1 的也要有，否則 fallback 會回 in-code
     await seedRP({ client_id: 'live-rp' })
+    await refreshClientsCache(env)
 
-    const all = await getAllClients(env)
-    expect(all.map(c => c.client_id)).toEqual(['live-rp'])
+    expect(getAllClients().map(c => c.client_id)).toEqual(['live-rp'])
   })
 
-  it('getClient 找不到 → null', async () => {
-    const c = await getClient(env, 'nope-not-here')
-    // D1 空 → 走 in-code，in-code 沒這個 → null
-    expect(c).toBeNull()
+  it('60s throttle：同 isolate 內第二次呼叫不打 D1', async () => {
+    await seedRP({ client_id: 'first-rp' })
+    await refreshClientsCache(env)
+    expect(getAllClients()[0].client_id).toBe('first-rp')
+
+    // 改 D1，但因 throttle 不會重讀
+    await env.chiyigo_db.prepare(`UPDATE oauth_clients SET client_id = 'changed-rp' WHERE client_id = 'first-rp'`).run()
+    await refreshClientsCache(env)
+    expect(getAllClients()[0].client_id).toBe('first-rp') // 還是舊值
   })
 
-  it('getClient 對 in-code RP（D1 空）→ 找得到', async () => {
-    const c = await getClient(env, 'chiyigo')
-    expect(c).toBeTruthy()
-    expect(c.aud).toBe('chiyigo')
-    expect(c.origins).toContain('https://chiyigo.com')
-  })
-
-  it('getValidAuds 回 Set 含所有 active aud', async () => {
-    await seedRP({ client_id: 'a', aud: 'aud-A' })
-    await seedRP({ client_id: 'b', aud: 'aud-B' })
-    const auds = await getValidAuds(env)
-    expect(auds.has('aud-A')).toBe(true)
-    expect(auds.has('aud-B')).toBe(true)
-    expect(auds.size).toBe(2)
-  })
-
-  it('KV cache：第二次呼叫不再打 D1', async () => {
-    await seedRP({ client_id: 'cached-rp', origins: ['https://cached.example'] })
-
-    const first = await getAllClients(env)
-    expect(first[0].client_id).toBe('cached-rp')
-
-    // 直接刪 D1 row；如果 KV cache 有效，下次呼叫仍應回 cached-rp
-    await env.chiyigo_db.prepare(`DELETE FROM oauth_clients WHERE client_id = 'cached-rp'`).run()
-
-    const second = await getAllClients(env)
-    expect(second[0].client_id).toBe('cached-rp')
-  })
-
-  it('invalidateClientsCache 後再呼叫會重讀 D1', async () => {
+  it('invalidateClientsCache 後強制重讀 D1', async () => {
     await seedRP({ client_id: 'before' })
-    await getAllClients(env)  // populate cache
+    await refreshClientsCache(env)
+    expect(getAllClients()[0].client_id).toBe('before')
 
-    // 改 D1，不清 cache → 還是讀到舊
     await env.chiyigo_db.prepare(`UPDATE oauth_clients SET client_id = 'after' WHERE client_id = 'before'`).run()
-    let r = await getAllClients(env)
-    expect(r[0].client_id).toBe('before') // cache hit
-
-    // 清 cache → 重讀 D1
-    await invalidateClientsCache(env)
-    r = await getAllClients(env)
-    expect(r[0].client_id).toBe('after')
+    await invalidateClientsCache(env)  // 重置 throttle + 清 KV
+    await refreshClientsCache(env)
+    expect(getAllClients()[0].client_id).toBe('after')
   })
 
-  it('in-code sync exports 不變（向後相容）', async () => {
-    const { ALLOWED_REDIRECT_URIS, VALID_AUDS, AUD_BY_ORIGIN } =
-      await import('../../functions/utils/oauth-clients.js')
-    expect(ALLOWED_REDIRECT_URIS).toContain('https://chiyigo.com/callback')
-    expect(VALID_AUDS.has('chiyigo')).toBe(true)
-    expect(AUD_BY_ORIGIN['https://mbti.chiyigo.com']).toBe('mbti')
+  it('衍生 getter：getAllowedRedirectUris flatten', async () => {
+    await seedRP({ client_id: 'rp1', redirect_uris: ['https://x/cb1', 'https://x/cb2'] })
+    await seedRP({ client_id: 'rp2', redirect_uris: ['https://y/cb'] })
+    await refreshClientsCache(env)
+
+    const list = getAllowedRedirectUris()
+    expect(list.length).toBe(3)
+    expect(list).toContain('https://x/cb1')
+    expect(list).toContain('https://y/cb')
+  })
+
+  it('衍生 getter：getAudByOrigin 反查表', async () => {
+    await seedRP({ client_id: 'rpA', aud: 'aud-A', origins: ['https://a.example', 'https://a2.example'] })
+    await seedRP({ client_id: 'rpB', aud: 'aud-B', origins: ['https://b.example'] })
+    await refreshClientsCache(env)
+
+    const map = getAudByOrigin()
+    expect(map['https://a.example']).toBe('aud-A')
+    expect(map['https://a2.example']).toBe('aud-A')
+    expect(map['https://b.example']).toBe('aud-B')
+  })
+
+  it('D1 失效 → 維持上次 cache（不會回 in-code 撞掉現有 D1 cache）', async () => {
+    await seedRP({ client_id: 'cached-rp' })
+    await refreshClientsCache(env)
+    expect(getAllClients()[0].client_id).toBe('cached-rp')
+
+    // 模擬 D1 fail：把 KV cache 也清掉，env.chiyigo_db 還在但 oauth_clients 表撈不到（is_active 改 0）
+    await env.chiyigo_db.prepare(`UPDATE oauth_clients SET is_active = 0`).run()
+    await invalidateClientsCache(env)
+    await refreshClientsCache(env)
+
+    // D1 回 0 row → fallthrough（沒覆寫 _currentClients），cache 仍是上次 cached-rp
+    expect(getAllClients()[0].client_id).toBe('cached-rp')
   })
 })

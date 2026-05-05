@@ -417,4 +417,5 @@ Week 11+:    Phase F — 對接時做
 | 2026-05-05 | Phase B 全部結案 + 實機驗收 PASS：B1 jti / B2 revocation check / B3 Admin Revoke API / B4 audit_log 22 事件接 ~15 endpoint / B5 GET /api/admin/audit；AUDIT_IP_SALT + DISCORD_AUDIT_WEBHOOK 已設；critical 告警鏈路（mfa.disable / account.delete → Discord）通；附錄 bug：2FA disable 後 dashboard UX 異常（純前端，排 Phase D 修） |
 | 2026-05-05 | 2FA disable UX bug 修復：dashboard 主動清 token + 跳 login.html?tfa_disabled=1 |
 | 2026-05-05 | Phase C-1 Wave 1（oauth_clients D1 化）：migration 0020 補欄位 + seed 4 RP；oauth-clients.js 加 async getAllClients/getClient/getValidAuds（KV cache + D1 + in-code fallback）；既有 sync exports 保留向後相容；待 Wave 2 切 consumers / Wave 3 admin CRUD |
+| 2026-05-05 | Phase C-1 Wave 2（consumers 切 sync getter）：cors / authorize / end-session / backchannel 全切到 sync getter（讀 module-level cache）；`_middleware.js` 觸發 `refreshClientsCache(env)`（per-isolate 60s throttle）；走 sync 而非 async cascade，避免改 ~14 處 handler；待 Wave 3 admin CRUD 即可零 deploy 加 RP |
 | 2026-05-02 | 大改版：擴張到金融級平台（金流 + 虛擬貨幣 + 真錢遊戲），新增 Phase 0 / Phase E / Phase F |

@@ -26,12 +26,10 @@ import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies.js'
 import { dispatchBackchannelLogout } from '../../../utils/backchannel.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import {
-  ALLOWED_POST_LOGOUT_URIS,
-  FRONTCHANNEL_LOGOUT_URIS,
-  FRONTCHANNEL_FRAME_ORIGINS,
+  getAllowedPostLogoutUris,
+  getFrontchannelUris,
+  getFrontchannelFrameOrigins,
 } from '../../../utils/oauth-clients.js'
-
-const ALLOWED_POST_LOGOUT_REDIRECT = new Set(ALLOWED_POST_LOGOUT_URIS)
 
 function escAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -39,7 +37,7 @@ function escAttr(s) {
 }
 
 function isAllowedPostLogoutUri(uri) {
-  return typeof uri === 'string' && ALLOWED_POST_LOGOUT_REDIRECT.has(uri)
+  return typeof uri === 'string' && getAllowedPostLogoutUris().includes(uri)
 }
 
 // id_token_hint 驗簽（不驗 exp）→ 取出 sub
@@ -139,11 +137,11 @@ export async function onRequestGet({ request, env, waitUntil }) {
     : postLogoutRedirectUri
 
   // 4. 回 HTML：嵌入 frontchannel iframe + meta refresh
-  const iframes = FRONTCHANNEL_LOGOUT_URIS
+  const iframes = getFrontchannelUris()
     .map(u => `<iframe src="${escAttr(u)}" sandbox="allow-scripts allow-same-origin" style="display:none" aria-hidden="true"></iframe>`)
     .join('\n')
 
-  const cspFrameSrc = FRONTCHANNEL_FRAME_ORIGINS.join(' ')
+  const cspFrameSrc = getFrontchannelFrameOrigins().join(' ')
 
   const html = `<!DOCTYPE html>
 <html lang="zh-TW">

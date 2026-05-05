@@ -1,57 +1,48 @@
 /**
- * OAuth/OIDC Client Registry — Phase C-1 (Wave 1)
+ * OAuth/OIDC Client Registry — Phase C-1 Wave 2
  *
- * 演進歷史：
- *   - Phase 1（2026-05-04）：in-code OAUTH_CLIENTS 為唯一 source of truth，
- *     集中 5 處 hardcode。
- *   - Phase C-1 Wave 1（2026-05-05）：搬到 D1 表 `oauth_clients`（migration
- *     0020 seed 過，欄位齊）。新 RP 可走 SQL INSERT 不必改 code。in-code list
- *     保留作 boot-time 預設值 + D1 不可用時 fallback（縱深防禦）。
- *   - Wave 2（未來）：consumers（cors / authorize / end-session / backchannel）
- *     一個一個切到 async getter，從同步 const 變成請求時讀 D1+KV。
- *   - Wave 3（未來）：admin CRUD endpoints 走 D1。
+ * 演進：
+ *   - Phase 1（2026-05-04）：in-code OAUTH_CLIENTS 為唯一 source of truth。
+ *   - Phase C-1 Wave 1（2026-05-05）：D1 表 + KV cache + async getters；
+ *     consumers 仍用 sync exports（值取自 in-code）。
+ *   - Phase C-1 Wave 2（2026-05-05）：sync getters 讀 module-level mutable cache，
+ *     `refreshClientsCache(env)` 由 _middleware.js 在每個 /api/* 請求前觸發
+ *     （per-isolate 60s throttle），cache 從 KV → D1 → in-code 三層讀。
+ *     consumers 從 sync const 改成 sync getter function（getXxx），不必 cascade async。
  *
- * 模組現況：
- *   - 同步 export（IN_CODE_CLIENTS / ALLOWED_REDIRECT_URIS / ...）保留：
- *     既有 consumers 不必改，仍能跑（值來自 in-code 與 D1 seed 一致）。
- *   - 非同步 export（getAllClients / getClient / getValidAuds 等）：
- *     讀 D1（KV cache），D1 fail 時 fallback in-code。Wave 2 之後 consumers 換用此 API。
- *
- * 加新 RP 步驟（Wave 1 期間）：
- *   1. 跑一條 INSERT INTO oauth_clients 到 prod D1
- *   2. （**重要**）順便在 IN_CODE_CLIENTS 加一筆並 deploy，否則：
- *      - cors.js 等同步 consumer 看不到新 RP（aud/origin 反查失效）
- *      - D1 暫時失效時 fallback 也沒這筆
- *   3. Wave 2 完工後 step 2 才能省略
+ * 為什麼用 sync getter + 模組級 cache（不用 async cascade）：
+ *   cors.getCorsHeaders / resolveAud 已在 ~14 個 handler 同步呼叫，把它們改 async
+ *   要每個 caller 全部 await，diff 量大且風險高。模組級 cache + middleware 預 refresh
+ *   讓 sync 端維持原樣，新增 RP 改 D1 → 下次 isolate refresh（≤60s + KV TTL 5min）
+ *   後可見。一致性 eventual 但對 RP 註冊（極低頻變動）足夠。
  */
 
 /**
  * @typedef {Object} OAuthClient
- * @property {string}   client_id                    JWT aud claim 與業務識別
- * @property {string}   aud                          通常 = client_id；保留分開以利演進
- * @property {string[]} origins                      該 RP 所有 web origin（CORS 白名單來源 + aud 反查）
- * @property {string[]} redirect_uris                authorize.js 白名單
- * @property {string[]} post_logout_redirect_uris    end-session.js post_logout_redirect_uri 白名單
- * @property {string[]} frontchannel_logout_uris     end-session HTML 內嵌 iframe URL
- * @property {string|null} backchannel_logout_uri    cross-site RP 必備；其餘留 null
+ * @property {string}   client_id
+ * @property {string}   aud
+ * @property {string[]} origins
+ * @property {string[]} redirect_uris
+ * @property {string[]} post_logout_redirect_uris
+ * @property {string[]} frontchannel_logout_uris
+ * @property {string|null} backchannel_logout_uri
  */
 
-/** @type {OAuthClient[]} — boot-time 預設值，與 migrations/0020 seed 對齊 */
+/** boot-time 預設值，與 migrations/0020 seed 對齊 */
 export const IN_CODE_CLIENTS = [
   {
     client_id: 'chiyigo',
     aud: 'chiyigo',
     origins: ['https://chiyigo.com'],
     redirect_uris: [
-      'chiyigo://auth/callback',          // Unity / Unreal / mobile custom scheme
-      'https://chiyigo.com/callback',     // Web SPA
-      'https://chiyigo.com/app/callback', // iOS Universal Link（預留）
+      'chiyigo://auth/callback',
+      'https://chiyigo.com/callback',
+      'https://chiyigo.com/app/callback',
     ],
     post_logout_redirect_uris: [
       'https://chiyigo.com/',
       'https://chiyigo.com/login',
     ],
-    // chiyigo 自己用 /api/ 子路徑（避開 root-level single function 觸發 Pages bundle bug）
     frontchannel_logout_uris: ['https://chiyigo.com/api/frontchannel-logout'],
     backchannel_logout_uri: null,
   },
@@ -100,40 +91,14 @@ export const IN_CODE_CLIENTS = [
   },
 ]
 
-// ── Sync exports（既有 consumers 用；值取自 in-code）──────────────
+// ── 模組級可變 cache ───────────────────────────────────────────
 
-const flat = (key) => IN_CODE_CLIENTS.flatMap(c => c[key] ?? [])
-
-/** @deprecated 名稱保留向後相容；同等 IN_CODE_CLIENTS */
-export const OAUTH_CLIENTS                 = IN_CODE_CLIENTS
-export const ALLOWED_CORS_ORIGINS          = flat('origins')
-export const ALLOWED_REDIRECT_URIS         = flat('redirect_uris')
-export const ALLOWED_POST_LOGOUT_URIS      = flat('post_logout_redirect_uris')
-export const FRONTCHANNEL_LOGOUT_URIS      = flat('frontchannel_logout_uris')
-
-export const BACKCHANNEL_LOGOUT_ENDPOINTS  = IN_CODE_CLIENTS
-  .filter(c => c.backchannel_logout_uri)
-  .map(c => ({ aud: c.aud, url: c.backchannel_logout_uri }))
-
-export const VALID_AUDS                    = new Set(IN_CODE_CLIENTS.map(c => c.aud))
-
-export const AUD_BY_ORIGIN                 = Object.fromEntries(
-  IN_CODE_CLIENTS.flatMap(c => c.origins.map(o => [o, c.aud]))
-)
-
-export const FRONTCHANNEL_FRAME_ORIGINS    = [
-  ...new Set(FRONTCHANNEL_LOGOUT_URIS.map(u => new URL(u).origin)),
-]
-
-// ── Async D1-backed API（Wave 2 之後 consumers 切到這邊）─────────
-
+let _currentClients = IN_CODE_CLIENTS
+let _lastRefreshAt  = 0
+const REFRESH_THROTTLE_MS = 60_000  // 同一 isolate 內 60s 內只跑一次 refresh
 const KV_KEY = 'oauth_clients:all'
-const KV_TTL_SEC = 300 // 5 min；admin CRUD 寫入時應該主動 purge
+const KV_TTL_SEC = 300              // 5 min；admin CRUD 寫入時應該主動 purge
 
-/**
- * 把 D1 row 轉成統一 OAuthClient shape（JSON columns 解析）。
- * 失敗（壞 JSON）→ 該欄位 fallback 空陣列／null，不擋整體流程。
- */
 function rowToClient(row) {
   const j = (s, def) => {
     if (s == null) return def
@@ -151,23 +116,25 @@ function rowToClient(row) {
 }
 
 /**
- * 取所有 active client（D1 → KV cache → in-code fallback）。
+ * 由 middleware 在每個 /api/* 請求前呼叫；per-isolate 60s 內只實際跑一次。
+ * 來源優先序：KV cache → D1 → in-code（fallback）。
  *
- * 來源優先序：
- *   1. KV cache hit
- *   2. D1 SELECT WHERE is_active=1
- *   3. IN_CODE_CLIENTS（D1 fail / 空表 / env 缺 binding）
+ * 失敗（D1 down / KV down）：不擋請求，繼續用上次 cache 或 in-code。
  *
- * @param {object} env  Cloudflare env（CHIYIGO_KV / chiyigo_db optional）
- * @returns {Promise<OAuthClient[]>}
+ * @param {object} env
+ * @param {boolean} [force]  跳過 60s throttle（admin CRUD 後呼叫）
  */
-export async function getAllClients(env) {
-  // 1. KV cache
+export async function refreshClientsCache(env, force = false) {
+  const now = Date.now()
+  if (!force && now - _lastRefreshAt < REFRESH_THROTTLE_MS) return
+  _lastRefreshAt = now
+
+  // 1. KV cache hit
   if (env?.CHIYIGO_KV) {
     try {
       const cached = await env.CHIYIGO_KV.get(KV_KEY, 'json')
-      if (Array.isArray(cached) && cached.length) return cached
-    } catch { /* KV 暫時失效 → 走 D1 */ }
+      if (Array.isArray(cached) && cached.length) { _currentClients = cached; return }
+    } catch { /* fallthrough */ }
   }
 
   // 2. D1
@@ -187,34 +154,92 @@ export async function getAllClients(env) {
         .all()
       if (Array.isArray(results) && results.length) {
         const clients = results.map(rowToClient)
-        // 寫 KV cache（失敗不擋）
+        _currentClients = clients
         if (env.CHIYIGO_KV) {
           try { await env.CHIYIGO_KV.put(KV_KEY, JSON.stringify(clients), { expirationTtl: KV_TTL_SEC }) }
           catch { /* ignore */ }
         }
-        return clients
+        return
       }
-    } catch { /* D1 fail → in-code fallback */ }
+    } catch { /* fallthrough */ }
   }
 
-  // 3. in-code
-  return IN_CODE_CLIENTS
+  // 3. fallback：保持 _currentClients 為上次值（如果都 fail 且首次，仍是 in-code）
 }
 
-/** 依 client_id 取單一 client（找不到回 null）。 */
-export async function getClient(env, clientId) {
-  const all = await getAllClients(env)
-  return all.find(c => c.client_id === clientId) ?? null
-}
-
-/** 給 JWT aud 驗證用：所有 active aud 字串集合。 */
-export async function getValidAuds(env) {
-  const all = await getAllClients(env)
-  return new Set(all.map(c => c.aud))
-}
-
-/** 主動清 KV cache（admin CRUD 寫入後呼叫）。 */
+/** Admin CRUD 寫入後呼叫：清 KV，下次 middleware refresh 會立即從 D1 抓新資料 */
 export async function invalidateClientsCache(env) {
-  if (!env?.CHIYIGO_KV) return
-  try { await env.CHIYIGO_KV.delete(KV_KEY) } catch { /* ignore */ }
+  _lastRefreshAt = 0  // 強制下次 refresh 不被 throttle 跳過
+  if (env?.CHIYIGO_KV) {
+    try { await env.CHIYIGO_KV.delete(KV_KEY) } catch { /* ignore */ }
+  }
 }
+
+/** 測試用：reset 模組狀態 */
+export function _resetCacheForTests() {
+  _currentClients = IN_CODE_CLIENTS
+  _lastRefreshAt  = 0
+}
+
+// ── Sync getters（consumers 改用這些，不再用舊 const）────────
+
+export function getAllClients()        { return _currentClients }
+export function getClient(clientId)    { return _currentClients.find(c => c.client_id === clientId) ?? null }
+
+export function getAllowedCorsOrigins()   { return _currentClients.flatMap(c => c.origins ?? []) }
+export function getAllowedRedirectUris()  { return _currentClients.flatMap(c => c.redirect_uris ?? []) }
+export function getAllowedPostLogoutUris(){ return _currentClients.flatMap(c => c.post_logout_redirect_uris ?? []) }
+export function getFrontchannelUris()     { return _currentClients.flatMap(c => c.frontchannel_logout_uris ?? []) }
+
+export function getBackchannelEndpoints() {
+  return _currentClients
+    .filter(c => c.backchannel_logout_uri)
+    .map(c => ({ aud: c.aud, url: c.backchannel_logout_uri }))
+}
+
+export function getValidAuds() {
+  return new Set(_currentClients.map(c => c.aud))
+}
+
+export function getAudByOrigin() {
+  return Object.fromEntries(
+    _currentClients.flatMap(c => (c.origins ?? []).map(o => [o, c.aud])),
+  )
+}
+
+export function getFrontchannelFrameOrigins() {
+  return [...new Set(getFrontchannelUris().map(u => {
+    try { return new URL(u).origin } catch { return null }
+  }).filter(Boolean))]
+}
+
+// ── 向後相容：舊 const 名稱 ────────────────────────────────
+// 注意：這些是「first-load 快照」，cache refresh 後不會更新。
+// 新 code 用 getXxx() 函式版本。
+
+const flat = (key) => IN_CODE_CLIENTS.flatMap(c => c[key] ?? [])
+
+/** @deprecated 用 getAllClients() 或 IN_CODE_CLIENTS */
+export const OAUTH_CLIENTS                 = IN_CODE_CLIENTS
+/** @deprecated 用 getAllowedCorsOrigins() */
+export const ALLOWED_CORS_ORIGINS          = flat('origins')
+/** @deprecated 用 getAllowedRedirectUris() */
+export const ALLOWED_REDIRECT_URIS         = flat('redirect_uris')
+/** @deprecated 用 getAllowedPostLogoutUris() */
+export const ALLOWED_POST_LOGOUT_URIS      = flat('post_logout_redirect_uris')
+/** @deprecated 用 getFrontchannelUris() */
+export const FRONTCHANNEL_LOGOUT_URIS      = flat('frontchannel_logout_uris')
+/** @deprecated 用 getBackchannelEndpoints() */
+export const BACKCHANNEL_LOGOUT_ENDPOINTS  = IN_CODE_CLIENTS
+  .filter(c => c.backchannel_logout_uri)
+  .map(c => ({ aud: c.aud, url: c.backchannel_logout_uri }))
+/** @deprecated 用 getValidAuds() */
+export const VALID_AUDS                    = new Set(IN_CODE_CLIENTS.map(c => c.aud))
+/** @deprecated 用 getAudByOrigin() */
+export const AUD_BY_ORIGIN                 = Object.fromEntries(
+  IN_CODE_CLIENTS.flatMap(c => c.origins.map(o => [o, c.aud])),
+)
+/** @deprecated 用 getFrontchannelFrameOrigins() */
+export const FRONTCHANNEL_FRAME_ORIGINS    = [
+  ...new Set(FRONTCHANNEL_LOGOUT_URIS.map(u => new URL(u).origin)),
+]
