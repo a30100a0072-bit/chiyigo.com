@@ -1702,6 +1702,7 @@ function redirectToEcpay(url, fields) {
   const form = document.createElement('form');
   form.action = url;
   form.method = 'POST';
+  form.acceptCharset = 'UTF-8';
   form.style.display = 'none';
   for (const [k, v] of Object.entries(fields)) {
     const input = document.createElement('input');
