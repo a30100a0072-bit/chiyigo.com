@@ -230,6 +230,107 @@ document.getElementById('search-input').addEventListener('input', e => {
 const _initToken = getToken()
 if (!_initToken) { showError(T().err_not_logged_in) } else { load(1) }
 
+// ── 需求單刪除紀錄清理（audit_log event_type='requisition.deleted'）──
+function escA(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+async function openAuditCleanup() {
+  document.getElementById('audit-cleanup-modal')?.remove();
+  const tok = getToken();
+  if (!tok) return;
+  const m = document.createElement('div');
+  m.id = 'audit-cleanup-modal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:1rem';
+  m.innerHTML = `
+    <div style="background:#0f0f14;border:1px solid #2a2a35;border-radius:14px;padding:1.25rem;width:100%;max-width:560px;max-height:80vh;overflow:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <h3 style="font-size:.95rem;color:#fff;margin:0">需求單刪除紀錄</h3>
+        <button data-action="audit-cleanup-close" style="background:transparent;border:0;color:#9aa0aa;cursor:pointer;font-size:1.1rem">✕</button>
+      </div>
+      <p style="font-size:.75rem;color:#9aa0aa;margin:0 0 .75rem">列出所有 <code style="background:#0a0a10;padding:.05rem .35rem;border-radius:.3rem">requisition.deleted</code> audit。判斷已不需要再追蹤的可永久清除（兩段式確認）。</p>
+      <div id="audit-cleanup-list" style="display:flex;flex-direction:column;gap:.5rem">
+        <p style="font-size:.8rem;color:#9aa0aa">載入中…</p>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) document.getElementById('audit-cleanup-modal')?.remove(); });
+
+  const r = await fetch('/api/admin/audit?event_type=requisition.deleted&limit=200', {
+    headers: { Authorization: `Bearer ${tok}` },
+  }).catch(() => null);
+  const list = document.getElementById('audit-cleanup-list');
+  if (!list) return;
+  if (!r || !r.ok) { list.innerHTML = `<p style="font-size:.8rem;color:#fca5a5">載入失敗</p>`; return; }
+  const j = await r.json();
+  const rows = j.rows ?? [];
+  if (!rows.length) { list.innerHTML = `<p style="font-size:.8rem;color:#9aa0aa">沒有刪除紀錄</p>`; return; }
+  list.innerHTML = rows.map(row => {
+    let data = {};
+    try { data = typeof row.event_data === 'string' ? JSON.parse(row.event_data) : (row.event_data ?? {}); } catch {}
+    const reqId = data?.requisition_id ?? '?';
+    const actor = data?.actor ?? '?';
+    return `
+      <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;background:#0a0a10;border:1px solid #2a2a35;border-radius:.55rem">
+        <div style="flex:1;min-width:0">
+          <p style="font-size:.78rem;color:#fff;margin:0">audit #${row.id} · req #${escA(reqId)} · user ${escA(row.user_id ?? '?')}</p>
+          <p style="font-size:.7rem;color:#9aa0aa;margin:0">actor=${escA(actor)} · ${escA(row.created_at)}</p>
+        </div>
+        <button data-audit-del="${row.id}" data-armed="0" style="padding:.35rem .65rem;border-radius:.45rem;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;font-size:.72rem;cursor:pointer">清除</button>
+      </div>`;
+  }).join('');
+}
+
+let _auditDelTimer = null;
+async function auditDelGo(auditId, btn) {
+  if (btn.dataset.armed !== '1') {
+    document.querySelectorAll('[data-audit-del]').forEach(b => {
+      if (b !== btn) {
+        b.dataset.armed = '0'; b.textContent = '清除';
+        b.style.background = 'rgba(239,68,68,.12)'; b.style.borderColor = 'rgba(239,68,68,.3)'; b.style.color = '#fca5a5';
+      }
+    });
+    btn.dataset.armed = '1';
+    btn.textContent = '確認清除';
+    btn.style.background = 'rgba(239,68,68,.4)';
+    btn.style.borderColor = 'rgba(239,68,68,.7)';
+    btn.style.color = '#fee2e2';
+    if (_auditDelTimer) clearTimeout(_auditDelTimer);
+    _auditDelTimer = setTimeout(() => {
+      if (!btn.isConnected) return;
+      btn.dataset.armed = '0'; btn.textContent = '清除';
+      btn.style.background = 'rgba(239,68,68,.12)'; btn.style.borderColor = 'rgba(239,68,68,.3)'; btn.style.color = '#fca5a5';
+    }, 4000);
+    return;
+  }
+  if (_auditDelTimer) { clearTimeout(_auditDelTimer); _auditDelTimer = null; }
+  const tok = getToken();
+  if (!tok) return;
+  // 此 endpoint 需要 step-up（elevated:account），先要 OTP
+  const otp = prompt('輸入 6 位 2FA OTP 確認永久清除 audit #' + auditId);
+  if (!otp || !/^\d{6}$/.test(otp)) return;
+  btn.disabled = true; btn.textContent = '處理中…';
+  const su = await fetch('/api/auth/step-up', {
+    method:  'POST',
+    headers: { 'Content-Type':'application/json', Authorization:`Bearer ${tok}` },
+    body:    JSON.stringify({ scope:'elevated:account', for_action:'delete_audit', otp_code: otp }),
+  }).catch(() => null);
+  if (!su || !su.ok) { btn.disabled = false; btn.textContent = '清除'; alert('step-up 失敗'); return; }
+  const { step_up_token } = await su.json();
+  const r = await fetch(`/api/admin/audit/${auditId}`, {
+    method:  'DELETE',
+    headers: { Authorization: `Bearer ${step_up_token}` },
+  }).catch(() => null);
+  if (!r || !r.ok) { btn.disabled = false; btn.textContent = '清除'; alert('刪除失敗'); return; }
+  btn.closest('div[style*="border:1px solid"]')?.remove();
+}
+
+document.getElementById('audit-cleanup-btn')?.addEventListener('click', openAuditCleanup);
+document.addEventListener('click', e => {
+  const closer = e.target.closest('[data-action="audit-cleanup-close"]');
+  if (closer) document.getElementById('audit-cleanup-modal')?.remove();
+  const delBtn = e.target.closest('[data-audit-del]');
+  if (delBtn) auditDelGo(Number(delBtn.dataset.auditDel), delBtn);
+});
+
 // ── block 2/2 ──
 (function(){
   const canvas=document.getElementById('neural-canvas');if(!canvas)return;

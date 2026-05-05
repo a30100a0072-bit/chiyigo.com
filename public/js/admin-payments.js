@@ -162,9 +162,11 @@ function renderTable(rows) {
     const status = String(r.status);
     const kindLabel = t['kind_' + r.kind] || r.kind;
     const canRefund = status === 'succeeded' && r.vendor === 'ecpay';
-    const actions = canRefund
+    const refundBtn = canRefund
       ? `<button class="pay-action-btn" data-action="open-refund" data-intent-id="${r.id}">${esc(t.action_refund)}</button>`
       : '';
+    // 強制刪除：admin 可清任意 status；UI 走 step-up + 兩段式確認
+    const delBtn = `<button class="pay-action-btn pay-action-danger" data-action="open-delete" data-intent-id="${r.id}">強制刪除</button>`;
     return `
       <tr data-action="open-detail" data-intent-id="${r.id}">
         <td class="id">${r.id}</td>
@@ -174,7 +176,7 @@ function renderTable(rows) {
         <td class="mono">${formatAmount(r)}</td>
         <td><span class="pay-badge ${status}">${esc(t['status_' + status] || status)}</span></td>
         <td class="mono">${esc(formatDate(r.created_at))}</td>
-        <td>${actions}</td>
+        <td>${refundBtn}${delBtn}</td>
       </tr>`;
   }).join('');
 }
@@ -244,12 +246,15 @@ document.addEventListener('click', e => {
   if (!t) return;
   const id = Number(t.dataset.intentId);
   if (t.dataset.action === 'open-detail') {
-    // 不要在 refund button 上 trigger detail
+    // 不要在 refund/delete button 上 trigger detail
     if (e.target.closest('.pay-action-btn')) return;
     openDetail(id);
   } else if (t.dataset.action === 'open-refund') {
     e.stopPropagation();
     openRefund(id);
+  } else if (t.dataset.action === 'open-delete') {
+    e.stopPropagation();
+    openAdminDelete(id);
   }
 });
 
@@ -357,6 +362,98 @@ document.getElementById('refund-confirm-btn').addEventListener('click', async ()
   }
   setRefundMsg(t.refund_success, 'ok');
   setTimeout(() => { closeModal('modal-refund'); load(); btn.disabled = false; }, 1200);
+});
+
+// ── Admin force-delete flow（兩段式確認 + step-up OTP）──
+// step-up 等同 refund 的 elevated:payment scope（避免另開 scope）
+function openAdminDelete(id) {
+  const row = window._lastData?.rows?.find(r => r.id === id);
+  if (!row) return;
+  document.getElementById('admin-del-modal')?.remove();
+  const m = document.createElement('div');
+  m.id = 'admin-del-modal';
+  m.className = 'modal-bd open';
+  m.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:1rem';
+  m.innerHTML = `
+    <div style="background:#0f0f14;border:1px solid #2a2a35;border-radius:14px;padding:1.25rem;width:100%;max-width:400px">
+      <h3 style="font-size:.95rem;color:#fff;margin:0 0 .75rem">強制刪除 #${row.id}</h3>
+      <p style="font-size:.8rem;color:#9aa0aa;margin:0 0 .5rem">user ${esc(row.user_id)} · ${esc(row.vendor)} · ${formatAmount(row)} · ${esc(row.status)}</p>
+      <p style="font-size:.78rem;color:#fca5a5;margin:0 0 .75rem">此操作會永久從 D1 刪除此筆 intent，audit log 會留 critical 記錄。succeeded 那筆刪除前請確認非真實成交。</p>
+      <input id="admin-del-otp" type="text" inputmode="numeric" maxlength="6" placeholder="6 位 2FA OTP" autocomplete="one-time-code"
+        style="width:100%;padding:.55rem .8rem;border-radius:.6rem;background:#0a0a10;border:1px solid #2a2a35;color:#fff;font-family:var(--font-mono);font-size:.9rem;letter-spacing:.2em;margin-bottom:.6rem">
+      <p id="admin-del-msg" style="font-size:.75rem;min-height:1em;margin:0 0 .6rem"></p>
+      <div style="display:flex;justify-content:flex-end;gap:.5rem">
+        <button data-action="admin-del-cancel" style="padding:.5rem .9rem;border-radius:.55rem;background:#1a1a22;border:1px solid #2a2a35;color:#cbd5e1;font-size:.78rem;cursor:pointer">取消</button>
+        <button id="admin-del-go" data-armed="0" data-id="${row.id}" style="padding:.5rem .9rem;border-radius:.55rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;font-size:.78rem;font-weight:600;cursor:pointer">強制刪除</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  setTimeout(() => document.getElementById('admin-del-otp')?.focus(), 50);
+  m.addEventListener('click', e => { if (e.target === m) closeAdminDelete(); });
+}
+function closeAdminDelete() { document.getElementById('admin-del-modal')?.remove(); }
+function setAdminDelMsg(text, type) {
+  const el = document.getElementById('admin-del-msg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = type === 'err' ? '#fca5a5' : type === 'ok' ? '#86efac' : '#9aa0aa';
+}
+let _adminDelArmTimer = null;
+async function adminDelGo() {
+  const btn = document.getElementById('admin-del-go');
+  if (!btn) return;
+  const id = Number(btn.dataset.id);
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = '確認強制刪除';
+    btn.style.background = 'rgba(239,68,68,.4)';
+    btn.style.borderColor = 'rgba(239,68,68,.7)';
+    btn.style.color = '#fee2e2';
+    if (_adminDelArmTimer) clearTimeout(_adminDelArmTimer);
+    _adminDelArmTimer = setTimeout(() => {
+      if (!btn.isConnected) return;
+      btn.dataset.armed = '0';
+      btn.textContent = '強制刪除';
+      btn.style.background = 'rgba(239,68,68,.15)';
+      btn.style.borderColor = 'rgba(239,68,68,.4)';
+      btn.style.color = '#fca5a5';
+    }, 4000);
+    return;
+  }
+  if (_adminDelArmTimer) { clearTimeout(_adminDelArmTimer); _adminDelArmTimer = null; }
+  const otp = document.getElementById('admin-del-otp')?.value.trim() ?? '';
+  if (!/^\d{6}$/.test(otp)) { setAdminDelMsg('請輸入 6 位數字 2FA', 'err'); return; }
+  const tok = getToken();
+  if (!tok) { setAdminDelMsg('未登入', 'err'); return; }
+  btn.disabled = true; setAdminDelMsg('驗證 2FA…', '');
+  const su = await fetch('/api/auth/step-up', {
+    method:  'POST',
+    headers: { 'Content-Type':'application/json', Authorization:`Bearer ${tok}` },
+    body:    JSON.stringify({ scope:'elevated:payment', for_action:'delete_payment', otp_code: otp }),
+  }).catch(() => null);
+  if (!su || !su.ok) {
+    const j = su ? await su.json().catch(() => ({})) : {};
+    setAdminDelMsg(j.error || `step-up ${su?.status ?? 'network'}`, 'err');
+    btn.disabled = false; return;
+  }
+  const { step_up_token } = await su.json();
+  setAdminDelMsg('呼叫刪除…', '');
+  const r = await fetch(`/api/admin/payments/intents/${id}/delete`, {
+    method:  'POST',
+    headers: { 'Content-Type':'application/json', Authorization:`Bearer ${step_up_token}` },
+  }).catch(() => null);
+  if (!r || !r.ok) {
+    const j = r ? await r.json().catch(() => ({})) : {};
+    setAdminDelMsg(j.error || `delete ${r?.status ?? 'network'}`, 'err');
+    btn.disabled = false; return;
+  }
+  setAdminDelMsg('✓ 已刪除', 'ok');
+  setTimeout(() => { closeAdminDelete(); load(); }, 800);
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-action]')?.dataset?.action;
+  if (a === 'admin-del-cancel') return closeAdminDelete();
+  if (e.target.id === 'admin-del-go') return adminDelGo();
 });
 
 // ── Init ───────────────────────────────────────────────

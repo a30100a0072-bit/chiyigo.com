@@ -285,7 +285,7 @@ function renderRequisitions(list) {
     const s    = reqStatus(r.status)
     const date = formatDateShort(r.created_at)
     return `
-      <div class="flex items-center justify-between px-5 py-3.5 gap-3">
+      <div data-req-open-id="${r.id}" class="flex items-center justify-between px-5 py-3.5 gap-3 cursor-pointer hover:bg-white/[0.02] transition-colors">
         <div class="flex items-center gap-2 min-w-0">
           <span class="text-xs text-gray-600 shrink-0">#${r.id}</span>
           <span class="text-sm text-white truncate">${esc(r.service_type)}</span>
@@ -351,6 +351,128 @@ async function revokeRequisition(id) {
     showBindToast(tApiError(e, T('net_err')), 'err')
     if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
   }
+}
+
+// ── Requisition detail modal + 永久刪除（status='revoked' 才顯示）──
+async function openRequisitionDetail(id) {
+  let row;
+  try {
+    row = await apiFetch(`/api/requisition/${id}`);
+  } catch (e) {
+    showBindToast(tApiError(e, T('net_err')), 'err');
+    return;
+  }
+  // 移除舊 modal
+  document.getElementById('req-detail-modal')?.remove();
+  const date = row.created_at ? formatDateShort(row.created_at) : '—';
+  const s    = reqStatus(row.status);
+  const fields = [
+    ['服務類型', row.service_type],
+    ['預算',     row.budget],
+    ['時程',     row.timeline],
+    ['姓名',     row.name],
+    ['聯絡',     row.contact],
+    ['公司',     row.company || '—'],
+  ];
+  const rowsHtml = fields.map(([k,v]) =>
+    `<div class="flex gap-3 text-sm"><span class="w-16 text-gray-500 shrink-0">${k}</span><span class="text-white break-all">${esc(v ?? '—')}</span></div>`
+  ).join('');
+  const msgHtml = row.message
+    ? `<div class="mt-2"><p class="text-xs text-gray-500 mb-1">需求說明</p><p class="text-sm text-white whitespace-pre-wrap break-words bg-[#0a0a10] border border-[#2a2a35] rounded-lg px-3 py-2">${esc(row.message)}</p></div>`
+    : '';
+  const delBtn = row.status === 'revoked'
+    ? `<button id="req-perm-del-btn" data-armed="0" data-req-id="${row.id}"
+         class="px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-semibold transition-all">永久刪除</button>`
+    : '';
+  const modal = document.createElement('div');
+  modal.id = 'req-detail-modal';
+  modal.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4';
+  modal.innerHTML = `
+    <div class="relative w-full max-w-md rounded-2xl bg-[#0f0f14] border border-[#2a2a35] p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-semibold text-white">需求單 #${row.id}</h3>
+        <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${s.cls}">${s.text}</span>
+      </div>
+      <div class="space-y-2">${rowsHtml}</div>
+      ${msgHtml}
+      <p class="text-xs text-gray-500 mt-3">建立時間 ${date}</p>
+      <div class="flex justify-end gap-2 mt-4">
+        ${delBtn}
+        <button data-action="req-detail-close"
+          class="px-3 py-1.5 rounded-lg bg-[#1a1a22] hover:bg-[#23232c] border border-[#2a2a35] text-gray-300 text-xs transition-all">關閉</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeRequisitionDetail(); });
+}
+function closeRequisitionDetail() {
+  document.getElementById('req-detail-modal')?.remove();
+}
+let _reqPermDelTimer = null;
+async function armOrConfirmReqPermDelete(id) {
+  const btn = document.getElementById('req-perm-del-btn');
+  if (!btn) return;
+  if (btn.dataset.armed === '1') {
+    if (_reqPermDelTimer) { clearTimeout(_reqPermDelTimer); _reqPermDelTimer = null; }
+    btn.disabled = true; btn.textContent = '刪除中…';
+    try {
+      await apiFetch(`/api/requisition/${id}`, { method: 'DELETE' });
+      closeRequisitionDetail();
+      showBindToast(`需求單 #${id} 已永久刪除`, 'ok');
+      loadRequisitions();
+    } catch (e) {
+      showBindToast(tApiError(e, T('net_err')), 'err');
+      btn.disabled = false; btn.textContent = '永久刪除'; btn.dataset.armed = '0';
+    }
+    return;
+  }
+  btn.dataset.armed = '1';
+  btn.textContent = '確認永久刪除';
+  btn.className = 'px-3 py-1.5 rounded-lg bg-red-500/40 hover:bg-red-500/50 border border-red-500/60 text-red-100 text-xs font-semibold transition-all';
+  _reqPermDelTimer = setTimeout(() => {
+    if (!btn.isConnected) return;
+    btn.dataset.armed = '0';
+    btn.textContent = '永久刪除';
+    btn.className = 'px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-semibold transition-all';
+  }, 4000);
+}
+
+// ── Payment intent 兩段式刪除 ──
+let _payDelTimer = null;
+async function armOrConfirmPayDelete(id) {
+  const btn = document.querySelector(`[data-pay-del-id="${id}"]`);
+  if (!btn) return;
+  if (btn.dataset.armed === '1') {
+    if (_payDelTimer) { clearTimeout(_payDelTimer); _payDelTimer = null; }
+    btn.disabled = true; btn.textContent = '刪除中…';
+    try {
+      await apiFetch(`/api/auth/payments/intents/${id}`, { method: 'DELETE' });
+      showBindToast(`充值 #${id} 已刪除`, 'ok');
+      loadPayments();
+    } catch (e) {
+      showBindToast(tApiError(e, T('net_err')), 'err');
+      btn.disabled = false; btn.textContent = '刪除'; btn.dataset.armed = '0';
+    }
+    return;
+  }
+  // disarm 其他 pay-del 按鈕
+  document.querySelectorAll('[data-pay-del-id]').forEach(b => {
+    if (b !== btn && b.dataset.armed === '1') {
+      b.dataset.armed = '0';
+      b.textContent = '刪除';
+      b.className = 'shrink-0 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs transition-all';
+    }
+  });
+  btn.dataset.armed = '1';
+  btn.textContent = '確認刪除';
+  btn.className = 'shrink-0 px-2 py-1 rounded-md bg-red-500/30 hover:bg-red-500/40 border border-red-500/50 text-red-200 text-xs font-semibold transition-all';
+  if (_payDelTimer) clearTimeout(_payDelTimer);
+  _payDelTimer = setTimeout(() => {
+    if (!btn.isConnected) return;
+    btn.dataset.armed = '0';
+    btn.textContent = '刪除';
+    btn.className = 'shrink-0 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs transition-all';
+  }, 4000);
 }
 
 // ── 綁定結果 URL 參數處理（OAuth callback 跳回後顯示 Toast）───
@@ -1616,6 +1738,12 @@ function renderPayments(items) {
         infoBlock = `<div class="mt-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs space-y-1">${lines}${expire}</div>`;
       }
     }
+    // 刪除按鈕：pending / failed / canceled 才顯示（其他狀態涉及帳務不可由 user 刪）
+    const canDelete = ['pending', 'failed', 'canceled'].includes(p.status);
+    const delBtn = canDelete
+      ? `<button data-pay-del-id="${p.id}" data-armed="0"
+           class="shrink-0 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs transition-all">刪除</button>`
+      : '';
     return `
       <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
@@ -1624,7 +1752,10 @@ function renderPayments(items) {
             <p class="text-xs text-gray-500 mt-0.5">${esc(p.vendor)} · ${esc(when)}</p>
             ${reqLine}
           </div>
-          <span class="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusClass}">${esc(statusLabel)}</span>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusClass}">${esc(statusLabel)}</span>
+            ${delBtn}
+          </div>
         </div>
         ${infoBlock}
       </div>`;
@@ -1725,8 +1856,13 @@ function redirectToEcpay(url, fields) {
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
 document.addEventListener('click', e => {
-  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page]');
+  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-req-open-id]');
   if (!t) return;
+  // 點需求單 row 跳明細（點到撤銷按鈕例外，已被前面 closest 抓到 button）
+  if (t.dataset.reqOpenId) {
+    return openRequisitionDetail(Number(t.dataset.reqOpenId));
+  }
+  if (t.dataset.payDelId) return armOrConfirmPayDelete(Number(t.dataset.payDelId));
   // 靜態按鈕 by id
   if (t.id === 'tfa-enable-btn')   return startSetup2FA();
   if (t.id === 'tfa-disable-btn')  return showDisablePanel();
@@ -1758,6 +1894,8 @@ document.addEventListener('click', e => {
   if (a === 'wallet-remove-cancel')    return cancelWalletRemove(t.dataset.walletId);
   if (a === 'wallet-remove-confirm')   return confirmWalletRemove(t.dataset.walletId);
   if (a === 'payment-form-cancel')     return cancelPaymentForm();
+  if (a === 'req-detail-close')        return closeRequisitionDetail();
+  if (t.id === 'req-perm-del-btn')     return armOrConfirmReqPermDelete(Number(t.dataset.reqId));
   // dynamic content
   if (t.dataset.revokeId) return armRevoke(Number(t.dataset.revokeId));
   if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);
