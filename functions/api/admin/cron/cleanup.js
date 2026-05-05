@@ -52,6 +52,9 @@ const TASKS = [
 
   // wallet_nonces: 過期即刪（Phase F-3；5min TTL，consumed 也跟著清）
   { name: 'wallet_nonces',       sql: `DELETE FROM wallet_nonces       WHERE expires_at < datetime('now')` },
+
+  // kyc_webhook_events: 留 90 天（dedupe 視窗 — vendor 重送窗口都不會這麼長）
+  { name: 'kyc_webhook_events',  sql: `DELETE FROM kyc_webhook_events  WHERE processed_at < datetime('now', '-90 days')` },
 ]
 
 export async function onRequestPost({ request, env }) {

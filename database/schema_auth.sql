@@ -232,3 +232,38 @@ CREATE TABLE IF NOT EXISTS wallet_nonces (
 );
 
 CREATE INDEX IF NOT EXISTS idx_wallet_nonces_expires  ON wallet_nonces(expires_at);
+
+-- =============================================
+-- KYC scaffold（migration 0024，Phase F-1）
+-- =============================================
+
+CREATE TABLE IF NOT EXISTS user_kyc (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id           INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  status            TEXT    NOT NULL DEFAULT 'unverified',
+  level             TEXT    NOT NULL DEFAULT 'basic',
+  vendor            TEXT,
+  vendor_session_id TEXT,
+  vendor_review_id  TEXT,
+  rejection_reason  TEXT,
+  verified_at       TEXT,
+  expires_at        TEXT,
+  created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_kyc_status   ON user_kyc(status);
+CREATE INDEX IF NOT EXISTS idx_user_kyc_expires  ON user_kyc(expires_at);
+
+CREATE TABLE IF NOT EXISTS kyc_webhook_events (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor       TEXT    NOT NULL,
+  event_id     TEXT    NOT NULL,
+  user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status_to    TEXT,
+  payload_hash TEXT,
+  processed_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(vendor, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_kyc_webhook_events_processed ON kyc_webhook_events(processed_at);
