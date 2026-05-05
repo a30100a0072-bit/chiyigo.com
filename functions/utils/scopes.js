@@ -39,7 +39,26 @@ export const SCOPES = Object.freeze({
   ADMIN_REVOKE:  'admin:revoke',
   ADMIN_AUDIT:   'admin:audit',
   ADMIN_CLIENTS: 'admin:clients',  // oauth_clients CRUD（Phase C-1 Wave 3 用）
+
+  // 高權限（Phase C-3）— **絕對不出現在 ROLE_BASE_SCOPES**，只能透過 step-up flow 取得
+  ELEVATED_ACCOUNT:   'elevated:account',     // 改密碼 / 改 email / 刪帳號
+  ELEVATED_PAYMENT:   'elevated:payment',     // 任何金流操作
+  ELEVATED_WITHDRAW:  'elevated:withdraw',
+  ELEVATED_WALLET_OP: 'elevated:wallet_op',
 })
+
+/** 已知 elevated 集合：step-up endpoint 接受的 scope 白名單 */
+export const KNOWN_ELEVATED_SCOPES = new Set([
+  SCOPES.ELEVATED_ACCOUNT,
+  SCOPES.ELEVATED_PAYMENT,
+  SCOPES.ELEVATED_WITHDRAW,
+  SCOPES.ELEVATED_WALLET_OP,
+])
+
+/** 該 scope 是否為「高權限」類型（必走 step-up flow）*/
+export function isElevatedScope(s) {
+  return typeof s === 'string' && KNOWN_ELEVATED_SCOPES.has(s)
+}
 
 // ── role → 內建 scope ────────────────────────────────────────
 
@@ -108,4 +127,18 @@ export function hasScope(payload, scope) {
 export function hasAllScopes(payload, scopes) {
   const eff = effectiveScopesFromJwt(payload)
   return scopes.every(s => eff.has(s))
+}
+
+/**
+ * **嚴格** scope 檢查：只看 token 內的 scope claim，**不**走 role fallback。
+ *
+ * 用途：elevated:* 等級的權限（金融操作等）絕不能因為「role=admin」就自動具備；
+ * 必須是 step-up flow 簽出來的 step_up_token 才有那 scope。一般 access_token
+ * 即使 role=admin 也不該有 elevated:*。
+ */
+export function hasExactScopeInToken(payload, scope) {
+  if (!payload || typeof payload !== 'object') return false
+  const tokenScopes = (typeof payload.scope === 'string' ? payload.scope : '')
+    .split(/\s+/).filter(Boolean)
+  return tokenScopes.includes(scope)
 }

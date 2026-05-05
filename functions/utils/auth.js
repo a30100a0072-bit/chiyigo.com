@@ -12,9 +12,9 @@
  */
 
 import { verifyJwt } from './jwt.js'
-import { isJtiRevoked } from './revocation.js'
+import { isJtiRevoked, revokeJti } from './revocation.js'
 import { safeUserAudit } from './user-audit.js'
-import { hasAllScopes, effectiveScopesFromJwt } from './scopes.js'
+import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedScope } from './scopes.js'
 
 /**
  * @param {Request}     request
@@ -152,6 +152,66 @@ export async function requireScope(request, env, ...requiredScopes) {
       }, 403),
     }
   }
+  return { user, error: null }
+}
+
+/**
+ * Step-up token 守門（Phase C-3）：高權限操作（金流 / 改密碼 / 刪帳號）專用。
+ *
+ * 嚴格規則：
+ *   1. token 必須是 elevated:xxx scope（**嚴格** — 不走 role fallback；admin 也不能跳過）
+ *   2. 必須是 elevated:* scope（防止有人用一般 scope 假冒 step-up）
+ *   3. for_action（若指定）必須完全相符
+ *   4. 通過後 **revoke jti**（一次性消耗），同 token 不能用於第二次操作
+ *
+ * 使用方式（保護一個高權限 endpoint）：
+ *   const { user, error } = await requireStepUp(request, env, 'elevated:account', 'delete_account')
+ *   if (error) return error
+ *
+ * @param {Request} request
+ * @param {object}  env
+ * @param {string}  requiredScope        必須 elevated:* 開頭
+ * @param {string} [requiredAction]      若 token 帶 for_action，必須相符；可省略
+ */
+export async function requireStepUp(request, env, requiredScope, requiredAction = null) {
+  if (!isElevatedScope(requiredScope)) {
+    // 程式錯誤而非 user 錯誤：caller 給了非 elevated 的 scope
+    return { user: null, error: res({ error: 'requireStepUp must check an elevated:* scope' }, 500) }
+  }
+
+  const { user, error } = await requireAuth(request, env)
+  if (error) return { user: null, error }
+
+  // 嚴格：scope claim 必含請求的 elevated；不接受 role fallback
+  if (!hasExactScopeInToken(user, requiredScope)) {
+    return {
+      user: null,
+      error: res({
+        error: 'Step-up authentication required',
+        code:  'STEP_UP_REQUIRED',
+        required_scope: requiredScope,
+      }, 403),
+    }
+  }
+
+  // for_action 比對（防把 elevated:account/change_password 拿去刪帳號）
+  if (requiredAction && user.for_action !== requiredAction) {
+    return {
+      user: null,
+      error: res({
+        error: 'Step-up token issued for a different action',
+        code:  'STEP_UP_ACTION_MISMATCH',
+        required_action: requiredAction,
+      }, 403),
+    }
+  }
+
+  // 一次性消耗：成功命中後立刻 revoke jti，同 token 不能再用
+  if (user.jti && env?.chiyigo_db) {
+    try { await revokeJti(env, user.jti, user.exp) }
+    catch { /* revoke 失敗不擋本次請求；下次仍會 401 因為 jti 進黑名單 */ }
+  }
+
   return { user, error: null }
 }
 
