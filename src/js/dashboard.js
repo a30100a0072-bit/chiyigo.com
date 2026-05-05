@@ -168,6 +168,7 @@ async function loadProfile() {
     window.__hasPassword = !!data.has_password;
     window.__userEmail   = data.email;
     renderSetPasswordSection(window.__hasPassword);
+    renderChangePasswordSection(window.__hasPassword, !!data.totp_enabled);
     renderDeleteSection(window.__hasPassword);
 
     // 需求單區塊
@@ -667,6 +668,79 @@ async function sendSetPasswordEmail() {
   }
 }
 
+// ── 修改密碼（in-session，走 step-up flow）──────────────
+function renderChangePasswordSection(hasPw, totpEnabled) {
+  const sec = document.getElementById('changepw-section');
+  if (!sec) return;
+  sec.classList.toggle('hidden', !hasPw);
+
+  const need2faHint = document.getElementById('changepw-need-2fa');
+  const form        = document.getElementById('changepw-form');
+  if (!need2faHint || !form) return;
+  // 沒 2FA → 顯示提示，隱藏表單（step-up 必走 OTP）
+  need2faHint.classList.toggle('hidden', !!totpEnabled);
+  form.classList.toggle('hidden', !totpEnabled);
+}
+
+async function submitChangePassword() {
+  const newEl     = document.getElementById('changepw-new');
+  const confirmEl = document.getElementById('changepw-confirm');
+  const otpEl     = document.getElementById('changepw-otp');
+  const msg       = document.getElementById('changepw-msg');
+  const btn       = document.getElementById('changepw-submit');
+
+  const newPw   = newEl.value;
+  const confirm = confirmEl.value;
+  const otp     = otpEl.value.trim();
+
+  function showMsg(text, type) {
+    msg.textContent = text;
+    msg.className   = 'text-xs ' + (type === 'err' ? 'text-red-400' : 'text-green-400');
+    msg.classList.remove('hidden');
+  }
+
+  if (!newPw || !confirm) { showMsg(T('net_err'), 'err'); return; }
+  if (newPw !== confirm)  { showMsg(T('changepw_mismatch'), 'err'); return; }
+  if (!/^\d{6}$/.test(otp)) { showMsg(T('totp_err6'), 'err'); return; }
+
+  btn.disabled = true;
+  msg.classList.add('hidden');
+
+  try {
+    // 1) step-up：拿 5min 短效 step_up_token
+    const stepRes = await apiFetch('/api/auth/step-up', {
+      method: 'POST',
+      body:   JSON.stringify({
+        scope: 'elevated:account',
+        for_action: 'change_password',
+        otp_code: otp,
+      }),
+    });
+    const stepUpToken = stepRes?.step_up_token;
+    if (!stepUpToken) { showMsg(T('net_err'), 'err'); btn.disabled = false; return; }
+
+    // 2) change-password：用 step_up_token 換密碼
+    await apiFetch('/api/auth/account/change-password', {
+      method:  'POST',
+      headers: { Authorization: 'Bearer ' + stepUpToken },
+      body:    JSON.stringify({ new_password: newPw }),
+    });
+
+    // 成功 → 同 2FA disable UX：顯示成功訊息 → 清 token + 廣播 → 跳 login
+    showMsg(T('changepw_success'), 'ok');
+    try { sessionStorage.removeItem('access_token'); } catch (_) {}
+    try {
+      if ('BroadcastChannel' in window) {
+        new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' });
+      }
+    } catch (_) {}
+    setTimeout(() => { location.replace('/login.html?password_reset=1'); }, 1500);
+  } catch (e) {
+    btn.disabled = false;
+    showMsg(tApiError(e, T('net_err')), 'err');
+  }
+}
+
 // ── 刪除帳號 ─────────────────────────────────────────────
 function renderDeleteSection(hasPw) {
   const btn   = document.getElementById('del-open-btn');
@@ -819,6 +893,21 @@ async function submitDeleteAccount() {
   new MutationObserver(sync).observe(sec, { attributes:true, attributeFilter:['class'] });
 })();
 
+// Sync changepw nav item visibility with section visibility
+(function() {
+  const sec = document.getElementById('changepw-section');
+  const sbBtn = document.getElementById('sb-nav-changepw');
+  const mBtn  = document.getElementById('m-ov-changepw');
+  if (!sec) return;
+  function sync() {
+    const hidden = sec.classList.contains('hidden');
+    if (sbBtn) sbBtn.hidden = hidden;
+    if (mBtn)  mBtn.hidden  = hidden;
+  }
+  sync();
+  new MutationObserver(sync).observe(sec, { attributes:true, attributeFilter:['class'] });
+})();
+
 // ── block 3/3 ──
 (function(){
   const canvas=document.getElementById('neural-canvas');if(!canvas)return;
@@ -857,6 +946,7 @@ document.addEventListener('click', e => {
   if (a === 'confirm-disable-2fa') return confirmDisable2FA();
   if (a === 'close-tfa-backup')    return closeTfaBackup();
   if (a === 'hide-delete-form')    return hideDeleteForm();
+  if (a === 'submit-change-password') return submitChangePassword();
   // dynamic content
   if (t.dataset.revokeId) return armRevoke(Number(t.dataset.revokeId));
   if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);

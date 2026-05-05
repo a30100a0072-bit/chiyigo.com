@@ -51,6 +51,10 @@
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5.5 7V4.5a2.5 2.5 0 015 0V7" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
           <span class="sb-label" data-i18n="nav_setpw">設定密碼</span>
         </button>
+        <button type="button" class="sb-item" id="sb-nav-changepw" data-scroll="changepw-section" hidden>
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5.5 7V4.5a2.5 2.5 0 015 0V7" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8 9.5v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_changepw">修改密碼</span>
+        </button>
       </nav>
 
       <div class="sb-bottom">
@@ -245,6 +249,33 @@
           </div>
         </div>
 
+        <!-- 修改密碼（hasPassword=true 才顯示；走 step-up flow，需 2FA）-->
+        <div id="changepw-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[#2a2a35]">
+            <p class="text-sm font-semibold text-white" data-i18n="changepw_title">修改密碼</p>
+            <p class="text-xs text-gray-500 mt-0.5" data-i18n="changepw_subtitle">需要當下 2FA 驗證碼確認；修改後將登出所有裝置。</p>
+          </div>
+          <div class="px-5 py-4 space-y-3">
+            <p id="changepw-need-2fa" class="hidden text-xs text-amber-300" data-i18n="changepw_need_2fa">請先啟用 2FA 才能修改密碼。</p>
+            <form id="changepw-form" class="space-y-3" autocomplete="off">
+              <input id="changepw-new" type="password" autocomplete="new-password"
+                class="w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
+                placeholder="新密碼" data-i18n-ph="changepw_new_ph" />
+              <input id="changepw-confirm" type="password" autocomplete="new-password"
+                class="w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
+                placeholder="再次輸入新密碼" data-i18n-ph="changepw_confirm_ph" />
+              <input id="changepw-otp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
+                class="w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
+                placeholder="2FA 6 位數驗證碼" data-i18n-ph="changepw_otp_ph" />
+              <button type="button" id="changepw-submit" data-action="submit-change-password"
+                class="w-full py-2.5 rounded-xl border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <span data-i18n="changepw_submit">確認修改</span>
+              </button>
+              <p id="changepw-msg" class="hidden text-xs"></p>
+            </form>
+          </div>
+        </div>
+
         <!-- Email 未驗證提示 -->
         <div id="email-banner" class="hidden mb-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-5 py-4">
           <div class="flex items-center justify-between gap-4">
@@ -394,6 +425,10 @@
         <button type="button" class="m-ov-item" id="m-ov-setpw" data-scroll="setpw-section" data-close-overlay hidden>
           <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="3" y="7" width="10" height="7" rx="1.3" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
           <span data-i18n="nav_setpw">設定密碼</span>
+        </button>
+        <button type="button" class="m-ov-item" id="m-ov-changepw" data-scroll="changepw-section" data-close-overlay hidden>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="3" y="7" width="10" height="7" rx="1.3" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5.5 7V4.5a2.5 2.5 0 015 0V7" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></span>
+          <span data-i18n="nav_changepw">修改密碼</span>
         </button>
         <button type="button" class="m-ov-item danger" data-action="logout" data-close-overlay>
           <span class="m-ov-icon-wrap"><svg viewBox="0 0 24 24" fill="none" class="m-ov-icon" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg></span>
