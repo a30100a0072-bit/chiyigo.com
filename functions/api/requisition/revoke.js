@@ -107,12 +107,13 @@ export async function onRequestPost({ request, env }) {
       }, 409)
     }
 
+    // P2-4: backfill amount_subunit（為部分退款留路；目前 = 全額）
     const inserted = await db
       .prepare(`INSERT INTO requisition_refund_request
-                 (requisition_id, user_id, intent_id, reason)
-                 VALUES (?, ?, ?, ?)
+                 (requisition_id, user_id, intent_id, reason, amount_subunit)
+                 VALUES (?, ?, ?, ?, ?)
                  RETURNING id`)
-      .bind(row.id, userId, paidIntent.id, reasonClipped)
+      .bind(row.id, userId, paidIntent.id, reasonClipped, paidIntent.amount_subunit ?? null)
       .first()
 
     await db

@@ -191,13 +191,13 @@ function renderPagination(total, page, limit) {
     <button data-load-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>${t.next_page}</button>`
 }
 
+// requisition 真實使用中的狀態：pending → (refund_pending) → revoked / deal
+// processing / completed 過去設計但未實裝，2026-05-06 移除避免誤導
 const REQ_STATUS_LABEL = {
   pending:        '待處理',
   refund_pending: '退款審核中',
   revoked:        '已撤銷',
   deal:           '✓ 已成交',
-  processing:     '處理中',
-  completed:      '已完成',
 };
 function statusPill(status) {
   const lbl = REQ_STATUS_LABEL[status] || status;

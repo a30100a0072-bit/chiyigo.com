@@ -102,10 +102,21 @@ export async function getPaymentIntent(env, { id, vendor, vendor_intent_id } = {
 /**
  * 更新 status / failure_reason。webhook 收到 PSP 通知時呼叫。
  * 用 (vendor, vendor_intent_id) 定位避免 race；caller 已 dedupe webhook event。
+ *
+ * P3-2（2026-05-06）：succeeded → 任何狀態 觸發 critical audit + Discord 告警。
+ *   合法路徑：succeeded → refunded（admin 退款），仍會觸發但這是預期。
+ *   非法路徑：succeeded → succeeded/pending/failed/canceled 任何代碼異常都會被告警。
  */
 export async function updatePaymentStatus(env, { vendor, vendor_intent_id, status, failure_reason = null }) {
   if (!env?.chiyigo_db) return false
   if (!VALID_STATUSES.has(status)) throw new Error(`Invalid payment status: ${status}`)
+
+  // 先讀舊 row（若 status 從 succeeded 變動 → 後面要發告警）
+  const before = await env.chiyigo_db
+    .prepare(`SELECT id, user_id, status, amount_subunit, currency
+                FROM payment_intents WHERE vendor = ? AND vendor_intent_id = ?`)
+    .bind(vendor, String(vendor_intent_id)).first()
+
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
   const r = await env.chiyigo_db
     .prepare(
@@ -115,7 +126,30 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
     )
     .bind(status, failure_reason, now, vendor, String(vendor_intent_id))
     .run()
-  return (r?.meta?.changes ?? 0) > 0
+  const changed = (r?.meta?.changes ?? 0) > 0
+
+  if (changed && before?.status === PAYMENT_STATUS.SUCCEEDED && status !== PAYMENT_STATUS.SUCCEEDED) {
+    // 動到 succeeded row → critical audit；safeUserAudit 內部已串 Discord webhook（DISCORD_AUDIT_WEBHOOK）
+    try {
+      await safeUserAudit(env, {
+        event_type: 'payment.intent.succeeded_status_changed',
+        severity: 'critical',
+        user_id: before.user_id ?? null,
+        data: {
+          intent_id:        before.id,
+          vendor,
+          vendor_intent_id: String(vendor_intent_id),
+          status_from:      before.status,
+          status_to:        status,
+          amount_subunit:   before.amount_subunit,
+          currency:         before.currency,
+          failure_reason,
+        },
+      })
+    } catch { /* swallow — alert 不擋主流程 */ }
+  }
+
+  return changed
 }
 
 /**
