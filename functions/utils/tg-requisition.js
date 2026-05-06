@@ -106,26 +106,43 @@ export async function buildRequisitionTgText(env, reqId, overrideStatus) {
 }
 
 /**
- * 觸發 editMessageText 把 TG 訊息更新到最新狀態。
- * 沒有 tg_message_id 或環境變數缺失就 noop（不報錯，避免影響主流程）。
+ * 觸發 TG 訊息更新到最新狀態。
+ *   - 有 tg_message_id → editMessageText 蓋舊訊息
+ *   - 沒 tg_message_id（legacy 資料 / 第一次 send 失敗） → sendMessage 補一則新訊息
+ *   - edit 若失敗（訊息太舊 >48h Telegram 拒絕 / message 不存在）也 fallback 為 sendMessage
+ *
+ * 環境變數缺失就 noop；其餘錯誤都吞掉，不擋主流程。
  */
 export async function syncRequisitionTgMessage(env, reqId, overrideStatus) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return
   const built = await buildRequisitionTgText(env, reqId, overrideStatus)
-  if (!built || !built.tg_message_id) return
-  try {
-    await fetch(
-      `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/editMessageText`,
-      {
+  if (!built) return
+  const base = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`
+  const payload = {
+    chat_id:    env.TELEGRAM_CHAT_ID,
+    text:       built.text,
+    parse_mode: 'HTML',
+  }
+
+  if (built.tg_message_id) {
+    try {
+      const r = await fetch(`${base}/editMessageText`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          chat_id:    env.TELEGRAM_CHAT_ID,
-          message_id: built.tg_message_id,
-          text:       built.text,
-          parse_mode: 'HTML',
-        }),
-      }
-    )
-  } catch { /* 連 TG 失敗不擋主流程 */ }
+        body:    JSON.stringify({ ...payload, message_id: built.tg_message_id }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (j?.ok) return
+      // edit 失敗（訊息太舊 / 內容相同 / 訊息已刪），往下走 sendMessage
+    } catch { /* fall through */ }
+  }
+
+  // sendMessage 備援
+  try {
+    await fetch(`${base}/sendMessage`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    })
+  } catch { /* TG 失敗不擋主流程 */ }
 }

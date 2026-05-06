@@ -219,9 +219,15 @@ function openModal(id) {
   const status = r.status || 'pending'
   // 動作鍵：保存 / 刪除 — pending 才顯示保存（其他狀態語意上不該移成交）；刪除全狀態都顯示
   const saveBtnHtml = status === 'pending'
-    ? `<button class="confirm" data-ra-action="save" data-ra-id="${r.id}" style="flex:1">保存（成交）</button>`
+    ? `<button class="btn-pill btn-pill--primary" data-ra-action="save" data-ra-id="${r.id}">
+         <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+         <span>保存（成交）</span>
+       </button>`
     : '';
-  const delBtnHtml = `<button data-ra-action="delete" data-ra-id="${r.id}" style="flex:1;padding:.55rem;border-radius:8px;background:transparent;border:1px solid rgba(239,68,68,.4);color:#dc2626;font-size:.85rem;font-weight:500;cursor:pointer">刪除</button>`;
+  const delBtnHtml = `<button class="btn-pill btn-pill--danger" data-ra-action="delete" data-ra-id="${r.id}">
+       <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4h10M6 4V2.5h4V4M5 4l.5 9a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+       <span>刪除</span>
+     </button>`;
 
   body.innerHTML = `
     <div class="modal-meta">
@@ -238,9 +244,7 @@ function openModal(id) {
       <p class="msg-label">${t.field_message}</p>
       <div class="msg-block">${esc(r.message)}</div>
     </div>
-    <div style="display:flex;gap:.6rem;margin-top:.5rem">
-      ${saveBtnHtml}${delBtnHtml}
-    </div>`
+    <div class="detail-actions">${saveBtnHtml}${delBtnHtml}</div>`
   document.getElementById('modal').classList.add('open')
 }
 function field(label, value, mono = false) {
@@ -546,7 +550,10 @@ function openReqAction(action, id) {
   btn.dataset.armed = '0';
   btn.textContent = isSave ? '下一步：確認保存' : '下一步：確認刪除';
   btn.disabled = false;
-  btn.style.cssText = isSave ? '' : 'background:#dc2626;border-color:#dc2626;color:#fff';
+  btn.style.cssText = ''; // 走 class，不再 inline
+  btn.className = isSave ? 'btn-pill btn-pill--primary' : 'btn-pill btn-pill--danger';
+  // cancel 也統一用 secondary class
+  document.querySelector('#modal-req-action [data-modal-close="modal-req-action"].cancel')?.classList.add('btn-pill', 'btn-pill--secondary');
   // 關上詳情，避免層疊
   document.getElementById('modal').classList.remove('open');
   document.getElementById('modal-req-action').classList.add('open');
@@ -566,17 +573,20 @@ document.getElementById('ra-confirm-btn')?.addEventListener('click', async () =>
   // 兩段式：第一次點擊只 arm；第二次才送
   if (btn.dataset.armed !== '1') {
     btn.dataset.armed = '1';
-    btn.textContent = action === 'save' ? '⚠️ 再點一次確認保存' : '⚠️ 再點一次確認刪除';
+    btn.textContent = action === 'save' ? '⚠ 再點一次確認保存' : '⚠ 再點一次確認刪除';
+    btn.classList.add('btn-pill--armed');
     setRaMsg('已進入確認狀態，再點一次按鈕送出', '');
     setTimeout(() => {
       if (btn.dataset.armed === '1') {
         btn.dataset.armed = '0';
         btn.textContent = action === 'save' ? '下一步：確認保存' : '下一步：確認刪除';
+        btn.classList.remove('btn-pill--armed');
         setRaMsg('', '');
       }
     }, 5000);
     return;
   }
+  btn.classList.remove('btn-pill--armed');
 
   btn.disabled = true;
   setRaMsg('送出中…', '');
