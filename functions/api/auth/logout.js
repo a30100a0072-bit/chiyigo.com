@@ -62,7 +62,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   return new Response(JSON.stringify({ message: 'Logged out' }), {
-    headers: { 'Content-Type': 'application/json', ...clearCookieHeader },
+    headers: { 'Content-Type': 'application/json', ...clearCookieHeader, ...cors },
   })
 }
 

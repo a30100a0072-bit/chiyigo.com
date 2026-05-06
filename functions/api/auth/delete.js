@@ -5,6 +5,7 @@
 import { verifyPassword, generateSecureToken, hashToken } from '../../utils/crypto.js'
 import { requireAuth, res } from '../../utils/auth.js'
 import { sendDeleteConfirmationEmail } from '../../utils/email.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
 
 const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_MINUTES = 15
@@ -14,9 +15,14 @@ export async function onRequestPost(ctx) {
   try {
     return await handleDelete(ctx)
   } catch (e) {
-    // 把真實 exception 訊息回給前端（diagnostic 模式）—
-    // 比 CF 1101 黑盒 HTML 好除錯，敏感資訊只到 message 層級。
-    return res({ error: 'Internal error', detail: String(e?.message ?? e) }, 500)
+    // 5xx：寫 audit 留痕（含完整 message 供 admin 排查），但前端只看到 generic
+    // error。原本回 detail 給前端 = 把 SQL/runtime stack 露給任何登入 user，是資訊洩漏。
+    await safeUserAudit(ctx.env, {
+      event_type: 'auth.delete.exception', severity: 'critical',
+      request: ctx.request,
+      data: { message: String(e?.message ?? e).slice(0, 1000) },
+    })
+    return res({ error: 'Internal error' }, 500)
   }
 }
 

@@ -29,7 +29,7 @@ export async function onRequestGet({ request, env }) {
     twofaFail24h, twofaLockedUsers,
     oauthInit1h, oauthInitTopIps,
     emailSend24h,
-    sessionsActive, sessionsNew24h, sessionsRevoked7d,
+    sessionsActive, sessionsIssued7d, sessionsRevoked7d,
     auditTotal, auditBan7d, auditUnban7d,
     aiTotal24h, aiBlocked24h, aiRateLimited24h, aiOk24h,
   ] = await Promise.all([
@@ -70,7 +70,8 @@ export async function onRequestGet({ request, env }) {
 
     // sessions
     db.prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE revoked_at IS NULL AND expires_at > datetime('now')`).first(),
-    db.prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE expires_at > datetime('now') AND id IN (SELECT id FROM refresh_tokens WHERE expires_at > datetime('now', '-7 days'))`).first(),
+    // 7 天內新發的 refresh token（auth_time = 簽發時間，refresh_tokens 沒 created_at）
+    db.prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE auth_time > datetime('now', '-7 days')`).first(),
     db.prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE revoked_at IS NOT NULL AND revoked_at > datetime('now', '-7 days')`).first(),
 
     // audit log
@@ -118,7 +119,7 @@ export async function onRequestGet({ request, env }) {
 
     sessions: {
       active_refresh_tokens: sessionsActive?.n ?? 0,
-      issued_7d:             sessionsNew24h?.n ?? 0,
+      issued_7d:             sessionsIssued7d?.n ?? 0,
       revoked_7d:            sessionsRevoked7d?.n ?? 0,
     },
 
