@@ -71,7 +71,7 @@ export async function onRequestGet({ request, env }) {
     .prepare(
       `SELECT id, user_id, vendor, vendor_intent_id, kind, status,
               amount_subunit, amount_raw, currency, metadata, failure_reason,
-              created_at, updated_at
+              requisition_id, created_at, updated_at
          FROM payment_intents ${where}
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?`,

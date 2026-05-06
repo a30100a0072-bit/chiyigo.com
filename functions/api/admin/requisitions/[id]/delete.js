@@ -43,14 +43,13 @@ export async function onRequestPost({ request, env, params }) {
   if (!row) return res({ error: 'not_found' }, 404, cors)
 
   // 防帳務黑洞：若還有 succeeded 但未退款的 payment_intent → 拒絕
-  const reqIdStr  = `"requisition_id":${id}`
-  const reqIdStr2 = `"requisition_id":"${id}"`
+  // P0-3: 改用 requisition_id FK，不再依賴 metadata LIKE 模糊比對
   const paid = await db
     .prepare(`SELECT id, amount_subunit, currency FROM payment_intents
                WHERE status = 'succeeded'
-                 AND (metadata LIKE ? OR metadata LIKE ?)
+                 AND requisition_id = ?
                LIMIT 1`)
-    .bind(`%${reqIdStr}%`, `%${reqIdStr2}%`).first()
+    .bind(id).first()
   if (paid) {
     return res({
       error: '此需求單仍有未退款的成功付款，請先退款再刪除',

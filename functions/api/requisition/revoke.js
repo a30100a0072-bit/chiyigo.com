@@ -68,19 +68,16 @@ export async function onRequestPost({ request, env }) {
     return res({ error: '此單已在處理中，無法撤銷', status: row.status }, 403)
 
   // 找這張單關聯的 succeeded payment_intent（最新一筆）
-  // metadata.requisition_id = N；JSON LIKE 比對，相容 number / string 兩種型別
-  const reqIdStr  = `"requisition_id":${row.id}`
-  const reqIdStr2 = `"requisition_id":"${row.id}"`
+  // P0-3: 用 requisition_id FK（2026-05-06）
   const paidIntent = await db
     .prepare(`
       SELECT id, vendor, amount_subunit, currency
       FROM   payment_intents
-      WHERE  user_id = ? AND status = 'succeeded'
-        AND  (metadata LIKE ? OR metadata LIKE ?)
+      WHERE  user_id = ? AND status = 'succeeded' AND requisition_id = ?
       ORDER  BY id DESC
       LIMIT  1
     `)
-    .bind(userId, `%${reqIdStr}%`, `%${reqIdStr2}%`)
+    .bind(userId, row.id)
     .first()
 
   // ── 分支 B：已付款 → 走 refund_request ─────────────────────

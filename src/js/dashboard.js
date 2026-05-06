@@ -190,9 +190,11 @@ async function loadProfile() {
 
     // Phase F-2 wave 3：付款 / 充值
     loadPayments();
+    // P1-6: 我的成交紀錄
+    loadDeals();
     // 從綠界分頁付款完切回來 → 自動重抓 intent list（不用 user 手動 F5）
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) loadPayments();
+      if (!document.hidden) { loadPayments(); loadDeals(); }
     });
 
     // requisition.html 帶 ?req=N 跳來時，自動開充值表單 + 預填編號
@@ -1834,6 +1836,60 @@ const PAY_STATUS_COLOR = {
   canceled:   'bg-gray-500/15 border-gray-500/30 text-gray-400',
   refunded:   'bg-gray-500/15 border-gray-500/30 text-gray-400',
 };
+
+// ── 我的成交紀錄（P1-6，2026-05-06）──
+async function loadDeals() {
+  const sec  = document.getElementById('deals-section');
+  const list = document.getElementById('deals-list');
+  if (!sec || !list) return;
+  try {
+    const data = await apiFetch('/api/auth/deals?limit=50');
+    const rows = data?.rows ?? [];
+    if (!rows.length) {
+      sec.classList.add('hidden');
+      return;
+    }
+    sec.classList.remove('hidden');
+    renderDeals(rows);
+  } catch (e) {
+    sec.classList.remove('hidden');
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+  }
+}
+
+function renderDeals(rows) {
+  const list = document.getElementById('deals-list');
+  if (!list) return;
+  list.innerHTML = rows.map(d => {
+    const total    = d.total_amount_subunit != null ? Number(d.total_amount_subunit).toLocaleString() : '—';
+    const refunded = d.refunded_amount_subunit && Number(d.refunded_amount_subunit) > 0
+      ? Number(d.refunded_amount_subunit).toLocaleString()
+      : null;
+    const cur = esc(d.currency || 'TWD');
+    const dt  = d.saved_at
+      ? new Date(d.saved_at.replace(' ', 'T') + 'Z').toLocaleString('zh-TW', { timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
+      : '—';
+    const reqLine = d.source_requisition_id
+      ? `<span class="mono text-[.68rem] text-gray-500">原單 #${d.source_requisition_id}</span>`
+      : `<span class="mono text-[.68rem] text-gray-600">原單已歸檔</span>`;
+    return `
+      <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
+        <div class="flex items-center justify-between gap-3 mb-1.5">
+          <span class="text-sm font-semibold text-white">#${d.id} · ${esc(d.service_type || '接案')}</span>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-emerald-500/15 text-emerald-300 border-emerald-500/40">✓ 已成交</span>
+        </div>
+        <div class="text-xs text-gray-400 space-y-0.5">
+          <div>客戶：${esc(d.customer_name)}${d.customer_company ? ' · ' + esc(d.customer_company) : ''}</div>
+          <div>已收：<span class="mono text-emerald-300">${total} ${cur}</span>${refunded ? ` · 已退：<span class="mono text-orange-300">${refunded} ${cur}</span>` : ''}</div>
+          <div class="flex items-center justify-between gap-2 pt-0.5">
+            ${reqLine}
+            <span class="mono text-[.68rem] text-gray-500">${esc(dt)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
 
 async function loadPayments() {
   const sec  = document.getElementById('payments-section');

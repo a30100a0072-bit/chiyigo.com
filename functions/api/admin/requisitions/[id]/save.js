@@ -59,15 +59,13 @@ export async function onRequestPost({ request, env, params }) {
   try { body = await request.json() } catch { /* keep empty */ }
   const notes = String(body?.notes ?? '').slice(0, 500) || null
 
-  // 撈付款摘要：metadata.requisition_id 對應本單
-  const reqIdStr  = `"requisition_id":${id}`
-  const reqIdStr2 = `"requisition_id":"${id}"`
+  // 撈付款摘要：requisition_id FK（P0-3，2026-05-06 不再依賴 metadata LIKE）
   const intentsRes = await db
     .prepare(`SELECT id, status, amount_subunit, currency
                 FROM payment_intents
-               WHERE metadata LIKE ? OR metadata LIKE ?
+               WHERE requisition_id = ?
                ORDER BY id ASC`)
-    .bind(`%${reqIdStr}%`, `%${reqIdStr2}%`).all()
+    .bind(id).all()
   const intents = intentsRes?.results ?? []
 
   let totalSucceeded = 0, totalRefunded = 0, currency = 'TWD'

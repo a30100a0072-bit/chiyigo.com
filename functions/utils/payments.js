@@ -50,24 +50,32 @@ export async function createPaymentIntent(env, payload = {}) {
   if (!env?.chiyigo_db) throw new Error('db not available')
   const { user_id, vendor, vendor_intent_id, kind = PAYMENT_KIND.DEPOSIT,
           status = PAYMENT_STATUS.PENDING, amount_subunit = null, amount_raw = null,
-          currency, metadata = null } = payload
+          currency, metadata = null, requisition_id = null } = payload
   if (!user_id || !vendor || !vendor_intent_id || !currency) {
     throw new Error('createPaymentIntent: missing required field')
   }
   if (!VALID_KINDS.has(kind))     throw new Error(`Invalid payment kind: ${kind}`)
   if (!VALID_STATUSES.has(status)) throw new Error(`Invalid payment status: ${status}`)
 
+  // P0-3: requisition_id 同步落 FK 欄位（metadata 仍保留 backwards compat）
+  let reqId = requisition_id != null ? Number(requisition_id) : null
+  if (reqId == null && metadata && typeof metadata === 'object') {
+    const fromMeta = Number(metadata.requisition_id)
+    if (Number.isFinite(fromMeta) && fromMeta > 0) reqId = fromMeta
+  }
+  if (!Number.isFinite(reqId) || reqId < 1) reqId = null
+
   const result = await env.chiyigo_db
     .prepare(
       `INSERT INTO payment_intents
          (user_id, vendor, vendor_intent_id, kind, status,
-          amount_subunit, amount_raw, currency, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          amount_subunit, amount_raw, currency, metadata, requisition_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id`,
     )
     .bind(user_id, vendor, String(vendor_intent_id), kind, status,
           amount_subunit, amount_raw, currency,
-          metadata ? JSON.stringify(metadata) : null)
+          metadata ? JSON.stringify(metadata) : null, reqId)
     .first()
   return result?.id ?? null
 }

@@ -165,8 +165,8 @@ function renderTable(rows) {
     const refundBtn = canRefund
       ? `<button class="pay-action-btn" data-action="open-refund" data-intent-id="${r.id}">${esc(t.action_refund)}</button>`
       : '';
-    // 強制刪除：admin 可清任意 status；UI 走 step-up + 兩段式確認
-    const delBtn = `<button class="pay-action-btn pay-action-danger" data-action="open-delete" data-intent-id="${r.id}">強制刪除</button>`;
+    // 強制刪除 / Anonymize：admin 可清任意 status；UI 走 step-up + 兩段式確認
+    const delBtn = `<button class="pay-action-btn pay-action-danger" data-action="open-delete" data-intent-id="${r.id}">強制刪除 / Anonymize</button>`;
     return `
       <tr data-action="open-detail" data-intent-id="${r.id}">
         <td class="id">${r.id}</td>
@@ -376,15 +376,15 @@ function openAdminDelete(id) {
   m.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:1rem';
   m.innerHTML = `
     <div style="background:#0f0f14;border:1px solid #2a2a35;border-radius:14px;padding:1.25rem;width:100%;max-width:400px">
-      <h3 style="font-size:.95rem;color:#fff;margin:0 0 .75rem">強制刪除 #${row.id}</h3>
+      <h3 style="font-size:.95rem;color:#fff;margin:0 0 .75rem">強制刪除 / Anonymize #${row.id}</h3>
       <p style="font-size:.8rem;color:#9aa0aa;margin:0 0 .5rem">user ${esc(row.user_id)} · ${esc(row.vendor)} · ${formatAmount(row)} · ${esc(row.status)}</p>
-      <p style="font-size:.78rem;color:#fca5a5;margin:0 0 .75rem">此操作會永久從 D1 刪除此筆 intent，audit log 會留 critical 記錄。succeeded 那筆刪除前請確認非真實成交。</p>
+      <p style="font-size:.78rem;color:#fca5a5;margin:0 0 .75rem">${['pending','failed','canceled'].includes(row.status) ? '此操作會永久從 D1 刪除此筆 intent。' : '此 intent 為 <b>'+esc(row.status)+'</b>，將執行 <b>anonymize</b>（保留金流憑證骨幹，清空 metadata 與 failure_reason）。row 不會被刪除。'} audit log 會留 critical 記錄。</p>
       <input id="admin-del-otp" type="text" inputmode="numeric" maxlength="6" placeholder="6 位 2FA OTP" autocomplete="one-time-code"
         style="width:100%;padding:.55rem .8rem;border-radius:.6rem;background:#0a0a10;border:1px solid #2a2a35;color:#fff;font-family:var(--font-mono);font-size:.9rem;letter-spacing:.2em;margin-bottom:.6rem">
       <p id="admin-del-msg" style="font-size:.75rem;min-height:1em;margin:0 0 .6rem"></p>
       <div style="display:flex;justify-content:flex-end;gap:.5rem">
         <button data-action="admin-del-cancel" style="padding:.5rem .9rem;border-radius:.55rem;background:#1a1a22;border:1px solid #2a2a35;color:#cbd5e1;font-size:.78rem;cursor:pointer">取消</button>
-        <button id="admin-del-go" data-armed="0" data-id="${row.id}" style="padding:.5rem .9rem;border-radius:.55rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;font-size:.78rem;font-weight:600;cursor:pointer">強制刪除</button>
+        <button id="admin-del-go" data-armed="0" data-id="${row.id}" style="padding:.5rem .9rem;border-radius:.55rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;font-size:.78rem;font-weight:600;cursor:pointer">強制刪除 / Anonymize</button>
       </div>
     </div>`;
   document.body.appendChild(m);
@@ -405,7 +405,7 @@ async function adminDelGo() {
   const id = Number(btn.dataset.id);
   if (btn.dataset.armed !== '1') {
     btn.dataset.armed = '1';
-    btn.textContent = '確認強制刪除';
+    btn.textContent = '確認強制刪除 / Anonymize';
     btn.style.background = 'rgba(239,68,68,.4)';
     btn.style.borderColor = 'rgba(239,68,68,.7)';
     btn.style.color = '#fee2e2';
@@ -413,7 +413,7 @@ async function adminDelGo() {
     _adminDelArmTimer = setTimeout(() => {
       if (!btn.isConnected) return;
       btn.dataset.armed = '0';
-      btn.textContent = '強制刪除';
+      btn.textContent = '強制刪除 / Anonymize';
       btn.style.background = 'rgba(239,68,68,.15)';
       btn.style.borderColor = 'rgba(239,68,68,.4)';
       btn.style.color = '#fca5a5';
@@ -447,7 +447,8 @@ async function adminDelGo() {
     setAdminDelMsg(j.error || `delete ${r?.status ?? 'network'}`, 'err');
     btn.disabled = false; return;
   }
-  setAdminDelMsg('✓ 已刪除', 'ok');
+  const j = await r.json().catch(() => ({}));
+  setAdminDelMsg(j.mode === 'anonymize' ? '✓ 已 anonymize' : '✓ 已刪除', 'ok');
   setTimeout(() => { closeAdminDelete(); load(); }, 800);
 }
 document.addEventListener('click', e => {

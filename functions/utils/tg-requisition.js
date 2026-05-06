@@ -58,15 +58,13 @@ export async function buildRequisitionTgText(env, reqId, overrideStatus) {
   const head   = STATUS_HEADER[status] || STATUS_HEADER.pending
   const E      = escapeTgHtml
 
-  // 撈關聯 payment_intents（user-side metadata.requisition_id = reqId）
-  const reqIdStr  = `"requisition_id":${reqId}`
-  const reqIdStr2 = `"requisition_id":"${reqId}"`
+  // 撈關聯 payment_intents（P0-3: requisition_id FK，2026-05-06）
   const paymentsRes = await db
     .prepare(`SELECT id, vendor, status, amount_subunit, currency, created_at
                 FROM payment_intents
-               WHERE metadata LIKE ? OR metadata LIKE ?
+               WHERE requisition_id = ?
                ORDER BY id ASC`)
-    .bind(`%${reqIdStr}%`, `%${reqIdStr2}%`).all()
+    .bind(reqId).all()
   const payments = paymentsRes?.results ?? []
 
   // 主訊息

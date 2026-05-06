@@ -28,19 +28,16 @@ export async function onRequestGet({ request, env, params }) {
 
   if (!row) return res({ error: 'not_found' }, 404)
 
-  // 串付款狀態：metadata.requisition_id = 本單 id 的所有 intent
-  // 用 LIKE 比對 JSON string；intent 數量低（user 自己的），效能不是問題
-  const reqIdStr = `"requisition_id":${id}`
-  const reqIdStr2 = `"requisition_id":"${id}"`  // 兼容字串型 id
+  // 串付款狀態：requisition_id FK（P0-3，2026-05-06）
   const payQuery = await env.chiyigo_db
     .prepare(`
       SELECT id, vendor, status, amount_subunit, currency, created_at
       FROM   payment_intents
-      WHERE  user_id = ? AND (metadata LIKE ? OR metadata LIKE ?)
+      WHERE  user_id = ? AND requisition_id = ?
       ORDER  BY id DESC
       LIMIT  20
     `)
-    .bind(userId, `%${reqIdStr}%`, `%${reqIdStr2}%`).all()
+    .bind(userId, id).all()
 
   return res({ ...row, linked_payments: payQuery.results ?? [] }, 200)
 }

@@ -1,22 +1,30 @@
 /**
  * POST /api/admin/payments/intents/:id/delete
  *
- * Admin 強制清任意 status 的 intent。succeeded 也可以（user 判斷哪些是真成交要保留 / 哪些是
- * 測試或廢棄）。
+ * P0-1（金流憑證完整性，2026-05-06）：分流 hard delete vs anonymize。
  *
- * 認證：admin:payments scope + elevated:payment step-up（同 refund 標準，避免 token 外洩 = 全清）
+ *   pending / failed / canceled  → hard DELETE（從未進帳或從未成功，可清）
+ *   succeeded / processing / refunded → anonymize（保留 amount/vendor/date/user_id，
+ *                                       清 metadata + failure_reason，metadata 寫
+ *                                       anonymized_at + anonymized_by）
  *
- * 行為：硬刪 payment_intents row + critical audit。webhook events 不刪（追溯需要）。
+ * 為什麼不允許 succeeded/refunded hard delete：
+ *   - 金流憑證（vendor_intent_id + amount + 時間）是法遵與對帳依據，一旦刪掉
+ *     audit_log 只剩事件不剩憑證
+ *   - 即使 admin token 外洩，也只能 anonymize 不能消滅憑證
  *
- * 為什麼用 POST 不 DELETE：step-up token 走 Authorization header，DELETE 在某些 proxy
- * 會吃掉 body / 不易觀測，POST + 動詞 path 統一專案風格（同 refund.js）。
+ * 認證：admin:payments scope + elevated:payment step-up
  */
 
 import { res, requireStepUp } from '../../../../../utils/auth.js'
 import { getCorsHeaders } from '../../../../../utils/cors.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes.js'
-import { getPaymentIntent } from '../../../../../utils/payments.js'
+import { getPaymentIntent, PAYMENT_STATUS } from '../../../../../utils/payments.js'
 import { safeUserAudit } from '../../../../../utils/user-audit.js'
+
+const HARD_DELETABLE = new Set([
+  PAYMENT_STATUS.PENDING, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED,
+])
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
@@ -39,12 +47,38 @@ export async function onRequestPost({ request, env, params }) {
   const intent = await getPaymentIntent(env, { id })
   if (!intent) return res({ error: 'not_found' }, 404, cors)
 
-  await env.chiyigo_db
-    .prepare('DELETE FROM payment_intents WHERE id = ?')
-    .bind(id).run()
+  const adminId = Number(stepCheck.user.sub)
+  let mode
+
+  if (HARD_DELETABLE.has(intent.status)) {
+    await env.chiyigo_db
+      .prepare('DELETE FROM payment_intents WHERE id = ?')
+      .bind(id).run()
+    mode = 'hard_delete'
+  } else {
+    // Anonymize：保留金流憑證骨幹，清除可能含敏感資訊的 metadata 與 failure_reason
+    const anonMeta = JSON.stringify({
+      anonymized_at: new Date().toISOString(),
+      anonymized_by: adminId,
+      original_status: intent.status,
+    })
+    await env.chiyigo_db
+      .prepare(
+        `UPDATE payment_intents
+            SET metadata = ?,
+                failure_reason = NULL,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          WHERE id = ?`,
+      )
+      .bind(anonMeta, id).run()
+    mode = 'anonymize'
+  }
 
   await safeUserAudit(env, {
-    event_type: 'payment.intent.deleted', severity: 'critical',
+    event_type: mode === 'hard_delete'
+      ? 'payment.intent.deleted'
+      : 'payment.intent.anonymized',
+    severity: 'critical',
     user_id: intent.user_id, request,
     data: {
       intent_id:        id,
@@ -52,10 +86,11 @@ export async function onRequestPost({ request, env, params }) {
       vendor_intent_id: intent.vendor_intent_id,
       status_was:       intent.status,
       amount_subunit:   intent.amount_subunit,
+      mode,
       actor:            'admin',
-      admin_user_id:    Number(stepCheck.user.sub),
+      admin_user_id:    adminId,
     },
   })
 
-  return res({ ok: true, id }, 200, cors)
+  return res({ ok: true, id, mode }, 200, cors)
 }
