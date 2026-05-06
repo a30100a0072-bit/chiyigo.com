@@ -252,9 +252,10 @@ export async function buildEcpayCheckoutFields(env, payload) {
   if (payload.clientBackUrl) fields.ClientBackURL = payload.clientBackUrl
   if (payload.orderResultUrl) fields.OrderResultURL = payload.orderResultUrl
 
-  const { mac, raw } = await ecpayCheckMacValueDebug(fields, hashKey, hashIV)
+  // NOTE: 不要 return raw concat string；含 HashKey/HashIV，外洩等於整把 ECPay 商家密鑰
+  const { mac } = await ecpayCheckMacValueDebug(fields, hashKey, hashIV)
   fields.CheckMacValue = mac
-  return { checkout_url: checkoutUrl, fields, _debug: { raw_to_hash: raw, mac } }
+  return { checkout_url: checkoutUrl, fields }
 }
 
 function formatTradeDate(d) {

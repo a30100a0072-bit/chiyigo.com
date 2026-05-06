@@ -137,7 +137,7 @@ export async function signJwt(payload, expiresIn, env, opts = {}) {
  * @param {object} env   Cloudflare env（含 JWT_PUBLIC_KEYS / JWT_PUBLIC_KEY）
  * @param {object} [opts]
  * @param {string|string[]} [opts.audience]  受眾驗證；缺省則不驗 aud（向後相容）
- * @param {string} [opts.issuer]             簽發者驗證；缺省驗 'https://chiyigo.com'
+ * @param {string|null}     [opts.issuer]    簽發者驗證；缺省驗 'https://chiyigo.com'；傳 null 才關閉
  * @returns {Promise<object>} JWT payload
  * @throws 驗證失敗 / 過期 / aud / iss 不符 / 找不到對應 kid 時拋出例外
  */
@@ -150,7 +150,13 @@ export async function verifyJwt(token, env, opts = {}) {
 
   const verifyOpts = { algorithms: ['ES256'] }
   if (opts.audience !== undefined) verifyOpts.audience = opts.audience
-  if (opts.issuer !== undefined)   verifyOpts.issuer   = opts.issuer
+  // 預設驗 issuer：所有 chiyigo 簽出的 token 都用 'https://chiyigo.com'（簽端見 signJwt setIssuer）。
+  // 不傳 → 套預設；明確傳 null → 關閉（給少數需要驗外部 token 的場景）。
+  if (opts.issuer === null) {
+    // 明確不驗
+  } else {
+    verifyOpts.issuer = opts.issuer ?? 'https://chiyigo.com'
+  }
 
   const { payload } = await jwtVerify(token, key, verifyOpts)
   return payload

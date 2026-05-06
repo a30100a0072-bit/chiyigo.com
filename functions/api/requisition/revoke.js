@@ -145,10 +145,13 @@ export async function onRequestPost({ request, env }) {
   }
 
   // ── 分支 A：沒付款 → 直接 revoke（舊行為）────────────────
+  // 只改 status；deleted_at 留給 user 之後走 DELETE /api/requisition/:id 兩段式軟刪
+  // （Wave 2 把 DELETE 改 soft 之後，這裡若同時設 deleted_at 會讓 me.js / GET / DELETE
+  //  的 deleted_at IS NULL filter 永遠看不到 → 撤銷單從列表消失、永久刪除 endpoint 形同擺設）
   await db
     .prepare(`
       UPDATE requisition
-      SET    status = 'revoked', deleted_at = CURRENT_TIMESTAMP
+      SET    status = 'revoked'
       WHERE  id = ? AND user_id = ?
     `)
     .bind(row.id, userId)

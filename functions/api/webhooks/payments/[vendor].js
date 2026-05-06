@@ -21,7 +21,7 @@
 import { res } from '../../../utils/auth.js'
 import {
   resolvePaymentAdapter, getPaymentIntent, createPaymentIntent, updatePaymentStatus,
-  PAYMENT_KIND, PAYMENT_STATUS,
+  PAYMENT_KIND,
 } from '../../../utils/payments.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 
@@ -75,6 +75,47 @@ export async function onRequestPost({ request, env, params }) {
       http_status_returned: 500,
     })
     throw e
+  }
+
+  // 金額/幣別校驗：webhook 帶的金額必須跟原 intent 一致，否則視為攻擊或 PSP 異常。
+  // Why：簽章 + 金額雙閘門。簽章密鑰若外洩，至少擋住「拿低額 intent 偽造高額成功」這條鏈。
+  // 注意：PSP-direct 流程（intent 還不存在）暫無從比對，跳過；建出來的 intent 直接以
+  // webhook 金額為準（沒有原值可對拍）。
+  if (intent && parsed.amount_subunit != null && intent.amount_subunit != null) {
+    const amountOk   = Number(parsed.amount_subunit) === Number(intent.amount_subunit)
+    const currencyOk = !parsed.currency || !intent.currency
+                       || String(parsed.currency).toUpperCase() === String(intent.currency).toUpperCase()
+    if (!amountOk || !currencyOk) {
+      await safeUserAudit(env, {
+        event_type: 'payment.webhook.amount_mismatch',
+        severity:   'critical',
+        user_id:    intent.user_id ?? null,
+        request,
+        data: {
+          vendor,
+          event_id:         parsed.event_id,
+          vendor_intent_id: parsed.vendor_intent_id,
+          intent_id:        intent.id,
+          expected_amount:  intent.amount_subunit,
+          got_amount:       parsed.amount_subunit,
+          expected_currency: intent.currency,
+          got_currency:     parsed.currency ?? null,
+        },
+      })
+      await dlqInsert(env, {
+        vendor,
+        event_id: parsed.event_id,
+        vendor_intent_id: parsed.vendor_intent_id,
+        raw_body: rawBody,
+        error_stage: 'amount_mismatch',
+        error_message: `expected ${intent.amount_subunit} ${intent.currency}, got ${parsed.amount_subunit} ${parsed.currency ?? '?'}`,
+        http_status_returned: 401,
+      })
+      if (typeof adapter.failureResponse === 'function') {
+        return adapter.failureResponse('amount_mismatch')
+      }
+      return res({ error: 'amount_mismatch' }, 401)
+    }
   }
 
   // dedupe — 寫 payment_webhook_events 撞 UNIQUE 即代表重送

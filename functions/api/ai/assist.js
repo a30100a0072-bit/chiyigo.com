@@ -14,7 +14,7 @@
  * }
  *
  * 防護（Phase 1 全部）：
- *   1. Cloudflare Turnstile（若 env.TURNSTILE_SECRET 已設定才驗證；未設定時跳過，方便先上線）
+ *   1. Cloudflare Turnstile（若 env.TURNSTILE_SECRET_KEY 已設定才驗證；未設定時跳過，方便先上線）
  *   2. CORS 鎖白名單（由 _middleware.js 處理）
  *   3. 輸入長度上限 500 字
  *   4. 黑名單關鍵字過濾
@@ -118,9 +118,11 @@ export async function onRequestPost({ request, env }) {
   }
 
   // ── 5. Turnstile（若已設定 secret）──────────────────────────
-  if (env.TURNSTILE_SECRET) {
+  // 跟全站共用同一把：env.TURNSTILE_SECRET_KEY（utils/turnstile.js 也是讀這把）。
+  // 早期誤用 TURNSTILE_SECRET 導致這條 endpoint 永遠 skip，已對齊。
+  if (env.TURNSTILE_SECRET_KEY) {
     if (!turnstileToken) return res({ error: '請完成人機驗證', code: 'TURNSTILE_REQUIRED' }, 400)
-    const ok = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET, ip)
+    const ok = await verifyTurnstile(turnstileToken, env.TURNSTILE_SECRET_KEY, ip)
     if (!ok) {
       await logAudit(db, { userId, ip, fingerprint, sessionId, prompt,
         status: 'blocked', blockReason: 'turnstile_failed', durationMs: Date.now() - startedAt })
