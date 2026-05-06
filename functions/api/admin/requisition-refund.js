@@ -20,6 +20,8 @@
 import { res } from '../../utils/auth.js'
 import { requireRole } from '../../utils/requireRole.js'
 import { getCorsHeaders } from '../../utils/cors.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 const VALID_STATUS = new Set(['pending', 'approved', 'rejected'])
 
@@ -29,8 +31,17 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
-  const { error } = await requireRole(request, env, 'admin')
+  const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
+
+  // T15 admin rate limit
+  const adminId = Number(user.sub)
+  const rl = await checkRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId, windowSeconds: 60, max: 60 })
+  if (rl.blocked) {
+    await safeUserAudit(env, { event_type: 'admin.read.rate_limited', severity: 'warn', user_id: adminId, request, data: { endpoint: 'refund-requests' } })
+    return res({ error: 'Too many requests', code: 'RATE_LIMITED' }, 429, cors)
+  }
+  await recordRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId })
 
   const url    = new URL(request.url)
   const status = url.searchParams.get('status') ?? 'pending'
@@ -65,6 +76,13 @@ export async function onRequestGet({ request, env }) {
     db.prepare(`SELECT COUNT(*) AS c FROM requisition_refund_request WHERE status = ?`)
       .bind(status).first(),
   ])
+
+  // T14 read audit
+  await safeUserAudit(env, {
+    event_type: 'admin.refund_requests.read', severity: 'info',
+    user_id: Number(user.sub), request,
+    data: { filters: { status }, result_count: rowsResult.results?.length ?? 0 },
+  })
 
   return res({
     rows:  rowsResult.results ?? [],

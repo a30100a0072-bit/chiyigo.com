@@ -19,6 +19,8 @@
 import { res } from '../../utils/auth.js'
 import { requireRole } from '../../utils/requireRole.js'
 import { getCorsHeaders } from '../../utils/cors.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
@@ -28,6 +30,15 @@ export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
   const role = await requireRole(request, env, 'admin')
   if (role.error) return role.error
+
+  // T15 admin rate limit
+  const adminId = Number(role.user.sub)
+  const rl = await checkRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId, windowSeconds: 60, max: 60 })
+  if (rl.blocked) {
+    await safeUserAudit(env, { event_type: 'admin.read.rate_limited', severity: 'warn', user_id: adminId, request, data: { endpoint: 'deals' } })
+    return res({ error: 'Too many requests', code: 'RATE_LIMITED' }, 429, cors)
+  }
+  await recordRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId })
 
   const url    = new URL(request.url)
   const format = url.searchParams.get('format') === 'csv' ? 'csv' : 'json'
@@ -72,6 +83,16 @@ export async function onRequestGet({ request, env }) {
     )
     .bind(...binds, limit, offset)
     .all()
+
+  // T14 read audit
+  await safeUserAudit(env, {
+    event_type: format === 'csv' ? 'admin.deals.exported' : 'admin.deals.read',
+    severity: 'info', user_id: Number(role.user.sub), request,
+    data: {
+      filters: { user_id: userId, q, from, to, format },
+      result_count: rowsResult.results?.length ?? 0,
+    },
+  })
 
   if (format === 'csv') {
     return csvResponse(rowsResult.results ?? [], cors)

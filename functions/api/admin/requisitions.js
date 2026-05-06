@@ -16,9 +16,10 @@
 
 import { requireRole } from '../../utils/requireRole.js'
 import { res } from '../../utils/auth.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
 
 export async function onRequestGet({ request, env }) {
-  const { error } = await requireRole(request, env, 'admin')
+  const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
 
   const url    = new URL(request.url)
@@ -54,6 +55,13 @@ export async function onRequestGet({ request, env }) {
       LIMIT ? OFFSET ?
     `).bind(...bindings, limit, offset).all(),
   ])
+
+  // T14 read audit
+  await safeUserAudit(env, {
+    event_type: 'admin.requisitions.read', severity: 'info',
+    user_id: Number(user.sub), request,
+    data: { filters: { q, page, limit, includeDeleted }, result_count: rows.results?.length ?? 0 },
+  })
 
   return res({
     requisitions: rows.results ?? [],

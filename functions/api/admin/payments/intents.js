@@ -23,6 +23,8 @@ import { res, requireScope } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
 import { SCOPES } from '../../../utils/scopes.js'
 import { PAYMENT_STATUS } from '../../../utils/payments.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 
 const VALID_STATUSES = new Set(Object.values(PAYMENT_STATUS))
 
@@ -32,8 +34,17 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
-  const { error } = await requireScope(request, env, SCOPES.ADMIN_PAYMENTS)
+  const { user, error } = await requireScope(request, env, SCOPES.ADMIN_PAYMENTS)
   if (error) return error
+
+  // T15 admin rate limit：60 read/min per admin（CSV export 也算）
+  const adminId = Number(user.sub)
+  const rl = await checkRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId, windowSeconds: 60, max: 60 })
+  if (rl.blocked) {
+    await safeUserAudit(env, { event_type: 'admin.read.rate_limited', severity: 'warn', user_id: adminId, request, data: { endpoint: 'payments.intents' } })
+    return res({ error: 'Too many requests', code: 'RATE_LIMITED' }, 429, cors)
+  }
+  await recordRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId })
 
   const url    = new URL(request.url)
   const format = url.searchParams.get('format') === 'csv' ? 'csv' : 'json'
@@ -91,6 +102,16 @@ export async function onRequestGet({ request, env }) {
     )
     .bind(...binds, limit, offset)
     .all()
+
+  // T14: 讀取 audit（info）— 誰在何時看了哪些 filter / 撈到幾筆
+  await safeUserAudit(env, {
+    event_type: format === 'csv' ? 'admin.payments.intents.exported' : 'admin.payments.intents.read',
+    severity: 'info', user_id: Number(user.sub), request,
+    data: {
+      filters: { status, vendor, user_id: userId, from, to, format },
+      result_count: rowsResult.results?.length ?? 0,
+    },
+  })
 
   // CSV 直接回傳，不算 totals／aggregate
   if (format === 'csv') {

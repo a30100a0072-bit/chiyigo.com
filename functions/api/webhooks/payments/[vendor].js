@@ -32,6 +32,9 @@ export async function onRequestPost({ request, env, params }) {
     return res({ error: `Unknown payment vendor: ${vendor}` }, 400)
   }
 
+  // T17 DLQ：讀 raw body 一次（adapter 可能也會讀），失敗時落 DLQ
+  const rawBody = await request.clone().text().catch(() => null)
+
   const parsed = await adapter.parseWebhook(request, env)
 
   // success/dedup 都要照 vendor 規格回（ECPay 要 plain text "1|OK"，否則 retry）
@@ -44,14 +47,35 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'payment.webhook.fail', severity: 'warn', request,
       data: { vendor, reason: parsed.error },
     })
+    await dlqInsert(env, {
+      vendor,
+      raw_body: rawBody,
+      error_stage: 'parse',
+      error_message: parsed.error || 'parse failed',
+      http_status_returned: 401,
+    })
     if (typeof adapter.failureResponse === 'function') {
       return adapter.failureResponse(parsed.error)
     }
     return res({ error: 'Webhook validation failed' }, 401)
   }
 
-  // 找對應的 intent
-  let intent = await getPaymentIntent(env, { vendor, vendor_intent_id: parsed.vendor_intent_id })
+  // 找對應的 intent — 從這裡之後任何 throw 都進 DLQ
+  let intent
+  try {
+    intent = await getPaymentIntent(env, { vendor, vendor_intent_id: parsed.vendor_intent_id })
+  } catch (e) {
+    await dlqInsert(env, {
+      vendor,
+      event_id: parsed.event_id,
+      vendor_intent_id: parsed.vendor_intent_id,
+      raw_body: rawBody,
+      error_stage: 'lookup_intent',
+      error_message: String(e?.message || e).slice(0, 1000),
+      http_status_returned: 500,
+    })
+    throw e
+  }
 
   // dedupe — 寫 payment_webhook_events 撞 UNIQUE 即代表重送
   const payloadHash = parsed.raw_body
@@ -72,35 +96,59 @@ export async function onRequestPost({ request, env, params }) {
     if (String(e?.message ?? e).includes('UNIQUE')) {
       return successFn({ deduplicated: true })
     }
+    await dlqInsert(env, {
+      vendor,
+      event_id: parsed.event_id,
+      vendor_intent_id: parsed.vendor_intent_id,
+      raw_body: rawBody,
+      payload_hash: payloadHash,
+      error_stage: 'dedupe_insert',
+      error_message: String(e?.message || e).slice(0, 1000),
+      http_status_returned: 500,
+    })
     throw e
   }
 
   // 沒既存 intent 且 webhook 帶 user_id → 主動建一筆（PSP 直接通知，跳過我方 /checkout 的場景）
-  if (!intent && parsed.user_id) {
-    try {
-      const id = await createPaymentIntent(env, {
-        user_id:          parsed.user_id,
+  try {
+    if (!intent && parsed.user_id) {
+      try {
+        const id = await createPaymentIntent(env, {
+          user_id:          parsed.user_id,
+          vendor,
+          vendor_intent_id: parsed.vendor_intent_id,
+          kind:             PAYMENT_KIND.DEPOSIT,
+          status:           parsed.status,
+          amount_subunit:   parsed.amount_subunit,
+          amount_raw:       parsed.amount_raw,
+          currency:         parsed.currency ?? 'TWD',
+          failure_reason:   parsed.failure_reason,
+        })
+        intent = { id, user_id: parsed.user_id }
+      } catch {
+        // 同 vendor_intent_id race → 重撈
+        intent = await getPaymentIntent(env, { vendor, vendor_intent_id: parsed.vendor_intent_id })
+      }
+    } else if (intent) {
+      await updatePaymentStatus(env, {
         vendor,
         vendor_intent_id: parsed.vendor_intent_id,
-        kind:             PAYMENT_KIND.DEPOSIT,
         status:           parsed.status,
-        amount_subunit:   parsed.amount_subunit,
-        amount_raw:       parsed.amount_raw,
-        currency:         parsed.currency ?? 'TWD',
         failure_reason:   parsed.failure_reason,
       })
-      intent = { id, user_id: parsed.user_id }
-    } catch {
-      // 同 vendor_intent_id race → 重撈
-      intent = await getPaymentIntent(env, { vendor, vendor_intent_id: parsed.vendor_intent_id })
     }
-  } else if (intent) {
-    await updatePaymentStatus(env, {
+  } catch (e) {
+    await dlqInsert(env, {
       vendor,
+      event_id: parsed.event_id,
       vendor_intent_id: parsed.vendor_intent_id,
-      status:           parsed.status,
-      failure_reason:   parsed.failure_reason,
+      raw_body: rawBody,
+      payload_hash: payloadHash,
+      error_stage: !intent ? 'create_intent' : 'update_status',
+      error_message: String(e?.message || e).slice(0, 1000),
+      http_status_returned: 500,
     })
+    throw e
   }
 
   // 若 adapter 回了 payment_info（ATM V 帳號 / CVS 代碼 / 條碼）→ merge 到 metadata.payment_info
@@ -145,4 +193,34 @@ async function mergeMetadata(env, intentId, patch) {
 async function sha256Hex(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
   return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// T17 DLQ: 把處理失敗的 webhook 落到 payment_webhook_dlq；任何 throw 都吞掉
+// （DLQ 自己壞掉也不能擋住 PSP 回應）
+async function dlqInsert(env, row) {
+  if (!env?.chiyigo_db) return
+  try {
+    let payloadHash = row.payload_hash ?? null
+    if (!payloadHash && row.raw_body) {
+      try { payloadHash = await sha256Hex(row.raw_body) } catch { /* ignore */ }
+    }
+    await env.chiyigo_db
+      .prepare(
+        `INSERT INTO payment_webhook_dlq
+           (vendor, event_id, vendor_intent_id, raw_body, payload_hash,
+            error_stage, error_message, http_status_returned)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        row.vendor ?? null,
+        row.event_id ?? null,
+        row.vendor_intent_id ?? null,
+        row.raw_body ?? null,
+        payloadHash,
+        row.error_stage ?? 'unknown',
+        (row.error_message ?? '').slice(0, 1000),
+        row.http_status_returned ?? null,
+      )
+      .run()
+  } catch { /* swallow — DLQ 失敗不能擋 PSP response */ }
 }
