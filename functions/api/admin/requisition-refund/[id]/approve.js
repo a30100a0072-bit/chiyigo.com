@@ -30,6 +30,7 @@ import {
 } from '../../../../utils/payments.js'
 import { ecpayRefund } from '../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition.js'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
@@ -134,11 +135,14 @@ export async function onRequestPost({ request, env, params }) {
     failure_reason:   adminNote ? `refund (req approval): ${adminNote}` : 'refund (req approval)',
   })
 
-  await db.prepare(`
-    UPDATE requisition
-       SET status = 'revoked', deleted_at = CURRENT_TIMESTAMP
-     WHERE id = ?
-  `).bind(rr.requisition_id).run()
+  // requisition_id 可能為 NULL（user 對未綁需求單的 succeeded payment 直接申請退款）
+  if (rr.requisition_id) {
+    await db.prepare(`
+      UPDATE requisition
+         SET status = 'revoked', deleted_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `).bind(rr.requisition_id).run()
+  }
 
   await db.prepare(`
     UPDATE requisition_refund_request
@@ -160,12 +164,14 @@ export async function onRequestPost({ request, env, params }) {
       admin_user_id:     Number(stepCheck.user.sub),
     },
   })
+  // TG sync（refunded 狀態納入摘要）
+  if (rr.requisition_id) await syncRequisitionTgMessage(env, rr.requisition_id)
 
   return res({
     ok: true,
     refund_request_id: id,
     requisition_id:    rr.requisition_id,
     intent_status:     PAYMENT_STATUS.REFUNDED,
-    requisition_status: 'revoked',
+    requisition_status: rr.requisition_id ? 'revoked' : null,
   }, 200, cors)
 }

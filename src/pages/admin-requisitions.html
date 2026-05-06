@@ -211,6 +211,48 @@
     </div>
   </div>
 
+  <!-- Audit cleanup modal -->
+  <div id="modal-audit-cleanup" class="modal-bd">
+    <div class="modal-card modal-card--wide">
+      <div class="modal-head">
+        <h2>需求單刪除紀錄</h2>
+        <button class="modal-close" data-modal-close="modal-audit-cleanup" aria-label="close">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="msg-label">列出所有 <code>requisition.deleted</code> audit。判斷已不需要再追蹤的可永久清除（兩段式確認 + 2FA OTP）。</p>
+        <div id="audit-cleanup-list" class="refund-review-list">
+          <p class="empty-state">載入中…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save / delete confirm modal（admin 兩段式 + OTP） -->
+  <div id="modal-req-action" class="modal-bd">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="ra-title">確認動作</h2>
+        <button class="modal-close" data-modal-close="modal-req-action" aria-label="close">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body refund-modal-body">
+        <p id="ra-summary" class="msg-block"></p>
+        <div>
+          <p class="msg-label" id="ra-note-label">備註（選填）</p>
+          <input id="ra-note" type="text" maxlength="500" placeholder="處理備註" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem" />
+        </div>
+        <p id="ra-msg" class="refund-msg"></p>
+        <div class="refund-actions">
+          <button class="cancel" data-modal-close="modal-req-action">取消</button>
+          <button id="ra-confirm-btn" class="confirm" data-armed="0">下一步</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Decide modal: approve / reject 共用 OTP + 備註輸入 -->
   <div id="modal-refund-decide" class="modal-bd">
     <div class="modal-card">

@@ -44,7 +44,7 @@ export async function onRequestGet({ request, env }) {
       .bind(...bindings)
       .first(),
     db.prepare(`
-      SELECT id, name, company, contact, service_type, budget, timeline, message, created_at
+      SELECT id, name, company, contact, service_type, budget, timeline, message, status, created_at
       FROM requisition ${where}
       ORDER BY created_at DESC
       LIMIT ? OFFSET ?

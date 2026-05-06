@@ -19,6 +19,7 @@
 
 import { requireAuth, res } from '../../utils/auth.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
+import { syncRequisitionTgMessage } from '../../utils/tg-requisition.js'
 
 async function editTelegramMessage(env, messageId, text) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID || !messageId) return
@@ -134,6 +135,8 @@ export async function onRequestPost({ request, env }) {
         reason:            reasonClipped,
       },
     })
+    // TG 訊息同步到 refund_pending 狀態
+    await syncRequisitionTgMessage(env, row.id)
 
     return res({
       ok: true,

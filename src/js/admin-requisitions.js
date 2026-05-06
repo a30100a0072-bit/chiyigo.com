@@ -191,14 +191,42 @@ function renderPagination(total, page, limit) {
     <button data-load-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>${t.next_page}</button>`
 }
 
+const REQ_STATUS_LABEL = {
+  pending:        '待處理',
+  refund_pending: '退款審核中',
+  revoked:        '已撤銷',
+  deal:           '已成交',
+  processing:     '處理中',
+  completed:      '已完成',
+};
+const REQ_STATUS_CLS = {
+  pending:        'background:rgba(245,158,11,.12);color:#d97706;border:1px solid rgba(245,158,11,.32)',
+  refund_pending: 'background:rgba(249,115,22,.12);color:#c2410c;border:1px solid rgba(249,115,22,.32)',
+  revoked:        'background:rgba(107,114,128,.1);color:#6b7280;border:1px solid rgba(107,114,128,.32)',
+  deal:           'background:rgba(16,185,129,.12);color:#059669;border:1px solid rgba(16,185,129,.32)',
+};
+function statusPill(status) {
+  const lbl = REQ_STATUS_LABEL[status] || status;
+  const cls = REQ_STATUS_CLS[status] || REQ_STATUS_CLS.pending;
+  return `<span style="${cls};display:inline-flex;padding:.18rem .55rem;border-radius:6px;font-size:.72rem;font-weight:500">${esc(lbl)}</span>`;
+}
+
 function openModal(id) {
   const r = window._reqData?.[id]
   if (!r) return
   const t = T()
   const body = document.getElementById('modal-body')
+  const status = r.status || 'pending'
+  // 動作鍵：保存 / 刪除 — pending 才顯示保存（其他狀態語意上不該移成交）；刪除全狀態都顯示
+  const saveBtnHtml = status === 'pending'
+    ? `<button class="confirm" data-ra-action="save" data-ra-id="${r.id}" style="flex:1">保存（成交）</button>`
+    : '';
+  const delBtnHtml = `<button data-ra-action="delete" data-ra-id="${r.id}" style="flex:1;padding:.55rem;border-radius:8px;background:transparent;border:1px solid rgba(239,68,68,.4);color:#dc2626;font-size:.85rem;font-weight:500;cursor:pointer">刪除</button>`;
+
   body.innerHTML = `
     <div class="modal-meta">
       <span>#${r.id}</span><span>·</span><span>${formatDate(r.created_at)}</span>
+      <span style="margin-left:auto">${statusPill(status)}</span>
     </div>
     ${field(t.field_name, r.name)}
     ${r.company ? field(t.field_company, r.company) : ''}
@@ -209,6 +237,9 @@ function openModal(id) {
     <div>
       <p class="msg-label">${t.field_message}</p>
       <div class="msg-block">${esc(r.message)}</div>
+    </div>
+    <div style="display:flex;gap:.6rem;margin-top:.5rem">
+      ${saveBtnHtml}${delBtnHtml}
     </div>`
   document.getElementById('modal').classList.add('open')
 }
@@ -234,47 +265,38 @@ if (!_initToken) { showError(T().err_not_logged_in) } else { load(1) }
 function escA(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
 async function openAuditCleanup() {
-  document.getElementById('audit-cleanup-modal')?.remove();
+  const modal = document.getElementById('modal-audit-cleanup');
+  modal.classList.add('open');
+  const list = document.getElementById('audit-cleanup-list');
+  list.innerHTML = `<p class="empty-state">載入中…</p>`;
   const tok = getToken();
-  if (!tok) return;
-  const m = document.createElement('div');
-  m.id = 'audit-cleanup-modal';
-  m.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:1rem';
-  m.innerHTML = `
-    <div style="background:#0f0f14;border:1px solid #2a2a35;border-radius:14px;padding:1.25rem;width:100%;max-width:560px;max-height:80vh;overflow:auto">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-        <h3 style="font-size:.95rem;color:#fff;margin:0">需求單刪除紀錄</h3>
-        <button data-action="audit-cleanup-close" style="background:transparent;border:0;color:#9aa0aa;cursor:pointer;font-size:1.1rem">✕</button>
-      </div>
-      <p style="font-size:.75rem;color:#9aa0aa;margin:0 0 .75rem">列出所有 <code style="background:#0a0a10;padding:.05rem .35rem;border-radius:.3rem">requisition.deleted</code> audit。判斷已不需要再追蹤的可永久清除（兩段式確認）。</p>
-      <div id="audit-cleanup-list" style="display:flex;flex-direction:column;gap:.5rem">
-        <p style="font-size:.8rem;color:#9aa0aa">載入中…</p>
-      </div>
-    </div>`;
-  document.body.appendChild(m);
-  m.addEventListener('click', e => { if (e.target === m) document.getElementById('audit-cleanup-modal')?.remove(); });
+  if (!tok) { list.innerHTML = `<p class="empty-state" style="color:#dc2626">未登入</p>`; return; }
 
   const r = await fetch('/api/admin/audit?event_type=requisition.deleted&limit=200', {
     headers: { Authorization: `Bearer ${tok}` },
   }).catch(() => null);
-  const list = document.getElementById('audit-cleanup-list');
-  if (!list) return;
-  if (!r || !r.ok) { list.innerHTML = `<p style="font-size:.8rem;color:#fca5a5">載入失敗</p>`; return; }
+  if (!r || !r.ok) { list.innerHTML = `<p class="empty-state" style="color:#dc2626">載入失敗</p>`; return; }
   const j = await r.json();
   const rows = j.rows ?? [];
-  if (!rows.length) { list.innerHTML = `<p style="font-size:.8rem;color:#9aa0aa">沒有刪除紀錄</p>`; return; }
+  if (!rows.length) { list.innerHTML = `<p class="empty-state">沒有刪除紀錄</p>`; return; }
   list.innerHTML = rows.map(row => {
     let data = {};
     try { data = typeof row.event_data === 'string' ? JSON.parse(row.event_data) : (row.event_data ?? {}); } catch {}
     const reqId = data?.requisition_id ?? '?';
     const actor = data?.actor ?? '?';
     return `
-      <div style="display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;background:#0a0a10;border:1px solid #2a2a35;border-radius:.55rem">
-        <div style="flex:1;min-width:0">
-          <p style="font-size:.78rem;color:#fff;margin:0">audit #${row.id} · req #${escA(reqId)} · user ${escA(row.user_id ?? '?')}</p>
-          <p style="font-size:.7rem;color:#9aa0aa;margin:0">actor=${escA(actor)} · ${escA(row.created_at)}</p>
+      <div class="refund-row">
+        <div class="refund-row__head">
+          <div class="refund-row__ids">
+            <span class="req-tag">audit #${row.id}</span>
+            <span class="meta-tag">req #${escA(reqId)}</span>
+            <span class="meta-tag">user ${escA(row.user_id ?? '?')}</span>
+          </div>
         </div>
-        <button data-audit-del="${row.id}" data-armed="0" style="padding:.35rem .65rem;border-radius:.45rem;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;font-size:.72rem;cursor:pointer">清除</button>
+        <div class="refund-row__sub">actor=${escA(actor)} · ${escA(row.created_at)}</div>
+        <div class="refund-row__actions">
+          <button class="reject" data-audit-del="${row.id}" data-armed="0">清除（兩段式 + OTP）</button>
+        </div>
       </div>`;
   }).join('');
 }
@@ -325,18 +347,19 @@ async function auditDelGo(auditId, btn) {
 
 document.getElementById('audit-cleanup-btn')?.addEventListener('click', openAuditCleanup);
 document.addEventListener('click', e => {
-  const closer = e.target.closest('[data-action="audit-cleanup-close"]');
-  if (closer) document.getElementById('audit-cleanup-modal')?.remove();
   const delBtn = e.target.closest('[data-audit-del]');
-  if (delBtn) auditDelGo(Number(delBtn.dataset.auditDel), delBtn);
-  // refund review modal close (data-modal-close 共用)
+  if (delBtn) return auditDelGo(Number(delBtn.dataset.auditDel), delBtn);
+  // 共用：data-modal-close
   const mc = e.target.closest('[data-modal-close]');
   if (mc) document.getElementById(mc.dataset.modalClose)?.classList.remove('open');
   // 退款列表內按鈕
   const rfApprove = e.target.closest('[data-rf-approve]');
-  if (rfApprove) openRefundDecide(Number(rfApprove.dataset.rfApprove), 'approve');
+  if (rfApprove) return openRefundDecide(Number(rfApprove.dataset.rfApprove), 'approve');
   const rfReject  = e.target.closest('[data-rf-reject]');
-  if (rfReject)  openRefundDecide(Number(rfReject.dataset.rfReject), 'reject');
+  if (rfReject)  return openRefundDecide(Number(rfReject.dataset.rfReject), 'reject');
+  // 詳情 modal 內：保存 / 刪除
+  const ra = e.target.closest('[data-ra-action]');
+  if (ra) return openReqAction(ra.dataset.raAction, Number(ra.dataset.raId));
 });
 // 點 backdrop 自動關
 document.querySelectorAll('.modal-bd').forEach(m => {
@@ -500,6 +523,85 @@ document.getElementById('rd-confirm-btn')?.addEventListener('click', async () =>
 });
 
 document.getElementById('refund-review-btn')?.addEventListener('click', openRefundReview);
+
+// ── 需求單保存 / 刪除（兩段式確認，admin only）─────────────
+let _raCtx = { action: null, id: null, armed: false };
+
+function openReqAction(action, id) {
+  const r = window._reqData?.[id];
+  if (!r) return;
+  _raCtx = { action, id, armed: false };
+  const isSave = action === 'save';
+  document.getElementById('ra-title').textContent = isSave ? '保存為成交資料' : '刪除需求單';
+  document.getElementById('ra-summary').innerHTML = isSave
+    ? `將 req #${id}（${escA(r.name)} / ${escA(r.contact)}）寫入「成交資料庫」。
+       後續可在 deals 表追蹤；TG 訊息會更新成 ✅ 已成交（含付款摘要）。`
+    : `<strong style="color:#dc2626">⚠️ 永久刪除 req #${id}</strong>
+       — DB row 直接消失；如有未退款的 succeeded payment 後端會擋下。
+       TG 訊息更新成 🗑 已刪除。`;
+  document.getElementById('ra-note-label').textContent = isSave ? '備註（選填，會寫入 deal.notes）' : '刪除原因（建議填，存 audit）';
+  document.getElementById('ra-note').value = '';
+  setRaMsg('', '');
+  const btn = document.getElementById('ra-confirm-btn');
+  btn.dataset.armed = '0';
+  btn.textContent = isSave ? '下一步：確認保存' : '下一步：確認刪除';
+  btn.disabled = false;
+  btn.style.cssText = isSave ? '' : 'background:#dc2626;border-color:#dc2626;color:#fff';
+  // 關上詳情，避免層疊
+  document.getElementById('modal').classList.remove('open');
+  document.getElementById('modal-req-action').classList.add('open');
+}
+
+function setRaMsg(text, type) {
+  const el = document.getElementById('ra-msg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'refund-msg' + (type ? ' ' + type : '');
+}
+
+document.getElementById('ra-confirm-btn')?.addEventListener('click', async () => {
+  const { action, id } = _raCtx;
+  if (!action || !id) return;
+  const btn = document.getElementById('ra-confirm-btn');
+  // 兩段式：第一次點擊只 arm；第二次才送
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = action === 'save' ? '⚠️ 再點一次確認保存' : '⚠️ 再點一次確認刪除';
+    setRaMsg('已進入確認狀態，再點一次按鈕送出', '');
+    setTimeout(() => {
+      if (btn.dataset.armed === '1') {
+        btn.dataset.armed = '0';
+        btn.textContent = action === 'save' ? '下一步：確認保存' : '下一步：確認刪除';
+        setRaMsg('', '');
+      }
+    }, 5000);
+    return;
+  }
+
+  btn.disabled = true;
+  setRaMsg('送出中…', '');
+  const tok = getToken();
+  const note = document.getElementById('ra-note').value.trim();
+  const ep = `/api/admin/requisitions/${id}/${action}`;
+  const r = await fetch(ep, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+    body:    JSON.stringify(action === 'save' ? { notes: note || null } : { confirm: true, notes: note || null }),
+  }).catch(() => null);
+  if (!r || !r.ok) {
+    let msg = `${action} 失敗`;
+    try { const j = await r.json(); msg = j.error || msg; } catch {}
+    setRaMsg(msg, 'err');
+    btn.disabled = false; btn.dataset.armed = '0';
+    btn.textContent = action === 'save' ? '下一步：確認保存' : '下一步：確認刪除';
+    return;
+  }
+  setRaMsg(action === 'save' ? '✓ 已保存到 deals' : '✓ 已永久刪除', 'ok');
+  setTimeout(() => {
+    document.getElementById('modal-req-action').classList.remove('open');
+    load(currentPage, currentQ);
+  }, 800);
+});
 
 // ── block 2/2 ──
 (function(){

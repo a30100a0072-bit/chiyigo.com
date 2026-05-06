@@ -519,6 +519,30 @@ async function armOrConfirmReqListDelete(id) {
   }, 4000);
 }
 
+// ── Payment intent 申請退款（succeeded → admin 審核退款流程，wave 7/8）──
+async function requestPaymentRefund(intentId) {
+  const reason = window.prompt('請填寫退款原因（會送 admin 審核）：', '');
+  if (!reason || !reason.trim()) return;
+  try {
+    const r = await apiFetch(`/api/payments/intents/${intentId}/refund-request`, {
+      method: 'POST',
+      body:   JSON.stringify({ reason: reason.trim() }),
+    });
+    showBindToast(r?.requisition_id
+      ? '退款申請已送出（已關聯需求單）'
+      : '退款申請已送出，等候 admin 審核', 'ok');
+    loadPayments();
+    if (r?.requisition_id) loadRequisitions();
+  } catch (e) {
+    if (e?.code === 'REFUND_ALREADY_PENDING') {
+      showBindToast('此筆充值已申請退款，請等候 admin 審核', 'err');
+      loadPayments();
+      return;
+    }
+    showBindToast(tApiError(e, T('net_err')), 'err');
+  }
+}
+
 // ── Payment intent 兩段式刪除 ──
 let _payDelTimer = null;
 async function armOrConfirmPayDelete(id) {
@@ -1822,16 +1846,15 @@ function renderPayments(items) {
     }
     // 動作按鈕：
     //  - pending / failed / canceled / refunded → 刪除（帳務已結清或從未進帳，可清掉 row）
-    //  - succeeded + 綁有 pending requisition → 撤銷（觸發 wave 7 退款申請流程）
-    //  - succeeded 沒綁需求單 → 沒按鈕（充值成果不該由 user 自行清，要走 admin 退款）
+    //  - succeeded → 退款（綁需求單會連帶把 req 翻 refund_pending；沒綁直接申請）
     const canDelete = ['pending', 'failed', 'canceled', 'refunded'].includes(p.status);
     let actionBtn = '';
     if (canDelete) {
       actionBtn = `<button data-pay-del-id="${p.id}" data-armed="0"
            class="shrink-0 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs transition-all">刪除</button>`;
-    } else if (p.status === 'succeeded' && reqId) {
-      actionBtn = `<button data-pay-revoke-req="${esc(reqId)}" data-pay-revoke-intent="${p.id}"
-           class="shrink-0 px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs transition-all">撤銷</button>`;
+    } else if (p.status === 'succeeded') {
+      actionBtn = `<button data-pay-refund-intent="${p.id}"
+           class="shrink-0 px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs transition-all">退款</button>`;
     }
     const delBtn = actionBtn;
     return `
@@ -1948,7 +1971,7 @@ function redirectToEcpay(url, fields) {
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
 document.addEventListener('click', e => {
-  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-revoke-req], [data-req-open-id]');
+  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-refund-intent], [data-req-open-id]');
   if (!t) return;
   // List 上的 revoked 永久刪除按鈕（要在 reqOpenId 之前，因為按鈕在 row 內）
   if (t.dataset.reqDelId) return armOrConfirmReqListDelete(Number(t.dataset.reqDelId));
@@ -1957,8 +1980,8 @@ document.addEventListener('click', e => {
     return openRequisitionDetail(Number(t.dataset.reqOpenId));
   }
   if (t.dataset.payDelId) return armOrConfirmPayDelete(Number(t.dataset.payDelId));
-  // succeeded 充值 row 上的「撤銷」→ 觸發已綁定需求單的退款申請流程（wave 7）
-  if (t.dataset.payRevokeReq) return revokeRequisition(Number(t.dataset.payRevokeReq));
+  // succeeded 充值 row 上的「退款」→ 不論有無綁需求單都建 refund_request
+  if (t.dataset.payRefundIntent) return requestPaymentRefund(Number(t.dataset.payRefundIntent));
   // 靜態按鈕 by id
   if (t.id === 'tfa-enable-btn')   return startSetup2FA();
   if (t.id === 'tfa-disable-btn')  return showDisablePanel();
