@@ -798,6 +798,8 @@ async function startSetup2FA() {
     await QRCode.toCanvas(document.getElementById('tfa-qr'), data.otpauth_uri, { width: 180, margin: 1 });
     document.getElementById('tfa-setup-panel').classList.remove('hidden');
     document.getElementById('tfa-otp-input').value = '';
+    const pwEl = document.getElementById('tfa-password-input');
+    if (pwEl) pwEl.value = '';
     document.getElementById('tfa-setup-msg').classList.add('hidden');
   } catch (e) {
     alert(tApiError(e, T('net_err')));
@@ -807,12 +809,14 @@ async function startSetup2FA() {
 
 async function confirmEnable2FA() {
   const otp = document.getElementById('tfa-otp-input').value.trim();
+  const pw  = (document.getElementById('tfa-password-input')?.value ?? '');
   const msg = document.getElementById('tfa-setup-msg');
   if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); return; }
+  if (!pw) { showTfaMsg(msg, T('tfa_pw_required') || '請輸入目前登入密碼', 'err'); return; }
   try {
     const data = await apiFetch('/api/auth/2fa/activate', {
       method: 'POST',
-      body:   JSON.stringify({ otp_code: otp }),
+      body:   JSON.stringify({ otp_code: otp, current_password: pw }),
     });
     const codesEl = document.getElementById('tfa-backup-codes');
     codesEl.innerHTML = data.backup_codes.map(c =>

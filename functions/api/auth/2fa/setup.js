@@ -12,8 +12,11 @@
 
 import { TOTP, Secret } from 'otpauth'
 import { requireAuth, res } from '../../../utils/auth.js'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 
 const TOTP_ISSUER = 'CHIYIGO'
+const RL_WINDOW_SEC = 60
+const RL_MAX        = 5
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
 
 function generateBase32Secret(byteLength = 20) {
@@ -38,6 +41,17 @@ export async function onRequestPost({ request, env }) {
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
+  const ip     = request.headers.get('CF-Connecting-IP') ?? null
+
+  // ── 1.5 Rate limit（防覆寫 totp_secret 的 setup spam）────────
+  // 真正的 2FA 啟用閘門在 /activate（要密碼 + OTP），這層只是限制 secret 寫入頻率
+  const { blocked } = await checkRateLimit(db, {
+    kind: '2fa_setup', userId, windowSeconds: RL_WINDOW_SEC, max: RL_MAX,
+  })
+  if (blocked) {
+    return res({ error: 'Too many attempts. Please try again later.', code: 'RATE_LIMITED' }, 429)
+  }
+  await recordRateLimit(db, { kind: '2fa_setup', userId, ip })
 
   // ── 2. 取得 local_account（確認使用本地密碼登入） ────────────
   const account = await db

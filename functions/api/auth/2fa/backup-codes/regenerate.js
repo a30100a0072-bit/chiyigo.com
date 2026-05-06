@@ -6,6 +6,10 @@ import { TOTP, Secret } from 'otpauth'
 import { generateBackupCodes, verifyBackupCode } from '../../../../utils/crypto.js'
 import { requireAuth, res } from '../../../../utils/auth.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../../utils/rate-limit.js'
+
+const RL_WINDOW_SEC = 60
+const RL_MAX        = 5
 
 export async function onRequestPost({ request, env }) {
   // ── 1. JWT 驗證 ───────────────────────────────────────────────
@@ -23,6 +27,15 @@ export async function onRequestPost({ request, env }) {
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
+  const ip     = request.headers.get('CF-Connecting-IP') ?? null
+
+  // ── 2.5 Rate limit（防 OTP/backup brute force）──────────────
+  const { blocked } = await checkRateLimit(db, {
+    kind: '2fa_regen', userId, windowSeconds: RL_WINDOW_SEC, max: RL_MAX,
+  })
+  if (blocked) {
+    return res({ error: 'Too many attempts. Please try again later.', code: 'RATE_LIMITED' }, 429)
+  }
 
   // ── 3. 取得帳號（必須已啟用 2FA）────────────────────────────
   const account = await db
@@ -43,8 +56,10 @@ export async function onRequestPost({ request, env }) {
       algorithm: 'SHA1', digits: 6, period: 30,
       secret: Secret.fromBase32(account.totp_secret),
     })
-    if (totp.validate({ token: sanitized, window: 1 }) === null)
+    if (totp.validate({ token: sanitized, window: 1 }) === null) {
+      await recordRateLimit(db, { kind: '2fa_regen', userId, ip })
       return res({ error: 'Invalid OTP code' }, 401)
+    }
   }
 
   // ── 4b. 驗證備用碼 ───────────────────────────────────────────
@@ -59,10 +74,15 @@ export async function onRequestPost({ request, env }) {
     for (const code of codes.results ?? []) {
       if (await verifyBackupCode(normalized, code.code_hash)) { matchId = code.id; break }
     }
-    if (matchId === null) return res({ error: 'Invalid or already used backup code' }, 401)
+    if (matchId === null) {
+      await recordRateLimit(db, { kind: '2fa_regen', userId, ip })
+      return res({ error: 'Invalid or already used backup code' }, 401)
+    }
     // Mark the used backup code before regenerating
     await db.prepare('UPDATE backup_codes SET used_at = datetime(\'now\') WHERE id = ?').bind(matchId).run()
   }
+
+  await clearRateLimit(db, { kind: '2fa_regen', userId })
 
   // ── 5. 生成 10 組新備用碼，替換舊有全部 ─────────────────────
   const { plain, hashed } = await generateBackupCodes()

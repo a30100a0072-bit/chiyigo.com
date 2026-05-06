@@ -11,6 +11,10 @@ import { TOTP, Secret } from 'otpauth'
 import { requireAuth, bumpTokenVersion, res } from '../../../utils/auth.js'
 import { verifyBackupCode } from '../../../utils/crypto.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
+import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
+
+const RL_WINDOW_SEC = 60
+const RL_MAX        = 5
 
 export async function onRequestPost({ request, env }) {
   const { user, error } = await requireAuth(request, env)
@@ -26,6 +30,15 @@ export async function onRequestPost({ request, env }) {
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
+  const ip     = request.headers.get('CF-Connecting-IP') ?? null
+
+  // ── Rate limit（防 OTP/備用碼 brute force 暴力嘗試解鎖 2FA）──
+  const { blocked } = await checkRateLimit(db, {
+    kind: '2fa_disable', userId, windowSeconds: RL_WINDOW_SEC, max: RL_MAX,
+  })
+  if (blocked) {
+    return res({ error: 'Too many attempts. Please try again later.', code: 'RATE_LIMITED' }, 429)
+  }
 
   const account = await db
     .prepare('SELECT totp_secret, totp_enabled FROM local_accounts WHERE user_id = ?')
@@ -45,8 +58,11 @@ export async function onRequestPost({ request, env }) {
       algorithm: 'SHA1', digits: 6, period: 30,
       secret: Secret.fromBase32(account.totp_secret),
     })
-    if (totp.validate({ token: sanitized, window: 1 }) === null)
+    if (totp.validate({ token: sanitized, window: 1 }) === null) {
+      await recordRateLimit(db, { kind: '2fa_disable', userId, ip })
+      await safeUserAudit(env, { event_type: 'mfa.totp.disable.fail', severity: 'warn', user_id: userId, request, data: { reason_code: 'bad_otp' } })
       return res({ error: 'Invalid OTP code' }, 401)
+    }
   }
 
   // ── 驗證備用碼（常時性比較，防計時攻擊）────────────────────────
@@ -61,8 +77,14 @@ export async function onRequestPost({ request, env }) {
     for (const code of codes.results ?? []) {
       if (await verifyBackupCode(normalized, code.code_hash)) { valid = true; break }
     }
-    if (!valid) return res({ error: 'Invalid or already used backup code' }, 401)
+    if (!valid) {
+      await recordRateLimit(db, { kind: '2fa_disable', userId, ip })
+      await safeUserAudit(env, { event_type: 'mfa.totp.disable.fail', severity: 'warn', user_id: userId, request, data: { reason_code: 'bad_backup_code' } })
+      return res({ error: 'Invalid or already used backup code' }, 401)
+    }
   }
+
+  await clearRateLimit(db, { kind: '2fa_disable', userId })
 
   // ── 停用 2FA，清除所有備用碼 ──────────────────────────────────
   await db.batch([
