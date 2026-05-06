@@ -43,11 +43,31 @@ const SANDBOX_CREDS = {
 }
 
 function getCreds(env) {
+  const isProd = env?.ECPAY_MODE === 'prod'
+  // Production 嚴格禁止 fallback 沙箱公開 creds：少設任何一把就 throw，
+  // 避免「mode=prod 但忘設金鑰 → 用 sandbox MerchantID 3002607 簽出 production
+  // checkout URL」這種會把訂單導去沙箱的隱性故障。Sandbox 仍允許未設環境變數
+  // 時用公開 creds 跑（方便本機 / staging 測試）。
+  if (isProd) {
+    const missing = []
+    if (!env?.ECPAY_MERCHANT_ID) missing.push('ECPAY_MERCHANT_ID')
+    if (!env?.ECPAY_HASH_KEY)    missing.push('ECPAY_HASH_KEY')
+    if (!env?.ECPAY_HASH_IV)     missing.push('ECPAY_HASH_IV')
+    if (missing.length > 0) {
+      throw new Error(`ECPay production credentials missing: ${missing.join(', ')}`)
+    }
+    return {
+      merchantId: env.ECPAY_MERCHANT_ID,
+      hashKey:    env.ECPAY_HASH_KEY,
+      hashIV:     env.ECPAY_HASH_IV,
+      isProd:     true,
+    }
+  }
   return {
     merchantId: env?.ECPAY_MERCHANT_ID ?? SANDBOX_CREDS.merchantId,
     hashKey:    env?.ECPAY_HASH_KEY    ?? SANDBOX_CREDS.hashKey,
     hashIV:     env?.ECPAY_HASH_IV     ?? SANDBOX_CREDS.hashIV,
-    isProd:     env?.ECPAY_MODE === 'prod',
+    isProd:     false,
   }
 }
 

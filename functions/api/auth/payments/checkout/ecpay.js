@@ -41,7 +41,7 @@ import {
   PAYMENT_KIND, PAYMENT_STATUS,
 } from '../../../../utils/payments.js'
 import {
-  buildEcpayCheckoutFields, generateMerchantTradeNo,
+  buildEcpayCheckoutFields, generateMerchantTradeNo, getEcpayCheckoutUrl,
 } from '../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
 
@@ -71,6 +71,19 @@ export async function onRequestPost({ request, env }) {
 
   const merchantTradeNo = generateMerchantTradeNo()
   const userId = Number(user.sub)
+
+  // Creds 檢查必須在建 intent 之前（mode=prod 缺金鑰會 throw）；
+  // 否則每次失敗都殘留一張 pending intent 在 DB。
+  try {
+    getEcpayCheckoutUrl(env)
+  } catch (e) {
+    await safeUserAudit(env, {
+      event_type: 'payment.vendor.misconfigured', severity: 'critical',
+      user_id: userId, request,
+      data: { vendor: 'ecpay', reason: String(e?.message || e).slice(0, 500) },
+    })
+    return res({ error: 'payment_vendor_misconfigured', code: 'PAYMENT_VENDOR_MISCONFIGURED' }, 500, cors)
+  }
 
   // 建 intent（pending）
   const intentId = await createPaymentIntent(env, {
