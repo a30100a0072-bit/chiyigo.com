@@ -6,7 +6,7 @@
 > - **L1.2**：接案諮詢紀錄＝現有需求單頁，案件狀態須連動 Telegram。✅ 已完成。
 > - **L2**：接案成功（deal）需要獨立頁面讓 admin / user 直觀看到所有成交紀錄。
 
-> **狀態**：P0–Wave 4 全部完工並上 prod（截至 commit `d67ab98`）。
+> **狀態**：P0–Wave 4 + 2026-05-07 codex 安全審查補丁全部完工並上 prod（截至 commit `73b2d13`）。
 
 ---
 
@@ -22,6 +22,12 @@
 | Wave 3 | `43ca3e1` | metadata archive / 日報月報 aggregate |
 | UI 對齊 | `60dba8e` | admin sidebar trim + i18n 4 國語言 + sun icon 對齊 |
 | Wave 4 | `d67ab98` | admin read audit / rate limit / webhook DLQ |
+| codex P0+P1 | `e86dc4e` | ECPay `?debug=1` 外洩 HashKey/HashIV ✕ / webhook 缺金額校驗 ✕ / AI Turnstile env 名 / JWT iss 預設 / client_back_url 白名單 / revoke 狀態機 |
+| 2FA 強化 | `38802f1` | activate 必傳 current_password / setup·disable·regenerate 加 rate limit / 前端 + 4 國 i18n |
+| ECPay prod 守門 | `25ac234` | `ECPAY_MODE=prod` 缺 creds 直接 throw（不偷用 sandbox） |
+| Refresh cookie | `7957429` | register / 2fa/verify 對齊 login 走 HttpOnly cookie（之前 body 暴露） |
+| 測試 schema sync | `01e20ba` | _setup.sql 對齊 migration 0026-0033 / ECPay test creds 換 3002607 → 31 fail 變 0 |
+| 低風險清理 | `73b2d13` | logout cors / delete.js 5xx 不外洩 message / metrics issued_7d 真實計算 |
 
 ---
 
