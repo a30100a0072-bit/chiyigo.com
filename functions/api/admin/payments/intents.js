@@ -35,10 +35,14 @@ export async function onRequestGet({ request, env }) {
   const { error } = await requireScope(request, env, SCOPES.ADMIN_PAYMENTS)
   if (error) return error
 
-  const url   = new URL(request.url)
+  const url    = new URL(request.url)
+  const format = url.searchParams.get('format') === 'csv' ? 'csv' : 'json'
+  // CSV 模式：硬上限 50000 row 一次撈，避免 worker 記憶體炸
   const page  = Math.max(1,  parseInt(url.searchParams.get('page')  ?? '1',  10))
-  const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10)))
-  const offset = (page - 1) * limit
+  const limit = format === 'csv'
+    ? Math.min(50000, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50000', 10)))
+    : Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10)))
+  const offset = format === 'csv' ? 0 : (page - 1) * limit
 
   const conds = []
   const binds = []
@@ -88,6 +92,11 @@ export async function onRequestGet({ request, env }) {
     .bind(...binds, limit, offset)
     .all()
 
+  // CSV 直接回傳，不算 totals／aggregate
+  if (format === 'csv') {
+    return csvResponse(rowsResult.results ?? [], cors, 'payment-records')
+  }
+
   // 總筆數（同 where；不 join refund_request 加速）
   const totalRow = await env.chiyigo_db
     .prepare(`SELECT COUNT(*) AS c FROM payment_intents ${wherePlain}`)
@@ -119,4 +128,32 @@ export async function onRequestGet({ request, env }) {
       sum_subunit_succeeded:  sumSucceededSubunit,
     },
   }, 200, cors)
+}
+
+// T9（2026-05-06）：CSV 直接從 worker 產出，避免前端跑 500 頁分頁迴圈撞 401 / OOM
+function csvCell(v) {
+  if (v == null) return ''
+  const s = String(v)
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+}
+function csvResponse(rows, cors, baseName) {
+  const header = ['id','user_id','vendor','vendor_intent_id','kind','status',
+                  'amount_subunit','amount_raw','currency','requisition_id',
+                  'refund_request_status','created_at','updated_at']
+  const lines = [header.join(',')]
+  for (const r of rows) {
+    lines.push(header.map(h => csvCell(r[h])).join(','))
+  }
+  // BOM 讓 Excel 正確顯示中文
+  const body = '﻿' + lines.join('\r\n')
+  const date = new Date().toISOString().slice(0, 10)
+  return new Response(body, {
+    status: 200,
+    headers: {
+      ...cors,
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${baseName}-${date}.csv"`,
+      'Cache-Control': 'no-store',
+    },
+  })
 }

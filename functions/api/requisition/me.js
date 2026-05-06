@@ -18,7 +18,7 @@ export async function onRequestGet({ request, env }) {
     .prepare(`
       SELECT id, service_type, budget, timeline, status, created_at, deleted_at
       FROM   requisition
-      WHERE  user_id = ?
+      WHERE  user_id = ? AND deleted_at IS NULL
       ORDER  BY created_at DESC
       LIMIT  50
     `)

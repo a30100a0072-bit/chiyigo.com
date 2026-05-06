@@ -38,7 +38,7 @@ export async function onRequestPost({ request, env, params }) {
 
   const db = env.chiyigo_db
   const row = await db
-    .prepare(`SELECT * FROM requisition WHERE id = ?`)
+    .prepare(`SELECT * FROM requisition WHERE id = ? AND deleted_at IS NULL`)
     .bind(id).first()
   if (!row) return res({ error: 'not_found' }, 404, cors)
 
@@ -64,19 +64,23 @@ export async function onRequestPost({ request, env, params }) {
   try { body = await request.json() } catch { /* keep empty */ }
   const notes = String(body?.notes ?? '').slice(0, 500) || null
 
-  // 先 sync TG 蓋訊息為「Admin 已刪除」（DB row 還在，syncRequisitionTgMessage 用 overrideStatus）
+  // 先 sync TG 蓋訊息為「Admin 已刪除」（row 還在，TG 用 overrideStatus）
   await syncRequisitionTgMessage(env, id, 'deleted')
 
-  await db.prepare(`DELETE FROM requisition WHERE id = ?`).bind(id).run()
+  // T8 soft delete（2026-05-06）：用 deleted_at 取代 hard delete，保留追溯鏈與 deals.source_requisition_id 引用
+  await db
+    .prepare(`UPDATE requisition SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`)
+    .bind(id).run()
 
   await safeUserAudit(env, {
     event_type: 'requisition.admin_deleted', severity: 'critical',
     user_id: row.user_id, request,
     data: {
       requisition_id: id,
-      original_row:   row,
+      original_status: row.status,
       admin_user_id:  Number(user.sub),
       notes,
+      mode: 'soft_delete',
     },
   })
 

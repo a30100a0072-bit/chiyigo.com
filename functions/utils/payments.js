@@ -42,6 +42,38 @@ export const PAYMENT_KIND = Object.freeze({
 
 const VALID_KINDS = new Set(Object.values(PAYMENT_KIND))
 
+// T11（2026-05-06）：metadata 寫入 allowlist，避免任意鍵污染查詢與 ETL
+//   anonymized_*：anonymize endpoint 會用，加在這裡讓 createPaymentIntent 也能 round-trip
+const METADATA_ALLOWED_KEYS = new Set([
+  'requisition_id',     // 關聯接案需求單 id
+  'order_id',           // 商戶訂單 id（前端傳）
+  'description',        // PSP 顯示用簡述
+  'client_back_url',    // ECPay 回跳
+  'tag',                // 自訂分類 tag
+  'note',               // 內部備註
+  'anonymized_at',      // anonymize endpoint 寫入
+  'anonymized_by',      // anonymize endpoint 寫入
+  'original_status',    // anonymize endpoint 寫入
+])
+
+function sanitizeMetadata(metadata) {
+  if (metadata == null) return null
+  if (typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error('metadata must be a plain object')
+  }
+  const out = {}
+  for (const [k, v] of Object.entries(metadata)) {
+    if (!METADATA_ALLOWED_KEYS.has(k)) continue  // 默默丟棄不在白名單的鍵
+    // 值大小限制：避免單欄塞 MB 級 payload
+    if (typeof v === 'string' && v.length > 1000) {
+      out[k] = v.slice(0, 1000)
+    } else {
+      out[k] = v
+    }
+  }
+  return Object.keys(out).length ? out : null
+}
+
 /**
  * INSERT 一筆 payment_intent。caller 應自行 build vendor_intent_id（PSP 回的）。
  * 同 (vendor, vendor_intent_id) UNIQUE 撞到 → throw（caller 應改走 update）。
@@ -57,10 +89,13 @@ export async function createPaymentIntent(env, payload = {}) {
   if (!VALID_KINDS.has(kind))     throw new Error(`Invalid payment kind: ${kind}`)
   if (!VALID_STATUSES.has(status)) throw new Error(`Invalid payment status: ${status}`)
 
+  // T11: 過濾 metadata 鍵（allowlist）+ 大小限制
+  const cleanMeta = sanitizeMetadata(metadata)
+
   // P0-3: requisition_id 同步落 FK 欄位（metadata 仍保留 backwards compat）
   let reqId = requisition_id != null ? Number(requisition_id) : null
-  if (reqId == null && metadata && typeof metadata === 'object') {
-    const fromMeta = Number(metadata.requisition_id)
+  if (reqId == null && cleanMeta) {
+    const fromMeta = Number(cleanMeta.requisition_id)
     if (Number.isFinite(fromMeta) && fromMeta > 0) reqId = fromMeta
   }
   if (!Number.isFinite(reqId) || reqId < 1) reqId = null
@@ -75,7 +110,7 @@ export async function createPaymentIntent(env, payload = {}) {
     )
     .bind(user_id, vendor, String(vendor_intent_id), kind, status,
           amount_subunit, amount_raw, currency,
-          metadata ? JSON.stringify(metadata) : null, reqId)
+          cleanMeta ? JSON.stringify(cleanMeta) : null, reqId)
     .first()
   return result?.id ?? null
 }

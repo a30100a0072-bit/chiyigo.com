@@ -29,10 +29,13 @@ export async function onRequestGet({ request, env }) {
   const role = await requireRole(request, env, 'admin')
   if (role.error) return role.error
 
-  const url   = new URL(request.url)
-  const page  = Math.max(1,  parseInt(url.searchParams.get('page')  ?? '1',  10))
-  const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10)))
-  const offset = (page - 1) * limit
+  const url    = new URL(request.url)
+  const format = url.searchParams.get('format') === 'csv' ? 'csv' : 'json'
+  const page   = Math.max(1,  parseInt(url.searchParams.get('page')  ?? '1',  10))
+  const limit  = format === 'csv'
+    ? Math.min(50000, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50000', 10)))
+    : Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10)))
+  const offset = format === 'csv' ? 0 : (page - 1) * limit
 
   const conds = []
   const binds = []
@@ -70,6 +73,10 @@ export async function onRequestGet({ request, env }) {
     .bind(...binds, limit, offset)
     .all()
 
+  if (format === 'csv') {
+    return csvResponse(rowsResult.results ?? [], cors)
+  }
+
   const totalRow = await env.chiyigo_db
     .prepare(`SELECT COUNT(*) AS c,
                      COALESCE(SUM(total_amount_subunit), 0)    AS s_total,
@@ -88,4 +95,29 @@ export async function onRequestGet({ request, env }) {
       sum_refunded_subunit: Number(totalRow?.s_refund ?? 0),
     },
   }, 200, cors)
+}
+
+function csvCell(v) {
+  if (v == null) return ''
+  const s = String(v)
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+}
+function csvResponse(rows, cors) {
+  const header = ['id','source_requisition_id','user_id','customer_name','customer_contact',
+                  'customer_company','service_type','budget','timeline',
+                  'total_amount_subunit','refunded_amount_subunit','currency',
+                  'payment_intent_ids','saved_at']
+  const lines = [header.join(',')]
+  for (const r of rows) lines.push(header.map(h => csvCell(r[h])).join(','))
+  const body = '﻿' + lines.join('\r\n')
+  const date = new Date().toISOString().slice(0, 10)
+  return new Response(body, {
+    status: 200,
+    headers: {
+      ...cors,
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="deals-${date}.csv"`,
+      'Cache-Control': 'no-store',
+    },
+  })
 }

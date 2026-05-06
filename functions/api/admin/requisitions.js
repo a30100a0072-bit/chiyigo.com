@@ -37,6 +37,10 @@ export async function onRequestGet({ request, env }) {
     bindings.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`)
   }
 
+  // T8 soft delete：預設隱藏已刪 row；?include_deleted=1 可看
+  const includeDeleted = url.searchParams.get('include_deleted') === '1'
+  if (!includeDeleted) conditions.push('deleted_at IS NULL')
+
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
 
   const [countRow, rows] = await Promise.all([

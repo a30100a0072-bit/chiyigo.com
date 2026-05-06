@@ -22,7 +22,7 @@ export async function onRequestGet({ request, env, params }) {
       SELECT id, name, contact, company, service_type, budget, timeline,
              message, status, created_at, deleted_at
       FROM   requisition
-      WHERE  id = ? AND user_id = ?
+      WHERE  id = ? AND user_id = ? AND deleted_at IS NULL
     `)
     .bind(id, userId).first()
 
@@ -51,7 +51,7 @@ export async function onRequestDelete({ request, env, params }) {
   const userId = Number(user.sub)
 
   const row = await env.chiyigo_db
-    .prepare('SELECT id, status FROM requisition WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id, status FROM requisition WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
     .bind(id, userId).first()
 
   if (!row) return res({ error: 'not_found' }, 404)
@@ -59,8 +59,9 @@ export async function onRequestDelete({ request, env, params }) {
     return res({ error: 'must_revoke_first', code: 'MUST_REVOKE_FIRST', status: row.status }, 403)
   }
 
+  // T8 soft delete（2026-05-06）：保留審計鏈與 deals.source_requisition_id 引用
   await env.chiyigo_db
-    .prepare('DELETE FROM requisition WHERE id = ? AND user_id = ?')
+    .prepare('UPDATE requisition SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
     .bind(id, userId).run()
 
   await safeUserAudit(env, {

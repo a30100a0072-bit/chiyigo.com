@@ -179,33 +179,33 @@ async function exportCsv() {
   const btn = document.getElementById('f-export');
   btn.disabled = true; const orig = btn.textContent; btn.textContent = '匯出中…';
   try {
-    const all = [];
-    let page = 1;
-    while (page <= 500) {
-      let j;
-      try { j = await apiFetch(`/api/admin/deals?${buildQs(page, 200)}`); }
-      catch (e) { if (e?.code === 'SESSION_EXPIRED') return; break; }
-      all.push(...(j?.rows ?? []));
-      if ((j?.rows ?? []).length < 200) break;
-      page++;
+    const qs = buildQs(1, 50000);
+    qs.set('format', 'csv');
+    const tok = sessionStorage.getItem('access_token');
+    let r = await fetch(`/api/admin/deals?${qs}`, {
+      headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      credentials: 'include',
+    });
+    if (r.status === 401) {
+      const ok = window.silentRefresh ? await window.silentRefresh() : false;
+      if (!ok) { location.href = '/login.html'; return; }
+      r = await fetch(`/api/admin/deals?${qs}`, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('access_token')}` },
+        credentials: 'include',
+      });
     }
-    const header = ['id','source_requisition_id','user_id','customer_name','customer_contact','customer_company','service_type','budget','total_amount_subunit','refunded_amount_subunit','currency','payment_intent_ids','saved_at'];
-    const rows = all.map(r => header.map(h => csvCell(r[h])).join(','));
-    const blob = new Blob(['﻿' + header.join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `deals-${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    if (!r.ok) { alert('匯出失敗：' + r.status); return; }
+    triggerDownload(await r.blob(), `deals-${new Date().toISOString().slice(0,10)}.csv`);
   } finally {
     btn.disabled = false; btn.textContent = orig;
   }
 }
-function csvCell(v) {
-  if (v == null) return '';
-  const s = String(v);
-  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-  return s;
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 load();

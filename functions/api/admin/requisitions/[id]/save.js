@@ -44,7 +44,7 @@ export async function onRequestPost({ request, env, params }) {
   const db = env.chiyigo_db
   const row = await db
     .prepare(`SELECT id, user_id, name, company, contact, service_type, budget, timeline, message, status
-                FROM requisition WHERE id = ?`)
+                FROM requisition WHERE id = ? AND deleted_at IS NULL`)
     .bind(id).first()
   if (!row) return res({ error: 'not_found' }, 404, cors)
   if (row.status !== 'pending') {

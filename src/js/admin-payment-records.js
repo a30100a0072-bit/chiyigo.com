@@ -165,33 +165,37 @@ async function exportCsv() {
   const btn = document.getElementById('f-export');
   btn.disabled = true; const orig = btn.textContent; btn.textContent = '匯出中…';
   try {
-    const all = [];
-    let page = 1;
-    while (page <= 500 /* hard cap */) {
-      let j;
-      try { j = await apiFetch(`/api/admin/payments/intents?${buildQs(page, 200)}`); }
-      catch (e) { if (e?.code === 'SESSION_EXPIRED') return; break; }
-      all.push(...(j?.rows ?? []));
-      if ((j?.rows ?? []).length < 200) break;
-      page++;
+    // T9: 後端直接產 CSV，避免前端跑分頁迴圈撞 401 / OOM
+    const qs = buildQs(1, 50000);
+    qs.set('format', 'csv');
+    const tok = sessionStorage.getItem('access_token');
+    const r = await fetch(`/api/admin/payments/intents?${qs}`, {
+      headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      credentials: 'include',
+    });
+    if (r.status === 401) {
+      // 用 silent refresh 補一次
+      const ok = window.silentRefresh ? await window.silentRefresh() : false;
+      if (!ok) { location.href = '/login.html'; return; }
+      const r2 = await fetch(`/api/admin/payments/intents?${qs}`, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('access_token')}` },
+        credentials: 'include',
+      });
+      if (!r2.ok) { alert('匯出失敗：' + r2.status); return; }
+      return triggerDownload(await r2.blob(), `payment-records-${new Date().toISOString().slice(0,10)}.csv`);
     }
-    const header = ['id','user_id','vendor','vendor_intent_id','kind','amount_subunit','amount_raw','currency','requisition_id','created_at'];
-    const rows = all.map(r => header.map(h => csvCell(r[h])).join(','));
-    const blob = new Blob(['﻿' + header.join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `payment-records-${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    if (!r.ok) { alert('匯出失敗：' + r.status); return; }
+    triggerDownload(await r.blob(), `payment-records-${new Date().toISOString().slice(0,10)}.csv`);
   } finally {
     btn.disabled = false; btn.textContent = orig;
   }
 }
-function csvCell(v) {
-  if (v == null) return '';
-  const s = String(v);
-  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-  return s;
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 load();
