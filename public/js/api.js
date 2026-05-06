@@ -36,13 +36,45 @@
     try { return sessionStorage.getItem('access_token') } catch { return null }
   }
 
-  async function apiFetch(input, init = {}) {
-    const url = typeof input === 'string' ? input : input.url
+  // 內部 silent refresh：用 HttpOnly cookie 換新 access_token；只此一處 implementation
+  // 防 thundering herd：同時多個請求 401 時共用同一顆 Promise，避免並發 refresh
+  let _refreshInflight = null
+  async function _silentRefresh() {
+    if (_refreshInflight) return _refreshInflight
+    _refreshInflight = (async () => {
+      try {
+        const r = await fetch('/api/auth/refresh', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        })
+        if (!r.ok) return false
+        const data = await r.json().catch(() => null)
+        if (data?.access_token) {
+          try { sessionStorage.setItem('access_token', data.access_token) } catch { /* ignore */ }
+          return true
+        }
+        return false
+      } catch { return false }
+      finally { setTimeout(() => { _refreshInflight = null }, 0) }
+    })()
+    return _refreshInflight
+  }
+
+  function _redirectToLogin() {
+    try { sessionStorage.removeItem('access_token') } catch { /* ignore */ }
+    // 防 redirect loop：本身就在 login 頁不再跳
+    if (!/\/login(\.html)?$/.test(location.pathname)) {
+      location.href = '/login.html'
+    }
+  }
+
+  async function _doFetch(url, init) {
     const opts = { ...init }
     opts.headers = new Headers(opts.headers || {})
     opts.credentials = opts.credentials ?? 'include'
 
-    // 自動 Authorization（不覆寫 caller 已給的）
+    // 自動 Authorization（不覆寫 caller 已給的；step-up token 會手動帶就跳過自動帶）
     if (!opts.headers.has('Authorization')) {
       const tok = getAccessToken()
       if (tok) opts.headers.set('Authorization', 'Bearer ' + tok)
@@ -53,17 +85,37 @@
       opts.headers.set('Content-Type', 'application/json')
     }
 
+    return fetch(url, opts)
+  }
+
+  async function apiFetch(input, init = {}) {
+    const url = typeof input === 'string' ? input : input.url
+    const skipRefresh = init?.skipRefresh === true  // step-up / refresh / login 自己呼叫不走 retry
+
     let res
     try {
-      res = await fetch(url, opts)
+      res = await _doFetch(url, init)
     } catch (netErr) {
-      // 網路層失敗（CORS、離線等）— 沒 traceId
       throw new ApiError({
-        status:  0,
-        traceId: null,
-        code:    'NETWORK_ERROR',
+        status: 0, traceId: null, code: 'NETWORK_ERROR',
         message: netErr?.message || 'Network error',
       })
+    }
+
+    // 401 → silent refresh → retry 一次；refresh 失敗或 retry 還 401 → redirect login
+    if (res.status === 401 && !skipRefresh) {
+      const refreshed = await _silentRefresh()
+      if (!refreshed) {
+        _redirectToLogin()
+        throw new ApiError({ status: 401, traceId: res.headers.get('X-Request-Id'), code: 'SESSION_EXPIRED', message: 'Session expired' })
+      }
+      try { res = await _doFetch(url, init) } catch (netErr) {
+        throw new ApiError({ status: 0, traceId: null, code: 'NETWORK_ERROR', message: netErr?.message || 'Network error' })
+      }
+      if (res.status === 401) {
+        _redirectToLogin()
+        throw new ApiError({ status: 401, traceId: res.headers.get('X-Request-Id'), code: 'SESSION_EXPIRED', message: 'Session expired' })
+      }
     }
 
     const traceId = res.headers.get('X-Request-Id')
@@ -100,7 +152,10 @@
     return e.traceId ? `${base}（#${e.traceId}）` : base
   }
 
+  // 對外暴露 silent refresh — 用在 step-up 等需要先確認 token 還有效的流程
+  // （step-up 自己 call 用 raw fetch，不走 apiFetch retry，避免遞迴）
   window.apiFetch       = apiFetch
   window.ApiError       = ApiError
   window.formatApiError = formatApiError
+  window.silentRefresh  = _silentRefresh
 })()

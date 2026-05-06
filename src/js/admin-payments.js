@@ -115,13 +115,14 @@ async function load() {
   const qs = new URLSearchParams({ page: String(currentPage), limit: '50' });
   for (const [k, v] of Object.entries(filters)) { if (v) qs.set(k, v); }
 
-  const r = await fetch(`/api/admin/payments/intents?${qs.toString()}`, {
-    headers: { Authorization: `Bearer ${tok}` },
-  }).catch(() => null);
-  if (!r) return showError(t.err_network);
-  if (r.status === 401 || r.status === 403) return showError(t.err_forbidden);
-  if (!r.ok) return showError(`HTTP ${r.status}`);
-  const data = await r.json();
+  let data;
+  try {
+    data = await apiFetch(`/api/admin/payments/intents?${qs.toString()}`);
+  } catch (e) {
+    if (e?.code === 'SESSION_EXPIRED') return; // apiFetch 已 redirect
+    if (e?.status === 403) return showError(t.err_forbidden);
+    return showError(window.formatApiError ? formatApiError(e, t.err_network) : (e?.message || t.err_network));
+  }
   window._lastData = data;
   document.getElementById('loading').hidden = true;
   document.getElementById('content').hidden = false;
@@ -165,8 +166,10 @@ function renderTable(rows) {
     const refundBtn = canRefund
       ? `<button class="pay-action-btn" data-action="open-refund" data-intent-id="${r.id}">${esc(t.action_refund)}</button>`
       : '';
-    // 強制刪除 / Anonymize：admin 可清任意 status；UI 走 step-up + 兩段式確認
-    const delBtn = `<button class="pay-action-btn pay-action-danger" data-action="open-delete" data-intent-id="${r.id}">強制刪除 / Anonymize</button>`;
+    // refunded = 金流憑證最終態，不顯示刪除/匿名化按鈕（後端也會 409）
+    const delBtn = status === 'refunded'
+      ? ''
+      : `<button class="pay-action-btn pay-action-danger" data-action="open-delete" data-intent-id="${r.id}">強制刪除 / Anonymize</button>`;
     return `
       <tr data-action="open-detail" data-intent-id="${r.id}">
         <td class="id">${r.id}</td>
@@ -325,27 +328,24 @@ document.getElementById('refund-confirm-btn').addEventListener('click', async ()
   if (!/^\d{6}$/.test(otp)) { setRefundMsg(t.refund_err_otp, 'err'); return; }
   if (!refundIntentId) { setRefundMsg(t.refund_err_no_intent, 'err'); return; }
 
-  const tok = getToken();
-  if (!tok) { setRefundMsg(t.err_login_required, 'err'); return; }
-
   const btn = document.getElementById('refund-confirm-btn');
   btn.disabled = true;
   setRefundMsg(t.refund_step_up, '');
 
-  // 1) step-up
-  const su = await fetch('/api/auth/step-up', {
-    method:  'POST',
-    headers: { 'Content-Type':'application/json', Authorization:`Bearer ${tok}` },
-    body:    JSON.stringify({ scope:'elevated:payment', for_action:'refund_payment', otp_code: otp }),
-  }).catch(() => null);
-  if (!su) { setRefundMsg(t.err_network, 'err'); btn.disabled = false; return; }
-  if (!su.ok) {
-    const j = await su.json().catch(() => ({}));
-    setRefundMsg(j.error || `step-up ${su.status}`, 'err');
+  // 1) step-up（apiFetch 自帶 401 silent refresh）
+  let step_up_token;
+  try {
+    const su = await apiFetch('/api/auth/step-up', {
+      method: 'POST',
+      body: JSON.stringify({ scope:'elevated:payment', for_action:'refund_payment', otp_code: otp }),
+    });
+    step_up_token = su?.step_up_token;
+    if (!step_up_token) { setRefundMsg(t.refund_err_no_stepup, 'err'); btn.disabled = false; return; }
+  } catch (e) {
+    if (e?.code === 'SESSION_EXPIRED') return;
+    setRefundMsg(e?.message || `step-up ${e?.status ?? ''}`, 'err');
     btn.disabled = false; return;
   }
-  const { step_up_token } = await su.json();
-  if (!step_up_token) { setRefundMsg(t.refund_err_no_stepup, 'err'); btn.disabled = false; return; }
 
   // 2) refund
   setRefundMsg(t.refund_calling, '');
@@ -370,21 +370,30 @@ function openAdminDelete(id) {
   const row = window._lastData?.rows?.find(r => r.id === id);
   if (!row) return;
   document.getElementById('admin-del-modal')?.remove();
+  const isHard = ['pending','failed','canceled'].includes(row.status);
+  const modeText = isHard
+    ? '此操作會永久從 D1 刪除此筆 intent。'
+    : `此 intent 為 <b>${esc(row.status)}</b>，將執行 <b>anonymize</b>（保留金流憑證骨幹，清空 metadata 與 failure_reason）。row 不會被刪除。`;
   const m = document.createElement('div');
   m.id = 'admin-del-modal';
   m.className = 'modal-bd open';
-  m.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:1rem';
   m.innerHTML = `
-    <div style="background:#0f0f14;border:1px solid #2a2a35;border-radius:14px;padding:1.25rem;width:100%;max-width:400px">
-      <h3 style="font-size:.95rem;color:#fff;margin:0 0 .75rem">強制刪除 / Anonymize #${row.id}</h3>
-      <p style="font-size:.8rem;color:#9aa0aa;margin:0 0 .5rem">user ${esc(row.user_id)} · ${esc(row.vendor)} · ${formatAmount(row)} · ${esc(row.status)}</p>
-      <p style="font-size:.78rem;color:#fca5a5;margin:0 0 .75rem">${['pending','failed','canceled'].includes(row.status) ? '此操作會永久從 D1 刪除此筆 intent。' : '此 intent 為 <b>'+esc(row.status)+'</b>，將執行 <b>anonymize</b>（保留金流憑證骨幹，清空 metadata 與 failure_reason）。row 不會被刪除。'} audit log 會留 critical 記錄。</p>
-      <input id="admin-del-otp" type="text" inputmode="numeric" maxlength="6" placeholder="6 位 2FA OTP" autocomplete="one-time-code"
-        style="width:100%;padding:.55rem .8rem;border-radius:.6rem;background:#0a0a10;border:1px solid #2a2a35;color:#fff;font-family:var(--font-mono);font-size:.9rem;letter-spacing:.2em;margin-bottom:.6rem">
-      <p id="admin-del-msg" style="font-size:.75rem;min-height:1em;margin:0 0 .6rem"></p>
-      <div style="display:flex;justify-content:flex-end;gap:.5rem">
-        <button data-action="admin-del-cancel" style="padding:.5rem .9rem;border-radius:.55rem;background:#1a1a22;border:1px solid #2a2a35;color:#cbd5e1;font-size:.78rem;cursor:pointer">取消</button>
-        <button id="admin-del-go" data-armed="0" data-id="${row.id}" style="padding:.5rem .9rem;border-radius:.55rem;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;font-size:.78rem;font-weight:600;cursor:pointer">強制刪除 / Anonymize</button>
+    <div class="modal-card" style="max-width:440px">
+      <div class="modal-head">
+        <h2>${isHard ? '強制刪除' : 'Anonymize'} #${row.id}</h2>
+        <button class="modal-close" data-action="admin-del-cancel" aria-label="close">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body refund-modal-body">
+        <p class="msg-block">user ${esc(row.user_id)} · ${esc(row.vendor)} · ${formatAmount(row)} · <b>${esc(row.status)}</b></p>
+        <p class="msg-label" style="color:#dc2626">${modeText} audit log 會留 critical 記錄。</p>
+        <input id="admin-del-otp" type="text" inputmode="numeric" maxlength="6" placeholder="6 位 2FA OTP" autocomplete="one-time-code">
+        <p id="admin-del-msg" class="refund-msg"></p>
+        <div class="refund-actions">
+          <button class="cancel" data-action="admin-del-cancel">取消</button>
+          <button id="admin-del-go" class="confirm" data-armed="0" data-id="${row.id}">${isHard ? '強制刪除' : '執行 Anonymize'}</button>
+        </div>
       </div>
     </div>`;
   document.body.appendChild(m);
@@ -396,7 +405,9 @@ function setAdminDelMsg(text, type) {
   const el = document.getElementById('admin-del-msg');
   if (!el) return;
   el.textContent = text || '';
-  el.style.color = type === 'err' ? '#fca5a5' : type === 'ok' ? '#86efac' : '#9aa0aa';
+  el.classList.remove('err', 'ok');
+  if (type === 'err') el.classList.add('err');
+  else if (type === 'ok') el.classList.add('ok');
 }
 let _adminDelArmTimer = null;
 async function adminDelGo() {
@@ -405,42 +416,44 @@ async function adminDelGo() {
   const id = Number(btn.dataset.id);
   if (btn.dataset.armed !== '1') {
     btn.dataset.armed = '1';
-    btn.textContent = '確認強制刪除 / Anonymize';
-    btn.style.background = 'rgba(239,68,68,.4)';
-    btn.style.borderColor = 'rgba(239,68,68,.7)';
-    btn.style.color = '#fee2e2';
+    const orig = btn.textContent;
+    btn.dataset.origText = orig;
+    btn.textContent = '再點一次確認';
+    btn.classList.add('armed');
     if (_adminDelArmTimer) clearTimeout(_adminDelArmTimer);
     _adminDelArmTimer = setTimeout(() => {
       if (!btn.isConnected) return;
       btn.dataset.armed = '0';
-      btn.textContent = '強制刪除 / Anonymize';
-      btn.style.background = 'rgba(239,68,68,.15)';
-      btn.style.borderColor = 'rgba(239,68,68,.4)';
-      btn.style.color = '#fca5a5';
+      btn.textContent = btn.dataset.origText || '強制刪除';
+      btn.classList.remove('armed');
     }, 4000);
     return;
   }
   if (_adminDelArmTimer) { clearTimeout(_adminDelArmTimer); _adminDelArmTimer = null; }
   const otp = document.getElementById('admin-del-otp')?.value.trim() ?? '';
   if (!/^\d{6}$/.test(otp)) { setAdminDelMsg('請輸入 6 位數字 2FA', 'err'); return; }
-  const tok = getToken();
-  if (!tok) { setAdminDelMsg('未登入', 'err'); return; }
   btn.disabled = true; setAdminDelMsg('驗證 2FA…', '');
-  const su = await fetch('/api/auth/step-up', {
-    method:  'POST',
-    headers: { 'Content-Type':'application/json', Authorization:`Bearer ${tok}` },
-    body:    JSON.stringify({ scope:'elevated:payment', for_action:'delete_payment', otp_code: otp }),
-  }).catch(() => null);
-  if (!su || !su.ok) {
-    const j = su ? await su.json().catch(() => ({})) : {};
-    setAdminDelMsg(j.error || `step-up ${su?.status ?? 'network'}`, 'err');
+
+  // step-up 走 apiFetch 自帶 401 → silent refresh → retry
+  let stepUpToken;
+  try {
+    const su = await apiFetch('/api/auth/step-up', {
+      method: 'POST',
+      body: JSON.stringify({ scope:'elevated:payment', for_action:'delete_payment', otp_code: otp }),
+    });
+    stepUpToken = su?.step_up_token;
+    if (!stepUpToken) throw new Error('missing step_up_token');
+  } catch (e) {
+    if (e?.code === 'SESSION_EXPIRED') return; // apiFetch 已 redirect
+    setAdminDelMsg(e?.message || 'step-up 失敗', 'err');
     btn.disabled = false; return;
   }
-  const { step_up_token } = await su.json();
+
   setAdminDelMsg('呼叫刪除…', '');
+  // 強制刪除走 step-up token，不能讓 apiFetch 用 access_token 蓋過去 → 手動帶 Authorization
   const r = await fetch(`/api/admin/payments/intents/${id}/delete`, {
-    method:  'POST',
-    headers: { 'Content-Type':'application/json', Authorization:`Bearer ${step_up_token}` },
+    method: 'POST',
+    headers: { 'Content-Type':'application/json', Authorization:`Bearer ${stepUpToken}` },
   }).catch(() => null);
   if (!r || !r.ok) {
     const j = r ? await r.json().catch(() => ({})) : {};

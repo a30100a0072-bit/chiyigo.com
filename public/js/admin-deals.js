@@ -72,19 +72,17 @@ function buildQs(page, limit) {
 }
 
 async function load() {
-  const tok = getToken();
-  if (!tok) { showError('請先登入'); return; }
   document.getElementById('loading').hidden = false;
   document.getElementById('content').hidden = true;
   document.getElementById('error-msg').hidden = true;
-
-  const r = await fetch(`/api/admin/deals?${buildQs(currentPage, 50)}`, {
-    headers: { Authorization: `Bearer ${tok}` },
-  }).catch(() => null);
-  if (!r) return showError('網路錯誤');
-  if (r.status === 401 || r.status === 403) return showError('權限不足');
-  if (!r.ok) return showError(`HTTP ${r.status}`);
-  const data = await r.json();
+  let data;
+  try {
+    data = await apiFetch(`/api/admin/deals?${buildQs(currentPage, 50)}`);
+  } catch (e) {
+    if (e?.code === 'SESSION_EXPIRED') return;
+    if (e?.status === 403) return showError('權限不足');
+    return showError(e?.message || '網路錯誤');
+  }
   document.getElementById('loading').hidden = true;
   document.getElementById('content').hidden = false;
   renderAll(data);
@@ -178,19 +176,17 @@ function renderPagination(total, page, limit) {
 }
 
 async function exportCsv() {
-  const tok = getToken();
-  if (!tok) return;
   const btn = document.getElementById('f-export');
   btn.disabled = true; const orig = btn.textContent; btn.textContent = '匯出中…';
   try {
     const all = [];
     let page = 1;
     while (page <= 500) {
-      const r = await fetch(`/api/admin/deals?${buildQs(page, 200)}`, { headers: { Authorization:`Bearer ${tok}` } });
-      if (!r.ok) break;
-      const j = await r.json();
-      all.push(...(j.rows ?? []));
-      if ((j.rows ?? []).length < 200) break;
+      let j;
+      try { j = await apiFetch(`/api/admin/deals?${buildQs(page, 200)}`); }
+      catch (e) { if (e?.code === 'SESSION_EXPIRED') return; break; }
+      all.push(...(j?.rows ?? []));
+      if ((j?.rows ?? []).length < 200) break;
       page++;
     }
     const header = ['id','source_requisition_id','user_id','customer_name','customer_contact','customer_company','service_type','budget','total_amount_subunit','refunded_amount_subunit','currency','payment_intent_ids','saved_at'];

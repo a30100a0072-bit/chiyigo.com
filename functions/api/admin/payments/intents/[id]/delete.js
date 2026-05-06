@@ -26,6 +26,12 @@ const HARD_DELETABLE = new Set([
   PAYMENT_STATUS.PENDING, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED,
 ])
 
+// L1.1: refunded 是金流憑證的最終態（錢進來再退出去），與 succeeded 同等不可改動。
+// 連 anonymize 都禁止 — 退款軌跡是合規 / dispute 的核心線索。
+const LOCKED_STATUSES = new Set([
+  PAYMENT_STATUS.REFUNDED,
+])
+
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
@@ -46,6 +52,15 @@ export async function onRequestPost({ request, env, params }) {
 
   const intent = await getPaymentIntent(env, { id })
   if (!intent) return res({ error: 'not_found' }, 404, cors)
+
+  // 鎖死狀態：refunded 不可被任何形式刪除/匿名化
+  if (LOCKED_STATUSES.has(intent.status)) {
+    return res({
+      error: '此狀態為金流憑證最終態，不可刪除或匿名化',
+      code:  'STATUS_LOCKED',
+      status: intent.status,
+    }, 409, cors)
+  }
 
   const adminId = Number(stepCheck.user.sub)
   let mode

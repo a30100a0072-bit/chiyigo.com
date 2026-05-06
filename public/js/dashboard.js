@@ -1956,7 +1956,9 @@ function renderPayments(items) {
     //  - succeeded（無 pending refund）→ 退款（綁需求單會連帶把 req 翻 refund_pending；沒綁直接申請）
     //  - succeeded（有 pending refund_request） → 不顯示 button，只顯示「待審核退款」狀態
     const isRefundPending = p.refund_request_status === 'pending';
-    const canDelete = ['pending', 'failed', 'canceled', 'refunded'].includes(p.status);
+    // 與後端 USER_DELETABLE 對齊（functions/api/auth/payments/intents/[id].js）
+    // refunded 是金流憑證最終態，不允許 user 刪除（admin 也不行，L1.1 原則）
+    const canDelete = ['pending', 'failed', 'canceled'].includes(p.status);
     let actionBtn = '';
     if (canDelete) {
       actionBtn = `<button data-pay-del-id="${p.id}" data-armed="0"
