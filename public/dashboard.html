@@ -615,6 +615,30 @@
   <!-- ── Sidebar layout bridge ────────────────────────────────── -->
 
   <!-- Neural canvas (same as about.html) -->
+  <!-- 退款申請 modal（payment row 點「退款」開啟）-->
+  <div id="refund-reason-modal" class="hidden fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
+    <div class="rounded-2xl bg-[#0f0f14] border border-[#2a2a35] p-5 w-full max-w-md shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-semibold text-white">申請退款</h3>
+        <button id="refund-reason-close" type="button" class="text-gray-500 hover:text-white p-1 rounded transition-colors" aria-label="close">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p id="refund-reason-summary" class="text-xs text-gray-400 mb-2 leading-relaxed"></p>
+      <p class="text-xs text-gray-500 mb-1.5">請填寫退款原因（會送 admin 審核）</p>
+      <textarea id="refund-reason-input" rows="3" maxlength="500"
+        class="w-full bg-[#0a0a10] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-colors resize-none"
+        placeholder="例：服務暫不需要 / 重複下單 / 其他"></textarea>
+      <p id="refund-reason-msg" class="text-xs mt-2 hidden"></p>
+      <div class="flex gap-2 mt-3">
+        <button id="refund-reason-cancel" type="button"
+          class="flex-1 py-2 rounded-lg border border-[#2a2a35] bg-transparent text-gray-300 hover:bg-white/5 hover:border-[#3a3a45] text-sm font-medium transition-all">取消</button>
+        <button id="refund-reason-submit" type="button"
+          class="flex-1 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-sm font-semibold transition-all">送出申請</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/dashboard.js?v=f2w6d" defer></script>
 </body>
 </html>

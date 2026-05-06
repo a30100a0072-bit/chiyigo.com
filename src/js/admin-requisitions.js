@@ -195,20 +195,14 @@ const REQ_STATUS_LABEL = {
   pending:        '待處理',
   refund_pending: '退款審核中',
   revoked:        '已撤銷',
-  deal:           '已成交',
+  deal:           '✓ 已成交',
   processing:     '處理中',
   completed:      '已完成',
 };
-const REQ_STATUS_CLS = {
-  pending:        'background:rgba(245,158,11,.12);color:#d97706;border:1px solid rgba(245,158,11,.32)',
-  refund_pending: 'background:rgba(249,115,22,.12);color:#c2410c;border:1px solid rgba(249,115,22,.32)',
-  revoked:        'background:rgba(107,114,128,.1);color:#6b7280;border:1px solid rgba(107,114,128,.32)',
-  deal:           'background:rgba(16,185,129,.12);color:#059669;border:1px solid rgba(16,185,129,.32)',
-};
 function statusPill(status) {
   const lbl = REQ_STATUS_LABEL[status] || status;
-  const cls = REQ_STATUS_CLS[status] || REQ_STATUS_CLS.pending;
-  return `<span style="${cls};display:inline-flex;padding:.18rem .55rem;border-radius:6px;font-size:.72rem;font-weight:500">${esc(lbl)}</span>`;
+  const variant = REQ_STATUS_LABEL[status] ? status : 'pending';
+  return `<span class="req-status-pill req-status-pill--${variant}">${esc(lbl)}</span>`;
 }
 
 function openModal(id) {

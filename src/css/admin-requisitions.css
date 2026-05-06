@@ -339,3 +339,18 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .btn-pill--armed{background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.5);color:#dc2626;animation:armed-pulse 1.4s ease-in-out infinite}
 .theme-dark .btn-pill--armed{color:#fca5a5}
 @keyframes armed-pulse{0%,to{box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0)}}
+
+/* 需求單狀態 pill（共用，含光暗主題） */
+.req-status-pill{display:inline-flex;align-items:center;padding:.2rem .6rem;border-radius:6px;font-size:.72rem;font-weight:600;border:1px solid;letter-spacing:.02em}
+.req-status-pill--pending       {background:rgba(245,158,11,.12);color:#b45309;border-color:rgba(245,158,11,.4)}
+.req-status-pill--refund_pending{background:rgba(249,115,22,.14);color:#c2410c;border-color:rgba(249,115,22,.45)}
+.req-status-pill--revoked       {background:rgba(107,114,128,.14);color:#4b5563;border-color:rgba(107,114,128,.4)}
+.req-status-pill--deal          {background:rgba(16,185,129,.18);color:#047857;border-color:rgba(16,185,129,.55);box-shadow:0 0 0 2px rgba(16,185,129,.05)}
+.req-status-pill--processing    {background:rgba(14,165,233,.14);color:#0369a1;border-color:rgba(14,165,233,.4)}
+.req-status-pill--completed     {background:rgba(16,185,129,.12);color:#059669;border-color:rgba(16,185,129,.4)}
+.theme-dark .req-status-pill--pending       {color:#fcd34d;border-color:rgba(252,211,77,.45)}
+.theme-dark .req-status-pill--refund_pending{color:#fdba74;border-color:rgba(253,186,116,.5)}
+.theme-dark .req-status-pill--revoked       {color:#d1d5db;border-color:rgba(209,213,219,.35)}
+.theme-dark .req-status-pill--deal          {background:rgba(16,185,129,.22);color:#6ee7b7;border-color:rgba(110,231,183,.55);box-shadow:0 0 12px rgba(16,185,129,.15)}
+.theme-dark .req-status-pill--processing    {color:#7dd3fc;border-color:rgba(125,211,252,.4)}
+.theme-dark .req-status-pill--completed     {color:#6ee7b7;border-color:rgba(110,231,183,.4)}

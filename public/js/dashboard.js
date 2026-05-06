@@ -520,28 +520,79 @@ async function armOrConfirmReqListDelete(id) {
 }
 
 // ── Payment intent 申請退款（succeeded → admin 審核退款流程，wave 7/8）──
+let _refundReasonIntentId = null;
+
+function setRefundReasonMsg(text, type) {
+  const el = document.getElementById('refund-reason-msg');
+  if (!el) return;
+  if (!text) { el.classList.add('hidden'); el.textContent = ''; return; }
+  el.classList.remove('hidden');
+  el.textContent = text;
+  el.className = 'text-xs mt-2 ' + (type === 'err' ? 'text-red-400' : type === 'ok' ? 'text-emerald-400' : 'text-gray-500');
+}
+
+function openRefundReasonModal(intentId) {
+  const p = (window._lastPayments || []).find(x => x.id === intentId);
+  if (!p) return;
+  _refundReasonIntentId = intentId;
+  const amt = p.amount_subunit != null
+    ? `${p.amount_subunit.toLocaleString()} ${esc(p.currency || 'TWD')}`
+    : (p.amount_raw ? `${esc(p.amount_raw)} ${esc(p.currency || '')}` : '—');
+  document.getElementById('refund-reason-summary').textContent =
+    `對充值 #${p.id}（${amt}）申請退款。Admin 審核通過後會原路退款，動作不可逆。`;
+  document.getElementById('refund-reason-input').value = '';
+  setRefundReasonMsg('', '');
+  document.getElementById('refund-reason-submit').disabled = false;
+  document.getElementById('refund-reason-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('refund-reason-input')?.focus(), 50);
+}
+
+function closeRefundReasonModal() {
+  document.getElementById('refund-reason-modal').classList.add('hidden');
+  _refundReasonIntentId = null;
+}
+
 async function requestPaymentRefund(intentId) {
-  const reason = window.prompt('請填寫退款原因（會送 admin 審核）：', '');
-  if (!reason || !reason.trim()) return;
+  openRefundReasonModal(intentId);
+}
+
+document.getElementById('refund-reason-close')?.addEventListener('click', closeRefundReasonModal);
+document.getElementById('refund-reason-cancel')?.addEventListener('click', closeRefundReasonModal);
+document.getElementById('refund-reason-modal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeRefundReasonModal();
+});
+document.getElementById('refund-reason-submit')?.addEventListener('click', async () => {
+  const id = _refundReasonIntentId;
+  if (!id) return;
+  const reason = document.getElementById('refund-reason-input').value.trim();
+  if (!reason) { setRefundReasonMsg('請填寫退款原因', 'err'); return; }
+  const btn = document.getElementById('refund-reason-submit');
+  btn.disabled = true;
+  setRefundReasonMsg('送出中…', '');
   try {
-    const r = await apiFetch(`/api/payments/intents/${intentId}/refund-request`, {
+    const r = await apiFetch(`/api/payments/intents/${id}/refund-request`, {
       method: 'POST',
-      body:   JSON.stringify({ reason: reason.trim() }),
+      body:   JSON.stringify({ reason }),
     });
-    showBindToast(r?.requisition_id
-      ? '退款申請已送出（已關聯需求單）'
-      : '退款申請已送出，等候 admin 審核', 'ok');
-    loadPayments();
-    if (r?.requisition_id) loadRequisitions();
-  } catch (e) {
-    if (e?.code === 'REFUND_ALREADY_PENDING') {
-      showBindToast('此筆充值已申請退款，請等候 admin 審核', 'err');
+    setRefundReasonMsg('✓ 已送出，等候 admin 審核', 'ok');
+    setTimeout(() => {
+      closeRefundReasonModal();
+      showBindToast(r?.requisition_id
+        ? '退款申請已送出（已關聯需求單）'
+        : '退款申請已送出，等候 admin 審核', 'ok');
       loadPayments();
+      if (r?.requisition_id) loadRequisitions();
+    }, 700);
+  } catch (e) {
+    btn.disabled = false;
+    if (e?.code === 'REFUND_ALREADY_PENDING') {
+      setRefundReasonMsg('此筆充值已申請退款，請等候 admin 審核', 'err');
+      setTimeout(() => { closeRefundReasonModal(); loadPayments(); }, 1200);
       return;
     }
-    showBindToast(tApiError(e, T('net_err')), 'err');
+    setRefundReasonMsg(tApiError(e, T('net_err')), 'err');
   }
-}
+});
 
 // ── Payment intent 兩段式刪除 ──
 let _payDelTimer = null;
@@ -1846,17 +1897,23 @@ function renderPayments(items) {
     }
     // 動作按鈕：
     //  - pending / failed / canceled / refunded → 刪除（帳務已結清或從未進帳，可清掉 row）
-    //  - succeeded → 退款（綁需求單會連帶把 req 翻 refund_pending；沒綁直接申請）
+    //  - succeeded（無 pending refund）→ 退款（綁需求單會連帶把 req 翻 refund_pending；沒綁直接申請）
+    //  - succeeded（有 pending refund_request） → 不顯示 button，只顯示「待審核退款」狀態
+    const isRefundPending = p.refund_request_status === 'pending';
     const canDelete = ['pending', 'failed', 'canceled', 'refunded'].includes(p.status);
     let actionBtn = '';
     if (canDelete) {
       actionBtn = `<button data-pay-del-id="${p.id}" data-armed="0"
            class="shrink-0 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs transition-all">刪除</button>`;
-    } else if (p.status === 'succeeded') {
+    } else if (p.status === 'succeeded' && !isRefundPending) {
       actionBtn = `<button data-pay-refund-intent="${p.id}"
            class="shrink-0 px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs transition-all">退款</button>`;
     }
     const delBtn = actionBtn;
+    // 待審核退款 → 蓋掉 succeeded 的 status pill 顯示
+    const overrideStatusPill = isRefundPending
+      ? '<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-orange-500/15 text-orange-300 border-orange-500/30">待審核退款</span>'
+      : null;
     return `
       <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
@@ -1866,7 +1923,7 @@ function renderPayments(items) {
             ${reqLine}
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusClass}">${esc(statusLabel)}</span>
+            ${overrideStatusPill || `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusClass}">${esc(statusLabel)}</span>`}
             ${delBtn}
           </div>
         </div>

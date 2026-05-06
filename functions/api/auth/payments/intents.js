@@ -47,12 +47,18 @@ export async function onRequestGet({ request, env }) {
 
   const rows = await env.chiyigo_db
     .prepare(
-      `SELECT id, vendor, vendor_intent_id, kind, status,
-              amount_subunit, amount_raw, currency, failure_reason,
-              created_at, updated_at
-         FROM payment_intents
-        WHERE ${where.join(' AND ')}
-        ORDER BY created_at DESC
+      `SELECT pi.id, pi.vendor, pi.vendor_intent_id, pi.kind, pi.status,
+              pi.amount_subunit, pi.amount_raw, pi.currency, pi.failure_reason,
+              pi.metadata,
+              pi.created_at, pi.updated_at,
+              rr.id AS refund_request_id,
+              rr.status AS refund_request_status,
+              rr.created_at AS refund_request_created_at
+         FROM payment_intents pi
+         LEFT JOIN requisition_refund_request rr
+           ON rr.intent_id = pi.id AND rr.status = 'pending'
+        WHERE ${where.map(c => 'pi.' + c).join(' AND ')}
+        ORDER BY pi.created_at DESC
         LIMIT ?`,
     )
     .bind(...binds, limit)
