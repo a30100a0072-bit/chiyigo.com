@@ -16,10 +16,12 @@ import {
 import { onRequestGet  as listHandler   } from '../../functions/api/admin/payments/intents.js'
 import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund.js'
 
+// 對齊 functions/utils/payment-vendors/ecpay.js 的新 SANDBOX_CREDS
+// 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
 const SANDBOX = {
-  MerchantID: '2000132',
-  HashKey:    '5294y0726k67Nck0',
-  HashIV:     'v77hoKGq4kWxNNIS',
+  MerchantID: '3002607',
+  HashKey:    'pwFHCqoQZGmho4w6',
+  HashIV:     'EkRm7iFT261dpevs',
 }
 
 async function adminToken(userId) {

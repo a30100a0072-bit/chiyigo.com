@@ -268,9 +268,11 @@ CREATE TABLE IF NOT EXISTS webauthn_challenges (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- payment_intents：對齊 prod migrations 0025 → 0029（P0-2 user_id SET NULL + P0-3 requisition_id FK）→ 0030（FK 修正：requisitions → requisition）
+-- 直接建最終 shape，省去測試 setup 跑三次 rebuild
 CREATE TABLE IF NOT EXISTS payment_intents (
   id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
   vendor              TEXT    NOT NULL,
   vendor_intent_id    TEXT    NOT NULL,
   kind                TEXT    NOT NULL DEFAULT 'deposit',
@@ -280,6 +282,7 @@ CREATE TABLE IF NOT EXISTS payment_intents (
   currency            TEXT    NOT NULL,
   metadata            TEXT,
   failure_reason      TEXT,
+  requisition_id      INTEGER REFERENCES requisition(id) ON DELETE SET NULL,
   created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(vendor, vendor_intent_id)
@@ -295,6 +298,54 @@ CREATE TABLE IF NOT EXISTS payment_webhook_events (
   payload_hash  TEXT,
   processed_at  TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(vendor, event_id)
+);
+
+-- migration 0026 + 0027 + 0031 合併最終 shape（amount_subunit 由 0031 ALTER 加入；
+-- requisition_id 在 0027 改成 nullable 但 _setup.sql 沒有舊資料壓力，直接建 NULLABLE）
+CREATE TABLE IF NOT EXISTS requisition_refund_request (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  requisition_id  INTEGER REFERENCES requisition(id) ON DELETE CASCADE,
+  user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  intent_id       INTEGER REFERENCES payment_intents(id) ON DELETE SET NULL,
+  reason          TEXT,
+  status          TEXT    NOT NULL DEFAULT 'pending',  -- pending | approved | rejected
+  admin_user_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  admin_note      TEXT,
+  amount_subunit  INTEGER,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  decided_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_rrr_status        ON requisition_refund_request(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rrr_requisition   ON requisition_refund_request(requisition_id);
+CREATE INDEX IF NOT EXISTS idx_rrr_user          ON requisition_refund_request(user_id, created_at DESC);
+
+-- migration 0032: payment_metadata_archive（anonymize 前 metadata snapshot）
+CREATE TABLE IF NOT EXISTS payment_metadata_archive (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  intent_id         INTEGER NOT NULL REFERENCES payment_intents(id) ON DELETE CASCADE,
+  original_status   TEXT,
+  original_metadata TEXT,
+  original_failure_reason TEXT,
+  archived_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  archived_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reason            TEXT
+);
+
+-- migration 0033: payment_webhook_dlq（webhook 失敗 dead-letter）
+CREATE TABLE IF NOT EXISTS payment_webhook_dlq (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor          TEXT    NOT NULL,
+  event_id        TEXT,
+  vendor_intent_id TEXT,
+  raw_body        TEXT,
+  payload_hash    TEXT,
+  error_stage     TEXT,
+  error_message   TEXT,
+  http_status_returned INTEGER,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  replayed_at     TEXT,
+  replayed_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  replay_result   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS auth_codes (

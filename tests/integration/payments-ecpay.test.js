@@ -22,10 +22,14 @@ import { getPaymentIntent, PAYMENT_STATUS } from '../../functions/utils/payments
 import { onRequestPost as checkoutHandler } from '../../functions/api/auth/payments/checkout/ecpay.js'
 import { onRequestPost as webhookHandler  } from '../../functions/api/webhooks/payments/[vendor].js'
 
+// 必須跟 functions/utils/payment-vendors/ecpay.js 的 SANDBOX_CREDS 一致；
+// 否則 webhook handler 在 env 沒設 ECPAY_HASH_KEY 時 fallback 到程式內的 sandbox creds，
+// 這裡測試 payload 用舊 key 簽會 CheckMacValue mismatch → 假綠
+// 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
 const SANDBOX = {
-  MerchantID: '2000132',
-  HashKey:    '5294y0726k67Nck0',
-  HashIV:     'v77hoKGq4kWxNNIS',
+  MerchantID: '3002607',
+  HashKey:    'pwFHCqoQZGmho4w6',
+  HashIV:     'EkRm7iFT261dpevs',
 }
 
 async function userToken(userId, email = 'p@x') {
@@ -59,7 +63,7 @@ describe('ECPay CheckMacValue 演算法', () => {
     //   MerchantID=2000132, MerchantTradeNo=Test123, ...
     //   依照排序 + .NET URL encode + lowercase → SHA256 大寫
     const params = {
-      MerchantID:        '2000132',
+      MerchantID:        SANDBOX.MerchantID,
       MerchantTradeNo:   'mtn0001',
       MerchantTradeDate: '2026/01/01 12:00:00',
       PaymentType:       'aio',
@@ -272,7 +276,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
 
     // 模擬 ECPay 回 ReturnURL
     const params = {
-      MerchantID:      '2000132',
+      MerchantID:      SANDBOX.MerchantID,
       MerchantTradeNo: vendor_intent_id,
       RtnCode:         '1',
       RtnMsg:          'Succeeded',
@@ -304,7 +308,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     const { vendor_intent_id } = await co.json()
 
     const params = {
-      MerchantID: '2000132', MerchantTradeNo: vendor_intent_id,
+      MerchantID: SANDBOX.MerchantID, MerchantTradeNo: vendor_intent_id,
       RtnCode: '1', RtnMsg: 'OK', TradeNo: 'TN_DEDUP_1',
       TradeAmt: '200', PaymentDate: '2026/01/01 12:30:00',
       PaymentType: 'Credit_CreditCard', TradeDate: '2026/01/01 12:00:00',
@@ -340,7 +344,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     const { vendor_intent_id, intent_id } = await co.json()
 
     const params = {
-      MerchantID: '2000132', MerchantTradeNo: vendor_intent_id,
+      MerchantID: SANDBOX.MerchantID, MerchantTradeNo: vendor_intent_id,
       RtnCode: '2', RtnMsg: 'ATM 取號成功', TradeNo: 'TN_ATM_E2E',
       TradeAmt: '500', BankCode: '004', vAccount: '9990001234567890',
       ExpireDate: '2026/01/15',
@@ -360,7 +364,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
 
   it('簽章錯 → 回 "0|signature_invalid" + audit warn', async () => {
     const params = {
-      MerchantID: '2000132', MerchantTradeNo: 'mtn_bad',
+      MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_bad',
       RtnCode: '1', TradeNo: 'TN_BAD',
       CheckMacValue: 'BADSIG',
     }
