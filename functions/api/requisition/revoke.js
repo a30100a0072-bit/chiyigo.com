@@ -1,16 +1,24 @@
 /**
  * POST /api/requisition/revoke
  * Header: Authorization: Bearer <access_token>
- * Body: { requisition_id }
+ * Body: { requisition_id, reason? }
  *
- * 撤銷需求單（僅限 status='pending' 且屬於自己的單）。
+ * 撤銷需求單。狀態必須是 'pending'，且屬於自己的單。
+ *
+ * 兩條路（Phase F-2 wave 7）：
+ *   (A) 沒有 succeeded payment_intent → 直接 revoke（同舊行為）
+ *   (B) 有 succeeded payment_intent   → 不直接撤；建一筆 requisition_refund_request
+ *       + requisition.status='refund_pending'，等 admin 審核退款
+ *
  * 防護：
- *  - IDOR：查詢時加 user_id 條件
- *  - 狀態機：非 pending 狀態回傳 403
- * 副作用：呼叫 Telegram editMessageText 覆蓋原訊息
+ *   - IDOR：查詢時加 user_id 條件
+ *   - 狀態機：非 pending 狀態回傳 403
+ *   - 已付款：強制走退款申請流程，避免「進帳但業務單 revoked」帳務黑洞
+ *   - 已付款分支需要 reason（min 1 char），便於 admin 審核
  */
 
 import { requireAuth, res } from '../../utils/auth.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
 
 async function editTelegramMessage(env, messageId, text) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID || !messageId) return
@@ -32,7 +40,6 @@ async function editTelegramMessage(env, messageId, text) {
 }
 
 export async function onRequestPost({ request, env }) {
-  // ── 1. JWT 驗證 ───────────────────────────────────────────────
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 
@@ -40,13 +47,12 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { requisition_id } = body ?? {}
+  const { requisition_id, reason } = body ?? {}
   if (!requisition_id) return res({ error: 'requisition_id is required' }, 400)
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
 
-  // ── 2. 查單（IDOR 防禦：加 user_id 條件）────────────────────
   const row = await db
     .prepare(`
       SELECT id, status, tg_message_id
@@ -57,12 +63,87 @@ export async function onRequestPost({ request, env }) {
     .first()
 
   if (!row) return res({ error: '找不到該需求單' }, 404)
-
-  // ── 3. 狀態機鎖定：僅 pending 可撤銷 ─────────────────────────
   if (row.status !== 'pending')
-    return res({ error: '此單已在處理中，無法撤銷' }, 403)
+    return res({ error: '此單已在處理中，無法撤銷', status: row.status }, 403)
 
-  // ── 4. 軟刪除 + 狀態更新 ─────────────────────────────────────
+  // 找這張單關聯的 succeeded payment_intent（最新一筆）
+  // metadata.requisition_id = N；JSON LIKE 比對，相容 number / string 兩種型別
+  const reqIdStr  = `"requisition_id":${row.id}`
+  const reqIdStr2 = `"requisition_id":"${row.id}"`
+  const paidIntent = await db
+    .prepare(`
+      SELECT id, vendor, amount_subunit, currency
+      FROM   payment_intents
+      WHERE  user_id = ? AND status = 'succeeded'
+        AND  (metadata LIKE ? OR metadata LIKE ?)
+      ORDER  BY id DESC
+      LIMIT  1
+    `)
+    .bind(userId, `%${reqIdStr}%`, `%${reqIdStr2}%`)
+    .first()
+
+  // ── 分支 B：已付款 → 走 refund_request ─────────────────────
+  if (paidIntent) {
+    const trimmed = String(reason ?? '').trim()
+    if (!trimmed) {
+      return res({
+        error: '已付款需求單需填寫退款原因',
+        code:  'REASON_REQUIRED',
+        intent_id: paidIntent.id,
+        amount_subunit: paidIntent.amount_subunit,
+        currency: paidIntent.currency,
+      }, 400)
+    }
+    const reasonClipped = trimmed.slice(0, 500)
+
+    // 防重複申請：同 requisition 已有 pending refund_request 直接 409
+    const existing = await db
+      .prepare(`SELECT id FROM requisition_refund_request
+                 WHERE requisition_id = ? AND status = 'pending' LIMIT 1`)
+      .bind(row.id).first()
+    if (existing) {
+      return res({
+        error: '此單已申請退款，請等候 admin 審核',
+        code:  'REFUND_ALREADY_PENDING',
+        refund_request_id: existing.id,
+      }, 409)
+    }
+
+    const inserted = await db
+      .prepare(`INSERT INTO requisition_refund_request
+                 (requisition_id, user_id, intent_id, reason)
+                 VALUES (?, ?, ?, ?)
+                 RETURNING id`)
+      .bind(row.id, userId, paidIntent.id, reasonClipped)
+      .first()
+
+    await db
+      .prepare(`UPDATE requisition SET status = 'refund_pending'
+                 WHERE id = ? AND user_id = ?`)
+      .bind(row.id, userId).run()
+
+    await safeUserAudit(env, {
+      event_type: 'requisition.refund.requested', severity: 'warn',
+      user_id: userId, request,
+      data: {
+        requisition_id:    row.id,
+        refund_request_id: inserted?.id,
+        intent_id:         paidIntent.id,
+        amount_subunit:    paidIntent.amount_subunit,
+        currency:          paidIntent.currency,
+        reason:            reasonClipped,
+      },
+    })
+
+    return res({
+      ok: true,
+      code: 'REFUND_REQUESTED',
+      refund_request_id: inserted?.id,
+      requisition_status: 'refund_pending',
+    })
+  }
+
+  // ── 分支 A：沒付款 → 直接 revoke（舊行為）────────────────
   await db
     .prepare(`
       UPDATE requisition
@@ -72,7 +153,6 @@ export async function onRequestPost({ request, env }) {
     .bind(row.id, userId)
     .run()
 
-  // ── 5. Telegram 精準擊殺（editMessageText）───────────────────
   const warningText =
     `❌ <b>警告：客戶已撤銷此需求單！</b>\n(原單號: #${row.id})`
   await editTelegramMessage(env, row.tg_message_id, warningText)

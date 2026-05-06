@@ -247,10 +247,11 @@ function tApiError(e, fallback) {
 // ── 需求單 ───────────────────────────────────────────────────
 
 const REQ_STATUS_CLS = {
-  pending:    'bg-amber-500/15 text-amber-300 border border-amber-500/20',
-  revoked:    'bg-gray-500/15 text-gray-500 border border-gray-500/20',
-  processing: 'bg-blue-500/15 text-blue-300 border border-blue-500/20',
-  completed:  'bg-green-500/15 text-green-300 border border-green-500/20',
+  pending:        'bg-amber-500/15 text-amber-300 border border-amber-500/20',
+  revoked:        'bg-gray-500/15 text-gray-500 border border-gray-500/20',
+  processing:     'bg-blue-500/15 text-blue-300 border border-blue-500/20',
+  completed:      'bg-green-500/15 text-green-300 border border-green-500/20',
+  refund_pending: 'bg-orange-500/15 text-orange-300 border border-orange-500/20',
 }
 function reqStatus(key) {
   return { text: T('status_' + key), cls: REQ_STATUS_CLS[key] ?? REQ_STATUS_CLS.pending }
@@ -342,18 +343,39 @@ function armRevoke(id) {
   _revokeArmTimer = setTimeout(() => disarmRevoke(id), 4000)
 }
 
-async function revokeRequisition(id) {
+async function revokeRequisition(id, reason) {
   const btn = document.getElementById(`revoke-btn-${id}`)
   if (_revokeArmTimer) { clearTimeout(_revokeArmTimer); _revokeArmTimer = null }
   if (btn) { btn.disabled = true; btn.textContent = T('btn_processing') }
   try {
-    await apiFetch('/api/requisition/revoke', {
+    const r = await apiFetch('/api/requisition/revoke', {
       method: 'POST',
-      body:   JSON.stringify({ requisition_id: id }),
+      body:   JSON.stringify({ requisition_id: id, reason }),
     })
-    showBindToast(T('msg_revoke_success').replace('${id}', id), 'ok')
+    if (r?.code === 'REFUND_REQUESTED') {
+      showBindToast('退款申請已送出，等候 admin 審核', 'ok')
+    } else {
+      showBindToast(T('msg_revoke_success').replace('${id}', id), 'ok')
+    }
     loadRequisitions()
   } catch (e) {
+    // 已付款 → 後端要求填退款原因；prompt 後重試
+    if (e?.code === 'REASON_REQUIRED') {
+      const amt = e.body?.amount_subunit, cur = e.body?.currency || 'TWD'
+      const tip = amt != null ? `（已付款 ${amt} ${cur}，需走退款審核）` : '（已付款，需走退款審核）'
+      const input = window.prompt('請填寫退款原因' + tip, '')
+      if (input && input.trim()) {
+        return revokeRequisition(id, input.trim())
+      }
+      // user 取消 → 還原按鈕
+      if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
+      return
+    }
+    if (e?.code === 'REFUND_ALREADY_PENDING') {
+      showBindToast('此單已申請退款，等候 admin 審核', 'err')
+      loadRequisitions()
+      return
+    }
     showBindToast(tApiError(e, T('net_err')), 'err')
     if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
   }

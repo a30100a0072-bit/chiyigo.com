@@ -329,7 +329,124 @@ document.addEventListener('click', e => {
   if (closer) document.getElementById('audit-cleanup-modal')?.remove();
   const delBtn = e.target.closest('[data-audit-del]');
   if (delBtn) auditDelGo(Number(delBtn.dataset.auditDel), delBtn);
+  const rfClose = e.target.closest('[data-action="refund-review-close"]');
+  if (rfClose) document.getElementById('refund-review-modal')?.remove();
+  const rfApprove = e.target.closest('[data-rf-approve]');
+  if (rfApprove) refundDecide(Number(rfApprove.dataset.rfApprove), 'approve');
+  const rfReject  = e.target.closest('[data-rf-reject]');
+  if (rfReject)  refundDecide(Number(rfReject.dataset.rfReject), 'reject');
 });
+
+// ── 退款申請審核（F-2 wave 7）──────────────────────────────
+async function fetchPendingRefundCount() {
+  const tok = getToken();
+  if (!tok) return;
+  const r = await fetch('/api/admin/requisition-refund?status=pending&limit=1', {
+    headers: { Authorization: `Bearer ${tok}` },
+  }).catch(() => null);
+  if (!r || !r.ok) return;
+  const j = await r.json();
+  const badge = document.getElementById('refund-pending-count');
+  if (!badge) return;
+  if (j.total > 0) { badge.textContent = j.total; badge.style.display = 'inline-block'; }
+  else             { badge.style.display = 'none'; }
+}
+fetchPendingRefundCount();
+
+async function openRefundReview() {
+  document.getElementById('refund-review-modal')?.remove();
+  const tok = getToken();
+  if (!tok) return;
+  const m = document.createElement('div');
+  m.id = 'refund-review-modal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:1rem';
+  m.innerHTML = `
+    <div style="background:#0f0f14;border:1px solid #2a2a35;border-radius:14px;padding:1.25rem;width:100%;max-width:680px;max-height:85vh;overflow:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <h3 style="font-size:.95rem;color:#fff;margin:0">退款申請審核</h3>
+        <button data-action="refund-review-close" style="background:transparent;border:0;color:#9aa0aa;cursor:pointer;font-size:1.1rem">✕</button>
+      </div>
+      <p style="font-size:.75rem;color:#9aa0aa;margin:0 0 .75rem">已付款的需求單 user 撤銷需走此審核。<strong style="color:#fdba74">通過 = 全額退款 + 撤銷</strong>，動作不可逆，需 2FA OTP 確認。</p>
+      <div id="refund-review-list" style="display:flex;flex-direction:column;gap:.6rem">
+        <p style="font-size:.8rem;color:#9aa0aa">載入中…</p>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) document.getElementById('refund-review-modal')?.remove(); });
+
+  const r = await fetch('/api/admin/requisition-refund?status=pending&limit=200', {
+    headers: { Authorization: `Bearer ${tok}` },
+  }).catch(() => null);
+  const list = document.getElementById('refund-review-list');
+  if (!list) return;
+  if (!r || !r.ok) { list.innerHTML = `<p style="font-size:.8rem;color:#fca5a5">載入失敗</p>`; return; }
+  const j = await r.json();
+  const rows = j.rows ?? [];
+  if (!rows.length) { list.innerHTML = `<p style="font-size:.8rem;color:#9aa0aa">沒有待審核退款申請</p>`; return; }
+  list.innerHTML = rows.map(row => {
+    const amt = row.intent_amount_subunit != null
+      ? `${Number(row.intent_amount_subunit).toLocaleString()} ${escA(row.intent_currency || 'TWD')}`
+      : '—';
+    return `
+      <div style="padding:.7rem .85rem;background:#0a0a10;border:1px solid #2a2a35;border-radius:.6rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:.4rem">
+          <div style="font-size:.78rem;color:#fff">
+            <strong>req #${escA(row.requisition_id)}</strong> ·
+            user ${escA(row.user_id)} ·
+            intent #${escA(row.intent_id ?? '?')} (${escA(row.intent_vendor ?? '?')})
+          </div>
+          <div style="font-size:.78rem;color:#fdba74;font-family:monospace">${amt}</div>
+        </div>
+        <div style="font-size:.72rem;color:#9aa0aa;margin-bottom:.4rem">
+          ${escA(row.req_name ?? '')} · ${escA(row.req_contact ?? '')} ·
+          申請時間 ${escA(row.created_at)}
+        </div>
+        <div style="font-size:.75rem;color:#cbd5e1;background:#000;border:1px solid #1a1a22;border-radius:.45rem;padding:.45rem .6rem;margin-bottom:.55rem;white-space:pre-wrap;word-break:break-word">${escA(row.reason ?? '(未填)')}</div>
+        <div style="display:flex;gap:.4rem;justify-content:flex-end">
+          <button data-rf-reject="${row.id}" style="padding:.35rem .7rem;border-radius:.45rem;background:#1a1a22;border:1px solid #2a2a35;color:#cbd5e1;font-size:.72rem;cursor:pointer">拒絕</button>
+          <button data-rf-approve="${row.id}" style="padding:.35rem .7rem;border-radius:.45rem;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);color:#86efac;font-size:.72rem;cursor:pointer;font-weight:600">通過 + 退款</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function refundDecide(refundReqId, action) {
+  const tok = getToken();
+  if (!tok) return;
+  const note = window.prompt(action === 'approve'
+    ? `通過退款 #${refundReqId}：填寫審核備註（可空）`
+    : `拒絕退款 #${refundReqId}：填寫拒絕理由（建議填）`, '');
+  if (note === null) return;
+  const otp = window.prompt('輸入 6 位 2FA OTP 確認');
+  if (!otp || !/^\d{6}$/.test(otp)) { alert('OTP 格式錯誤'); return; }
+
+  const forAction = action === 'approve' ? 'approve_requisition_refund' : 'reject_requisition_refund';
+  const su = await fetch('/api/auth/step-up', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+    body:    JSON.stringify({ scope: 'elevated:payment', for_action: forAction, otp_code: otp }),
+  }).catch(() => null);
+  if (!su || !su.ok) { alert('step-up 失敗'); return; }
+  const { step_up_token } = await su.json();
+
+  const ep = `/api/admin/requisition-refund/${refundReqId}/${action}`;
+  const r = await fetch(ep, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${step_up_token}` },
+    body:    JSON.stringify({ admin_note: note || null }),
+  }).catch(() => null);
+  if (!r || !r.ok) {
+    let msg = `${action} 失敗`;
+    try { const j = await r.json(); msg += `：${j.error ?? ''}${j.rtn_msg ? ' / ' + j.rtn_msg : ''}`; } catch {}
+    alert(msg);
+    return;
+  }
+  alert(action === 'approve' ? '已通過並退款' : '已拒絕');
+  openRefundReview();
+  fetchPendingRefundCount();
+}
+
+document.getElementById('refund-review-btn')?.addEventListener('click', openRefundReview);
 
 // ── block 2/2 ──
 (function(){
