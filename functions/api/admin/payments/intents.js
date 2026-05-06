@@ -47,48 +47,57 @@ export async function onRequestGet({ request, env }) {
   if (userId) {
     const n = Number(userId)
     if (!Number.isFinite(n)) return res({ error: 'user_id must be a number' }, 400, cors)
-    conds.push('user_id = ?'); binds.push(n)
+    conds.push('pi.user_id = ?'); binds.push(n)
   }
 
   const status = url.searchParams.get('status')
   if (status) {
     if (!VALID_STATUSES.has(status)) return res({ error: 'invalid status' }, 400, cors)
-    conds.push('status = ?'); binds.push(status)
+    conds.push('pi.status = ?'); binds.push(status)
   }
 
   const vendor = url.searchParams.get('vendor')
-  if (vendor) { conds.push('vendor = ?'); binds.push(vendor) }
+  if (vendor) { conds.push('pi.vendor = ?'); binds.push(vendor) }
 
   const from = url.searchParams.get('from')
-  if (from) { conds.push('created_at >= ?'); binds.push(from) }
+  if (from) { conds.push('pi.created_at >= ?'); binds.push(from) }
   const to   = url.searchParams.get('to')
-  if (to)   { conds.push('created_at < ?');  binds.push(to) }
+  if (to)   { conds.push('pi.created_at < ?');  binds.push(to) }
 
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+  // count / aggregate 不需要 join（refund 資訊只有列表頁要）→ 用無 prefix 版本
+  const wherePlain = where.replace(/\bpi\./g, '')
 
   // 主清單（含 metadata；admin 對帳要看 requisition_id / payment_info）
   const rowsResult = await env.chiyigo_db
     .prepare(
-      `SELECT id, user_id, vendor, vendor_intent_id, kind, status,
-              amount_subunit, amount_raw, currency, metadata, failure_reason,
-              requisition_id, created_at, updated_at
-         FROM payment_intents ${where}
-        ORDER BY created_at DESC
+      `SELECT pi.id, pi.user_id, pi.vendor, pi.vendor_intent_id, pi.kind, pi.status,
+              pi.amount_subunit, pi.amount_raw, pi.currency, pi.metadata, pi.failure_reason,
+              pi.requisition_id, pi.created_at, pi.updated_at,
+              rr.id         AS refund_request_id,
+              rr.status     AS refund_request_status,
+              rr.created_at AS refund_request_created_at,
+              rr.reason     AS refund_request_reason
+         FROM payment_intents pi
+         LEFT JOIN requisition_refund_request rr
+           ON rr.intent_id = pi.id AND rr.status = 'pending'
+         ${where}
+        ORDER BY pi.created_at DESC
         LIMIT ? OFFSET ?`,
     )
     .bind(...binds, limit, offset)
     .all()
 
-  // 總筆數（同 where）
+  // 總筆數（同 where；不 join refund_request 加速）
   const totalRow = await env.chiyigo_db
-    .prepare(`SELECT COUNT(*) AS c FROM payment_intents ${where}`)
+    .prepare(`SELECT COUNT(*) AS c FROM payment_intents ${wherePlain}`)
     .bind(...binds).first()
 
   // 對帳：count by status + sum 成功金額
   const aggRows = await env.chiyigo_db
     .prepare(
       `SELECT status, COUNT(*) AS cnt, SUM(COALESCE(amount_subunit, 0)) AS amt
-         FROM payment_intents ${where}
+         FROM payment_intents ${wherePlain}
         GROUP BY status`,
     )
     .bind(...binds).all()

@@ -242,6 +242,14 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .pay-badge.failed    {background:rgba(239,68,68,.1);  color:#dc2626; border-color:rgba(239,68,68,.32)}
 .pay-badge.canceled  {background:rgba(107,114,128,.1);color:#6b7280; border-color:rgba(107,114,128,.32)}
 .pay-badge.refunded  {background:rgba(107,114,128,.1);color:#6b7280; border-color:rgba(107,114,128,.32)}
+.pay-badge.refund-pending{background:rgba(249,115,22,.12); color:#c2410c; border-color:rgba(249,115,22,.4); cursor:help}
+.theme-dark .pay-badge.refund-pending{color:#fdba74; border-color:rgba(253,186,116,.5)}
+
+/* admin-refund-requests page status tabs */
+.rr-tab{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem 1rem;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:.8rem;font-family:var(--font-sans);cursor:pointer;transition:color .18s,border-color .18s,background .18s}
+.rr-tab:hover{color:var(--text);border-color:var(--border-bright)}
+.rr-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.rr-tab.active .action-badge{background:#fff;color:var(--accent)}
 .theme-dark .pay-badge.pending   {color:#fbbf24}
 .theme-dark .pay-badge.processing{color:#38bdf8}
 .theme-dark .pay-badge.succeeded {color:#34d399}

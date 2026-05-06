@@ -1968,9 +1968,12 @@ function renderPayments(items) {
            class="shrink-0 px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs transition-all">退款</button>`;
     }
     const delBtn = actionBtn;
-    // 待審核退款 → 蓋掉 succeeded 的 status pill 顯示
+    // 退款申請中 → 蓋掉 succeeded 的 status pill；title 顯示申請時間（hover / mobile long-press）
+    const refundReqAt = p.refund_request_created_at
+      ? new Date(p.refund_request_created_at.replace(' ', 'T') + 'Z').toLocaleString(dateLocale(), { timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
+      : null;
     const overrideStatusPill = isRefundPending
-      ? '<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-orange-500/15 text-orange-300 border-orange-500/30">待審核退款</span>'
+      ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-orange-500/15 text-orange-300 border-orange-500/30 cursor-help" title="申請時間：${esc(refundReqAt || '—')}（等候 admin 審核）">退款申請中</span>`
       : null;
     return `
       <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>充值紀錄 — CHIYIGO Admin</title>
+  <title>退款申請 — CHIYIGO Admin</title>
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
@@ -22,11 +22,12 @@
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           <span class="sb-label">接案諮詢</span>
         </a>
-        <a href="/admin-refund-requests.html" class="sb-item">
+        <a href="/admin-refund-requests.html" class="sb-item active">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 0 1 8.5-3.5L13 6M13 8a5 5 0 0 1-8.5 3.5L3 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M11 2v4h-4M5 14V10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="sb-label">退款申請</span>
+          <span id="sb-rr-badge" class="action-badge" hidden style="margin-left:auto"></span>
         </a>
-        <a href="/admin-payment-records.html" class="sb-item active">
+        <a href="/admin-payment-records.html" class="sb-item">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 4h12v8H2z" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="9.5" r="1" fill="currentColor"/></svg>
           <span class="sb-label">充值紀錄</span>
         </a>
@@ -60,9 +61,9 @@
         <div class="admin-wrap">
           <div class="admin-head">
             <div>
-              <p class="meta">// admin panel · read-only</p>
-              <h1>充值紀錄</h1>
-              <p class="desc">永久保留的成功充值憑證；本頁僅供查閱與匯出，無編輯動作。</p>
+              <p class="meta">// admin panel</p>
+              <h1>退款申請</h1>
+              <p class="desc">user 提交的退款申請；審核通過會即時呼叫 ECPay 退款，動作不可逆。</p>
             </div>
             <button id="logout-btn" class="admin-logout">
               <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
@@ -77,47 +78,43 @@
           </div>
 
           <div id="content" hidden>
-            <div class="filter-bar">
-              <input id="f-user-id" type="number" min="1" placeholder="user_id" />
-              <select id="f-vendor">
-                <option value="">所有 vendor</option>
-                <option value="ecpay">ECPay</option>
-                <option value="mock">mock</option>
-              </select>
-              <input id="f-from" type="date" />
-              <input id="f-to"   type="date" />
-              <button id="f-apply">套用</button>
-              <button id="f-clear" class="clear-btn">清除</button>
-              <button id="f-export" class="clear-btn" title="匯出當前篩選的所有頁">↓ CSV</button>
+            <div class="filter-bar" style="margin-bottom:1rem">
+              <button class="rr-tab" data-st="pending">待審核 <span id="cnt-pending" class="action-badge" hidden></span></button>
+              <button class="rr-tab" data-st="approved">已通過</button>
+              <button class="rr-tab" data-st="rejected">已拒絕</button>
             </div>
-
-            <div id="totals" class="totals-row"></div>
-
-            <div class="table-wrap">
-              <table class="req-table">
-                <thead>
-                  <tr>
-                    <th class="id">#</th>
-                    <th>使用者</th>
-                    <th>Vendor</th>
-                    <th>Vendor 流水號</th>
-                    <th>金額</th>
-                    <th>關聯需求單</th>
-                    <th>建立時間</th>
-                  </tr>
-                </thead>
-                <tbody id="table-body"></tbody>
-              </table>
-            </div>
-            <div id="cards-container" class="cards-wrap"></div>
-            <div id="pagination" class="pager"></div>
+            <div id="rr-list" class="refund-review-list"></div>
           </div>
         </div>
       </main>
     </div>
   </div>
 
+  <!-- Decide modal（approve / reject 共用）-->
+  <div id="modal-refund-decide" class="modal-bd">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="rd-title">通過退款並執行</h2>
+        <button class="modal-close" data-modal-close="modal-refund-decide" aria-label="close">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="modal-body refund-modal-body">
+        <p id="rd-summary" class="msg-block"></p>
+        <p id="rd-note-label" class="msg-label">審核備註（選填）</p>
+        <input id="rd-note" type="text" maxlength="200" placeholder="備註會記錄到 audit log" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem">
+        <p class="msg-label">2FA OTP（執行金流動作必填）</p>
+        <input id="rd-otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000">
+        <p id="rd-msg" class="refund-msg"></p>
+        <div class="refund-actions">
+          <button class="cancel" data-modal-close="modal-refund-decide">取消</button>
+          <button id="rd-confirm-btn" class="confirm">確認</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/api.js"></script>
-  <script src="/js/admin-payment-records.js" defer></script>
+  <script src="/js/admin-refund-requests.js" defer></script>
 </body>
 </html>

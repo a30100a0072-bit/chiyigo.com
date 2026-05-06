@@ -162,14 +162,21 @@ function renderTable(rows) {
   body.innerHTML = rows.map(r => {
     const status = String(r.status);
     const kindLabel = t['kind_' + r.kind] || r.kind;
-    const canRefund = status === 'succeeded' && r.vendor === 'ecpay';
+    const isRefundPending = r.refund_request_status === 'pending';
+    // user 已申請退款 → admin 不該再點直接退款（要走 /admin-refund-requests 審核）
+    const canRefund = status === 'succeeded' && r.vendor === 'ecpay' && !isRefundPending;
     const refundBtn = canRefund
       ? `<button class="pay-action-btn" data-action="open-refund" data-intent-id="${r.id}">${esc(t.action_refund)}</button>`
       : '';
-    // refunded = 金流憑證最終態，不顯示刪除/匿名化按鈕（後端也會 409）
-    const delBtn = status === 'refunded'
+    // refunded = 金流憑證最終態 + 申請退款中也鎖住（必須由審核流程處理）
+    const delBtn = (status === 'refunded' || isRefundPending)
       ? ''
       : `<button class="pay-action-btn pay-action-danger" data-action="open-delete" data-intent-id="${r.id}">強制刪除 / Anonymize</button>`;
+    // succeeded + 有 pending refund_request → 蓋掉「已成功」pill 顯示「申請退款」
+    const refundReqAt = r.refund_request_created_at ? formatDate(r.refund_request_created_at) : '';
+    const statusCell = isRefundPending
+      ? `<span class="pay-badge refund-pending" title="申請時間：${esc(refundReqAt)}">申請退款</span>`
+      : `<span class="pay-badge ${status}">${esc(t['status_' + status] || status)}</span>`;
     return `
       <tr data-action="open-detail" data-intent-id="${r.id}">
         <td class="id">${r.id}</td>
@@ -177,7 +184,7 @@ function renderTable(rows) {
         <td class="mono">${esc(r.vendor)}</td>
         <td>${esc(kindLabel)}</td>
         <td class="mono">${formatAmount(r)}</td>
-        <td><span class="pay-badge ${status}">${esc(t['status_' + status] || status)}</span></td>
+        <td>${statusCell}</td>
         <td class="mono">${esc(formatDate(r.created_at))}</td>
         <td>${refundBtn}${delBtn}</td>
       </tr>`;
