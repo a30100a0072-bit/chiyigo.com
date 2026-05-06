@@ -329,12 +329,18 @@ document.addEventListener('click', e => {
   if (closer) document.getElementById('audit-cleanup-modal')?.remove();
   const delBtn = e.target.closest('[data-audit-del]');
   if (delBtn) auditDelGo(Number(delBtn.dataset.auditDel), delBtn);
-  const rfClose = e.target.closest('[data-action="refund-review-close"]');
-  if (rfClose) document.getElementById('refund-review-modal')?.remove();
+  // refund review modal close (data-modal-close 共用)
+  const mc = e.target.closest('[data-modal-close]');
+  if (mc) document.getElementById(mc.dataset.modalClose)?.classList.remove('open');
+  // 退款列表內按鈕
   const rfApprove = e.target.closest('[data-rf-approve]');
-  if (rfApprove) refundDecide(Number(rfApprove.dataset.rfApprove), 'approve');
+  if (rfApprove) openRefundDecide(Number(rfApprove.dataset.rfApprove), 'approve');
   const rfReject  = e.target.closest('[data-rf-reject]');
-  if (rfReject)  refundDecide(Number(rfReject.dataset.rfReject), 'reject');
+  if (rfReject)  openRefundDecide(Number(rfReject.dataset.rfReject), 'reject');
+});
+// 點 backdrop 自動關
+document.querySelectorAll('.modal-bd').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
 });
 
 // ── 退款申請審核（F-2 wave 7）──────────────────────────────
@@ -348,103 +354,150 @@ async function fetchPendingRefundCount() {
   const j = await r.json();
   const badge = document.getElementById('refund-pending-count');
   if (!badge) return;
-  if (j.total > 0) { badge.textContent = j.total; badge.style.display = 'inline-block'; }
-  else             { badge.style.display = 'none'; }
+  if (j.total > 0) { badge.textContent = j.total; badge.hidden = false; }
+  else             { badge.hidden = true; }
 }
 fetchPendingRefundCount();
 
-async function openRefundReview() {
-  document.getElementById('refund-review-modal')?.remove();
-  const tok = getToken();
-  if (!tok) return;
-  const m = document.createElement('div');
-  m.id = 'refund-review-modal';
-  m.style.cssText = 'position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.7);padding:1rem';
-  m.innerHTML = `
-    <div style="background:#0f0f14;border:1px solid #2a2a35;border-radius:14px;padding:1.25rem;width:100%;max-width:680px;max-height:85vh;overflow:auto">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-        <h3 style="font-size:.95rem;color:#fff;margin:0">退款申請審核</h3>
-        <button data-action="refund-review-close" style="background:transparent;border:0;color:#9aa0aa;cursor:pointer;font-size:1.1rem">✕</button>
-      </div>
-      <p style="font-size:.75rem;color:#9aa0aa;margin:0 0 .75rem">已付款的需求單 user 撤銷需走此審核。<strong style="color:#fdba74">通過 = 全額退款 + 撤銷</strong>，動作不可逆，需 2FA OTP 確認。</p>
-      <div id="refund-review-list" style="display:flex;flex-direction:column;gap:.6rem">
-        <p style="font-size:.8rem;color:#9aa0aa">載入中…</p>
-      </div>
-    </div>`;
-  document.body.appendChild(m);
-  m.addEventListener('click', e => { if (e.target === m) document.getElementById('refund-review-modal')?.remove(); });
+let _rrCache = []; // 目前 modal 顯示的 rows，supply summary
 
+async function openRefundReview() {
+  const modal = document.getElementById('modal-refund-review');
+  modal.classList.add('open');
+  const list = document.getElementById('refund-review-list');
+  list.innerHTML = `<p class="empty-state">載入中…</p>`;
+
+  const tok = getToken();
+  if (!tok) { list.innerHTML = `<p class="empty-state" style="color:#dc2626">未登入</p>`; return; }
   const r = await fetch('/api/admin/requisition-refund?status=pending&limit=200', {
     headers: { Authorization: `Bearer ${tok}` },
   }).catch(() => null);
+  if (!r || !r.ok) { list.innerHTML = `<p class="empty-state" style="color:#dc2626">載入失敗</p>`; return; }
+  const j = await r.json();
+  _rrCache = j.rows ?? [];
+  renderRefundReviewList();
+}
+
+function renderRefundReviewList() {
   const list = document.getElementById('refund-review-list');
   if (!list) return;
-  if (!r || !r.ok) { list.innerHTML = `<p style="font-size:.8rem;color:#fca5a5">載入失敗</p>`; return; }
-  const j = await r.json();
-  const rows = j.rows ?? [];
-  if (!rows.length) { list.innerHTML = `<p style="font-size:.8rem;color:#9aa0aa">沒有待審核退款申請</p>`; return; }
-  list.innerHTML = rows.map(row => {
+  if (!_rrCache.length) {
+    list.innerHTML = `<p class="empty-state">沒有待審核退款申請</p>`;
+    return;
+  }
+  list.innerHTML = _rrCache.map(row => {
     const amt = row.intent_amount_subunit != null
       ? `${Number(row.intent_amount_subunit).toLocaleString()} ${escA(row.intent_currency || 'TWD')}`
       : '—';
     return `
-      <div style="padding:.7rem .85rem;background:#0a0a10;border:1px solid #2a2a35;border-radius:.6rem">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:.4rem">
-          <div style="font-size:.78rem;color:#fff">
-            <strong>req #${escA(row.requisition_id)}</strong> ·
-            user ${escA(row.user_id)} ·
-            intent #${escA(row.intent_id ?? '?')} (${escA(row.intent_vendor ?? '?')})
+      <div class="refund-row" data-rr-row="${row.id}">
+        <div class="refund-row__head">
+          <div class="refund-row__ids">
+            <span class="req-tag">req #${escA(row.requisition_id)}</span>
+            <span class="meta-tag">user ${escA(row.user_id)}</span>
+            <span class="meta-tag">intent #${escA(row.intent_id ?? '?')} (${escA(row.intent_vendor ?? '?')})</span>
           </div>
-          <div style="font-size:.78rem;color:#fdba74;font-family:monospace">${amt}</div>
+          <div class="refund-row__amount">${amt}</div>
         </div>
-        <div style="font-size:.72rem;color:#9aa0aa;margin-bottom:.4rem">
-          ${escA(row.req_name ?? '')} · ${escA(row.req_contact ?? '')} ·
-          申請時間 ${escA(row.created_at)}
+        <div class="refund-row__sub">
+          ${escA(row.req_name ?? '')}${row.req_contact ? ' · ' + escA(row.req_contact) : ''} · 申請時間 ${escA(row.created_at)}
         </div>
-        <div style="font-size:.75rem;color:#cbd5e1;background:#000;border:1px solid #1a1a22;border-radius:.45rem;padding:.45rem .6rem;margin-bottom:.55rem;white-space:pre-wrap;word-break:break-word">${escA(row.reason ?? '(未填)')}</div>
-        <div style="display:flex;gap:.4rem;justify-content:flex-end">
-          <button data-rf-reject="${row.id}" style="padding:.35rem .7rem;border-radius:.45rem;background:#1a1a22;border:1px solid #2a2a35;color:#cbd5e1;font-size:.72rem;cursor:pointer">拒絕</button>
-          <button data-rf-approve="${row.id}" style="padding:.35rem .7rem;border-radius:.45rem;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.4);color:#86efac;font-size:.72rem;cursor:pointer;font-weight:600">通過 + 退款</button>
+        <div class="refund-row__reason">${escA(row.reason ?? '(未填)')}</div>
+        <div class="refund-row__actions">
+          <button class="reject"  data-rf-reject="${row.id}">拒絕</button>
+          <button class="approve" data-rf-approve="${row.id}">通過 + 退款</button>
         </div>
       </div>`;
   }).join('');
 }
 
-async function refundDecide(refundReqId, action) {
-  const tok = getToken();
-  if (!tok) return;
-  const note = window.prompt(action === 'approve'
-    ? `通過退款 #${refundReqId}：填寫審核備註（可空）`
-    : `拒絕退款 #${refundReqId}：填寫拒絕理由（建議填）`, '');
-  if (note === null) return;
-  const otp = window.prompt('輸入 6 位 2FA OTP 確認');
-  if (!otp || !/^\d{6}$/.test(otp)) { alert('OTP 格式錯誤'); return; }
+// ── Decide modal（OTP + 備註）──────────────────────────────
+let _rrDecideId = null;
+let _rrDecideAction = null;
 
-  const forAction = action === 'approve' ? 'approve_requisition_refund' : 'reject_requisition_refund';
+function openRefundDecide(id, action) {
+  const row = _rrCache.find(r => r.id === id);
+  if (!row) return;
+  _rrDecideId = id;
+  _rrDecideAction = action;
+  const isApprove = action === 'approve';
+  const amt = row.intent_amount_subunit != null
+    ? `${Number(row.intent_amount_subunit).toLocaleString()} ${escA(row.intent_currency || 'TWD')}`
+    : '—';
+  document.getElementById('rd-title').textContent = isApprove ? '通過退款並執行' : '拒絕退款申請';
+  document.getElementById('rd-summary').innerHTML = isApprove
+    ? `通過後 <strong>立刻退款 ${amt}</strong> 並撤銷需求單 #${escA(row.requisition_id)}（intent #${escA(row.intent_id)}）。動作不可逆。`
+    : `拒絕退款申請 #${escA(id)}（req #${escA(row.requisition_id)}）。需求單仍維持「退款審核中」，user 可改聯絡客服。`;
+  document.getElementById('rd-note-label').textContent = isApprove ? '審核備註（選填）' : '拒絕理由（建議填）';
+  document.getElementById('rd-note').value = '';
+  document.getElementById('rd-otp').value = '';
+  setRdMsg('', '');
+  const btn = document.getElementById('rd-confirm-btn');
+  btn.disabled = false;
+  btn.textContent = isApprove ? '確認通過並退款' : '確認拒絕';
+  btn.className = isApprove ? 'confirm' : 'cancel';
+  btn.style.cssText = isApprove
+    ? ''
+    : 'background:#dc2626;border-color:#dc2626;color:#fff';
+  document.getElementById('modal-refund-decide').classList.add('open');
+  setTimeout(() => document.getElementById('rd-otp')?.focus(), 50);
+}
+
+function setRdMsg(text, type) {
+  const el = document.getElementById('rd-msg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'refund-msg' + (type ? ' ' + type : '');
+}
+
+document.getElementById('rd-confirm-btn')?.addEventListener('click', async () => {
+  const id  = _rrDecideId;
+  const act = _rrDecideAction;
+  if (!id || !act) return;
+  const otp  = document.getElementById('rd-otp').value.trim();
+  const note = document.getElementById('rd-note').value.trim();
+  if (!/^\d{6}$/.test(otp)) { setRdMsg('OTP 須為 6 位數字', 'err'); return; }
+  const tok = getToken();
+  if (!tok) { setRdMsg('未登入', 'err'); return; }
+
+  const btn = document.getElementById('rd-confirm-btn');
+  btn.disabled = true;
+  setRdMsg('step-up 驗證中…', '');
+
+  const forAction = act === 'approve' ? 'approve_requisition_refund' : 'reject_requisition_refund';
   const su = await fetch('/api/auth/step-up', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
     body:    JSON.stringify({ scope: 'elevated:payment', for_action: forAction, otp_code: otp }),
   }).catch(() => null);
-  if (!su || !su.ok) { alert('step-up 失敗'); return; }
+  if (!su || !su.ok) {
+    let msg = 'step-up 失敗';
+    try { const j = await su.json(); msg = j.error || msg; } catch {}
+    setRdMsg(msg, 'err'); btn.disabled = false; return;
+  }
   const { step_up_token } = await su.json();
+  if (!step_up_token) { setRdMsg('未拿到 step-up token', 'err'); btn.disabled = false; return; }
 
-  const ep = `/api/admin/requisition-refund/${refundReqId}/${action}`;
-  const r = await fetch(ep, {
+  setRdMsg(act === 'approve' ? '呼叫 ECPay 退款中…' : '寫入拒絕中…', '');
+  const r = await fetch(`/api/admin/requisition-refund/${id}/${act}`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${step_up_token}` },
     body:    JSON.stringify({ admin_note: note || null }),
   }).catch(() => null);
   if (!r || !r.ok) {
-    let msg = `${action} 失敗`;
-    try { const j = await r.json(); msg += `：${j.error ?? ''}${j.rtn_msg ? ' / ' + j.rtn_msg : ''}`; } catch {}
-    alert(msg);
-    return;
+    let msg = `${act} 失敗`;
+    try { const j = await r.json(); msg = (j.error || msg) + (j.rtn_msg ? ` / ${j.rtn_msg}` : ''); } catch {}
+    setRdMsg(msg, 'err'); btn.disabled = false; return;
   }
-  alert(action === 'approve' ? '已通過並退款' : '已拒絕');
-  openRefundReview();
-  fetchPendingRefundCount();
-}
+  setRdMsg(act === 'approve' ? '✓ 已通過並退款' : '✓ 已拒絕', 'ok');
+  // 從 cache + DOM 移除這筆，避免重複按
+  _rrCache = _rrCache.filter(x => x.id !== id);
+  setTimeout(() => {
+    document.getElementById('modal-refund-decide').classList.remove('open');
+    renderRefundReviewList();
+    fetchPendingRefundCount();
+  }, 900);
+});
 
 document.getElementById('refund-review-btn')?.addEventListener('click', openRefundReview);
 

@@ -286,3 +286,38 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .refund-modal-body .refund-actions .confirm{background:#dc2626;border-color:#dc2626;color:#fff}
 .refund-modal-body .refund-actions .confirm:hover{filter:brightness(1.08)}
 .refund-modal-body .refund-actions .confirm:disabled{opacity:.5;cursor:not-allowed}
+
+/* 頁面風格的右上動作鍵 */
+.head-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;margin-left:auto}
+.action-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .8rem;border:1px solid var(--border);border-radius:9px;background:var(--bg-surface);color:var(--text-muted);font-family:var(--font-sans);font-size:.78rem;cursor:pointer;transition:color .18s,border-color .18s,background .18s,filter .18s}
+.action-btn svg{width:13px;height:13px;flex-shrink:0}
+.action-btn:hover{color:var(--text);border-color:var(--border-bright);background:var(--bg-elevated)}
+.action-btn--warn{color:#d97706;border-color:rgba(245,158,11,.32);background:rgba(245,158,11,.08)}
+.action-btn--warn:hover{color:#b45309;border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.16)}
+.theme-dark .action-btn--warn{color:#fbbf24;border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.1)}
+.theme-dark .action-btn--warn:hover{color:#fde68a;background:rgba(245,158,11,.18)}
+.action-badge{display:inline-flex;align-items:center;justify-content:center;min-width:1.05rem;height:1.05rem;padding:0 .35rem;border-radius:100px;background:#d97706;color:#fff;font-family:var(--font-mono);font-size:.66rem;font-weight:700}
+.theme-dark .action-badge{background:#fbbf24;color:#1A1B2E}
+.action-badge[hidden]{display:none}
+
+/* Refund review modal: 寬版 + 列表 */
+.modal-card--wide{max-width:680px}
+.refund-review-list{display:flex;flex-direction:column;gap:.7rem}
+.refund-review-list .empty-state{font-family:var(--font-mono);font-size:.78rem;color:var(--text-dim);text-align:center;padding:1.5rem 0}
+.refund-row{padding:.85rem 1rem;background:var(--bg-elevated);border:1px solid var(--border);border-radius:11px;transition:border-color .18s}
+.refund-row:hover{border-color:var(--border-bright)}
+.refund-row__head{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-bottom:.45rem;flex-wrap:wrap}
+.refund-row__ids{font-family:var(--font-mono);font-size:.76rem;color:var(--text);display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.refund-row__ids .req-tag{font-weight:600;color:var(--accent);background:var(--accent-dim);padding:.1rem .45rem;border-radius:5px;border:1px solid rgba(108,110,229,.22)}
+.refund-row__ids .meta-tag{color:var(--text-muted)}
+.refund-row__amount{font-family:var(--font-mono);font-size:.92rem;font-weight:600;color:#d97706;letter-spacing:.02em}
+.theme-dark .refund-row__amount{color:#fbbf24}
+.refund-row__sub{font-size:.74rem;color:var(--text-muted);margin-bottom:.5rem;line-height:1.55}
+.refund-row__reason{font-size:.8rem;color:var(--text);background:var(--bg-surface);border:1px solid var(--border-dim);border-radius:8px;padding:.55rem .75rem;margin-bottom:.6rem;white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.refund-row__actions{display:flex;justify-content:flex-end;gap:.5rem}
+.refund-row__actions button{padding:.4rem .85rem;border-radius:8px;font-size:.78rem;font-weight:500;cursor:pointer;border:1px solid;transition:filter .15s,background .15s,color .15s}
+.refund-row__actions .reject{background:transparent;border-color:var(--border);color:var(--text-muted)}
+.refund-row__actions .reject:hover{color:#dc2626;border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.06)}
+.refund-row__actions .approve{background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.32);color:#059669}
+.refund-row__actions .approve:hover{filter:brightness(1.06);background:rgba(16,185,129,.18)}
+.theme-dark .refund-row__actions .approve{color:#34d399}

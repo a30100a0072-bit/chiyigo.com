@@ -1820,12 +1820,20 @@ function renderPayments(items) {
         infoBlock = `<div class="mt-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs space-y-1">${lines}${expire}</div>`;
       }
     }
-    // 刪除按鈕：pending / failed / canceled 才顯示（其他狀態涉及帳務不可由 user 刪）
-    const canDelete = ['pending', 'failed', 'canceled'].includes(p.status);
-    const delBtn = canDelete
-      ? `<button data-pay-del-id="${p.id}" data-armed="0"
-           class="shrink-0 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs transition-all">刪除</button>`
-      : '';
+    // 動作按鈕：
+    //  - pending / failed / canceled / refunded → 刪除（帳務已結清或從未進帳，可清掉 row）
+    //  - succeeded + 綁有 pending requisition → 撤銷（觸發 wave 7 退款申請流程）
+    //  - succeeded 沒綁需求單 → 沒按鈕（充值成果不該由 user 自行清，要走 admin 退款）
+    const canDelete = ['pending', 'failed', 'canceled', 'refunded'].includes(p.status);
+    let actionBtn = '';
+    if (canDelete) {
+      actionBtn = `<button data-pay-del-id="${p.id}" data-armed="0"
+           class="shrink-0 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs transition-all">刪除</button>`;
+    } else if (p.status === 'succeeded' && reqId) {
+      actionBtn = `<button data-pay-revoke-req="${esc(reqId)}" data-pay-revoke-intent="${p.id}"
+           class="shrink-0 px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs transition-all">撤銷</button>`;
+    }
+    const delBtn = actionBtn;
     return `
       <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
@@ -1940,7 +1948,7 @@ function redirectToEcpay(url, fields) {
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
 document.addEventListener('click', e => {
-  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-req-open-id]');
+  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-revoke-req], [data-req-open-id]');
   if (!t) return;
   // List 上的 revoked 永久刪除按鈕（要在 reqOpenId 之前，因為按鈕在 row 內）
   if (t.dataset.reqDelId) return armOrConfirmReqListDelete(Number(t.dataset.reqDelId));
@@ -1949,6 +1957,8 @@ document.addEventListener('click', e => {
     return openRequisitionDetail(Number(t.dataset.reqOpenId));
   }
   if (t.dataset.payDelId) return armOrConfirmPayDelete(Number(t.dataset.payDelId));
+  // succeeded 充值 row 上的「撤銷」→ 觸發已綁定需求單的退款申請流程（wave 7）
+  if (t.dataset.payRevokeReq) return revokeRequisition(Number(t.dataset.payRevokeReq));
   // 靜態按鈕 by id
   if (t.id === 'tfa-enable-btn')   return startSetup2FA();
   if (t.id === 'tfa-disable-btn')  return showDisablePanel();
