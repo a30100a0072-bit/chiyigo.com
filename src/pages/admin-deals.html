@@ -87,6 +87,17 @@
               <button id="f-export" class="clear-btn">↓ CSV</button>
             </div>
             <div id="totals" class="totals-row"></div>
+
+            <details class="agg-panel" open>
+              <summary>📊 報表（成交統計）</summary>
+              <div class="agg-controls">
+                <button class="rr-tab agg-period" data-period="daily">日</button>
+                <button class="rr-tab agg-period active" data-period="monthly">月</button>
+                <span id="agg-loading" class="agg-loading" hidden>載入中…</span>
+              </div>
+              <div id="agg-table-wrap" class="agg-table-wrap"></div>
+            </details>
+
             <div class="table-wrap">
               <table class="req-table">
                 <thead>

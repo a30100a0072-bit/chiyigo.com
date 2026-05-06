@@ -72,6 +72,17 @@ export async function onRequestPost({ request, env, params }) {
     mode = 'hard_delete'
   } else {
     // Anonymize：保留金流憑證骨幹，清除可能含敏感資訊的 metadata 與 failure_reason
+    // T12: 先 archive 原始 metadata + failure_reason 到 cold storage，合規/dispute 用
+    await env.chiyigo_db
+      .prepare(
+        `INSERT INTO payment_metadata_archive
+           (intent_id, original_status, original_metadata, original_failure_reason, archived_by, reason)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(id, intent.status, intent.metadata ?? null, intent.failure_reason ?? null,
+            adminId, 'admin_anonymize')
+      .run()
+
     const anonMeta = JSON.stringify({
       anonymized_at: new Date().toISOString(),
       anonymized_by: adminId,

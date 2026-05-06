@@ -199,3 +199,52 @@ function triggerDownload(blob, filename) {
 }
 
 load();
+
+// ── Aggregate report (P3-1) ───────────────────────────────
+let aggPeriod = 'monthly';
+async function loadAgg() {
+  const wrap = document.getElementById('agg-table-wrap');
+  const ld   = document.getElementById('agg-loading');
+  if (!wrap) return;
+  ld.hidden = false;
+  let data;
+  try {
+    data = await apiFetch(`/api/admin/payments/aggregate?period=${aggPeriod}&status=succeeded`);
+  } catch (e) {
+    if (e?.code === 'SESSION_EXPIRED') return;
+    wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(e?.message || '載入失敗')}</p>`;
+    ld.hidden = true; return;
+  }
+  ld.hidden = true;
+  const buckets = data?.buckets ?? [];
+  if (!buckets.length) { wrap.innerHTML = '<p style="font-size:.78rem;color:var(--text-dim)">無資料</p>'; return; }
+  const rows = buckets.map(b => `
+    <tr>
+      <td>${esc(b.bucket)}</td>
+      <td class="num">${b.count.toLocaleString()}</td>
+      <td class="num">${b.sum_subunit.toLocaleString()}</td>
+      <td class="num refund">${b.refunded_count.toLocaleString()}</td>
+      <td class="num refund">${b.refunded_sum_subunit.toLocaleString()}</td>
+      <td class="num net">${(b.sum_subunit - b.refunded_sum_subunit).toLocaleString()}</td>
+    </tr>`).join('');
+  wrap.innerHTML = `
+    <table class="agg-table">
+      <thead><tr>
+        <th>${aggPeriod === 'daily' ? '日期' : '月份'}</th>
+        <th class="num">充值筆數</th>
+        <th class="num">充值金額</th>
+        <th class="num">退款筆數</th>
+        <th class="num">退款金額</th>
+        <th class="num">淨額</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+document.querySelectorAll('.agg-period').forEach(b => {
+  b.addEventListener('click', () => {
+    aggPeriod = b.dataset.period;
+    document.querySelectorAll('.agg-period').forEach(x => x.classList.toggle('active', x === b));
+    loadAgg();
+  });
+});
+loadAgg();

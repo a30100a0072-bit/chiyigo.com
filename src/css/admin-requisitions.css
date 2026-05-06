@@ -250,6 +250,24 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .rr-tab:hover{color:var(--text);border-color:var(--border-bright)}
 .rr-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .rr-tab.active .action-badge{background:#fff;color:var(--accent)}
+
+/* P3-1 aggregate report panel */
+.agg-panel{margin-bottom:1.25rem;border:1px solid var(--border);border-radius:10px;background:var(--bg-surface);padding:.6rem 1rem 1rem}
+.agg-panel>summary{cursor:pointer;font-size:.85rem;font-weight:600;color:var(--text);padding:.3rem 0;list-style:none;user-select:none}
+.agg-panel>summary::-webkit-details-marker{display:none}
+.agg-panel>summary::before{content:'▸';display:inline-block;margin-right:.4rem;color:var(--text-dim);transition:transform .15s}
+.agg-panel[open]>summary::before{transform:rotate(90deg)}
+.agg-controls{display:flex;align-items:center;gap:.5rem;margin:.5rem 0 .8rem}
+.agg-loading{font-size:.74rem;color:var(--text-dim);font-family:var(--font-mono)}
+.agg-table-wrap{overflow-x:auto;margin:0 -.3rem}
+.agg-table{width:100%;font-size:.78rem;font-family:var(--font-mono);border-collapse:collapse}
+.agg-table th{text-align:left;padding:.4rem .6rem;color:var(--text-dim);font-weight:500;border-bottom:1px solid var(--border-dim);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase}
+.agg-table td{padding:.4rem .6rem;color:var(--text);border-bottom:1px solid var(--border-dim)}
+.agg-table tr:last-child td{border-bottom:none}
+.agg-table td.num{text-align:right}
+.agg-table td.refund{color:var(--text-muted)}
+.theme-dark .agg-table td.refund{color:#fdba74}
+.agg-table td.net{color:var(--accent);font-weight:600}
 .theme-dark .pay-badge.pending   {color:#fbbf24}
 .theme-dark .pay-badge.processing{color:#38bdf8}
 .theme-dark .pay-badge.succeeded {color:#34d399}
