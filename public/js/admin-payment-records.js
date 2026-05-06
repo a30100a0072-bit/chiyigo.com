@@ -1,6 +1,31 @@
 // admin-payment-records.js — read-only 充值紀錄頁
 // 走既有 /api/admin/payments/intents 但鎖 status=succeeded；無 delete/refund UI
 
+// ── i18n ───────────────────────────────────────────────
+const LANGS_I18N = {"zh-TW":{"page_title":"充值紀錄","page_desc":"永久保留的成功充值憑證；本頁僅供查閱與匯出，無編輯動作。","page_meta":"// admin panel · read-only","nav_requisitions":"接案諮詢","nav_refund_requests":"退款申請","nav_payment_records":"充值紀錄","nav_deals":"成交紀錄","nav_payments":"金流對帳","nav_member":"會員中心","logout":"登出","loading":"// 載入中…","relogin":"→ 重新登入","filter_vendor_all":"所有 vendor","filter_user_id_ph":"user_id","filter_apply":"套用","filter_clear":"清除","filter_export":"↓ CSV","filter_export_title":"匯出當前篩選的所有頁","totals_count_succeeded":"本頁查到 (succeeded)","totals_sum_subunit":"合計金額 (TWD subunit)","col_user":"使用者","col_vendor":"Vendor","col_vendor_intent_id":"Vendor 流水號","col_amount":"金額","col_requisition":"關聯需求單","col_created":"建立時間","empty_text":"// 沒有符合條件的紀錄","agg_title":"📊 報表（充值統計）","agg_period_daily":"日","agg_period_monthly":"月","agg_loading":"載入中…","agg_empty":"無資料","agg_col_bucket_daily":"日期","agg_col_bucket_monthly":"月份","agg_col_count":"充值筆數","agg_col_sum":"充值金額","agg_col_refund_count":"退款筆數","agg_col_refund_sum":"退款金額","agg_col_net":"淨額","pager_prev":"← 上一頁","pager_next":"下一頁 →"},"en":{"page_title":"Payment Records","page_desc":"Permanent record of successful top-ups. Read-only — no edits possible.","page_meta":"// admin panel · read-only","nav_requisitions":"Inquiries","nav_refund_requests":"Refund Requests","nav_payment_records":"Payment Records","nav_deals":"Deals","nav_payments":"Reconciliation","nav_member":"Member","logout":"Log out","loading":"// loading…","relogin":"→ Sign in again","filter_vendor_all":"All vendors","filter_user_id_ph":"user_id","filter_apply":"Apply","filter_clear":"Clear","filter_export":"↓ CSV","filter_export_title":"Export all matching rows","totals_count_succeeded":"Found (succeeded)","totals_sum_subunit":"Total amount (TWD subunit)","col_user":"User","col_vendor":"Vendor","col_vendor_intent_id":"Vendor Intent ID","col_amount":"Amount","col_requisition":"Linked Inquiry","col_created":"Created","empty_text":"// no matching records","agg_title":"📊 Report (Top-ups)","agg_period_daily":"Daily","agg_period_monthly":"Monthly","agg_loading":"loading…","agg_empty":"no data","agg_col_bucket_daily":"Date","agg_col_bucket_monthly":"Month","agg_col_count":"Count","agg_col_sum":"Amount","agg_col_refund_count":"Refund Count","agg_col_refund_sum":"Refund Amount","agg_col_net":"Net","pager_prev":"← Prev","pager_next":"Next →"},"ja":{"page_title":"入金記録","page_desc":"成功した入金の永久記録。閲覧と書き出しのみ、編集不可。","page_meta":"// admin panel · read-only","nav_requisitions":"案件相談","nav_refund_requests":"返金申請","nav_payment_records":"入金記録","nav_deals":"成約記録","nav_payments":"決済照合","nav_member":"会員","logout":"ログアウト","loading":"// 読み込み中…","relogin":"→ 再ログイン","filter_vendor_all":"すべての vendor","filter_user_id_ph":"user_id","filter_apply":"適用","filter_clear":"クリア","filter_export":"↓ CSV","filter_export_title":"現在の条件で全件書き出し","totals_count_succeeded":"件数 (succeeded)","totals_sum_subunit":"合計金額 (TWD subunit)","col_user":"ユーザー","col_vendor":"Vendor","col_vendor_intent_id":"Vendor 番号","col_amount":"金額","col_requisition":"関連案件","col_created":"作成日時","empty_text":"// 条件に合うデータがありません","agg_title":"📊 レポート（入金統計）","agg_period_daily":"日次","agg_period_monthly":"月次","agg_loading":"読み込み中…","agg_empty":"データなし","agg_col_bucket_daily":"日付","agg_col_bucket_monthly":"月","agg_col_count":"入金件数","agg_col_sum":"入金額","agg_col_refund_count":"返金件数","agg_col_refund_sum":"返金額","agg_col_net":"純額","pager_prev":"← 前へ","pager_next":"次へ →"},"ko":{"page_title":"입금 기록","page_desc":"성공한 입금의 영구 기록. 조회와 내보내기만 가능, 편집 불가.","page_meta":"// admin panel · read-only","nav_requisitions":"프로젝트 상담","nav_refund_requests":"환불 신청","nav_payment_records":"입금 기록","nav_deals":"성사 기록","nav_payments":"결제 대사","nav_member":"회원","logout":"로그아웃","loading":"// 로딩 중…","relogin":"→ 다시 로그인","filter_vendor_all":"모든 vendor","filter_user_id_ph":"user_id","filter_apply":"적용","filter_clear":"초기화","filter_export":"↓ CSV","filter_export_title":"현재 조건으로 전체 내보내기","totals_count_succeeded":"건수 (succeeded)","totals_sum_subunit":"합계 금액 (TWD subunit)","col_user":"사용자","col_vendor":"Vendor","col_vendor_intent_id":"Vendor 번호","col_amount":"금액","col_requisition":"관련 요청","col_created":"생성일시","empty_text":"// 일치하는 기록이 없습니다","agg_title":"📊 리포트 (입금 통계)","agg_period_daily":"일별","agg_period_monthly":"월별","agg_loading":"로딩 중…","agg_empty":"데이터 없음","agg_col_bucket_daily":"날짜","agg_col_bucket_monthly":"월","agg_col_count":"입금 건수","agg_col_sum":"입금액","agg_col_refund_count":"환불 건수","agg_col_refund_sum":"환불액","agg_col_net":"순액","pager_prev":"← 이전","pager_next":"다음 →"}};
+let curLang = localStorage.getItem('lang') || 'zh-TW';
+function T() { return LANGS_I18N[curLang] || LANGS_I18N['zh-TW'] || {}; }
+function applyLangI(lang) {
+  if (!LANGS_I18N[lang]) return;
+  curLang = lang;
+  const t = T();
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (typeof t[k] === 'string') el.textContent = t[k]; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.dataset.i18nPh; if (typeof t[k] === 'string') el.placeholder = t[k]; });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { const k = el.dataset.i18nTitle; if (typeof t[k] === 'string') el.title = t[k]; });
+  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  localStorage.setItem('lang', lang);
+  // 重新 render 表格 + agg（含動態文字）
+  if (typeof renderAll === 'function' && window._lastData) renderAll(window._lastData);
+  if (typeof loadAgg === 'function') loadAgg();
+}
+const langTogBtn = document.getElementById('lang-toggle-btn');
+const langDrop   = document.getElementById('lang-dropdown');
+langTogBtn?.addEventListener('click', e => { e.stopPropagation(); langDrop?.classList.toggle('open'); });
+document.addEventListener('click', () => langDrop?.classList.remove('open'));
+langDrop?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDrop.classList.remove('open'); });
+applyLangI(curLang);
+
 const ACCESS_TOKEN_KEY = 'access_token';
 const getToken = () => sessionStorage.getItem(ACCESS_TOKEN_KEY);
 
@@ -97,10 +122,11 @@ function renderAll(data) {
 }
 
 function renderTotals(total, totals) {
+  const t = T();
   const sumLabel = (totals?.sum_subunit_succeeded ?? 0).toLocaleString();
   document.getElementById('totals').innerHTML = `
-    <div class="totals-cell"><span class="lbl">本頁查到 (succeeded)</span><span class="val">${total}</span></div>
-    <div class="totals-cell"><span class="lbl">合計金額 (TWD subunit)</span><span class="val accent">${sumLabel}</span></div>
+    <div class="totals-cell"><span class="lbl">${esc(t.totals_count_succeeded || '本頁查到 (succeeded)')}</span><span class="val">${total}</span></div>
+    <div class="totals-cell"><span class="lbl">${esc(t.totals_sum_subunit || '合計金額 (TWD subunit)')}</span><span class="val accent">${sumLabel}</span></div>
   `;
 }
 
@@ -114,7 +140,7 @@ function reqCell(r) {
 function renderTable(rows) {
   const body = document.getElementById('table-body');
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="7" class="empty">// 沒有符合條件的紀錄</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="empty">${esc(T().empty_text || '// 沒有符合條件的紀錄')}</td></tr>`;
     return;
   }
   body.innerHTML = rows.map(r => `
@@ -152,10 +178,11 @@ function renderPagination(total, page, limit) {
   const pag = document.getElementById('pagination');
   const totalPages = Math.max(1, Math.ceil((total || 0) / limit));
   if (totalPages <= 1) { pag.innerHTML = ''; return; }
+  const t = T();
   pag.innerHTML = `
-    <button ${page<=1?'disabled':''} data-act="prev">← 上一頁</button>
+    <button ${page<=1?'disabled':''} data-act="prev">${esc(t.pager_prev || '← 上一頁')}</button>
     <span class="page-info">${page} / ${totalPages}</span>
-    <button ${page>=totalPages?'disabled':''} data-act="next">下一頁 →</button>
+    <button ${page>=totalPages?'disabled':''} data-act="next">${esc(t.pager_next || '下一頁 →')}</button>
   `;
   pag.querySelector('[data-act=prev]')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; load(); } });
   pag.querySelector('[data-act=next]')?.addEventListener('click', () => { currentPage++; load(); });
@@ -217,7 +244,8 @@ async function loadAgg() {
   }
   ld.hidden = true;
   const buckets = data?.buckets ?? [];
-  if (!buckets.length) { wrap.innerHTML = '<p style="font-size:.78rem;color:var(--text-dim)">無資料</p>'; return; }
+  const t = T();
+  if (!buckets.length) { wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(t.agg_empty || '無資料')}</p>`; return; }
   const rows = buckets.map(b => `
     <tr>
       <td>${esc(b.bucket)}</td>
@@ -230,12 +258,12 @@ async function loadAgg() {
   wrap.innerHTML = `
     <table class="agg-table">
       <thead><tr>
-        <th>${aggPeriod === 'daily' ? '日期' : '月份'}</th>
-        <th class="num">充值筆數</th>
-        <th class="num">充值金額</th>
-        <th class="num">退款筆數</th>
-        <th class="num">退款金額</th>
-        <th class="num">淨額</th>
+        <th>${esc(aggPeriod === 'daily' ? (t.agg_col_bucket_daily || '日期') : (t.agg_col_bucket_monthly || '月份'))}</th>
+        <th class="num">${esc(t.agg_col_count || '充值筆數')}</th>
+        <th class="num">${esc(t.agg_col_sum || '充值金額')}</th>
+        <th class="num">${esc(t.agg_col_refund_count || '退款筆數')}</th>
+        <th class="num">${esc(t.agg_col_refund_sum || '退款金額')}</th>
+        <th class="num">${esc(t.agg_col_net || '淨額')}</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

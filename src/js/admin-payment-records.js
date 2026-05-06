@@ -1,6 +1,31 @@
 // admin-payment-records.js — read-only 充值紀錄頁
 // 走既有 /api/admin/payments/intents 但鎖 status=succeeded；無 delete/refund UI
 
+// ── i18n ───────────────────────────────────────────────
+const LANGS_I18N = /*@i18n@*/{};
+let curLang = localStorage.getItem('lang') || 'zh-TW';
+function T() { return LANGS_I18N[curLang] || LANGS_I18N['zh-TW'] || {}; }
+function applyLangI(lang) {
+  if (!LANGS_I18N[lang]) return;
+  curLang = lang;
+  const t = T();
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (typeof t[k] === 'string') el.textContent = t[k]; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.dataset.i18nPh; if (typeof t[k] === 'string') el.placeholder = t[k]; });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { const k = el.dataset.i18nTitle; if (typeof t[k] === 'string') el.title = t[k]; });
+  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  localStorage.setItem('lang', lang);
+  // 重新 render 表格 + agg（含動態文字）
+  if (typeof renderAll === 'function' && window._lastData) renderAll(window._lastData);
+  if (typeof loadAgg === 'function') loadAgg();
+}
+const langTogBtn = document.getElementById('lang-toggle-btn');
+const langDrop   = document.getElementById('lang-dropdown');
+langTogBtn?.addEventListener('click', e => { e.stopPropagation(); langDrop?.classList.toggle('open'); });
+document.addEventListener('click', () => langDrop?.classList.remove('open'));
+langDrop?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDrop.classList.remove('open'); });
+applyLangI(curLang);
+
 const ACCESS_TOKEN_KEY = 'access_token';
 const getToken = () => sessionStorage.getItem(ACCESS_TOKEN_KEY);
 
@@ -97,10 +122,11 @@ function renderAll(data) {
 }
 
 function renderTotals(total, totals) {
+  const t = T();
   const sumLabel = (totals?.sum_subunit_succeeded ?? 0).toLocaleString();
   document.getElementById('totals').innerHTML = `
-    <div class="totals-cell"><span class="lbl">本頁查到 (succeeded)</span><span class="val">${total}</span></div>
-    <div class="totals-cell"><span class="lbl">合計金額 (TWD subunit)</span><span class="val accent">${sumLabel}</span></div>
+    <div class="totals-cell"><span class="lbl">${esc(t.totals_count_succeeded || '本頁查到 (succeeded)')}</span><span class="val">${total}</span></div>
+    <div class="totals-cell"><span class="lbl">${esc(t.totals_sum_subunit || '合計金額 (TWD subunit)')}</span><span class="val accent">${sumLabel}</span></div>
   `;
 }
 
@@ -114,7 +140,7 @@ function reqCell(r) {
 function renderTable(rows) {
   const body = document.getElementById('table-body');
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="7" class="empty">// 沒有符合條件的紀錄</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="empty">${esc(T().empty_text || '// 沒有符合條件的紀錄')}</td></tr>`;
     return;
   }
   body.innerHTML = rows.map(r => `
@@ -152,10 +178,11 @@ function renderPagination(total, page, limit) {
   const pag = document.getElementById('pagination');
   const totalPages = Math.max(1, Math.ceil((total || 0) / limit));
   if (totalPages <= 1) { pag.innerHTML = ''; return; }
+  const t = T();
   pag.innerHTML = `
-    <button ${page<=1?'disabled':''} data-act="prev">← 上一頁</button>
+    <button ${page<=1?'disabled':''} data-act="prev">${esc(t.pager_prev || '← 上一頁')}</button>
     <span class="page-info">${page} / ${totalPages}</span>
-    <button ${page>=totalPages?'disabled':''} data-act="next">下一頁 →</button>
+    <button ${page>=totalPages?'disabled':''} data-act="next">${esc(t.pager_next || '下一頁 →')}</button>
   `;
   pag.querySelector('[data-act=prev]')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; load(); } });
   pag.querySelector('[data-act=next]')?.addEventListener('click', () => { currentPage++; load(); });
@@ -217,7 +244,8 @@ async function loadAgg() {
   }
   ld.hidden = true;
   const buckets = data?.buckets ?? [];
-  if (!buckets.length) { wrap.innerHTML = '<p style="font-size:.78rem;color:var(--text-dim)">無資料</p>'; return; }
+  const t = T();
+  if (!buckets.length) { wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(t.agg_empty || '無資料')}</p>`; return; }
   const rows = buckets.map(b => `
     <tr>
       <td>${esc(b.bucket)}</td>
@@ -230,12 +258,12 @@ async function loadAgg() {
   wrap.innerHTML = `
     <table class="agg-table">
       <thead><tr>
-        <th>${aggPeriod === 'daily' ? '日期' : '月份'}</th>
-        <th class="num">充值筆數</th>
-        <th class="num">充值金額</th>
-        <th class="num">退款筆數</th>
-        <th class="num">退款金額</th>
-        <th class="num">淨額</th>
+        <th>${esc(aggPeriod === 'daily' ? (t.agg_col_bucket_daily || '日期') : (t.agg_col_bucket_monthly || '月份'))}</th>
+        <th class="num">${esc(t.agg_col_count || '充值筆數')}</th>
+        <th class="num">${esc(t.agg_col_sum || '充值金額')}</th>
+        <th class="num">${esc(t.agg_col_refund_count || '退款筆數')}</th>
+        <th class="num">${esc(t.agg_col_refund_sum || '退款金額')}</th>
+        <th class="num">${esc(t.agg_col_net || '淨額')}</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

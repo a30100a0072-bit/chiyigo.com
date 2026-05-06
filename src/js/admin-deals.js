@@ -1,5 +1,28 @@
 // admin-deals.js — 成交紀錄頁
 
+// ── i18n ───────────────────────────────────────────────
+const LANGS_I18N = /*@i18n@*/{};
+let curLang = localStorage.getItem('lang') || 'zh-TW';
+function T() { return LANGS_I18N[curLang] || LANGS_I18N['zh-TW'] || {}; }
+function applyLangI(lang) {
+  if (!LANGS_I18N[lang]) return;
+  curLang = lang;
+  const t = T();
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (typeof t[k] === 'string') el.textContent = t[k]; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.dataset.i18nPh; if (typeof t[k] === 'string') el.placeholder = t[k]; });
+  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  localStorage.setItem('lang', lang);
+  if (typeof renderAll === 'function' && window._lastData) renderAll(window._lastData);
+  if (typeof loadAgg === 'function') loadAgg();
+}
+const langTogBtn = document.getElementById('lang-toggle-btn');
+const langDrop   = document.getElementById('lang-dropdown');
+langTogBtn?.addEventListener('click', e => { e.stopPropagation(); langDrop?.classList.toggle('open'); });
+document.addEventListener('click', () => langDrop?.classList.remove('open'));
+langDrop?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDrop.classList.remove('open'); });
+applyLangI(curLang);
+
 const ACCESS_TOKEN_KEY = 'access_token';
 const getToken = () => sessionStorage.getItem(ACCESS_TOKEN_KEY);
 
@@ -95,14 +118,15 @@ function renderAll(data) {
   renderPagination(data.total, data.page, data.limit);
 }
 
-function renderTotals(t) {
-  if (!t) { document.getElementById('totals').innerHTML = ''; return; }
-  const net = (Number(t.sum_total_subunit) - Number(t.sum_refunded_subunit)).toLocaleString();
+function renderTotals(totals) {
+  if (!totals) { document.getElementById('totals').innerHTML = ''; return; }
+  const tt = T();
+  const net = (Number(totals.sum_total_subunit) - Number(totals.sum_refunded_subunit)).toLocaleString();
   document.getElementById('totals').innerHTML = `
-    <div class="totals-cell"><span class="lbl">成交筆數</span><span class="val">${t.count}</span></div>
-    <div class="totals-cell"><span class="lbl">總收</span><span class="val accent">${Number(t.sum_total_subunit).toLocaleString()}</span></div>
-    <div class="totals-cell"><span class="lbl">總退</span><span class="val">${Number(t.sum_refunded_subunit).toLocaleString()}</span></div>
-    <div class="totals-cell"><span class="lbl">淨收 (subunit)</span><span class="val accent">${net}</span></div>
+    <div class="totals-cell"><span class="lbl">${esc(tt.totals_count || '成交筆數')}</span><span class="val">${totals.count}</span></div>
+    <div class="totals-cell"><span class="lbl">${esc(tt.totals_sum_total || '總收')}</span><span class="val accent">${Number(totals.sum_total_subunit).toLocaleString()}</span></div>
+    <div class="totals-cell"><span class="lbl">${esc(tt.totals_sum_refunded || '總退')}</span><span class="val">${Number(totals.sum_refunded_subunit).toLocaleString()}</span></div>
+    <div class="totals-cell"><span class="lbl">${esc(tt.totals_net || '淨收 (subunit)')}</span><span class="val accent">${net}</span></div>
   `;
 }
 
@@ -112,14 +136,14 @@ function intentLinks(ids) {
 }
 
 function reqLink(id) {
-  if (!id) return '<span class="mono" style="color:#6b7280">已刪</span>';
+  if (!id) return `<span class="mono" style="color:#6b7280">${esc(T().deleted_req || '已刪')}</span>`;
   return `<a class="mono" href="/admin-requisitions.html#req-${id}" style="color:var(--accent);text-decoration:none">#${id}</a>`;
 }
 
 function renderTable(rows) {
   const body = document.getElementById('table-body');
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="9" class="empty">// 沒有符合條件的成交紀錄</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9" class="empty">${esc(T().empty_text || '// 沒有符合條件的成交紀錄')}</td></tr>`;
     return;
   }
   body.innerHTML = rows.map(r => {
@@ -166,10 +190,11 @@ function renderPagination(total, page, limit) {
   const pag = document.getElementById('pagination');
   const totalPages = Math.max(1, Math.ceil((total || 0) / limit));
   if (totalPages <= 1) { pag.innerHTML = ''; return; }
+  const t = T();
   pag.innerHTML = `
-    <button ${page<=1?'disabled':''} data-act="prev">← 上一頁</button>
+    <button ${page<=1?'disabled':''} data-act="prev">${esc(t.pager_prev || '← 上一頁')}</button>
     <span class="page-info">${page} / ${totalPages}</span>
-    <button ${page>=totalPages?'disabled':''} data-act="next">下一頁 →</button>
+    <button ${page>=totalPages?'disabled':''} data-act="next">${esc(t.pager_next || '下一頁 →')}</button>
   `;
   pag.querySelector('[data-act=prev]')?.addEventListener('click', () => { if (currentPage > 1) { currentPage--; load(); } });
   pag.querySelector('[data-act=next]')?.addEventListener('click', () => { currentPage++; load(); });
@@ -227,7 +252,8 @@ async function loadAgg() {
   }
   ld.hidden = true;
   const buckets = data?.buckets ?? [];
-  if (!buckets.length) { wrap.innerHTML = '<p style="font-size:.78rem;color:var(--text-dim)">無資料</p>'; return; }
+  const tt = T();
+  if (!buckets.length) { wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(tt.agg_empty || '無資料')}</p>`; return; }
   const rows = buckets.map(b => `
     <tr>
       <td>${esc(b.bucket)}</td>
@@ -239,11 +265,11 @@ async function loadAgg() {
   wrap.innerHTML = `
     <table class="agg-table">
       <thead><tr>
-        <th>${aggPeriod === 'daily' ? '日期' : '月份'}</th>
-        <th class="num">成交筆數</th>
-        <th class="num">總收</th>
-        <th class="num">已退</th>
-        <th class="num">淨收</th>
+        <th>${esc(aggPeriod === 'daily' ? (tt.agg_col_bucket_daily || '日期') : (tt.agg_col_bucket_monthly || '月份'))}</th>
+        <th class="num">${esc(tt.agg_col_count || '成交筆數')}</th>
+        <th class="num">${esc(tt.agg_col_total || '總收')}</th>
+        <th class="num">${esc(tt.agg_col_refunded || '已退')}</th>
+        <th class="num">${esc(tt.agg_col_net || '淨收')}</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
