@@ -1,0 +1,2214 @@
+{
+  "db": "chiyigo_db",
+  "generated_at": "2026-05-06T16:23:47.635Z",
+  "counts": {
+    "tables": 33,
+    "indexes": 63,
+    "views": 0,
+    "triggers": 0
+  },
+  "cf_d1_migrations": "__table_missing__",
+  "tables": {
+    "_cf_KV": {
+      "columns": "ERR: Command failed: npx.cmd wrangler d1 execute chiyigo_db --remote --json --command",
+      "row_count": "ERR: Command failed: npx.cmd wrangler d1 execute chiyigo_db --remote --json --command"
+    },
+    "admin_audit_log": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "admin_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "admin_email",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "action",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "target_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "target_email",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "ip_address",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "prev_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "row_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "ai_audit": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "ip",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "fingerprint",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "session_id",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "prompt",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "response",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "model",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "block_reason",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "duration_ms",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "CURRENT_TIMESTAMP",
+          "pk": false
+        }
+      ],
+      "row_count": 5
+    },
+    "audit_log": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "event_type",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "severity",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'info'",
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "client_id",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "ip_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "event_data",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 398
+    },
+    "auth_codes": {
+      "columns": [
+        {
+          "name": "code_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "code_challenge",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "redirect_uri",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "state",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "scope",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "nonce",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "auth_time",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "backup_codes": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "code_hash",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "used_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 20
+    },
+    "d1_migrations": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "applied_at",
+          "type": "TIMESTAMP",
+          "notnull": true,
+          "dflt": "CURRENT_TIMESTAMP",
+          "pk": false
+        }
+      ],
+      "row_count": 14
+    },
+    "deals": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "source_requisition_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "customer_name",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "customer_contact",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "customer_company",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "service_type",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "budget",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "timeline",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "total_amount_subunit",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        },
+        {
+          "name": "refunded_amount_subunit",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        },
+        {
+          "name": "currency",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'TWD'",
+          "pk": false
+        },
+        {
+          "name": "payment_intent_ids",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "saved_by_admin_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "saved_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "email_verifications": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "token_hash",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "token_type",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "ip_address",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "used_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "ip_blacklist": {
+      "columns": [
+        {
+          "name": "ip",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "blocked_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "hit_count",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "kyc_webhook_events": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "vendor",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "event_id",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "status_to",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "payload_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "processed_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "local_accounts": {
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "password_hash",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "password_salt",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "totp_secret",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "totp_enabled",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        }
+      ],
+      "row_count": 5
+    },
+    "login_attempts": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "ip",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "email",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "kind",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'login'",
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 230
+    },
+    "oauth_clients": {
+      "columns": [
+        {
+          "name": "client_id",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "client_name",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "client_secret_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "app_type",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'web'",
+          "pk": false
+        },
+        {
+          "name": "allowed_redirect_uris",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "allowed_scopes",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "allowed_grant_types",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'[\"authorization_code\",\"refresh_token\"]'",
+          "pk": false
+        },
+        {
+          "name": "require_pkce",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "1",
+          "pk": false
+        },
+        {
+          "name": "token_endpoint_auth_method",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'none'",
+          "pk": false
+        },
+        {
+          "name": "post_logout_redirect_uris",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "frontchannel_logout_uri",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "logo_uri",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "client_uri",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "policy_uri",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "tos_uri",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "is_active",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "1",
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "aud",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "cors_origins",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "backchannel_logout_uri",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "frontchannel_logout_uris",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 4
+    },
+    "oauth_states": {
+      "columns": [
+        {
+          "name": "state_token",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "code_verifier",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "redirect_uri",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "platform",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'web'",
+          "pk": false
+        },
+        {
+          "name": "client_callback",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "ip_address",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "nonce",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "aud",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "password_resets": {
+      "columns": [
+        {
+          "name": "token_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "payment_intents": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "vendor",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "vendor_intent_id",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "kind",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'deposit'",
+          "pk": false
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'pending'",
+          "pk": false
+        },
+        {
+          "name": "amount_subunit",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "amount_raw",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "currency",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "metadata",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "failure_reason",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "requisition_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "payment_metadata_archive": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "intent_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "original_status",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "original_metadata",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "original_failure_reason",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "archived_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "archived_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "payment_webhook_dlq": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "vendor",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "event_id",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "vendor_intent_id",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "raw_body",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "payload_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "error_stage",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "error_message",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "http_status_returned",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "replayed_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "replayed_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "replay_result",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "payment_webhook_events": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "vendor",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "event_id",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "intent_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "status_to",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "payload_hash",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "processed_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "pkce_sessions": {
+      "columns": [
+        {
+          "name": "session_key",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "state",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "code_challenge",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "redirect_uri",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "ip_address",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "scope",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "nonce",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "portfolio": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "title",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "category",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "description",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "image_url",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "link_url",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "tags",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "sort_order",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": "0",
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 9
+    },
+    "refresh_tokens": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "token_hash",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "device_info",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "device_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "revoked_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "auth_time",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 56
+    },
+    "requisition": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "contact",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "company",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "service_type",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "budget",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "message",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "owner_guest_id",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "owner_user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "timeline",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "tg_message_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'pending'",
+          "pk": false
+        },
+        {
+          "name": "deleted_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "source_ip",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "requisition_refund_request": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "requisition_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "intent_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'pending'",
+          "pk": false
+        },
+        {
+          "name": "admin_user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "admin_note",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "decided_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "amount_subunit",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "revoked_jti": {
+      "columns": [
+        {
+          "name": "jti",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "revoked_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 9
+    },
+    "user_identities": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "provider",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "provider_id",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "display_name",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "avatar_url",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "metadata",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 5
+    },
+    "user_kyc": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'unverified'",
+          "pk": false
+        },
+        {
+          "name": "level",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'basic'",
+          "pk": false
+        },
+        {
+          "name": "vendor",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "vendor_session_id",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "vendor_review_id",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "rejection_reason",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "verified_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 1
+    },
+    "user_wallets": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "address",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "chain_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "1",
+          "pk": false
+        },
+        {
+          "name": "nickname",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "signed_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "last_used_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "user_webauthn_credentials": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "credential_id",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "public_key",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "counter",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        },
+        {
+          "name": "transports",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "aaguid",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "nickname",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "backup_eligible",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        },
+        {
+          "name": "backup_state",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "last_used_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 1
+    },
+    "users": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "email",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "email_verified",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        },
+        {
+          "name": "role",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'player'",
+          "pk": false
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "'active'",
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        },
+        {
+          "name": "deleted_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "token_version",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "0",
+          "pk": false
+        },
+        {
+          "name": "public_sub",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        }
+      ],
+      "row_count": 10
+    },
+    "wallet_nonces": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "nonce",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "address",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "chain_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "dflt": "1",
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "consumed_at",
+          "type": "TEXT",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 0
+    },
+    "webauthn_challenges": {
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": true
+        },
+        {
+          "name": "challenge",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "ceremony",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": null,
+          "pk": false
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": true,
+          "dflt": "datetime('now')",
+          "pk": false
+        }
+      ],
+      "row_count": 12
+    }
+  }
+}
