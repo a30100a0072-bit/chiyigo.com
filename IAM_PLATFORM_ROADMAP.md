@@ -337,11 +337,15 @@ GDPR「右遺忘」 vs audit 不可變的衝突：
 - 一律 idempotent（webhook 可能重送）
 - 全部寫 audit log
 
-### F3. 錢包連接（非託管）
+### F3. 錢包連接（非託管） — ✅ 全結案（2026-05-07）
 - 用 SIWE（Sign-In with Ethereum）/ WalletConnect
 - 驗 wallet 簽章 → 綁定到 user_wallets
 - IdP 不存 private key
 - 鏈上交易由 client 自行發起
+- 後端：4 endpoint + 自實作 EIP-4361 verifier（@noble，不引 siwe/ethers），migration 0023
+- 前端：dashboard wallets-section + sidebar/mobile overlay nav + 4 國 i18n
+- 安全：解綁強制 step-up `for_action='unbind_wallet'`，綁/解綁皆 critical audit + Discord ping
+- 驗證：codex 靜態 + 真瀏覽器 MetaMask 簽名 + Discord webhook 真機 ping 全綠（user_id=12，2026-05-07 01:07–01:09）
 
 ### F4. 反詐欺整合
 - 第三方：MaxMind / Sift / 自建規則
