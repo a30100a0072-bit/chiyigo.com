@@ -20,6 +20,7 @@ import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils
 import { requireAuth, res } from '../../../utils/auth.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
+import { refreshCookie } from '../../../utils/cookies.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
@@ -42,7 +43,7 @@ export async function onRequestPost({ request, env }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { otp_code, device_uuid, aud } = body ?? {}
+  const { otp_code, device_uuid, platform, aud } = body ?? {}
   if (!otp_code || typeof otp_code !== 'string')
     return res({ error: 'otp_code is required' }, 400)
   const audience = resolveAud(aud)
@@ -96,7 +97,7 @@ export async function onRequestPost({ request, env }) {
     if (delta !== null) {
       await clearRateLimit(db, { kind: '2fa', userId })
       await safeUserAudit(env, { event_type: 'mfa.totp.verify.success', user_id: userId, request })
-      return res(await issueToken(userId, record, db, device_uuid, env, audience, request, 'totp'))
+      return await respondWithToken(userId, record, db, device_uuid, platform, env, audience, request, 'totp')
     }
   }
 
@@ -123,7 +124,7 @@ export async function onRequestPost({ request, env }) {
         if (revoked.meta?.changes > 0) {
           await clearRateLimit(db, { kind: '2fa', userId })
           await safeUserAudit(env, { event_type: 'mfa.backup_code.use', severity: 'warn', user_id: userId, request })
-          return res(await issueToken(userId, record, db, device_uuid, env, audience, request, 'backup_code'))
+          return await respondWithToken(userId, record, db, device_uuid, platform, env, audience, request, 'backup_code')
         }
       }
     }
@@ -135,7 +136,7 @@ export async function onRequestPost({ request, env }) {
   return res({ error: 'Invalid OTP or backup code' }, 401)
 }
 
-async function issueToken(userId, record, db, deviceUuid, env, audience, request, method) {
+async function respondWithToken(userId, record, db, deviceUuid, platform, env, audience, request, method) {
   const accessToken = await signJwt({
     sub:            String(userId),
     email:          record.email,
@@ -174,13 +175,26 @@ async function issueToken(userId, record, db, deviceUuid, env, audience, request
     })
   }
 
-  return {
+  const payload = {
     access_token:   accessToken,
-    refresh_token:  refreshToken,
     user_id:        userId,
     email:          record.email,
     email_verified: record.email_verified === 1,
     role:           record.role,
     status:         record.status,
   }
+
+  // Web 瀏覽器（無 device_uuid 且非明確 App 平台）→ HttpOnly cookie，
+  // 不把 refresh_token 暴露到 JSON body / Network panel。對齊 local/login.js 273。
+  const isWeb = !deviceUuid && (!platform || platform === 'web')
+  if (isWeb) {
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie':   refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400),
+      },
+    })
+  }
+  return res({ ...payload, refresh_token: refreshToken })
 }

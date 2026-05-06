@@ -16,6 +16,7 @@ import { validatePassword } from '../../../utils/password.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
+import { refreshCookie } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -29,7 +30,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
 
-  const { email, password, guest_id, device_uuid, aud } = body ?? {}
+  const { email, password, guest_id, device_uuid, platform, aud } = body ?? {}
   const audience = resolveAud(aud)
 
   if (!email || !password)
@@ -134,14 +135,27 @@ export async function onRequestPost({ request, env, waitUntil }) {
     if (typeof waitUntil === 'function') waitUntil(sendTask)
   }
 
-  return res({
+  const payload = {
     access_token:   accessToken,
-    refresh_token:  refreshToken,
     user_id:        user.id,
     email:          emailLower,
     email_verified: false,
     role:           user.role,
     status:         user.status,
-  }, 201)
+  }
+
+  // Web 瀏覽器（無 device_uuid 且非明確 App 平台）→ HttpOnly cookie，
+  // 不把 refresh_token 暴露到 JSON body。對齊 local/login.js 273。
+  const isWeb = !device_uuid && (!platform || platform === 'web')
+  if (isWeb) {
+    return new Response(JSON.stringify(payload), {
+      status: 201,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie':   refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400),
+      },
+    })
+  }
+  return res({ ...payload, refresh_token: refreshToken }, 201)
 }
 

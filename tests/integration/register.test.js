@@ -40,7 +40,7 @@ beforeEach(async () => {
 })
 
 describe('POST /api/auth/local/register', () => {
-  it('happy path → 201 + access_token + refresh_token + DB rows', async () => {
+  it('happy path → 201 + access_token + refresh cookie + DB rows（web 預設走 cookie）', async () => {
     env.RESEND_API_KEY = 'test-key'
     const res = await callFunction(registerPost, regReq({
       email: 'new@example.com',
@@ -49,7 +49,10 @@ describe('POST /api/auth/local/register', () => {
     expect(res.status).toBe(201)
     const body = await res.json()
     expect(body.access_token).toBeTruthy()
-    expect(body.refresh_token).toMatch(/^[0-9a-f]{64}$/)
+    // 對齊 login.js：web（無 device_uuid）走 HttpOnly cookie，body 不應暴露 refresh_token
+    expect(body.refresh_token).toBeUndefined()
+    const cookie = res.headers.get('Set-Cookie') ?? ''
+    expect(cookie).toMatch(/^chiyigo_refresh=[0-9a-f]{64};/)
     expect(body.email).toBe('new@example.com')
     expect(body.email_verified).toBe(false)
 
