@@ -1,7 +1,7 @@
 # IAM 平台化升級路線圖（金融級）
 
 **建立日期**：2026-05-02
-**最後更新**：2026-05-02
+**最後更新**：2026-05-07
 **目標規模**：chiyigo.com IdP → **金融級多 App 平台 IdP**
 **已知未來 client**：
 - chiyigo / mbti / talo（既有 web）
@@ -414,6 +414,7 @@ Week 11+:    Phase F — 對接時做
 
 | 日期 | 事件 |
 |---|---|
+| 2026-05-07 | Phase D+E+F 真實環境驗證階段 1（codex 全段掃過 22 PASS / 5 FAIL→修完 / 24 SKIP）：(1) D-8/E-4 passkey support check 從 `isSecureContext !== false` 改 `location.protocol === 'https:'` — 排除 `http://localhost`，dashboard.js + auth-ui.js 兩處（commit `0995018`）；(2) admin-refund-requests TDZ：bootstrap 的 `applyLangI(curLang)` 在 line 26 跑時，`render()` 雖然 hoisted 但 body 用到 line 55 才宣告的 `esc`，empty-state 分支仍踩 TDZ → 頁面卡「// 載入中…」；最小修法把這次 init call 移到檔尾、`load()` 前（commit `d878be5`）；(3) KYC_MOCK_SECRET 上 Pages prod + .dev.vars 同步；I-2/I-3/I-5 用 user 16 jay30100jay 重驗全 PASS（dedupe + audit critical 全鏈路通）；(4) FAIL 待議：J-1 login 5/IP/min 撞不到，因 Turnstile pre-check 缺 token 先回 403 CAPTCHA_FAILED，rate-limit 邏輯走不到，需改驗策略（mock Turnstile token）或調整 pre-check 順序。SKIP 24 條卡在 VPN/實機 passkey/收信/未提供密碼。詳細 todo 表更新在 `project_phase_d_prod_verification.md` |
 | 2026-05-02 | 初版（5 Phase，限 OIDC 多 App） |
 | 2026-05-04 | 加入 OIDC Back-Channel Logout 1.0 為跨 site RP（sport-app on pages.dev）SSO 登出機制；併行 frontchannel 不取代，作雙保險 |
 | 2026-05-04 | 加入 oauth_clients 通用 RP 註冊機制需求；Phase 1 in-code registry 集中現有 5 處 hardcode；Phase 2 D1 表化排在本路線圖 Phase C；目標：新增 RP 從改 5 個檔變成跑 1 條 SQL |
