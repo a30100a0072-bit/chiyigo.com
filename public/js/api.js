@@ -21,6 +21,23 @@
 ;(function () {
   'use strict'
 
+  // 同 auth-ui.js：每瀏覽器一次性 web-<uuid>，給 /api/auth/refresh X-Device-Id 用
+  function _chiyigoGetDeviceUuid() {
+    var KEY = 'chiyigo.device_uuid'
+    try {
+      var v = localStorage.getItem(KEY)
+      if (v && /^web-[0-9a-f-]{36}$/i.test(v)) return v
+    } catch (_) {}
+    if (window.__chiyigoMemoryDeviceUuid) return window.__chiyigoMemoryDeviceUuid
+    var uuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID() : null
+    if (!uuid) return null
+    var fullUuid = 'web-' + uuid
+    try { localStorage.setItem(KEY, fullUuid) }
+    catch (_) { window.__chiyigoMemoryDeviceUuid = fullUuid }
+    return fullUuid
+  }
+
   class ApiError extends Error {
     constructor({ status, traceId, code, message, body }) {
       super(message || `HTTP ${status}`)
@@ -43,9 +60,10 @@
     if (_refreshInflight) return _refreshInflight
     _refreshInflight = (async () => {
       try {
+        const _devId = _chiyigoGetDeviceUuid()
         const r = await fetch('/api/auth/refresh', {
           method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: Object.assign({ 'Content-Type': 'application/json' }, _devId ? { 'X-Device-Id': _devId } : {}),
           body: '{}',
         })
         if (!r.ok) return false

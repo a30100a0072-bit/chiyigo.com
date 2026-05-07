@@ -12,6 +12,23 @@
 (function () {
   'use strict';
 
+  // 同 auth-ui.js / api.js：每瀏覽器一次性 web-<uuid>，給 /api/auth/refresh X-Device-Id 用
+  function _chiyigoGetDeviceUuid() {
+    var KEY = 'chiyigo.device_uuid';
+    try {
+      var v = localStorage.getItem(KEY);
+      if (v && /^web-[0-9a-f-]{36}$/i.test(v)) return v;
+    } catch (_) {}
+    if (window.__chiyigoMemoryDeviceUuid) return window.__chiyigoMemoryDeviceUuid;
+    var uuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID() : null;
+    if (!uuid) return null;
+    var fullUuid = 'web-' + uuid;
+    try { localStorage.setItem(KEY, fullUuid); }
+    catch (_) { window.__chiyigoMemoryDeviceUuid = fullUuid; }
+    return fullUuid;
+  }
+
   var TOKEN_KEY    = 'access_token';
   var CHANNEL_NAME = 'chiyigo-auth';
   var LOCK_NAME    = 'chiyigo-auth-refresh';
@@ -52,10 +69,13 @@
   // 跑一次 /api/auth/refresh；成功 → 寫 token + 廣播 + re-apply UI
   async function doRefresh() {
     try {
+      var _devId = _chiyigoGetDeviceUuid();
+      var _hdrs = { 'Content-Type': 'application/json' };
+      if (_devId) _hdrs['X-Device-Id'] = _devId;
       var r = await fetch('/api/auth/refresh', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: _hdrs,
         body: '{}',
       });
       if (!r.ok) return false;

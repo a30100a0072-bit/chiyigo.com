@@ -11,6 +11,32 @@
 
 'use strict';
 
+// ── browser-level device identity（chiyigo.device_uuid）──────────
+// 每個瀏覽器第一次進站產一次 web-<uuid>，存 localStorage；之後 login / refresh 一律帶。
+// 各瀏覽器看到自己獨立的 device session row。Safari private mode / localStorage 失敗時退到
+// in-memory，同 tab 一致；換 tab 視作新裝置（觸發新裝置告警，預期行為）。
+function _chiyigoGetDeviceUuid() {
+  var KEY = 'chiyigo.device_uuid';
+  try {
+    var v = localStorage.getItem(KEY);
+    if (v && /^web-[0-9a-f-]{36}$/i.test(v)) return v;
+  } catch (_) { /* storage 被擋 */ }
+  if (window.__chiyigoMemoryDeviceUuid) return window.__chiyigoMemoryDeviceUuid;
+  var uuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID() : null;
+  if (!uuid) {
+    if (typeof console !== 'undefined') console.warn('[device-id] crypto.randomUUID unavailable');
+    return null;
+  }
+  var fullUuid = 'web-' + uuid;
+  try { localStorage.setItem(KEY, fullUuid); }
+  catch (_) {
+    window.__chiyigoMemoryDeviceUuid = fullUuid;
+    if (typeof console !== 'undefined') console.warn('[device-id] localStorage unavailable, using in-memory');
+  }
+  return fullUuid;
+}
+
 // ── i18n：四語系錯誤 / UI 字串 ───────────────────────────────────
 // 後端錯誤訊息（res.json().error）對照：以英文 key 查 4 語對應翻譯
 const ERROR_I18N = {
@@ -164,10 +190,11 @@ function getToken() {
 // 以 HttpOnly Cookie 靜默換取新 access_token，成功回傳 true
 async function refreshAccessToken() {
   try {
+    const _devId = _chiyigoGetDeviceUuid();
     const res = await fetch('/api/auth/refresh', {
       method:      'POST',
       credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' },
+      headers:     Object.assign({ 'Content-Type': 'application/json' }, _devId ? { 'X-Device-Id': _devId } : {}),
       body:        '{}',
     });
     if (!res.ok) return false;
@@ -376,6 +403,7 @@ async function handleLogin(event) {
       body:        JSON.stringify({
         email, password,
         aud: _crossAppAud ?? undefined,
+        device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
         'cf-turnstile-response': tsToken,
       }),
     });
@@ -447,6 +475,7 @@ async function handleRegister(event) {
       body:    JSON.stringify({
         email, password, guest_id,
         aud: _crossAppAud ?? undefined,
+        device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
         'cf-turnstile-response': tsToken,
       }),
     });
@@ -502,7 +531,7 @@ async function handleTotp(event) {
         'Content-Type':  'application/json',
         'Authorization': 'Bearer ' + _preAuthToken,
       },
-      body: JSON.stringify({ otp_code, aud: _crossAppAud ?? undefined }),
+      body: JSON.stringify({ otp_code, aud: _crossAppAud ?? undefined, device_uuid: _chiyigoGetDeviceUuid() ?? undefined }),
     });
 
     const data = await res.json();
@@ -704,6 +733,7 @@ async function handlePasskeyLogin() {
       body: JSON.stringify({
         response: responseJson,
         aud: _crossAppAud ?? undefined,
+        device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
       }),
     });
     const data = await verifyRes.json();
