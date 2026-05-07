@@ -270,7 +270,73 @@
     "node_token":   "Token / Session",
     "node_audit":   "Admin / 監査",
     "node_kyc":     "KYC 本人確認",
-    "node_payment": "決済 / 返金"
+    "node_payment": "決済 / 返金",
+
+    "details": {
+      "login": {
+        "purpose": "サインアップ・ログイン・パスワードリセット・メール認証の入口。リスクスコアリング、ブルートフォース防御、Turnstileのbot防止を備えています。",
+        "flow": ["フォーム送信 → Turnstileチャレンジ","POST /api/auth/local/login（device_uuid付き）","サーバー側リスクスコア（4シグナル：国 / UA / 時間 / 失敗回数）","スコア≥70は拒否+メール通知；30–70は警告+audit；それ以外はaccess+refresh発行","新規デバイス → メール警告 + audit critical"],
+        "api": ["POST /api/auth/local/login","POST /api/auth/local/register","POST /api/auth/local/forgot-password","POST /api/auth/local/reset-password","D1: users / login_attempts / risk_audit"],
+        "security": ["login 5/IP/分のレート制限（D1）","24時間IPブロックリスト＋段階的クールダウン","Argon2パスワードハッシュ + pepper","ログイン後の国跳び → audit critical + メール"],
+        "tech": ["Cloudflare Pages Functions","D1 atomic UPDATE...RETURNING","Turnstile","Discord critical webhook"]
+      },
+      "oauth": {
+        "purpose": "Google / LINE / Facebook ソーシャルログイン；同時にchiyigoはOIDC ProviderとしてmbtiやtaloなどサブサイトのSSOを提供。",
+        "flow": ["Google選択 → GET /api/auth/oauth/google/init","PKCE + state + nonce → pkce_sessions","Callbackでcode交換 → id_token → sig/iss/aud/nonce検証","ローカルユーザー検索/作成 → oauth_account紐付け → chiyigoトークン発行","サブサイトSSO：GET /api/auth/oauth/authorize、cookieセッション + prompt=none/login + RP Registry"],
+        "api": ["GET  /api/auth/oauth/[provider]/init","GET  /api/auth/oauth/[provider]/callback","GET  /api/auth/oauth/authorize","POST /api/auth/oauth/token","POST /api/auth/oauth/end-session","POST /api/auth/oauth/code","POST /api/admin/oauth-clients (RP CRUD)","D1: oauth_accounts / oauth_clients / pkce_sessions / auth_codes"],
+        "security": ["ES256 JWK 非対称署名","aud ホワイトリスト（talo/mbti/chiyigo/sport-app）","5層検証：iss/aud/kid/nonce/fragment","RP Registry CRUD：新規RP登録に再デプロイ不要","Backchannel logout：sidインデックス + 三方向single sign-out"],
+        "tech": ["jose (JWT)","OIDC discovery","PKCE S256","Dynamic Client Registry"]
+      },
+      "email": {
+        "purpose": "メール認証、パスワードリセット、メール紐付けフロー。すべてのトークンは atomic UPDATE...RETURNING による一回限り消費でリプレイ防止。",
+        "flow": ["POST /api/auth/local/forgot-password","サーバーがjtiハッシュをemail_tokensに保存","ユーザーがリンクをクリック → POST /api/auth/local/reset-password","UPDATE email_tokens SET used_at=? WHERE jti=? AND used_at IS NULL RETURNING ...","RETURNINGが空 → 使用済み/不在 → 拒否"],
+        "api": ["POST /api/auth/email/send-verification","POST /api/auth/email/verify","POST /api/auth/local/forgot-password","POST /api/auth/local/reset-password","D1: email_tokens (jti, hash, used_at, expires_at)"],
+        "security": ["原子的消費でレース条件防止","トークンはハッシュのみ保存","15分TTL","自分のメールに対するリセットはcaptcha不要、他人なら必須","Resend API + 複数キーローテーション"],
+        "tech": ["Resend","ワンショットjtiトークン","D1 atomic write"]
+      },
+      "mfa": {
+        "purpose": "TOTP 2FA + WebAuthn/Passkey + 高権限操作のstep-up。2FA無効化時はトークン即時クリア+login.html?tfa_disabled=1へリダイレクト。",
+        "flow": ["有効化：dashboardでQR表示 → otpauth URI → 6桁OTP検証","ログイン：パスワード後 → OTP / passkey assertion追加","Step-up：決済 / パスワード変更前に再MFA","elevated:* scope の短命（5分）一回限りトークン発行","操作完了後即revoke"],
+        "api": ["POST /api/auth/2fa/setup","POST /api/auth/2fa/activate","POST /api/auth/2fa/verify","POST /api/auth/2fa/disable","POST /api/auth/2fa/backup-codes/regenerate","POST /api/auth/webauthn/register-options","POST /api/auth/webauthn/register-verify","POST /api/auth/webauthn/login-options","POST /api/auth/webauthn/login-verify","GET  /api/auth/webauthn/credentials","POST /api/auth/step-up","D1: user_2fa / webauthn_credentials"],
+        "security": ["otpauth secret 暗号化保存","WebAuthn challenge 一回限り","Step-up token TTL 5分 + jti","2FA無効化 → bumpTokenVersion + graceful logout","requireStepUp ミドルウェア"],
+        "tech": ["otpauth","@simplewebauthn/server","elevated:* scope claim","token-version bump"]
+      },
+      "device": {
+        "purpose": "ブラウザごとにweb-<uuid>をlocalStorageに保存；refresh tokenをデバイスに強紐付け；不一致なら家族全体をrevoke。",
+        "flow": ["初回ロード → web-<uuid>生成 → localStorage","Refresh は X-Device-Id ヘッダ必須","サーバーで照合：不一致 → user_id+device_id の全refreshをrevoke","Dashboardでアクティブデバイス一覧","ユーザーは個別 / 一括revoke可能"],
+        "api": ["GET    /api/auth/devices","POST   /api/auth/devices/logout","POST   /api/auth/refresh (X-Device-Id required)","D1: refresh_tokens (user_id, device_id, family_id, revoked_at)"],
+        "security": ["デバイス紐付けでクロスデバイスrefresh防止","異常デバイス → メール + audit critical","国跳び audit","Passkeyを特定デバイスに紐付け","リネームで認識しやすく"],
+        "tech": ["localStorage UUID","family-based revocation","X-Device-Id header"]
+      },
+      "token": {
+        "purpose": "JWT (ES256) access + refresh の二重構成。jti ブロックリスト（D1）で即時失効；scope catalogで細粒度認可；token-version bumpでファミリー全体を無効化。",
+        "flow": ["ログイン成功 → access (15分) + refresh (30日) 発行","APIがaccess受信：verifyJwt → jtiブロックリスト確認 → buildTokenScope","Refresh：ローテーション + 旧jtiをrevoked","requireScope(\"payment.write\") 失敗 → 401","クリティカルな変更 → bumpTokenVersion → 全トークン即無効"],
+        "api": ["POST /api/auth/refresh","POST /api/auth/logout","POST /api/admin/revoke","GET  /api/auth/me","GET  /api/auth/userinfo","D1: refresh_tokens / revoked_jtis / token_versions"],
+        "security": ["ES256 非対称JWK","jti ブロックリスト即時反映","scope catalog（payment/admin/audit/elevated）","Token-version bump = 全デバイスログアウト","Refresh rotation + 再利用検知"],
+        "tech": ["jose ES256","D1 jti index","scope-based authz","version-bump cascade"]
+      },
+      "audit": {
+        "purpose": "管理コンソール + 22種類のauditイベント + 構造化ログ + traceIdミドルウェア + Discord critical アラート。",
+        "flow": ["全endpoint → ミドルウェアが audit_log を発行","重要度：info / warn / critical","critical → 同期Discord webhook","管理ダッシュボードでフィルタ：user_id / event / 時間 / severity","ホワイトリストイベントは削除可、payment/refundは不変"],
+        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log (22 event_type)"],
+        "security": ["Criticalイベント削除不可","admin scope: admin.read / admin.write","Step-up は2FA必須","管理操作も自身をaudit","Observability traceId 全リンク追跡"],
+        "tech": ["Cloudflare Real-time logs","traceId middleware","Discord webhook","admin RBAC"]
+      },
+      "kyc": {
+        "purpose": "ベンダー非依存のKYCアダプター。スキーマは特定ベンダーに結合せず、Sumsub / Onfido / Persona の差し替えはアダプター1ファイルで完結。",
+        "flow": ["dashboard /kyc → 書類アップロード","サーバーがベンダーアダプター呼び出し（現在モック）","ベンダーwebhook → POST /api/webhooks/kyc/[vendor] で状態更新","GET /api/auth/kyc/status で状態取得","status=approved → 出金限度解放"],
+        "api": ["GET  /api/auth/kyc/status","POST /api/webhooks/kyc/[vendor]","D1: kyc_sessions / kyc_documents"],
+        "security": ["ベンダーアダプターパターン","Webhook 署名検証","PII フィールド暗号化","出金前KYC必須"],
+        "tech": ["Phase F-1","Adapter pattern","Encrypt-at-rest"]
+      },
+      "payment": {
+        "purpose": "F-2 wave 1-7：チャージ / 返金 / 突合 / step-up / 二段階返金審査。ECPay AIO + CheckMacValue + 実機クレカでEnd-to-End検証済み。",
+        "flow": ["ユーザーがチャージ → POST /api/auth/payments/intents","POST /api/auth/payments/checkout/ecpay → ECPay form","Webhook → POST /api/webhooks/payments/ecpay → CheckMacValue検証","返金申請：POST /api/payments/intents/[id]/refund-request","管理者審査（step-up + 2FA） → POST /api/admin/payments/intents/[id]/refund","突合：cron で ECPay vs D1 を比較（/api/admin/payments/aggregate）"],
+        "api": ["POST   /api/auth/payments/intents","GET    /api/auth/payments/intents/[id]","POST   /api/auth/payments/checkout/ecpay","POST   /api/payments/intents/[id]/refund-request","POST   /api/webhooks/payments/[vendor]","POST   /api/admin/payments/intents/[id]/refund","POST   /api/admin/payments/intents/[id]/delete","GET    /api/admin/payments/intents","GET    /api/admin/payments/aggregate","GET    /api/admin/payments/webhook-dlq","D1: payment_intents / refund_requests"],
+        "security": ["双方向 CheckMacValue 検証","subunit/raw 二重金額カラムで丸めバグ防止","返金 step-up + 2FA OTP","ハードデリート + audit ホワイトリスト","Webhook idempotency + DLQ"],
+        "tech": ["ECPay AIO","CheckMacValue","D1 cron 突合","step-up scope"]
+      }
+    }
   },
   "ko": {
     "nav_home": "홈",
@@ -317,6 +383,72 @@
     "node_token":   "Token / Session",
     "node_audit":   "Admin / 감사",
     "node_kyc":     "KYC",
-    "node_payment": "결제 / 환불"
+    "node_payment": "결제 / 환불",
+
+    "details": {
+      "login": {
+        "purpose": "회원가입, 로그인, 비밀번호 재설정, 이메일 인증의 진입점. 위험 점수 평가, brute-force 방어, Turnstile 봇 차단을 지원합니다.",
+        "flow": ["폼 제출 → Turnstile 챌린지","POST /api/auth/local/login (device_uuid 포함)","서버 측 위험 점수 (4가지 신호: 국가 / UA / 시간 / 실패횟수)","점수 ≥ 70은 거부 + 이메일; 30–70은 audit warn; 그 외 access + refresh 발급","신규 디바이스 → 이메일 알림 + audit critical"],
+        "api": ["POST /api/auth/local/login","POST /api/auth/local/register","POST /api/auth/local/forgot-password","POST /api/auth/local/reset-password","D1: users / login_attempts / risk_audit"],
+        "security": ["login 5/IP/분 rate-limit (D1)","24시간 IP 차단 + 단계적 cooldown","Argon2 password hash + pepper","로그인 후 국가 점프 → audit critical + 이메일"],
+        "tech": ["Cloudflare Pages Functions","D1 atomic UPDATE...RETURNING","Turnstile","Discord critical webhook"]
+      },
+      "oauth": {
+        "purpose": "Google / LINE / Facebook 소셜 로그인; 동시에 chiyigo가 OIDC Provider로서 mbti / talo / sport-app 등 서브사이트에 SSO 제공.",
+        "flow": ["Google 선택 → GET /api/auth/oauth/google/init","PKCE + state + nonce → pkce_sessions","Callback에서 code 교환 → id_token → sig/iss/aud/nonce 검증","로컬 사용자 조회/생성 → oauth_account 연결 → chiyigo 토큰 발급","서브사이트 SSO: GET /api/auth/oauth/authorize, cookie session + prompt=none/login + RP Registry"],
+        "api": ["GET  /api/auth/oauth/[provider]/init","GET  /api/auth/oauth/[provider]/callback","GET  /api/auth/oauth/authorize","POST /api/auth/oauth/token","POST /api/auth/oauth/end-session","POST /api/auth/oauth/code","POST /api/admin/oauth-clients (RP CRUD)","D1: oauth_accounts / oauth_clients / pkce_sessions / auth_codes"],
+        "security": ["ES256 JWK 비대칭 서명","aud 화이트리스트 (talo/mbti/chiyigo/sport-app)","5계층 검증: iss/aud/kid/nonce/fragment","RP Registry CRUD: 신규 RP 재배포 불필요","Backchannel logout: sid 인덱스 + 3방향 single sign-out"],
+        "tech": ["jose (JWT)","OIDC discovery","PKCE S256","Dynamic Client Registry"]
+      },
+      "email": {
+        "purpose": "이메일 인증, 비밀번호 재설정, 이메일 연결. 모든 토큰은 atomic UPDATE...RETURNING으로 일회성 소비 — 재생 방지.",
+        "flow": ["POST /api/auth/local/forgot-password","서버가 jti hash를 email_tokens에 저장","사용자가 링크 클릭 → POST /api/auth/local/reset-password","UPDATE email_tokens SET used_at=? WHERE jti=? AND used_at IS NULL RETURNING ...","RETURNING이 비어있음 → 사용됨/없음 → 거부"],
+        "api": ["POST /api/auth/email/send-verification","POST /api/auth/email/verify","POST /api/auth/local/forgot-password","POST /api/auth/local/reset-password","D1: email_tokens (jti, hash, used_at, expires_at)"],
+        "security": ["원자적 소비로 race condition 방지","토큰은 해시만 저장","15분 TTL","본인 이메일 재설정은 captcha 불필요, 타인은 필수","Resend API + 다중 키 로테이션"],
+        "tech": ["Resend","One-shot jti 토큰","D1 atomic write"]
+      },
+      "mfa": {
+        "purpose": "TOTP 2FA + WebAuthn/Passkey + 고권한 작업 step-up. 2FA 비활성화 시 토큰 즉시 정리 + login.html?tfa_disabled=1 리디렉트.",
+        "flow": ["활성화: dashboard에서 QR 표시 → otpauth URI → 6자리 OTP 검증","로그인: 비밀번호 후 → OTP / passkey assertion 추가","Step-up: 결제 / 비밀번호 변경 전 재MFA","elevated:* scope 단명 (5분) 일회성 토큰 발급","작업 완료 후 즉시 revoke"],
+        "api": ["POST /api/auth/2fa/setup","POST /api/auth/2fa/activate","POST /api/auth/2fa/verify","POST /api/auth/2fa/disable","POST /api/auth/2fa/backup-codes/regenerate","POST /api/auth/webauthn/register-options","POST /api/auth/webauthn/register-verify","POST /api/auth/webauthn/login-options","POST /api/auth/webauthn/login-verify","GET  /api/auth/webauthn/credentials","POST /api/auth/step-up","D1: user_2fa / webauthn_credentials"],
+        "security": ["otpauth secret 암호화 저장","WebAuthn challenge 일회성","Step-up token TTL 5분 + jti","2FA disable → bumpTokenVersion + graceful logout","requireStepUp 미들웨어"],
+        "tech": ["otpauth","@simplewebauthn/server","elevated:* scope claim","token-version bump"]
+      },
+      "device": {
+        "purpose": "각 브라우저는 web-<uuid>를 localStorage에 저장; refresh token을 디바이스에 강제 결합; 불일치 시 디바이스 family 전체 revoke.",
+        "flow": ["최초 로드 → web-<uuid> 생성 → localStorage","Refresh는 X-Device-Id 헤더 필수","서버 비교: 불일치 → user_id+device_id의 모든 refresh를 revoke","Dashboard에서 활성 디바이스 표시","사용자는 개별 / 전체 revoke 가능"],
+        "api": ["GET    /api/auth/devices","POST   /api/auth/devices/logout","POST   /api/auth/refresh (X-Device-Id required)","D1: refresh_tokens (user_id, device_id, family_id, revoked_at)"],
+        "security": ["디바이스 결합으로 cross-device refresh 차단","비정상 디바이스 → 이메일 + audit critical","국가 점프 audit","Passkey를 특정 디바이스에 결합","Rename으로 친숙한 이름 표시"],
+        "tech": ["localStorage UUID","family-based revocation","X-Device-Id header"]
+      },
+      "token": {
+        "purpose": "JWT (ES256) access + refresh 듀얼 트랙. jti 블록리스트 (D1)로 즉시 무효화; scope catalog 세분화 인가; token-version bump으로 family 전체 캐스케이드 무효화.",
+        "flow": ["로그인 성공 → access (15분) + refresh (30일) 서명","API access 수신: verifyJwt → jti 블록리스트 확인 → buildTokenScope","Refresh: 로테이션 + 이전 jti revoked","requireScope(\"payment.write\") 실패 → 401","Critical 변경 → bumpTokenVersion → 모든 토큰 즉시 무효화"],
+        "api": ["POST /api/auth/refresh","POST /api/auth/logout","POST /api/admin/revoke","GET  /api/auth/me","GET  /api/auth/userinfo","D1: refresh_tokens / revoked_jtis / token_versions"],
+        "security": ["ES256 비대칭 JWK","jti 블록리스트 즉시 적용","세분화된 scope catalog (payment/admin/audit/elevated)","Token-version bump = 전 디바이스 logout","Refresh rotation + reuse detection"],
+        "tech": ["jose ES256","D1 jti index","scope-based authz","version-bump cascade"]
+      },
+      "audit": {
+        "purpose": "관리자 콘솔 + 22가지 audit 이벤트 + 구조화 로그 + traceId 미들웨어 + Discord critical 경고.",
+        "flow": ["모든 endpoint → 미들웨어가 audit_log 발행","심각도: info / warn / critical","critical → 동기 Discord webhook","Admin Dashboard 필터: user_id / event / 시간 / severity","화이트리스트 이벤트만 삭제 가능, payment/refund는 불변"],
+        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log (22 event_type)"],
+        "security": ["Critical 이벤트 삭제 불가","admin scope: admin.read / admin.write","Step-up은 2FA 필수","모든 admin 작업도 audit","Observability traceId 전체 추적"],
+        "tech": ["Cloudflare Real-time logs","traceId middleware","Discord webhook","admin RBAC"]
+      },
+      "kyc": {
+        "purpose": "벤더 비종속 KYC 어댑터. 스키마는 특정 벤더에 결합되지 않으며 Sumsub / Onfido / Persona 교체는 어댑터 1파일로 완료.",
+        "flow": ["dashboard /kyc → 서류 업로드","서버가 벤더 어댑터 호출 (현재 mock)","벤더 webhook → POST /api/webhooks/kyc/[vendor] 상태 업데이트","GET /api/auth/kyc/status로 상태 조회","status=approved → 출금 한도 해제"],
+        "api": ["GET  /api/auth/kyc/status","POST /api/webhooks/kyc/[vendor]","D1: kyc_sessions / kyc_documents"],
+        "security": ["벤더 어댑터 패턴","Webhook 서명 검증","PII 필드 암호화","출금 전 KYC 필수"],
+        "tech": ["Phase F-1","Adapter pattern","Encrypt-at-rest"]
+      },
+      "payment": {
+        "purpose": "F-2 wave 1-7: 충전 / 환불 / 정산 / step-up / 2단계 환불 심사. ECPay AIO + CheckMacValue + 실기 신용카드로 End-to-End 검증 완료.",
+        "flow": ["사용자 충전 → POST /api/auth/payments/intents","POST /api/auth/payments/checkout/ecpay → ECPay form","Webhook → POST /api/webhooks/payments/ecpay → CheckMacValue 검증","환불 신청: POST /api/payments/intents/[id]/refund-request","관리자 심사 (step-up + 2FA) → POST /api/admin/payments/intents/[id]/refund","정산: cron으로 ECPay vs D1 비교 (/api/admin/payments/aggregate)"],
+        "api": ["POST   /api/auth/payments/intents","GET    /api/auth/payments/intents/[id]","POST   /api/auth/payments/checkout/ecpay","POST   /api/payments/intents/[id]/refund-request","POST   /api/webhooks/payments/[vendor]","POST   /api/admin/payments/intents/[id]/refund","POST   /api/admin/payments/intents/[id]/delete","GET    /api/admin/payments/intents","GET    /api/admin/payments/aggregate","GET    /api/admin/payments/webhook-dlq","D1: payment_intents / refund_requests"],
+        "security": ["양방향 CheckMacValue 검증","subunit/raw 듀얼 금액 컬럼으로 반올림 버그 방지","환불 step-up + 2FA OTP","Hard delete + audit 화이트리스트","Webhook idempotency + DLQ"],
+        "tech": ["ECPay AIO","CheckMacValue","D1 cron 정산","step-up scope"]
+      }
+    }
   }
 }
