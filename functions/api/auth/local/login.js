@@ -202,12 +202,17 @@ export async function onRequestPost({ request, env }) {
 
   // ── 6a. 需要 2FA → 回傳受限 pre_auth_token（ES256）───────────
   if (record.totp_enabled) {
+    // Phase E-2 forward：把密碼階段算出的 risk 帶進 pre_auth claims，
+    // 讓 2fa/verify 的 auth.login.success audit 也帶 risk_score（事後可查 forensic）
     const preAuthToken = await signJwt({
       sub:    String(record.user_id),
       scope:  'pre_auth',
       role:   record.role,
       status: record.status,
       ver:    record.token_version ?? 0,
+      risk_score:   risk.score,
+      risk_factors: risk.factors,
+      risk_country: risk.country,
     }, PRE_AUTH_TOKEN_TTL, env)
 
     return res({

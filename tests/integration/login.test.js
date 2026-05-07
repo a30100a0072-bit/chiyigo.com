@@ -83,6 +83,11 @@ describe('POST /api/auth/local/login — happy path & failures', () => {
     const { payload } = await jwtVerify(body.pre_auth_token, pub, { algorithms: ['ES256'] })
     expect(payload.sub).toBe(String(u.id))
     expect(payload.scope).toBe('pre_auth')
+    // Phase E-2 forward: risk fields propagated to pre_auth so 2fa/verify
+    // can write them into auth.login.success audit
+    expect(typeof payload.risk_score).toBe('number')
+    expect(Array.isArray(payload.risk_factors)).toBe(true)
+    expect(payload).toHaveProperty('risk_country')
   })
 
   it('密碼錯 → 401 + login_attempts 寫入 1 筆', async () => {

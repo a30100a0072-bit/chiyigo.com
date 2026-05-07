@@ -54,6 +54,11 @@ export async function onRequestPost({ request, env }) {
   const db     = env.chiyigo_db
   const ip     = request.headers.get('CF-Connecting-IP') ?? null
 
+  // Phase E-2 forward：從 pre_auth claims 取出密碼階段算的 risk，後面寫進 audit
+  const riskClaims = (typeof user.risk_score === 'number')
+    ? { score: user.risk_score, factors: user.risk_factors ?? [], country: user.risk_country ?? null }
+    : null
+
   // ── 2.5 Rate Limit（per-user 5 次 / 5 分鐘）──────────────────
   // pre_auth_token 短效 5min，但攻擊者仍可在 5 分鐘內暴力試 6 位數 / 20-hex
   // 失敗 ≥5 次直接 429，必須等 window 過或重新登入觸發新 pre_auth
@@ -97,7 +102,7 @@ export async function onRequestPost({ request, env }) {
     if (delta !== null) {
       await clearRateLimit(db, { kind: '2fa', userId })
       await safeUserAudit(env, { event_type: 'mfa.totp.verify.success', user_id: userId, request })
-      return await respondWithToken(userId, record, db, device_uuid, platform, env, audience, request, 'totp')
+      return await respondWithToken(userId, record, db, device_uuid, platform, env, audience, request, riskClaims, 'totp')
     }
   }
 
@@ -124,7 +129,7 @@ export async function onRequestPost({ request, env }) {
         if (revoked.meta?.changes > 0) {
           await clearRateLimit(db, { kind: '2fa', userId })
           await safeUserAudit(env, { event_type: 'mfa.backup_code.use', severity: 'warn', user_id: userId, request })
-          return await respondWithToken(userId, record, db, device_uuid, platform, env, audience, request, 'backup_code')
+          return await respondWithToken(userId, record, db, device_uuid, platform, env, audience, request, riskClaims, 'backup_code')
         }
       }
     }
@@ -136,7 +141,7 @@ export async function onRequestPost({ request, env }) {
   return res({ error: 'Invalid OTP or backup code' }, 401)
 }
 
-async function respondWithToken(userId, record, db, deviceUuid, platform, env, audience, request, method) {
+async function respondWithToken(userId, record, db, deviceUuid, platform, env, audience, request, riskClaims, method) {
   const accessToken = await signJwt({
     sub:            String(userId),
     email:          record.email,
@@ -158,16 +163,21 @@ async function respondWithToken(userId, record, db, deviceUuid, platform, env, a
   `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt).run()
 
   // Phase D-4：登入完成 audit + 異常裝置警示
-  // Phase E-2：寫 ua_hash 到 audit（risk check 已在 local/login.js password 階段做過，此處不重複）
+  // Phase E-2：risk check 已在 local/login.js password 階段做過，此處不重算；
+  // 但把該階段塞進 pre_auth claims 的 risk 欄位帶過來，讓 audit 有完整 forensic
   if (request) {
     const uaHash = await hashUa(request.headers.get('User-Agent') ?? '').catch(() => null)
+    const riskData = riskClaims
+      ? { risk_score: riskClaims.score, risk_factors: riskClaims.factors }
+      : {}
     await safeUserAudit(env, {
       event_type: 'auth.login.success',
       user_id: userId, request,
       data: {
         method: method ?? 'totp',
-        country: request?.cf?.country ?? null,
+        country: riskClaims?.country ?? request?.cf?.country ?? null,
         ua_hash: uaHash,
+        ...riskData,
       },
     })
     await safeAlertAnomalies(env, request, {
