@@ -1304,8 +1304,12 @@ function renderDevices(devices) {
     return;
   }
   list.innerHTML = devices.map(d => {
-    const isWeb = d.device_uuid === null || d.device_uuid === undefined;
-    const label = isWeb ? T('device_label_web') : `${T('device_label_app')} · ${esc(String(d.device_uuid).slice(0, 8))}`;
+    const dev = d.device_uuid;
+    const isNull    = dev === null || dev === undefined;
+    const isBrowser = isNull || (typeof dev === 'string' && dev.startsWith('web-'));
+    const label = isBrowser
+      ? (isNull ? T('device_label_web') : `${T('device_label_web')} · ${esc(dev.slice(4, 12))}`)
+      : `${T('device_label_app')} · ${esc(String(dev).slice(0, 8))}`;
     const last  = formatRelative(d.last_seen);
     const dataAttr = isWeb ? 'data-device-uuid=""' : `data-device-uuid="${esc(d.device_uuid)}"`;
     return `
@@ -1323,16 +1327,20 @@ function renderDevices(devices) {
 }
 
 async function logoutDevice(deviceUuidAttr) {
-  const isWeb = deviceUuidAttr === '';
-  const device_uuid = isWeb ? null : deviceUuidAttr;
+  const isNullGroup = deviceUuidAttr === '';
+  const device_uuid = isNullGroup ? null : deviceUuidAttr;
+  // 判斷是不是「自己這台」— 對 NULL group / 自己 device_uuid 都算自己，要清 token + 跳 login
+  let myUuid = null;
+  try { myUuid = localStorage.getItem('chiyigo.device_uuid'); } catch (_) {}
+  const isMyOwnRow = isNullGroup || (myUuid && deviceUuidAttr === myUuid);
   try {
     await apiFetch('/api/auth/devices/logout', {
       method: 'POST',
       body:   JSON.stringify({ device_uuid }),
     });
     showBindToast(T('device_logout_success'), 'ok');
-    if (isWeb) {
-      // 撤的就是當下 web session → 自己也清掉
+    if (isMyOwnRow) {
+      // 撤的就是當下 session → 自己也清掉
       try { sessionStorage.removeItem('access_token'); } catch (_) {}
       try { if ('BroadcastChannel' in window) new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' }); } catch (_) {}
       setTimeout(() => { location.replace('/login.html?logout=device'); }, 800);
