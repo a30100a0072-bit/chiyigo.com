@@ -49,6 +49,7 @@
 /* ── Panel ── */
 .cp-panel{position:sticky;top:24px;border:1px solid var(--bd,rgba(255,255,255,.08));border-radius:14px;background:var(--bg,#0e1018);padding:24px;min-height:480px;max-height:78vh;overflow-y:auto}
 .cp-panel-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:48px 16px;color:var(--text-2,#9aa1b3);min-height:380px}
+.cp-panel-empty[hidden],.cp-panel-body[hidden]{display:none !important}
 .cp-panel-icon{font-size:36px;color:var(--accent);opacity:.5;margin-bottom:14px}
 .cp-panel-empty-text{font-size:14px;line-height:1.6;max-width:280px;margin:0}
 
@@ -100,8 +101,8 @@
   .cp-node{position:static;transform:none;justify-content:flex-start;width:100%;padding:14px 16px;border-radius:10px;white-space:normal;overflow-wrap:anywhere;line-height:1.4;text-align:left}
   .cp-node:hover{transform:none}
   .cp-node.active{transform:none}
-  .cp-node-core{order:-1;justify-content:center;margin-bottom:8px;padding:18px;font-size:15px}
-  .cp-node-core .cp-node-core-sub{display:inline;margin-left:8px;margin-top:0}
+  .cp-node-core{order:-1;justify-content:center;margin-bottom:8px;padding:18px;font-size:15px;text-align:center}
+  .cp-node-core .cp-node-core-sub{display:block;margin:4px 0 0;font-size:10px;opacity:.75}
   .cp-stats{grid-template-columns:repeat(2,1fr)}
   .cp-stack-grid{grid-template-columns:1fr 1fr}
   .cp-hero{padding:32px 20px 16px}
@@ -112,4 +113,12 @@
   .cp-stats{grid-template-columns:1fr 1fr}
   .cp-stack-grid{grid-template-columns:1fr}
   .cp-title{font-size:32px}
+}
+
+/* ── Reduced motion：關掉背景 canvas + 節點動畫 ── */
+@media (prefers-reduced-motion:reduce){
+  #neural-canvas{display:none}
+  .cp-node,.cp-lines line{transition:none}
+  .cp-node:hover{transform:translate(-50%,-50%)}
+  [data-reveal]{opacity:1;transform:none}
 }

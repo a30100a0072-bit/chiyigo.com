@@ -324,8 +324,9 @@ const revObs    = new IntersectionObserver(entries => {
 }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
 document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
 
-// ── Neural canvas (與 portfolio.js 同款) ──
+// ── Neural canvas (與 portfolio.js 同款；尊重 prefers-reduced-motion) ──
 (function(){
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
   const canvas=document.getElementById('neural-canvas');if(!canvas)return;
   const ctx=canvas.getContext('2d');if(!ctx)return;
   let W=0,H=0,nodes=[];const DIST=155;
