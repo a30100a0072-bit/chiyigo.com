@@ -1345,7 +1345,7 @@ async function logoutDevice(deviceUuidAttr) {
 }
 
 function passkeySupported() {
-  return typeof window.PublicKeyCredential === 'function' && window.isSecureContext !== false;
+  return typeof window.PublicKeyCredential === 'function' && location.protocol === 'https:';
 }
 
 async function loadPasskeys() {

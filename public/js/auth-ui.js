@@ -614,7 +614,7 @@ async function handleTotp(event) {
 // ── Phase D-3c：Passkey 登入入口 ─────────────────────────────────
 
 function passkeySupported() {
-  return typeof window.PublicKeyCredential === 'function' && window.isSecureContext !== false;
+  return typeof window.PublicKeyCredential === 'function' && location.protocol === 'https:';
 }
 
 function pkB64urlToBuf(s) {
