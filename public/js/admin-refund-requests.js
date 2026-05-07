@@ -23,7 +23,6 @@ const langDrop   = document.getElementById('lang-dropdown');
 langTogBtn?.addEventListener('click', e => { e.stopPropagation(); langDrop?.classList.toggle('open'); });
 document.addEventListener('click', () => langDrop?.classList.remove('open'));
 langDrop?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDrop.classList.remove('open'); });
-applyLangI(curLang);
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const getToken = () => sessionStorage.getItem(ACCESS_TOKEN_KEY);
@@ -236,4 +235,5 @@ document.getElementById('rd-confirm-btn').addEventListener('click', async () => 
   }, 800);
 });
 
+applyLangI(curLang);
 load();
