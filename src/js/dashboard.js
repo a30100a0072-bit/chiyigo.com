@@ -1334,10 +1334,16 @@ async function logoutDevice(deviceUuidAttr) {
   try { myUuid = localStorage.getItem('chiyigo.device_uuid'); } catch (_) {}
   const isMyOwnRow = isNullGroup || (myUuid && deviceUuidAttr === myUuid);
   try {
-    await apiFetch('/api/auth/devices/logout', {
+    const r = await apiFetch('/api/auth/devices/logout', {
       method: 'POST',
       body:   JSON.stringify({ device_uuid }),
     });
+    // race：另一個 tab 剛剛已撤完，這裡 revoked=0 → 不算成功，刷新就好
+    if (!r || r.revoked === 0) {
+      showBindToast(T('device_logout_already_revoked') || '此裝置已無有效 session', 'ok');
+      loadDevices();
+      return;
+    }
     showBindToast(T('device_logout_success'), 'ok');
     if (isMyOwnRow) {
       // 撤的就是當下 session → 自己也清掉

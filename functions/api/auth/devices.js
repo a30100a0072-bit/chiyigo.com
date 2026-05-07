@@ -14,6 +14,8 @@
  *
  * GET 回傳：
  *   200 → { devices: [{ device_uuid, last_seen, first_seen, active_count, total_count }] }
+ *   只列 active_count > 0 的 device — 全部 revoked 的 group 直接過濾掉，
+ *   避免 dashboard 持續顯示「0 使用中」row 看起來像「沒登出成功」。
  *
  * POST /logout：
  *   Body: { device_uuid: string | null }
@@ -52,6 +54,7 @@ export async function onRequestGet({ request, env }) {
          FROM refresh_tokens
         WHERE user_id = ?
         GROUP BY device_uuid
+       HAVING active_count > 0
         ORDER BY MAX(auth_time) DESC NULLS LAST`,
     )
     .bind(userId)
