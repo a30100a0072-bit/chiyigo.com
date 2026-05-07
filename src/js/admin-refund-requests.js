@@ -1,5 +1,8 @@
 // admin-refund-requests.js — 退款申請列表 + 審核
 
+let curStatus = 'pending';
+let _cache = [];
+
 // ── i18n ───────────────────────────────────────────────
 const LANGS_I18N = /*@i18n@*/{};
 let curLang = localStorage.getItem('lang') || 'zh-TW';
@@ -62,9 +65,6 @@ function showError(msg) {
   document.getElementById('error-msg').hidden = false;
   document.getElementById('error-text').textContent = `// error: ${msg}`;
 }
-
-let curStatus = 'pending';
-let _cache = [];
 
 document.querySelectorAll('.rr-tab').forEach(btn => {
   btn.addEventListener('click', () => {

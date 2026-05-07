@@ -25,7 +25,7 @@
         <a href="/admin-refund-requests.html" class="sb-item active">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 0 1 8.5-3.5L13 6M13 8a5 5 0 0 1-8.5 3.5L3 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M11 2v4h-4M5 14V10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="sb-label" data-i18n="nav_refund_requests">退款申請</span>
-          <span id="sb-rr-badge" class="action-badge" hidden style="margin-left:auto"></span>
+          <span id="sb-rr-badge" class="action-badge sb-badge-end" hidden></span>
         </a>
         <a href="/admin-payment-records.html" class="sb-item">
           <svg class="sb-icon" viewBox="0 0 16 16" fill="none"><path d="M2 4h12v8H2z" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="9.5" r="1" fill="currentColor"/></svg>
@@ -87,7 +87,7 @@
           </div>
 
           <div id="content" hidden>
-            <div class="filter-bar" style="margin-bottom:1rem">
+            <div class="filter-bar">
               <button class="rr-tab" data-st="pending"><span data-i18n="tab_pending">待審核</span> <span id="cnt-pending" class="action-badge" hidden></span></button>
               <button class="rr-tab" data-st="approved" data-i18n="tab_approved">已通過</button>
               <button class="rr-tab" data-st="rejected" data-i18n="tab_rejected">已拒絕</button>
@@ -111,7 +111,7 @@
       <div class="modal-body refund-modal-body">
         <p id="rd-summary" class="msg-block"></p>
         <p id="rd-note-label" class="msg-label">審核備註（選填）</p>
-        <input id="rd-note" type="text" maxlength="200" placeholder="備註會記錄到 audit log" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem">
+        <input id="rd-note" type="text" maxlength="200" placeholder="備註會記錄到 audit log" class="rd-note-input">
         <p class="msg-label">2FA OTP（執行金流動作必填）</p>
         <input id="rd-otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000">
         <p id="rd-msg" class="refund-msg"></p>

@@ -301,6 +301,8 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .modal-info-block .info-line .v{color:var(--text);user-select:all;word-break:break-all}
 
 .refund-modal-body input[type="text"]{width:100%;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:.6rem .85rem;font-size:.95rem;color:var(--text);font-family:var(--font-mono);letter-spacing:.18em;text-align:center}
+.refund-modal-body input.rd-note-input{text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem}
+.sb-badge-end{margin-left:auto}
 .refund-modal-body input[type="text"]:focus{outline:none;border-color:var(--accent)}
 .refund-modal-body .refund-msg{font-size:.78rem;min-height:1.1rem}
 .refund-modal-body .refund-msg.err{color:#dc2626}
