@@ -58,6 +58,18 @@ const TASKS = [
 
   // payment_webhook_events: 留 90 天（dedupe + 對帳追溯；同 KYC pattern）
   { name: 'payment_webhook_events', sql: `DELETE FROM payment_webhook_events WHERE processed_at < datetime('now', '-90 days')` },
+
+  // payment_intents stale pending：cashier 開了沒付的 intent（user 關掉視窗 / 改主意）
+  // 超過 24hr 還停在 pending → 標 canceled，避免 dashboard / admin 列表無限累積。
+  // ATM/CVS 取號後 status 已是 processing 不會被掃；succeeded/failed/refunded 也不動。
+  // 用 UPDATE 不 DELETE：保留對帳追溯。meta.changes 是 affected rows。
+  { name: 'payment_intents_stale_pending',
+    sql: `UPDATE payment_intents
+             SET status = 'canceled',
+                 updated_at = CURRENT_TIMESTAMP,
+                 metadata = json_set(COALESCE(metadata, '{}'), '$.canceled_reason', 'stale_pending_24hr')
+           WHERE status = 'pending'
+             AND created_at < datetime('now', '-24 hours')` },
 ]
 
 export async function onRequestPost({ request, env }) {
