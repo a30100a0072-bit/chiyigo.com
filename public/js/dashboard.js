@@ -1311,7 +1311,7 @@ function renderDevices(devices) {
       ? (isNull ? T('device_label_web') : `${T('device_label_web')} · ${esc(dev.slice(4, 12))}`)
       : `${T('device_label_app')} · ${esc(String(dev).slice(0, 8))}`;
     const last  = formatRelative(d.last_seen);
-    const dataAttr = isWeb ? 'data-device-uuid=""' : `data-device-uuid="${esc(d.device_uuid)}"`;
+    const dataAttr = isNull ? 'data-device-uuid=""' : `data-device-uuid="${esc(dev)}"`;
     return `
       <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3 flex items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
