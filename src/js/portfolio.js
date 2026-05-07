@@ -17,8 +17,9 @@ const CAT_LABEL = {
   'App':         'APP設計',
   'Integration': '企業應用整合',
   'Game':        '遊戲開發',
+  'Platform':    '平台 / 會員系統',
 };
-const CAT_ORDER = ['Web','System','AI','Analytics','App','Integration','Game'];
+const CAT_ORDER = ['Web','System','AI','Analytics','App','Integration','Game','Platform'];
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -139,6 +140,7 @@ function applyLang(lang) {
   CAT_LABEL['AI'] = t.cat_ai; CAT_LABEL['Analytics'] = t.cat_analytics;
   CAT_LABEL['App'] = t.cat_app; CAT_LABEL['Integration'] = t.cat_integration;
   CAT_LABEL['Game'] = t.cat_game;
+  CAT_LABEL['Platform'] = t.cat_platform;
   document.querySelectorAll('.lang-opt').forEach(b =>
     b.classList.toggle('active', b.dataset.lang === lang));
   document.querySelectorAll('.m-ov-lang-opt').forEach(b =>
