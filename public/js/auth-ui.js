@@ -789,6 +789,20 @@ window.addEventListener('pageshow', (event) => {
   clearTimeout(_pwdTimers['reg-confirm']);
 });
 
+// OAuth 按鈕（Discord / Google / LINE / Facebook）→ 寫一次性 cookie 帶 device_uuid
+// 給 callback 用。Cookie SameSite=Lax 可從 IdP 跨 site nav 帶回 callback。
+// 10min TTL；callback 寫進 refresh_tokens 後立即清掉（CLEAR_OAUTH_DEVICE_COOKIE）
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('.oauth-btn');
+  if (!btn) return;
+  var href = btn.getAttribute('href') || '';
+  if (!/^\/api\/auth\/oauth\//.test(href)) return;
+  var devId = _chiyigoGetDeviceUuid();
+  if (!devId) return;
+  document.cookie = 'chiyigo_oauth_device=' + encodeURIComponent(devId) +
+    '; Path=/; Max-Age=600; SameSite=Lax; Secure';
+});
+
 // Turnstile data-callback：token 簽完 → 標記所在 .ts-wrap is-ready，CSS 隱藏 hint。
 // 不用 setTimeout/poll；callback 由 widget 自己觸發。
 window.onTurnstileReady = function (_token, widgetId) {

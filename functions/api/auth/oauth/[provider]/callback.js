@@ -20,7 +20,7 @@ import { signJwt } from '../../../../utils/jwt.js'
 import { generateSecureToken, hashToken } from '../../../../utils/crypto.js'
 import { getProvider } from '../../../../utils/oauth-providers.js'
 import { resolveAud } from '../../../../utils/cors.js'
-import { refreshCookie } from '../../../../utils/cookies.js'
+import { refreshCookie, readOAuthDeviceCookie, CLEAR_OAUTH_DEVICE_COOKIE } from '../../../../utils/cookies.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
 import { safeAlertAnomalies } from '../../../../utils/device-alerts.js'
 import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../../utils/risk-score.js'
@@ -317,13 +317,18 @@ async function handle(context) {
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 86400_000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // Phase 2026-05-07 browser-level device identity：client JS 在按 OAuth 按鈕前
+  // 寫 chiyigo_oauth_device cookie；callback 取出後寫進 refresh_tokens 讓「我的裝置」
+  // 能拆開顯示桌面 / 手機 / 不同 browser。沒 cookie 退回 NULL 行為（舊 client 相容）。
+  const webDeviceUuid = readOAuthDeviceCookie(request)
+
   await db.prepare(`
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-    VALUES (?, ?, NULL, ?, datetime('now'))
-  `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
+    VALUES (?, ?, ?, ?, datetime('now'))
+  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt).run()
 
-  // Phase D-4：登入 audit + 異常裝置警示（OAuth 永遠 web，device_uuid=NULL → new device 自動跳過，
-  // 只跑 country jump 偵測）
+  // Phase D-4：登入 audit + 異常裝置警示。webDeviceUuid 有值 → 視作真實裝置，
+  // 觸發新裝置 email；NULL → 只跑 country jump（OAuth 舊行為）
   await safeUserAudit(env, {
     event_type: 'auth.login.success',
     user_id: userId, request,
@@ -336,7 +341,7 @@ async function handle(context) {
     },
   })
   await safeAlertAnomalies(env, request, {
-    userId, email: userRow.email, deviceUuid: null,
+    userId, email: userRow.email, deviceUuid: webDeviceUuid,
   })
 
   // PKCE 模式（從 mbti.chiyigo.com 發起）：回到登入頁讓 auth-ui.js 完成授權碼交換
@@ -374,14 +379,14 @@ try{sessionStorage.setItem('access_token',${safeToken});}catch(e){}
 })();
 </script></head><body></body></html>`
 
-  return new Response(html, {
-    status: 200,
-    headers: {
-      'Content-Type':  'text/html;charset=UTF-8',
-      'Cache-Control': 'no-store',
-      'Set-Cookie':    refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400),
-    },
+  const headers = new Headers({
+    'Content-Type':  'text/html;charset=UTF-8',
+    'Cache-Control': 'no-store',
   })
+  headers.append('Set-Cookie', refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400))
+  // 清掉 chiyigo_oauth_device（已轉存到 refresh_tokens.device_uuid，cookie 任務完成）
+  headers.append('Set-Cookie', CLEAR_OAUTH_DEVICE_COOKIE)
+  return new Response(html, { status: 200, headers })
 }
 
 // ── Token 換取 ────────────────────────────────────────────────────
