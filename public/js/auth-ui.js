@@ -51,6 +51,7 @@ const UI_I18N = {
   err_network:    { 'zh-TW':'網路錯誤，請檢查連線後重試', en:'Network error, please check your connection and retry', ja:'ネットワークエラーです。接続を確認してもう一度お試しください', ko:'네트워크 오류입니다. 연결을 확인하고 다시 시도해주세요' },
   err_pkce:       { 'zh-TW':'PKCE 授權失敗，請重試', en:'PKCE authorization failed, please try again', ja:'PKCE認可に失敗しました。もう一度お試しください', ko:'PKCE 인증에 실패했습니다. 다시 시도해주세요' },
   err_captcha_pending: { 'zh-TW':'人機驗證尚未完成，請稍候再點一次', en:'Captcha is still verifying, please wait and try again', ja:'ボット認証が完了していません。少々お待ちください', ko:'봇 검증이 아직 완료되지 않았습니다. 잠시만 기다려 주세요' },
+  ts_loading_hint: { 'zh-TW':'資安驗證準備中，可先填寫帳號與密碼', en:'Preparing security check — feel free to fill in your account and password', ja:'セキュリティ確認の準備中です。先にアカウントとパスワードをご入力いただけます', ko:'보안 확인 준비 중입니다. 계정과 비밀번호를 먼저 입력하셔도 됩니다' },
   // Phase D-3c：passkey 登入入口
   login_passkey_btn: { 'zh-TW':'用 Passkey 登入', en:'Sign in with Passkey', ja:'パスキーでログイン', ko:'Passkey로 로그인' },
   passkey_logging_in: { 'zh-TW':'請依瀏覽器提示完成驗證…', en:'Follow the browser prompt to continue…', ja:'ブラウザの指示に従って認証してください…', ko:'브라우저 안내에 따라 인증을 완료하세요…' },
@@ -757,3 +758,10 @@ window.addEventListener('pageshow', (event) => {
   clearTimeout(_pwdTimers['reg-password']);
   clearTimeout(_pwdTimers['reg-confirm']);
 });
+
+// Turnstile data-callback：token 簽完 → 標記所在 .ts-wrap is-ready，CSS 隱藏 hint。
+// 不用 setTimeout/poll；callback 由 widget 自己觸發。
+window.onTurnstileReady = function (_token, widgetId) {
+  const widgets = document.querySelectorAll('.ts-wrap');
+  widgets.forEach((w) => w.classList.add('is-ready'));
+};
