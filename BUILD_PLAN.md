@@ -153,7 +153,7 @@
 | 5 | 電商網站開發 | Web（網站設計）|
 | 7 | MBTI 認知幾何模型 | System（系統設計）|
 | 4 | AI 需求單助手（demo: `/ai-assistant.html`）| AI（AI解決方案）|
-| 6 | 量化數據分析儀表板 | Analytics（量化數據分析）|
+| — | CHIYIGO 會員系統（互動式架構展示 `/case-platform.html`）| Platform（平台 / 會員系統，首頁 svc4 直連）|
 | 8 | 健身紀錄 APP | App（APP設計）|
 | 9 | ERP 企業系統整合 | Integration（企業應用整合）|
 
