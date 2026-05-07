@@ -83,7 +83,7 @@ describe('utils/brute-force — isIpBlacklisted', () => {
     expect(await isIpBlacklisted(env.chiyigo_db, '1.1.1.1')).toBeNull()
   })
 
-  it('在黑名單且未過期 → 回 reason + expires', async () => {
+  it('[J-5] 在黑名單且未過期 → 回 reason + expires', async () => {
     const exp = new Date(Date.now() + 3600_000).toISOString().replace('T', ' ').slice(0, 19)
     await env.chiyigo_db.prepare(
       `INSERT INTO ip_blacklist (ip, reason, expires_at) VALUES (?, ?, ?)`,
@@ -94,7 +94,7 @@ describe('utils/brute-force — isIpBlacklisted', () => {
     expect(r?.reason).toBe('cross_user_scan')
   })
 
-  it('過期黑名單 → null（不擋）', async () => {
+  it('[J-5] 過期黑名單 → null（不擋）', async () => {
     const exp = new Date(Date.now() - 1000).toISOString().replace('T', ' ').slice(0, 19)
     await env.chiyigo_db.prepare(
       `INSERT INTO ip_blacklist (ip, reason, expires_at) VALUES (?, ?, ?)`,
@@ -162,7 +162,7 @@ describe('login.js E-4 接點', () => {
     expect(audit?.severity).toBe('critical')
   })
 
-  it('連續失敗 ≥3 次 → cooldown 攔下次嘗試', async () => {
+  it('[J-4] 連續失敗 ≥3 次 → cooldown 攔下次嘗試', async () => {
     await seedUser({ email: 'cd@x', password: 'GoodPass#1234' })
     // 3 筆同 email 失敗（不同 IP 避開 IP 限流）
     for (let i = 0; i < 3; i++) {
@@ -179,7 +179,7 @@ describe('login.js E-4 接點', () => {
     expect(body.retry_after).toBeGreaterThan(0)
   })
 
-  it('自動黑名單：同 IP 撞 10 個 distinct email → critical audit + 下次 IP 直接擋', async () => {
+  it('[J-3] 自動黑名單：同 IP 撞 10 個 distinct email → critical audit + 下次 IP 直接擋', async () => {
     // 預埋 9 筆 distinct email 從同 IP，之後 1 次密碼錯造成第 10 筆 → 觸發黑名單
     // 預埋 row 都用 5min 前的時間，避開 5/IP/min 但保留在 1hr scan window 內
     const ip = '13.13.13.13'

@@ -139,7 +139,7 @@ describe('POST /api/auth/step-up', () => {
     expect(row.used_at).not.toBeNull()
   })
 
-  it('Rate limit：3 次失敗後 429（Phase E3 改 3/min）', async () => {
+  it('[J-2] Rate limit：3 次失敗後 429（Phase E3 改 3/min）', async () => {
     const u = await seedUser({ email: 'rl@x' })
     await enableTotp(u.id, TEST_TOTP_SECRET)
     const tok = await userTokenWithScope(u.id)

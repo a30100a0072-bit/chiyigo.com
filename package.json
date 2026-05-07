@@ -13,6 +13,7 @@
     "test:cov": "vitest run --coverage",
     "test:int": "vitest run --config vitest.workers.config.js",
     "test:all": "npm test && npm run test:int",
+    "test:security:auth": "vitest run --config vitest.workers.config.js --testNamePattern=\"\\[J-\"",
     "lint": "eslint functions tests",
     "lint:handlers": "node scripts/lint-handlers.js"
   },
