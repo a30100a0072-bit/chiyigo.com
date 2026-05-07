@@ -97,7 +97,7 @@
   .cp-stage{aspect-ratio:auto;min-height:0;display:block;background:none;padding:0}
   .cp-lines{display:none}
   .cp-stage{display:flex;flex-direction:column;gap:8px}
-  .cp-node{position:static;transform:none;justify-content:flex-start;width:100%;padding:14px 16px;border-radius:10px}
+  .cp-node{position:static;transform:none;justify-content:flex-start;width:100%;padding:14px 16px;border-radius:10px;white-space:normal;overflow-wrap:anywhere;line-height:1.4;text-align:left}
   .cp-node:hover{transform:none}
   .cp-node.active{transform:none}
   .cp-node-core{order:-1;justify-content:center;margin-bottom:8px;padding:18px;font-size:15px}
