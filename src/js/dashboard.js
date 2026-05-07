@@ -2008,12 +2008,15 @@ function cancelPaymentForm() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const methodEl = document.getElementById('payment-method');
+  if (methodEl) methodEl.value = 'ALL';
   const msg = document.getElementById('payment-form-msg');
   if (msg) { msg.classList.add('hidden'); msg.textContent = ''; }
 }
 
 async function submitPaymentCheckout() {
   const amountEl = document.getElementById('payment-amount');
+  const methodEl = document.getElementById('payment-method');
   const descEl   = document.getElementById('payment-desc');
   const reqEl    = document.getElementById('payment-requisition');
   const msg      = document.getElementById('payment-form-msg');
@@ -2044,6 +2047,7 @@ async function submitPaymentCheckout() {
       method: 'POST',
       body: JSON.stringify({
         amount,
+        choose_payment: methodEl?.value || 'ALL',
         trade_desc: (descEl?.value || '').trim() || undefined,
         item_name:  (descEl?.value || '').trim() || undefined,
         metadata:   Object.keys(metadata).length ? metadata : undefined,

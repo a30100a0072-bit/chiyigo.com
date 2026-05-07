@@ -258,6 +258,19 @@ describe('POST /api/auth/payments/checkout/ecpay', () => {
     expect(intent.vendor_intent_id).toBe(body.vendor_intent_id)
     expect(intent.amount_subunit).toBe(1000)
   })
+
+  it('choose_payment=ATM → ECPay fields ChoosePayment=ATM', async () => {
+    const u = await seedUser({ email: 'c4@x' })
+    await setUserKycStatus(env, u.id, { status: KYC_STATUS.VERIFIED, vendor: 'mock' })
+    const tok = await userToken(u.id)
+    const resp = await checkoutHandler({
+      request: bearerJson('POST', 'https://chiyigo.com/api/auth/payments/checkout/ecpay', tok,
+        { amount: 100, choose_payment: 'ATM' }), env,
+    })
+    expect(resp.status).toBe(200)
+    const body = await resp.json()
+    expect(body.fields.ChoosePayment).toBe('ATM')
+  })
 })
 
 describe('端到端：checkout → ECPay webhook → succeeded', () => {
@@ -360,6 +373,67 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     expect(intent.status).toBe(PAYMENT_STATUS.PROCESSING)
     expect(intent.metadata?.payment_info?.method).toBe('atm')
     expect(intent.metadata?.payment_info?.v_account).toBe('9990001234567890')
+  })
+
+  it('checkout → CVS 取號 webhook → metadata.payment_info 寫進 intent', async () => {
+    const u = await seedUser({ email: 'cvs-e2e@x' })
+    await setUserKycStatus(env, u.id, { status: KYC_STATUS.VERIFIED, vendor: 'mock' })
+    const tok = await userToken(u.id)
+    const co = await checkoutHandler({
+      request: bearerJson('POST', 'https://chiyigo.com/api/auth/payments/checkout/ecpay', tok,
+        { amount: 300, choose_payment: 'CVS' }), env,
+    })
+    const { vendor_intent_id, intent_id } = await co.json()
+
+    const params = {
+      MerchantID: SANDBOX.MerchantID, MerchantTradeNo: vendor_intent_id,
+      RtnCode: '10100073', RtnMsg: 'CVS 取號成功', TradeNo: 'TN_CVS_E2E',
+      TradeAmt: '300', PaymentNo: 'LLL12345678',
+      ExpireDate: '2026/01/10 23:59:59',
+      PaymentType: 'CVS_CVS', TradeDate: '2026/01/01 12:00:00',
+    }
+    params.CheckMacValue = await ecpayCheckMacValue(params, SANDBOX.HashKey, SANDBOX.HashIV)
+    const wh = await webhookHandler({
+      request: ecpayWebhookReq(params), env, params: { vendor: 'ecpay' },
+    })
+    expect(await wh.text()).toBe('1|OK')
+
+    const intent = await getPaymentIntent(env, { id: intent_id })
+    expect(intent.status).toBe(PAYMENT_STATUS.PROCESSING)
+    expect(intent.metadata?.payment_info?.method).toBe('cvs')
+    expect(intent.metadata?.payment_info?.payment_no).toBe('LLL12345678')
+  })
+
+  it('checkout → BARCODE 取號 webhook → 三段條碼寫進 intent', async () => {
+    const u = await seedUser({ email: 'barcode-e2e@x' })
+    await setUserKycStatus(env, u.id, { status: KYC_STATUS.VERIFIED, vendor: 'mock' })
+    const tok = await userToken(u.id)
+    const co = await checkoutHandler({
+      request: bearerJson('POST', 'https://chiyigo.com/api/auth/payments/checkout/ecpay', tok,
+        { amount: 200, choose_payment: 'BARCODE' }), env,
+    })
+    const { vendor_intent_id, intent_id } = await co.json()
+
+    const params = {
+      MerchantID: SANDBOX.MerchantID, MerchantTradeNo: vendor_intent_id,
+      RtnCode: '10100073', RtnMsg: 'Barcode 取號成功', TradeNo: 'TN_BARCODE_E2E',
+      TradeAmt: '200',
+      Barcode1: 'BC1XX', Barcode2: 'BC2YY', Barcode3: 'BC3ZZ',
+      ExpireDate: '2026/01/10',
+      PaymentType: 'BARCODE_BARCODE', TradeDate: '2026/01/01 12:00:00',
+    }
+    params.CheckMacValue = await ecpayCheckMacValue(params, SANDBOX.HashKey, SANDBOX.HashIV)
+    const wh = await webhookHandler({
+      request: ecpayWebhookReq(params), env, params: { vendor: 'ecpay' },
+    })
+    expect(await wh.text()).toBe('1|OK')
+
+    const intent = await getPaymentIntent(env, { id: intent_id })
+    expect(intent.status).toBe(PAYMENT_STATUS.PROCESSING)
+    expect(intent.metadata?.payment_info?.method).toBe('barcode')
+    expect(intent.metadata?.payment_info?.barcode_1).toBe('BC1XX')
+    expect(intent.metadata?.payment_info?.barcode_2).toBe('BC2YY')
+    expect(intent.metadata?.payment_info?.barcode_3).toBe('BC3ZZ')
   })
 
   it('簽章錯 → 回 "0|signature_invalid" + audit warn', async () => {

@@ -371,6 +371,17 @@
                 class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[#2a2a35] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
             </div>
             <div>
+              <label class="block text-xs text-gray-400 mb-1" data-i18n="payment_method_label">付款方式</label>
+              <select id="payment-method"
+                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[#2a2a35] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white transition-all outline-none">
+                <option value="ALL" data-i18n="payment_method_all">全部（綠界選擇）</option>
+                <option value="Credit" data-i18n="payment_method_credit">信用卡</option>
+                <option value="ATM" data-i18n="payment_method_atm">ATM 轉帳</option>
+                <option value="CVS" data-i18n="payment_method_cvs">超商代碼</option>
+                <option value="BARCODE" data-i18n="payment_method_barcode">超商條碼</option>
+              </select>
+            </div>
+            <div>
               <label class="block text-xs text-gray-400 mb-1" data-i18n="payment_desc_label">描述（顯示在綠界）</label>
               <input id="payment-desc" type="text" maxlength="100" placeholder="例如：chiyigo 服務充值"
                 data-i18n-ph="payment_desc_ph"

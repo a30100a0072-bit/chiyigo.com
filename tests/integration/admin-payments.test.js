@@ -113,6 +113,38 @@ describe('GET /api/admin/payments/intents', () => {
     expect(body.total).toBe(1)
     expect(body.rows[0].user_id).toBe(u1.id)
   })
+
+  it('vendor=ecpay + date range filters rows and totals', async () => {
+    const a = await seedUser({ email: 'a4@x', role: 'admin' })
+    const u = await seedUser({ email: 'u4@x' })
+    const inRange = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'date_in',
+      currency: 'TWD', amount_subunit: 100, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    const outRange = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'date_out',
+      currency: 'TWD', amount_subunit: 200, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'mock_in',
+      currency: 'TWD', amount_subunit: 300, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    await env.chiyigo_db.prepare(`UPDATE payment_intents SET created_at = ? WHERE id = ?`)
+      .bind('2026-01-15 00:00:00', inRange).run()
+    await env.chiyigo_db.prepare(`UPDATE payment_intents SET created_at = ? WHERE id = ?`)
+      .bind('2026-02-15 00:00:00', outRange).run()
+
+    const tok = await adminToken(a.id)
+    const resp = await listHandler({
+      request: bearer('GET', 'http://x/?vendor=ecpay&from=2026-01-01&to=2026-02-01', tok),
+      env,
+    })
+    expect(resp.status).toBe(200)
+    const body = await resp.json()
+    expect(body.total).toBe(1)
+    expect(body.rows[0].vendor_intent_id).toBe('date_in')
+    expect(body.totals.sum_subunit_succeeded).toBe(100)
+  })
 })
 
 describe('POST /api/admin/payments/intents/:id/refund', () => {

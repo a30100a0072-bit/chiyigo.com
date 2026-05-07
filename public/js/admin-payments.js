@@ -197,10 +197,14 @@ function renderCards(rows) {
   if (!rows.length) { c.innerHTML = `<div class="empty">${esc(t.empty_text)}</div>`; return; }
   c.innerHTML = rows.map(r => {
     const status = String(r.status);
-    const canRefund = status === 'succeeded' && r.vendor === 'ecpay';
+    const isRefundPending = r.refund_request_status === 'pending';
+    const canRefund = status === 'succeeded' && r.vendor === 'ecpay' && !isRefundPending;
     const actions = canRefund
       ? `<button class="pay-action-btn" data-action="open-refund" data-intent-id="${r.id}" style="margin-top:.6rem">${esc(t.action_refund)}</button>`
       : '';
+    const statusBadge = isRefundPending
+      ? `<span class="pay-badge refund-pending">申請退款</span>`
+      : `<span class="pay-badge ${status}">${esc(t['status_' + status] || status)}</span>`;
     return `
       <div class="req-card" data-action="open-detail" data-intent-id="${r.id}">
         <div class="row">
@@ -208,7 +212,7 @@ function renderCards(rows) {
             <span class="name">#${r.id} · user ${esc(r.user_id)}</span>
             <span class="company">${esc(r.vendor)}</span>
           </div>
-          <span class="pay-badge ${status}">${esc(t['status_' + status] || status)}</span>
+          ${statusBadge}
         </div>
         <div class="row" style="font-family:var(--font-mono);font-size:.78rem">${formatAmount(r)}</div>
         <div class="when">${esc(formatDate(r.created_at))}</div>
@@ -274,8 +278,9 @@ function openDetail(id) {
   const t = T();
   const meta = parseMeta(row);
   let metaHtml = '';
-  if (meta?.requisition_id) {
-    metaHtml += `<div class="modal-row"><span class="lbl">${esc(t.detail_requisition)}</span><span class="val mono">#${esc(meta.requisition_id)}</span></div>`;
+  const requisitionId = row.requisition_id ?? meta?.requisition_id;
+  if (requisitionId) {
+    metaHtml += `<div class="modal-row"><span class="lbl">${esc(t.detail_requisition)}</span><span class="val mono">#${esc(requisitionId)}</span></div>`;
   }
   if (meta?.payment_info) {
     const info = meta.payment_info;
