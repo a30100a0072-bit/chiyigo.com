@@ -5,6 +5,7 @@ const I18N = {
     success_title:'信件已送出', success_desc:'如果該信箱已註冊，你將在幾分鐘內收到重設連結。\n連結有效期為 1 小時。',
     footer_note:'你的資料由 CHIYIGO 安全保管，100% 資料主權。',
     loading:'送出中…', err_generic:'請求失敗，請稍後再試。', err_network:'網路錯誤，請檢查連線後重試。',
+    err_captcha_pending:'請先完成人機驗證。',
   },
   en: {
     back_login:'Back to login', title:'Forgot Password', subtitle:'Enter your registered email; we will send a reset link.',
@@ -12,6 +13,7 @@ const I18N = {
     success_title:'Email sent', success_desc:'If this email is registered, you will receive a reset link in a few minutes.\nThe link is valid for 1 hour.',
     footer_note:'Your data is securely held by CHIYIGO — 100% data sovereignty.',
     loading:'Sending…', err_generic:'Request failed, please try again later.', err_network:'Network error, please check your connection.',
+    err_captcha_pending:'Please complete the CAPTCHA first.',
   },
   ja: {
     back_login:'ログインに戻る', title:'パスワードをお忘れですか', subtitle:'登録メールアドレスを入力してください。再設定リンクをお送りします。',
@@ -19,6 +21,7 @@ const I18N = {
     success_title:'メールを送信しました', success_desc:'登録済みのメールアドレスであれば、数分以内に再設定リンクが届きます。\n有効期限は1時間です。',
     footer_note:'あなたのデータはCHIYIGOで安全に保管されます。データ主権100%。',
     loading:'送信中…', err_generic:'リクエストに失敗しました。後でもう一度お試しください。', err_network:'ネットワークエラーです。接続を確認してください。',
+    err_captcha_pending:'先に認証を完了してください。',
   },
   ko: {
     back_login:'로그인으로 돌아가기', title:'비밀번호를 잊으셨나요', subtitle:'가입된 이메일을 입력하시면 재설정 링크를 보내드립니다.',
@@ -26,6 +29,7 @@ const I18N = {
     success_title:'이메일을 보냈습니다', success_desc:'등록된 이메일이라면 몇 분 안에 재설정 링크가 도착합니다.\n링크는 1시간 동안 유효합니다.',
     footer_note:'귀하의 데이터는 CHIYIGO에서 안전하게 보관됩니다 — 데이터 주권 100%.',
     loading:'전송 중…', err_generic:'요청이 실패했습니다. 잠시 후 다시 시도해 주세요.', err_network:'네트워크 오류입니다. 연결을 확인해 주세요.',
+    err_captcha_pending:'먼저 캡차 인증을 완료해 주세요.',
   },
 };
 
@@ -72,6 +76,15 @@ async function handleSubmit(e) {
   const orig  = btn.textContent;
 
   setMsg('');
+
+  // Turnstile token：widget 把 token 寫進隱藏 input[name="cf-turnstile-response"]
+  const tsToken = document.querySelector('#form-forgot [name="cf-turnstile-response"]')?.value || '';
+  const hasTsWidget = !!document.querySelector('#form-forgot .cf-turnstile');
+  if (hasTsWidget && !tsToken) {
+    setMsg(T('err_captcha_pending'), 'error');
+    return;
+  }
+
   btn.disabled = true;
   btn.textContent = T('loading');
 
@@ -79,7 +92,7 @@ async function handleSubmit(e) {
     const res = await fetch('/api/auth/local/forgot-password', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email }),
+      body:    JSON.stringify({ email, 'cf-turnstile-response': tsToken }),
     });
 
     if (res.ok) {
