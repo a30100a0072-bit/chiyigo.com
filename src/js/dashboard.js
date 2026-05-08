@@ -2110,41 +2110,7 @@ function redirectToEcpay(url, fields) {
 // ── Phase C-3 unified click delegation ──
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
-// 密碼欄位顯示/隱藏（10s 自動回隱藏，跟 login 頁同 UX）
-const _pwdTimers = {};
-const PWD_HIDE_MS = 10_000;
-const EYE_OPEN_PATH  = '<path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>';
-const EYE_CLOSE_PATH = '<path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>';
-function togglePassword(inputId, btnId) {
-  const input = document.getElementById(inputId);
-  const btn   = document.getElementById(btnId);
-  const icon  = document.getElementById(btnId + '-icon');
-  if (!input || !btn) return;
-  if (input.type === 'password') {
-    input.type = 'text';
-    btn.classList.add('eye-active');
-    if (icon) icon.innerHTML = EYE_CLOSE_PATH;
-    clearTimeout(_pwdTimers[inputId]);
-    _pwdTimers[inputId] = setTimeout(() => hidePassword(inputId, btnId), PWD_HIDE_MS);
-  } else {
-    hidePassword(inputId, btnId);
-  }
-}
-function hidePassword(inputId, btnId) {
-  const input = document.getElementById(inputId);
-  const btn   = document.getElementById(btnId);
-  const icon  = document.getElementById(btnId + '-icon');
-  if (input) input.type = 'password';
-  if (btn)   btn.classList.remove('eye-active');
-  if (icon)  icon.innerHTML = EYE_OPEN_PATH;
-  clearTimeout(_pwdTimers[inputId]);
-}
-
 document.addEventListener('click', e => {
-  // 密碼眼睛切換（最先處理；data-toggle-pwd 不會跟其他 action 重疊）
-  const eyeBtn = e.target.closest('[data-toggle-pwd]');
-  if (eyeBtn) { togglePassword(eyeBtn.dataset.togglePwd, eyeBtn.dataset.toggleEye); return; }
-
   const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-refund-intent], [data-req-open-id]');
   if (!t) return;
   // List 上的 revoked 永久刪除按鈕（要在 reqOpenId 之前，因為按鈕在 row 內）
