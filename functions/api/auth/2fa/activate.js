@@ -78,6 +78,9 @@ export async function onRequestPost({ request, env }) {
   }
 
   // ── 4a. 驗 current_password（先驗，OTP 錯也算入限流）─────────
+  // 注意：用 403（不是 401）— authenticated 但 credential 驗證失敗。
+  // 401 留給 access_token 無效；前端 apiFetch 對 401 自動 silent-refresh + retry，
+  // 若這裡回 401，密碼錯會被誤判為 session expired → 把 user 踢下線（2026-05-08 fix）
   const passwordOk = await verifyPassword(current_password, account.password_salt, account.password_hash)
   if (!passwordOk) {
     await recordRateLimit(db, { kind: '2fa_activate', userId, ip })
@@ -85,7 +88,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'mfa.totp.activate.fail', severity: 'warn',
       user_id: userId, request, data: { reason_code: 'bad_password' },
     })
-    return res({ error: 'Invalid current password' }, 401)
+    return res({ error: 'Invalid current password', code: 'BAD_PASSWORD' }, 403)
   }
 
   // ── 4b. 驗證 OTP（±1 period window 容許時鐘偏差）────────────
@@ -103,7 +106,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'mfa.totp.activate.fail', severity: 'warn',
       user_id: userId, request, data: { reason_code: 'bad_otp' },
     })
-    return res({ error: 'Invalid OTP code' }, 401)
+    return res({ error: 'Invalid OTP code', code: 'BAD_OTP' }, 403)
   }
 
   await clearRateLimit(db, { kind: '2fa_activate', userId })
