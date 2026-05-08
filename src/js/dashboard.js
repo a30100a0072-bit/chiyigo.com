@@ -2111,6 +2111,10 @@ function redirectToEcpay(url, fields) {
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
 document.addEventListener('click', e => {
+  // 密碼眼睛切換（最先處理；togglePassword/hidePassword 由 auth-ui.js 提供全域函式，不要重複宣告 _pwdTimers）
+  const eyeBtn = e.target.closest('[data-toggle-pwd]');
+  if (eyeBtn) { togglePassword(eyeBtn.dataset.togglePwd, eyeBtn.dataset.toggleEye); return; }
+
   const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-refund-intent], [data-req-open-id]');
   if (!t) return;
   // List 上的 revoked 永久刪除按鈕（要在 reqOpenId 之前，因為按鈕在 row 內）
