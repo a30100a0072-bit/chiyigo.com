@@ -165,7 +165,7 @@ async function loadProfile() {
         span.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[#5865F2]/15 text-[#5865F2] border border-[#5865F2]/20';
         span.textContent = 'Discord';
       } else if (p === 'local') {
-        span.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-500/15 text-gray-300 border border-gray-500/20';
+        span.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-500/15 text-[var(--text)] border border-gray-500/20';
         span.textContent = T('provider_local');
       } else {
         span.className = 'text-xs text-gray-500';
@@ -320,7 +320,7 @@ function renderRequisitions(list) {
       <div data-req-open-id="${r.id}" class="flex items-center justify-between px-5 py-3.5 gap-3 cursor-pointer hover:bg-white/[0.02] transition-colors">
         <div class="flex items-center gap-2 min-w-0">
           <span class="text-xs text-gray-600 shrink-0">#${r.id}</span>
-          <span class="text-sm text-white truncate">${esc(r.service_type)}</span>
+          <span class="text-sm text-[var(--text)] truncate">${esc(r.service_type)}</span>
           <span class="text-xs text-gray-500 shrink-0">${date}</span>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -434,10 +434,10 @@ async function openRequisitionDetail(id) {
     ['公司',     row.company || '—'],
   ];
   const rowsHtml = fields.map(([k,v]) =>
-    `<div class="flex gap-3 text-sm"><span class="w-16 text-gray-500 shrink-0">${k}</span><span class="text-white break-all">${esc(v ?? '—')}</span></div>`
+    `<div class="flex gap-3 text-sm"><span class="w-16 text-gray-500 shrink-0">${k}</span><span class="text-[var(--text)] break-all">${esc(v ?? '—')}</span></div>`
   ).join('');
   const msgHtml = row.message
-    ? `<div class="mt-2"><p class="text-xs text-gray-500 mb-1">需求說明</p><p class="text-sm text-white whitespace-pre-wrap break-words bg-[var(--bg-elevated)] border border-[var(--border-bright)] rounded-lg px-3 py-2">${esc(row.message)}</p></div>`
+    ? `<div class="mt-2"><p class="text-xs text-gray-500 mb-1">需求說明</p><p class="text-sm text-[var(--text)] whitespace-pre-wrap break-words bg-[var(--bg-elevated)] border border-[var(--border-bright)] rounded-lg px-3 py-2">${esc(row.message)}</p></div>`
     : '';
   // 串付款狀態
   const payments = row.linked_payments ?? [];
@@ -451,7 +451,7 @@ async function openRequisitionDetail(id) {
            const when = p.created_at ? formatRelative(p.created_at) : '';
            return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-bright)] text-xs">
              <span class="text-gray-400">#${p.id} · ${esc(p.vendor)}</span>
-             <span class="text-white font-mono">${amt}</span>
+             <span class="text-[var(--text)] font-mono">${amt}</span>
              <span class="px-2 py-0.5 rounded-full text-xs font-semibold border ${cls}">${esc(lbl)}</span>
            </div>`;
          }).join('')}</div></div>`;
@@ -465,7 +465,7 @@ async function openRequisitionDetail(id) {
   modal.innerHTML = `
     <div class="relative w-full max-w-md rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] p-5">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-base font-semibold text-white">需求單 #${row.id}</h3>
+        <h3 class="text-base font-semibold text-[var(--text)]">需求單 #${row.id}</h3>
         <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${s.cls}">${s.text}</span>
       </div>
       <div class="space-y-2">${rowsHtml}</div>
@@ -475,7 +475,7 @@ async function openRequisitionDetail(id) {
       <div class="flex justify-end gap-2 mt-4">
         ${delBtn}
         <button data-action="req-detail-close"
-          class="px-3 py-1.5 rounded-lg bg-[#1a1a22] hover:bg-[#23232c] border border-[var(--border-bright)] text-gray-300 text-xs transition-all">關閉</button>
+          class="px-3 py-1.5 rounded-lg bg-[#1a1a22] hover:bg-[#23232c] border border-[var(--border-bright)] text-[var(--text)] text-xs transition-all">關閉</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -707,7 +707,7 @@ function renderBindingSection(identities) {
       <div class="flex items-center justify-between px-5 py-3.5">
         <div class="flex items-center gap-2 min-w-0">
           ${dot}
-          <span class="text-sm font-medium text-white">${label}</span>
+          <span class="text-sm font-medium text-[var(--text)]">${label}</span>
           ${linked && displayName
             ? `<span class="text-xs text-gray-500 truncate max-w-[120px]">${esc(displayName)}</span>`
             : ''}
@@ -853,7 +853,7 @@ async function confirmEnable2FA() {
     });
     const codesEl = document.getElementById('tfa-backup-codes');
     codesEl.innerHTML = data.backup_codes.map(c =>
-      `<code class="block text-center text-xs font-mono bg-[var(--bg)] border border-[var(--border-bright)] rounded-lg px-2 py-1.5 text-gray-300 select-all">${c}</code>`
+      `<code class="block text-center text-xs font-mono bg-[var(--bg)] border border-[var(--border-bright)] rounded-lg px-2 py-1.5 text-[var(--text)] select-all">${c}</code>`
     ).join('');
     render2FASection(true);
     window.__totpEnabled = true;
@@ -1380,7 +1380,7 @@ function renderDevices(devices) {
     return `
       <div class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3 flex items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
-          <p class="text-sm font-medium text-white truncate">${label}</p>
+          <p class="text-sm font-medium text-[var(--text)] truncate">${label}</p>
           <p class="text-xs text-gray-500 mt-0.5">${T('device_last_seen_label')}：${esc(last)} · ${d.active_count} ${T('device_active_label')}</p>
         </div>
         <button type="button" data-action="logout-device" ${dataAttr}
@@ -1464,12 +1464,12 @@ function renderPasskeys(creds) {
       <div id="pk-row-${c.id}" class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium text-white truncate" id="pk-nickname-${c.id}">${esc(nickname)}</p>
+            <p class="text-sm font-medium text-[var(--text)] truncate" id="pk-nickname-${c.id}">${esc(nickname)}</p>
             <p class="text-xs text-gray-500 mt-0.5">${T('passkey_last_used_label')}：${esc(lastUsed)} · ${esc(transports)}</p>
           </div>
           <div class="shrink-0 flex gap-2">
             <button type="button" data-action="passkey-rename-open" data-passkey-id="${c.id}"
-              class="px-3 py-1.5 rounded-lg border border-[var(--border-bright)] hover:bg-[#1f1f28] text-gray-300 text-xs font-semibold transition-all">
+              class="px-3 py-1.5 rounded-lg border border-[var(--border-bright)] hover:bg-[#1f1f28] text-[var(--text)] text-xs font-semibold transition-all">
               ${T('passkey_rename_btn')}
             </button>
             <button type="button" data-action="passkey-remove-open" data-passkey-id="${c.id}"
@@ -1481,7 +1481,7 @@ function renderPasskeys(creds) {
         <div id="pk-rename-${c.id}" class="hidden mt-3 space-y-2">
           <input id="pk-name-${c.id}" type="text" maxlength="64" value="${esc(nickname)}"
             placeholder="${T('passkey_rename_ph')}"
-            class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40" />
+            class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-[var(--text)] text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40" />
           <p id="pk-rename-msg-${c.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">
             <button type="button" data-action="passkey-rename-cancel" data-passkey-id="${c.id}"
@@ -1498,7 +1498,7 @@ function renderPasskeys(creds) {
           <p class="text-xs text-amber-300">${T('passkey_remove_hint')}</p>
           <input id="pk-otp-${c.id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
             placeholder="${T('passkey_remove_otp_ph')}"
-            class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
+            class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-[var(--text)] text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
           <p id="pk-msg-${c.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">
             <button type="button" data-action="passkey-remove-cancel" data-passkey-id="${c.id}"
@@ -1714,7 +1714,7 @@ function renderWallets(wallets) {
       <div id="wl-row-${w.id}" class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium text-white truncate font-mono">${display}</p>
+            <p class="text-sm font-medium text-[var(--text)] truncate font-mono">${display}</p>
             <p class="text-xs text-gray-500 mt-0.5">${esc(chainLabel(w.chain_id))} · ${T('wallet_signed_at_label')}：${esc(signedAt)}</p>
           </div>
           <button type="button" data-action="wallet-remove-open" data-wallet-id="${w.id}"
@@ -1726,7 +1726,7 @@ function renderWallets(wallets) {
           <p class="text-xs text-amber-300">${T('wallet_remove_hint')}</p>
           <input id="wl-otp-${w.id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
             placeholder="${T('wallet_remove_otp_ph')}"
-            class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
+            class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-[var(--text)] text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
           <p id="wl-msg-${w.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">
             <button type="button" data-action="wallet-remove-cancel" data-wallet-id="${w.id}"
@@ -1958,7 +1958,7 @@ function renderDeals(rows) {
     return `
       <div class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3 mb-1.5">
-          <span class="text-sm font-semibold text-white">#${d.id} · ${esc(d.service_type || '接案')}</span>
+          <span class="text-sm font-semibold text-[var(--text)]">#${d.id} · ${esc(d.service_type || '接案')}</span>
           <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-emerald-500/15 text-emerald-300 border-emerald-500/40">✓ 已成交</span>
         </div>
         <div class="text-xs text-gray-400 space-y-0.5">
@@ -2062,7 +2062,7 @@ function renderPayments(items) {
       <div class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium text-white">${esc(kindLabel)} · ${amount}</p>
+            <p class="text-sm font-medium text-[var(--text)]">${esc(kindLabel)} · ${amount}</p>
             <p class="text-xs text-gray-500 mt-0.5">${esc(p.vendor)} · ${esc(when)}</p>
             ${reqLine}
           </div>
