@@ -207,8 +207,6 @@ input:-webkit-autofill:active {
 /* 密碼欄位顯示/隱藏（套用 login 同一視覺）*/
 .field-input-wrap{position:relative}
 .field-input-wrap .field-input{padding-right:2.75rem}
-.eye-btn{position:absolute;right:.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#9ca3af;padding:.25rem;display:flex;align-items:center;transition:color .18s ease}
-.eye-btn:hover,.eye-btn.eye-active{color:#a78bfa}
+.eye-btn{position:absolute;right:.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-dim);padding:.25rem;display:flex;align-items:center;transition:color .18s ease}
+.eye-btn:hover,.eye-btn.eye-active{color:var(--accent)}
 .eye-btn svg{width:18px;height:18px}
-.theme-light .eye-btn{color:#6b7280}
-.theme-light .eye-btn:hover,.theme-light .eye-btn.eye-active{color:#7c3aed}
