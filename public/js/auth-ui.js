@@ -188,7 +188,12 @@ function getToken() {
 }
 
 // 以 HttpOnly Cookie 靜默換取新 access_token，成功回傳 true
+// P0-11：全站收斂 — 委派給 api.js 的 window.silentRefresh（含 navigator.locks 跨 tab 序列化）
 async function refreshAccessToken() {
+  if (typeof window !== 'undefined' && typeof window.silentRefresh === 'function') {
+    return window.silentRefresh();
+  }
+  // fallback：api.js 還沒 load（同頁 script 順序保證罕見）→ 直接打一次
   try {
     const _devId = _chiyigoGetDeviceUuid();
     const res = await fetch('/api/auth/refresh', {

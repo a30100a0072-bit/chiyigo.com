@@ -53,28 +53,49 @@
     try { return sessionStorage.getItem('access_token') } catch { return null }
   }
 
-  // 內部 silent refresh：用 HttpOnly cookie 換新 access_token；只此一處 implementation
-  // 防 thundering herd：同時多個請求 401 時共用同一顆 Promise，避免並發 refresh
+  // 內部 silent refresh：用 HttpOnly cookie 換新 access_token；
+  // P0-11：全站收斂到此單一 implementation —
+  //   1. tab 內 _refreshInflight 共用同一 Promise（thundering herd）
+  //   2. 跨 tab 用 navigator.locks('chiyigo-auth-refresh')，避免多分頁同時 rotate
+  //      導致第一個 refresh 拿到的 token 被第二個請求 revoke（device-bound rotation）
+  // 公開為 window.silentRefresh，auth-ui.js / sidebar-auth.js / dashboard.js 全走這個。
+  const LOCK_NAME = 'chiyigo-auth-refresh'
   let _refreshInflight = null
+
+  async function _doRefreshOnce() {
+    try {
+      const _devId = _chiyigoGetDeviceUuid()
+      const r = await fetch('/api/auth/refresh', {
+        method: 'POST', credentials: 'include',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, _devId ? { 'X-Device-Id': _devId } : {}),
+        body: '{}',
+      })
+      if (!r.ok) return false
+      const data = await r.json().catch(() => null)
+      if (data?.access_token) {
+        try { sessionStorage.setItem('access_token', data.access_token) } catch { /* ignore */ }
+        return true
+      }
+      return false
+    } catch { return false }
+  }
+
   async function _silentRefresh() {
     if (_refreshInflight) return _refreshInflight
     _refreshInflight = (async () => {
       try {
-        const _devId = _chiyigoGetDeviceUuid()
-        const r = await fetch('/api/auth/refresh', {
-          method: 'POST', credentials: 'include',
-          headers: Object.assign({ 'Content-Type': 'application/json' }, _devId ? { 'X-Device-Id': _devId } : {}),
-          body: '{}',
-        })
-        if (!r.ok) return false
-        const data = await r.json().catch(() => null)
-        if (data?.access_token) {
-          try { sessionStorage.setItem('access_token', data.access_token) } catch { /* ignore */ }
-          return true
+        if (typeof navigator !== 'undefined' && navigator.locks) {
+          // 進到 lock 後再檢一次：別的分頁可能在我等 lock 時已 rotate 並把 token broadcast 過來
+          return await navigator.locks.request(LOCK_NAME, { mode: 'exclusive' }, async () => {
+            try {
+              const tok = sessionStorage.getItem('access_token')
+              if (tok) return true
+            } catch { /* ignore */ }
+            return _doRefreshOnce()
+          })
         }
-        return false
-      } catch { return false }
-      finally { setTimeout(() => { _refreshInflight = null }, 0) }
+        return await _doRefreshOnce()
+      } finally { setTimeout(() => { _refreshInflight = null }, 0) }
     })()
     return _refreshInflight
   }

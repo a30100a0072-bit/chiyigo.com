@@ -67,7 +67,18 @@
   }
 
   // 跑一次 /api/auth/refresh；成功 → 寫 token + 廣播 + re-apply UI
+  // P0-11：委派給 api.js 的 window.silentRefresh（含 navigator.locks）；
+  // 成功後自己讀回 token 廣播 + 套 UI
   async function doRefresh() {
+    if (typeof window.silentRefresh === 'function') {
+      var ok = await window.silentRefresh();
+      if (ok) {
+        var t = readToken();
+        if (t) { broadcastLogin(t); applyAuthState(); return true; }
+      }
+      return false;
+    }
+    // fallback（罕見：api.js 未 load）
     try {
       var _devId = _chiyigoGetDeviceUuid();
       var _hdrs = { 'Content-Type': 'application/json' };
@@ -134,6 +145,12 @@
         } else if (e.data.type === 'logout') {
           writeToken(null);
           applyAuthState();
+          // P0-12：私密頁要立刻跳 login，避免連鎖 401（公開頁僅切 UI）
+          var path = location.pathname;
+          var isPublic = path === '/' || path === '' || path.startsWith('/login') ||
+                         path.startsWith('/index') || path.startsWith('/forgot-password') ||
+                         path.startsWith('/reset-password') || path.startsWith('/verify-email');
+          if (!isPublic) location.replace('/login.html?logout=other_tab');
         }
       });
     }

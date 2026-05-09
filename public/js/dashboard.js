@@ -117,10 +117,12 @@ async function loadProfile() {
       }
     }
 
+    // P0-13：403 不當登出（403 ≠ 過期）。/api/auth/me 在被 ban / role 降級時會回 403，
+    // 這時 throw 出去顯示 error-card，留 user 在頁上自己處理；登出走自家 logout 流程。
     if (res.status === 403) {
-      sessionStorage.removeItem('access_token');
-      window.location.href = '/login.html';
-      return;
+      const body = await res.json().catch(() => ({}));
+      console.warn('[loadProfile] 403', body, 'traceId=', res.headers.get('X-Request-Id'));
+      throw new Error(body.error || 'Forbidden');
     }
 
     if (!res.ok) {
@@ -221,6 +223,20 @@ async function loadProfile() {
 }
 
 loadProfile();
+
+// P0-12：跨 tab 登出同步 — 別的分頁登出 → dashboard 私密頁立刻跳 login，
+// 不要等下次 fetch 撞 401（避免連鎖 401 + sidebar-auth 只清 UI 不踢人）
+;(function () {
+  if (!('BroadcastChannel' in window)) return;
+  try {
+    const ch = new BroadcastChannel('chiyigo-auth');
+    ch.addEventListener('message', e => {
+      if (!e?.data || e.data.type !== 'logout') return;
+      try { sessionStorage.removeItem('access_token'); } catch (_) {}
+      location.replace('/login.html?logout=other_tab');
+    });
+  } catch (_) {}
+})();
 
 // ── HTML 轉義 helper（防 XSS）────────────────────────────────
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')

@@ -152,16 +152,10 @@ async function authedFetch(url, opts) {
   });
   let res = await doFetch(token);
   if (res.status === 401) {
-    // try refresh once
-    const _devId = (function(){var k='chiyigo.device_uuid';try{var v=localStorage.getItem(k);if(/^web-[0-9a-f-]{36}$/i.test(v||''))return v;}catch(_){}var u=(typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():null;if(!u)return null;var f='web-'+u;try{localStorage.setItem(k,f);}catch(_){}return f;})();
-    const _hdrs = { 'Content-Type': 'application/json' }; if (_devId) _hdrs['X-Device-Id'] = _devId;
-    const r = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include', headers: _hdrs, body: '{}' });
-    if (r.ok) {
-      const d = await r.json().catch(() => ({}));
-      if (d.access_token) {
-        sessionStorage.setItem(TOKEN_KEY, d.access_token);
-        res = await doFetch(d.access_token);
-      }
+    // P0-11：委派給 api.js 的 window.silentRefresh（含 navigator.locks 跨 tab 序列化）
+    const ok = (typeof window.silentRefresh === 'function') ? await window.silentRefresh() : false;
+    if (ok) {
+      res = await doFetch(sessionStorage.getItem(TOKEN_KEY));
     }
   }
   return res;
