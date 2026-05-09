@@ -1,0 +1,98 @@
+/* ============================================================
+ * _tokens.css — 全站設計 token 單一 source of truth
+ * ------------------------------------------------------------
+ * 載入順序：所有 page CSS 之前。
+ * 涵蓋：color / theme / font / accent / neural / 全域 reset。
+ * 不涵蓋：layout vars（--max-w / --pad-x / --sidebar-w /
+ *         --titlebar-h / --section-y / --os-content-h），
+ *         這些是 page-specific，留在各 page CSS。
+ * ============================================================ */
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+a { color: inherit; text-decoration: none; }
+ul { list-style: none; }
+img { max-width: 100%; height: auto; display: block; }
+
+/* ── Theme tokens (light, default) ── */
+:root, .theme-light {
+  /* surface */
+  --bg:            #F0F2FA;
+  --bg-surface:    #FFFFFF;
+  --bg-elevated:   #FAFAFE;
+  --bg-sidebar:    #EAEBF5;
+  --bg-titlebar:   #F4F5FC;
+
+  /* border */
+  --border:        rgba(0,0,0,.07);
+  --border-dim:    rgba(0,0,0,.05);
+  --border-bright: rgba(0,0,0,.14);
+  --border-mid:    rgba(0,0,0,.10);
+
+  /* text */
+  --text:          #1A1B2E;
+  --text-muted:    rgba(26,27,46,.60);
+  --text-dim:      rgba(26,27,46,.38);
+
+  /* accent */
+  --accent:        #6C6EE5;
+  --accent-dim:    rgba(108,110,229,.10);
+  --accent-glow:   rgba(108,110,229,.18);
+
+  /* misc */
+  --hover-overlay: rgba(0,0,0,.05);
+
+  /* neural canvas（首頁背景動畫；非首頁無害） */
+  --neural-r: 108; --neural-g: 110; --neural-b: 229;
+  --neural-node-opacity: .22;
+  --neural-line-opacity: .09;
+
+  /* font */
+  --font-sans:    'Inter','Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;
+  --font-mono:    'DM Mono','Courier New',monospace;
+  --font-body:    var(--font-sans);
+  --font-display: var(--font-sans);
+}
+
+/* ── Theme tokens (dark) ── */
+.theme-dark {
+  --bg:            #0B0F1A;
+  --bg-surface:    #151B2C;
+  --bg-elevated:   #1A2136;
+  --bg-sidebar:    #0F1424;
+  --bg-titlebar:   #0D1120;
+
+  --border:        rgba(255,255,255,.08);
+  --border-dim:    rgba(255,255,255,.05);
+  --border-bright: rgba(255,255,255,.14);
+  --border-mid:    rgba(255,255,255,.10);
+
+  --text:          #F3F4F6;
+  --text-muted:    rgba(243,244,246,.62);
+  --text-dim:      rgba(243,244,246,.36);
+
+  --accent:        #7B6CFF;
+  --accent-dim:    rgba(123,108,255,.12);
+  --accent-glow:   rgba(123,108,255,.25);
+
+  --hover-overlay: rgba(255,255,255,.06);
+
+  --neural-r: 123; --neural-g: 108; --neural-b: 255;
+  --neural-node-opacity: .40;
+  --neural-line-opacity: .15;
+}
+
+/* ── Global root html / body ── */
+html {
+  font-family: var(--font-sans);
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color .3s ease, color .3s ease;
+}
+
+/* ── Logo theme toggle（共用 partial 用） ── */
+.logo-dark, .theme-dark .logo-light { display: none !important; }
+.theme-dark .logo-dark { display: block !important; }
+</content>
+</invoke>
