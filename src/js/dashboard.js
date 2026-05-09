@@ -437,7 +437,7 @@ async function openRequisitionDetail(id) {
     `<div class="flex gap-3 text-sm"><span class="w-16 text-gray-500 shrink-0">${k}</span><span class="text-white break-all">${esc(v ?? '—')}</span></div>`
   ).join('');
   const msgHtml = row.message
-    ? `<div class="mt-2"><p class="text-xs text-gray-500 mb-1">需求說明</p><p class="text-sm text-white whitespace-pre-wrap break-words bg-[#0a0a10] border border-[#2a2a35] rounded-lg px-3 py-2">${esc(row.message)}</p></div>`
+    ? `<div class="mt-2"><p class="text-xs text-gray-500 mb-1">需求說明</p><p class="text-sm text-white whitespace-pre-wrap break-words bg-[#0a0a10] border border-[var(--border-bright)] rounded-lg px-3 py-2">${esc(row.message)}</p></div>`
     : '';
   // 串付款狀態
   const payments = row.linked_payments ?? [];
@@ -449,7 +449,7 @@ async function openRequisitionDetail(id) {
            const lbl = T('payment_status_' + p.status) || p.status;
            const amt = p.amount_subunit != null ? `${p.amount_subunit.toLocaleString()} ${esc(p.currency || 'TWD')}` : '—';
            const when = p.created_at ? formatRelative(p.created_at) : '';
-           return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[#0a0a10] border border-[#2a2a35] text-xs">
+           return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[#0a0a10] border border-[var(--border-bright)] text-xs">
              <span class="text-gray-400">#${p.id} · ${esc(p.vendor)}</span>
              <span class="text-white font-mono">${amt}</span>
              <span class="px-2 py-0.5 rounded-full text-xs font-semibold border ${cls}">${esc(lbl)}</span>
@@ -463,7 +463,7 @@ async function openRequisitionDetail(id) {
   modal.id = 'req-detail-modal';
   modal.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4';
   modal.innerHTML = `
-    <div class="relative w-full max-w-md rounded-2xl bg-[#0f0f14] border border-[#2a2a35] p-5">
+    <div class="relative w-full max-w-md rounded-2xl bg-[#0f0f14] border border-[var(--border-bright)] p-5">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-base font-semibold text-white">需求單 #${row.id}</h3>
         <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${s.cls}">${s.text}</span>
@@ -475,7 +475,7 @@ async function openRequisitionDetail(id) {
       <div class="flex justify-end gap-2 mt-4">
         ${delBtn}
         <button data-action="req-detail-close"
-          class="px-3 py-1.5 rounded-lg bg-[#1a1a22] hover:bg-[#23232c] border border-[#2a2a35] text-gray-300 text-xs transition-all">關閉</button>
+          class="px-3 py-1.5 rounded-lg bg-[#1a1a22] hover:bg-[#23232c] border border-[var(--border-bright)] text-gray-300 text-xs transition-all">關閉</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -853,7 +853,7 @@ async function confirmEnable2FA() {
     });
     const codesEl = document.getElementById('tfa-backup-codes');
     codesEl.innerHTML = data.backup_codes.map(c =>
-      `<code class="block text-center text-xs font-mono bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-2 py-1.5 text-gray-300 select-all">${c}</code>`
+      `<code class="block text-center text-xs font-mono bg-[#0e0e12] border border-[var(--border-bright)] rounded-lg px-2 py-1.5 text-gray-300 select-all">${c}</code>`
     ).join('');
     render2FASection(true);
     window.__totpEnabled = true;
@@ -1305,7 +1305,7 @@ async function submitDeleteAccount() {
   function initNodes(){const n=W<768?40:90;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
   const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
   let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
-  function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--as-neural-r').trim()||'108',g:s.getPropertyValue('--as-neural-g').trim()||'110',b:s.getPropertyValue('--as-neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--as-neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--as-neural-line-opacity').trim()||'.09')}}
+  function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--neural-r').trim()||'108',g:s.getPropertyValue('--neural-g').trim()||'110',b:s.getPropertyValue('--neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--neural-line-opacity').trim()||'.09')}}
   syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
   function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
     for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
@@ -1378,7 +1378,7 @@ function renderDevices(devices) {
     const last  = formatRelative(d.last_seen);
     const dataAttr = isNull ? 'data-device-uuid=""' : `data-device-uuid="${esc(dev)}"`;
     return `
-      <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3 flex items-center justify-between gap-3">
+      <div class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3 flex items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
           <p class="text-sm font-medium text-white truncate">${label}</p>
           <p class="text-xs text-gray-500 mt-0.5">${T('device_last_seen_label')}：${esc(last)} · ${d.active_count} ${T('device_active_label')}</p>
@@ -1461,7 +1461,7 @@ function renderPasskeys(creds) {
     const lastUsed = c.last_used_at ? formatRelative(c.last_used_at) : T('passkey_never_used');
     const transports = (c.transports ?? []).join(', ') || '—';
     return `
-      <div id="pk-row-${c.id}" class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
+      <div id="pk-row-${c.id}" class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-white truncate" id="pk-nickname-${c.id}">${esc(nickname)}</p>
@@ -1469,7 +1469,7 @@ function renderPasskeys(creds) {
           </div>
           <div class="shrink-0 flex gap-2">
             <button type="button" data-action="passkey-rename-open" data-passkey-id="${c.id}"
-              class="px-3 py-1.5 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-300 text-xs font-semibold transition-all">
+              class="px-3 py-1.5 rounded-lg border border-[var(--border-bright)] hover:bg-[#1f1f28] text-gray-300 text-xs font-semibold transition-all">
               ${T('passkey_rename_btn')}
             </button>
             <button type="button" data-action="passkey-remove-open" data-passkey-id="${c.id}"
@@ -1481,11 +1481,11 @@ function renderPasskeys(creds) {
         <div id="pk-rename-${c.id}" class="hidden mt-3 space-y-2">
           <input id="pk-name-${c.id}" type="text" maxlength="64" value="${esc(nickname)}"
             placeholder="${T('passkey_rename_ph')}"
-            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40" />
+            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40" />
           <p id="pk-rename-msg-${c.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">
             <button type="button" data-action="passkey-rename-cancel" data-passkey-id="${c.id}"
-              class="flex-1 py-2 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
+              class="flex-1 py-2 rounded-lg border border-[var(--border-bright)] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
               ${T('passkey_rename_cancel')}
             </button>
             <button type="button" data-action="passkey-rename-save" data-passkey-id="${c.id}"
@@ -1498,11 +1498,11 @@ function renderPasskeys(creds) {
           <p class="text-xs text-amber-300">${T('passkey_remove_hint')}</p>
           <input id="pk-otp-${c.id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
             placeholder="${T('passkey_remove_otp_ph')}"
-            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
+            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
           <p id="pk-msg-${c.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">
             <button type="button" data-action="passkey-remove-cancel" data-passkey-id="${c.id}"
-              class="flex-1 py-2 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
+              class="flex-1 py-2 rounded-lg border border-[var(--border-bright)] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
               ${T('passkey_remove_cancel')}
             </button>
             <button type="button" data-action="passkey-remove-confirm" data-passkey-id="${c.id}"
@@ -1711,7 +1711,7 @@ function renderWallets(wallets) {
     const display = w.nickname ? `${esc(w.nickname)} · ${esc(shortAddr(w.address))}` : esc(w.address);
     const signedAt = w.signed_at ? formatRelative(w.signed_at) : '—';
     return `
-      <div id="wl-row-${w.id}" class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
+      <div id="wl-row-${w.id}" class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-white truncate font-mono">${display}</p>
@@ -1726,11 +1726,11 @@ function renderWallets(wallets) {
           <p class="text-xs text-amber-300">${T('wallet_remove_hint')}</p>
           <input id="wl-otp-${w.id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
             placeholder="${T('wallet_remove_otp_ph')}"
-            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
+            class="w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-red-500/40" />
           <p id="wl-msg-${w.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">
             <button type="button" data-action="wallet-remove-cancel" data-wallet-id="${w.id}"
-              class="flex-1 py-2 rounded-lg border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
+              class="flex-1 py-2 rounded-lg border border-[var(--border-bright)] hover:bg-[#1f1f28] text-gray-400 text-xs font-semibold transition-all">
               ${T('wallet_remove_cancel')}
             </button>
             <button type="button" data-action="wallet-remove-confirm" data-wallet-id="${w.id}"
@@ -1956,7 +1956,7 @@ function renderDeals(rows) {
       ? `<span class="mono text-[.68rem] text-gray-500">原單 #${d.source_requisition_id}</span>`
       : `<span class="mono text-[.68rem] text-gray-600">原單已歸檔</span>`;
     return `
-      <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
+      <div class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <span class="text-sm font-semibold text-white">#${d.id} · ${esc(d.service_type || '接案')}</span>
           <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-emerald-500/15 text-emerald-300 border-emerald-500/40">✓ 已成交</span>
@@ -2059,7 +2059,7 @@ function renderPayments(items) {
       ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-orange-500/15 text-orange-300 border-orange-500/30 cursor-help" title="申請時間：${esc(refundReqAt || '—')}（等候 admin 審核）">退款申請中</span>`
       : null;
     return `
-      <div class="rounded-xl bg-[#0e0e16] border border-[#2a2a35] px-4 py-3">
+      <div class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-white">${esc(kindLabel)} · ${amount}</p>

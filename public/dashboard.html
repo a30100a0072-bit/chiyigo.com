@@ -7,13 +7,15 @@
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
-  <link rel="stylesheet" href="/css/tailwind.css?v=2be2f142" />
+  <link rel="stylesheet" href="/css/tailwind.css?v=0f1886b5" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/dashboard.css?v=2be2f142" />
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=2be2f142" />
-  <script defer src="/js/notify.js?v=2be2f142"></script>
-  <script defer src="/js/confirm-dialog.js?v=2be2f142"></script>
+  <link rel="stylesheet" href="/css/_tokens.css?v=0f1886b5" />
+  <link rel="stylesheet" href="/css/_components.css?v=0f1886b5" />
+  <link rel="stylesheet" href="/css/dashboard.css?v=0f1886b5" />
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=0f1886b5" />
+  <script defer src="/js/notify.js?v=0f1886b5"></script>
+  <script defer src="/js/confirm-dialog.js?v=0f1886b5"></script>
 </head>
 <body class="font-sans antialiased min-h-screen has-sidebar">
 
@@ -133,7 +135,7 @@
         </div>
 
         <!-- 詳細資訊 -->
-        <div class="rounded-2xl bg-[#16161d] border border-[#2a2a35] divide-y divide-[#2a2a35] shadow-2xl mb-4">
+        <div class="rounded-2xl bg-[#16161d] border border-[var(--border-bright)] divide-y divide-[#2a2a35] shadow-2xl mb-4">
           <div class="flex items-center justify-between px-5 py-4">
             <span class="text-sm text-gray-500" data-i18n="lbl_email">電子信箱</span>
             <span id="info-email" class="text-sm text-white font-medium">—</span>
@@ -153,7 +155,7 @@
         </div>
 
         <!-- 2FA 管理區塊 -->
-        <div id="tfa-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
+        <div id="tfa-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="flex items-center justify-between px-5 py-4">
             <div class="flex items-center gap-3">
               <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -168,7 +170,7 @@
           </div>
 
           <!-- 啟用 / 停用按鈕 -->
-          <div class="border-t border-[#2a2a35] px-5 py-3 flex gap-2">
+          <div class="border-t border-[var(--border-bright)] px-5 py-3 flex gap-2">
             <button id="tfa-enable-btn"
               class="hidden px-4 py-2 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
               <span id="tfa-enable-label" data-i18n="tfa_enable_btn">啟用 2FA</span>
@@ -181,7 +183,7 @@
           <p id="tfa-need-pw" class="hidden px-5 pb-3 text-xs text-amber-400" data-i18n="tfa_need_pw">請先到上方「設定登入密碼」完成密碼設定，才能啟用 2FA。</p>
 
           <!-- Setup 面板（啟用流程）-->
-          <div id="tfa-setup-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-4">
+          <div id="tfa-setup-panel" class="hidden border-t border-[var(--border-bright)] px-5 py-5 space-y-4">
             <p class="text-xs text-gray-400" data-i18n="tfa_setup_hint">用 Google Authenticator 或任何 TOTP App 掃描 QR Code，然後輸入 6 位數驗證碼完成啟用。</p>
             <div class="flex flex-col items-center gap-3">
               <canvas id="tfa-qr" class="rounded-xl bg-white p-3"></canvas>
@@ -192,14 +194,14 @@
             </div>
             <div class="field-input-wrap">
               <input id="tfa-password-input" type="password" autocomplete="current-password" aria-label="目前登入密碼" placeholder="輸入目前登入密碼" data-i18n-ph="tfa_pw_ph"
-                class="field-input w-full bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-500/50" />
+                class="field-input w-full bg-[#0e0e12] border border-[var(--border-bright)] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-500/50" />
               <button type="button" id="tfa-password-eye" data-toggle-pwd="tfa-password-input" data-toggle-eye="tfa-password-eye" class="eye-btn" aria-label="顯示/隱藏密碼">
                 <svg id="tfa-password-eye-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
               </button>
             </div>
             <div class="flex gap-2">
               <input id="tfa-otp-input" type="text" inputmode="numeric" maxlength="6" aria-label="2FA 驗證碼（啟用）" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph"
-                class="flex-1 bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-500/50 tracking-widest text-center" />
+                class="flex-1 bg-[#0e0e12] border border-[var(--border-bright)] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand-500/50 tracking-widest text-center" />
               <button data-action="confirm-enable-2fa"
                 class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all">
                 <span data-i18n="tfa_confirm_enable">確認啟用</span>
@@ -209,11 +211,11 @@
           </div>
 
           <!-- Disable 面板（停用流程）-->
-          <div id="tfa-disable-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-3">
+          <div id="tfa-disable-panel" class="hidden border-t border-[var(--border-bright)] px-5 py-5 space-y-3">
             <p class="text-xs text-amber-400" data-i18n="tfa_disable_warn">停用後需重新設定才能再次啟用。請輸入 Authenticator App 的驗證碼確認。</p>
             <div class="flex gap-2">
               <input id="tfa-disable-input" type="text" inputmode="numeric" maxlength="6" aria-label="2FA 驗證碼（停用）" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph"
-                class="flex-1 bg-[#0e0e12] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/50 tracking-widest text-center" />
+                class="flex-1 bg-[#0e0e12] border border-[var(--border-bright)] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500/50 tracking-widest text-center" />
               <button data-action="confirm-disable-2fa"
                 class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold transition-all">
                 <span data-i18n="tfa_confirm_disable">確認停用</span>
@@ -223,7 +225,7 @@
           </div>
 
           <!-- 備用碼顯示（啟用成功後）-->
-          <div id="tfa-backup-panel" class="hidden border-t border-[#2a2a35] px-5 py-5 space-y-3">
+          <div id="tfa-backup-panel" class="hidden border-t border-[var(--border-bright)] px-5 py-5 space-y-3">
             <div class="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/20 p-3">
               <svg class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
               <p class="text-xs text-amber-300"><span data-i18n="tfa_backup_warn_pre">請立即抄下這 10 組備用碼，之後</span><strong data-i18n="tfa_backup_warn_em">無法再次查看</strong><span data-i18n="tfa_backup_warn_post">。每組只能使用一次。</span></p>
@@ -237,8 +239,8 @@
         </div>
 
         <!-- 我的需求單 -->
-        <div id="req-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
-          <div class="px-5 py-4 border-b border-[#2a2a35] flex items-center justify-between">
+        <div id="req-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[var(--border-bright)] flex items-center justify-between">
             <div>
               <p class="text-sm font-semibold text-white" data-i18n="req_title">我的需求單</p>
               <p class="text-xs text-gray-500 mt-0.5" data-i18n="req_subtitle">近期提交的接案諮詢</p>
@@ -247,12 +249,12 @@
           </div>
           <div id="req-list" class="divide-y divide-[#2a2a35]"></div>
           <div id="req-empty" class="hidden px-5 py-6 text-center text-sm text-gray-500" data-i18n="req_empty">尚無需求單紀錄</div>
-          <p id="req-revoke-note" class="hidden px-5 py-3 text-xs text-gray-500 border-t border-[#2a2a35]" data-i18n="req_revoke_note">如需更改請撤銷需求重新填寫</p>
+          <p id="req-revoke-note" class="hidden px-5 py-3 text-xs text-gray-500 border-t border-[var(--border-bright)]" data-i18n="req_revoke_note">如需更改請撤銷需求重新填寫</p>
         </div>
 
         <!-- 帳號綁定區塊 -->
-        <div id="bind-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
-          <div class="px-5 py-4 border-b border-[#2a2a35]">
+        <div id="bind-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[var(--border-bright)]">
             <p class="text-sm font-semibold text-white" data-i18n="bind_title">帳號綁定</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="bind_subtitle">連結第三方帳號以增加登入選項</p>
           </div>
@@ -275,8 +277,8 @@
         </div>
 
         <!-- 修改密碼（hasPassword=true 才顯示；走 step-up flow，需 2FA）-->
-        <div id="changepw-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
-          <div class="px-5 py-4 border-b border-[#2a2a35]">
+        <div id="changepw-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[var(--border-bright)]">
             <p class="text-sm font-semibold text-white" data-i18n="changepw_title">修改密碼</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="changepw_subtitle">需要當下 2FA 驗證碼確認；修改後將登出所有裝置。</p>
           </div>
@@ -285,7 +287,7 @@
             <form id="changepw-form" class="space-y-3" autocomplete="off">
               <div class="field-input-wrap">
                 <input id="changepw-new" type="password" autocomplete="new-password"
-                  class="field-input w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
+                  class="field-input w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
                   placeholder="新密碼" data-i18n-ph="changepw_new_ph" />
                 <button type="button" id="changepw-new-eye" data-toggle-pwd="changepw-new" data-toggle-eye="changepw-new-eye" class="eye-btn" aria-label="顯示/隱藏密碼">
                   <svg id="changepw-new-eye-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -293,14 +295,14 @@
               </div>
               <div class="field-input-wrap">
                 <input id="changepw-confirm" type="password" autocomplete="new-password"
-                  class="field-input w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
+                  class="field-input w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
                   placeholder="再次輸入新密碼" data-i18n-ph="changepw_confirm_ph" />
                 <button type="button" id="changepw-confirm-eye" data-toggle-pwd="changepw-confirm" data-toggle-eye="changepw-confirm-eye" class="eye-btn" aria-label="顯示/隱藏密碼">
                   <svg id="changepw-confirm-eye-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 </button>
               </div>
               <input id="changepw-otp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
-                class="w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[#2a2a35] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
+                class="w-full px-3 py-2 rounded-lg bg-[#0e0e16] border border-[var(--border-bright)] text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/40"
                 placeholder="2FA 6 位數驗證碼" data-i18n-ph="changepw_otp_ph" />
               <button type="button" id="changepw-submit" data-action="submit-change-password"
                 class="w-full py-2.5 rounded-xl border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
@@ -312,8 +314,8 @@
         </div>
 
         <!-- 我的裝置（Phase D-3）-->
-        <div id="devices-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
-          <div class="px-5 py-4 border-b border-[#2a2a35]">
+        <div id="devices-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[var(--border-bright)]">
             <p class="text-sm font-semibold text-white" data-i18n="devices_title">我的裝置</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="devices_subtitle">這些裝置目前可以登入你的帳號。陌生的請立即登出。</p>
           </div>
@@ -325,8 +327,8 @@
         </div>
 
         <!-- Passkey（Phase D-3）-->
-        <div id="passkeys-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
-          <div class="px-5 py-4 border-b border-[#2a2a35] flex items-start justify-between gap-3">
+        <div id="passkeys-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[var(--border-bright)] flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-semibold text-white" data-i18n="passkeys_title">Passkey / 安全金鑰</p>
               <p class="text-xs text-gray-500 mt-0.5" data-i18n="passkeys_subtitle">綁定後可用裝置生物辨識（Face ID / 指紋 / Windows Hello）登入。</p>
@@ -346,8 +348,8 @@
         </div>
 
         <!-- 錢包綁定（Phase F-3）-->
-        <div id="wallets-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
-          <div class="px-5 py-4 border-b border-[#2a2a35] flex items-start justify-between gap-3">
+        <div id="wallets-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[var(--border-bright)] flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-semibold text-white" data-i18n="wallets_title">錢包 / Web3</p>
               <p class="text-xs text-gray-500 mt-0.5" data-i18n="wallets_subtitle">綁定 Ethereum 地址（非託管 — 我們不存私鑰）。未來金流 / NFT 場景使用。</p>
@@ -367,8 +369,8 @@
         </div>
 
         <!-- 付款 / 充值（Phase F-2 wave 3）-->
-        <div id="payments-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
-          <div class="px-5 py-4 border-b border-[#2a2a35] flex items-start justify-between gap-3">
+        <div id="payments-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[var(--border-bright)] flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-semibold text-white" data-i18n="payments_title">付款 / 充值</p>
               <p class="text-xs text-gray-500 mt-0.5" data-i18n="payments_subtitle">綠界 ECPay：信用卡 / ATM / 超商代碼 / Apple/Google Pay。</p>
@@ -380,17 +382,17 @@
           </div>
 
           <!-- 充值表單（按 + 開啟）-->
-          <div id="payment-form" class="hidden px-5 py-4 border-b border-[#2a2a35] space-y-3">
+          <div id="payment-form" class="hidden px-5 py-4 border-b border-[var(--border-bright)] space-y-3">
             <div>
               <label class="block text-xs text-gray-400 mb-1" data-i18n="payment_amount_label">金額（TWD，整數）</label>
               <input id="payment-amount" type="number" min="1" max="200000" step="1" placeholder="例如：500"
                 data-i18n-ph="payment_amount_ph"
-                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[#2a2a35] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
+                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[var(--border-bright)] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
             </div>
             <div>
               <label class="block text-xs text-gray-400 mb-1" data-i18n="payment_method_label">付款方式</label>
               <select id="payment-method"
-                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[#2a2a35] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white transition-all outline-none">
+                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[var(--border-bright)] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white transition-all outline-none">
                 <option value="ALL" data-i18n="payment_method_all">全部（綠界選擇）</option>
                 <option value="Credit" data-i18n="payment_method_credit">信用卡</option>
                 <option value="ATM" data-i18n="payment_method_atm">ATM 轉帳</option>
@@ -402,18 +404,18 @@
               <label class="block text-xs text-gray-400 mb-1" data-i18n="payment_desc_label">描述（顯示在綠界）</label>
               <input id="payment-desc" type="text" maxlength="100" placeholder="例如：chiyigo 服務充值"
                 data-i18n-ph="payment_desc_ph"
-                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[#2a2a35] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
+                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[var(--border-bright)] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
             </div>
             <div>
               <label class="block text-xs text-gray-400 mb-1" data-i18n="payment_requisition_label">關聯接案編號（選填）</label>
               <input id="payment-requisition" type="number" min="1" step="1" placeholder="例如：12（不填即為一般充值）"
                 data-i18n-ph="payment_requisition_ph"
-                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[#2a2a35] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
+                class="w-full px-4 py-2.5 rounded-xl bg-[#0e0e12] border border-[var(--border-bright)] focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 text-sm text-white placeholder-gray-600 transition-all outline-none"/>
             </div>
             <p id="payment-form-msg" class="hidden text-xs"></p>
             <div class="flex gap-2">
               <button data-action="payment-form-cancel"
-                class="flex-1 py-2.5 rounded-xl border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 font-semibold text-sm transition-all">
+                class="flex-1 py-2.5 rounded-xl border border-[var(--border-bright)] hover:bg-[#1f1f28] text-gray-400 font-semibold text-sm transition-all">
                 <span data-i18n="payment_cancel_btn">取消</span>
               </button>
               <button id="payment-submit-btn"
@@ -433,8 +435,8 @@
         </div>
 
         <!-- 我的成交紀錄（P1-6，2026-05-06）-->
-        <div id="deals-section" class="hidden rounded-2xl bg-[#16161d] border border-[#2a2a35] shadow-2xl mb-4 overflow-hidden">
-          <div class="px-5 py-4 border-b border-[#2a2a35]">
+        <div id="deals-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+          <div class="px-5 py-4 border-b border-[var(--border-bright)]">
             <p class="text-sm font-semibold text-white">我的成交紀錄</p>
             <p class="text-xs text-gray-500 mt-0.5">已正式成交的接案項目；含已收/已退金額與當時提供的客戶資訊。</p>
           </div>
@@ -499,7 +501,7 @@
               <p id="del-msg" class="hidden text-xs"></p>
               <div class="flex gap-2">
                 <button data-action="hide-delete-form"
-                  class="flex-1 py-2.5 rounded-xl border border-[#2a2a35] hover:bg-[#1f1f28] text-gray-400 font-semibold text-sm transition-all">
+                  class="flex-1 py-2.5 rounded-xl border border-[var(--border-bright)] hover:bg-[#1f1f28] text-gray-400 font-semibold text-sm transition-all">
                   <span data-i18n="del_cancel_btn">取消</span>
                 </button>
                 <button id="del-submit-btn"
@@ -661,15 +663,15 @@
   <div id="bind-toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl whitespace-nowrap pointer-events-none transition-opacity duration-300"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
-  <script src="/js/api.js?v=2be2f142"></script>
-  <script src="/js/auth-ui.js?v=2be2f142"></script>
+  <script src="/js/api.js?v=0f1886b5"></script>
+  <script src="/js/auth-ui.js?v=0f1886b5"></script>
 
   <!-- ── Sidebar layout bridge ────────────────────────────────── -->
 
   <!-- Neural canvas (same as about.html) -->
   <!-- 退款申請 modal（payment row 點「退款」開啟）-->
   <div id="refund-reason-modal" class="hidden fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-    <div class="rounded-2xl bg-[#0f0f14] border border-[#2a2a35] p-5 w-full max-w-md shadow-2xl">
+    <div class="rounded-2xl bg-[#0f0f14] border border-[var(--border-bright)] p-5 w-full max-w-md shadow-2xl">
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-base font-semibold text-white">申請退款</h3>
         <button id="refund-reason-close" type="button" class="text-gray-500 hover:text-white p-1 rounded transition-colors" aria-label="close">
@@ -679,18 +681,18 @@
       <p id="refund-reason-summary" class="text-xs text-gray-400 mb-2 leading-relaxed"></p>
       <p class="text-xs text-gray-500 mb-1.5">請填寫退款原因（會送 admin 審核）</p>
       <textarea id="refund-reason-input" rows="3" maxlength="500"
-        class="w-full bg-[#0a0a10] border border-[#2a2a35] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-colors resize-none"
+        class="w-full bg-[#0a0a10] border border-[var(--border-bright)] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-colors resize-none"
         placeholder="例：服務暫不需要 / 重複下單 / 其他"></textarea>
       <p id="refund-reason-msg" class="text-xs mt-2 hidden"></p>
       <div class="flex gap-2 mt-3">
         <button id="refund-reason-cancel" type="button"
-          class="flex-1 py-2 rounded-lg border border-[#2a2a35] bg-transparent text-gray-300 hover:bg-white/5 hover:border-[#3a3a45] text-sm font-medium transition-all">取消</button>
+          class="flex-1 py-2 rounded-lg border border-[var(--border-bright)] bg-transparent text-gray-300 hover:bg-white/5 hover:border-[#3a3a45] text-sm font-medium transition-all">取消</button>
         <button id="refund-reason-submit" type="button"
           class="flex-1 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-sm font-semibold transition-all">送出申請</button>
       </div>
     </div>
   </div>
 
-  <script src="/js/dashboard.js?v=2be2f142" defer></script>
+  <script src="/js/dashboard.js?v=0f1886b5" defer></script>
 </body>
 </html>
