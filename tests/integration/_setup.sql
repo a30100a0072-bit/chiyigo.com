@@ -45,8 +45,18 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   device_uuid TEXT,
   expires_at  TEXT    NOT NULL,
   revoked_at  TEXT,
-  auth_time   TEXT
+  auth_time   TEXT,
+  scope       TEXT  -- migration 0035（P1-5）
 );
+
+-- migration 0035（P1-6/P1-8）— TOTP replay 防護
+CREATE TABLE IF NOT EXISTS used_totp (
+  user_id  INTEGER NOT NULL,
+  slot     INTEGER NOT NULL,
+  used_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, slot)
+);
+CREATE INDEX IF NOT EXISTS idx_used_totp_used_at ON used_totp(used_at);
 
 CREATE TABLE IF NOT EXISTS login_attempts (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

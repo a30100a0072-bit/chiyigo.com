@@ -134,10 +134,12 @@ export async function onRequestPost({ request, env }) {
   // header 是事實來源（chiyigo SDK / sport-app SDK 都送 X-Device-Id）；缺值寫 null（web cookie 路徑）
   const headerDeviceId = request.headers.get('X-Device-Id') ?? request.headers.get('x-device-id')
   const deviceUuid     = (headerDeviceId && headerDeviceId.trim()) || null
+  // P1-5：把 OIDC scope 落 refresh_tokens；refresh.js rotation 時透傳，
+  // silent refresh 後 access_token 仍帶 openid/email 等
   await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-              VALUES (?, ?, ?, ?, ?)`)
-    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime)
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope)
+              VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime, authCode.scope ?? null)
     .run()
 
   // 簽發 Access Token（ES256，15 分鐘） — aud 依 redirect_uri origin 決定

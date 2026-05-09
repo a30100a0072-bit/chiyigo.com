@@ -2,8 +2,8 @@
 // Requires JWT + OTP or backup_code verification.
 // Replaces all existing backup codes with 10 freshly generated ones.
 
-import { TOTP, Secret } from 'otpauth'
 import { generateBackupCodes, verifyBackupCode } from '../../../../utils/crypto.js'
+import { verifyTotpReplaySafe } from '../../../../utils/totp.js'
 import { requireAuth, res } from '../../../../utils/auth.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../../utils/rate-limit.js'
@@ -46,17 +46,11 @@ export async function onRequestPost({ request, env }) {
   if (!account)              return res({ error: 'Local account not found' }, 404)
   if (!account.totp_enabled) return res({ error: '2FA is not enabled' }, 409)
 
-  // ── 4a. 驗證 OTP ─────────────────────────────────────────────
+  // ── 4a. 驗證 OTP（P1-8：verifyTotpReplaySafe）─────────────────
   if (otp_code) {
-    const sanitized = String(otp_code).replace(/\s/g, '')
-    if (!/^\d{6}$/.test(sanitized))
-      return res({ error: 'otp_code must be 6 digits' }, 400)
-
-    const totp = new TOTP({
-      algorithm: 'SHA1', digits: 6, period: 30,
-      secret: Secret.fromBase32(account.totp_secret),
-    })
-    if (totp.validate({ token: sanitized, window: 1 }) === null) {
+    const r = await verifyTotpReplaySafe(env, { userId, secret: account.totp_secret, code: otp_code })
+    if (!r.ok) {
+      if (r.reason === 'bad_format') return res({ error: 'otp_code must be 6 digits' }, 400)
       await recordRateLimit(db, { kind: '2fa_regen', userId, ip })
       return res({ error: 'Invalid OTP code' }, 401)
     }

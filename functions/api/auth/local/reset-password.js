@@ -11,7 +11,7 @@
  *  6. DELETE 所有 refresh_tokens（登出所有裝置）
  */
 
-import { TOTP, Secret } from 'otpauth'
+import { verifyTotpReplaySafe } from '../../../utils/totp.js'
 import {
   hashToken,
   generateSalt,
@@ -77,15 +77,10 @@ export async function onRequestPost({ request, env }) {
     const sanitized = totp_code.replace(/[\s-]/g, '')
     let passed = false
 
-    // 3a. TOTP（6 位數字）
+    // 3a. TOTP（6 位數字）— P1-8：verifyTotpReplaySafe 防 60s 內 replay
     if (/^\d{6}$/.test(sanitized)) {
-      const totp  = new TOTP({
-        algorithm: 'SHA1',
-        digits:    6,
-        period:    30,
-        secret:    Secret.fromBase32(record.totp_secret),
-      })
-      passed = totp.validate({ token: sanitized, window: 1 }) !== null
+      const r = await verifyTotpReplaySafe(env, { userId, secret: record.totp_secret, code: sanitized })
+      passed = r.ok
     }
 
     // 3b. 備用救援碼（20 hex chars）

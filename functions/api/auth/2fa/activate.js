@@ -22,7 +22,7 @@
  *  { backup_codes: ['XXXXX-XXXXX-XXXXX-XXXXX', ...] }  (10 組)
  */
 
-import { TOTP, Secret } from 'otpauth'
+import { verifyTotpReplaySafe } from '../../../utils/totp.js'
 import { generateBackupCodes, verifyPassword } from '../../../utils/crypto.js'
 import { requireAuth, res } from '../../../utils/auth.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
@@ -91,20 +91,14 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Invalid current password', code: 'BAD_PASSWORD' }, 403)
   }
 
-  // ── 4b. 驗證 OTP（±1 period window 容許時鐘偏差）────────────
-  const totp = new TOTP({
-    algorithm: 'SHA1',
-    digits:    6,
-    period:    30,
-    secret:    Secret.fromBase32(account.totp_secret),
-  })
-
-  const delta = totp.validate({ token: sanitized, window: 1 })
-  if (delta === null) {
+  // ── 4b. 驗證 OTP（P1-8：verifyTotpReplaySafe，window=1 容時鐘偏差 + 防 replay）
+  const r = await verifyTotpReplaySafe(env, { userId, secret: account.totp_secret, code: sanitized })
+  if (!r.ok) {
     await recordRateLimit(db, { kind: '2fa_activate', userId, ip })
     await safeUserAudit(env, {
       event_type: 'mfa.totp.activate.fail', severity: 'warn',
-      user_id: userId, request, data: { reason_code: 'bad_otp' },
+      user_id: userId, request,
+      data: { reason_code: r.reason === 'replay' ? 'totp_replay' : 'bad_otp' },
     })
     return res({ error: 'Invalid OTP code', code: 'BAD_OTP' }, 403)
   }

@@ -64,7 +64,7 @@ export async function onRequestPost({ request, env }) {
   const tokenHash = await hashToken(refresh_token)
   const tokenRow  = await db
     .prepare(`
-      SELECT id, user_id, device_uuid, revoked_at, auth_time
+      SELECT id, user_id, device_uuid, revoked_at, auth_time, scope
       FROM refresh_tokens
       WHERE token_hash = ? AND expires_at > datetime('now')
     `)
@@ -146,13 +146,14 @@ export async function onRequestPost({ request, env }) {
   // Rotation 保留原本的 auth_time（silent refresh 不算重新互動式認證，
   // OIDC max_age 才有意義）。舊 row 沒 auth_time 時用 NOW 當保守 fallback。
   const preservedAuthTime = tokenRow.auth_time ?? new Date().toISOString().replace('T', ' ').slice(0, 19)
+  // P1-5：把 OIDC scope 透傳到 rotation 後的新 row，避免遺失
   await db.batch([
     db.prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE id = ?`)
       .bind(tokenRow.id),
     db.prepare(`
-      INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-      VALUES (?, ?, ?, ?, ?)
-    `).bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime),
+      INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null),
   ])
 
   // ── 5. 簽發新 Access Token ───────────────────────────────────
@@ -163,7 +164,8 @@ export async function onRequestPost({ request, env }) {
     role:           user.role,
     status:         user.status,
     ver:            user.token_version ?? 0,
-    scope:          buildTokenScope(user.role),
+    // P1-5：buildTokenScope 帶第二參，保留原本 OIDC scope（openid/email/...）
+    scope:          buildTokenScope(user.role, tokenRow.scope ?? ''),
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   // Web → 新 Cookie；App → JSON body

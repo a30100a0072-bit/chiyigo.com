@@ -7,8 +7,8 @@
  * 並刪除所有備用碼。
  */
 
-import { TOTP, Secret } from 'otpauth'
 import { requireAuth, bumpTokenVersion, res } from '../../../utils/auth.js'
+import { verifyTotpReplaySafe } from '../../../utils/totp.js'
 import { verifyBackupCode } from '../../../utils/crypto.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
@@ -48,19 +48,16 @@ export async function onRequestPost({ request, env }) {
   if (!account)              return res({ error: 'Local account not found' }, 404)
   if (!account.totp_enabled) return res({ error: '2FA is not enabled' }, 409)
 
-  // ── 驗證 OTP ──────────────────────────────────────────────────
+  // ── 驗證 OTP（P1-8：用 verifyTotpReplaySafe 防 replay）──────────
   if (otp_code) {
-    const sanitized = String(otp_code).replace(/\s/g, '')
-    if (!/^\d{6}$/.test(sanitized))
-      return res({ error: 'otp_code must be 6 digits' }, 400)
-
-    const totp = new TOTP({
-      algorithm: 'SHA1', digits: 6, period: 30,
-      secret: Secret.fromBase32(account.totp_secret),
-    })
-    if (totp.validate({ token: sanitized, window: 1 }) === null) {
+    const r = await verifyTotpReplaySafe(env, { userId, secret: account.totp_secret, code: otp_code })
+    if (!r.ok) {
+      if (r.reason === 'bad_format') return res({ error: 'otp_code must be 6 digits' }, 400)
       await recordRateLimit(db, { kind: '2fa_disable', userId, ip })
-      await safeUserAudit(env, { event_type: 'mfa.totp.disable.fail', severity: 'warn', user_id: userId, request, data: { reason_code: 'bad_otp' } })
+      await safeUserAudit(env, {
+        event_type: 'mfa.totp.disable.fail', severity: 'warn', user_id: userId, request,
+        data: { reason_code: r.reason === 'replay' ? 'totp_replay' : 'bad_otp' },
+      })
       return res({ error: 'Invalid OTP code' }, 401)
     }
   }

@@ -39,7 +39,6 @@
  *   429 → step-up 限流
  */
 
-import { TOTP, Secret } from 'otpauth'
 import { verifyBackupCode } from '../../utils/crypto.js'
 import { requireAuth, res } from '../../utils/auth.js'
 import { signJwt } from '../../utils/jwt.js'
@@ -47,13 +46,15 @@ import { resolveAud } from '../../utils/cors.js'
 import { KNOWN_ELEVATED_SCOPES } from '../../utils/scopes.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../utils/rate-limit.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
+import { verifyTotpReplaySafe } from '../../utils/totp.js'
 
 const STEP_UP_TTL = '5m'
 const STEP_UP_TTL_SECONDS = 300
 
-// Phase E3：原 5/5min 改 3/min（緊一點，金融操作前的 OTP 爆破防護要嚴）
-const RL_WINDOW_SEC = 60
-const RL_MAX        = 3
+// P1-6：3/min 在 6 位 OTP brute force 觀點下其實偏寬（180/hr=4320/day）；
+// 改 5/5min（60/hr=1440/day），更窄的長期 quota；window=1 仍保留 + used_totp 防 replay
+const RL_WINDOW_SEC = 300
+const RL_MAX        = 5
 
 export async function onRequestPost({ request, env }) {
   const { user, error } = await requireAuth(request, env)
@@ -115,16 +116,10 @@ export async function onRequestPost({ request, env }) {
   let usedBackupId = null
 
   if (otp_code) {
-    const sanitized = String(otp_code).replace(/\s/g, '')
-    if (!/^\d{6}$/.test(sanitized))
-      return res({ error: 'otp_code must be 6 digits' }, 400)
-    const totp = new TOTP({
-      algorithm: 'SHA1', digits: 6, period: 30,
-      secret: Secret.fromBase32(record.totp_secret),
-    })
-    if (totp.validate({ token: sanitized, window: 1 }) !== null) {
-      amr = ['pwd', 'totp']
-    }
+    const r = await verifyTotpReplaySafe(env, { userId, secret: record.totp_secret, code: otp_code })
+    if (r.ok) amr = ['pwd', 'totp']
+    else if (r.reason === 'bad_format') return res({ error: 'otp_code must be 6 digits' }, 400)
+    // r.reason === 'replay' → 統一走下面 amr 判失敗，audit 帶 reason_code 區分
   } else if (backup_code) {
     const normalized = String(backup_code).replace(/[-\s]/g, '').toLowerCase()
     if (/^[0-9a-f]{20}$/.test(normalized)) {

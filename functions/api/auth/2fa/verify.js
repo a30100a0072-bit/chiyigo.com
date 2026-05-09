@@ -15,8 +15,8 @@
  *  401 → { error: 'Invalid OTP or backup code' }
  */
 
-import { TOTP, Secret } from 'otpauth'
 import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils/crypto.js'
+import { verifyTotpReplaySafe } from '../../../utils/totp.js'
 import { requireAuth, res } from '../../../utils/auth.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
@@ -90,19 +90,18 @@ export async function onRequestPost({ request, env }) {
   if (!record || !record.totp_enabled)
     return res({ error: 'Invalid request' }, 400)
 
-  // ── 4a. 嘗試 TOTP 驗證（6 位數字）───────────────────────────
+  // ── 4a. 嘗試 TOTP 驗證（6 位數字）— P1-8 補 used_totp replay 防護 ─
   if (/^\d{6}$/.test(sanitized)) {
-    const totp  = new TOTP({
-      algorithm: 'SHA1',
-      digits:    6,
-      period:    30,
-      secret:    Secret.fromBase32(record.totp_secret),
+    const r = await verifyTotpReplaySafe(env, {
+      userId, secret: record.totp_secret, code: sanitized,
     })
-    const delta = totp.validate({ token: sanitized, window: 1 })
-    if (delta !== null) {
+    if (r.ok) {
       await clearRateLimit(db, { kind: '2fa', userId })
       await safeUserAudit(env, { event_type: 'mfa.totp.verify.success', user_id: userId, request })
       return await respondWithToken(userId, record, db, device_uuid, platform, env, audience, request, riskClaims, 'totp')
+    }
+    if (r.reason === 'replay') {
+      await safeUserAudit(env, { event_type: 'mfa.totp.verify.replay', severity: 'warn', user_id: userId, request })
     }
   }
 
