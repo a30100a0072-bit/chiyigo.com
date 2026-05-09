@@ -117,3 +117,43 @@
   border-top: 1px solid var(--border-dim);
   display: flex; align-items: center; justify-content: flex-end; gap: .65rem;
 }
+
+/* ── Toast（Phase 2 notify.js 消費） ───────────────── */
+.toast-stack {
+  position: fixed;
+  top: 1rem; right: 1rem;
+  z-index: var(--z-toast);
+  display: flex; flex-direction: column; gap: .5rem;
+  pointer-events: none;
+  max-width: min(92vw, 420px);
+}
+.toast {
+  pointer-events: auto;
+  background: var(--bg-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 10px;
+  padding: .75rem 1rem;
+  font-size: .85rem;
+  line-height: 1.5;
+  box-shadow: 0 10px 32px rgba(0,0,0,.18);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateX(20px);
+  transition: opacity .25s ease, transform .25s ease;
+  word-break: break-word;
+}
+.toast.show    { opacity: 1; transform: translateX(0); }
+.toast.leaving { opacity: 0; transform: translateX(20px); }
+.toast-success { border-left-color: #22a865; }
+.toast-error   { border-left-color: #dc2626; }
+.toast-warning { border-left-color: #f59e0b; }
+.toast-info    { border-left-color: var(--accent); }
+
+@media (max-width: 640px) {
+  .toast-stack { top: auto; bottom: 1rem; left: 1rem; right: 1rem; max-width: none; }
+  .toast { transform: translateY(20px); }
+  .toast.show    { transform: translateY(0); }
+  .toast.leaving { transform: translateY(20px); }
+}

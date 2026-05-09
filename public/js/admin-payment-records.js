@@ -212,10 +212,10 @@ async function exportCsv() {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('access_token')}` },
         credentials: 'include',
       });
-      if (!r2.ok) { alert('匯出失敗：' + r2.status); return; }
+      if (!r2.ok) { window.notify.error('匯出失敗：' +r2.status); return; }
       return triggerDownload(await r2.blob(), `payment-records-${new Date().toISOString().slice(0,10)}.csv`);
     }
-    if (!r.ok) { alert('匯出失敗：' + r.status); return; }
+    if (!r.ok) { window.notify.error('匯出失敗：' +r.status); return; }
     triggerDownload(await r.blob(), `payment-records-${new Date().toISOString().slice(0,10)}.csv`);
   } finally {
     btn.disabled = false; btn.textContent = orig;
