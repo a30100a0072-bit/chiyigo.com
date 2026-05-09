@@ -218,6 +218,13 @@ async function refreshAccessToken() {
 function logout() {
   sessionStorage.removeItem(TOKEN_KEY);
   clearGuestId();
+  // P0-12：先廣播登出 → 其他 tab（dashboard / admin / 公開頁 sidebar）即時同步
+  // 沒有 broadcast 的話別的 tab 要等下次 fetch 撞 401 才察覺
+  try {
+    if ('BroadcastChannel' in window) {
+      new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' });
+    }
+  } catch (_) {}
   const url = '/api/auth/oauth/end-session?post_logout_redirect_uri=' +
               encodeURIComponent('https://chiyigo.com/login');
   window.location.href = url;
@@ -233,7 +240,8 @@ window.addEventListener('storage', e => {
   const isPublic = path === '/' || path === '' || path.startsWith('/login') ||
                    path.startsWith('/index') || path.startsWith('/forgot-password') ||
                    path.startsWith('/reset-password') || path.startsWith('/verify-email');
-  if (!isPublic) location.href = '/login.html';
+  // P0-12：對齊跨 tab logout URL，方便 login.html 顯示「其他分頁登出了」訊息
+  if (!isPublic) location.replace('/login.html?logout=other_tab');
 });
 
 // ── 成功後跳轉 ───────────────────────────────────────────────────
