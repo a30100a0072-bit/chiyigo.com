@@ -54,6 +54,8 @@ const METADATA_ALLOWED_KEYS = new Set([
   'anonymized_at',      // anonymize endpoint 寫入
   'anonymized_by',      // anonymize endpoint 寫入
   'original_status',    // anonymize endpoint 寫入
+  'trade_no',           // P0-10：webhook succeeded 時寫入 vendor TradeNo，refund 直接讀
+  'payment_info',       // ATM/CVS 取號資訊（webhook handler mergeMetadata 寫入）
 ])
 
 function sanitizeMetadata(metadata) {
@@ -185,6 +187,52 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
   }
 
   return changed
+}
+
+/**
+ * P0-7 退款 atomic lock。
+ *
+ * 原 race：admin/payments/intents/:id/refund 與 admin/requisition-refund/:id/approve
+ * 兩個入口都 `SELECT status; if succeeded → call ECPay → UPDATE refunded`，
+ * 雙擊 / 兩個 admin 同時審 → 兩條都過 SELECT → 兩次打 ECPay 退款。
+ *
+ * 修法：UPDATE...WHERE status='succeeded' RETURNING * 一條 SQL atomic 鎖到
+ * 'processing'。第二個 caller 讀回 0 row → 知道別人已在退或已退過 → 409。
+ *
+ * 失敗時用 unlockIntentToSucceeded 解鎖（intent 本身仍 succeeded，只是退款 call 失敗）。
+ * 成功時 caller 走 updatePaymentStatus → 'refunded'。
+ *
+ * 注意：此 lock UPDATE 不走 updatePaymentStatus，所以不會觸發
+ * payment.intent.succeeded_status_changed critical audit；refund 自身的
+ * payment.refund.success / requisition.refund.approved 已是 critical，覆蓋足夠。
+ */
+export async function lockIntentForRefund(env, intentId) {
+  if (!env?.chiyigo_db) return { ok: false, code: 'NO_DB' }
+  const row = await env.chiyigo_db
+    .prepare(
+      `UPDATE payment_intents
+          SET status = 'processing', updated_at = datetime('now')
+        WHERE id = ? AND status = 'succeeded'
+        RETURNING id, vendor, vendor_intent_id, amount_subunit, currency,
+                  user_id, metadata, requisition_id`,
+    )
+    .bind(intentId).first()
+  if (!row) return { ok: false, code: 'ALREADY_PROCESSING_OR_NOT_SUCCEEDED' }
+  if (row.metadata) {
+    try { row.metadata = JSON.parse(row.metadata) } catch { /* keep raw */ }
+  }
+  return { ok: true, intent: row }
+}
+
+export async function unlockIntentToSucceeded(env, intentId) {
+  if (!env?.chiyigo_db) return
+  await env.chiyigo_db
+    .prepare(
+      `UPDATE payment_intents
+          SET status = 'succeeded', updated_at = datetime('now')
+        WHERE id = ? AND status = 'processing'`,
+    )
+    .bind(intentId).run()
 }
 
 /**

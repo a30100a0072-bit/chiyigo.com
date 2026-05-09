@@ -30,6 +30,7 @@ import { getCorsHeaders } from '../../../../../utils/cors.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes.js'
 import {
   getPaymentIntent, updatePaymentStatus, PAYMENT_STATUS,
+  lockIntentForRefund, unlockIntentToSucceeded,
 } from '../../../../../utils/payments.js'
 import { ecpayRefund } from '../../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../../utils/user-audit.js'
@@ -78,20 +79,23 @@ export async function onRequestPost({ request, env, params }) {
     return res({ error: `refund not implemented for vendor: ${intent.vendor}` }, 400, cors)
   }
 
-  // 從 webhook events 撈付款成功那筆的 event_id（= ECPay TradeNo）
-  const eventRow = await env.chiyigo_db
-    .prepare(
-      `SELECT event_id FROM payment_webhook_events
-        WHERE vendor = ? AND intent_id = ? AND status_to = ?
-        ORDER BY processed_at DESC LIMIT 1`,
-    )
-    .bind('ecpay', id, PAYMENT_STATUS.SUCCEEDED)
-    .first()
-
-  // event_id for SUCCEEDED is bare TradeNo（沒底線後綴）
-  const tradeNo = eventRow?.event_id && !/_\d+$/.test(eventRow.event_id)
-    ? eventRow.event_id
-    : null
+  // P0-10：優先讀 intent.metadata.trade_no（webhook succeeded 時寫入，正規來源）；
+  // 沒有時 fallback 到舊路徑（payment_webhook_events 撈 event_id），相容歷史 row。
+  let tradeNo = intent.metadata?.trade_no ?? null
+  if (!tradeNo) {
+    const eventRow = await env.chiyigo_db
+      .prepare(
+        `SELECT event_id FROM payment_webhook_events
+          WHERE vendor = ? AND intent_id = ? AND status_to = ?
+          ORDER BY processed_at DESC LIMIT 1`,
+      )
+      .bind('ecpay', id, PAYMENT_STATUS.SUCCEEDED)
+      .first()
+    // event_id for SUCCEEDED is bare TradeNo（沒底線後綴）
+    tradeNo = eventRow?.event_id && !/_\d+$/.test(eventRow.event_id)
+      ? eventRow.event_id
+      : null
+  }
   if (!tradeNo) {
     return res({ error: 'TradeNo not found; cannot call refund API' }, 400, cors)
   }
@@ -99,6 +103,17 @@ export async function onRequestPost({ request, env, params }) {
   let body = {}
   try { body = await request.json() } catch { /* keep empty */ }
   const reason = String(body?.reason ?? '').slice(0, 200) || null
+
+  // P0-7 atomic lock：UPDATE...WHERE status='succeeded' RETURNING；
+  // 鎖到 'processing' 才 call ECPay。雙路徑（refund + approve）競態下
+  // 第二個 caller 拿不到 row → 409，不會打第二次退款。
+  const lock = await lockIntentForRefund(env, id)
+  if (!lock.ok) {
+    return res({
+      error: 'intent is being processed or no longer succeeded',
+      code:  'INTENT_RACE_CONFLICT',
+    }, 409, cors)
+  }
 
   // call ECPay
   const refundResult = await ecpayRefund(env, {
@@ -109,6 +124,8 @@ export async function onRequestPost({ request, env, params }) {
   })
 
   if (!refundResult.ok) {
+    // 解鎖回 succeeded（intent 本身沒退掉，使用者仍可重試）
+    await unlockIntentToSucceeded(env, id)
     await safeUserAudit(env, {
       event_type: 'payment.refund.fail', severity: 'warn',
       user_id: intent.user_id, request,

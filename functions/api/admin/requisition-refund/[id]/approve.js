@@ -27,6 +27,7 @@ import { getCorsHeaders } from '../../../../utils/cors.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes.js'
 import {
   getPaymentIntent, updatePaymentStatus, PAYMENT_STATUS,
+  lockIntentForRefund, unlockIntentToSucceeded,
 } from '../../../../utils/payments.js'
 import { ecpayRefund } from '../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
@@ -83,21 +84,34 @@ export async function onRequestPost({ request, env, params }) {
   try { body = await request.json() } catch { /* keep empty */ }
   const adminNote = String(body?.admin_note ?? '').slice(0, 500) || null
 
-  // 撈成功付款那筆的 TradeNo
-  const eventRow = await db
-    .prepare(
-      `SELECT event_id FROM payment_webhook_events
-        WHERE vendor = ? AND intent_id = ? AND status_to = ?
-        ORDER BY processed_at DESC LIMIT 1`,
-    )
-    .bind('ecpay', intent.id, PAYMENT_STATUS.SUCCEEDED)
-    .first()
-
-  const tradeNo = eventRow?.event_id && !/_\d+$/.test(eventRow.event_id)
-    ? eventRow.event_id
-    : null
+  // P0-10：優先讀 intent.metadata.trade_no（webhook succeeded 時寫入）；
+  // 沒有時 fallback 到 payment_webhook_events，相容歷史 row。
+  let tradeNo = intent.metadata?.trade_no ?? null
+  if (!tradeNo) {
+    const eventRow = await db
+      .prepare(
+        `SELECT event_id FROM payment_webhook_events
+          WHERE vendor = ? AND intent_id = ? AND status_to = ?
+          ORDER BY processed_at DESC LIMIT 1`,
+      )
+      .bind('ecpay', intent.id, PAYMENT_STATUS.SUCCEEDED)
+      .first()
+    tradeNo = eventRow?.event_id && !/_\d+$/.test(eventRow.event_id)
+      ? eventRow.event_id
+      : null
+  }
   if (!tradeNo) {
     return res({ error: 'TradeNo not found; cannot call refund API' }, 400, cors)
+  }
+
+  // P0-7 atomic lock：與 admin/payments/intents/:id/refund 共用 helper，
+  // 雙路徑（approve / 直接退款）競態下只有一個能拿到鎖，第二個 409。
+  const lock = await lockIntentForRefund(env, intent.id)
+  if (!lock.ok) {
+    return res({
+      error: 'intent is being processed or no longer succeeded',
+      code:  'INTENT_RACE_CONFLICT',
+    }, 409, cors)
   }
 
   const refundResult = await ecpayRefund(env, {
@@ -108,6 +122,7 @@ export async function onRequestPost({ request, env, params }) {
   })
 
   if (!refundResult.ok) {
+    await unlockIntentToSucceeded(env, intent.id)
     await safeUserAudit(env, {
       event_type: 'requisition.refund.fail', severity: 'warn',
       user_id: rr.user_id, request,

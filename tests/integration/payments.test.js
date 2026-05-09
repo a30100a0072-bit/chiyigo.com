@@ -273,22 +273,51 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     expect(audit?.severity).toBe('critical')
   })
 
-  it('沒既存 intent + webhook 帶 user_id → 主動建立', async () => {
-    const u = await seedUser({ email: 'w2@x' })
+  it('沒既存 intent + webhook 帶 user_id + PSP_DIRECT_INTENT_ENABLED=1 → 主動建立', async () => {
+    // P0-9：fallback 改 opt-in，env flag 開才會自動建 intent。
+    env.PSP_DIRECT_INTENT_ENABLED = '1'
+    try {
+      const u = await seedUser({ email: 'w2@x' })
+      const body = JSON.stringify({
+        event_id: 'evt_w2', vendor_intent_id: 'pi_w2', user_id: u.id,
+        status: 'succeeded', amount_subunit: 8000, currency: 'USD',
+      })
+      const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+      const resp = await webhookHandler({
+        request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+      })
+      expect(resp.status).toBe(200)
+      const row = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_w2' })
+      expect(row).not.toBeNull()
+      expect(row.user_id).toBe(u.id)
+      expect(row.status).toBe(PAYMENT_STATUS.SUCCEEDED)
+      expect(row.currency).toBe('USD')
+    } finally {
+      delete env.PSP_DIRECT_INTENT_ENABLED
+    }
+  })
+
+  it('P0-9：沒既存 intent + flag 關 → 不建 intent + critical audit + DLQ', async () => {
+    const u = await seedUser({ email: 'w2b@x' })
     const body = JSON.stringify({
-      event_id: 'evt_w2', vendor_intent_id: 'pi_w2', user_id: u.id,
-      status: 'succeeded', amount_subunit: 8000, currency: 'USD',
+      event_id: 'evt_w2b', vendor_intent_id: 'pi_w2b', user_id: u.id,
+      status: 'succeeded', amount_subunit: 999999, currency: 'TWD',
     })
     const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
     const resp = await webhookHandler({
       request: webhookReq(body, sig), env, params: { vendor: 'mock' },
     })
     expect(resp.status).toBe(200)
-    const row = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_w2' })
-    expect(row).not.toBeNull()
-    expect(row.user_id).toBe(u.id)
-    expect(row.status).toBe(PAYMENT_STATUS.SUCCEEDED)
-    expect(row.currency).toBe('USD')
+    const row = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_w2b' })
+    expect(row).toBeNull()  // 不建 intent
+    const audit = await env.chiyigo_db.prepare(
+      `SELECT severity FROM audit_log WHERE event_type = 'payment.webhook.psp_direct_blocked'`,
+    ).first()
+    expect(audit?.severity).toBe('critical')
+    const dlq = await env.chiyigo_db.prepare(
+      `SELECT error_stage FROM payment_webhook_dlq WHERE event_id = 'evt_w2b'`,
+    ).first()
+    expect(dlq?.error_stage).toBe('psp_direct_disabled')
   })
 
   it('重送同 event_id → 200 deduplicated', async () => {

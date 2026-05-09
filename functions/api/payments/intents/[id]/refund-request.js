@@ -71,13 +71,32 @@ export async function onRequestPost({ request, env, params }) {
   const reasonClipped = reason.slice(0, 500)
   // P2-4: 同步 backfill amount_subunit（目前一律全額退；為部分退款留路）
   const amountSubunit = intent?.amount_subunit ?? null
-  const inserted = await db
-    .prepare(`INSERT INTO requisition_refund_request
-               (requisition_id, user_id, intent_id, reason, amount_subunit)
-               VALUES (?, ?, ?, ?, ?)
-               RETURNING id`)
-    .bind(reqId, userId, intentId, reasonClipped, amountSubunit)
-    .first()
+  // P0-8：上面的 SELECT 是 best-effort 訊息提示；真正鎖死同 intent 只能一筆 pending
+  // 是 migration 0034 的 partial UNIQUE index（uq_rrr_intent_pending）。
+  // 雙擊／競態下兩個 request 都通過 SELECT 才到這 → INSERT UNIQUE conflict 擋掉第二個。
+  let inserted
+  try {
+    inserted = await db
+      .prepare(`INSERT INTO requisition_refund_request
+                 (requisition_id, user_id, intent_id, reason, amount_subunit)
+                 VALUES (?, ?, ?, ?, ?)
+                 RETURNING id`)
+      .bind(reqId, userId, intentId, reasonClipped, amountSubunit)
+      .first()
+  } catch (e) {
+    if (String(e?.message ?? e).includes('UNIQUE')) {
+      const dup = await db
+        .prepare(`SELECT id FROM requisition_refund_request
+                   WHERE intent_id = ? AND status = 'pending' LIMIT 1`)
+        .bind(intentId).first()
+      return res({
+        error: '此筆充值已申請退款，請等候 admin 審核',
+        code:  'REFUND_ALREADY_PENDING',
+        refund_request_id: dup?.id ?? null,
+      }, 409)
+    }
+    throw e
+  }
 
   if (reqId) {
     await db

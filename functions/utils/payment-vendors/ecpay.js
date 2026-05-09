@@ -211,6 +211,8 @@ export const ecpayPaymentAdapter = {
         ? (params.RtnMsg ? String(params.RtnMsg) : `RtnCode=${rtnCode}`)
         : null,
       payment_info:     paymentInfo,
+      // P0-10：把 TradeNo 露出去，webhook handler 在 succeeded 時寫進 intent.metadata.trade_no
+      trade_no:         params.TradeNo ? String(params.TradeNo) : null,
       raw_body:         rawBody,
     }
   },

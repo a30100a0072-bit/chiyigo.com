@@ -150,8 +150,41 @@ export async function onRequestPost({ request, env, params }) {
     throw e
   }
 
-  // 沒既存 intent 且 webhook 帶 user_id → 主動建一筆（PSP 直接通知，跳過我方 /checkout 的場景）
+  // P0-9：原本「沒既存 intent + webhook 帶 user_id」會自動 createPaymentIntent，
+  // 但 amount_subunit 直接抄 webhook body → 攻擊者偽造 webhook 即可塞任意金額成功 row。
+  // 改成：預設關閉，除非顯式 env flag PSP_DIRECT_INTENT_ENABLED='1' 才允許
+  // （我方所有正式 PSP 都先過 /checkout 建 intent，這條 fallback 實際是死路；保留 flag
+  //   是讓未來真接「PSP-direct only」vendor 時可顯式開）。
+  // 不開時：丟 DLQ + critical audit + 仍回 success（避免 PSP retry 灌爆）。
+  const pspDirectAllowed = String(env?.PSP_DIRECT_INTENT_ENABLED ?? '') === '1'
   try {
+    if (!intent && parsed.user_id && !pspDirectAllowed) {
+      await safeUserAudit(env, {
+        event_type: 'payment.webhook.psp_direct_blocked',
+        severity:   'critical',
+        user_id:    parsed.user_id,
+        request,
+        data: {
+          vendor,
+          event_id:         parsed.event_id,
+          vendor_intent_id: parsed.vendor_intent_id,
+          got_amount:       parsed.amount_subunit,
+          got_currency:     parsed.currency,
+          status:           parsed.status,
+        },
+      })
+      await dlqInsert(env, {
+        vendor,
+        event_id: parsed.event_id,
+        vendor_intent_id: parsed.vendor_intent_id,
+        raw_body: rawBody,
+        payload_hash: payloadHash,
+        error_stage: 'psp_direct_disabled',
+        error_message: 'PSP-direct intent creation disabled (set PSP_DIRECT_INTENT_ENABLED=1 to enable)',
+        http_status_returned: 200,
+      })
+      return successFn()
+    }
     if (!intent && parsed.user_id) {
       try {
         const id = await createPaymentIntent(env, {
@@ -195,6 +228,12 @@ export async function onRequestPost({ request, env, params }) {
   // 若 adapter 回了 payment_info（ATM V 帳號 / CVS 代碼 / 條碼）→ merge 到 metadata.payment_info
   if (parsed.payment_info && intent?.id) {
     await mergeMetadata(env, intent.id, { payment_info: parsed.payment_info })
+  }
+
+  // P0-10：付款成功時把 vendor TradeNo 寫進 intent.metadata.trade_no，
+  // 退款 endpoint 直接讀取（不再靠 payment_webhook_events 的 event_id 反推）
+  if (parsed.status === 'succeeded' && parsed.trade_no && intent?.id) {
+    await mergeMetadata(env, intent.id, { trade_no: parsed.trade_no })
   }
 
   await safeUserAudit(env, {
