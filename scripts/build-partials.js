@@ -15,9 +15,37 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execSync } from 'node:child_process'
 import Handlebars from 'handlebars'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// P2-8：build-time cache-bust 版號（git short hash），全站 <script src> / <link href> 統一蓋。
+// 失敗（沒裝 git / 不在 repo）退回 timestamp，不擋 build。
+function resolveBuildVer() {
+  try {
+    const h = execSync('git rev-parse --short=8 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim()
+    if (/^[0-9a-f]{6,12}$/.test(h)) return h
+  } catch { /* fall through */ }
+  return 'b' + Date.now().toString(36)
+}
+const BUILD_VER = resolveBuildVer()
+
+// 規則：只蓋 src 開頭是 / 的本地資源（避開 CDN / 跨網域）。
+//   - 已有 ?v=... → 取代為 build hash（可手動 bump 但被自動覆蓋為一致）
+//   - 已有其他 ?query → 後綴 &v=hash
+//   - 沒 query → 加 ?v=hash
+const ASSET_RE = /\b(src|href)="(\/[^"#?]+\.(?:js|css|mjs))(\?[^"#]*)?(#[^"]*)?"/g
+function injectCacheBust(html) {
+  return html.replace(ASSET_RE, (_, attr, p, query, hash) => {
+    let q
+    if (!query) q = `?v=${BUILD_VER}`
+    else if (/[?&]v=/.test(query)) q = query.replace(/([?&])v=[^&]*/, `$1v=${BUILD_VER}`)
+    else q = `${query}&v=${BUILD_VER}`
+    return `${attr}="${p}${q}${hash || ''}"`
+  })
+}
 const ROOT = path.resolve(__dirname, '..')
 const SRC_PAGES = path.join(ROOT, 'src/pages')
 const SRC_PARTIALS = path.join(ROOT, 'src/partials')
@@ -97,7 +125,9 @@ async function buildPage(filename) {
   const raw = await fs.readFile(srcPath, 'utf8')
   const withI18n = await injectI18n(filename, raw)
   const tpl = Handlebars.compile(withI18n, { noEscape: true })
-  const out = tpl({})
+  const rendered = tpl({})
+  // P2-8：HTML 出檔前統一注入 ?v=<git-hash>，蓋掉手寫的 ?v=
+  const out = injectCacheBust(rendered)
   await fs.mkdir(path.dirname(outPath), { recursive: true })
   await fs.writeFile(outPath, out, 'utf8')
 }

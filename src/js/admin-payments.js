@@ -45,10 +45,14 @@ const ACCESS_TOKEN_KEY = 'access_token';
 function getToken() { return sessionStorage.getItem(ACCESS_TOKEN_KEY); }
 
 async function logout() {
-  const tok = getToken();
-  if (tok) await fetch('/api/auth/logout', { method:'POST', credentials:'include', headers:{ Authorization:`Bearer ${tok}` } }).catch(() => {});
-  sessionStorage.clear();
-  location.href = '/login.html';
+  // P2-11：admin-* 也走 OIDC RP-Initiated Logout，與 sidebar-auth/dashboard 對齊。
+  // end-session 後端會撤所有 refresh + 觸發 backchannel 通知第三方 RP（mbti/talo/sport-app）。
+  try { sessionStorage.removeItem('access_token'); } catch(_) {}
+  try {
+    if ('BroadcastChannel' in window) new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' });
+  } catch(_) {}
+  location.href = '/api/auth/oauth/end-session?post_logout_redirect_uri=' +
+                  encodeURIComponent('https://chiyigo.com/login.html');
 }
 document.getElementById('logout-btn').addEventListener('click', logout);
 

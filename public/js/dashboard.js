@@ -156,15 +156,26 @@ async function loadProfile() {
 
     document.getElementById('email-banner').classList.toggle('hidden', !!data.email_verified);
 
+    // P2-9：用 createElement + textContent 取代 innerHTML 拼接（基線：DOM 一律不 string concat）
     const providersEl = document.getElementById('info-providers');
-    const PROVIDER_ICON_FN = (p) => p === 'discord'
-      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[#5865F2]/15 text-[#5865F2] border border-[#5865F2]/20">Discord</span>`
-      : p === 'local'
-      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-500/15 text-gray-300 border border-gray-500/20">${T('provider_local')}</span>`
-      : `<span class="text-xs text-gray-500">${p}</span>`;
-    const icons = (data.identities ?? []).map(i => PROVIDER_ICON_FN(i.provider));
-    if (icons.length === 0) icons.push(PROVIDER_ICON_FN('local'));
-    providersEl.innerHTML = icons.join('');
+    providersEl.replaceChildren();
+    const buildProviderChip = (p) => {
+      const span = document.createElement('span');
+      if (p === 'discord') {
+        span.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[#5865F2]/15 text-[#5865F2] border border-[#5865F2]/20';
+        span.textContent = 'Discord';
+      } else if (p === 'local') {
+        span.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-gray-500/15 text-gray-300 border border-gray-500/20';
+        span.textContent = T('provider_local');
+      } else {
+        span.className = 'text-xs text-gray-500';
+        span.textContent = p;
+      }
+      return span;
+    };
+    const list = (data.identities ?? []);
+    if (list.length === 0) providersEl.appendChild(buildProviderChip('local'));
+    else for (const i of list) providersEl.appendChild(buildProviderChip(i.provider));
 
     // 2FA 區塊
     render2FASection(data.totp_enabled ?? false, !!data.has_password);
@@ -180,20 +191,22 @@ async function loadProfile() {
     renderDeleteSection(window.__hasPassword);
 
     // 需求單區塊
-    loadRequisitions();
-
-    // Phase D-3：裝置 + Passkey
+    // P2-10：原本 6 個 fire-and-forget 並發 fetch（loadRequisitions/Devices/Passkeys/
+    // Wallets/Payments/Deals）+ silent refresh 同時跑會給 401 race。改成 async sequential
+    // 鏈，每個 await 完再下一個；watchdog 取消上一個 race。視覺體驗仍即時（每段都獨立 render）。
     window.__totpEnabled = !!data.totp_enabled;
-    loadDevices();
-    loadPasskeys();
-
-    // Phase F-3：錢包
-    loadWallets();
-
-    // Phase F-2 wave 3：付款 / 充值
-    loadPayments();
-    // P1-6: 我的成交紀錄
-    loadDeals();
+    (async () => {
+      try {
+        await loadRequisitions();
+        await loadDevices();
+        await loadPasskeys();
+        await loadWallets();
+        await loadPayments();
+        await loadDeals();
+      } catch (e) {
+        console.warn('[loadProfile] sequential subload aborted:', e);
+      }
+    })();
     // 從綠界分頁付款完切回來 → 自動重抓 intent list（不用 user 手動 F5）
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) { loadPayments(); loadDeals(); }
