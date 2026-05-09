@@ -437,7 +437,7 @@ async function openRequisitionDetail(id) {
     `<div class="flex gap-3 text-sm"><span class="w-16 text-gray-500 shrink-0">${k}</span><span class="text-white break-all">${esc(v ?? '—')}</span></div>`
   ).join('');
   const msgHtml = row.message
-    ? `<div class="mt-2"><p class="text-xs text-gray-500 mb-1">需求說明</p><p class="text-sm text-white whitespace-pre-wrap break-words bg-[#0a0a10] border border-[var(--border-bright)] rounded-lg px-3 py-2">${esc(row.message)}</p></div>`
+    ? `<div class="mt-2"><p class="text-xs text-gray-500 mb-1">需求說明</p><p class="text-sm text-white whitespace-pre-wrap break-words bg-[var(--bg-elevated)] border border-[var(--border-bright)] rounded-lg px-3 py-2">${esc(row.message)}</p></div>`
     : '';
   // 串付款狀態
   const payments = row.linked_payments ?? [];
@@ -449,7 +449,7 @@ async function openRequisitionDetail(id) {
            const lbl = T('payment_status_' + p.status) || p.status;
            const amt = p.amount_subunit != null ? `${p.amount_subunit.toLocaleString()} ${esc(p.currency || 'TWD')}` : '—';
            const when = p.created_at ? formatRelative(p.created_at) : '';
-           return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[#0a0a10] border border-[var(--border-bright)] text-xs">
+           return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-bright)] text-xs">
              <span class="text-gray-400">#${p.id} · ${esc(p.vendor)}</span>
              <span class="text-white font-mono">${amt}</span>
              <span class="px-2 py-0.5 rounded-full text-xs font-semibold border ${cls}">${esc(lbl)}</span>
@@ -463,7 +463,7 @@ async function openRequisitionDetail(id) {
   modal.id = 'req-detail-modal';
   modal.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4';
   modal.innerHTML = `
-    <div class="relative w-full max-w-md rounded-2xl bg-[#0f0f14] border border-[var(--border-bright)] p-5">
+    <div class="relative w-full max-w-md rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] p-5">
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-base font-semibold text-white">需求單 #${row.id}</h3>
         <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${s.cls}">${s.text}</span>
@@ -1378,7 +1378,7 @@ function renderDevices(devices) {
     const last  = formatRelative(d.last_seen);
     const dataAttr = isNull ? 'data-device-uuid=""' : `data-device-uuid="${esc(dev)}"`;
     return `
-      <div class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3 flex items-center justify-between gap-3">
+      <div class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3 flex items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
           <p class="text-sm font-medium text-white truncate">${label}</p>
           <p class="text-xs text-gray-500 mt-0.5">${T('device_last_seen_label')}：${esc(last)} · ${d.active_count} ${T('device_active_label')}</p>
@@ -1461,7 +1461,7 @@ function renderPasskeys(creds) {
     const lastUsed = c.last_used_at ? formatRelative(c.last_used_at) : T('passkey_never_used');
     const transports = (c.transports ?? []).join(', ') || '—';
     return `
-      <div id="pk-row-${c.id}" class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3">
+      <div id="pk-row-${c.id}" class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-white truncate" id="pk-nickname-${c.id}">${esc(nickname)}</p>
@@ -1711,7 +1711,7 @@ function renderWallets(wallets) {
     const display = w.nickname ? `${esc(w.nickname)} · ${esc(shortAddr(w.address))}` : esc(w.address);
     const signedAt = w.signed_at ? formatRelative(w.signed_at) : '—';
     return `
-      <div id="wl-row-${w.id}" class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3">
+      <div id="wl-row-${w.id}" class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-white truncate font-mono">${display}</p>
@@ -1956,7 +1956,7 @@ function renderDeals(rows) {
       ? `<span class="mono text-[.68rem] text-gray-500">原單 #${d.source_requisition_id}</span>`
       : `<span class="mono text-[.68rem] text-gray-600">原單已歸檔</span>`;
     return `
-      <div class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3">
+      <div class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3 mb-1.5">
           <span class="text-sm font-semibold text-white">#${d.id} · ${esc(d.service_type || '接案')}</span>
           <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-emerald-500/15 text-emerald-300 border-emerald-500/40">✓ 已成交</span>
@@ -2059,7 +2059,7 @@ function renderPayments(items) {
       ? `<span class="px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-orange-500/15 text-orange-300 border-orange-500/30 cursor-help" title="申請時間：${esc(refundReqAt || '—')}（等候 admin 審核）">退款申請中</span>`
       : null;
     return `
-      <div class="rounded-xl bg-[#0e0e16] border border-[var(--border-bright)] px-4 py-3">
+      <div class="rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium text-white">${esc(kindLabel)} · ${amount}</p>
