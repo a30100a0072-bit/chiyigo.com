@@ -1,5 +1,5 @@
 /* ── block 1/2 ── */
-body { background-color: #0e0e12; color: #e4e4ef; }
+body { background-color: var(--bg); color: var(--text); }
 /* logo light/dark sync */
 .db-logo{height:38px;width:auto;display:block}
 .logo-dark,.theme-dark .logo-light{display:none!important}
@@ -23,8 +23,7 @@ body { background-color: #0e0e12; color: #e4e4ef; }
 .theme-dark .theme-btn .icon-sun{display:none}
 .theme-dark .theme-btn .icon-moon{display:block}
 
-/* ── 亮模式覆蓋（dashboard 原本硬編碼為暗色，這裡以 theme-light 反轉）── */
-.theme-light body{background-color:#f7f7fb;color:#1a1a24}
+/* ── 亮模式覆蓋 — 主 body 已吃 token；以下保留 divide / globe / banner 等需單獨處理的 ── */
 .theme-light .divide-\[\#2a2a35\]>:not([hidden])~:not([hidden]){border-color:#e3e3ec!important}
 .theme-light .globe-btn,.theme-light .theme-btn{border-color:#d8d8e2;color:#5a5a6a}
 .theme-light .db-lang-drop{background:#fff;border-color:#d8d8e2;box-shadow:0 4px 24px rgba(0,0,0,.08)}
@@ -161,47 +160,17 @@ body.has-sidebar{overflow:hidden}
 .bind-dot[data-provider="line"]     { background: #06c755; }
 .bind-dot[data-provider="facebook"] { background: #1877f2; }
 
-/* Chrome / Safari 的 autofill 預設會把 input 背景塗白、文字塗黑，
-   導致 dashboard 暗色 UI 變成白底白字（password / OTP 框看不見字）。
-   用「inset box-shadow」蓋過 autofill bg；text-fill-color 強制白字。
-   transition 5000s 是業界 hack：Chrome autofill 觸發時有 ~150ms
-   動畫期間還是露出白底，用超長 transition 把那段壓掉。 */
+/* Chrome / Safari autofill：用 inset box-shadow 蓋過 autofill 預設白底；
+   transition 5000s 是業界 hack 壓掉 ~150ms autofill 動畫期間露出的白底。
+   bg/text 全吃 token，dark/light 自動切換，不再需要 .theme-light 變體。 */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-text-fill-color: #ffffff !important;
-  -webkit-box-shadow: 0 0 0 1000px #0e0e16 inset !important;
-  caret-color: #ffffff !important;
-  transition: background-color 5000s ease-in-out 0s !important;
-}
-
-/* ── Phase D-3 修：Light mode 下 dashboard 內 input 一律覆蓋 ─────────
-   原因：dashboard.html / dashboard.js 動態 row 用 hardcoded
-   bg-[#0e0e16] / bg-[#0e0e12] / bg-[#0f0f14] + text-white，
-   切到光模式變成「黑底白字」很突兀。
-   覆蓋成 var(--bg-elevated) / var(--text) 讓它跟著主題走。 */
-.theme-light .dash-content input[class*="bg-[#0e0e1"],
-.theme-light .dash-content input[class*="bg-[#0f0f1"],
-.theme-light .dash-content input[class*="bg-[#0a0a1"] {
-  background-color: var(--bg-elevated) !important;
-  color: var(--text) !important;
-  border-color: var(--border-bright) !important;
+  -webkit-text-fill-color: var(--text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-elevated) inset !important;
   caret-color: var(--text) !important;
-}
-.theme-light .dash-content input[class*="bg-[#0e0e1"]::placeholder,
-.theme-light .dash-content input[class*="bg-[#0f0f1"]::placeholder,
-.theme-light .dash-content input[class*="bg-[#0a0a1"]::placeholder {
-  color: var(--text-dim) !important;
-}
-/* autofill 的 light mode 變體（蓋掉前面 dark mode 的 !important）*/
-.theme-light input:-webkit-autofill,
-.theme-light input:-webkit-autofill:hover,
-.theme-light input:-webkit-autofill:focus,
-.theme-light input:-webkit-autofill:active {
-  -webkit-text-fill-color: #1A1B2E !important;
-  -webkit-box-shadow: 0 0 0 1000px #FAFAFE inset !important;
-  caret-color: #1A1B2E !important;
+  transition: background-color 5000s ease-in-out 0s !important;
 }
 
 /* 密碼欄位顯示/隱藏（套用 login 同一視覺）*/
