@@ -19,8 +19,8 @@
     "tfa_confirm_disable": "確認停用",
     "tfa_disable_warn": "停用後需重新設定才能再次啟用。請輸入 Authenticator App 的驗證碼確認。",
     "tfa_backup_warn_pre": "請立即抄下這 10 組備用碼，之後",
-    "tfa_backup_warn_em":  "無法再次查看",
-    "tfa_backup_warn_post":"。每組只能使用一次。",
+    "tfa_backup_warn_em": "無法再次查看",
+    "tfa_backup_warn_post": "。每組只能使用一次。",
     "tfa_backup_done": "我已抄寫完畢",
     "email_unverified": "Email 尚未驗證",
     "email_unverified_sub": "驗證後可使用完整帳號功能",
@@ -246,7 +246,9 @@
     "payment_info_atm_account": "虛擬帳號",
     "payment_info_cvs_no": "超商繳費代碼",
     "payment_info_barcode": "超商條碼",
-    "payment_info_expire": "繳費期限"
+    "payment_info_expire": "繳費期限",
+    "del_otp_ph": "2FA 6 位數驗證碼",
+    "del_otp_required": "刪除帳號需先啟用 2FA。請至上方「兩步驟驗證」啟用後再操作。"
   },
   "en": {
     "back_home": "Back to Home",
@@ -268,8 +270,8 @@
     "tfa_confirm_disable": "Confirm Disable",
     "tfa_disable_warn": "After disabling, you must set it up again to re-enable. Enter your authenticator code to confirm.",
     "tfa_backup_warn_pre": "Please copy these 10 backup codes now. They ",
-    "tfa_backup_warn_em":  "cannot be viewed again",
-    "tfa_backup_warn_post":". Each code can only be used once.",
+    "tfa_backup_warn_em": "cannot be viewed again",
+    "tfa_backup_warn_post": ". Each code can only be used once.",
     "tfa_backup_done": "I have saved my codes",
     "email_unverified": "Email Not Verified",
     "email_unverified_sub": "Verify to unlock full account features",
@@ -495,7 +497,9 @@
     "payment_info_atm_account": "Virtual account",
     "payment_info_cvs_no": "CVS payment code",
     "payment_info_barcode": "CVS barcode",
-    "payment_info_expire": "Expires"
+    "payment_info_expire": "Expires",
+    "del_otp_ph": "2FA 6-digit code",
+    "del_otp_required": "Account deletion requires 2FA. Enable it in the Two-Factor Authentication section first."
   },
   "ja": {
     "back_home": "ホームに戻る",
@@ -517,8 +521,8 @@
     "tfa_confirm_disable": "無効化を確認",
     "tfa_disable_warn": "無効化後は再設定が必要です。確認のためにAuthenticatorコードを入力してください。",
     "tfa_backup_warn_pre": "今すぐこの10組のバックアップコードをメモしてください。",
-    "tfa_backup_warn_em":  "再表示はできません",
-    "tfa_backup_warn_post":"。各コードは1回のみ使用可能です。",
+    "tfa_backup_warn_em": "再表示はできません",
+    "tfa_backup_warn_post": "。各コードは1回のみ使用可能です。",
     "tfa_backup_done": "保存しました",
     "email_unverified": "メール未認証",
     "email_unverified_sub": "認証するとすべての機能が使えます",
@@ -744,7 +748,9 @@
     "payment_info_atm_account": "仮想口座",
     "payment_info_cvs_no": "コンビニ支払コード",
     "payment_info_barcode": "コンビニバーコード",
-    "payment_info_expire": "支払期限"
+    "payment_info_expire": "支払期限",
+    "del_otp_ph": "2FA 6桁コード",
+    "del_otp_required": "アカウント削除には2FAが必要です。先に「二段階認証」を有効化してください。"
   },
   "ko": {
     "back_home": "홈으로 돌아가기",
@@ -766,8 +772,8 @@
     "tfa_confirm_disable": "비활성화 확인",
     "tfa_disable_warn": "비활성화 후 다시 설정해야 재활성화할 수 있습니다. 인증 코드를 입력하여 확인하세요.",
     "tfa_backup_warn_pre": "지금 바로 이 10개의 백업 코드를 기록해 두세요. ",
-    "tfa_backup_warn_em":  "다시 볼 수 없습니다",
-    "tfa_backup_warn_post":". 각 코드는 한 번만 사용 가능합니다.",
+    "tfa_backup_warn_em": "다시 볼 수 없습니다",
+    "tfa_backup_warn_post": ". 각 코드는 한 번만 사용 가능합니다.",
     "tfa_backup_done": "저장 완료",
     "email_unverified": "이메일 미인증",
     "email_unverified_sub": "인증 후 모든 기능을 사용할 수 있습니다",
@@ -993,6 +999,8 @@
     "payment_info_atm_account": "가상 계좌",
     "payment_info_cvs_no": "편의점 결제 코드",
     "payment_info_barcode": "편의점 바코드",
-    "payment_info_expire": "납부 기한"
+    "payment_info_expire": "납부 기한",
+    "del_otp_ph": "2FA 6자리 코드",
+    "del_otp_required": "계정 삭제는 2FA가 필요합니다. 위의 \"2단계 인증\"에서 먼저 활성화하세요."
   }
 }

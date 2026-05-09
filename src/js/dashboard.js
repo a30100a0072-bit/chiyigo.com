@@ -1151,6 +1151,7 @@ const DEL_ERR_MAP = {
 };
 async function submitDeleteAccount() {
   const pw   = document.getElementById('del-password').value;
+  const otp  = (document.getElementById('del-otp')?.value ?? '').trim();
   const msg  = document.getElementById('del-msg');
   const btn  = document.getElementById('del-submit-btn');
   msg.classList.add('hidden');
@@ -1161,21 +1162,44 @@ async function submitDeleteAccount() {
     msg.classList.remove('hidden');
     return;
   }
+  // P1-3：刪帳號要 step-up（elevated:account）→ 必填 6 位 OTP
+  if (!/^\d{6}$/.test(otp)) {
+    msg.textContent = T('totp_err6');
+    msg.className = 'text-xs text-red-400';
+    msg.classList.remove('hidden');
+    return;
+  }
   btn.disabled = true;
   try {
-    await apiFetch('/api/auth/delete', {
+    // 1) 換 step-up token（5min 短效）
+    const stepRes = await apiFetch('/api/auth/step-up', {
       method: 'POST',
-      body:   JSON.stringify({ password: pw }),
+      body:   JSON.stringify({
+        scope: 'elevated:account',
+        for_action: 'delete_account',
+        otp_code: otp,
+      }),
+    });
+    const stepUpToken = stepRes?.step_up_token;
+    if (!stepUpToken) throw new Error('no step_up_token');
+
+    // 2) 帶 step-up token + password 兩重憑證 POST 刪帳號（送 confirmation email）
+    await apiFetch('/api/auth/delete', {
+      method:  'POST',
+      headers: { Authorization: 'Bearer ' + stepUpToken },
+      body:    JSON.stringify({ password: pw }),
     });
     msg.innerHTML = T('del_sent');
     msg.className = 'text-xs text-emerald-400';
     msg.classList.remove('hidden');
     document.getElementById('del-password').value = '';
+    if (document.getElementById('del-otp')) document.getElementById('del-otp').value = '';
   } catch (e) {
     if (e instanceof ApiError && e.status > 0) {
-      // 先試 delete 專用映射，再退回全域 BACKEND_ERR_MAP
       const k = DEL_ERR_MAP[e.body?.error] || BACKEND_ERR_MAP[e.body?.error];
-      const base = k ? T(k) : T('del_err_generic').replace('${status}', e.status);
+      // step-up 405/403/401 也走 generic（含 STEP_UP_REQUIRES_2FA）
+      let base = k ? T(k) : T('del_err_generic').replace('${status}', e.status);
+      if (e.body?.code === 'STEP_UP_REQUIRES_2FA') base = T('del_otp_required');
       msg.textContent = e.traceId ? `${base}（#${e.traceId}）` : base;
       console.warn('[delete-account]', e.status, e.body, 'traceId=', e.traceId);
     } else {

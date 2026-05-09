@@ -3,7 +3,8 @@
 // Step 2 is POST /api/auth/delete/confirm with the emailed token.
 
 import { verifyPassword, generateSecureToken, hashToken } from '../../utils/crypto.js'
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireStepUp, res } from '../../utils/auth.js'
+import { SCOPES } from '../../utils/scopes.js'
 import { sendDeleteConfirmationEmail } from '../../utils/email.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
 
@@ -27,8 +28,9 @@ export async function onRequestPost(ctx) {
 }
 
 async function handleDelete({ request, env }) {
-  // ── 1. JWT 驗證 ───────────────────────────────────────────────
-  const { user, error } = await requireAuth(request, env)
+  // P1-3：刪帳號是高權限毀滅性動作，要求 step-up token（5min 短效，需通過 2FA 換來）
+  // + 額外驗一次密碼作雙重憑證（step-up 雖已驗 TOTP，密碼是 OAuth-only 帳號禁止刪的閘門）
+  const { user, error } = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'delete_account')
   if (error) return error
 
   // ── 2. 解析 Body ─────────────────────────────────────────────
