@@ -223,7 +223,7 @@ async function exportCsv() {
         credentials: 'include',
       });
     }
-    if (!r.ok) { alert('匯出失敗：' + r.status); return; }
+    if (!r.ok) { window.notify.error('匯出失敗：' + r.status); return; }
     triggerDownload(await r.blob(), `deals-${new Date().toISOString().slice(0,10)}.csv`);
   } finally {
     btn.disabled = false; btn.textContent = orig;

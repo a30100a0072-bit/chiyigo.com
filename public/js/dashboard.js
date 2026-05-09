@@ -831,7 +831,7 @@ async function startSetup2FA() {
     if (pwEl) pwEl.value = '';
     document.getElementById('tfa-setup-msg').classList.add('hidden');
   } catch (e) {
-    alert(tApiError(e, T('net_err')));
+    window.notify.error(tApiError(e, T('net_err')));
   }
   btn.disabled = false; btn.querySelector('[data-i18n]').textContent = T('tfa_enable_btn');
 }

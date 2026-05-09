@@ -335,13 +335,13 @@ async function auditDelGo(auditId, btn) {
     headers: { 'Content-Type':'application/json', Authorization:`Bearer ${tok}` },
     body:    JSON.stringify({ scope:'elevated:account', for_action:'delete_audit', otp_code: otp }),
   }).catch(() => null);
-  if (!su || !su.ok) { btn.disabled = false; btn.textContent = '清除'; alert('step-up 失敗'); return; }
+  if (!su || !su.ok) { btn.disabled = false; btn.textContent = '清除'; window.notify.error('step-up 失敗'); return; }
   const { step_up_token } = await su.json();
   const r = await fetch(`/api/admin/audit/${auditId}`, {
     method:  'DELETE',
     headers: { Authorization: `Bearer ${step_up_token}` },
   }).catch(() => null);
-  if (!r || !r.ok) { btn.disabled = false; btn.textContent = '清除'; alert('刪除失敗'); return; }
+  if (!r || !r.ok) { btn.disabled = false; btn.textContent = '清除'; window.notify.error('刪除失敗'); return; }
   btn.closest('div[style*="border:1px solid"]')?.remove();
 }
 
