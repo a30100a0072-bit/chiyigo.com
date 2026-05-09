@@ -4,11 +4,7 @@ body { background-color: var(--bg); color: var(--text); }
 .db-logo{height:38px;width:auto;display:block}
 .logo-dark,.theme-dark .logo-light{display:none!important}
 .theme-dark .logo-dark{display:block!important}
-/* sb-foot-btn 內 sun/moon icon 切換（HTML 用 .sb-foot-btn 而非 .theme-btn） */
-.sb-foot-btn .icon-moon{display:none}
-.sb-foot-btn .icon-sun{display:block}
-.theme-dark .sb-foot-btn .icon-sun{display:none}
-.theme-dark .sb-foot-btn .icon-moon{display:block}
+/* sb-foot-btn / sun-moon icon toggle / lang-dropdown 已集中至 _components.css */
 
 /* ── 亮模式覆蓋 — 主 body 已吃 token；以下保留 divide / globe / banner 等需單獨處理的 ── */
 .theme-light .divide-\[\#2a2a35\]>:not([hidden])~:not([hidden]){border-color:#e3e3ec!important}
@@ -57,18 +53,7 @@ body.has-sidebar{overflow:hidden}
 .sb-cta-desc{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:.75rem}
 .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--accent);color:#fff;font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
 .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
-.sb-footer{display:flex;align-items:center;gap:.5rem;position:relative}
-.sb-foot-icons{display:flex;gap:.25rem}
-.sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
-.sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
-.sb-foot-btn svg{width:14px;height:14px}
 .sb-copyright{font-family:'DM Mono',monospace;font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
-
-.sb-lang-drop{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
-.sb-lang-drop.open{display:flex}
-.sb-lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:inherit;font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
-.sb-lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
-.sb-lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
 
 /* Mobile topbar / overlay */
 .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim)}

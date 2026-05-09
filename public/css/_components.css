@@ -232,3 +232,32 @@
 .empty-state .btn-primary,
 .empty-state .btn-ghost,
 .empty-state .btn-danger { margin-top: .65rem; }
+
+/* ── Form input focus ring（B3 follow-up）──────────────
+ * forgot-password / reset-password / bind-email / dashboard 4 頁的 form input
+ * 用 Tailwind 任意 utility `focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20`，
+ * 但 brand-500 + opacity 修飾子在 JIT 沒 build 出來 → focus 沒視覺反饋。
+ * 在這裡無條件 map 到 var(--accent) / var(--accent-glow)，所有頁面共用。 */
+.focus\:border-brand-500\/60:focus { border-color: var(--accent) !important; }
+.focus\:ring-brand-500\/20:focus {
+  box-shadow: 0 0 0 3px var(--accent-glow) !important;
+  outline: none;
+}
+
+/* ── Sidebar foot controls（B3 follow-up：原 12 份 CSS 各自一份，集中於此）──
+ * HTML 用 .sb-footer / .sb-foot-icons / .sb-foot-btn / .lang-dropdown / .lang-opt
+ * dashboard 額外保留 .db-lang-opt（JS hook，CSS 無 rule）與 #db-lang-drop（JS getElementById） */
+.sb-footer{display:flex;align-items:center;gap:.5rem;position:relative}
+.sb-foot-icons{display:flex;gap:.25rem}
+.sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
+.sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
+.sb-foot-btn svg{width:14px;height:14px}
+.sb-foot-btn .icon-moon{display:none}
+.sb-foot-btn .icon-sun{display:block}
+.theme-dark .sb-foot-btn .icon-sun{display:none}
+.theme-dark .sb-foot-btn .icon-moon{display:block}
+.lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
+.lang-dropdown.open{display:flex}
+.lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
+.lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
+.lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}

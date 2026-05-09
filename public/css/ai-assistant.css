@@ -45,7 +45,7 @@ body{min-height:100vh;overflow:hidden}
 .sb-cta-desc{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:.75rem}
 .sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
 .sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
-.sb-footer{display:flex;align-items:center;gap:.5rem;position:relative}
+/* .sb-footer / .sb-foot-* / .lang-dropdown / .lang-opt 已集中至 _components.css */
 .sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
 .sb-login-link:hover{color:var(--accent);background:var(--bg-elevated)}
 .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
@@ -53,10 +53,6 @@ body{min-height:100vh;overflow:hidden}
 .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
 .m-login-btn:hover{color:var(--text)}
 .m-login-btn svg{width:17px;height:17px}
-.sb-foot-icons{display:flex;gap:.25rem}
-.sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
-.sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
-.sb-foot-btn svg{width:14px;height:14px}
 .sb-copyright{font-family:var(--font-mono);font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
 
 .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim);transition:background .3s ease,border-color .3s ease}
@@ -124,11 +120,6 @@ body{min-height:100vh;overflow:hidden}
 .footer-contact-item svg{width:13px;height:13px;flex-shrink:0}
 .copy{font-family:var(--font-mono);font-size:.62rem;color:var(--text-dim);width:100%;grid-column:1/-1;opacity:.6}
 
-.lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
-.lang-dropdown.open{display:flex}
-.lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
-.lang-opt:hover{background:var(--hover-overlay);color:var(--text)}
-.lang-opt.active{color:var(--accent);font-weight:500;background:var(--accent-dim)}
 .m-ov-lang-row{display:flex;gap:.5rem;margin-top:.75rem}
 .m-ov-lang-opt{flex:1;padding:.42rem .2rem;border:1px solid var(--border-dim);background:transparent;border-radius:8px;font-family:var(--font-sans);font-size:.72rem;color:var(--text-muted);cursor:pointer;transition:border-color .18s,color .18s,background .18s;text-align:center}
 .m-ov-lang-opt:hover{border-color:var(--border);color:var(--text)}
