@@ -43,29 +43,25 @@ export async function saveChallenge(env, { challenge, user_id = null, ceremony }
 }
 
 /**
- * 一次性消耗 challenge（atomic：先 SELECT 拿值再 DELETE）。
+ * 一次性消耗 challenge（atomic：DELETE...RETURNING 一條 SQL）。
  *  - 已過期 → 視為不存在
  *  - ceremony 不符 → 視為不存在（不要洩漏細節）
  *  - 找不到 / 已被消耗 → 回 null
  *
- * D1 不支援 RETURNING with DELETE 還沒穩定到能依賴，這裡兩步走 + 競態下最多
- * 同 challenge 被驗兩次，但驗證階段還會比對 publicKey + counter，安全性不破。
+ * P1-7：原本兩步走（SELECT 後 DELETE）競態下同 challenge 可被驗兩次，
+ * 雖有 publicKey/counter 兜底但仍違反 step-up「一次性消耗」基線。
+ * D1 已穩定支援 DELETE...RETURNING（SQLite 3.35+），改一條 SQL 原子化。
  */
 export async function consumeChallenge(env, { challenge, ceremony }) {
   const row = await env.chiyigo_db
     .prepare(
-      `SELECT challenge, user_id, ceremony, expires_at
-         FROM webauthn_challenges
-        WHERE challenge = ? AND ceremony = ? AND expires_at > datetime('now')`,
+      `DELETE FROM webauthn_challenges
+        WHERE challenge = ? AND ceremony = ? AND expires_at > datetime('now')
+       RETURNING challenge, user_id, ceremony, expires_at`,
     )
     .bind(challenge, ceremony)
     .first()
-  if (!row) return null
-  // fire and forget delete — 失敗不擋驗證流程，DB 上 5 分鐘後也會被視為過期
-  await env.chiyigo_db
-    .prepare(`DELETE FROM webauthn_challenges WHERE challenge = ?`)
-    .bind(challenge).run()
-  return row
+  return row || null
 }
 
 /**

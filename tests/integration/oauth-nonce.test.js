@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys } from './_helpers.js'
+import { resetDb, ensureJwtKeys, appleSignIdToken, appleJwksBody } from './_helpers.js'
 import {
   onRequestGet as cbGet,
 } from '../../functions/api/auth/oauth/[provider]/callback.js'
@@ -92,6 +92,12 @@ function makeFetchMock(plan) {
     }
     if (url.includes('api.line.me/v2/profile')) {
       return new Response(JSON.stringify(plan.profileBody), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    // P1-1：Apple callback 改 jwtVerify(JWKS) → mock JWKS endpoint 回測試公鑰
+    if (url.includes('appleid.apple.com/auth/keys')) {
+      return new Response(JSON.stringify(plan.appleJwks ?? { keys: [] }), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       })
     }
@@ -271,12 +277,13 @@ describe('init.js OIDC nonce 生成', () => {
 
 describe('Apple callback nonce 驗證', () => {
   it('id_token.nonce 與 stored.nonce 不符 → 拒絕', async () => {
-    const idToken = fakeAppleIdToken({
+    const idToken = await appleSignIdToken({
       sub: 'apple-uid-1', email: 'attacker@apple.example',
-      email_verified: 'true', nonce: 'wrong-nonce',
+      email_verified: 'true', aud: 'apple-cid', nonce: 'wrong-nonce',
     })
     vi.stubGlobal('fetch', makeFetchMock({
       tokenBody: { access_token: 'fake-tok', id_token: idToken },
+      appleJwks: await appleJwksBody(),
     }))
 
     await seedOauthState({
@@ -297,12 +304,13 @@ describe('Apple callback nonce 驗證', () => {
 
   it('id_token.nonce 與 stored.nonce 相符 → 成功', async () => {
     const goodNonce = 'real-apple-nonce-2'
-    const idToken = fakeAppleIdToken({
+    const idToken = await appleSignIdToken({
       sub: 'apple-uid-2', email: 'good@apple.example',
-      email_verified: 'true', nonce: goodNonce,
+      email_verified: 'true', aud: 'apple-cid', nonce: goodNonce,
     })
     vi.stubGlobal('fetch', makeFetchMock({
       tokenBody: { access_token: 'fake-tok', id_token: idToken },
+      appleJwks: await appleJwksBody(),
     }))
 
     await seedOauthState({

@@ -130,10 +130,14 @@ export async function onRequestPost({ request, env }) {
   // refresh_tokens.auth_time 用 auth_codes 透傳的（silent SSO 保留原 auth_time，
   // 互動式登入則由 code.js 寫成 NOW）。fallback NOW 防 silent 鏈路 auth_time 為 null。
   const newAuthTime = authCode.auth_time ?? new Date().toISOString().replace('T', ' ').slice(0, 19)
+  // P1-2：OIDC 主流路徑也要寫 device_uuid 否則 D-1 device binding 對 OIDC token 失效
+  // header 是事實來源（chiyigo SDK / sport-app SDK 都送 X-Device-Id）；缺值寫 null（web cookie 路徑）
+  const headerDeviceId = request.headers.get('X-Device-Id') ?? request.headers.get('x-device-id')
+  const deviceUuid     = (headerDeviceId && headerDeviceId.trim()) || null
   await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at, auth_time)
-              VALUES (?, ?, ?, ?)`)
-    .bind(user.id, refreshTokenHash, refreshExpiresAt, newAuthTime)
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
+              VALUES (?, ?, ?, ?, ?)`)
+    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime)
     .run()
 
   // 簽發 Access Token（ES256，15 分鐘） — aud 依 redirect_uri origin 決定

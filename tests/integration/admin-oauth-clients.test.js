@@ -36,6 +36,16 @@ async function adminToken(userId) {
   )
 }
 
+// P0-5：PATCH/DELETE 改要求 step-up（elevated:account + for_action）
+async function adminStepUpToken(userId, forAction) {
+  return signJwt(
+    { sub: String(userId), email: 'a@x', role: 'admin', status: 'active', ver: 0,
+      scope: 'elevated:account', for_action: forAction,
+      amr: ['pwd', 'totp'], acr: 'urn:chiyigo:loa:2' },
+    '5m', env,
+  )
+}
+
 async function call(handler, { token, method = 'GET', body = null, params = {}, query = '' }) {
   const url = `http://x/api/admin/oauth-clients${query ? '?' + query : ''}`
   const headers = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : {}
@@ -207,8 +217,9 @@ describe('Admin oauth-clients CRUD', () => {
     const tok = await adminToken(id)
     await call(createHandler, { token: tok, method: 'POST', body: VALID_BODY })
 
+    const stepTok = await adminStepUpToken(id, 'update_oauth_client')
     const r = await call(patchHandler, {
-      token: tok, method: 'PATCH', params: { client_id: 'test-rp-1' },
+      token: stepTok, method: 'PATCH', params: { client_id: 'test-rp-1' },
       body: { client_name: 'Renamed RP', backchannel_logout_uri: 'https://test-rp-1.example/bc' },
     })
     expect(r.status).toBe(200)
@@ -224,17 +235,18 @@ describe('Admin oauth-clients CRUD', () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
     const tok = await adminToken(id)
     await call(createHandler, { token: tok, method: 'POST', body: VALID_BODY })
+    const stepTok = await adminStepUpToken(id, 'update_oauth_client')
     const r = await call(patchHandler, {
-      token: tok, method: 'PATCH', params: { client_id: 'test-rp-1' }, body: {},
+      token: stepTok, method: 'PATCH', params: { client_id: 'test-rp-1' }, body: {},
     })
     expect(r.status).toBe(400)
   })
 
   it('PATCH 不存在的 client_id → 404', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
-    const tok = await adminToken(id)
+    const stepTok = await adminStepUpToken(id, 'update_oauth_client')
     const r = await call(patchHandler, {
-      token: tok, method: 'PATCH', params: { client_id: 'nope' },
+      token: stepTok, method: 'PATCH', params: { client_id: 'nope' },
       body: { client_name: 'X' },
     })
     expect(r.status).toBe(404)
@@ -247,8 +259,9 @@ describe('Admin oauth-clients CRUD', () => {
       token: tok, method: 'POST',
       body: { ...VALID_BODY, backchannel_logout_uri: 'https://test-rp-1.example/bc' },
     })
+    const stepTok = await adminStepUpToken(id, 'update_oauth_client')
     const r = await call(patchHandler, {
-      token: tok, method: 'PATCH', params: { client_id: 'test-rp-1' },
+      token: stepTok, method: 'PATCH', params: { client_id: 'test-rp-1' },
       body: { backchannel_logout_uri: null },
     })
     expect(r.status).toBe(200)
@@ -263,7 +276,8 @@ describe('Admin oauth-clients CRUD', () => {
     const tok = await adminToken(id)
     await call(createHandler, { token: tok, method: 'POST', body: VALID_BODY })
 
-    const r = await call(deleteHandler, { token: tok, method: 'DELETE', params: { client_id: 'test-rp-1' } })
+    const stepTok = await adminStepUpToken(id, 'delete_oauth_client')
+    const r = await call(deleteHandler, { token: stepTok, method: 'DELETE', params: { client_id: 'test-rp-1' } })
     expect(r.status).toBe(200)
 
     const row = await env.chiyigo_db
@@ -279,15 +293,18 @@ describe('Admin oauth-clients CRUD', () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
     const tok = await adminToken(id)
     await call(createHandler, { token: tok, method: 'POST', body: VALID_BODY })
-    await call(deleteHandler, { token: tok, method: 'DELETE', params: { client_id: 'test-rp-1' } })
-    const r = await call(deleteHandler, { token: tok, method: 'DELETE', params: { client_id: 'test-rp-1' } })
+    // step-up token 一次性消耗，每次 DELETE 要新發一張
+    const t1 = await adminStepUpToken(id, 'delete_oauth_client')
+    await call(deleteHandler, { token: t1, method: 'DELETE', params: { client_id: 'test-rp-1' } })
+    const t2 = await adminStepUpToken(id, 'delete_oauth_client')
+    const r = await call(deleteHandler, { token: t2, method: 'DELETE', params: { client_id: 'test-rp-1' } })
     expect(r.status).toBe(409)
   })
 
   it('DELETE 不存在 → 404', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
-    const tok = await adminToken(id)
-    const r = await call(deleteHandler, { token: tok, method: 'DELETE', params: { client_id: 'nope' } })
+    const stepTok = await adminStepUpToken(id, 'delete_oauth_client')
+    const r = await call(deleteHandler, { token: stepTok, method: 'DELETE', params: { client_id: 'nope' } })
     expect(r.status).toBe(404)
   })
 

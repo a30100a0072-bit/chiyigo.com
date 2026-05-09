@@ -20,7 +20,7 @@ const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_HOURS   = 1
 const IP_HOURLY_LIMIT   = 5   // per IP, across all token types
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, waitUntil }) {
   let body
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON' }, 400) }
@@ -93,8 +93,11 @@ export async function onRequestPost({ request, env }) {
     .bind(userRow.id)
     .first()
 
-  if (recent)
+  if (recent) {
+    // P1-4：冷卻分支也跑 fakeHashDelay 對齊 unknown_email + happy 路徑時序
+    await fakeHashDelay()
     return res({ message: 'If that email is registered, a reset link has been sent.' })
+  }
 
   // ── 3. 生成 Token ────────────────────────────────────────────
   const token     = generateSecureToken()
@@ -110,17 +113,23 @@ export async function onRequestPost({ request, env }) {
     .bind(userRow.id, tokenHash, ip, expiresAt)
     .run()
 
-  // ── 4. 發信（失敗時回滾 token，但仍回 200 防枚舉）──────────────
-  try {
-    await sendPasswordResetEmail(env.RESEND_API_KEY, userRow.email, token, env)
-  } catch {
-    await db
-      .prepare('DELETE FROM email_verifications WHERE token_hash = ?')
-      .bind(tokenHash)
-      .run()
-  }
-
-  await safeUserAudit(env, { event_type: 'account.password.reset_request', user_id: userRow.id, request })
+  // ── 4. 發信（async via waitUntil 不擋響應；失敗時回滾 token，但仍回 200 防枚舉）
+  // P1-4：sendEmail 是網路 I/O（Resend API ~200-500ms），同步 await 會讓 happy 路徑
+  // 比 unknown_email / cooldown 慢一個量級，timing oracle。改 waitUntil 在 response 後跑。
+  const sendJob = (async () => {
+    try {
+      await sendPasswordResetEmail(env.RESEND_API_KEY, userRow.email, token, env)
+    } catch {
+      await db
+        .prepare('DELETE FROM email_verifications WHERE token_hash = ?')
+        .bind(tokenHash)
+        .run()
+    }
+    await safeUserAudit(env, { event_type: 'account.password.reset_request', user_id: userRow.id, request })
+  })()
+  if (typeof waitUntil === 'function') waitUntil(sendJob)
+  // happy 分支也跑 fakeHashDelay → 確保響應時間下限與 unknown_email/cooldown 同
+  await fakeHashDelay()
   return res({ message: 'If that email is registered, a reset link has been sent.' })
 }
 

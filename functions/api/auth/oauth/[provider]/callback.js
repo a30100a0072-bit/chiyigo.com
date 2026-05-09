@@ -419,12 +419,11 @@ async function exchangeCode({ cfg, code, code_verifier, redirect_uri }) {
 
 async function fetchProfile(provider, cfg, tokens, expectedNonce) {
   // Apple：user info 在 id_token 內，無 userInfoUrl
+  // P1-1：原本只 decodeJwtPayload 沒驗章 → 攻擊者可造任意 sub/email 取代帳號
+  // 改 jwtVerify(JWKS) + 驗 iss/aud/nonce
   if (provider === 'apple') {
-    const payload = decodeJwtPayload(tokens.id_token)
-    // OIDC nonce 必須與授權階段儲存的值一致，否則為 replay
-    if (expectedNonce && payload.nonce !== expectedNonce) {
-      throw new Error('id_token nonce mismatch')
-    }
+    if (!tokens.id_token) throw new Error('Apple id_token missing')
+    const payload = await verifyAppleIdToken(tokens.id_token, cfg.clientId, expectedNonce)
     return payload
   }
 
@@ -482,6 +481,26 @@ function getGoogleJwks() {
 async function verifyGoogleIdToken(idToken, expectedAud, expectedNonce) {
   const { payload } = await jwtVerify(idToken, getGoogleJwks(), {
     issuer:   ['https://accounts.google.com', 'accounts.google.com'],
+    audience: expectedAud,
+  })
+  if (expectedNonce && payload.nonce !== expectedNonce) {
+    throw new Error('id_token nonce mismatch')
+  }
+  return payload
+}
+
+// Apple id_token 驗章（RS256，透過 JWKS）
+let _appleJwks = null
+function getAppleJwks() {
+  if (!_appleJwks) {
+    _appleJwks = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'))
+  }
+  return _appleJwks
+}
+
+async function verifyAppleIdToken(idToken, expectedAud, expectedNonce) {
+  const { payload } = await jwtVerify(idToken, getAppleJwks(), {
+    issuer:   'https://appleid.apple.com',
     audience: expectedAud,
   })
   if (expectedNonce && payload.nonce !== expectedNonce) {

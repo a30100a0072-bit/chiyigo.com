@@ -179,6 +179,48 @@ export async function googleJwksBody() {
   return { keys: [publicJwk] }
 }
 
+// Apple test keys + signed id_token + JWKS body（與 Google helper 對稱）
+let _appleTestKeys = null
+export async function ensureAppleTestKeys() {
+  if (_appleTestKeys) return _appleTestKeys
+  const { generateKeyPair, exportJWK } = await import('jose')
+  // Apple 用 RS256；jose JWKS verify 會依 alg 自動匹配
+  const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true, modulusLength: 2048 })
+  const priv = await exportJWK(privateKey)
+  const pub  = await exportJWK(publicKey)
+  priv.kid = pub.kid = 'apple-test-key'
+  priv.alg = pub.alg = 'RS256'
+  pub.use  = 'sig'
+  _appleTestKeys = { privateKey, publicJwk: pub, privateJwk: priv }
+  return _appleTestKeys
+}
+
+export async function appleSignIdToken({
+  sub      = 'apple-test',
+  email    = null,
+  email_verified = 'true',
+  aud      = 'apple-cid',
+  iss      = 'https://appleid.apple.com',
+  nonce    = null,
+  expiresIn = 600,
+} = {}) {
+  const { SignJWT } = await import('jose')
+  const { privateKey, privateJwk } = await ensureAppleTestKeys()
+  const now = Math.floor(Date.now() / 1000)
+  const payload = { sub, aud, iss, iat: now, exp: now + expiresIn }
+  if (email != null) payload.email = email
+  payload.email_verified = email_verified
+  if (nonce) payload.nonce = nonce
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: 'RS256', kid: privateJwk.kid })
+    .sign(privateKey)
+}
+
+export async function appleJwksBody() {
+  const { publicJwk } = await ensureAppleTestKeys()
+  return { keys: [publicJwk] }
+}
+
 /**
  * Insert a user + local_accounts row (password set).
  * Returns { id, email, password, salt, hash }.
