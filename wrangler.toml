@@ -28,6 +28,13 @@ id = "e3ca0c13ce5a4ec9aee7d550b0596e04"
 [ai]
 binding = "AI"
 
+# P1-18 audit_log 合規 archive bucket（2026-05-09 建立）
+# 用途：cron cleanup 把超過 1 年的 info/warn audit_log 寫成 JSONL 進 R2 後刪除
+# critical 永不刪。沒這個 binding → cleanup 不會刪 row（合規優先，避免無備份就丟證據）
+[[r2_buckets]]
+binding     = "AUDIT_ARCHIVE_BUCKET"
+bucket_name = "chiyigo-audit-archive"
+
 # 註：Pages Direct Upload 模式不支援 wrangler.toml [observability] 區塊
 # （Workers 才有）。Pages Functions 看 console.log 的方法：
 #   1) Cloudflare Dashboard → Workers & Pages → chiyigo-com → 任一 deployment
