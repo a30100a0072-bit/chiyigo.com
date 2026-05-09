@@ -52,6 +52,12 @@ img { max-width: 100%; height: auto; display: block; }
   --font-mono:    'DM Mono','Courier New',monospace;
   --font-body:    var(--font-sans);
   --font-display: var(--font-sans);
+
+  /* z-index 層次（Phase 2 Toast / Confirm 也吃這層） */
+  --z-sticky:  50;
+  --z-overlay: 100;
+  --z-modal:   200;
+  --z-toast:   300;
 }
 
 /* ── Theme tokens (dark) ── */

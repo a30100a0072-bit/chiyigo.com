@@ -1,0 +1,119 @@
+/* ============================================================
+ * _components.css — 全站共用元件層
+ * ------------------------------------------------------------
+ * 載入順序：_tokens.css → _components.css → page CSS
+ * 用途：提供 .btn / .modal / .pill 的 canonical 預設樣式。
+ * Page CSS 因 cascade 在後，仍能覆寫本層；新頁面可直接用這些 class。
+ * ============================================================ */
+
+/* ── Button base ─────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  padding: .65rem 1.4rem;
+  font-family: var(--font-body); font-size: .88rem; font-weight: 500;
+  border-radius: 8px; border: none; cursor: pointer;
+  text-decoration: none; line-height: 1.2;
+  transition: filter .18s ease, transform .18s ease,
+              background .18s ease, border-color .18s ease, color .18s ease;
+}
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ── Button variants ─────────────────────────────── */
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  padding: .65rem 1.4rem;
+  background: var(--accent); color: #fff;
+  font-family: var(--font-body); font-size: .88rem; font-weight: 500;
+  border-radius: 8px; border: none; cursor: pointer;
+  transition: filter .18s ease, transform .18s ease;
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .65rem 1.2rem;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-family: var(--font-body); font-size: .88rem; font-weight: 400;
+  border-radius: 10px; border: 1px solid var(--border); cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-elevated);
+  border-color: var(--border-mid);
+  color: var(--text);
+}
+.btn-ghost:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn-danger {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  padding: .65rem 1.4rem;
+  background: #dc2626; color: #fff;
+  font-family: var(--font-body); font-size: .88rem; font-weight: 500;
+  border-radius: 8px; border: none; cursor: pointer;
+  transition: filter .18s ease, transform .18s ease;
+}
+.btn-danger:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+.btn-danger:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ── Pill ────────────────────────────────────────── */
+.pill {
+  display: inline-flex; align-items: center;
+  padding: .18rem .55rem;
+  border-radius: 6px;
+  font-size: .72rem;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-glow);
+}
+
+/* ── Modal ───────────────────────────────────────── */
+.modal-bd {
+  display: none;
+  position: fixed; inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.modal-bd.open { display: flex; }
+
+.modal-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 100%; max-width: 560px;
+  max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0,0,0,.32);
+}
+
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.4rem;
+  border-bottom: 1px solid var(--border-dim);
+}
+.modal-head h2 { font-size: .9rem; font-weight: 600; color: var(--text); }
+
+.modal-close {
+  background: none; border: none;
+  color: var(--text-dim); cursor: pointer;
+  padding: .25rem; border-radius: 6px;
+  transition: color .18s, background .18s;
+}
+.modal-close:hover { color: var(--text); background: var(--hover-overlay); }
+.modal-close svg { width: 18px; height: 18px; display: block; }
+
+.modal-body {
+  padding: 1.25rem 1.4rem;
+  display: flex; flex-direction: column; gap: .85rem;
+  font-size: .86rem;
+}
+
+.modal-footer {
+  padding: 1rem 1.4rem;
+  border-top: 1px solid var(--border-dim);
+  display: flex; align-items: center; justify-content: flex-end; gap: .65rem;
+}
