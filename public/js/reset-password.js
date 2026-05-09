@@ -183,20 +183,30 @@ async function submitReset(btn, btnId, totpCode) {
     });
     const data = await res.json().catch(() => ({}));
 
-    if (res.ok) { showPanel('panel-success'); startCountdown(); return; }
+    if (res.ok) {
+      // P1-22：成功 / 各種終止分支都要清掉 newPassword（敏感資料留 module scope 是 XSS 攻擊面）
+      newPassword = '';
+      try { document.getElementById('new-password').value = ''; document.getElementById('confirm-password').value = ''; } catch {}
+      showPanel('panel-success'); startCountdown(); return;
+    }
 
     if (res.status === 403 && data.requires_2fa) {
+      // 2FA 分支保留 newPassword（要送第二段）；其餘失敗一律清
       showPanel('panel-2fa');
       document.getElementById('totp-code').focus();
       return;
     }
 
     if (res.status === 400 && data.error?.includes('invalid or has expired')) {
+      newPassword = '';
       showPanel('panel-invalid'); return;
     }
 
+    // 其他錯誤（密碼太弱 / token 用過 / 5xx）— 清掉，user 重新輸入
+    newPassword = '';
     setMsg(data.error ? tBackend(data.error) : T('err_generic'));
   } catch {
+    newPassword = '';
     setMsg(T('err_network'));
   } finally {
     btn.disabled    = false;

@@ -103,8 +103,11 @@ async function handleSubmit(e) {
 
     const data = await res.json().catch(() => ({}));
     setMsg(data.error ?? T('err_generic'), 'error');
+    // P1-20：失敗時 reset Turnstile，否則 token 已被 server 核銷，下一次送一定再失敗
+    try { window.turnstile?.reset?.() } catch {}
   } catch {
     setMsg(T('err_network'), 'error');
+    try { window.turnstile?.reset?.() } catch {}
   } finally {
     btn.disabled = false;
     btn.textContent = T('btn_submit');

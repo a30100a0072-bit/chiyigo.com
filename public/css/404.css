@@ -72,6 +72,7 @@ img{max-width:100%;height:auto;display:block}
 .sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
 .sb-login-link:hover{color:var(--accent);background:var(--bg-elevated)}
 .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
+.sb-login-link[hidden],.m-login-btn[hidden]{display:none!important}
 .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
 .m-login-btn:hover{color:var(--text)}
 .m-login-btn svg{width:17px;height:17px}

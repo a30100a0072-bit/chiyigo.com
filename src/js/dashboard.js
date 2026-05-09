@@ -824,11 +824,15 @@ async function startSetup2FA() {
 }
 
 async function confirmEnable2FA() {
+  // P1-21：disable button 防雙擊
+  const btn = document.querySelector('#tfa-setup-panel button[data-action="confirm-enable-2fa"]');
+  if (btn?.disabled) return;
+  if (btn) btn.disabled = true;
   const otp = document.getElementById('tfa-otp-input').value.trim();
   const pw  = (document.getElementById('tfa-password-input')?.value ?? '');
   const msg = document.getElementById('tfa-setup-msg');
-  if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); return; }
-  if (!pw) { showTfaMsg(msg, T('tfa_pw_required') || '請輸入目前登入密碼', 'err'); return; }
+  if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); if (btn) btn.disabled = false; return; }
+  if (!pw) { showTfaMsg(msg, T('tfa_pw_required') || '請輸入目前登入密碼', 'err'); if (btn) btn.disabled = false; return; }
   try {
     const data = await apiFetch('/api/auth/2fa/activate', {
       method: 'POST',
@@ -844,6 +848,8 @@ async function confirmEnable2FA() {
     document.getElementById('tfa-backup-panel').classList.remove('hidden');
   } catch (e) {
     showTfaMsg(msg, tApiError(e, T('net_err')), 'err');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -859,9 +865,13 @@ function showDisablePanel() {
 }
 
 async function confirmDisable2FA() {
+  // P1-21：button 防雙擊
+  const btn = document.querySelector('#tfa-disable-panel button[data-action="confirm-disable-2fa"]');
+  if (btn?.disabled) return;
+  if (btn) btn.disabled = true;
   const otp = document.getElementById('tfa-disable-input').value.trim();
   const msg = document.getElementById('tfa-disable-msg');
-  if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); return; }
+  if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); if (btn) btn.disabled = false; return; }
   try {
     await apiFetch('/api/auth/2fa/disable', {
       method: 'POST',
@@ -878,8 +888,10 @@ async function confirmDisable2FA() {
       }
     } catch (_) {}
     setTimeout(() => { location.replace('/login.html?tfa_disabled=1'); }, 1500);
+    // 不解鎖 — 即將跳頁
   } catch (e) {
     showTfaMsg(msg, tApiError(e, T('net_err')), 'err');
+    if (btn) btn.disabled = false;
   }
 }
 
