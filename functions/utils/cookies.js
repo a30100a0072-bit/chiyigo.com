@@ -3,10 +3,16 @@
  *
  * Domain=.chiyigo.com → 跨子網域共用（chiyigo / mbti / talo）
  * Path=/api/auth      → 只送到 auth 路由，避免每個請求都帶
- * SameSite=Lax        → 容許從子網域 top-level navigation 帶 cookie
+ * SameSite=None       → 跨站 iframe 也送（IdP 必要）；OIDC silent SSO（prompt=none
+ *                       iframe）從第三方 RP 嵌入 chiyigo /authorize 時，Lax 不送 →
+ *                       永遠 login_required。改 None 後 cross-site iframe + 跨子網域
+ *                       top-level nav 都送，前者新增、後者行為不變。
+ *                       前提一律 Secure（HTTPS）+ HttpOnly + Path 限制；
+ *                       refresh token 自帶 device_uuid + jti rotation + 撤銷機制，
+ *                       SameSite=None 帶來的 CSRF 風險已被多層補償。
  */
 
-const COOKIE_BASE = 'chiyigo_refresh=%TOKEN%; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=Lax; Path=/api/auth'
+const COOKIE_BASE = 'chiyigo_refresh=%TOKEN%; Domain=.chiyigo.com; HttpOnly; Secure; SameSite=None; Path=/api/auth'
 
 export function refreshCookie(token, maxAgeSec) {
   return `${COOKIE_BASE.replace('%TOKEN%', token)}; Max-Age=${maxAgeSec}`
