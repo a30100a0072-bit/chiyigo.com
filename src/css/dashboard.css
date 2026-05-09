@@ -4,24 +4,11 @@ body { background-color: var(--bg); color: var(--text); }
 .db-logo{height:38px;width:auto;display:block}
 .logo-dark,.theme-dark .logo-light{display:none!important}
 .theme-dark .logo-dark{display:block!important}
-/* globe lang button */
-.globe-wrap{position:relative}
-.globe-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--border-bright);background:none;color:var(--text-muted);cursor:pointer;transition:border-color .15s,color .15s;flex-shrink:0}
-.globe-btn:hover{border-color:var(--accent);color:var(--accent)}
-.globe-btn svg{width:15px;height:15px}
-.db-lang-drop{display:none;position:absolute;top:calc(100% + .45rem);right:0;background:var(--bg-surface);border:1px solid var(--border-bright);border-radius:12px;padding:.4rem;min-width:124px;box-shadow:0 4px 24px rgba(0,0,0,.5);z-index:200}
-.db-lang-drop.open{display:flex;flex-direction:column;gap:.15rem}
-.db-lang-opt{background:none;border:none;padding:.45rem .85rem;border-radius:8px;font-size:.8rem;cursor:pointer;color:var(--text-muted);text-align:left;transition:background .15s,color .15s;font-family:inherit;white-space:nowrap;width:100%}
-.db-lang-opt:hover,.db-lang-opt.active{background:var(--accent-dim);color:var(--accent)}
-
-/* theme toggle button — 與 globe-btn 同款式 */
-.theme-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid var(--border-bright);background:none;color:var(--text-muted);cursor:pointer;transition:border-color .15s,color .15s;flex-shrink:0}
-.theme-btn:hover{border-color:var(--accent);color:var(--accent)}
-.theme-btn svg{width:15px;height:15px}
-.theme-btn .icon-moon{display:none}
-.theme-btn .icon-sun{display:block}
-.theme-dark .theme-btn .icon-sun{display:none}
-.theme-dark .theme-btn .icon-moon{display:block}
+/* sb-foot-btn 內 sun/moon icon 切換（HTML 用 .sb-foot-btn 而非 .theme-btn） */
+.sb-foot-btn .icon-moon{display:none}
+.sb-foot-btn .icon-sun{display:block}
+.theme-dark .sb-foot-btn .icon-sun{display:none}
+.theme-dark .sb-foot-btn .icon-moon{display:block}
 
 /* ── 亮模式覆蓋 — 主 body 已吃 token；以下保留 divide / globe / banner 等需單獨處理的 ── */
 .theme-light .divide-\[\#2a2a35\]>:not([hidden])~:not([hidden]){border-color:#e3e3ec!important}
