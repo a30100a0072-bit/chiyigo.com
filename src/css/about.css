@@ -22,33 +22,7 @@ body{min-height:100vh;overflow:hidden}
 .dash-content::-webkit-scrollbar-thumb{background:var(--border-mid);border-radius:2px}
 .dash-content::-webkit-scrollbar-thumb:hover{background:var(--border-bright)}
 
-/* ── Sidebar ── */
-.sb-brand{display:flex;align-items:center;gap:.6rem;padding:1.35rem 1.25rem 1.1rem;flex-shrink:0;text-decoration:none}
-.sb-logo-img{height:76px;width:auto;display:block;flex-shrink:0}
-.sb-nav{flex:1;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.18rem;scrollbar-width:none}
-.sb-nav::-webkit-scrollbar{display:none}
-.sb-item{display:flex;align-items:center;gap:.7rem;padding:.6rem .85rem;border-radius:10px;font-family:var(--font-body);font-size:.875rem;font-weight:400;color:var(--text-muted);text-decoration:none;transition:background .18s ease,color .18s ease}
-.sb-item:hover{background:#6c6ee512;color:var(--text)}
-.sb-item.active{background:var(--accent-dim);color:var(--accent);font-weight:500}
-.sb-item.active .sb-icon{color:var(--accent);opacity:1}
-.sb-icon{width:16px;height:16px;flex-shrink:0;color:var(--text-dim);opacity:.7;transition:color .18s ease,opacity .18s ease}
-.sb-item:hover .sb-icon{color:var(--text-muted);opacity:.9}
-.sb-label{line-height:1;white-space:nowrap}
-.sb-bottom{flex-shrink:0;padding:.75rem;border-top:1px solid var(--border-dim)}
-.sb-cta{background:linear-gradient(140deg,#6c6ee51f,#5b8bf514);border:1px solid rgba(108,110,229,.16);border-radius:14px;padding:1rem;margin-bottom:.75rem;position:relative;overflow:hidden}
-.sb-cta:before{content:"";position:absolute;top:-12px;right:-12px;width:60px;height:60px;border-radius:50%;background:#6c6ee514;pointer-events:none}
-.sb-cta-desc{font-size:.72rem;color:var(--text-muted);line-height:1.5;margin-bottom:.75rem}
-.sb-cta-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:.5rem;background:var(--accent);color:#fff;font-family:var(--font-body);font-size:.78rem;font-weight:500;border-radius:8px;text-decoration:none;transition:filter .18s ease,transform .18s ease}
-.sb-cta-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
-/* .sb-footer / .sb-foot-* / .lang-dropdown / .lang-opt 已集中至 _components.css */
-.sb-login-link{display:flex;align-items:center;gap:.5rem;padding:.42rem .65rem;margin:0 .5rem .18rem;border-radius:8px;text-decoration:none;font-size:.79rem;font-weight:500;color:var(--text-dim);transition:color .18s,background .18s}
-.sb-login-link:hover{color:var(--accent-primary);background:var(--bg-elevated)}
-.sb-login-link svg{width:14px;height:14px;flex-shrink:0}
-.sb-login-link[hidden],.m-login-btn[hidden]{display:none!important}
-.m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
-.m-login-btn:hover{color:var(--text-primary)}
-.m-login-btn svg{width:17px;height:17px}
-.sb-copyright{font-family:var(--font-mono);font-size:.6rem;color:var(--text-dim);letter-spacing:.04em;margin-left:auto;white-space:nowrap}
+/* .sb-* / .m-login-btn 已集中至 _components.css（含 .sb-footer / .lang-dropdown） */
 
 /* ── Mobile topbar ── */
 .m-topbar{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:var(--bg-titlebar);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);border-bottom:1px solid var(--border-dim);transition:background .3s ease,border-color .3s ease}
