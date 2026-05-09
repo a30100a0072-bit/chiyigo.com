@@ -94,5 +94,3 @@ html {
 /* ── Logo theme toggle（共用 partial 用） ── */
 .logo-dark, .theme-dark .logo-light { display: none !important; }
 .theme-dark .logo-dark { display: block !important; }
-</content>
-</invoke>
