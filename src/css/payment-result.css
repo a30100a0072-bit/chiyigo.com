@@ -1,0 +1,16 @@
+/* payment-result.css — 簡單中介頁，吃 _tokens.css 變數 */
+body { background: var(--bg); color: var(--text); }
+.pr-muted { color: var(--text-muted); }
+.pr-dim   { color: var(--text-dim); }
+
+.pr-success-icon-wrap {
+  background: rgba(16,185,129,.10);
+  border: 1px solid rgba(16,185,129,.22);
+}
+.pr-success-icon { color: #10B981; }
+
+.pr-btn-success {
+  background: #10B981; color: #fff;
+  transition: filter .18s ease, transform .18s ease;
+}
+.pr-btn-success:hover { filter: brightness(1.08); transform: translateY(-1px); }
