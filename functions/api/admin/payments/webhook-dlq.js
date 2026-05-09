@@ -15,9 +15,9 @@
  *   再實作（YAGNI）。
  */
 
-import { res } from '../../../utils/auth.js'
-import { requireRole } from '../../../utils/requireRole.js'
+import { res, requireStepUp } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 
 export async function onRequestOptions({ request, env }) {
@@ -26,8 +26,14 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
-  const { user, error } = await requireRole(request, env, 'admin')
-  if (error) return error
+  // P1-16：DLQ raw_body 含 ECPay payload（PII / 帳號 / 部分卡資訊）；
+  // 與 metadata-archive 對齊，要求 step-up elevated:payment + admin:payments scope。
+  const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_PAYMENT, 'view_webhook_dlq')
+  if (stepCheck.error) return stepCheck.error
+  const user = stepCheck.user
+  if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_PAYMENTS)) {
+    return res({ error: 'admin:payments scope required' }, 403, cors)
+  }
 
   const url     = new URL(request.url)
   const pending = url.searchParams.get('pending') !== '0'
@@ -52,9 +58,9 @@ export async function onRequestGet({ request, env }) {
     )
     .bind(...binds, limit).all()
 
-  // T14 read audit — DLQ 含 raw_body，讀取也要可追溯
+  // T14 read audit — DLQ 含 raw_body，升級 critical（含 PII，每次讀取都該即時告警）
   await safeUserAudit(env, {
-    event_type: 'admin.payment_webhook_dlq.read', severity: 'info',
+    event_type: 'admin.payment_webhook_dlq.read', severity: 'critical',
     user_id: Number(user.sub), request,
     data: { filters: { pending, vendor }, result_count: results?.length ?? 0 },
   })

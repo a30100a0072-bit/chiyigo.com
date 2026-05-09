@@ -18,6 +18,7 @@
 import { res } from '../../../../utils/auth.js'
 import { requireRole } from '../../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
+import { safeUserAudit } from '../../../../utils/user-audit.js'
 
 const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 
@@ -42,12 +43,7 @@ export async function onRequestPost({ request, env, params }) {
 
   if (target.status !== 'banned') return res({ error: 'User is not banned' }, 400)
 
-  await db
-    .prepare(`UPDATE users SET status = 'active' WHERE id = ?`)
-    .bind(targetId)
-    .run()
-
-  // ── 稽核日誌（hash chain；table / 欄位不存在時靜默跳過）─────
+  // P1-15：先寫 hash-chain，失敗拒動
   try {
     await appendAuditLog(db, {
       admin_id:     Number(user.sub),
@@ -57,7 +53,20 @@ export async function onRequestPost({ request, env, params }) {
       target_email: target.email,
       ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
     })
-  } catch { /* migration 0003/0012 not yet applied */ }
+  } catch {
+    return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+  }
+
+  await db
+    .prepare(`UPDATE users SET status = 'active' WHERE id = ?`)
+    .bind(targetId)
+    .run()
+
+  await safeUserAudit(env, {
+    event_type: 'admin.user.unbanned', severity: 'critical',
+    user_id: targetId, request,
+    data: { admin_id: Number(user.sub), target_email: target.email },
+  })
 
   return res({ message: 'User unbanned', user_id: targetId, status: 'active' })
 }

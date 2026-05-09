@@ -35,6 +35,7 @@ import { res } from '../../utils/auth.js'
 import { requireRole } from '../../utils/requireRole.js'
 import { revokeJti } from '../../utils/revocation.js'
 import { appendAuditLog } from '../../utils/audit-log.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
 
 const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 
@@ -60,15 +61,23 @@ export async function onRequestPost({ request, env }) {
     if (!jti) return res({ error: 'jti is required for mode=jti' }, 400)
 
     const exp = Number.isFinite(body.exp) ? body.exp : Math.floor(Date.now() / 1000) + 3600
-    await revokeJti(env, jti, exp)
 
-    // jti mode 沒有特定 target user：用 0 / synthetic email 滿足 NOT NULL，
-    // 真正識別資訊放在 action（'revoke.jti'）+ admin_audit_log 串到 jti 黑名單
-    // 內查（未來 audit query API 可 join）。
-    await safeAudit(db, {
-      admin_id: Number(user.sub), admin_email: user.email,
-      action: 'revoke.jti', target_id: 0, target_email: `jti:${jti.slice(0, 32)}`,
-      ip_address: ip,
+    // P1-15：先寫 hash-chain；失敗即拒，不做 KV revoke 也不留靜默痕跡
+    try {
+      await appendAuditLog(db, {
+        admin_id: Number(user.sub), admin_email: user.email,
+        action: 'revoke.jti', target_id: 0, target_email: `jti:${jti.slice(0, 32)}`,
+        ip_address: ip,
+      })
+    } catch {
+      return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+    }
+
+    await revokeJti(env, jti, exp)
+    await safeUserAudit(env, {
+      event_type: 'admin.token.revoked.jti', severity: 'critical',
+      user_id: Number(user.sub), request,
+      data: { jti: jti.slice(0, 32), exp, admin_id: Number(user.sub) },
     })
     return res({ mode, jti, message: 'Access token revoked' })
   }
@@ -91,6 +100,17 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Cannot revoke a user with equal or higher role' }, 403)
 
   if (mode === 'user') {
+    // P1-15：先寫 hash-chain；失敗拒動
+    try {
+      await appendAuditLog(db, {
+        admin_id: Number(user.sub), admin_email: user.email,
+        action: 'revoke.user', target_id: targetId, target_email: target.email,
+        ip_address: ip,
+      })
+    } catch {
+      return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+    }
+
     // bump token_version → access_token 全失效；撤所有 refresh_token
     const stats = await db.batch([
       db.prepare(`UPDATE users SET token_version = token_version + 1 WHERE id = ?`).bind(targetId),
@@ -101,10 +121,10 @@ export async function onRequestPost({ request, env }) {
     ])
     const refreshRevoked = stats?.[1]?.meta?.changes ?? 0
 
-    await safeAudit(db, {
-      admin_id: Number(user.sub), admin_email: user.email,
-      action: 'revoke.user', target_id: targetId, target_email: target.email,
-      ip_address: ip,
+    await safeUserAudit(env, {
+      event_type: 'admin.token.revoked.user', severity: 'critical',
+      user_id: targetId, request,
+      data: { admin_id: Number(user.sub), refresh_revoked: refreshRevoked, target_email: target.email },
     })
     return res({ mode, user_id: targetId, refresh_revoked: refreshRevoked })
   }
@@ -112,6 +132,17 @@ export async function onRequestPost({ request, env }) {
   // mode === 'device'
   const deviceUuid = typeof body.device_uuid === 'string' ? body.device_uuid.trim() : ''
   if (!deviceUuid) return res({ error: 'device_uuid is required for mode=device' }, 400)
+
+  // P1-15：先寫 hash-chain
+  try {
+    await appendAuditLog(db, {
+      admin_id: Number(user.sub), admin_email: user.email,
+      action: 'revoke.device', target_id: targetId, target_email: target.email,
+      ip_address: ip,
+    })
+  } catch {
+    return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+  }
 
   const result = await db
     .prepare(`
@@ -122,15 +153,10 @@ export async function onRequestPost({ request, env }) {
     .run()
   const refreshRevoked = result?.meta?.changes ?? 0
 
-  await safeAudit(db, {
-    admin_id: Number(user.sub), admin_email: user.email,
-    action: 'revoke.device', target_id: targetId, target_email: target.email,
-    ip_address: ip,
+  await safeUserAudit(env, {
+    event_type: 'admin.token.revoked.device', severity: 'critical',
+    user_id: targetId, request,
+    data: { admin_id: Number(user.sub), device_uuid: deviceUuid, refresh_revoked: refreshRevoked },
   })
   return res({ mode, user_id: targetId, device_uuid: deviceUuid, refresh_revoked: refreshRevoked })
-}
-
-// admin_audit_log 表 / hash chain 在某些環境可能還沒 apply migration，靜默跳過（同 ban.js 模式）
-async function safeAudit(db, payload) {
-  try { await appendAuditLog(db, payload) } catch { /* table / chain 缺失時不擋 admin 操作 */ }
 }

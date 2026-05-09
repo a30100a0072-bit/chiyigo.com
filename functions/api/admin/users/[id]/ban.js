@@ -15,6 +15,7 @@
 import { res } from '../../../../utils/auth.js'
 import { requireRole } from '../../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
+import { safeUserAudit } from '../../../../utils/user-audit.js'
 
 const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 
@@ -40,6 +41,20 @@ export async function onRequestPost({ request, env, params }) {
 
   if (target.status === 'banned') return res({ error: 'User is already banned' }, 400)
 
+  // P1-15：先寫 hash-chain admin_audit_log。失敗即拒絕，不允許「動作成功但無證據」。
+  try {
+    await appendAuditLog(db, {
+      admin_id:     Number(user.sub),
+      admin_email:  user.email,
+      action:       'ban',
+      target_id:    targetId,
+      target_email: target.email,
+      ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
+    })
+  } catch {
+    return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+  }
+
   // ── 原子：更新 status + bump token_version + 撤銷所有 refresh_token ───
   // bump token_version 使所有 access token 立即失效（不必等 15m 過期）
   await db.batch([
@@ -50,17 +65,12 @@ export async function onRequestPost({ request, env, params }) {
     `).bind(targetId),
   ])
 
-  // ── 稽核日誌（hash chain 防竄改；table / 欄位不存在時靜默跳過）─
-  try {
-    await appendAuditLog(db, {
-      admin_id:     Number(user.sub),
-      admin_email:  user.email,
-      action:       'ban',
-      target_id:    targetId,
-      target_email: target.email,
-      ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
-    })
-  } catch { /* migration 0003/0012 not yet applied */ }
+  // P1-15：補 user_audit critical（觸發 Discord 即時通知）
+  await safeUserAudit(env, {
+    event_type: 'admin.user.banned', severity: 'critical',
+    user_id: targetId, request,
+    data: { admin_id: Number(user.sub), target_email: target.email },
+  })
 
   return res({ message: 'User banned', user_id: targetId, status: 'banned' })
 }

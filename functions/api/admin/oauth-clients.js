@@ -20,6 +20,7 @@ import { res } from '../../utils/auth.js'
 import { requireRole } from '../../utils/requireRole.js'
 import { invalidateClientsCache } from '../../utils/oauth-clients.js'
 import { appendAuditLog } from '../../utils/audit-log.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
 
 const CLIENT_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/  // 小寫英數 + - + _，1-64 字
 const VALID_APP_TYPES = new Set(['web', 'native', 'mobile'])
@@ -143,6 +144,20 @@ export async function onRequestPost({ request, env }) {
     .bind(n.client_id).first()
   if (exists) return res({ error: 'client_id already exists', code: 'CLIENT_ID_TAKEN' }, 409)
 
+  // P1-15：先寫 hash-chain，失敗拒建
+  try {
+    await appendAuditLog(env.chiyigo_db, {
+      admin_id:     Number(user.sub),
+      admin_email:  user.email,
+      action:       'oauth_client.create',
+      target_id:    0,
+      target_email: `oauth_client:${n.client_id}`,
+      ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
+    })
+  } catch {
+    return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+  }
+
   await env.chiyigo_db
     .prepare(`
       INSERT INTO oauth_clients (
@@ -164,17 +179,11 @@ export async function onRequestPost({ request, env }) {
   // cache invalidate：下次 middleware refresh 立即讀到新 RP
   await invalidateClientsCache(env)
 
-  // admin_audit_log（hash chain；表/chain 不存在時靜默跳過，同 ban.js pattern）
-  try {
-    await appendAuditLog(env.chiyigo_db, {
-      admin_id:     Number(user.sub),
-      admin_email:  user.email,
-      action:       'oauth_client.create',
-      target_id:    0,                                       // schema NOT NULL，RP 無 user-id
-      target_email: `oauth_client:${n.client_id}`,
-      ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
-    })
-  } catch { /* ignore */ }
+  await safeUserAudit(env, {
+    event_type: 'admin.oauth_client.created', severity: 'critical',
+    user_id: Number(user.sub), request,
+    data: { client_id: n.client_id, app_type: n.app_type, aud: n.aud },
+  })
 
   return res({ message: 'Client created', client_id: n.client_id }, 201)
 }

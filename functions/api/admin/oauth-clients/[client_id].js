@@ -14,6 +14,7 @@ import { res, requireStepUp } from '../../../utils/auth.js'
 import { requireRole } from '../../../utils/requireRole.js'
 import { invalidateClientsCache } from '../../../utils/oauth-clients.js'
 import { appendAuditLog } from '../../../utils/audit-log.js'
+import { safeUserAudit } from '../../../utils/user-audit.js'
 import { SCOPES } from '../../../utils/scopes.js'
 
 const VALID_APP_TYPES = new Set(['web', 'native', 'mobile'])
@@ -144,6 +145,25 @@ export async function onRequestPatch({ request, env, params }) {
   if (errors.length) return res({ error: errors.join('; ') }, 400)
   if (!sets.length) return res({ error: 'No updatable fields provided' }, 400)
 
+  // P1-15：先確認目標存在，再寫 hash-chain；失敗拒改（避免靜默改 RP 後無證據）
+  const exists = await env.chiyigo_db
+    .prepare(`SELECT 1 FROM oauth_clients WHERE client_id = ? LIMIT 1`)
+    .bind(params.client_id).first()
+  if (!exists) return res({ error: 'Client not found' }, 404)
+
+  try {
+    await appendAuditLog(env.chiyigo_db, {
+      admin_id:     Number(user.sub),
+      admin_email:  user.email,
+      action:       'oauth_client.update',
+      target_id:    0,
+      target_email: `oauth_client:${params.client_id}`,
+      ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
+    })
+  } catch {
+    return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+  }
+
   const result = await env.chiyigo_db
     .prepare(`UPDATE oauth_clients SET ${sets.join(', ')}, updated_at = datetime('now')
               WHERE client_id = ?`)
@@ -155,16 +175,11 @@ export async function onRequestPatch({ request, env, params }) {
 
   await invalidateClientsCache(env)
 
-  try {
-    await appendAuditLog(env.chiyigo_db, {
-      admin_id:     Number(user.sub),
-      admin_email:  user.email,
-      action:       'oauth_client.update',
-      target_id:    0,
-      target_email: `oauth_client:${params.client_id}`,
-      ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
-    })
-  } catch { /* ignore */ }
+  await safeUserAudit(env, {
+    event_type: 'admin.oauth_client.updated', severity: 'critical',
+    user_id: Number(user.sub), request,
+    data: { client_id: params.client_id, fields_changed: sets.map(s => s.split(' = ')[0]) },
+  })
 
   return res({ message: 'Client updated', client_id: params.client_id })
 }
@@ -178,22 +193,12 @@ export async function onRequestDelete({ request, env, params }) {
   const user = stepCheck.user
   if (user.role !== 'admin') return res({ error: 'admin role required' }, 403)
 
-  const result = await env.chiyigo_db
-    .prepare(`UPDATE oauth_clients SET is_active = 0, updated_at = datetime('now')
-              WHERE client_id = ? AND is_active = 1`)
-    .bind(params.client_id)
-    .run()
-
-  if ((result.meta?.changes ?? 0) === 0) {
-    // 區分 not found vs 已下架
-    const exists = await env.chiyigo_db
-      .prepare(`SELECT is_active FROM oauth_clients WHERE client_id = ?`)
-      .bind(params.client_id).first()
-    if (!exists) return res({ error: 'Client not found' }, 404)
-    return res({ error: 'Client already disabled' }, 409)
-  }
-
-  await invalidateClientsCache(env)
+  // P1-15：先確認狀態，再 hash-chain，再執行 UPDATE
+  const existing = await env.chiyigo_db
+    .prepare(`SELECT is_active FROM oauth_clients WHERE client_id = ?`)
+    .bind(params.client_id).first()
+  if (!existing) return res({ error: 'Client not found' }, 404)
+  if (!existing.is_active) return res({ error: 'Client already disabled' }, 409)
 
   try {
     await appendAuditLog(env.chiyigo_db, {
@@ -204,7 +209,23 @@ export async function onRequestDelete({ request, env, params }) {
       target_email: `oauth_client:${params.client_id}`,
       ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
     })
-  } catch { /* ignore */ }
+  } catch {
+    return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+  }
+
+  await env.chiyigo_db
+    .prepare(`UPDATE oauth_clients SET is_active = 0, updated_at = datetime('now')
+              WHERE client_id = ?`)
+    .bind(params.client_id)
+    .run()
+
+  await invalidateClientsCache(env)
+
+  await safeUserAudit(env, {
+    event_type: 'admin.oauth_client.disabled', severity: 'critical',
+    user_id: Number(user.sub), request,
+    data: { client_id: params.client_id },
+  })
 
   return res({ message: 'Client disabled (soft delete)', client_id: params.client_id })
 }

@@ -44,8 +44,11 @@ const TASKS = [
   // login_attempts: 90 天（風控分析需要尾段）
   { name: 'login_attempts',      sql: `DELETE FROM login_attempts      WHERE created_at < datetime('now', '-90 days')` },
 
-  // audit_log: 90 天（金流前未啟動，保險用）
-  { name: 'audit_log',           sql: `DELETE FROM audit_log           WHERE created_at < datetime('now', '-90 days')` },
+  // audit_log：P1-18（金流合規 retention）
+  //   - severity='critical' 永不刪（Discord 已通知 + 入 R2 永久存證；evidence trail）
+  //   - severity='info'/'warn' 保留 1 年；超過才清
+  // 用 SPECIAL 任務名觸發 audit_log_archive() 流程，不走通用 SQL。
+  { name: 'audit_log',           special: 'audit_log_archive' },
 
   // ip_blacklist: 過期即刪（Phase E-4；24hr TTL，過期 row 對 query 無意義）
   { name: 'ip_blacklist',        sql: `DELETE FROM ip_blacklist        WHERE expires_at < datetime('now')` },
@@ -85,6 +88,12 @@ export async function onRequestPost({ request, env }) {
 
   for (const task of TASKS) {
     try {
+      if (task.special === 'audit_log_archive') {
+        const r = await archiveAndDeleteAuditLog(env)
+        totalDeleted += r.deleted
+        results.push({ table: task.name, ...r })
+        continue
+      }
       const r = await db.prepare(task.sql).run()
       const deleted = r.meta?.changes ?? 0
       totalDeleted += deleted
@@ -96,5 +105,70 @@ export async function onRequestPost({ request, env }) {
   }
 
   return res({ ok: true, totalDeleted, results })
+}
+
+/**
+ * P1-18 audit_log 合規清理。
+ * 規則：
+ *   - critical 永不刪
+ *   - info / warn 保留 1 年；超過才考慮刪
+ *   - 若有 env.AUDIT_ARCHIVE_BUCKET（R2 binding）→ 刪前先存一份 JSONL 進 R2
+ *   - 沒 R2 binding → 為符合金流合規，info/warn 也不刪（避免無備份就丟證據），只回報 skipped
+ *
+ * R2 binding 設置（MANUAL_TODO）：
+ *   1. wrangler r2 bucket create chiyigo-audit-archive
+ *   2. wrangler.toml 加：
+ *      [[r2_buckets]]
+ *      binding = "AUDIT_ARCHIVE_BUCKET"
+ *      bucket_name = "chiyigo-audit-archive"
+ *   3. Pages dashboard 同步綁
+ */
+async function archiveAndDeleteAuditLog(env) {
+  const db = env.chiyigo_db
+  const cutoff = `datetime('now', '-365 days')`
+
+  // 撈過期 row 數量（用來決定是否走 archive 流程）
+  const countRow = await db
+    .prepare(`SELECT COUNT(*) AS c FROM audit_log
+               WHERE created_at < ${cutoff} AND severity IN ('info','warn')`).first()
+  const eligible = countRow?.c ?? 0
+  if (!eligible) return { deleted: 0, archived: 0, skipped: 0 }
+
+  // 沒 R2 → 不刪（合規優先），回報待 admin 設置
+  if (!env.AUDIT_ARCHIVE_BUCKET) {
+    return { deleted: 0, archived: 0, skipped: eligible, note: 'AUDIT_ARCHIVE_BUCKET binding missing; retain rows' }
+  }
+
+  // 分批 archive + delete（每批 1000 row，避免單次 worker 撐爆）
+  const BATCH = 1000
+  let archived = 0
+  let deleted = 0
+  for (let i = 0; i < 50; i++) {  // 上限 50 批 = 50000 row/次 cron；其餘留下次
+    const { results } = await db
+      .prepare(`SELECT * FROM audit_log
+                 WHERE created_at < ${cutoff} AND severity IN ('info','warn')
+                 ORDER BY id ASC LIMIT ?`)
+      .bind(BATCH).all()
+    if (!results?.length) break
+
+    const date = new Date().toISOString().slice(0, 10)
+    const minId = results[0].id
+    const maxId = results[results.length - 1].id
+    const key = `audit_log/${date}/${minId}-${maxId}.jsonl`
+    const body = results.map(r => JSON.stringify(r)).join('\n') + '\n'
+    await env.AUDIT_ARCHIVE_BUCKET.put(key, body, {
+      httpMetadata: { contentType: 'application/x-ndjson' },
+    })
+
+    const ids = results.map(r => r.id)
+    const placeholders = ids.map(() => '?').join(',')
+    const r = await db
+      .prepare(`DELETE FROM audit_log WHERE id IN (${placeholders})`)
+      .bind(...ids).run()
+    archived += results.length
+    deleted += r.meta?.changes ?? 0
+  }
+
+  return { deleted, archived, skipped: 0 }
 }
 
