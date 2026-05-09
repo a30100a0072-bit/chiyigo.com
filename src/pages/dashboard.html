@@ -135,7 +135,7 @@
         </div>
 
         <!-- 詳細資訊 -->
-        <div class="rounded-2xl bg-[#16161d] border border-[var(--border-bright)] divide-y divide-[#2a2a35] shadow-2xl mb-4">
+        <div class="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] divide-y divide-[#2a2a35] shadow-2xl mb-4">
           <div class="flex items-center justify-between px-5 py-4">
             <span class="text-sm text-gray-500" data-i18n="lbl_email">電子信箱</span>
             <span id="info-email" class="text-sm text-white font-medium">—</span>
@@ -155,7 +155,7 @@
         </div>
 
         <!-- 2FA 管理區塊 -->
-        <div id="tfa-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="tfa-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="flex items-center justify-between px-5 py-4">
             <div class="flex items-center gap-3">
               <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -239,7 +239,7 @@
         </div>
 
         <!-- 我的需求單 -->
-        <div id="req-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="req-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[var(--border-bright)] flex items-center justify-between">
             <div>
               <p class="text-sm font-semibold text-white" data-i18n="req_title">我的需求單</p>
@@ -253,7 +253,7 @@
         </div>
 
         <!-- 帳號綁定區塊 -->
-        <div id="bind-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="bind-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[var(--border-bright)]">
             <p class="text-sm font-semibold text-white" data-i18n="bind_title">帳號綁定</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="bind_subtitle">連結第三方帳號以增加登入選項</p>
@@ -262,7 +262,7 @@
         </div>
 
         <!-- 設定登入密碼（OAuth-only 帳號）-->
-        <div id="setpw-section" class="hidden rounded-2xl bg-[#16161d] border border-amber-500/20 shadow-2xl mb-4 overflow-hidden">
+        <div id="setpw-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-amber-500/20 shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-amber-500/15">
             <p class="text-sm font-semibold text-amber-300" data-i18n="setpw_title">設定登入密碼</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="setpw_subtitle">你目前透過第三方帳號登入。設定密碼後，將擁有後備登入方式，並可執行刪帳等敏感操作。</p>
@@ -277,7 +277,7 @@
         </div>
 
         <!-- 修改密碼（hasPassword=true 才顯示；走 step-up flow，需 2FA）-->
-        <div id="changepw-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="changepw-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[var(--border-bright)]">
             <p class="text-sm font-semibold text-white" data-i18n="changepw_title">修改密碼</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="changepw_subtitle">需要當下 2FA 驗證碼確認；修改後將登出所有裝置。</p>
@@ -314,7 +314,7 @@
         </div>
 
         <!-- 我的裝置（Phase D-3）-->
-        <div id="devices-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="devices-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[var(--border-bright)]">
             <p class="text-sm font-semibold text-white" data-i18n="devices_title">我的裝置</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="devices_subtitle">這些裝置目前可以登入你的帳號。陌生的請立即登出。</p>
@@ -327,7 +327,7 @@
         </div>
 
         <!-- Passkey（Phase D-3）-->
-        <div id="passkeys-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="passkeys-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[var(--border-bright)] flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-semibold text-white" data-i18n="passkeys_title">Passkey / 安全金鑰</p>
@@ -348,7 +348,7 @@
         </div>
 
         <!-- 錢包綁定（Phase F-3）-->
-        <div id="wallets-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="wallets-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[var(--border-bright)] flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-semibold text-white" data-i18n="wallets_title">錢包 / Web3</p>
@@ -369,7 +369,7 @@
         </div>
 
         <!-- 付款 / 充值（Phase F-2 wave 3）-->
-        <div id="payments-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="payments-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[var(--border-bright)] flex items-start justify-between gap-3">
             <div class="min-w-0">
               <p class="text-sm font-semibold text-white" data-i18n="payments_title">付款 / 充值</p>
@@ -435,7 +435,7 @@
         </div>
 
         <!-- 我的成交紀錄（P1-6，2026-05-06）-->
-        <div id="deals-section" class="hidden rounded-2xl bg-[#16161d] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
+        <div id="deals-section" class="hidden rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-bright)] shadow-2xl mb-4 overflow-hidden">
           <div class="px-5 py-4 border-b border-[var(--border-bright)]">
             <p class="text-sm font-semibold text-white">我的成交紀錄</p>
             <p class="text-xs text-gray-500 mt-0.5">已正式成交的接案項目；含已收/已退金額與當時提供的客戶資訊。</p>
@@ -469,7 +469,7 @@
         </button>
 
         <!-- 危險區：刪除帳號 -->
-        <div id="danger-section" class="mt-6 rounded-2xl bg-[#16161d] border border-red-500/20 shadow-2xl overflow-hidden">
+        <div id="danger-section" class="mt-6 rounded-2xl bg-[var(--bg-surface)] border border-red-500/20 shadow-2xl overflow-hidden">
           <div class="px-5 py-4 border-b border-red-500/15">
             <p class="text-sm font-semibold text-red-400" data-i18n="danger_title">危險區</p>
             <p class="text-xs text-gray-500 mt-0.5" data-i18n="danger_subtitle">永久刪除帳號與所有相關資料，操作不可復原</p>
