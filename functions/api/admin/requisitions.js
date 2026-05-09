@@ -17,15 +17,29 @@
 import { requireRole } from '../../utils/requireRole.js'
 import { res } from '../../utils/auth.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 export async function onRequestGet({ request, env }) {
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
 
+  // P1-12：套上 admin_read rate limit（與 deals.js 一致 60/min/admin）
+  const adminId = Number(user.sub)
+  const rl = await checkRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId, windowSeconds: 60, max: 60 })
+  if (rl.blocked) {
+    await safeUserAudit(env, {
+      event_type: 'admin.read.rate_limited', severity: 'warn',
+      user_id: adminId, request, data: { endpoint: 'requisitions' },
+    })
+    return res({ error: 'Too many requests', code: 'RATE_LIMITED' }, 429)
+  }
+  await recordRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId })
+
   const url    = new URL(request.url)
   const page   = Math.max(1, parseInt(url.searchParams.get('page')  ?? '1', 10))
   const limit  = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10)))
-  const q      = url.searchParams.get('q') ?? ''
+  // P1-12：q 長度上限 100，避免 SQLite LIKE 在大 dataset 上拖慢 + 防注入式爆炸
+  const q      = (url.searchParams.get('q') ?? '').slice(0, 100)
   const offset = (page - 1) * limit
 
   const db = env.chiyigo_db

@@ -102,6 +102,9 @@ export async function onRequestPost({ request, env, params }) {
           got_currency:     parsed.currency ?? null,
         },
       })
+      // P1-11：amount_mismatch 不回 failure（否則 PSP 會 retry 3 次 → 灌爆 DLQ +
+      // critical Discord 連發）。已寫 critical audit + DLQ 留存證據；intent 維持原狀
+      // （不更新 status，避免被偽造金額污染），對 PSP 回 success 結束 retry。
       await dlqInsert(env, {
         vendor,
         event_id: parsed.event_id,
@@ -109,12 +112,9 @@ export async function onRequestPost({ request, env, params }) {
         raw_body: rawBody,
         error_stage: 'amount_mismatch',
         error_message: `expected ${intent.amount_subunit} ${intent.currency}, got ${parsed.amount_subunit} ${parsed.currency ?? '?'}`,
-        http_status_returned: 401,
+        http_status_returned: 200,
       })
-      if (typeof adapter.failureResponse === 'function') {
-        return adapter.failureResponse('amount_mismatch')
-      }
-      return res({ error: 'amount_mismatch' }, 401)
+      return successFn()
     }
   }
 

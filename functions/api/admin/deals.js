@@ -57,10 +57,18 @@ export async function onRequestGet({ request, env }) {
     if (!Number.isFinite(n)) return res({ error: 'user_id must be a number' }, 400, cors)
     conds.push('user_id = ?'); binds.push(n)
   }
+  // P1-13：from/to ISO 8601 驗證（與 admin/payments/intents 對齊）
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
   const from = url.searchParams.get('from')
-  if (from) { conds.push('saved_at >= ?'); binds.push(from) }
+  if (from) {
+    if (!ISO_RE.test(from)) return res({ error: 'from must be ISO 8601 date/datetime' }, 400, cors)
+    conds.push('saved_at >= ?'); binds.push(from)
+  }
   const to   = url.searchParams.get('to')
-  if (to)   { conds.push('saved_at < ?');  binds.push(to) }
+  if (to)   {
+    if (!ISO_RE.test(to)) return res({ error: 'to must be ISO 8601 date/datetime' }, 400, cors)
+    conds.push('saved_at < ?');  binds.push(to)
+  }
 
   const q = url.searchParams.get('q')
   if (q) {

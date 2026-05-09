@@ -68,12 +68,46 @@ export async function onRequestPost({ request, env, params }) {
     .bind(id).all()
   const intents = intentsRes?.results ?? []
 
-  let totalSucceeded = 0, totalRefunded = 0, currency = 'TWD'
+  // P1-14：先按 currency 分組，避免 TWD + JPY + USD 不同小數位 + 不同主單位混加成假數字。
+  // deals 表單 currency / 單一 total_amount_subunit 欄位（schema 0028）→ 多幣別目前阻擋，
+  // 提示 admin 先處理掉非主幣別 intent 再保存（refund / 換 currency 標）。
+  // 用 BigInt 累加避免 amount_subunit 在 sub-cent currency 上累加超 Number.MAX_SAFE_INTEGER。
+  const byCurrency = new Map()  // currency → { succeeded: BigInt, refunded: BigInt }
   for (const it of intents) {
-    if (it.status === 'succeeded') totalSucceeded += Number(it.amount_subunit) || 0
-    if (it.status === 'refunded')  totalRefunded  += Number(it.amount_subunit) || 0
-    if (it.currency) currency = it.currency
+    const cur = (it.currency || 'TWD').toUpperCase()
+    if (!byCurrency.has(cur)) byCurrency.set(cur, { succeeded: 0n, refunded: 0n })
+    const slot = byCurrency.get(cur)
+    const amt  = BigInt(Math.trunc(Number(it.amount_subunit) || 0))
+    if (it.status === 'succeeded') slot.succeeded += amt
+    if (it.status === 'refunded')  slot.refunded  += amt
   }
+  // 純 informational：沒任何已支付 intent 也允許保存（純線下成交）
+  const activeCurrencies = [...byCurrency.entries()]
+    .filter(([, v]) => v.succeeded > 0n || v.refunded > 0n)
+    .map(([k]) => k)
+  if (activeCurrencies.length > 1) {
+    return res({
+      error: '此需求單包含多種幣別 intent，請先處理（退款 / 拆分）後再保存',
+      code:  'MIXED_CURRENCY',
+      currencies: activeCurrencies,
+      breakdown: Object.fromEntries(
+        [...byCurrency.entries()].map(([k, v]) => [k, {
+          succeeded_subunit: v.succeeded.toString(),
+          refunded_subunit:  v.refunded.toString(),
+        }]),
+      ),
+    }, 409, cors)
+  }
+  const currency = activeCurrencies[0] || (intents[0]?.currency || 'TWD').toUpperCase()
+  const slot = byCurrency.get(currency) ?? { succeeded: 0n, refunded: 0n }
+  // amount_subunit INTEGER 上限 9.2e18（SQLite INT8）；但 Number 安全上限 2^53。
+  // 真撞到才報錯，正常 TWD/USD 不可能。
+  const MAX = BigInt(Number.MAX_SAFE_INTEGER)
+  if (slot.succeeded > MAX || slot.refunded > MAX) {
+    return res({ error: 'amount overflow', code: 'AMOUNT_OVERFLOW' }, 409, cors)
+  }
+  const totalSucceeded = Number(slot.succeeded)
+  const totalRefunded  = Number(slot.refunded)
   const intentIds = intents.map(it => it.id)
 
   // INSERT into deals

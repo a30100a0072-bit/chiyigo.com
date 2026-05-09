@@ -365,6 +365,34 @@ export async function ecpayRefund(env, { merchantTradeNo, tradeNo, totalAmount, 
   // /CreditDetail/DoAction 回的是 form-urlencoded
   const rtn = Object.fromEntries(new URLSearchParams(text))
   const rtnCode = String(rtn.RtnCode ?? '')
+
+  // P1-10：對回應做防偽校驗（防中間人/偽造 ECPay response）
+  //   1. 必校：MerchantID / MerchantTradeNo / TradeNo 必須與我方送出值一致
+  //   2. 若回應含 CheckMacValue（部分 endpoint 才回）→ 重算驗章；不一致即視為失敗
+  //   注意：DoAction 官方 spec 不一定回 CheckMacValue；缺欄位時不視為失敗，但欄位不符
+  //   一律視為失敗，避免攻擊者偽造「RtnCode=1」假退款成功。
+  let verifyError = null
+  if (rtn.MerchantID && String(rtn.MerchantID) !== String(merchantId)) {
+    verifyError = `merchant_id_mismatch: got ${rtn.MerchantID}`
+  } else if (rtn.MerchantTradeNo && String(rtn.MerchantTradeNo) !== String(merchantTradeNo)) {
+    verifyError = `merchant_trade_no_mismatch: got ${rtn.MerchantTradeNo}`
+  } else if (rtn.TradeNo && String(rtn.TradeNo) !== String(tradeNo)) {
+    verifyError = `trade_no_mismatch: got ${rtn.TradeNo}`
+  } else if (rtn.CheckMacValue) {
+    const expectMac = await ecpayCheckMacValue(rtn, hashKey, hashIV)
+    if (String(rtn.CheckMacValue).toUpperCase() !== expectMac) {
+      verifyError = 'check_mac_value_mismatch'
+    }
+  }
+  if (verifyError) {
+    return {
+      ok:       false,
+      rtn_code: rtnCode || 'VERIFY_FAIL',
+      rtn_msg:  `response verification failed: ${verifyError}`,
+      raw:      text,
+    }
+  }
+
   return {
     ok:        rtnCode === '1',
     rtn_code:  rtnCode,

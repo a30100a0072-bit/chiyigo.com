@@ -114,12 +114,36 @@ export async function onRequestPost({ request, env, params }) {
     }, 409, cors)
   }
 
-  const refundResult = await ecpayRefund(env, {
-    merchantTradeNo: intent.vendor_intent_id,
-    tradeNo,
-    totalAmount:     intent.amount_subunit,
-    action:          'R',
-  })
+  // P1-9：ecpayRefund fetch throw（網路 / DNS / TLS）→ ECPay 端可能已退款也可能沒退，
+  // 我方 intent 已被 lockIntentForRefund 標 'processing'。不能 unlock 回 succeeded
+  // （否則第二次按又會打一次 ECPay → 可能重複退）；保留 processing 等對帳 cron 處理。
+  let refundResult
+  try {
+    refundResult = await ecpayRefund(env, {
+      merchantTradeNo: intent.vendor_intent_id,
+      tradeNo,
+      totalAmount:     intent.amount_subunit,
+      action:          'R',
+    })
+  } catch (e) {
+    await safeUserAudit(env, {
+      event_type: 'requisition.refund.network_error', severity: 'critical',
+      user_id: rr.user_id, request,
+      data: {
+        refund_request_id: id,
+        requisition_id:    rr.requisition_id,
+        intent_id:         intent.id,
+        vendor_intent_id:  intent.vendor_intent_id,
+        trade_no:          tradeNo,
+        admin_user_id:     Number(stepCheck.user.sub),
+        error:             String(e?.message ?? e).slice(0, 500),
+      },
+    })
+    return res({
+      error: 'ECPay refund call failed (network); intent left in processing for reconciliation',
+      code:  'REFUND_PENDING_RECONCILIATION',
+    }, 502, cors)
+  }
 
   if (!refundResult.ok) {
     await unlockIntentToSucceeded(env, intent.id)

@@ -88,10 +88,19 @@ export async function onRequestGet({ request, env }) {
   const vendor = url.searchParams.get('vendor')
   if (vendor) { conds.push('pi.vendor = ?'); binds.push(vendor) }
 
+  // P1-13：from/to 必須是 ISO 8601 date / datetime；
+  // 接受 'YYYY-MM-DD' 或 'YYYY-MM-DDTHH:mm:ss[.sss][Z|±HH:mm]'（與 SQLite datetime 相容）
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
   const from = url.searchParams.get('from')
-  if (from) { conds.push('pi.created_at >= ?'); binds.push(from) }
+  if (from) {
+    if (!ISO_RE.test(from)) return res({ error: 'from must be ISO 8601 date/datetime' }, 400, cors)
+    conds.push('pi.created_at >= ?'); binds.push(from)
+  }
   const to   = url.searchParams.get('to')
-  if (to)   { conds.push('pi.created_at < ?');  binds.push(to) }
+  if (to)   {
+    if (!ISO_RE.test(to)) return res({ error: 'to must be ISO 8601 date/datetime' }, 400, cors)
+    conds.push('pi.created_at < ?');  binds.push(to)
+  }
 
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
   // count / aggregate 不需要 join（refund 資訊只有列表頁要）→ 用無 prefix 版本
