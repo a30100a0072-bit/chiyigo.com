@@ -31,8 +31,12 @@ export async function onRequestGet({ request, env }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_PAYMENT, 'view_webhook_dlq')
   if (stepCheck.error) return stepCheck.error
   const user = stepCheck.user
-  if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_PAYMENTS)) {
-    return res({ error: 'admin:payments scope required' }, 403, cors)
+  // P1-17 Phase 3: 任一金流 fine scope 即可讀 DLQ（仍需 step-up + critical audit 把關 PII 風險）
+  const eff = effectiveScopesFromJwt(user)
+  const ok = eff.has(SCOPES.ADMIN_PAYMENTS_READ) || eff.has(SCOPES.ADMIN_PAYMENTS_WRITE) ||
+             eff.has(SCOPES.ADMIN_PAYMENTS_REFUND) || eff.has(SCOPES.ADMIN_PAYMENTS_APPROVE)
+  if (!ok) {
+    return res({ error: 'admin:payments:* scope required' }, 403, cors)
   }
 
   const url     = new URL(request.url)

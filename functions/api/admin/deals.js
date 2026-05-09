@@ -16,8 +16,8 @@
  *   200 → { rows, total, page, limit, totals: { count, sum_total_subunit, sum_refunded_subunit } }
  */
 
-import { res } from '../../utils/auth.js'
-import { requireRole } from '../../utils/requireRole.js'
+import { res, requireAnyScope } from '../../utils/auth.js'
+import { SCOPES } from '../../utils/scopes.js'
 import { getCorsHeaders } from '../../utils/cors.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
@@ -28,7 +28,12 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
-  const role = await requireRole(request, env, 'admin')
+  // P1-17 Phase 3: deals 是 requisition→payment 的成交紀錄，併入 admin:payments:* 任一
+  const role = await requireAnyScope(
+    request, env,
+    SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
+    SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
+  )
   if (role.error) return role.error
 
   // T15 admin rate limit

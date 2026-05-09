@@ -13,8 +13,8 @@
  * 用 saved_at 為 bucket 基準（admin 「保存」當下視為成交時間）。
  */
 
-import { res } from '../../../utils/auth.js'
-import { requireRole } from '../../../utils/requireRole.js'
+import { res, requireAnyScope } from '../../../utils/auth.js'
+import { SCOPES } from '../../../utils/scopes.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
 
 export async function onRequestOptions({ request, env }) {
@@ -23,7 +23,12 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
-  const role = await requireRole(request, env, 'admin')
+  // P1-17 Phase 3: 同 deals.js
+  const role = await requireAnyScope(
+    request, env,
+    SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
+    SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
+  )
   if (role.error) return role.error
 
   const url    = new URL(request.url)

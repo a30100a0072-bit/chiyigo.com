@@ -17,8 +17,8 @@
  *   實際退款動作走 step-up + elevated:payment（approve/reject endpoint），這裡只是讀。
  */
 
-import { res } from '../../utils/auth.js'
-import { requireRole } from '../../utils/requireRole.js'
+import { res, requireAnyScope } from '../../utils/auth.js'
+import { SCOPES } from '../../utils/scopes.js'
 import { getCorsHeaders } from '../../utils/cors.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
@@ -31,7 +31,12 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
-  const { user, error } = await requireRole(request, env, 'admin')
+  // P1-17 Phase 3: 退款列表屬金流，任一金流 fine 即可讀
+  const { user, error } = await requireAnyScope(
+    request, env,
+    SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
+    SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
+  )
   if (error) return error
 
   // T15 admin rate limit

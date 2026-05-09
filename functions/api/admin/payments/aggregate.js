@@ -18,7 +18,7 @@
  * Scope: admin:payments
  */
 
-import { res, requireScope } from '../../../utils/auth.js'
+import { res, requireAnyScope } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
 import { SCOPES } from '../../../utils/scopes.js'
 import { PAYMENT_STATUS } from '../../../utils/payments.js'
@@ -31,7 +31,12 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
-  const { error } = await requireScope(request, env, SCOPES.ADMIN_PAYMENTS)
+  // P1-17 Phase 3: 任一金流 fine scope 即可讀（finance/support 透過 :read 通過）
+  const { error } = await requireAnyScope(
+    request, env,
+    SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
+    SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
+  )
   if (error) return error
 
   const url    = new URL(request.url)

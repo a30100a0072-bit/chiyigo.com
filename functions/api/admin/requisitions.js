@@ -14,13 +14,18 @@
  *  401 / 403 → 未授權或角色不足
  */
 
-import { requireRole } from '../../utils/requireRole.js'
-import { res } from '../../utils/auth.js'
+import { res, requireAnyScope } from '../../utils/auth.js'
+import { SCOPES } from '../../utils/scopes.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 export async function onRequestGet({ request, env }) {
-  const { user, error } = await requireRole(request, env, 'admin')
+  // P1-17 Phase 3: requisitions 屬金流脈絡（接案 → 報價 → 收款），收進 admin:payments:* 任一
+  const { user, error } = await requireAnyScope(
+    request, env,
+    SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
+    SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
+  )
   if (error) return error
 
   // P1-12：套上 admin_read rate limit（與 deals.js 一致 60/min/admin）

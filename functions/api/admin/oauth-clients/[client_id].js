@@ -10,7 +10,7 @@
  *   要硬刪：admin 直接走 SQL（不開 API，避免誤操作）。
  */
 
-import { res, requireStepUp } from '../../../utils/auth.js'
+import { res, requireStepUp, requireAnyScope } from '../../../utils/auth.js'
 import { requireRole } from '../../../utils/requireRole.js'
 import { invalidateClientsCache } from '../../../utils/oauth-clients.js'
 import { appendAuditLog } from '../../../utils/audit-log.js'
@@ -37,7 +37,8 @@ function isStringArray(v) {
 // ── GET ─────────────────────────────────────────────────────────
 
 export async function onRequestGet({ request, env, params }) {
-  const { error } = await requireRole(request, env, 'admin')
+  // P1-17 Phase 3: GET 同時接受 admin:clients:read 或 :write
+  const { error } = await requireAnyScope(request, env, SCOPES.ADMIN_CLIENTS_READ, SCOPES.ADMIN_CLIENTS_WRITE)
   if (error) return error
 
   const row = await env.chiyigo_db

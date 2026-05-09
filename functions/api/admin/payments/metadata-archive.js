@@ -30,9 +30,12 @@ export async function onRequestGet({ request, env }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_PAYMENT, 'view_metadata_archive')
   if (stepCheck.error) return stepCheck.error
 
+  // P1-17 Phase 3: 任一金流 fine scope 即可讀（step-up 已是主要把關；finance/support 透過 :read 通過）
   const effective = effectiveScopesFromJwt(stepCheck.user)
-  if (!effective.has(SCOPES.ADMIN_PAYMENTS)) {
-    return res({ error: 'admin:payments scope required' }, 403, cors)
+  const ok = effective.has(SCOPES.ADMIN_PAYMENTS_READ) || effective.has(SCOPES.ADMIN_PAYMENTS_WRITE) ||
+             effective.has(SCOPES.ADMIN_PAYMENTS_REFUND) || effective.has(SCOPES.ADMIN_PAYMENTS_APPROVE)
+  if (!ok) {
+    return res({ error: 'admin:payments:* scope required' }, 403, cors)
   }
 
   const url = new URL(request.url)

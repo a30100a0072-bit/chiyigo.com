@@ -156,6 +156,38 @@ export async function requireScope(request, env, ...requiredScopes) {
 }
 
 /**
+ * OR scope 守門（P1-17 Phase 3）：通過 requireAuth + 檢查 JWT 帶有「任一」指定 scope。
+ *
+ * 用途：read endpoint 同時接受 read 或 write 權限的 token。例：
+ *   `requireAnyScope(request, env, ADMIN_USERS_READ, ADMIN_USERS_WRITE)`
+ *   → 能 ban user 的人也能 GET 用戶列表（直覺一致），同時 finance/support 等
+ *     只拿到 :read fine 的 role 也能讀。
+ *
+ * 既有 admin/super_admin/developer 透過 hierarchy 拿到所有 fine，全通過；零 regression。
+ *
+ * @param {Request} request
+ * @param {object}  env
+ * @param  {...string} acceptedScopes   任一命中即放行
+ */
+export async function requireAnyScope(request, env, ...acceptedScopes) {
+  const { user, error } = await requireAuth(request, env)
+  if (error) return { user: null, error }
+
+  const eff = effectiveScopesFromJwt(user)
+  if (!acceptedScopes.some(s => eff.has(s))) {
+    return {
+      user: null,
+      error: res({
+        error:    'Forbidden',
+        code:     'INSUFFICIENT_SCOPE',
+        accepted: acceptedScopes,
+      }, 403),
+    }
+  }
+  return { user, error: null }
+}
+
+/**
  * Step-up token 守門（Phase C-3）：高權限操作（金流 / 改密碼 / 刪帳號）專用。
  *
  * 嚴格規則：

@@ -13,11 +13,13 @@
  *  ai:         ai_audit 24h 狀態分布
  */
 
-import { requireRole } from '../../utils/requireRole.js'
+import { requireAnyScope } from '../../utils/auth.js'
+import { SCOPES } from '../../utils/scopes.js'
 import { verifyAuditChain } from '../../utils/audit-log.js'
 
 export async function onRequestGet({ request, env }) {
-  const { error } = await requireRole(request, env, 'admin')
+  // P1-17 Phase 3: metrics 主要是用戶/session 統計 → 收進 admin:users:read|write
+  const { error } = await requireAnyScope(request, env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE)
   if (error) return error
 
   const db = env.chiyigo_db

@@ -19,7 +19,7 @@
  *   400 → 參數錯
  */
 
-import { res, requireScope, requireStepUp } from '../../../utils/auth.js'
+import { res, requireScope, requireAnyScope, requireStepUp } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
 import { PAYMENT_STATUS } from '../../../utils/payments.js'
@@ -48,7 +48,12 @@ export async function onRequestGet({ request, env }) {
       return res({ error: 'admin:payments scope required' }, 403, cors)
     }
   } else {
-    const r = await requireScope(request, env, SCOPES.ADMIN_PAYMENTS)
+    // P1-17 Phase 3: 任一金流 fine scope 即可讀（finance/support 透過 :read 通過）
+    const r = await requireAnyScope(
+      request, env,
+      SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
+      SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
+    )
     if (r.error) return r.error
     user = r.user
   }

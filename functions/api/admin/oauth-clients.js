@@ -16,7 +16,7 @@
  *   backchannel_logout_uri, allowed_scopes, app_type
  */
 
-import { res } from '../../utils/auth.js'
+import { res, requireAnyScope } from '../../utils/auth.js'
 import { requireRole } from '../../utils/requireRole.js'
 import { invalidateClientsCache } from '../../utils/oauth-clients.js'
 import { appendAuditLog } from '../../utils/audit-log.js'
@@ -102,7 +102,8 @@ function validateCreateBody(body) {
 // ── GET /api/admin/oauth-clients ─────────────────────────────────
 
 export async function onRequestGet({ request, env }) {
-  const { error } = await requireRole(request, env, 'admin')
+  // P1-17 Phase 3: GET 同時接受 admin:clients:read 或 :write
+  const { error } = await requireAnyScope(request, env, SCOPES.ADMIN_CLIENTS_READ, SCOPES.ADMIN_CLIENTS_WRITE)
   if (error) return error
 
   const url      = new URL(request.url)

@@ -22,7 +22,7 @@
  * Step-up 鎖：未來 Phase C 上線後再要求 step_up_token；目前只 requireRole admin。
  */
 
-import { res, requireScope } from '../../utils/auth.js'
+import { res, requireAnyScope } from '../../utils/auth.js'
 import { SCOPES } from '../../utils/scopes.js'
 import { canRoleSeeAuditEvent } from '../../utils/roles.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
@@ -59,7 +59,8 @@ function redactEventData(raw) {
 }
 
 export async function onRequestGet({ request, env }) {
-  const { user, error } = await requireScope(request, env, SCOPES.ADMIN_AUDIT)
+  // P1-17 Phase 3: GET 同時接受 read 或 write（write token 也能 GET）
+  const { user, error } = await requireAnyScope(request, env, SCOPES.ADMIN_AUDIT_READ, SCOPES.ADMIN_AUDIT_WRITE)
   if (error) return error
 
   // P2-6：套上 admin_read rate limit（與 deals / payments/intents 對齊 60/min）

@@ -3,7 +3,7 @@
  *
  * 驗證：
  *   1. 未授權 → 401
- *   2. role=player → 403 INSUFFICIENT_ROLE
+ *   2. role=player → 403 INSUFFICIENT_SCOPE（P1-17 Phase 3 從 role gate → scope gate）
  *   3. role=admin → 200，回傳結構完整
  *   4. 聚合計數正確（insert 假資料後比對）
  *   5. audit chain valid 在無資料時為 true
@@ -45,7 +45,7 @@ describe('GET /api/admin/metrics', () => {
     expect(res.status).toBe(401)
   })
 
-  it('player role → 403 INSUFFICIENT_ROLE', async () => {
+  it('player role → 403 INSUFFICIENT_SCOPE（Phase 3 改 scope gate）', async () => {
     const u = await seedUser({ email: 'p@x' })
     const tok = await signJwt(
       { sub: String(u.id), email: 'p@x', role: 'player', status: 'active', ver: 0 },
@@ -54,7 +54,7 @@ describe('GET /api/admin/metrics', () => {
     const res = await callMetrics(tok)
     expect(res.status).toBe(403)
     const body = await res.json()
-    expect(body.code).toBe('INSUFFICIENT_ROLE')
+    expect(body.code).toBe('INSUFFICIENT_SCOPE')
   })
 
   it('admin role → 200 + 完整結構', async () => {

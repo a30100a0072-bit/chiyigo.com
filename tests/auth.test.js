@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { generateKeyPair, exportJWK } from 'jose'
 import { signJwt } from '../functions/utils/jwt.js'
-import { requireAuth, requireScope, res } from '../functions/utils/auth.js'
+import { requireAuth, requireScope, requireAnyScope, res } from '../functions/utils/auth.js'
 import { requireRole } from '../functions/utils/requireRole.js'
 import { SCOPES } from '../functions/utils/scopes.js'
 
@@ -155,6 +155,83 @@ describe('requireScope', () => {
 
   it('沒 token → 401（透傳 requireAuth）', async () => {
     const r = await requireScope(reqWithAuth(null), env, SCOPES.ADMIN_AUDIT)
+    expect(r.error.status).toBe(401)
+  })
+})
+
+describe('requireAnyScope (P1-17 Phase 3)', () => {
+  it('任一 scope 命中 → 通過', async () => {
+    const tok = await signJwt(
+      { sub: '1', role: 'player', status: 'active', scope: 'admin:users:read' },
+      '5m', env,
+    )
+    const { error } = await requireAnyScope(
+      reqWithAuth(tok), env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE,
+    )
+    expect(error).toBeNull()
+  })
+
+  it('write token 也能通過 read endpoint', async () => {
+    const tok = await signJwt(
+      { sub: '1', role: 'player', status: 'active', scope: 'admin:users:write' },
+      '5m', env,
+    )
+    const { error } = await requireAnyScope(
+      reqWithAuth(tok), env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE,
+    )
+    expect(error).toBeNull()
+  })
+
+  it('admin coarse 透過 hierarchy 通過 fine OR 守門', async () => {
+    const tok = await signJwt(
+      { sub: '1', role: 'admin', status: 'active' },
+      '5m', env,
+    )
+    const { error } = await requireAnyScope(
+      reqWithAuth(tok), env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE,
+    )
+    expect(error).toBeNull()
+  })
+
+  it('finance role 透過 ROLE_BASE_SCOPES 通過 admin:payments:* 任一', async () => {
+    const tok = await signJwt({ sub: '1', role: 'finance', status: 'active' }, '5m', env)
+    const { error } = await requireAnyScope(
+      reqWithAuth(tok), env,
+      SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
+      SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
+    )
+    expect(error).toBeNull()
+  })
+
+  it('finance 沒 admin:users:* → 403', async () => {
+    const tok = await signJwt({ sub: '1', role: 'finance', status: 'active' }, '5m', env)
+    const r = await requireAnyScope(
+      reqWithAuth(tok), env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE,
+    )
+    expect(r.error.status).toBe(403)
+    const body = await r.error.json()
+    expect(body.code).toBe('INSUFFICIENT_SCOPE')
+    expect(body.accepted).toEqual([SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE])
+  })
+
+  it('support role 通過 admin:users:read | :write 守門', async () => {
+    const tok = await signJwt({ sub: '1', role: 'support', status: 'active' }, '5m', env)
+    const { error } = await requireAnyScope(
+      reqWithAuth(tok), env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE,
+    )
+    expect(error).toBeNull()
+  })
+
+  it('player（無 admin scope）→ 403', async () => {
+    const tok = await signJwt({ sub: '1', role: 'player', status: 'active' }, '5m', env)
+    const r = await requireAnyScope(
+      reqWithAuth(tok), env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE,
+    )
+    expect(r.error.status).toBe(403)
+  })
+
+  it('沒 token → 401（透傳 requireAuth）', async () => {
+    const r = await requireAnyScope(reqWithAuth(null), env, SCOPES.ADMIN_USERS_READ)
     expect(r.error.status).toBe(401)
   })
 })
