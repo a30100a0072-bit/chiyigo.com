@@ -19,9 +19,9 @@
  *   400 → 參數錯
  */
 
-import { res, requireScope } from '../../../utils/auth.js'
+import { res, requireScope, requireStepUp } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
-import { SCOPES } from '../../../utils/scopes.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
 import { PAYMENT_STATUS } from '../../../utils/payments.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
@@ -34,8 +34,24 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestGet({ request, env }) {
   const cors = getCorsHeaders(request, env)
-  const { user, error } = await requireScope(request, env, SCOPES.ADMIN_PAYMENTS)
-  if (error) return error
+
+  // P0-6：CSV export 帶整批 PII，必須 step-up（一次性 elevated:payment token）
+  const url    = new URL(request.url)
+  const format = url.searchParams.get('format') === 'csv' ? 'csv' : 'json'
+
+  let user
+  if (format === 'csv') {
+    const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_PAYMENT, 'export_payment_intents')
+    if (stepCheck.error) return stepCheck.error
+    user = stepCheck.user
+    if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_PAYMENTS)) {
+      return res({ error: 'admin:payments scope required' }, 403, cors)
+    }
+  } else {
+    const r = await requireScope(request, env, SCOPES.ADMIN_PAYMENTS)
+    if (r.error) return r.error
+    user = r.user
+  }
 
   // T15 admin rate limit：60 read/min per admin（CSV export 也算）
   const adminId = Number(user.sub)
@@ -46,8 +62,6 @@ export async function onRequestGet({ request, env }) {
   }
   await recordRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId })
 
-  const url    = new URL(request.url)
-  const format = url.searchParams.get('format') === 'csv' ? 'csv' : 'json'
   // CSV 模式：硬上限 50000 row 一次撈，避免 worker 記憶體炸
   const page  = Math.max(1,  parseInt(url.searchParams.get('page')  ?? '1',  10))
   const limit = format === 'csv'
@@ -83,11 +97,12 @@ export async function onRequestGet({ request, env }) {
   // count / aggregate 不需要 join（refund 資訊只有列表頁要）→ 用無 prefix 版本
   const wherePlain = where.replace(/\bpi\./g, '')
 
-  // 主清單（含 metadata；admin 對帳要看 requisition_id / payment_info）
+  // P0-6：列表預設不回 pi.metadata（含 PII：payment_info / 第三方 trade_no 等）
+  // 個別 intent 詳細資料走 /api/admin/payments/intents/:id（已另有 step-up）
   const rowsResult = await env.chiyigo_db
     .prepare(
       `SELECT pi.id, pi.user_id, pi.vendor, pi.vendor_intent_id, pi.kind, pi.status,
-              pi.amount_subunit, pi.amount_raw, pi.currency, pi.metadata, pi.failure_reason,
+              pi.amount_subunit, pi.amount_raw, pi.currency, pi.failure_reason,
               pi.requisition_id, pi.created_at, pi.updated_at,
               rr.id         AS refund_request_id,
               rr.status     AS refund_request_status,
@@ -103,10 +118,11 @@ export async function onRequestGet({ request, env }) {
     .bind(...binds, limit, offset)
     .all()
 
-  // T14: 讀取 audit（info）— 誰在何時看了哪些 filter / 撈到幾筆
+  // T14: 讀取 audit（CSV export 升級 critical → Discord 即時告警）
   await safeUserAudit(env, {
     event_type: format === 'csv' ? 'admin.payments.intents.exported' : 'admin.payments.intents.read',
-    severity: 'info', user_id: Number(user.sub), request,
+    severity: format === 'csv' ? 'critical' : 'info',
+    user_id: Number(user.sub), request,
     data: {
       filters: { status, vendor, user_id: userId, from, to, format },
       result_count: rowsResult.results?.length ?? 0,

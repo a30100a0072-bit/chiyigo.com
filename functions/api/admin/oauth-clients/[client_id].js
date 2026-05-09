@@ -10,10 +10,11 @@
  *   要硬刪：admin 直接走 SQL（不開 API，避免誤操作）。
  */
 
-import { res } from '../../../utils/auth.js'
+import { res, requireStepUp } from '../../../utils/auth.js'
 import { requireRole } from '../../../utils/requireRole.js'
 import { invalidateClientsCache } from '../../../utils/oauth-clients.js'
 import { appendAuditLog } from '../../../utils/audit-log.js'
+import { SCOPES } from '../../../utils/scopes.js'
 
 const VALID_APP_TYPES = new Set(['web', 'native', 'mobile'])
 
@@ -129,8 +130,11 @@ function buildPatchSet(body) {
 }
 
 export async function onRequestPatch({ request, env, params }) {
-  const { user, error } = await requireRole(request, env, 'admin')
-  if (error) return error
+  // P0-5：改 redirect_uris / scopes 等同帳號劫持武器，必須 step-up
+  const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'update_oauth_client')
+  if (stepCheck.error) return stepCheck.error
+  const user = stepCheck.user
+  if (user.role !== 'admin') return res({ error: 'admin role required' }, 403)
 
   let body
   try { body = await request.json() }
@@ -168,8 +172,11 @@ export async function onRequestPatch({ request, env, params }) {
 // ── DELETE（軟下架）─────────────────────────────────────────────
 
 export async function onRequestDelete({ request, env, params }) {
-  const { user, error } = await requireRole(request, env, 'admin')
-  if (error) return error
+  // P0-5：軟下架仍可造成既有 RP 全斷，必須 step-up
+  const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'delete_oauth_client')
+  if (stepCheck.error) return stepCheck.error
+  const user = stepCheck.user
+  if (user.role !== 'admin') return res({ error: 'admin role required' }, 403)
 
   const result = await env.chiyigo_db
     .prepare(`UPDATE oauth_clients SET is_active = 0, updated_at = datetime('now')
