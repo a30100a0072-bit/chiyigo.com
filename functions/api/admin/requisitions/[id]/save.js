@@ -55,6 +55,20 @@ export async function onRequestPost({ request, env, params }) {
     }, 409, cors)
   }
 
+  // P2-7：兩個 admin 同時雙擊「保存」會各自跑完整流程 → 兩筆 deals 雙重計算。
+  // 在進 INSERT 之前 atomic 把 status 'pending'→'deal'，沒拿到 row 的第二個 caller 直接 409。
+  const lock = await db
+    .prepare(`UPDATE requisition SET status = 'deal'
+               WHERE id = ? AND status = 'pending' AND deleted_at IS NULL
+               RETURNING id`)
+    .bind(id).first()
+  if (!lock) {
+    return res({
+      error: '需求單已被其他管理員保存或刪除',
+      code:  'SAVE_RACE_CONFLICT',
+    }, 409, cors)
+  }
+
   let body = {}
   try { body = await request.json() } catch { /* keep empty */ }
   const notes = String(body?.notes ?? '').slice(0, 500) || null
@@ -127,9 +141,7 @@ export async function onRequestPost({ request, env, params }) {
       notes, Number(user.sub),
     ).first()
 
-  await db
-    .prepare(`UPDATE requisition SET status = 'deal' WHERE id = ?`)
-    .bind(id).run()
+  // P2-7：status 已在進 INSERT 前 atomic 設為 'deal'（lock 那段），這裡不必再 UPDATE
 
   await safeUserAudit(env, {
     event_type: 'requisition.saved_as_deal', severity: 'info',

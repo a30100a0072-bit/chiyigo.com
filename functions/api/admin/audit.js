@@ -24,14 +24,51 @@
 
 import { res, requireScope } from '../../utils/auth.js'
 import { SCOPES } from '../../utils/scopes.js'
+import { safeUserAudit } from '../../utils/user-audit.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 const VALID_SEVERITY = new Set(['info', 'warn', 'critical'])
 
+// P2-6：event_data 內 PII 欄位白名單裁切（避免 admin 透過 audit GET 撈整批用戶 IP / email / OTP 等）
+// 規則：只回收以下安全欄位；其他統一替換為 [redacted:N keys]，需要時走 admin/audit/:id 讀單筆才回原值（後續 RFP）。
+const SAFE_EVENT_DATA_KEYS = new Set([
+  'reason_code', 'trace_id', 'event_id', 'severity_hint',
+  'admin_id', 'admin_user_id', 'target_email_domain',
+  'scope', 'for_action', 'mode', 'method', 'status_code',
+  'amount_subunit', 'currency', 'vendor', 'intent_id', 'requisition_id',
+  'refund_request_id', 'rtn_code', 'rtn_msg',
+  'count', 'result_count', 'filters', 'endpoint',
+  'kind', 'severity', 'reason',
+])
+
+function redactEventData(raw) {
+  if (raw == null) return null
+  let parsed
+  try { parsed = JSON.parse(String(raw)) }
+  catch { return null }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const out = {}
+  let redactedCount = 0
+  for (const [k, v] of Object.entries(parsed)) {
+    if (SAFE_EVENT_DATA_KEYS.has(k)) out[k] = v
+    else redactedCount++
+  }
+  if (redactedCount) out._redacted_keys = redactedCount
+  return out
+}
+
 export async function onRequestGet({ request, env }) {
-  // Phase C-2 PoC：用 scope 守門取代 requireRole。`admin:audit` 同時內建在
-  // admin/developer 的 ROLE_BASE_SCOPES，所以行為對既有 admin 完全相容。
-  const { error } = await requireScope(request, env, SCOPES.ADMIN_AUDIT)
+  const { user, error } = await requireScope(request, env, SCOPES.ADMIN_AUDIT)
   if (error) return error
+
+  // P2-6：套上 admin_read rate limit（與 deals / payments/intents 對齊 60/min）
+  const adminId = Number(user.sub)
+  const rl = await checkRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId, windowSeconds: 60, max: 60 })
+  if (rl.blocked) {
+    await safeUserAudit(env, { event_type: 'admin.read.rate_limited', severity: 'warn', user_id: adminId, request, data: { endpoint: 'audit' } })
+    return res({ error: 'Too many requests', code: 'RATE_LIMITED' }, 429)
+  }
+  await recordRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId })
 
   const url   = new URL(request.url)
   const page  = Math.max(1, parseInt(url.searchParams.get('page')  ?? '1',  10))
@@ -60,11 +97,18 @@ export async function onRequestGet({ request, env }) {
     conds.push('severity = ?'); binds.push(severity)
   }
 
+  // P2-6：from/to ISO 8601 驗證（與 admin/payments 對齊）
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
   const from = url.searchParams.get('from')
-  if (from) { conds.push("created_at >= ?"); binds.push(from) }
-
+  if (from) {
+    if (!ISO_RE.test(from)) return res({ error: 'from must be ISO 8601 date/datetime' }, 400)
+    conds.push("created_at >= ?"); binds.push(from)
+  }
   const to = url.searchParams.get('to')
-  if (to)   { conds.push("created_at <  ?"); binds.push(to) }
+  if (to)   {
+    if (!ISO_RE.test(to)) return res({ error: 'to must be ISO 8601 date/datetime' }, 400)
+    conds.push("created_at <  ?"); binds.push(to)
+  }
 
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
   const db    = env.chiyigo_db
@@ -80,8 +124,22 @@ export async function onRequestGet({ request, env }) {
     `).bind(...binds, limit, offset).all(),
   ])
 
+  // P2-6：每列 event_data 走白名單裁切，避免 PII 直回
+  const rawRows = rowsResult?.results ?? []
+  const rows = rawRows.map(r => ({ ...r, event_data: redactEventData(r.event_data) }))
+
+  // P2-6：寫 admin.audit.read audit（含 result_count + filters）
+  await safeUserAudit(env, {
+    event_type: 'admin.audit.read', severity: 'info',
+    user_id: adminId, request,
+    data: {
+      result_count: rows.length,
+      filters: { user_id: userId, event_type: eventType, severity, from, to, page, limit },
+    },
+  })
+
   return res({
-    rows:  rowsResult?.results ?? [],
+    rows,
     total: countRow?.total ?? 0,
     page,
     limit,

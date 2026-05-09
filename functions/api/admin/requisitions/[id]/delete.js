@@ -43,13 +43,18 @@ export async function onRequestPost({ request, env, params }) {
   if (!row) return res({ error: 'not_found' }, 404, cors)
 
   // 防帳務黑洞：若還有 succeeded 但未退款的 payment_intent → 拒絕
-  // P0-3: 改用 requisition_id FK，不再依賴 metadata LIKE 模糊比對
+  // P0-3: 主路徑用 requisition_id FK
+  // P2-5: 老資料（FK 加上去之前的 intent）只在 metadata.requisition_id 留 JSON pointer。
+  //       FK 為 NULL 但 metadata 指向本 id 的 row 也要視同未退款攔下，避免 hard/soft 刪後成 orphan。
   const paid = await db
     .prepare(`SELECT id, amount_subunit, currency FROM payment_intents
                WHERE status = 'succeeded'
-                 AND requisition_id = ?
+                 AND (
+                   requisition_id = ?
+                   OR (requisition_id IS NULL AND json_extract(metadata, '$.requisition_id') = ?)
+                 )
                LIMIT 1`)
-    .bind(id).first()
+    .bind(id, id).first()
   if (paid) {
     return res({
       error: '此需求單仍有未退款的成功付款，請先退款再刪除',
