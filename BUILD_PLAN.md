@@ -173,7 +173,7 @@
 | 模組 | 狀態 |
 |------|------|
 | reset-password UPSERT（OAuth 用戶首次建立密碼）| ✅ |
-| `/api/auth/identity/bind` — 通用綁定 API（JWT 保護）| ✅ |
+| ~~`/api/auth/identity/bind`~~ — 已刪（2026-05-09 P0-1：未驗 provider_id 持有者 → 帳號劫持；綁定改走 OAuth callback `binding:` 路徑）| 🗑 |
 | `/api/auth/identity/unbind` — 防自殺解綁 API（最後登入方式保護）| ✅ |
 | OAuth init `is_binding=true` — 綁定模式 JSON 回傳 redirect_url | ✅ |
 | OAuth callback 綁定分支（`binding:USER_ID` 前綴，CSRF 由 state 原子核銷保護）| ✅ |

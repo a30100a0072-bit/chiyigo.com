@@ -85,18 +85,19 @@ export async function onRequestPost(context) {
       .first()
 
     if (existingUser) {
-      if (!cfg?.trustEmail) {
-        return res({
-          error: `此信箱已透過密碼登入註冊。請改用「密碼登入」，登入後可在帳號設定中綁定 ${provider} 帳號。`,
-        }, 409)
-      }
-      // trustEmail=true → 靜默綁定
-      userId = existingUser.id
-      await db.prepare(`
-        INSERT OR IGNORE INTO user_identities
-          (user_id, provider, provider_id, display_name, avatar_url)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(userId, provider, provider_id, name ?? null, avatar ?? null).run()
+      // P0-2：bind-email 階段的 email 是「使用者手動輸入」，未經第三方驗章；
+      // 即使 provider trustEmail=true 也不能據此靜默接管既有帳號。
+      // 一律拒絕，導引至「密碼登入後手動綁定」流程。
+      await safeUserAudit(env, {
+        event_type: 'oauth.bind_email.collision_blocked',
+        severity: 'warn',
+        user_id: existingUser.id,
+        request,
+        data: { provider, reason: 'unverified_typed_email' },
+      })
+      return res({
+        error: `此信箱已被既有帳號使用。請改用既有方式登入，登入後可在帳號設定中綁定 ${provider} 帳號。`,
+      }, 409)
 
     } else {
       // ── 4. 全新用戶 → 建立 user + identity ──────────────────────

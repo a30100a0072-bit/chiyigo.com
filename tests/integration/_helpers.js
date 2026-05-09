@@ -135,6 +135,50 @@ export async function ensureJwtKeys() {
   _keysReady = true
 }
 
+// ── Google id_token 測試簽章工具（P0-3）──────────────────────────
+// callback.js 改成驗 Google id_token 簽章，測試需要：
+//   1. 一把穩定的「Google」測試金鑰
+//   2. JWKS endpoint mock 回傳對應公鑰
+let _googleTestKeys = null
+export async function ensureGoogleTestKeys() {
+  if (_googleTestKeys) return _googleTestKeys
+  const { generateKeyPair, exportJWK } = await import('jose')
+  const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true })
+  const priv = await exportJWK(privateKey)
+  const pub  = await exportJWK(publicKey)
+  priv.kid = pub.kid = 'google-test-key'
+  priv.alg = pub.alg = 'ES256'
+  pub.use  = 'sig'
+  _googleTestKeys = { privateKey, publicJwk: pub, privateJwk: priv }
+  return _googleTestKeys
+}
+
+export async function googleSignIdToken({
+  sub      = 'g-test',
+  email    = null,
+  email_verified = true,
+  aud      = 'goog-cid',
+  iss      = 'https://accounts.google.com',
+  nonce    = null,
+  expiresIn = 600,
+} = {}) {
+  const { SignJWT } = await import('jose')
+  const { privateKey, privateJwk } = await ensureGoogleTestKeys()
+  const now = Math.floor(Date.now() / 1000)
+  const payload = { sub, aud, iss, iat: now, exp: now + expiresIn }
+  if (email != null) payload.email = email
+  payload.email_verified = email_verified
+  if (nonce) payload.nonce = nonce
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid })
+    .sign(privateKey)
+}
+
+export async function googleJwksBody() {
+  const { publicJwk } = await ensureGoogleTestKeys()
+  return { keys: [publicJwk] }
+}
+
 /**
  * Insert a user + local_accounts row (password set).
  * Returns { id, email, password, salt, hash }.

@@ -16,6 +16,7 @@
  *  6. 簽發 JWT + Refresh Token，依 platform 回傳
  */
 
+import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { signJwt } from '../../../../utils/jwt.js'
 import { generateSecureToken, hashToken } from '../../../../utils/crypto.js'
 import { getProvider } from '../../../../utils/oauth-providers.js'
@@ -427,6 +428,15 @@ async function fetchProfile(provider, cfg, tokens, expectedNonce) {
     return payload
   }
 
+  // Google：原本 trust userinfo HTTP body 的 email_verified；改驗 id_token 簽章
+  // 取得權威 sub/email/email_verified（防止 token endpoint 與本地之間被中間人改 body）
+  // init.js 永遠帶 openid scope，Google 必定回 id_token；缺失視為硬性失敗
+  let googleClaims = null
+  if (provider === 'google') {
+    if (!tokens.id_token) throw new Error('Google id_token missing')
+    googleClaims = await verifyGoogleIdToken(tokens.id_token, cfg.clientId, expectedNonce)
+  }
+
   // LINE：email 在 id_token 內（scope 包含 email 時），驗 HMAC-SHA256 簽名
   // 注意：LINE id_token 簽章驗證失敗 / nonce 不符均視為硬性失敗（不再降級為「忽略 email」），
   // 否則攻擊者可注入未驗簽 id_token 取得本不應持有的 email。
@@ -448,7 +458,36 @@ async function fetchProfile(provider, cfg, tokens, expectedNonce) {
   // 將 LINE email 注入 raw profile（LINE profile API 不含 email）
   if (provider === 'line' && lineEmail) raw.email = lineEmail
 
+  // Google：用 id_token 驗章後的 claim 覆寫 userinfo 的 sub/email/email_verified
+  // userinfo 仍提供 name/picture（這兩個欄位偽造影響小）
+  if (provider === 'google' && googleClaims) {
+    raw.sub            = googleClaims.sub
+    raw.email          = googleClaims.email ?? raw.email ?? null
+    raw.email_verified = googleClaims.email_verified === true
+  }
+
   return raw
+}
+
+// Google id_token 驗章（ES256/RS256，透過 JWKS）
+// 模組級快取 JWKS：同一 isolate 內 Google 公鑰 fetch 僅一次（jose 內部會 respect HTTP cache headers）
+let _googleJwks = null
+function getGoogleJwks() {
+  if (!_googleJwks) {
+    _googleJwks = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'))
+  }
+  return _googleJwks
+}
+
+async function verifyGoogleIdToken(idToken, expectedAud, expectedNonce) {
+  const { payload } = await jwtVerify(idToken, getGoogleJwks(), {
+    issuer:   ['https://accounts.google.com', 'accounts.google.com'],
+    audience: expectedAud,
+  })
+  if (expectedNonce && payload.nonce !== expectedNonce) {
+    throw new Error('id_token nonce mismatch')
+  }
+  return payload
 }
 
 // ── 工具 ─────────────────────────────────────────────────────────

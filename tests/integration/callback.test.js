@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import { env } from 'cloudflare:test'
 import {
   resetDb, seedUser, ensureJwtKeys,
+  googleSignIdToken, googleJwksBody,
 } from './_helpers.js'
 import {
   onRequestGet as cbGet,
@@ -51,6 +52,14 @@ let fetchPlan  // { tokenStatus, tokenBody, profileStatus, profileBody }
 function makeFetchMock(plan) {
   return vi.fn(async (input /* , init */) => {
     const url = typeof input === 'string' ? input : input.url
+    // Google JWKS — P0-3 id_token 驗章用
+    if (url.includes('googleapis.com/oauth2/v3/certs')) {
+      const body = await googleJwksBody()
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
     if (url.includes('oauth2/v') && url.includes('token')) {
       // google / line token endpoints
       return new Response(JSON.stringify(plan.tokenBody ?? { access_token: 'fake-tok', token_type: 'Bearer' }), {
@@ -123,6 +132,12 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
   })
 
   it('全新用戶（google, email_verified=true）→ 200 + users + user_identities + refresh_tokens（L9：用 last_row_id）', async () => {
+    fetchPlan.tokenBody = {
+      access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({
+        sub: 'g-12345', email: 'newgoog@example.com', email_verified: true,
+      }),
+    }
     fetchPlan.profileBody = {
       sub:            'g-12345',
       email:          'newgoog@example.com',
@@ -160,6 +175,12 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
 
   it('信箱碰撞 + trustEmail=true (google) + email_verified=true → 靜默綁定（C2）', async () => {
     const u = await seedUser({ email: 'collide@example.com', password: 'OldPass#1234', emailVerified: 0 })
+    fetchPlan.tokenBody = {
+      access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({
+        sub: 'g-collide', email: 'collide@example.com', email_verified: true,
+      }),
+    }
     fetchPlan.profileBody = {
       sub:            'g-collide',
       email:          'collide@example.com',
@@ -185,6 +206,12 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
 
   it('信箱碰撞 + trustEmail=true 但 email_verified=false → 403 拒絕（C2 雙重守門）', async () => {
     const u = await seedUser({ email: 'unverified@example.com', password: 'OldPass#1234' })
+    fetchPlan.tokenBody = {
+      access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({
+        sub: 'g-unver', email: 'unverified@example.com', email_verified: false,
+      }),
+    }
     fetchPlan.profileBody = {
       sub:            'g-unver',
       email:          'unverified@example.com',
@@ -242,6 +269,12 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
        VALUES (?, 'google', 'g-return', 'OldName', 'old.png')`,
     ).bind(u.id).run()
 
+    fetchPlan.tokenBody = {
+      access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({
+        sub: 'g-return', email: 'returning@example.com', email_verified: true,
+      }),
+    }
     fetchPlan.profileBody = {
       sub:            'g-return',
       email:          'returning@example.com',
