@@ -70,6 +70,10 @@ export async function onRequestPost({ request, env }) {
   if (!record || record.deleted_at) return res({ error: 'Account not found' }, 400)
 
   // ── 3. 2FA 閉環 ──────────────────────────────────────────────
+  // P2-2：TOTP 與 backup_code 兩條 path 對 race 的暴露不同 —
+  //   TOTP：純驗證無資源消耗 → 維持原設計（先驗 2FA，後 atomic 消耗 token）
+  //   backup_code：destructive；先 atomic 消耗 token 鎖單一執行緒，再驗碼 → 防 race 浪費救援碼
+  let tokenConsumed = false
   if (record.totp_enabled === 1) {
     if (!totp_code)
       return res({ requires_2fa: true, error: '2FA verification required' }, 403)
@@ -77,51 +81,61 @@ export async function onRequestPost({ request, env }) {
     const sanitized = totp_code.replace(/[\s-]/g, '')
     let passed = false
 
-    // 3a. TOTP（6 位數字）— P1-8：verifyTotpReplaySafe 防 60s 內 replay
     if (/^\d{6}$/.test(sanitized)) {
       const r = await verifyTotpReplaySafe(env, { userId, secret: record.totp_secret, code: sanitized })
       passed = r.ok
     }
 
-    // 3b. 備用救援碼（20 hex chars）
     if (!passed && /^[0-9a-f]{20}$/i.test(sanitized)) {
+      const lockToken = await db
+        .prepare(`
+          UPDATE email_verifications SET used_at = datetime('now')
+          WHERE token_hash = ? AND token_type = 'reset_password'
+            AND used_at IS NULL AND expires_at > datetime('now')
+          RETURNING user_id
+        `)
+        .bind(tokenHash).first()
+      if (!lockToken) return res({ error: 'Token is invalid or has expired' }, 400)
+      tokenConsumed = true
+
       const codes = await db
         .prepare('SELECT id, code_hash FROM backup_codes WHERE user_id = ? AND used_at IS NULL')
-        .bind(userId)
-        .all()
-
+        .bind(userId).all()
       for (const code of codes.results ?? []) {
         if (await verifyBackupCode(sanitized, code.code_hash)) {
           const revoked = await db
-            .prepare(`
-              UPDATE backup_codes SET used_at = datetime('now')
-              WHERE id = ? AND used_at IS NULL
-            `)
-            .bind(code.id)
-            .run()
+            .prepare(`UPDATE backup_codes SET used_at = datetime('now') WHERE id = ? AND used_at IS NULL`)
+            .bind(code.id).run()
           if (revoked.meta?.changes > 0) { passed = true; break }
         }
+      }
+      if (!passed) {
+        await safeUserAudit(env, {
+          event_type: 'account.password.reset.backup_code_fail', severity: 'warn',
+          user_id: userId, request, data: { token_consumed: true },
+        })
+        return res({
+          error: 'Invalid backup code; reset token has been consumed, please request a new email',
+          code:  'BACKUP_CODE_FAIL_TOKEN_CONSUMED',
+        }, 401)
       }
     }
 
     if (!passed) return res({ error: 'Invalid 2FA code' }, 401)
   }
 
-  // ── 4. 原子核銷 token（防並發重放）───────────────────────────
-  const consumed = await db
-    .prepare(`
-      UPDATE email_verifications
-      SET    used_at = datetime('now')
-      WHERE  token_hash = ?
-        AND  token_type = 'reset_password'
-        AND  used_at    IS NULL
-        AND  expires_at > datetime('now')
-      RETURNING user_id
-    `)
-    .bind(tokenHash)
-    .first()
-
-  if (!consumed) return res({ error: 'Token is invalid or has expired' }, 400)
+  // ── 4. 原子核銷 token（若 backup_code path 已消耗則 skip）──────
+  if (!tokenConsumed) {
+    const consumed = await db
+      .prepare(`
+        UPDATE email_verifications SET used_at = datetime('now')
+        WHERE token_hash = ? AND token_type = 'reset_password'
+          AND used_at IS NULL AND expires_at > datetime('now')
+        RETURNING user_id
+      `)
+      .bind(tokenHash).first()
+    if (!consumed) return res({ error: 'Token is invalid or has expired' }, 400)
+  }
 
   // ── 5. UPSERT 密碼（新 salt + PBKDF2；OAuth-only 用戶首次建立密碼）──
   const newSalt = generateSalt()

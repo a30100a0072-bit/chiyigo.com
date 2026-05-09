@@ -206,6 +206,33 @@ export async function requireStepUp(request, env, requiredScope, requiredAction 
     }
   }
 
+  // P2-4：高權限 step-up 嚴格再驗 token_version + role + status，
+  // 確保「demoted admin 5min 內仍可退款」這條 race 被堵。
+  // requireAuth 已驗 ver，但這裡再查最新 row 比對 role/status，
+  // 防 role 直接 SQL 改成 player（沒走 bumpTokenVersion）後 step-up 仍生效。
+  if (env?.chiyigo_db && user.sub) {
+    const userId = Number(user.sub)
+    if (Number.isFinite(userId)) {
+      const row = await env.chiyigo_db
+        .prepare('SELECT role, status, token_version FROM users WHERE id = ? AND deleted_at IS NULL')
+        .bind(userId).first()
+      if (!row) {
+        return { user: null, error: res({ error: 'User not found', code: 'STEP_UP_USER_GONE' }, 403) }
+      }
+      if (row.status === 'banned') {
+        return { user: null, error: res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403) }
+      }
+      const dbVer  = row.token_version ?? 0
+      const jwtVer = Number.isFinite(user.ver) ? user.ver : 0
+      if (jwtVer < dbVer) {
+        return { user: null, error: res({ error: 'Step-up token revoked', code: 'STEP_UP_REVOKED' }, 401) }
+      }
+      if (row.role !== user.role) {
+        return { user: null, error: res({ error: 'Role changed since step-up; re-authenticate', code: 'STEP_UP_ROLE_DRIFT' }, 403) }
+      }
+    }
+  }
+
   // 一次性消耗：成功命中後立刻 revoke jti，同 token 不能再用
   if (user.jti && env?.chiyigo_db) {
     try { await revokeJti(env, user.jti, user.exp) }

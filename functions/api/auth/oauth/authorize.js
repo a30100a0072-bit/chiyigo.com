@@ -100,7 +100,12 @@ export async function onRequestGet({ request, env }) {
   // ── Silent SSO（OIDC prompt 處理）──────────────────────────────
   // prompt=login 一律跳過 silent，強制顯示 login UI（即使有 session）。
   // 其他情況試讀 refresh cookie；查到 active user 就直接 issue auth_code 跳轉。
-  if (prompt !== 'login') {
+  //
+  // P2-1：max_age=0 視同 prompt=login（OIDC §3.1.2.1：max_age=0 強制重認）。
+  // 即使現有 isWithinMaxAge(0)→false 已導致 silent 失敗，這條提早 short-circuit
+  // 讓意圖明確；也避開未來改動 isWithinMaxAge 時不小心放行 max_age=0 的回歸。
+  const forcePromptLogin = prompt === 'login' || maxAge === 0
+  if (!forcePromptLogin) {
     const refreshToken = readRefreshCookie(request.headers.get('Cookie'))
     if (refreshToken) {
       const user = await findActiveUserByRefreshCookie(env, refreshToken)

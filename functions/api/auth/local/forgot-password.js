@@ -37,11 +37,14 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const authHeader = request.headers.get('Authorization') ?? ''
   if (authHeader.startsWith('Bearer ')) {
     try {
-      const payload = await verifyJwt(authHeader.slice(7).trim(), env)
+      // P2-3：要求 token aud='chiyigo'。否則第三方 RP（sport-app/mbti/talo 等）的
+      // access_token 也能繞過 turnstile，雖只能對 own email 操作，但破壞了「IAM 自身
+      // 才能 skip」的封閉假設。
+      const payload = await verifyJwt(authHeader.slice(7).trim(), env, { audience: 'chiyigo' })
       if (payload.email && String(payload.email).toLowerCase() === emailLower) {
         skipTurnstile = true
       }
-    } catch { /* 簽章 / 過期 invalid → 走匿名路徑 */ }
+    } catch { /* 簽章 / 過期 / aud 不符 → 走匿名路徑 */ }
   }
 
   if (!skipTurnstile) {
