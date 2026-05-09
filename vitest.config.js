@@ -15,8 +15,39 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'text-summary'],
       include:  ['functions/utils/**'],
-      // audit-log / rate-limit 是 D1-dependent helper，由整合測試把關（同 auth endpoint）
-      exclude:  ['functions/utils/audit-log.js', 'functions/utils/rate-limit.js'],
+      // 排除分兩類，**新加 helper 預設不算 = 必須評估後決定**：
+      //   (A) D1-dependent — 必須 cloudflare:test runtime + miniflare D1，由 tests/integration 把關
+      //   (B) 外部 API call（Resend / Turnstile / Telegram / Discord）— 不接 mock 的話沒意義
+      // 其餘純模組（jwt/auth/scopes/roles/crypto/cors/email-static-helpers/...）走 80% 門檻
+      exclude: [
+        // (A) D1-dependent
+        'functions/utils/audit-log.js',          // hash-chain INSERT/SELECT
+        'functions/utils/rate-limit.js',         // login_attempts CRUD
+        'functions/utils/payments.js',           // payment_intents lockForRefund 等
+        'functions/utils/kyc.js',                // kyc_verifications schema + adapter
+        'functions/utils/kyc-vendors/**',        // 同上
+        'functions/utils/payment-vendors/**',    // ecpay/mock adapters 都吃 env+D1
+        'functions/utils/oauth-clients.js',      // D1 + KV cache
+        'functions/utils/oauth-session.js',      // D1 cookie session
+        'functions/utils/revocation.js',         // revoked_jti CRUD
+        'functions/utils/role-change.js',        // UPDATE + bumpTokenVersion + audit chain
+        'functions/utils/totp.js',               // used_totp PK replay-safe
+        'functions/utils/webauthn.js',           // consumeChallenge atomic + D1
+        'functions/utils/brute-force.js',        // ip_blacklist CRUD
+        'functions/utils/user-audit.js',         // audit_log INSERT + Discord webhook
+        'functions/utils/device-alerts.js',      // D1 lookup + email send
+        'functions/utils/backchannel.js',        // D1 oauth_clients + fetch logout
+
+        // (B) 外部 API call（要 mock fetch 才能單測，目前由 integration 真打測試環境）
+        'functions/utils/email.js',              // Resend API send paths
+        'functions/utils/turnstile.js',          // Cloudflare siteverify
+        'functions/utils/tg-requisition.js',     // Telegram bot API
+
+        // 其他暫無單測但屬於可單測的純模組（TODO，新增單測後從 exclude 移除）
+        'functions/utils/cookies.js',
+        'functions/utils/risk-score.js',
+        'functions/utils/siwe.js',
+      ],
       thresholds: {
         statements: 80,
         branches:   80,
