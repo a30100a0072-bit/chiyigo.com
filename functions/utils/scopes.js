@@ -34,12 +34,25 @@ export const SCOPES = Object.freeze({
   READ_PROFILE:  'read:profile',
   WRITE_PROFILE: 'write:profile',
 
-  // 平台 admin
+  // ── 平台 admin coarse（向後相容；admin/developer ROLE_BASE_SCOPES 仍給這些）
+  // hierarchical：coarse 自動含其下所有 fine（見 effectiveScopesFromJwt）
   ADMIN_USERS:   'admin:users',
   ADMIN_REVOKE:  'admin:revoke',
   ADMIN_AUDIT:   'admin:audit',
   ADMIN_CLIENTS:  'admin:clients',  // oauth_clients CRUD（Phase C-1 Wave 3 用）
   ADMIN_PAYMENTS: 'admin:payments', // 金流對帳 + 退款（Phase F-2 wave 4 用）
+
+  // ── 平台 admin fine（P1-17）— 最少特權 token / 將來 finance/support role 用
+  // 規則：read 只查、write 改非金流的 row、refund 是金流 destructive 的尖端權限
+  ADMIN_USERS_READ:      'admin:users:read',
+  ADMIN_USERS_WRITE:     'admin:users:write',     // ban / unban / 改 role
+  ADMIN_AUDIT_READ:      'admin:audit:read',
+  ADMIN_AUDIT_WRITE:     'admin:audit:write',     // DELETE audit_log（已 + step-up）
+  ADMIN_CLIENTS_READ:    'admin:clients:read',
+  ADMIN_CLIENTS_WRITE:   'admin:clients:write',   // POST/PATCH/DELETE oauth_clients
+  ADMIN_PAYMENTS_READ:   'admin:payments:read',
+  ADMIN_PAYMENTS_WRITE:  'admin:payments:write',  // hard delete intent / metadata-archive 寫
+  ADMIN_PAYMENTS_REFUND: 'admin:payments:refund', // 退款（最敏感金流動作）
 
   // 高權限（Phase C-3）— **絕對不出現在 ROLE_BASE_SCOPES**，只能透過 step-up flow 取得
   ELEVATED_ACCOUNT:   'elevated:account',     // 改密碼 / 改 email / 刪帳號
@@ -47,6 +60,40 @@ export const SCOPES = Object.freeze({
   ELEVATED_WITHDRAW:  'elevated:withdraw',
   ELEVATED_WALLET_OP: 'elevated:wallet_op',
 })
+
+/**
+ * coarse → fine 映射表（P1-17 hierarchical scope）。
+ *
+ * 規則：access_token 帶 coarse scope 時，effective scope set 自動包含所有 fine
+ * 子項。endpoint 端用 fine 守門可減少 blast radius（外洩 read-only token 不能
+ * 退款），但不影響既有 admin/developer access_token（仍含 coarse → 全套通過）。
+ *
+ * 拓展時：新加 admin:foo:bar fine scope，記得在這裡 register coarse → fine 對應。
+ */
+const SCOPE_HIERARCHY = Object.freeze({
+  [SCOPES.ADMIN_USERS]: [
+    SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE,
+  ],
+  [SCOPES.ADMIN_AUDIT]: [
+    SCOPES.ADMIN_AUDIT_READ, SCOPES.ADMIN_AUDIT_WRITE,
+  ],
+  [SCOPES.ADMIN_CLIENTS]: [
+    SCOPES.ADMIN_CLIENTS_READ, SCOPES.ADMIN_CLIENTS_WRITE,
+  ],
+  [SCOPES.ADMIN_PAYMENTS]: [
+    SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE, SCOPES.ADMIN_PAYMENTS_REFUND,
+  ],
+})
+
+/** 把 set 內所有 coarse scope 的 fine 子項一併加入；不影響原有 fine scope。*/
+function expandHierarchy(set) {
+  for (const coarse of Object.keys(SCOPE_HIERARCHY)) {
+    if (set.has(coarse)) {
+      for (const fine of SCOPE_HIERARCHY[coarse]) set.add(fine)
+    }
+  }
+  return set
+}
 
 /** 已知 elevated 集合：step-up endpoint 接受的 scope 白名單 */
 export const KNOWN_ELEVATED_SCOPES = new Set([
@@ -118,7 +165,9 @@ export function effectiveScopesFromJwt(payload) {
   const tokenScopes = (typeof payload.scope === 'string' ? payload.scope : '')
     .split(/\s+/).filter(Boolean)
   const roleScopes  = scopesForRole(payload.role)
-  return new Set([...tokenScopes, ...roleScopes])
+  // P1-17：把 coarse scope 在比對前展開成 coarse + 所有 fine，使既有 admin token
+  // （含 admin:payments）自動具備 admin:payments:refund 等 fine-grain 權限。
+  return expandHierarchy(new Set([...tokenScopes, ...roleScopes]))
 }
 
 export function hasScope(payload, scope) {

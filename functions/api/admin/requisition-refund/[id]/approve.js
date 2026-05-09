@@ -45,9 +45,10 @@ export async function onRequestPost({ request, env, params }) {
   )
   if (stepCheck.error) return stepCheck.error
 
+  // P1-17：fine-grain admin:payments:refund（coarse admin:payments token 仍通過 hierarchy）
   const effective = effectiveScopesFromJwt(stepCheck.user)
-  if (!effective.has(SCOPES.ADMIN_PAYMENTS)) {
-    return res({ error: 'admin:payments scope required' }, 403, cors)
+  if (!effective.has(SCOPES.ADMIN_PAYMENTS_REFUND)) {
+    return res({ error: 'admin:payments:refund scope required' }, 403, cors)
   }
 
   const id = Number(params?.id)

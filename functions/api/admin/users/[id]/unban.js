@@ -19,12 +19,18 @@ import { res } from '../../../../utils/auth.js'
 import { requireRole } from '../../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes.js'
 
 const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 
 export async function onRequestPost({ request, env, params }) {
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
+
+  // P1-17：fine-grain admin:users:write 守門
+  if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_USERS_WRITE)) {
+    return res({ error: 'admin:users:write scope required' }, 403)
+  }
 
   const targetId = parseInt(params.id, 10)
   if (isNaN(targetId)) return res({ error: 'Invalid user id' }, 400)

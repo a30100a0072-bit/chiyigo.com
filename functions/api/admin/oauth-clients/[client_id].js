@@ -15,7 +15,7 @@ import { requireRole } from '../../../utils/requireRole.js'
 import { invalidateClientsCache } from '../../../utils/oauth-clients.js'
 import { appendAuditLog } from '../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
-import { SCOPES } from '../../../utils/scopes.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
 
 const VALID_APP_TYPES = new Set(['web', 'native', 'mobile'])
 
@@ -135,7 +135,10 @@ export async function onRequestPatch({ request, env, params }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'update_oauth_client')
   if (stepCheck.error) return stepCheck.error
   const user = stepCheck.user
-  if (user.role !== 'admin') return res({ error: 'admin role required' }, 403)
+  // P1-17：fine-grain admin:clients:write 守門（取代 hard-coded role==='admin'）
+  if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_CLIENTS_WRITE)) {
+    return res({ error: 'admin:clients:write scope required' }, 403)
+  }
 
   let body
   try { body = await request.json() }
@@ -191,7 +194,10 @@ export async function onRequestDelete({ request, env, params }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'delete_oauth_client')
   if (stepCheck.error) return stepCheck.error
   const user = stepCheck.user
-  if (user.role !== 'admin') return res({ error: 'admin role required' }, 403)
+  // P1-17：fine-grain admin:clients:write 守門（軟下架仍是 destructive）
+  if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_CLIENTS_WRITE)) {
+    return res({ error: 'admin:clients:write scope required' }, 403)
+  }
 
   // P1-15：先確認狀態，再 hash-chain，再執行 UPDATE
   const existing = await env.chiyigo_db

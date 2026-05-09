@@ -99,3 +99,40 @@ describe('effectiveScopesFromJwt + hasScope/hasAllScopes', () => {
     expect(effectiveScopesFromJwt('string').size).toBe(0)
   })
 })
+
+describe('P1-17 hierarchical scope expansion', () => {
+  it('admin:payments coarse → 自動含 :read/:write/:refund', () => {
+    const payload = { scope: 'admin:payments', role: 'player' }
+    const eff = effectiveScopesFromJwt(payload)
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_READ)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_WRITE)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_REFUND)).toBe(true)
+  })
+
+  it('admin role 透過 ROLE_BASE_SCOPES → 也展開 fine', () => {
+    const payload = { role: 'admin' }  // 連 scope claim 都沒
+    const eff = effectiveScopesFromJwt(payload)
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_REFUND)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_USERS_WRITE)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_WRITE)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_CLIENTS_WRITE)).toBe(true)
+  })
+
+  it('只給 fine read 不會自動長出 write', () => {
+    const payload = { scope: 'admin:payments:read', role: 'player' }
+    const eff = effectiveScopesFromJwt(payload)
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_READ)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_WRITE)).toBe(false)
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_REFUND)).toBe(false)
+  })
+
+  it('hasAllScopes：coarse token 也能通過 fine 守門', () => {
+    const payload = { scope: 'admin:payments', role: 'player' }
+    expect(hasAllScopes(payload, [SCOPES.ADMIN_PAYMENTS_REFUND])).toBe(true)
+  })
+
+  it('hasAllScopes：fine read token 不能通過 fine refund 守門', () => {
+    const payload = { scope: 'admin:payments:read', role: 'player' }
+    expect(hasAllScopes(payload, [SCOPES.ADMIN_PAYMENTS_REFUND])).toBe(false)
+  })
+})

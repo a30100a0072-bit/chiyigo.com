@@ -21,9 +21,10 @@ export async function onRequestDelete({ request, env, params }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'delete_audit')
   if (stepCheck.error) return stepCheck.error
 
+  // P1-17：fine-grain admin:audit:write（DELETE 是 destructive，不能讓 read-only token 動）
   const effective = effectiveScopesFromJwt(stepCheck.user)
-  if (!effective.has(SCOPES.ADMIN_AUDIT)) {
-    return res({ error: 'admin:audit scope required' }, 403)
+  if (!effective.has(SCOPES.ADMIN_AUDIT_WRITE)) {
+    return res({ error: 'admin:audit:write scope required' }, 403)
   }
 
   const id = Number(params?.id)

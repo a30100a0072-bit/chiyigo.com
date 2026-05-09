@@ -21,6 +21,7 @@ import { requireRole } from '../../utils/requireRole.js'
 import { invalidateClientsCache } from '../../utils/oauth-clients.js'
 import { appendAuditLog } from '../../utils/audit-log.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../utils/scopes.js'
 
 const CLIENT_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/  // 小寫英數 + - + _，1-64 字
 const VALID_APP_TYPES = new Set(['web', 'native', 'mobile'])
@@ -129,6 +130,11 @@ export async function onRequestGet({ request, env }) {
 export async function onRequestPost({ request, env }) {
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
+
+  // P1-17：fine-grain admin:clients:write 守門。admin role coarse → fine 透過 hierarchy 通過
+  if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_CLIENTS_WRITE)) {
+    return res({ error: 'admin:clients:write scope required' }, 403)
+  }
 
   let body
   try { body = await request.json() }

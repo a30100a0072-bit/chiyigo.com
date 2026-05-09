@@ -53,12 +53,12 @@ export async function onRequestPost({ request, env, params }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_PAYMENT, 'refund_payment')
   if (stepCheck.error) return stepCheck.error
 
-  // 確認 user 有 admin:payments 權限。step-up token scope 純 elevated:*，
-  // 但 token 帶 role 可走 effectiveScopesFromJwt fallback：admin/developer 自動有 admin:payments。
-  // 一般 player role 即使 step-up 拿到 elevated:payment 也不會有 admin:payments → 403（防越權退別人款）。
+  // P1-17：用 fine-grain admin:payments:refund 守門。admin/developer 透過
+  // ROLE_BASE_SCOPES 拿 coarse admin:payments，effectiveScopesFromJwt 自動展開
+  // 含 :refund，相容無痛；外洩的 read-only token（admin:payments:read）會被擋。
   const effective = effectiveScopesFromJwt(stepCheck.user)
-  if (!effective.has(SCOPES.ADMIN_PAYMENTS)) {
-    return res({ error: 'admin:payments scope required' }, 403, cors)
+  if (!effective.has(SCOPES.ADMIN_PAYMENTS_REFUND)) {
+    return res({ error: 'admin:payments:refund scope required' }, 403, cors)
   }
 
   const id = Number(params?.id)
