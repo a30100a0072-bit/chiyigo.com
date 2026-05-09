@@ -22,6 +22,7 @@
        2) 沒 token → 非同步呼叫 /api/auth/refresh（HttpOnly cookie 跨分頁有效），成功就寫回 sessionStorage 並繼續
        3) refresh 失敗 → 跳登入
        期間用一張 loading splash 蓋住內容，避免閃登入畫面 -->
+  <link rel="stylesheet" href="/css/_tokens.css" />
   <link rel="stylesheet" href="/css/ai-assistant.css" />
   <link rel="stylesheet" href="/css/sidebar-auth.css" />
   <script>

@@ -1,42 +1,9 @@
-*,*:before,*:after{box-sizing:border-box;margin:0;padding:0}
-
-:root,.theme-light{
-  --bg:#F0F2FA;--bg-surface:#FFFFFF;--bg-elevated:#FAFAFE;
-  --bg-sidebar:#EAEBF5;--bg-titlebar:#F4F5FC;
-  --border:rgba(0,0,0,.07);--border-dim:rgba(0,0,0,.05);
-  --border-bright:rgba(0,0,0,.14);--border-mid:rgba(0,0,0,.1);
-  --text:#1A1B2E;--text-muted:rgba(26,27,46,.6);--text-dim:rgba(26,27,46,.38);
-  --accent:#6C6EE5;--accent-dim:rgba(108,110,229,.1);--accent-glow:rgba(108,110,229,.18);
-  --hover-overlay:rgba(0,0,0,.05);
-  --neural-r:108;--neural-g:110;--neural-b:229;
-  --neural-node-opacity:.22;--neural-line-opacity:.09;
-  --font-sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
-  --font-display:var(--font-sans);--font-mono:"DM Mono","Courier New",monospace;
-  --font-body:var(--font-sans);
-  --max-w:1200px;--pad-x:2rem;--sidebar-w:220px;--titlebar-h:60px;
-}
-.theme-dark{
-  --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
-  --bg-sidebar:#0F1424;--bg-titlebar:#0D1120;
-  --border:rgba(255,255,255,.08);--border-dim:rgba(255,255,255,.05);
-  --border-bright:rgba(255,255,255,.14);--border-mid:rgba(255,255,255,.1);
-  --text:#F3F4F6;--text-muted:rgba(243,244,246,.62);--text-dim:rgba(243,244,246,.36);
-  --accent:#7B6CFF;--accent-dim:rgba(123,108,255,.12);--accent-glow:rgba(123,108,255,.25);
-  --hover-overlay:rgba(255,255,255,.06);
-  --neural-r:123;--neural-g:108;--neural-b:255;
-  --neural-node-opacity:.4;--neural-line-opacity:.15;
-}
+/* Page layout vars（design token 已抽到 _tokens.css） */
+:root{--max-w:1200px;--pad-x:2rem;--sidebar-w:220px;--titlebar-h:60px}
 @media(max-width:768px){:root{--sidebar-w:0px;--titlebar-h:0px;--pad-x:1.25rem}}
 
-html{font-family:var(--font-sans);background-color:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background-color .3s ease,color .3s ease}
 body{min-height:100vh;overflow:hidden}
 @media(max-width:768px){body{overflow:auto}}
-a{color:inherit;text-decoration:none}
-ul{list-style:none}
-img{max-width:100%;height:auto;display:block}
-
-.logo-dark,.theme-dark .logo-light{display:none!important}
-.theme-dark .logo-dark{display:block!important}
 
 #neural-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
 
