@@ -33,7 +33,8 @@ describe('POST /api/auth/local/login — happy path & failures', () => {
     const cookie = res.headers.get('Set-Cookie') ?? ''
     expect(cookie).toMatch(/^chiyigo_refresh=[0-9a-f]{64};/)
     expect(cookie).toMatch(/HttpOnly/)
-    expect(cookie).toMatch(/SameSite=Lax/)
+    // commit efac703：跨站 iframe silent SSO 改 SameSite=None
+    expect(cookie).toMatch(/SameSite=None/)
 
     // access_token 簽章驗證 + payload 結構
     const pub = await importJWK(JSON.parse(env.JWT_PUBLIC_KEY), 'ES256')

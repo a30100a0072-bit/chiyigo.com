@@ -57,13 +57,18 @@ async function execAll(sql) {
 
 async function dropAllTables() {
   // 反覆刪到 sqlite_master 沒有非 system table 為止（避免外鍵順序問題）
+  // race 防護：vitest workers pool 共用 D1 instance；其他 test file 的 resetDb 可能在
+  // 我們 SELECT/DROP 之間動 schema，導致 IF EXISTS 都還會撞 "no such table"。
+  // 解法：try/catch 包單一 DROP，整體仍會在下一輪 retry 直到清乾淨（最多 5 輪）。
   for (let i = 0; i < 5; i++) {
     const rows = await env.chiyigo_db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%'`)
       .all()
     if (!rows.results?.length) return
     for (const { name } of rows.results) {
-      await env.chiyigo_db.prepare(`DROP TABLE IF EXISTS "${name}"`).run()
+      try {
+        await env.chiyigo_db.prepare(`DROP TABLE IF EXISTS "${name}"`).run()
+      } catch { /* race：被別的 test file 先刪了，下一輪 SELECT 就不會再列到 */ }
     }
   }
 }
