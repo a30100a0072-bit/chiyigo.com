@@ -24,6 +24,7 @@
 
 import { res, requireScope } from '../../utils/auth.js'
 import { SCOPES } from '../../utils/scopes.js'
+import { canRoleSeeAuditEvent } from '../../utils/roles.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
@@ -126,7 +127,11 @@ export async function onRequestGet({ request, env }) {
 
   // P2-6：每列 event_data 走白名單裁切，避免 PII 直回
   const rawRows = rowsResult?.results ?? []
-  const rows = rawRows.map(r => ({ ...r, event_data: redactEventData(r.event_data) }))
+  // P1-17 Phase 2 latent：support role 額外按 event_type 前綴白/黑名單裁切，
+  // 避免客服看到 risk engine internals / role 變更等敏感事件。super_admin /
+  // admin / developer / finance 走 canRoleSeeAuditEvent 全 true（no-op）。
+  const filteredRows = rawRows.filter(r => canRoleSeeAuditEvent(r.event_type, user.role))
+  const rows = filteredRows.map(r => ({ ...r, event_data: redactEventData(r.event_data) }))
 
   // P2-6：寫 admin.audit.read audit（含 result_count + filters）
   await safeUserAudit(env, {

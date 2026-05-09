@@ -50,9 +50,10 @@ export const SCOPES = Object.freeze({
   ADMIN_AUDIT_WRITE:     'admin:audit:write',     // DELETE audit_log（已 + step-up）
   ADMIN_CLIENTS_READ:    'admin:clients:read',
   ADMIN_CLIENTS_WRITE:   'admin:clients:write',   // POST/PATCH/DELETE oauth_clients
-  ADMIN_PAYMENTS_READ:   'admin:payments:read',
-  ADMIN_PAYMENTS_WRITE:  'admin:payments:write',  // hard delete intent / metadata-archive 寫
-  ADMIN_PAYMENTS_REFUND: 'admin:payments:refund', // 退款（最敏感金流動作）
+  ADMIN_PAYMENTS_READ:    'admin:payments:read',
+  ADMIN_PAYMENTS_WRITE:   'admin:payments:write',  // hard delete intent / metadata-archive 寫
+  ADMIN_PAYMENTS_REFUND:  'admin:payments:refund', // 退款（最敏感金流動作）
+  ADMIN_PAYMENTS_APPROVE: 'admin:payments:approve', // 退款審核 approve（P1-17 Phase 2 latent；目前 endpoint 仍走 :refund）
 
   // 高權限（Phase C-3）— **絕對不出現在 ROLE_BASE_SCOPES**，只能透過 step-up flow 取得
   ELEVATED_ACCOUNT:   'elevated:account',     // 改密碼 / 改 email / 刪帳號
@@ -81,7 +82,8 @@ const SCOPE_HIERARCHY = Object.freeze({
     SCOPES.ADMIN_CLIENTS_READ, SCOPES.ADMIN_CLIENTS_WRITE,
   ],
   [SCOPES.ADMIN_PAYMENTS]: [
-    SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE, SCOPES.ADMIN_PAYMENTS_REFUND,
+    SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
+    SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
   ],
 })
 
@@ -113,12 +115,20 @@ export function isElevatedScope(s) {
 /**
  * role 直接對應的 scope。發 token 時這些一定加上去；OIDC 額外要的 scope 額外加。
  *
- * 規則：
+ * 規則（current）：
  *   - 每個人都有 read:profile / write:profile（管自己的帳號）
- *   - admin / developer 取得 admin:* 全套
- *   - moderator 暫時無增量（Phase C-2 後再依需求補）
+ *   - admin / developer / super_admin 取得 admin:* coarse 全套（hierarchy 自動展開所有 fine）
+ *
+ * P1-17 Phase 2（latent role rollout，2026-05-09）：
+ *   - 新增 super_admin / finance / support / user 四個 role 的 scope mapping
+ *   - prod 目前仍只有單一 super_admin（既有 admin user 視為 super_admin）；finance/support
+ *     mapping 已 ready，待真要建第二個 admin 帳號時 issue 一個 token + bumpTokenVersion 即可
+ *   - 既有 admin / developer 條目「不要動」：保留 backward compat 不影響現有 prod session
+ *   - finance / support 嚴格只給 fine scope，**禁** admin:users / admin:clients / admin:audit
+ *     coarse（避免 hierarchy 展開後拿到 *_WRITE 升權）
  */
 const ROLE_BASE_SCOPES = {
+  // ── current production roles ─────────────────────────────────
   player:    [SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE],
   moderator: [SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE],
   admin: [
@@ -129,6 +139,31 @@ const ROLE_BASE_SCOPES = {
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
   ],
+
+  // ── P1-17 Phase 2 latent roles ──────────────────────────────
+  // super_admin = admin 同義詞（新 canonical name）；現有 admin user 不必 migrate role 欄位
+  super_admin: [
+    SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
+    SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
+  ],
+  // finance：金流 read + 退款 + 退款審核 + webhook-dlq（dlq endpoint 用 ADMIN_PAYMENTS gate）
+  // 嚴禁：admin:users（避免改 role/ban）、admin:clients（OAuth RP）、admin:audit（avoid PII access）
+  finance: [
+    SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
+    SCOPES.ADMIN_PAYMENTS_READ,
+    SCOPES.ADMIN_PAYMENTS_REFUND,
+    SCOPES.ADMIN_PAYMENTS_APPROVE,
+  ],
+  // support：客服查詢用，純 read；audit read 透過 roles.js#filterAuditEventForRole 額外裁切
+  // 嚴禁：任何 *_WRITE / *_REFUND / admin:clients
+  support: [
+    SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
+    SCOPES.ADMIN_USERS_READ,
+    SCOPES.ADMIN_PAYMENTS_READ,
+    SCOPES.ADMIN_AUDIT_READ,
+  ],
+  // user：基本身份（與 player 等價的非遊戲別名）
+  user: [SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE],
 }
 
 /** 取 role 內建 scope；未知 role → 空陣列 */

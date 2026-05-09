@@ -100,6 +100,70 @@ describe('effectiveScopesFromJwt + hasScope/hasAllScopes', () => {
   })
 })
 
+describe('P1-17 Phase 2 — latent role mappings (super_admin / finance / support / user)', () => {
+  it('super_admin → 與 admin coarse 完全等價', () => {
+    const a = new Set(scopesForRole('admin'))
+    const s = new Set(scopesForRole('super_admin'))
+    expect(s.size).toBe(a.size)
+    for (const x of a) expect(s.has(x)).toBe(true)
+  })
+
+  it('finance → 拿 fine payment scope；不得有 users / clients / audit / *_WRITE non-payment', () => {
+    const set = new Set(scopesForRole('finance'))
+    expect(set.has(SCOPES.ADMIN_PAYMENTS_READ)).toBe(true)
+    expect(set.has(SCOPES.ADMIN_PAYMENTS_REFUND)).toBe(true)
+    expect(set.has(SCOPES.ADMIN_PAYMENTS_APPROVE)).toBe(true)
+    // 不得 escalate
+    expect(set.has(SCOPES.ADMIN_USERS)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_USERS_WRITE)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_CLIENTS)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_CLIENTS_WRITE)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_AUDIT)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_AUDIT_WRITE)).toBe(false)
+    // 透過 hierarchy 也不應展開出 ADMIN_PAYMENTS coarse → 不該有 :write（finance 不能 hard delete）
+    const eff = effectiveScopesFromJwt({ role: 'finance' })
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_WRITE)).toBe(false)
+  })
+
+  it('support → 純 read；無 write / refund / clients', () => {
+    const set = new Set(scopesForRole('support'))
+    expect(set.has(SCOPES.ADMIN_USERS_READ)).toBe(true)
+    expect(set.has(SCOPES.ADMIN_PAYMENTS_READ)).toBe(true)
+    expect(set.has(SCOPES.ADMIN_AUDIT_READ)).toBe(true)
+    // 不得 escalate
+    expect(set.has(SCOPES.ADMIN_USERS_WRITE)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_PAYMENTS_REFUND)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_PAYMENTS_WRITE)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_CLIENTS_READ)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_CLIENTS_WRITE)).toBe(false)
+    expect(set.has(SCOPES.ADMIN_AUDIT_WRITE)).toBe(false)
+  })
+
+  it('user → 與 player 等價（基本 profile 而已）', () => {
+    const u = new Set(scopesForRole('user'))
+    const p = new Set(scopesForRole('player'))
+    expect(u.size).toBe(p.size)
+    for (const x of p) expect(u.has(x)).toBe(true)
+  })
+
+  it('既有 admin / developer 條目沒被改（backward compat）', () => {
+    expect(scopesForRole('admin')).toContain(SCOPES.ADMIN_PAYMENTS)
+    expect(scopesForRole('developer')).toContain(SCOPES.ADMIN_PAYMENTS)
+  })
+})
+
+describe('P1-17 Phase 2 — admin:payments:approve fine scope', () => {
+  it('coarse admin:payments → 自動含 :approve', () => {
+    const eff = effectiveScopesFromJwt({ scope: 'admin:payments', role: 'player' })
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_APPROVE)).toBe(true)
+  })
+
+  it(':refund token 不會自動長出 :approve（fine → fine 互不蘊含）', () => {
+    const eff = effectiveScopesFromJwt({ scope: 'admin:payments:refund', role: 'player' })
+    expect(eff.has(SCOPES.ADMIN_PAYMENTS_APPROVE)).toBe(false)
+  })
+})
+
 describe('P1-17 hierarchical scope expansion', () => {
   it('admin:payments coarse → 自動含 :read/:write/:refund', () => {
     const payload = { scope: 'admin:payments', role: 'player' }
