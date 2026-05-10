@@ -18,7 +18,7 @@ import { buildTokenScope } from '../../../utils/scopes.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL   = '15m'
@@ -94,21 +94,13 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // rate-limit（user-audit.js:46-75），採樣是現階段最低成本的方案。
   if (guest_id && !isValidGuestId) {
     try {
-      const raw  = String(guest_id)
-      const salt = env.AUDIT_IP_SALT || ''  // 沿用既有 IP 鹽；缺值則用空字串（仍比 plain SHA 強）
-      // Codex r7-2：keyed HMAC-SHA256 取代 raw SHA-256；防 audit DB 外洩後對低熵
-      // guest_id 字典反推。salt 缺值不擋（仍記錄事件），下游監控應檢查 salt 已配。
-      const key  = await crypto.subtle.importKey(
-        'raw', new TextEncoder().encode(salt || 'dev-fallback-no-salt'),
-        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
-      )
-      const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw))
-      const sig    = Array.from(new Uint8Array(sigBuf))
-        .map(b => b.toString(16).padStart(2, '0')).join('')
-      // Codex r7-3：deterministic sampling — 用 hash 取模代 Math.random，同一 bad
-      // value 重試不會累積 audit。第一個 byte (0..255) < 26 ≈ 10.2%，與原機率近似。
-      const sampleByte = sigBuf instanceof ArrayBuffer ? new Uint8Array(sigBuf)[0] : sigBuf[0]
-      if (sampleByte < 26) {
+      const raw = String(guest_id)
+      // Codex r7-2 / r8-2：用 hashIdentifierForAudit (派生 domain key) 取代直接 HMAC root salt。
+      // domain='guest-id-audit' → 與其他識別符 domain 獨立，rotation/blast radius 切乾淨。
+      const sig = await hashIdentifierForAudit(env, 'guest-id-audit', raw)
+      // Codex r7-3：deterministic sampling — 同一 bad value 重試不累積 audit。
+      // sig.bytes[0] < 26 ≈ 10.16%
+      if (sig.bytes[0] < 26) {
         // prefix_class：分類 enum，不存任何明文（防 email/手機/姓名被當 guest_id 落 audit）
         let prefixClass = 'other'
         if (/^web-/i.test(raw))            prefixClass = 'web_malformed' // 'web-' 開頭但 uuid 格式錯
@@ -120,9 +112,9 @@ export async function onRequestPost({ request, env, waitUntil }) {
           data: {
             length:       raw.length,
             prefix_class: prefixClass,
-            hmac16:       sig.slice(0, 16),  // 同 hmac → 同 client（HMAC keyed，無法字典反推）
-            sampled:      true,              // 提醒分析端真實量是 ×10（deterministic）
-            salted:       Boolean(salt),     // 提醒：若 false 表示 AUDIT_IP_SALT 未設，需修配置
+            hmac16:       sig.hex.slice(0, 16),  // domain-keyed HMAC，無法字典反推
+            sampled:      true,                   // 提醒分析端真實量是 ×10（deterministic）
+            salted:       sig.salted,             // false → AUDIT_IP_SALT 未設，需修配置
           },
         })
       }
@@ -156,12 +148,12 @@ export async function onRequestPost({ request, env, waitUntil }) {
       const newUserId = takenRows[0]?.user_id ?? null
       if (takenIds.length) {
         // Codex audit r3 #3（2026-05-10）：takeover 後 owner_guest_id 變 NULL，
-        // 失去訪客→user 軌跡。寫一筆 audit 記下 sha256(guest_id) + 受影響 requisition_ids，
+        // 失去訪客→user 軌跡。寫一筆 audit 記下 hash(guest_id) + 受影響 requisition_ids，
         // 不存明文 device id（保護瀏覽器身份）。
-        const enc = new TextEncoder().encode(guest_id)
-        const guestHashBuf = await crypto.subtle.digest('SHA-256', enc)
-        const guestHash = Array.from(new Uint8Array(guestHashBuf))
-          .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
+        // Codex r8-1：對齊 invalid 路徑，改用 hashIdentifierForAudit (keyed HMAC)；
+        // 同 domain ('guest-id-audit') 確保 takeover.guest_id_hash 與 invalid_format.hmac16
+        // 對於同一 raw guest_id 會匹配（cross-event correlation），且都防字典反推。
+        const sig = await hashIdentifierForAudit(env, 'guest-id-audit', guest_id)
         await safeUserAudit(env, {
           event_type: 'requisition.takeover', severity: 'info',
           user_id: newUserId, request,
@@ -169,7 +161,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
           // user_id 已可追溯帳號；email 在 admin audit API 也會被 redaction，留 raw 是雙標
           data: {
             requisition_ids: takenIds,
-            guest_id_hash:   guestHash,
+            guest_id_hash:   sig.hex.slice(0, 32),
+            salted:          sig.salted,
             count:           allTakenIds.length,  // 真實命中數（未 cap）
             truncated,                            // true 表示 requisition_ids 被截
           },

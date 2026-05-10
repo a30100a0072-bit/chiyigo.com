@@ -93,6 +93,44 @@ export async function safeUserAudit(env, entry) {
 }
 
 /**
+ * Codex r8 helper（2026-05-10）：把 user-controlled 識別符（guest_id / 未來 device_id /
+ * credential_id / wallet address）轉成可放 audit 的 keyed HMAC hex；防 audit DB 外洩
+ * 後字典反推。
+ *
+ * Domain key 派生：HMAC(AUDIT_IP_SALT, "<domain>:v1") — 不直接用 root salt 簽 raw 值，
+ * 不同 domain (guest-id / device-id / ...) key 互相獨立；rotation 時改派生字串版本即可，
+ * 不影響其他 domain。
+ *
+ * 缺 AUDIT_IP_SALT 時 fallback 字串可被 audit DB 外洩者推出，但仍比 raw SHA 安全；
+ * 回傳 `salted: false` 給 caller 寫入 audit data，下游監控可偵測 prod 缺 salt 配置。
+ *
+ * @param {object} env
+ * @param {string} domain  e.g. 'guest-id-audit'（多種識別符共用此 helper）
+ * @param {string} raw     原始字串
+ * @returns {Promise<{ hex: string, bytes: Uint8Array, salted: boolean }>}
+ */
+export async function hashIdentifierForAudit(env, domain, raw) {
+  const root = env.AUDIT_IP_SALT || 'dev-fallback-no-salt'
+  const rootKey = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(root),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const derivedBuf = await crypto.subtle.sign(
+    'HMAC', rootKey, new TextEncoder().encode(`${domain}:v1`),
+  )
+  const domainKey = await crypto.subtle.importKey(
+    'raw', derivedBuf,
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const sigBuf = await crypto.subtle.sign(
+    'HMAC', domainKey, new TextEncoder().encode(String(raw)),
+  )
+  const bytes = new Uint8Array(sigBuf)
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+  return { hex, bytes, salted: Boolean(env.AUDIT_IP_SALT) }
+}
+
+/**
  * Critical 事件 Discord webhook 預留 hook。
  * env.DISCORD_AUDIT_WEBHOOK 缺值即 noop。設 secret 後自動生效，無 code 改動。
  */
