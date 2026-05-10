@@ -488,3 +488,16 @@ document.addEventListener('click', e => {
 
 // ── Init ───────────────────────────────────────────────
 load();
+
+// ── Mobile hamburger overlay + 對齊 m-theme-btn / m-ov-lang-opt 行為 ──
+const hamBtn  = document.getElementById('m-ham-btn');
+const overlay = document.getElementById('m-overlay');
+const mTopbar = document.getElementById('m-topbar');
+function openMenu() { hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open'); overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden'); mTopbar?.classList.add('menu-open'); document.body.style.overflow='hidden'; }
+function closeMenu() { hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open'); overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true'); mTopbar?.classList.remove('menu-open'); document.body.style.overflow=''; }
+hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
+overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
+overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
+document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+document.getElementById('m-theme-btn')?.addEventListener('click', () => document.getElementById('theme-toggle-btn')?.click());
+overlay?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });

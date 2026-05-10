@@ -140,6 +140,66 @@
     </div>
   </div>
 
+  {{> topbar-mobile pathPrefix="/" brandHref="/index.html" loginHref="/dashboard.html" loginLabel="會員中心"}}
+
+  <!-- Mobile overlay -->
+  <div class="m-overlay" id="m-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="主選單">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle" aria-hidden="true"></div>
+      <div class="m-ov-head">
+        <div class="m-ov-brand">
+          <img src="/images/logo-light.png" alt="CHIYIGO" class="m-ov-logo-img logo-light">
+          <img src="/images/logo-dark.png"  alt="CHIYIGO" class="m-ov-logo-img logo-dark">
+        </div>
+        <div class="m-ov-status">
+          <span class="m-ov-status-dot" aria-hidden="true"></span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
+        </div>
+      </div>
+      <nav class="m-ov-nav" aria-label="主導覽">
+        <a href="/admin-requisitions.html" class="m-ov-item" data-stagger="0" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_admin_requisitions">接案諮詢</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/admin-refund-requests.html" class="m-ov-item" data-stagger="1" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M3 8a5 5 0 0 1 8.5-3.5L13 6M13 8a5 5 0 0 1-8.5 3.5L3 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M11 2v4h-4M5 14V10h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="m-ov-label">退款申請</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/admin-payment-records.html" class="m-ov-item active" data-stagger="2" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 4h12v8H2z" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.4"/><circle cx="11.5" cy="9.5" r="1" fill="currentColor"/></svg></span>
+          <span class="m-ov-label">充值紀錄</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/admin-deals.html" class="m-ov-item" data-stagger="3" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M3 3l10 10M13 3v6M13 3H7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+          <span class="m-ov-label">成交紀錄</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/admin-payments.html" class="m-ov-item" data-stagger="4" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><path d="M2 5h12v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5l1.5-2h9L14 5" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/><path d="M5 9h2M9 9h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>
+          <span class="m-ov-label" data-i18n="nav_admin_payments">金流對帳</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/dashboard.html" class="m-ov-item" data-stagger="5" data-close-overlay>
+          <span class="m-ov-icon-wrap"><svg viewBox="0 0 16 16" fill="none" class="m-ov-icon"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></span>
+          <span class="m-ov-label" data-i18n="member_center">會員中心</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </nav>
+      <div class="m-ov-cta">
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/sidebar-auth.js" defer></script>
   <script src="/js/api.js"></script>
   <script src="/js/admin-payment-records.js" defer></script>
 </body>
