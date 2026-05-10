@@ -19,17 +19,20 @@
 -- SELECT id, name, email, service, budget, created_at FROM requisition ORDER BY created_at DESC LIMIT 20;
 
 -- ─────────────────────────────────────────────────────────────
--- 2026-05-10：新增「運動減重 APP」（sport-app）
--- 執行：npx wrangler d1 execute chiyigo_db --remote --command "..."（複製下方整段）
--- 圖片：先把圖丟到 public/images/portfolio/sport-app.png（建議 1200x800，和 mbti.png/talo.png 同尺寸）
+-- 2026-05-10：新增「運動減重 APP」（sport-app）→ 已 apply (id=15)
 -- ─────────────────────────────────────────────────────────────
-INSERT INTO portfolio (title, category, description, image_url, link_url, tags, sort_order)
-VALUES (
-  '運動減重 APP',
-  'App',
-  '跨平台健身 / 健康 / 飲食 / 地圖探索系統。Cloudflare-native 全棧（Workers + D1 + KV + R2 + Workers AI），Web 為 React + Vite PWA、Mobile 為 Expo iOS/Android，並串接 chiyigo OIDC 單一登入。',
-  '/images/portfolio/sport_app.jpg',
-  'https://sport-app-web.pages.dev/',
-  'React, PWA, Expo, Cloudflare Workers, D1, OIDC SSO, Workers AI',
-  10
-);
+-- INSERT INTO portfolio (title, category, description, image_url, link_url, tags, sort_order)
+-- VALUES (
+--   '運動減重 APP',
+--   'App',
+--   '跨平台健身 / 健康 / 飲食 / 地圖探索系統。Cloudflare-native 全棧（Workers + D1 + KV + R2 + Workers AI），Web 為 React + Vite PWA、Mobile 為 Expo iOS/Android，並串接 chiyigo OIDC 單一登入。',
+--   '/images/portfolio/sport_app.jpg',
+--   'https://sport-app-web.pages.dev/',
+--   'React, PWA, Expo, Cloudflare Workers, D1, OIDC SSO, Workers AI',
+--   10
+-- );
+
+-- ─────────────────────────────────────────────────────────────
+-- 2026-05-10：刪掉舊的「健身紀錄 APP」(id=8，無圖無連結，被新的運動減重 APP 取代)
+-- ─────────────────────────────────────────────────────────────
+DELETE FROM portfolio WHERE id = 8 AND title = '健身紀錄 APP';
