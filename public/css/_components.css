@@ -276,8 +276,9 @@
 .sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
 .sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
 .sb-foot-btn svg{width:14px;height:14px}
-.sb-foot-btn .icon-theme{width:22px;height:13px}
-.tool-btn .icon-theme{width:22px;height:13px;display:block}
+.sb-foot-btn .icon-theme{width:22px;height:22px}
+.tool-btn .icon-theme{width:22px;height:22px;display:block}
+.m-theme-btn .icon-theme{width:22px;height:22px;display:block}
 .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
 .lang-dropdown.open{display:flex}
 .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}
