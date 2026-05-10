@@ -1,40 +1,42 @@
-/* confirm-delete.css — 全吃 _tokens.css 變數
- * HTML 中的 Tailwind 任意值（bg-[#0e0e12] 等）由本檔重新映射到 token
- */
+/* confirm-delete.css — 沿用 login.css + _components.css；本頁專屬：危險警示區塊 */
 
-.panel { display: none; }
-.panel.active { display: block; animation: fadeUpIn 0.3s ease forwards; }
-@keyframes fadeUpIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.cd-icon-danger {
+  background: rgba(248,113,113,.10) !important;
+  border-color: rgba(248,113,113,.25) !important;
+  color: #f87171 !important;
+}
+.cd-icon-danger svg { color: currentColor; }
 
-/* ── Tailwind 任意值 → token 映射（取代舊 .theme-light override） ── */
-.bg-\[\#0e0e12\]      { background-color: var(--bg) !important; }
-.bg-\[\#0e0e12\]\/80  { background-color: color-mix(in srgb, var(--bg) 82%, transparent) !important; }
-.bg-\[\#16161d\]      { background-color: var(--bg-surface) !important; }
-.border-\[\#2a2a35\]  { border-color: var(--border) !important; }
-.text-white           { color: var(--text) !important; }
-.text-gray-400        { color: var(--text-muted) !important; }
-.text-gray-500        { color: var(--text-muted) !important; }
-.text-gray-600        { color: var(--text-dim) !important; }
-.hover\:text-white:hover  { color: var(--text) !important; }
-.hover\:text-gray-300:hover { color: var(--text-muted) !important; }
+.cd-danger-box {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  background: rgba(248,113,113,.05);
+  border: 1px solid rgba(248,113,113,.20);
+  border-radius: 12px;
+}
+.cd-danger-title {
+  color: #f87171;
+  font-size: .85rem;
+  font-weight: 600;
+  margin: 0 0 .5rem;
+}
+.cd-danger-list {
+  margin: 0; padding-left: 1.25rem;
+  color: var(--text-muted);
+  font-size: .85rem;
+  line-height: 1.7;
+  list-style: disc;
+}
 
-/* ── 工具按鈕（theme + lang）── */
-.tool-btn { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center;
-  border-radius:9px; border:1px solid var(--border); background:transparent; color:var(--text-muted);
-  cursor:pointer; transition:background .18s ease, color .18s ease, border-color .18s ease; }
-.tool-btn:hover { background:var(--hover-overlay); color:var(--text); }
-.tool-btn svg { width:13px; height:13px; display:block; }
+.cd-btn-danger {
+  background: #ef4444;
+}
+.cd-btn-danger:hover { background: #dc2626; filter: none; }
+.cd-btn-danger:active { background: #b91c1c; }
 
-.lang-wrap { position:relative; }
-.lang-menu { position:absolute; top:calc(100% + 6px); right:0; min-width:140px;
-  background:var(--bg-surface); border:1px solid var(--border); border-radius:10px;
-  padding:.35rem; display:none; box-shadow:0 12px 28px rgba(0,0,0,.18); z-index:100; }
-.lang-menu.open { display:block; }
-/* .lang-opt 已集中至 _components.css */
-
-/* theme icon toggle 已移除：現用單一 .icon-theme（sun+moon 同時顯示，定義於 _components.css） */
-
-/* ── Header logo ── */
-.hdr-logo { height: 26px; width: auto; display: block; }
-.logo-dark, .theme-dark .logo-light { display: none !important; }
-.theme-dark .logo-dark { display: block !important; }
+.cd-cancel-link {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  margin-top: .5rem;
+}

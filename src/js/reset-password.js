@@ -96,27 +96,9 @@ function applyLang(lang) {
   document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
-function applyTheme(isLight) {
-  document.documentElement.classList.toggle('theme-light', isLight);
-  document.documentElement.classList.toggle('theme-dark', !isLight);
-  try { localStorage.setItem('theme', isLight ? 'light' : 'dark') } catch {}
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   applyLang(getLang());
-  applyTheme(document.documentElement.classList.contains('theme-light'));
-
-  document.getElementById('theme-btn').addEventListener('click', () => {
-    applyTheme(!document.documentElement.classList.contains('theme-light'));
-  });
-  const langMenu = document.getElementById('lang-menu');
-  document.getElementById('lang-btn').addEventListener('click', e => {
-    e.stopPropagation(); langMenu.classList.toggle('open');
-  });
-  langMenu.querySelectorAll('.lang-opt').forEach(opt => {
-    opt.addEventListener('click', () => { applyLang(opt.dataset.lang); langMenu.classList.remove('open'); });
-  });
-  document.addEventListener('click', () => langMenu.classList.remove('open'));
+  // theme/lang 切換交給 sidebar-auth.js（partial 提供 #theme-toggle-btn / #sb-lang-btn）
 });
 
 // ── 狀態 ─────────────────────────────────────────────────────
@@ -133,11 +115,10 @@ function showPanel(id) {
 
 function setMsg(text, type = 'error') {
   const box = document.getElementById('msg-box');
-  if (!text) { box.classList.add('hidden'); return; }
+  if (!text) { box.style.display = 'none'; box.textContent = ''; return; }
   box.textContent = text;
-  box.className = type === 'error'
-    ? 'mb-5 px-4 py-3 rounded-lg text-sm font-medium bg-red-500/10 border border-red-500/20 text-red-400'
-    : 'mb-5 px-4 py-3 rounded-lg text-sm font-medium bg-green-500/10 border border-green-500/20 text-green-400';
+  box.className = 'msg-box ' + (type === 'error' ? 'msg-error' : 'msg-success');
+  box.style.display = 'block';
 }
 
 function togglePwd(inputId, iconId) {
