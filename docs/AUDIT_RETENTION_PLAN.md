@@ -1,10 +1,36 @@
 # Audit Retention Plan — F-3 Phase 2
 
-> Status: v6 draft (codex round-6 feedback integrated) · 2026-05-10
+> Status: v7 draft (per-category R2 retention lock 對齊) · 2026-05-10
 > Phase 1 done (commit 97e1a72): event registry + warn-on-missing
 > Phase 2 scope: audit_log retention + R2 cold archive
 > Phase 2 **不**動 admin_audit_log hot D1（量小、hash chain 證據敏感、verifier 不改）
 > Phase 3 (條件觸發)：admin_audit_log size > 500k row 或 D1 壓力明顯時 → 加 audit_chain_anchor + hot purge
+
+## v7 主要變更（per-category R2 retention lock，user round-7 決定）
+
+驗證 R2 `lock` 與 `lifecycle` 都支援 `--prefix` filtering → retention matrix 不再僅是文字承諾，由 R2 物理保護層強制執行（合規 + GDPR / legal order 都對得上）。
+
+| 改動點 | v6 → v7 |
+|---|---|
+| **R2 key** | 加 `{category}` 段：`audit-log/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{...}` |
+| **manifest key** | 同上加 `{cold_class}` 段 |
+| **`audit_archive_chunks` PK** | 加 `cold_class` 欄：`(env, table_name, cold_class, archive_date, min_id, max_id, chunk_sha256)` |
+| **Archive worker** | 「先 classify → 再切 chunk」：同 chunk 只裝同 cold_class 的 row |
+| **R2 lock 對應** | 6 個 cold_class 各 1 條 lock + lifecycle rule（共 6+6=12 條 prefix-scoped 規則）|
+| **debug_failure retention=0** | 純 aggregate 不寫 R2，aggregate 表自己走 1y prefix |
+
+**Cold archive class（v7 新增）** — `audit-policy` 衍生 + `severity` 細分：
+
+| cold_class（R2 prefix）| 來源 | Lock retention | Lifecycle expire |
+|---|---|---|---|
+| `immutable` | category=immutable | 2555d (7y) | 2557d |
+| `security_critical` | category=security_signal AND severity=critical | 2555d (7y) | 2557d |
+| `security_warn` | category=security_signal AND severity IN (warn,info) | 1095d (3y) | 1097d |
+| `read_audit` | category=read_audit | 1095d (3y) | 1097d |
+| `telemetry` | category=telemetry | 365d (1y) | 367d |
+| `debug_failure` | category=debug_failure | 365d (1y) | 367d (or skip cold) |
+
+**admin_audit_log** 全 row 視為 `immutable` cold_class（所有 admin 操作都金流/權限級）。
 
 ## v6 主要變更（codex round-6 修正）
 
@@ -122,12 +148,18 @@
 
 **R2 bucket**：prod / preview 分 bucket（`chiyigo-audit-archive` / `chiyigo-audit-archive-preview`）；env binding `AUDIT_ARCHIVE_BUCKET`（保留命名空間，未來可有 `AUDIT_ARCHIVE_QUEUE` / `AUDIT_ARCHIVE_KV`）。
 
-**Key 命名**（資料 + manifest 分前綴，env 入 key 防同 bucket 互汙染）：
+**Key 命名**（v7：加 `{cold_class}` 段對齊 R2 prefix-based lock）：
 ```
-audit-log/{env}/{table}/{yyyy}/{mm}/{dd}/{min_id}-{max_id}-{chunk_sha256}.jsonl.zst
-manifest/{env}/{table}/{yyyy}/{mm}/{dd}/{min_id}-{max_id}-{chunk_sha256}.json
-manifest/{env}/{table}/{yyyy}/{mm}/month.json
-runs/{env}/{table}/{yyyy}/{mm}/{dd}/{run_id}.json   # 該 run 內含的 chunk_id 列表（觀察用）
+audit-log/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{min_id}-{max_id}-{chunk_sha256}.jsonl.zst
+manifest/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{min_id}-{max_id}-{chunk_sha256}.json
+manifest/{env}/{table}/{cold_class}/{yyyy}/{mm}/month.json
+runs/{env}/{table}/{yyyy}/{mm}/{dd}/{run_id}.json   # 該 run 內含的 chunk_id 列表（觀察用，跨 cold_class）
+```
+範例 prod chunk key：
+```
+audit-log/prod/audit_log/immutable/2026/04/30/1234567-1244440-abc123ef.jsonl.zst
+audit-log/prod/audit_log/security_critical/2026/04/30/1244441-1244892-def456ab.jsonl.zst
+audit-log/prod/audit_log/telemetry/2026/04/30/1244893-1247001-fed789cd.jsonl.zst
 ```
 - **chunk manifest key 與 jsonl key 完全對齊**：相同 `min_id-max_id-chunk_sha256` 路徑下 → 重跑同 chunk 時 GET 既存 manifest 直接讀 state 接續，不靠 run_id 推斷（codex H-2 修正）
 - `run_id` = ULID，**降為 metadata**：寫進 manifest 與獨立 run-index 檔，方便人工觀察某次 cron 跑了哪些 chunk，但不參與 idempotency
@@ -277,11 +309,16 @@ ELSE:
 
 **用途**：admin job 重建月份索引時讀總 manifest 即可，不必逐 chunk 列舉 R2。
 
-### 寫入流程（fail-safe，可重入）
+### 寫入流程（fail-safe，可重入；v7 加 classify 步驟）
 
 ```
 1. SELECT batch from D1 (id range [min_id..max_id], ORDER BY id)
-2. Build JSONL → compress (zstd) → SHA-256 (decompressed + compressed)
+1.5. classifyForCold(row) → cold_class (六選一)
+     - 由 audit-policy.classifyAuditEvent(event_type) + severity 衍生
+     - 同一 cold_class 的 row 進同 chunk；id range 在該 class 內可能不連續
+     - 若 cold_class='debug_failure' AND retention=0 → skip cold archive
+       （只走 aggregate；aggregate 表自己依 telemetry/debug retention 走獨立 prefix）
+2. Build JSONL（同 cold_class）→ compress (zstd) → SHA-256 (decompressed + compressed)
 3. Upload manifest（state=planned）to R2
 4. Upload jsonl.zst chunk to R2 (key 含 chunk_sha256，重跑 idempotent)
 5. Update manifest（state=uploaded）
@@ -333,11 +370,13 @@ CREATE INDEX idx_audit_log_archived_at ON audit_log(archived_at);
 
 **admin_audit_log 不加 archived_at**（v3 user decision；Phase 2 只 copy cold 不 purge）
 
-**audit_archive_chunks（per-chunk 狀態，codex M-3 修正）**
+**audit_archive_chunks（per-chunk 狀態，codex M-3 修正 + v7 加 cold_class）**
 ```sql
 CREATE TABLE audit_archive_chunks (
   env             TEXT    NOT NULL,
   table_name      TEXT    NOT NULL,
+  cold_class      TEXT    NOT NULL            -- v7：R2 prefix 對應的 retention class
+                  CHECK(cold_class IN ('immutable','security_critical','security_warn','read_audit','telemetry','debug_failure')),
   archive_date    TEXT    NOT NULL,           -- YYYY-MM-DD
   min_id          INTEGER NOT NULL,
   max_id          INTEGER NOT NULL,
@@ -360,9 +399,9 @@ CREATE TABLE audit_archive_chunks (
   run_id          TEXT NOT NULL,              -- 最後一次處理的 run
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  PRIMARY KEY (env, table_name, archive_date, min_id, max_id, chunk_sha256)
+  PRIMARY KEY (env, table_name, cold_class, archive_date, min_id, max_id, chunk_sha256)
 );
-CREATE INDEX idx_archive_chunks_state ON audit_archive_chunks(state, table_name);
+CREATE INDEX idx_archive_chunks_state ON audit_archive_chunks(state, table_name, cold_class);
 CREATE INDEX idx_archive_chunks_purge ON audit_archive_chunks(state, purge_after)
   WHERE state = 'marked_archived';            -- cron-purge-worker 主查詢索引
 CREATE INDEX idx_archive_chunks_blacklist ON audit_archive_chunks(blacklisted_at)
@@ -497,12 +536,73 @@ Phase 3 加：
 - 不刪掉 D1 binding（cleanup.js 其他 task 仍要用）
 - 落 prod 確認 cron 不再呼舊路徑
 
-**Step 0.2 — R2 bucket + IAM**
-- 建 prod / preview 兩個 bucket（`chiyigo-audit-archive` / `chiyigo-audit-archive-preview`）
-- 開 versioning，retention lock（若 R2 支援）
-- 建立最小權限 archive token（PUT/GET only，不給 DELETE）
-- **驗** Step 0.1 已 deployed prod 後，才設 `AUDIT_ARCHIVE_BUCKET` env binding（順序顛倒會立即觸發舊路徑）
-- 不寫 code，純 ops
+**Step 0.2 — R2 bucket + IAM + per-class lock + lifecycle（v7 落地）**
+
+> Step 0.1 已 deployed prod（commit e57ded4），舊路徑已死。可進 Step 0.2。
+
+**Bucket**
+- prod `chiyigo-audit-archive` 已存在（commit ebd44d2，object_count=0）
+- 建 preview bucket：`wrangler r2 bucket create chiyigo-audit-archive-preview`
+
+**Versioning**（兩個 bucket 都開）
+- R2 versioning 用 dashboard 或 API 開（wrangler 4.87 沒有 `versioning` 子命令）
+
+**Per-class lock（6 條）— 對 prod bucket**
+```bash
+# 7-year retention（金融 + critical security）
+wrangler r2 bucket lock add chiyigo-audit-archive lock-immutable \
+  "audit-log/prod/audit_log/immutable/" --retention-days 2555 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-sec-critical \
+  "audit-log/prod/audit_log/security_critical/" --retention-days 2555 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-admin-immutable \
+  "audit-log/prod/admin_audit_log/immutable/" --retention-days 2555 -y
+
+# 3-year retention
+wrangler r2 bucket lock add chiyigo-audit-archive lock-sec-warn \
+  "audit-log/prod/audit_log/security_warn/" --retention-days 1095 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-read-audit \
+  "audit-log/prod/audit_log/read_audit/" --retention-days 1095 -y
+
+# 1-year retention
+wrangler r2 bucket lock add chiyigo-audit-archive lock-telemetry \
+  "audit-log/prod/audit_log/telemetry/" --retention-days 365 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-debug \
+  "audit-log/prod/audit_log/debug_failure/" --retention-days 365 -y
+
+# manifest 也要鎖（與資料同 retention）
+wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-7y \
+  "manifest/prod/audit_log/immutable/" --retention-days 2555 -y
+# ... 其他 manifest prefix 同樣模式（共 7 條 manifest lock）
+```
+
+**Per-class lifecycle（lock 過期後自動刪）— 對 prod bucket**
+```bash
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-immutable \
+  "audit-log/prod/audit_log/immutable/" --expire-days 2557 -y
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-sec-critical \
+  "audit-log/prod/audit_log/security_critical/" --expire-days 2557 -y
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-sec-warn \
+  "audit-log/prod/audit_log/security_warn/" --expire-days 1097 -y
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-read-audit \
+  "audit-log/prod/audit_log/read_audit/" --expire-days 1097 -y
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-telemetry \
+  "audit-log/prod/audit_log/telemetry/" --expire-days 367 -y
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-debug \
+  "audit-log/prod/audit_log/debug_failure/" --expire-days 367 -y
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-admin-immutable \
+  "audit-log/prod/admin_audit_log/immutable/" --expire-days 2557 -y
+# manifest 同樣 lifecycle 一條一條設
+```
+
+**IAM**
+- Dashboard 建立最小權限 archive token：bucket-scope `chiyigo-audit-archive` + `chiyigo-audit-archive-preview`，permission = Object Read & Write（**不給 Delete**）
+- `wrangler.toml` 已有 `AUDIT_ARCHIVE_BUCKET` binding（commit ebd44d2 已 deploy）— 不需再動
+
+**驗證清單**
+- `wrangler r2 bucket lock list chiyigo-audit-archive` → 7+ 條 rule
+- `wrangler r2 bucket lifecycle list chiyigo-audit-archive` → 7+ 條 rule
+- 試上傳一個 object 進 `audit-log/prod/audit_log/immutable/` → 立即 GET 回讀 ok；試 DELETE → 應失敗（lock 生效）
+- preview bucket 不需 lock（測試方便，dev 寫過就丟）
 
 ### PR 1 — Schema + retention metadata
 - 加 `audit_log.archived_at` 欄（**不**加 `admin_audit_log.archived_at`，v3 user decision）
