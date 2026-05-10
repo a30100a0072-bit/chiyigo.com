@@ -8,6 +8,20 @@
 
 ## 近期重大進度（2026-05-10）
 
+### m-overlay-public partial 抽出 + 5 auth i18n 補齊 + 5 auth m-ham handler（commits `237af28` `0e89858` `8ed1e73`，淨 -816 行）
+
+| Commit | 範圍 | 主題 |
+|---|---|---|
+| `237af28` | 16 公開/auth 頁 + 5 auth i18n | 新增 `m-overlay-public-{home,other}.hbs` partial（home 用 #hero 錨點、other 吃 `pathPrefix` / `active` 參數）；16 頁 inline ~52 行 m-overlay block 收歸成一行 partial 呼叫，淨 -816 行；標準化 a11y（role=dialog / aria-modal / aria-hidden）、icon-wrap 改 `<span aria-hidden="true">`、`data-close-overlay` 全補、chevron stroke-width 1.4 統一；5 auth i18n（forgot/reset/verify/bind/confirm.json）從 login.json 拷 12 sidebar/m-overlay key × 4 lang 補齊 |
+| `0e89858` | 5 auth js | append 23 行 IIFE：m-ham-btn click toggle openMenu/closeMenu、overlay 背景關閉、`[data-close-overlay]` setTimeout(closeMenu, 120)、Escape 關閉；補完讓上一個 commit 的 i18n 在 mobile 真正生效 |
+| `8ed1e73` | review 補修 | (1) index.js 補 m-overlay aria-hidden toggle（partial 標準化後 m-overlay 初始 aria-hidden=true，但 index.js 沒對應 toggle → screen reader 永遠以為隱藏）；(2) reset-password.json multi-sentinel 修：合併 script 預設扁平結構，把 12 keys 寫到頂層 zh-TW/en/ja/ko，build 不會 inject 進 `I18N` 變數 → 改寫進 `d.I18N.<lang>` 並刪除誤寫的頂層 lang |
+
+**全站 partial 數**：9 → 11（新增 `m-overlay-public-{home,other}.hbs`）
+
+**剩餘技術債**（pre-existing，不在本次 scope）：5 auth 頁 `#theme-toggle-btn` / `#lang-toggle-btn` / `#m-theme-btn` / `#m-lang-btn` 4 顆按鈕仍未接 click handler（commit `447026c` 起）。詳見 memory `project_5_auth_unwired_btn_debt.md`。
+
+---
+
 ### 第 1+2 類 16 頁版型對齊 + 第 4 類 admin mobile menu 對齊（commits `447026c` `3919705` `3187b27` `2977528`，總淨 +91 行 ※ 4 admin 頁從零補 mobile UI 為主）
 
 兩段工作：
@@ -25,7 +39,7 @@
 - `sidebar-public-{home,other}` partial：16/16
 - `topbar-mobile` partial：16/16
 - `dash-wrap` 骨架：16/16
-- m-overlay 結構：16/16（仍 inline，未抽 partial）
+- m-overlay 結構：16/16 ✅ 已抽 `m-overlay-public-{home,other}` partial（2026-05-10 commit `237af28`）
 - `_tokens.css + _components.css`：16/16
 - 無 tailwind / hdr-logo / lang-wrap legacy 殘留：16/16
 
