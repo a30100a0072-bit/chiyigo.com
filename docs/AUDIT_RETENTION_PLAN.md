@@ -1,10 +1,56 @@
 # Audit Retention Plan — F-3 Phase 2
 
-> Status: v10 draft (PR 1 commit 9de0e15 + codex round-11 修正 + 0.2a 執行紀錄) · 2026-05-10
+> Status: v11 draft (R2 物理 compliance 限制盤點 + 真正防線 pivot) · 2026-05-10
 > Phase 1 done (commit 97e1a72): event registry + warn-on-missing
 > Phase 2 scope: audit_log retention + R2 cold archive
 > Phase 2 **不**動 admin_audit_log hot D1（量小、hash chain 證據敏感、verifier 不改）
 > Phase 3 (條件觸發)：admin_audit_log size > 500k row 或 D1 壓力明顯時 → 加 audit_chain_anchor + hot purge
+
+## v11 主要變更（R2 物理 compliance 限制盤點，2026-05-10）
+
+dashboard + token smoke 後盤點 R2 平台能力，**v9 的「Lock 是 physical compliance」假設徹底破**。文件先前依賴的多層保護不存在；改成現實可達的三層。
+
+### R2 平台限制一覽（dashboard + smoke 驗證）
+
+| 預期能力 | 平台實況 | 證據 |
+|---|---|---|
+| Object versioning | ❌ 不支援 | dashboard Settings 完全沒這個 toggle；Cloudflare Ask AI 確認 |
+| Object Lock 強制模式（governance/compliance）| ❌ 不支援 | Ask AI 比對表：S3 Yes / R2 Not applicable |
+| Bucket Lock 擋 owner DELETE | ❌ owner always bypass | smoke：lock add 後 wrangler delete 立即成功 |
+| Token 「PUT/GET only, no DELETE」| ❌ permission level 沒這選項 | dashboard 只有 Admin Read & Write / Admin Read only / Object Read & Write / Object Read only；smoke：Object Read & Write 跑 PUT 200 / GET 200 / DELETE 204 |
+| Lifecycle 自動到期 | ✅ 支援，prefix-based | wrangler r2 bucket lifecycle add 確認 |
+
+### v11 真正物理 compliance 三層
+
+1. **Lifecycle rules**（唯一平台級強制）：到期才刪、無法人手提早；prod 上 36 條對應 retention matrix
+2. **Worker code discipline**：archive worker code **禁用 `.delete()`**；lint rule + code review 強制
+3. **Bucket Lock**（best-effort 第三層）：擋 limited-token + 防手滑；owner 仍可 bypass，不算強制層
+
+R2 binding（PR 2 worker 用的 `env.AUDIT_ARCHIVE_BUCKET`）是 deploy 時綁定的全 bucket 訪問權，不看 token、不看 permission level。所以 token 在 worker runtime 沒實際 enforcement 作用，只用於 admin 手動 scripts。
+
+### PR 0.2b 執行紀錄（2026-05-10 完成）
+
+- ✅ 建 R2 Account API Token `audit-archive-writer`
+  - Permission: Object Read & Write（dashboard 唯一可選的「不含 Admin」write 級別）
+  - Scope: `chiyigo-audit-archive` + `chiyigo-audit-archive-preview`
+  - TTL: Forever（人工 rotate）
+  - 存放：`.dev.vars`（local）+ Pages Production secrets（prod，4 個 secret 全 type=Secret）
+- ✅ 4 個 secret 進 Pages prod（dashboard 確認）：
+  - `AUDIT_ARCHIVE_API_TOKEN`（Cloudflare API token）
+  - `AUDIT_ARCHIVE_S3_ACCESS_KEY_ID`
+  - `AUDIT_ARCHIVE_S3_SECRET_ACCESS_KEY`
+  - `AUDIT_ARCHIVE_S3_ENDPOINT`
+- ✅ Token DELETE smoke：S3 API 直打驗 PUT 200 / GET 200 / **DELETE 204** / GET-after-delete 404
+  - 確認 R2 token 無「不含 DELETE」的 permission level（v11 限制盤點 #4 來源）
+- ⏸️ Versioning：**跳過**（R2 不支援，不存在這個動作）
+- ⏸️ Bucket Lock 對 prod：**不上**（v9 決策，等 PR 2 dry-run 過 1 個月）
+
+### PR 2 archive worker 必須加的 code discipline（v11 新增）
+
+- archive worker 路徑（functions/api/admin/cron/audit-archive*.js 等）**禁用 `env.AUDIT_ARCHIVE_BUCKET.delete()`**
+- 加 ESLint rule 或 grep-based pre-commit hook 抓
+- code review checklist 加一條：「archive worker 是否有 .delete() call？」
+- 任何需要刪 R2 物件的場景 → 走 admin 獨立 endpoint + 多重審核（不在 archive worker code path）
 
 ## v10 主要變更（PR 1 + codex round-11）
 

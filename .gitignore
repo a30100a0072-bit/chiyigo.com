@@ -9,3 +9,4 @@ dist/
 # 但因 Cloudflare Pages 新版 dashboard UI 無法設 build command，故仍 commit 進 repo。
 # 修改流程：改 src/ → npm run build → commit src/ 與 public/ 一起推。
 # （階段 7 會加 pre-commit hook 自動 build。）
+.scripts/
