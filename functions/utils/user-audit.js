@@ -19,6 +19,8 @@
  *   trace_id, reason_code, provider, mode, jti（截斷）, device_uuid（截斷）...
  */
 
+import { classifyAuditEvent } from './audit-policy.js'
+
 const KNOWN_SEVERITY = new Set(['info', 'warn', 'critical'])
 
 /**
@@ -61,6 +63,12 @@ function extractTraceId(request, explicitTraceId) {
 export async function safeUserAudit(env, entry) {
   try {
     if (!env?.chiyigo_db) return
+    // F-3 Phase 1：查 event_type 是否在 audit-policy registry。
+    // 不在則 console.warn，但照常寫入 audit（不擋 handler、不影響稽核完整性）。
+    // 新增 audit event 必須同 PR 補進 audit-policy.js，否則 prod 會持續 warn。
+    if (entry.event_type && !classifyAuditEvent(entry.event_type)) {
+      console.warn('[audit-policy] unclassified event_type:', entry.event_type)
+    }
     const severity = KNOWN_SEVERITY.has(entry.severity) ? entry.severity : 'info'
     const ipHash   = await hashIp(env, entry.request?.headers?.get('CF-Connecting-IP'))
     const traceId  = extractTraceId(entry.request, entry.trace_id)
