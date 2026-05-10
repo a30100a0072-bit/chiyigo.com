@@ -17,6 +17,7 @@
  */
 
 import { requireAuth, res } from './auth.js'
+import { safeUserAudit } from './user-audit.js'
 
 const ROLE_LEVEL = {
   player: 0, user: 0, finance: 0, support: 0,
@@ -34,6 +35,15 @@ export const KNOWN_ROLES = new Set(Object.keys(ROLE_LEVEL))
 export function isKnownRole(role) { return KNOWN_ROLES.has(role) }
 
 /**
+ * Codex r5 #5（2026-05-10）：unknown_role audit 寫到 Discord webhook / 結構化 log，
+ * 為防控制字元 / Markdown / unicode 干擾下游解析，把 role 字串清成 [a-z0-9_-] 後截 32 字。
+ * 合法 role 全在此白名單內，sanitize 不會丟資訊；非法 role 經此處理才落 audit。
+ */
+export function safeRoleString(role) {
+  return String(role || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 32)
+}
+
+/**
  * @param {Request} request
  * @param {object}  env
  * @param {string}  minRole  — 'player' | 'moderator' | 'admin' | 'developer'
@@ -42,6 +52,21 @@ export function isKnownRole(role) { return KNOWN_ROLES.has(role) }
 export async function requireRole(request, env, minRole) {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
+
+  // Codex r5 #2（2026-05-10）：actor role 不在 KNOWN_ROLES → 通常是 DB drift 或竄改。
+  // 不影響流程（下方 hierarchy 仍會擋），但要寫 critical audit 讓 oncall 看見。
+  // 注意：actor.role 是 JWT claim，理論上在 token 簽發時就已是合法 role；不合法代表
+  // 簽發端 / DB / 中介有問題 — 對齊 unknown_role_target 用 critical 而非 warn。
+  if (!KNOWN_ROLES.has(user.role)) {
+    await safeUserAudit(env, {
+      event_type: 'admin.unknown_role_actor', severity: 'critical',
+      user_id: Number(user.sub), request,
+      data: {
+        actor_role: safeRoleString(user.role),
+        min_role:   minRole,
+      },
+    })
+  }
 
   const userLevel     = ROLE_LEVEL[user.role]  ?? -1
   const requiredLevel = ROLE_LEVEL[minRole]    ?? Infinity

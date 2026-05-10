@@ -88,6 +88,28 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // requisition INSERT 端有驗，但 register 仍可能收到舊 client / 直接打 API 的雜值，
   // 不驗就送進 SQL 雖無 injection 但會做無謂查詢。
   const isValidGuestId = guest_id && /^web-[0-9a-f-]{36}$/i.test(guest_id)
+  // Codex r5 #3（2026-05-10）：guest_id 存在但格式不對 = 舊 client / 第三方 bot / 未授權呼叫
+  // 寫一筆 warn audit 用以偵測 client bug；只記 length + prefix（前 4 字元）+ hash，
+  // 不存明文（避免被掃 API 的攻擊資料污染 audit）。production safeUserAudit 內部已對
+  // critical/warn 分流，rate-limit 由 audit pipeline 統一管。
+  if (guest_id && !isValidGuestId) {
+    try {
+      const raw = String(guest_id)
+      const enc = new TextEncoder().encode(raw)
+      const hashBuf = await crypto.subtle.digest('SHA-256', enc)
+      const hash = Array.from(new Uint8Array(hashBuf))
+        .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16)
+      await safeUserAudit(env, {
+        event_type: 'register.guest_id_invalid_format', severity: 'warn',
+        user_id: null, request,
+        data: {
+          length:    raw.length,
+          prefix:    raw.slice(0, 4),  // 區分 'web-' typo / 'guest-' 舊格式 / 完全亂碼
+          hash16:    hash,             // 同 hash 重複可知是同一 client
+        },
+      })
+    } catch { /* audit 失敗不阻流 */ }
+  }
   if (isValidGuestId) {
     try {
       // Codex audit r2 #3（2026-05-10）：除了 owner_user_id，也同步寫 user_id。
@@ -108,7 +130,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
         .bind(emailLower, emailLower, guest_id)
         .all()
       const takenRows = taken?.results ?? []
-      const takenIds  = takenRows.map(r => r.id)
+      const allTakenIds = takenRows.map(r => r.id)
+      // Codex r5 #4（2026-05-10）：requisition_ids cap，避免訪客跨多日累積大量 row 後 audit 過大
+      const TAKEN_IDS_CAP = 100
+      const takenIds  = allTakenIds.slice(0, TAKEN_IDS_CAP)
+      const truncated = allTakenIds.length > TAKEN_IDS_CAP
       const newUserId = takenRows[0]?.user_id ?? null
       if (takenIds.length) {
         // Codex audit r3 #3（2026-05-10）：takeover 後 owner_guest_id 變 NULL，
@@ -125,7 +151,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
             requisition_ids: takenIds,
             guest_id_hash:   guestHash,
             email:           emailLower,
-            count:           takenIds.length,
+            count:           allTakenIds.length,  // 真實命中數（未 cap）
+            truncated,                            // true 表示 requisition_ids 被截
           },
         })
       }
