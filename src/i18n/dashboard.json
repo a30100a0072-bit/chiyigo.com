@@ -62,7 +62,7 @@
     "err_captcha": "人機驗證失敗，請重新整理頁面再試",
     "resend_timer_label": "重發（${s}s）",
     "req_title": "我的需求單",
-    "req_subtitle": "近期提交的接案諮詢",
+    "req_subtitle": "近期提交的需求諮詢",
     "req_new_btn": "提交新單 →",
     "req_empty": "尚無需求單紀錄",
     "req_revoke_note": "如需更改請撤銷需求重新填寫",
