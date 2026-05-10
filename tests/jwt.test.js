@@ -42,7 +42,7 @@ describe('signJwt / verifyJwt', () => {
 
   it('sets aud when audience option provided', async () => {
     const token = await signJwt({ sub: 'u' }, '5m', env, { audience: 'talo' })
-    const payload = await verifyJwt(token, env)
+    const payload = await verifyJwt(token, env, { audience: 'talo' })
     expect(payload.aud).toBe('talo')
   })
 
@@ -63,9 +63,14 @@ describe('signJwt / verifyJwt', () => {
     expect(payload.aud).toBe('sport-app')
   })
 
-  it('verifyJwt without audience opt does NOT verify aud (backward compat)', async () => {
+  it('verifyJwt 預設驗 aud="chiyigo"（Codex #1）', async () => {
     const token = await signJwt({ sub: 'u' }, '5m', env, { audience: 'whatever' })
-    const payload = await verifyJwt(token, env)
+    await expect(verifyJwt(token, env)).rejects.toThrow()
+  })
+
+  it('verifyJwt audience: null 才關閉 aud 驗證（OIDC userinfo 用）', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env, { audience: 'whatever' })
+    const payload = await verifyJwt(token, env, { audience: null })
     expect(payload.aud).toBe('whatever')
   })
 
@@ -96,9 +101,15 @@ describe('signJwt / verifyJwt', () => {
     expect(payload.ver).toBe(7)
   })
 
-  it('omits aud when audience option not provided', async () => {
+  it('signJwt 預設 aud="chiyigo"（Codex #1）', async () => {
     const token = await signJwt({ sub: 'u' }, '5m', env)
     const payload = await verifyJwt(token, env)
+    expect(payload.aud).toBe('chiyigo')
+  })
+
+  it('signJwt audience: null 才省略 aud claim', async () => {
+    const token = await signJwt({ sub: 'u' }, '5m', env, { audience: null })
+    const payload = await verifyJwt(token, env, { audience: null })
     expect(payload.aud).toBeUndefined()
   })
 

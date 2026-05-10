@@ -55,20 +55,6 @@ export async function onRequestPost({ request, env, params }) {
     }, 409, cors)
   }
 
-  // P2-7：兩個 admin 同時雙擊「保存」會各自跑完整流程 → 兩筆 deals 雙重計算。
-  // 在進 INSERT 之前 atomic 把 status 'pending'→'deal'，沒拿到 row 的第二個 caller 直接 409。
-  const lock = await db
-    .prepare(`UPDATE requisition SET status = 'deal'
-               WHERE id = ? AND status = 'pending' AND deleted_at IS NULL
-               RETURNING id`)
-    .bind(id).first()
-  if (!lock) {
-    return res({
-      error: '需求單已被其他管理員保存或刪除',
-      code:  'SAVE_RACE_CONFLICT',
-    }, 409, cors)
-  }
-
   let body = {}
   try { body = await request.json() } catch { /* keep empty */ }
   const notes = String(body?.notes ?? '').slice(0, 500) || null
@@ -99,6 +85,8 @@ export async function onRequestPost({ request, env, params }) {
   const activeCurrencies = [...byCurrency.entries()]
     .filter(([, v]) => v.succeeded > 0n || v.refunded > 0n)
     .map(([k]) => k)
+  // Codex #4：所有驗證在 lock 之前完成，避免 status 已改 'deal' 但 INSERT 失敗造成
+  // requisition 卡 deal 卻無 deal row。並發保護仍由下方 atomic UPDATE...RETURNING 提供。
   if (activeCurrencies.length > 1) {
     return res({
       error: '此需求單包含多種幣別 intent，請先處理（退款 / 拆分）後再保存',
@@ -123,6 +111,20 @@ export async function onRequestPost({ request, env, params }) {
   const totalSucceeded = Number(slot.succeeded)
   const totalRefunded  = Number(slot.refunded)
   const intentIds = intents.map(it => it.id)
+
+  // P2-7：兩個 admin 同時雙擊「保存」會各自跑完整流程 → 兩筆 deals 雙重計算。
+  // atomic 把 status 'pending'→'deal'，沒拿到 row 的第二個 caller 直接 409。
+  const lock = await db
+    .prepare(`UPDATE requisition SET status = 'deal'
+               WHERE id = ? AND status = 'pending' AND deleted_at IS NULL
+               RETURNING id`)
+    .bind(id).first()
+  if (!lock) {
+    return res({
+      error: '需求單已被其他管理員保存或刪除',
+      code:  'SAVE_RACE_CONFLICT',
+    }, 409, cors)
+  }
 
   // INSERT into deals
   const inserted = await db

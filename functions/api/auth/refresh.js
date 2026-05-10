@@ -146,15 +146,30 @@ export async function onRequestPost({ request, env }) {
   // Rotation 保留原本的 auth_time（silent refresh 不算重新互動式認證，
   // OIDC max_age 才有意義）。舊 row 沒 auth_time 時用 NOW 當保守 fallback。
   const preservedAuthTime = tokenRow.auth_time ?? new Date().toISOString().replace('T', ' ').slice(0, 19)
+  // Codex #2（2026-05-10）：原 SELECT→batch UPDATE/INSERT 有 race 窗 — 兩個並發 refresh 都
+  // 通過 SELECT 的 revoked_at IS NULL 檢查 → 雙方各拿到一條新 refresh chain。改用 atomic
+  // UPDATE...WHERE revoked_at IS NULL RETURNING：D1/SQLite 對 token_hash UNIQUE 列做 row-level
+  // 序列化，只會有一方 RETURNING 出 row；輸的一方視同 reuse_detected。
+  const revokedRow = await db
+    .prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now')
+                WHERE id = ? AND revoked_at IS NULL
+                RETURNING id`)
+    .bind(tokenRow.id)
+    .first()
+  if (!revokedRow) {
+    await safeUserAudit(env, {
+      event_type: 'auth.refresh.fail', severity: 'warn',
+      user_id: tokenRow.user_id, request,
+      data: { reason_code: 'reuse_race_lost' },
+    })
+    return res({ error: 'Refresh token has been revoked' }, 401, cors)
+  }
   // P1-5：把 OIDC scope 透傳到 rotation 後的新 row，避免遺失
-  await db.batch([
-    db.prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE id = ?`)
-      .bind(tokenRow.id),
-    db.prepare(`
-      INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null),
-  ])
+  await db
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope)
+              VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null)
+    .run()
 
   // ── 5. 簽發新 Access Token ───────────────────────────────────
   const accessToken = await signJwt({

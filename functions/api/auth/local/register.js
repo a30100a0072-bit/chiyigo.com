@@ -14,6 +14,7 @@ import { signJwt } from '../../../utils/jwt.js'
 import { sendVerificationEmail } from '../../../utils/email.js'
 import { validatePassword } from '../../../utils/password.js'
 import { resolveAud } from '../../../utils/cors.js'
+import { buildTokenScope } from '../../../utils/scopes.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
@@ -99,9 +100,9 @@ export async function onRequestPost({ request, env, waitUntil }) {
     }
   }
 
-  // ── 7. 取得新建 user 資料（含 role / status 預設值）──────────
+  // ── 7. 取得新建 user 資料（含 role / status 預設值 / token_version）──
   const user = await db
-    .prepare('SELECT id, role, status FROM users WHERE email = ?')
+    .prepare('SELECT id, role, status, token_version FROM users WHERE email = ?')
     .bind(emailLower)
     .first()
 
@@ -118,12 +119,15 @@ export async function onRequestPost({ request, env, waitUntil }) {
     .run()
 
   // ── 9. 簽發 Access Token（ES256）────────────────────────────
+  // Codex #8：對齊 login.js 補 ver / scope claim，避免後續 bumpTokenVersion / scope 守門失效
   const accessToken = await signJwt({
     sub:            String(user.id),
     email:          emailLower,
     email_verified: false,
     role:           user.role,
     status:         user.status,
+    ver:            user.token_version ?? 0,
+    scope:          buildTokenScope(user.role),
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   await safeUserAudit(env, { event_type: 'account.register', user_id: user.id, request })

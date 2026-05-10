@@ -3,8 +3,10 @@
  * Header: Authorization: Bearer <access_token>
  *
  * 提交接案需求單（登入選填，訪客可送）。
- * 限流（UTC+8）：登入用戶 10 單/日、訪客 5 單/日（全域）、每 IP 3 單/日。
+ * 限流（UTC+8）：登入用戶 10 單/日、訪客同 guest_id 5 單/日、每 IP 3 單/日。
  * 流程：驗 JWT（選填）→ 主限流 → IP 限流 → INSERT → 發 TG → UPDATE tg_message_id
+ * 訪客 guest_id：body.guest_id 或 X-Device-Id header（前端 chiyigo.device_uuid），
+ * 寫入 owner_guest_id 供註冊時 takeover；無 guest_id 時退回純 IP 限流。
  */
 
 import { requireAuth, res } from '../utils/auth.js'
@@ -79,23 +81,34 @@ export async function onRequestPost({ request, env }) {
   const db = env.chiyigo_db
   const ip = request.headers.get('CF-Connecting-IP') ?? null
 
-  // ── 2a. 主限流：登入用戶 10 單/日；訪客全域 5 單/日 ──────────
-  const countRow = userId !== null
-    ? await db.prepare(`
-        SELECT COUNT(*) AS cnt FROM requisition
-        WHERE user_id = ?
-          AND date(created_at, '+8 hours') = date('now', '+8 hours')
-          AND deleted_at IS NULL
-      `).bind(userId).first()
-    : await db.prepare(`
-        SELECT COUNT(*) AS cnt FROM requisition
-        WHERE user_id IS NULL
-          AND date(created_at, '+8 hours') = date('now', '+8 hours')
-          AND deleted_at IS NULL
-      `).first()
+  // 訪客 guest_id：優先取 body，其次 X-Device-Id header；格式 web-<uuid>
+  let guestId = null
+  if (userId === null) {
+    const candidate = (body.guest_id || request.headers.get('X-Device-Id') || '').trim()
+    if (/^web-[0-9a-f-]{36}$/i.test(candidate)) guestId = candidate
+  }
+
+  // ── 2a. 主限流：登入用戶 10 單/日；同 guest_id 訪客 5 單/日 ────
+  // 無 guest_id 訪客（無 localStorage 環境）僅靠 2b 的 per-IP 3 單/日鎖
+  let countRow = null
+  if (userId !== null) {
+    countRow = await db.prepare(`
+      SELECT COUNT(*) AS cnt FROM requisition
+      WHERE user_id = ?
+        AND date(created_at, '+8 hours') = date('now', '+8 hours')
+        AND deleted_at IS NULL
+    `).bind(userId).first()
+  } else if (guestId) {
+    countRow = await db.prepare(`
+      SELECT COUNT(*) AS cnt FROM requisition
+      WHERE owner_guest_id = ?
+        AND date(created_at, '+8 hours') = date('now', '+8 hours')
+        AND deleted_at IS NULL
+    `).bind(guestId).first()
+  }
 
   const dayLimit = userId !== null ? 10 : 5
-  if ((countRow?.cnt ?? 0) >= dayLimit)
+  if (countRow && (countRow.cnt ?? 0) >= dayLimit)
     return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們' }, 429)
 
   // ── 2b. 每 IP 限流：3 單/日（防單一機器人耗光訪客全域配額）──
@@ -115,11 +128,13 @@ export async function onRequestPost({ request, env }) {
     const { meta } = await db
       .prepare(`
         INSERT INTO requisition
-          (user_id, name, company, contact, service_type, budget, timeline, message, source_ip)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (user_id, owner_user_id, owner_guest_id, name, company, contact, service_type, budget, timeline, message, source_ip)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         userId,
+        userId,
+        guestId,
         body.name.trim(),
         body.company?.trim()  ?? '',
         body.contact.trim(),

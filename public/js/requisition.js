@@ -58,6 +58,24 @@ form?.addEventListener('submit', async (e) => {
     const _token = sessionStorage.getItem('access_token');
     const fetchHeaders = { 'Content-Type': 'application/json' };
     if (_token) fetchHeaders['Authorization'] = 'Bearer ' + _token;
+    // 訪客 guest_id：每瀏覽器一次性 web-<uuid>，註冊時 takeover 此 requisition
+    let _devId = null;
+    try {
+      const KEY = 'chiyigo.device_uuid';
+      _devId = localStorage.getItem(KEY);
+      if (!_devId || !/^web-[0-9a-f-]{36}$/i.test(_devId)) {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          _devId = 'web-' + crypto.randomUUID();
+          localStorage.setItem(KEY, _devId);
+        } else {
+          _devId = null;
+        }
+      }
+    } catch (_) { _devId = null; }
+    if (_devId) {
+      fetchHeaders['X-Device-Id'] = _devId;
+      payload.guest_id = _devId;
+    }
     const res = await fetch('/api/requisition', {
       method:  'POST',
       headers: fetchHeaders,

@@ -113,8 +113,11 @@ async function getVerifyingKey(env, kid) {
  * @param {string} expiresIn 有效期，例如 '15m', '5m', '7d'
  * @param {object} env       Cloudflare env（含 JWT_PRIVATE_KEY）
  * @param {object} [opts]
- * @param {string} [opts.audience]  受眾識別（缺省不寫入 aud claim）
+ * @param {string|null} [opts.audience]  受眾識別；缺省 'chiyigo'；明確傳 null 才省略 aud claim
  * @returns {Promise<string>} JWT 字串
+ *
+ * Codex #1（2026-05-10）：簽發端預設 aud='chiyigo'，配合 verifyJwt 預設驗 'chiyigo'，
+ * 把跨 app token 互打的攻擊面收斂到顯式 opt-out（mbti/talo/sport-app 走 resolveAud 帶值）。
  */
 export async function signJwt(payload, expiresIn, env, opts = {}) {
   const { key, kid } = await getSigningKey(env)
@@ -125,7 +128,8 @@ export async function signJwt(payload, expiresIn, env, opts = {}) {
     .setIssuer('https://chiyigo.com')
     .setIssuedAt()
     .setExpirationTime(expiresIn)
-  if (opts.audience) builder.setAudience(opts.audience)
+  const aud = opts.audience === undefined ? 'chiyigo' : opts.audience
+  if (aud !== null) builder.setAudience(aud)
   return builder.sign(key)
 }
 
@@ -136,10 +140,14 @@ export async function signJwt(payload, expiresIn, env, opts = {}) {
  * @param {string} token JWT 字串
  * @param {object} env   Cloudflare env（含 JWT_PUBLIC_KEYS / JWT_PUBLIC_KEY）
  * @param {object} [opts]
- * @param {string|string[]} [opts.audience]  受眾驗證；缺省則不驗 aud（向後相容）
+ * @param {string|string[]|null} [opts.audience]  受眾驗證；缺省驗 'chiyigo'；
+ *                                                  明確傳 null 才關閉（OIDC userinfo 等跨 app 端點用）
  * @param {string|null}     [opts.issuer]    簽發者驗證；缺省驗 'https://chiyigo.com'；傳 null 才關閉
  * @returns {Promise<object>} JWT payload
  * @throws 驗證失敗 / 過期 / aud / iss 不符 / 找不到對應 kid 時拋出例外
+ *
+ * Codex #1（2026-05-10）：預設驗 aud='chiyigo'，避免 mbti/talo/sport-app aud 的 token
+ * 直接打 chiyigo resource API；跨 aud endpoint 必須 explicit `audience: null`。
  */
 export async function verifyJwt(token, env, opts = {}) {
   let kid = null
@@ -149,7 +157,11 @@ export async function verifyJwt(token, env, opts = {}) {
   if (!key) throw new Error(`No public key matches kid=${kid}`)
 
   const verifyOpts = { algorithms: ['ES256'] }
-  if (opts.audience !== undefined) verifyOpts.audience = opts.audience
+  if (opts.audience === null) {
+    // 明確不驗（OIDC userinfo 等跨 aud 端點）
+  } else {
+    verifyOpts.audience = opts.audience ?? 'chiyigo'
+  }
   // 預設驗 issuer：所有 chiyigo 簽出的 token 都用 'https://chiyigo.com'（簽端見 signJwt setIssuer）。
   // 不傳 → 套預設；明確傳 null → 關閉（給少數需要驗外部 token 的場景）。
   if (opts.issuer === null) {

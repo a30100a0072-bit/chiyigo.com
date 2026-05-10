@@ -27,7 +27,9 @@
 import { requireAuth, res } from '../../utils/auth.js'
 
 export async function onRequestGet({ request, env }) {
-  const { user, error } = await requireAuth(request, env)
+  // OIDC userinfo 是跨 aud 端點（mbti/talo/sport-app 等用各自 aud token 來查 sub）
+  // 必須 explicit 關閉 aud 驗證；否則 jwt.js 預設 'chiyigo' 會擋下其他 RP token
+  const { user, error } = await requireAuth(request, env, null, { audience: null })
   if (error) return error
 
   const userId = Number(user.sub)
