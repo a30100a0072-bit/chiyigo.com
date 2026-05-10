@@ -22,12 +22,12 @@
        2) 沒 token → 非同步呼叫 /api/auth/refresh（HttpOnly cookie 跨分頁有效），成功就寫回 sessionStorage 並繼續
        3) refresh 失敗 → 跳登入
        期間用一張 loading splash 蓋住內容，避免閃登入畫面 -->
-  <link rel="stylesheet" href="/css/_tokens.css?v=39da48ea" />
-  <link rel="stylesheet" href="/css/_components.css?v=39da48ea" />
-  <link rel="stylesheet" href="/css/ai-assistant.css?v=39da48ea" />
-  <script defer src="/js/notify.js?v=39da48ea"></script>
-  <script defer src="/js/confirm-dialog.js?v=39da48ea"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=39da48ea" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=95cd352c" />
+  <link rel="stylesheet" href="/css/_components.css?v=95cd352c" />
+  <link rel="stylesheet" href="/css/ai-assistant.css?v=95cd352c" />
+  <script defer src="/js/notify.js?v=95cd352c"></script>
+  <script defer src="/js/confirm-dialog.js?v=95cd352c"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=95cd352c" />
   <script>
     (function () {
       var hasTok = false;
@@ -160,7 +160,7 @@
 
           <a href="portfolio.html" class="ai-back" data-reveal>
             <svg viewBox="0 0 16 16" fill="none"><path d="M10 4l-4 4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span data-i18n="ai_back">返回案例作品</span>
+            <span data-i18n="ai_back">返回 chiyigo 作品</span>
           </a>
 
           <div class="ai-header" data-reveal data-reveal-delay="1">
@@ -232,7 +232,7 @@
             <p class="ai-success-body" data-i18n="ai_success_body">我會在 1–2 個工作天內回覆你。若有急件請直接 LINE / Email 聯絡我。</p>
             <p class="ai-disclaimer" id="ai-success-ref"></p>
             <div class="ai-actions">
-              <a href="portfolio.html" class="btn-secondary" data-i18n="ai_btn_back_portfolio">返回案例作品</a>
+              <a href="portfolio.html" class="btn-secondary" data-i18n="ai_btn_back_portfolio">返回 chiyigo 作品</a>
             </div>
           </div>
 
@@ -365,8 +365,8 @@
 
 
   <!-- Neural network animation -->
-  <script src="/js/sidebar-auth.js?v=39da48ea" defer></script>
-  <script src="/js/ai-assistant.js?v=39da48ea" defer></script>
+  <script src="/js/sidebar-auth.js?v=95cd352c" defer></script>
+  <script src="/js/ai-assistant.js?v=95cd352c" defer></script>
 
 </body>
 </html>
