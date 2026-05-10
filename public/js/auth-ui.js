@@ -161,20 +161,20 @@ function handleCrossAppRedirect(accessToken) {
 }
 
 // ── guest_id 管理 ────────────────────────────────────────────────
+// Codex audit r2 #2（2026-05-10）：guest_id 統一用 chiyigo.device_uuid（web-<uuid>），
+// 與 requisition.js 訪客送單寫入的 owner_guest_id 同一個 key，否則 register.js 的
+// takeover WHERE owner_guest_id=? 永不命中。device_uuid 同時被 refresh token 強綁，
+// 不要在 register 成功後 clear（會破壞同 session 的 refresh）。
 
 function getOrCreateGuestId() {
-  let id = localStorage.getItem(GUEST_ID_KEY);
-  if (!id) {
-    // 16 bytes 強亂數 → 32 hex chars
-    const bytes = crypto.getRandomValues(new Uint8Array(16));
-    id = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-    localStorage.setItem(GUEST_ID_KEY, id);
-  }
-  return id;
+  // 沿用 _chiyigoGetDeviceUuid（同檔上方定義）：web-<uuid> 格式 + localStorage 失敗退 in-memory
+  return _chiyigoGetDeviceUuid();
 }
 
 function clearGuestId() {
-  localStorage.removeItem(GUEST_ID_KEY);
+  // 故意 no-op：device_uuid 是裝置身份，refresh token 依此綁定，不能在註冊成功後清掉
+  // 舊 GUEST_ID_KEY ('chiyigo_guest_id') 殘留資料一律清除（單向遷移）
+  try { localStorage.removeItem(GUEST_ID_KEY); } catch (_) { /* ignore */ }
 }
 
 // ── JWT 儲存（Refresh Token 改由後端 HttpOnly Cookie 管理）────────

@@ -16,12 +16,10 @@
  */
 
 import { res } from '../../../../utils/auth.js'
-import { requireRole } from '../../../../utils/requireRole.js'
+import { requireRole, actorOutranksTarget } from '../../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes.js'
-
-const ROLE_LEVEL = { player: 0, moderator: 1, admin: 2, developer: 3 }
 
 export async function onRequestPost({ request, env, params }) {
   const { user, error } = await requireRole(request, env, 'admin')
@@ -44,7 +42,7 @@ export async function onRequestPost({ request, env, params }) {
 
   if (!target) return res({ error: 'User not found' }, 404)
 
-  if ((ROLE_LEVEL[target.role] ?? -1) >= (ROLE_LEVEL[user.role] ?? -1))
+  if (!actorOutranksTarget(user.role, target.role))
     return res({ error: 'Cannot unban a user with equal or higher role' }, 403)
 
   if (target.status !== 'banned') return res({ error: 'User is not banned' }, 400)

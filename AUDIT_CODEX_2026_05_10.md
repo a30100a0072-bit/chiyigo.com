@@ -47,6 +47,20 @@
 - `npm run test:int` → 452 passed
 - `npm run lint` → 0 errors / 18 warnings（同 baseline，無新增）
 
+## Round 4（Codex r2 audit follow-up，2026-05-10）
+
+Codex 二輪驗收主 Round 1-3 後揪出 6 個剩餘缺口，4 high + 2 medium。已全驗證符合並修復。
+
+| # | 主張 | 修復 |
+|---|------|------|
+| r2-1 | owner_guest_id/owner_user_id 沒 numbered migration → fresh D1 部署 500 | ✅ 補 `migrations/0036_requisition_owner_columns.sql` + index |
+| r2-2 | requisition 用 `chiyigo.device_uuid`、register 用 `chiyigo_guest_id` → takeover 永不命中 | ✅ `public/js/auth-ui.js` `getOrCreateGuestId()` 改用 `_chiyigoGetDeviceUuid()`；clearGuestId 變 no-op（避免破壞 refresh token 綁定） |
+| r2-3 | takeover 只更新 owner_user_id，不動 user_id → /me、/[id]、revoke 全用 user_id 查不到 | ✅ `register.js` UPDATE 同步寫 user_id；條件加 `user_id IS NULL` 防覆蓋 |
+| r2-4 | ban/unban/admin/revoke 自帶 ROLE_LEVEL 表，本次 super_admin 補強沒涵蓋 | ✅ `requireRole.js` 匯出 `actorOutranksTarget`；3 endpoint 改 import |
+| r2-5 | refresh aud 仍由 body 決定，子站可用共用 cookie 換 aud=chiyigo token | ⏭ followup（需 Origin/registry 設計） |
+| r2-6 | save lock 改 deal 後若 INSERT 失敗，留 status='deal' 但無 deal row | ✅ try/catch 包 INSERT；失敗 UPDATE status='pending' rollback + critical audit + 500 |
+
 ## Commit log
 
-（待 commit 後補 hash）
+- `3a6a11e` — Round 1-3（codex 6 修復）
+- `<待補>` — Round 4（codex r2 5 修復）

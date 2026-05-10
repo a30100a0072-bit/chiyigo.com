@@ -127,21 +127,41 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   // INSERT into deals
-  const inserted = await db
-    .prepare(`INSERT INTO deals
-               (source_requisition_id, user_id, customer_name, customer_contact,
-                customer_company, service_type, budget, timeline, message,
-                total_amount_subunit, refunded_amount_subunit, currency,
-                payment_intent_ids, notes, saved_by_admin_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               RETURNING id`)
-    .bind(
-      row.id, row.user_id, row.name, row.contact,
-      row.company || null, row.service_type, row.budget || null, row.timeline || null, row.message,
-      totalSucceeded, totalRefunded, currency,
-      intentIds.length ? JSON.stringify(intentIds) : null,
-      notes, Number(user.sub),
-    ).first()
+  // Codex audit r2 #6（2026-05-10）：lock 已把 status 改 'deal'，若 INSERT 因 D1 transient
+  // / FK / unique 衝突失敗會留下 status='deal' 但 deals 表無 row 的孤兒。包 try/catch，
+  // 失敗時把 status rollback 回 'pending' 並回 500，admin 可重試。
+  let inserted
+  try {
+    inserted = await db
+      .prepare(`INSERT INTO deals
+                 (source_requisition_id, user_id, customer_name, customer_contact,
+                  customer_company, service_type, budget, timeline, message,
+                  total_amount_subunit, refunded_amount_subunit, currency,
+                  payment_intent_ids, notes, saved_by_admin_id)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 RETURNING id`)
+      .bind(
+        row.id, row.user_id, row.name, row.contact,
+        row.company || null, row.service_type, row.budget || null, row.timeline || null, row.message,
+        totalSucceeded, totalRefunded, currency,
+        intentIds.length ? JSON.stringify(intentIds) : null,
+        notes, Number(user.sub),
+      ).first()
+  } catch (e) {
+    // best-effort rollback：把 status 退回 pending，僅當仍是 'deal' 才動
+    try {
+      await db
+        .prepare(`UPDATE requisition SET status = 'pending'
+                   WHERE id = ? AND status = 'deal'`)
+        .bind(id).run()
+    } catch { /* 連 rollback 都失敗就只能靠 audit 留證據 */ }
+    await safeUserAudit(env, {
+      event_type: 'requisition.save_as_deal.fail', severity: 'critical',
+      user_id: row.user_id, request,
+      data: { requisition_id: id, reason_code: 'deal_insert_failed', error: String(e?.message || e) },
+    })
+    return res({ error: 'Failed to create deal record', code: 'DEAL_INSERT_FAILED' }, 500, cors)
+  }
 
   // P2-7：status 已在進 INSERT 前 atomic 設為 'deal'（lock 那段），這裡不必再 UPDATE
 

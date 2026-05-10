@@ -86,14 +86,19 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // ── 6. 訪客轉正（Best-effort，僅轉同 guest_id 下尚未綁定的紀錄）────
   if (guest_id) {
     try {
+      // Codex audit r2 #3（2026-05-10）：除了 owner_user_id，也同步寫 user_id。
+      // 原因：requisition/me.js、[id].js、revoke.js 全用 WHERE user_id=? 查詢，只設
+      // owner_user_id 會讓使用者在會員中心永遠看不到自己訪客時送的單，且無法撤回。
+      // 條件加 user_id IS NULL 避免覆蓋他人已綁定的 row。
       await db
         .prepare(`
           UPDATE requisition
           SET owner_user_id  = (SELECT id FROM users WHERE email = ?),
+              user_id        = (SELECT id FROM users WHERE email = ?),
               owner_guest_id = NULL
-          WHERE owner_guest_id = ? AND owner_user_id IS NULL
+          WHERE owner_guest_id = ? AND owner_user_id IS NULL AND user_id IS NULL
         `)
-        .bind(emailLower, guest_id)
+        .bind(emailLower, emailLower, guest_id)
         .run()
     } catch {
       // 欄位不存在（schema 尚未遷移）時不中斷主流程
