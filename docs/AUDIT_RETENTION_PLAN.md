@@ -1,10 +1,22 @@
 # Audit Retention Plan — F-3 Phase 2
 
-> Status: v8.3 draft (codex round-10 wording 修正) · 2026-05-10
+> Status: v9 draft (PR 0.2 拆 a/b/c 避免 lock 不可逆風險) · 2026-05-10
 > Phase 1 done (commit 97e1a72): event registry + warn-on-missing
 > Phase 2 scope: audit_log retention + R2 cold archive
 > Phase 2 **不**動 admin_audit_log hot D1（量小、hash chain 證據敏感、verifier 不改）
 > Phase 3 (條件觸發)：admin_audit_log size > 500k row 或 D1 壓力明顯時 → 加 audit_chain_anchor + hot purge
+
+## v9 主要變更（PR 0.2 拆 a/b/c）
+
+R2 retention lock 不可逆 — 一旦 `--retention-days 2555` 設下去，該 prefix 在 7 年內無法 DELETE（包括 admin / root token）。為避免「worker 還沒驗就鎖 prod」的不對稱風險，v9 把 PR 0.2 拆三階段：
+
+| 階段 | 範圍 | 何時跑 |
+|---|---|---|
+| **0.2a** | 建 preview bucket + 指令 / IAM / key layout 驗證；正式 prefix 不鎖 | 立即可動，無風險 |
+| **0.2b** | prod versioning + 最小權限 archive token（無 Delete）+ lock/lifecycle 寫 runbook **不執行** | 立即可動，無風險 |
+| **0.2c** | prod 正式 36 條 lock + 36 條 lifecycle | **PR 2 dry-run 過關後才動** |
+
+**前置 PR 1 仍可平行**：D1 schema migration / classifyForCold / safeUserAudit 寫 cold_class / backfill 都沒有不可逆操作，可在 0.2a/b 同時推。
 
 ## v8.1 主要變更（codex round-8 修正）
 
@@ -630,9 +642,49 @@ Phase 3 加：
 - 不刪掉 D1 binding（cleanup.js 其他 task 仍要用）
 - 落 prod 確認 cron 不再呼舊路徑
 
-**Step 0.2 — R2 bucket + IAM + per-class lock + lifecycle（v7 落地）**
+**Step 0.2 — R2 bucket + IAM + per-class lock + lifecycle（拆三階段，避免 R2 lock 不可逆風險）**
 
 > Step 0.1 已 deployed prod（commit e57ded4），舊路徑已死。可進 Step 0.2。
+>
+> ⚠️ **R2 retention lock 不可逆**：一旦 `lock add ... --retention-days 2555` 設下去，該 prefix 的 object 在 7 年內**無法 DELETE**（包括 admin / root token）。誤設只能等過期。
+>
+> 因此 v8.3 把 0.2 拆三階段：先 preview 驗指令、prod 只做安全前置、locks 等 PR 2 dry-run 驗過 worker 行為才上。
+
+---
+
+**Step 0.2a — Preview bucket + 指令驗證（純 dry-run 環境）**
+
+- 建 preview bucket：`wrangler r2 bucket create chiyigo-audit-archive-preview`
+- 在 preview 驗：wrangler 指令、IAM、R2 key layout、worker classifyForCold 對 path 對齊
+- preview **不需開正式 retention lock**；若要測 lock 行為，只用 disposable test prefix（如 `_lock-smoke/`）配 `--retention-days 1` 短 retention，驗完即丟
+- 不碰任何正式 cold_class prefix（避免測試殘留）
+
+---
+
+**Step 0.2b — Prod 安全前置（不執行 lock）**
+
+- prod bucket `chiyigo-audit-archive` 已存在（commit ebd44d2，object_count=0），只需：
+  1. 開 versioning（dashboard 或 API；wrangler 4.87 沒 versioning 子命令）
+  2. 建立最小權限 archive token：`Object Read & Write` only（**不給 Delete**），bucket-scope `chiyigo-audit-archive` + preview
+  3. 把下方 36 條 lock + 36 條 lifecycle 寫成 **runbook**（不執行）
+- prod `object_count` 維持 0；只允許人工測試用非正式 prefix（如 `_admin-smoke/`）
+- `wrangler.toml` 已有 `AUDIT_ARCHIVE_BUCKET` binding（commit ebd44d2 已 deploy）— 不需再動
+
+---
+
+**Step 0.2c — Prod 正式 lock（PR 2 dry-run 報告過關後才動）**
+
+> 觸發條件（**全部滿足**才執行）：
+> - PR 2 archive worker dry-run 在 prod 跑 ≥ 1 個月
+> - dry-run 期間驗證通過：classify / chunk key / manifest / retry / cursor / month finalize 全綠
+> - dry-run **沒**寫進正式 cold_class prefix（最多寫 `audit-log-dryrun/` 或 preview）
+> - admin 確認啟動指令、無需回退
+
+執行下方 36 條 lock + 36 條 lifecycle 命令。**完成後 7 年內 prefix DELETE 全部失敗**。
+
+---
+
+**完整 lock + lifecycle 命令（runbook，Step 0.2c 才跑）**
 
 **Bucket**
 - prod `chiyigo-audit-archive` 已存在（commit ebd44d2，object_count=0）
