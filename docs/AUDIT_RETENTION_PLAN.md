@@ -1,10 +1,21 @@
 # Audit Retention Plan — F-3 Phase 2
 
-> Status: v7 draft (per-category R2 retention lock 對齊) · 2026-05-10
+> Status: v8 draft (codex round-7 finding 修正) · 2026-05-10
 > Phase 1 done (commit 97e1a72): event registry + warn-on-missing
 > Phase 2 scope: audit_log retention + R2 cold archive
 > Phase 2 **不**動 admin_audit_log hot D1（量小、hash chain 證據敏感、verifier 不改）
 > Phase 3 (條件觸發)：admin_audit_log size > 500k row 或 D1 壓力明顯時 → 加 audit_chain_anchor + hot purge
+
+## v8 主要變更（codex round-7 修正）
+
+| codex finding | v8 解法 |
+|---|---|
+| H 1：cold_class 分流後 D1 mark/purge `WHERE id BETWEEN` 會誤動其他 class | `audit_log` 加 `cold_class` 欄；safeUserAudit 寫入時自動填；mark/purge 加 `AND cold_class = ?` predicate |
+| H 2：progress query `MAX(max_id)` 跨 cold_class 不安全 | 進度查詢改 per (table, cold_class)；GROUP BY cold_class；每 class 獨立 cursor |
+| M 3：manifest 範例 key 缺 cold_class、`categories` 欄與「同 chunk 同 class」衝突 | manifest 加 `cold_class` + `cold_class_version` 單值欄；移除 `categories` 混合計數；`severities` 改成同 class 內摘要 |
+| M 4：aggregate cold archive lock/lifecycle 沒落到命令 | PR 0.2 補 `audit-log-aggregate-{telemetry,debug}/` 與其 manifest 4 條 lock + 4 條 lifecycle（共 18+18 條規則）|
+
+**新增**：`cold_class_version` 概念（user 加固）— audit-policy 改動時 bump，避免歷史 chunk 分類語義模糊。chunks 表 + manifest 都記。
 
 ## v7 主要變更（per-category R2 retention lock，user round-7 決定）
 
@@ -178,11 +189,13 @@ manifest 是 archive lifecycle 的 source of truth；不只靠 audit event 推�
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "2.0",
   "env": "prod",
   "table": "audit_log",
+  "cold_class": "security_critical",            // v8：每 chunk 單一 cold_class
+  "cold_class_version": 1,                      // v8：classifier 版本；audit-policy 改動後 bump
   "run_id": "01HZAB...ULID",
-  "chunk_id": "audit-log/prod/audit_log/2026/04/30/1234567-1244440-abc123ef.jsonl.zst",
+  "chunk_id": "audit-log/prod/audit_log/security_critical/2026/04/30/1244441-1244892-def456ab.jsonl.zst",
   "state": "verified",                          // planned|uploaded|verified|marked_archived|purged|cold_copied|failed|blacklisted
   "state_history": [
     { "state": "planned",          "at": "2026-05-15T18:00:00Z" },
@@ -191,16 +204,15 @@ manifest 是 archive lifecycle 的 source of truth；不只靠 audit event 推�
     { "state": "marked_archived",  "at": "2026-05-15T18:00:12Z" },
     { "state": "purged",           "at": "2026-05-15T18:30:00Z" }
   ],
-  "row_count": 9874,
-  "min_id": 1234567,
-  "max_id": 1244440,
-  "min_ts": "2026-04-01T00:00:00Z",
-  "max_ts": "2026-04-30T23:59:59Z",
+  "row_count": 452,
+  "min_id": 1244441,
+  "max_id": 1244892,
+  "min_ts": "2026-04-30T00:00:11Z",
+  "max_ts": "2026-04-30T23:48:02Z",
   "sha256_jsonl": "<sha256 of decompressed jsonl>",
   "sha256_zst": "<sha256 of compressed file>",
   "compression": "zstd-19",
-  "categories": { "immutable": 1234, "security_signal": 5678 },
-  "severities": { "info": 1000, "warn": 7000, "critical": 1874 },
+  "severities": { "critical": 452 },            // 同 cold_class chunk 內的 severity 摘要
 
   // admin_audit_log only — 跨 chunk hash chain 驗證用
   "first_row_hash":         "<row_hash of min_id>",
@@ -247,13 +259,13 @@ IF changed == manifest.row_count:
 ELSE IF changed == 0:
   -- 可能：(a) 前一輪已標記成功但 state 沒升、(b) 沒任何 row 在範圍內
   query: SELECT COUNT(*) FROM audit_log
-           WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL
+           WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at IS NOT NULL
   IF count == manifest.row_count → marked_archived（recovery 成功，標記資料已存在）
   ELSE → state=failed + audit.archive.row_count_mismatch（critical）
 ELSE (0 < changed < row_count):
   -- partial update：手動補標記到 row_count 為止
   query: SELECT COUNT(*) FROM audit_log
-           WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL
+           WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at IS NOT NULL
   IF count == manifest.row_count → marked_archived
   ELSE → state=failed + audit.archive.partial_archive_mismatch（critical）
 ```
@@ -265,8 +277,9 @@ ELSE (0 < changed < row_count):
 ```
 LET deleted = DELETE affected_rows
 LET still_archived = SELECT COUNT(*) FROM audit_log
-                       WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL
-LET remaining_in_range = SELECT COUNT(*) FROM audit_log WHERE id BETWEEN ? AND ?
+                       WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at IS NOT NULL
+LET remaining_in_range = SELECT COUNT(*) FROM audit_log
+                           WHERE id BETWEEN ? AND ? AND cold_class = ?
 
 IF deleted == manifest.row_count AND still_archived == 0:
   → purged（first-pass 成功）
@@ -278,7 +291,7 @@ ELSE IF deleted == 0 AND still_archived == manifest.row_count:
   → 維持 marked_archived，下輪重試
 ELSE IF deleted > 0 AND deleted < manifest.row_count:
   -- partial DELETE：手動補刪到 still_archived = 0
-  retry DELETE WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL
+  retry DELETE WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at IS NOT NULL
   IF still_archived == 0 → purged
   ELSE → state=failed + audit.archive.purge_mismatch（critical）
 ELSE:
@@ -312,12 +325,12 @@ ELSE:
 ### 寫入流程（fail-safe，可重入；v7 加 classify 步驟）
 
 ```
-1. SELECT batch from D1 (id range [min_id..max_id], ORDER BY id)
-1.5. classifyForCold(row) → cold_class (六選一)
-     - 由 audit-policy.classifyAuditEvent(event_type) + severity 衍生
-     - 同一 cold_class 的 row 進同 chunk；id range 在該 class 內可能不連續
-     - 若 cold_class='debug_failure' AND retention=0 → skip cold archive
-       （只走 aggregate；aggregate 表自己依 telemetry/debug retention 走獨立 prefix）
+1. 對每個 cold_class 各跑一輪：
+   SELECT * FROM audit_log
+    WHERE id BETWEEN ? AND ? AND cold_class = ?
+    ORDER BY id
+   （v8：cold_class 已在 audit_log row 上，不再 worker 內分類；
+    SELECT 範圍內可能不連續，但 chunk 只裝同 cold_class row → mark/purge 用同 predicate 不誤動其他 class）
 2. Build JSONL（同 cold_class）→ compress (zstd) → SHA-256 (decompressed + compressed)
 3. Upload manifest（state=planned）to R2
 4. Upload jsonl.zst chunk to R2 (key 含 chunk_sha256，重跑 idempotent)
@@ -325,14 +338,14 @@ ELSE:
 6. R2 GET back chunk → verify SHA-256 + row count
    ok   → manifest（state=verified）+ audit.archive.chunk_uploaded
    fail → audit.archive.verification_failed（critical）→ 不刪 D1，下輪重試
-7. Mark archived（D1 logical delete）：
+7. Mark archived（D1 logical delete，v8 加 cold_class predicate）：
      UPDATE audit_log SET archived_at=NOW()
-       WHERE id BETWEEN ? AND ? AND archived_at IS NULL
+       WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at IS NULL
      依「marked_archived 升態雙路徑」驗證 affected_rows / 已標記 count
      ok → manifest（state=marked_archived）+ audit.archive.marked_archived
 8. Delayed purge（grace period = 7 days；獨立 cron run 觸發）：
      DELETE FROM audit_log
-       WHERE id BETWEEN ? AND ? AND archived_at < NOW() - INTERVAL '7 days'
+       WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at < NOW() - INTERVAL '7 days'
      依「purged 升態驗證」驗證 deleted + still_archived
      ok → manifest（state=purged）+ audit.archive.d1_purged
 9. 月底所有 chunk 進入 terminal state（`audit_log` → purged / `admin_audit_log` → cold_copied）→ 寫月份 manifest + audit.archive.month_completed
@@ -360,15 +373,41 @@ ELSE:
 | Admin 看冷存 | `/api/admin/audit/export?month=2026-04` 從 R2 拉 manifest + chunks，逐 chunk verify sha256 + row count 後組合，寫 `admin.audit.archive.read` 進 hot audit |
 
 
-### Schema 變更（v3 修正）
+### Schema 變更（v3 修正 + v8 加 cold_class）
 
-**audit_log 加 archived_at**
+**audit_log 加 archived_at + cold_class**（v8 codex round-7 H-1/H-2 修正）
 ```sql
 ALTER TABLE audit_log ADD COLUMN archived_at TEXT;
+ALTER TABLE audit_log ADD COLUMN cold_class TEXT NOT NULL DEFAULT 'immutable'
+  CHECK(cold_class IN ('immutable','security_critical','security_warn','read_audit','telemetry','debug_failure'));
 CREATE INDEX idx_audit_log_archived_at ON audit_log(archived_at);
+CREATE INDEX idx_audit_log_cold_id ON audit_log(cold_class, id);   -- archive worker SELECT 主索引
 ```
 
-**admin_audit_log 不加 archived_at**（v3 user decision；Phase 2 只 copy cold 不 purge）
+**admin_audit_log 不加 archived_at / cold_class**（v3 user decision；Phase 2 只 copy cold 不 purge；admin 全 row 視為 immutable cold_class，由 archive worker 路徑硬寫常數）
+
+**safeUserAudit 寫入時自動填 cold_class**
+```js
+// functions/utils/user-audit.js（v8 改動）
+import { classifyForCold } from './audit-policy.js'   // 新 helper
+
+const cold_class = classifyForCold(entry.event_type, severity)
+INSERT INTO audit_log (..., severity, ..., cold_class) VALUES (..., ?, ..., ?)
+```
+
+**Backfill 既有 row**：PR 1 schema migration 同 PR 跑一次：
+```sql
+-- 對所有 cold_class='immutable' (DEFAULT) 的舊 row 重算正確值
+-- classifier 邏輯 inline 寫成 CASE WHEN 或 worker 跑單次 backfill
+UPDATE audit_log SET cold_class =
+  CASE
+    WHEN event_type IN (...immutable list...) THEN 'immutable'
+    WHEN event_type IN (...security_signal list...) AND severity='critical' THEN 'security_critical'
+    WHEN event_type IN (...security_signal list...) THEN 'security_warn'
+    ...
+  END
+WHERE cold_class = 'immutable';   -- DEFAULT 值，未經 classifier
+```
 
 **audit_archive_chunks（per-chunk 狀態，codex M-3 修正 + v7 加 cold_class）**
 ```sql
@@ -377,6 +416,7 @@ CREATE TABLE audit_archive_chunks (
   table_name      TEXT    NOT NULL,
   cold_class      TEXT    NOT NULL            -- v7：R2 prefix 對應的 retention class
                   CHECK(cold_class IN ('immutable','security_critical','security_warn','read_audit','telemetry','debug_failure')),
+  cold_class_version INTEGER NOT NULL DEFAULT 1, -- v8：classifier 版本，audit-policy 改動 bump
   archive_date    TEXT    NOT NULL,           -- YYYY-MM-DD
   min_id          INTEGER NOT NULL,
   max_id          INTEGER NOT NULL,
@@ -446,15 +486,27 @@ CREATE TABLE audit_log_aggregate_debug (
 CREATE INDEX idx_agg_debug_event ON audit_log_aggregate_debug(event_type, hour_bucket);
 ```
 
-**舊 audit_archive_state（v2）**：作廢，不建。改用 chunks 表查詢取 table-specific terminal state 的 `MAX(max_id)`（codex round-5 M-1）：
+**舊 audit_archive_state（v2）**：作廢，不建。
+
+**進度查詢必須 per (table, cold_class)**（v8 codex round-7 H-2 修正）— 不能用 global MAX(max_id)，因為各 cold_class 的 id range 交錯，某 class 的高 max_id 完成不代表低 id 的其他 class 完成。
+
 ```sql
--- audit_log 進度
-SELECT MAX(max_id) FROM audit_archive_chunks
- WHERE table_name='audit_log' AND state='purged';
--- admin_audit_log 進度
-SELECT MAX(max_id) FROM audit_archive_chunks
- WHERE table_name='admin_audit_log' AND state='cold_copied';
+-- 每個 (table, cold_class) 各自查 cursor
+SELECT cold_class, MAX(max_id) AS cursor
+  FROM audit_archive_chunks
+ WHERE table_name='audit_log'
+   AND state='purged'    -- audit_log terminal
+ GROUP BY cold_class;
+
+-- admin_audit_log（全部 immutable cold_class，terminal=cold_copied）
+SELECT MAX(max_id) AS cursor
+  FROM audit_archive_chunks
+ WHERE table_name='admin_audit_log'
+   AND cold_class='immutable'
+   AND state='cold_copied';
 ```
+
+**Worker 續跑邏輯**：每個 cold_class 維護獨立 cursor，下一輪 SELECT 從 `cursor + 1` 開始，避免重掃已 archived 範圍。
 
 ## 新增 audit events（要進 audit-policy registry）
 
@@ -570,9 +622,34 @@ wrangler r2 bucket lock add chiyigo-audit-archive lock-debug \
   "audit-log/prod/audit_log/debug_failure/" --retention-days 365 -y
 
 # manifest 也要鎖（與資料同 retention）
-wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-7y \
+# 7y manifest（3 個）
+wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-immutable \
   "manifest/prod/audit_log/immutable/" --retention-days 2555 -y
-# ... 其他 manifest prefix 同樣模式（共 7 條 manifest lock）
+wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-sec-critical \
+  "manifest/prod/audit_log/security_critical/" --retention-days 2555 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-admin \
+  "manifest/prod/admin_audit_log/immutable/" --retention-days 2555 -y
+# 3y manifest（2 個）
+wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-sec-warn \
+  "manifest/prod/audit_log/security_warn/" --retention-days 1095 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-read \
+  "manifest/prod/audit_log/read_audit/" --retention-days 1095 -y
+# 1y manifest（2 個）
+wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-tele \
+  "manifest/prod/audit_log/telemetry/" --retention-days 365 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-manifest-debug \
+  "manifest/prod/audit_log/debug_failure/" --retention-days 365 -y
+
+# Aggregate 表的 cold archive（v8 codex round-7 M-4 修正）
+# telemetry / debug aggregate 月底進 R2，retention 1y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-agg-tele \
+  "audit-log-aggregate-telemetry/prod/" --retention-days 365 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-agg-debug \
+  "audit-log-aggregate-debug/prod/" --retention-days 365 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-agg-manifest-tele \
+  "manifest/prod/audit_log_aggregate_telemetry/" --retention-days 365 -y
+wrangler r2 bucket lock add chiyigo-audit-archive lock-agg-manifest-debug \
+  "manifest/prod/audit_log_aggregate_debug/" --retention-days 365 -y
 ```
 
 **Per-class lifecycle（lock 過期後自動刪）— 對 prod bucket**
@@ -591,8 +668,22 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-debug \
   "audit-log/prod/audit_log/debug_failure/" --expire-days 367 -y
 wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-admin-immutable \
   "audit-log/prod/admin_audit_log/immutable/" --expire-days 2557 -y
-# manifest 同樣 lifecycle 一條一條設
+
+# manifest 對應 lifecycle（7 條，prefix 改 manifest/prod/...）
+# Aggregate 對應 lifecycle（4 條，prefix 改 audit-log-aggregate-{telemetry|debug}/ 與其 manifest）
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-tele \
+  "audit-log-aggregate-telemetry/prod/" --expire-days 367 -y
+wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-debug \
+  "audit-log-aggregate-debug/prod/" --expire-days 367 -y
+# ... manifest 與 aggregate manifest 同樣模式
 ```
+
+**Lock + Lifecycle 規則總數**：
+- audit-log/ 7 條（6 cold_class + 1 admin_audit_log/immutable）
+- manifest/ 7 條（對應）
+- audit-log-aggregate-{telemetry,debug}/ 2 條
+- manifest/.../audit_log_aggregate_{telemetry,debug}/ 2 條
+- 共 **18 條 lock + 18 條 lifecycle = 36 條規則**
 
 **IAM**
 - Dashboard 建立最小權限 archive token：bucket-scope `chiyigo-audit-archive` + `chiyigo-audit-archive-preview`，permission = Object Read & Write（**不給 Delete**）
@@ -605,10 +696,15 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-admin-immutable \
 - preview bucket 不需 lock（測試方便，dev 寫過就丟）
 
 ### PR 1 — Schema + retention metadata
-- 加 `audit_log.archived_at` 欄（**不**加 `admin_audit_log.archived_at`，v3 user decision）
-- 新建 `audit_archive_chunks` 表（per-chunk 狀態，codex M-3）
-- 新建 `audit_log_aggregate_telemetry` + `audit_log_aggregate_debug` 表（M-5）
-- 不動現有寫入路徑
+- 加 `audit_log.archived_at` + `audit_log.cold_class` 兩欄（v8 codex round-7 H-1）
+  - cold_class CHECK + idx_audit_log_cold_id `(cold_class, id)` 索引
+  - **不**加 `admin_audit_log.archived_at`（v3 user decision；admin Phase 2 不 purge）
+- safeUserAudit 改寫：呼叫新 helper `classifyForCold(event_type, severity)` → 寫入 cold_class 欄
+- Backfill migration：對 DEFAULT 'immutable' 的舊 row 用 CASE WHEN 重算
+- 新建 `audit_archive_chunks` 表（per-chunk 狀態 + cold_class + cold_class_version）
+- 新建 `audit_log_aggregate_telemetry` + `audit_log_aggregate_debug` 表
+- audit-policy.js 加 `classifyForCold()` 函式 + 7 個新 archive event 入 registry
+- 同 PR 加單元測試：`classifyForCold` 對每個已知 event_type 的回值；schema migration up/down
 
 ### PR 2 — Archive worker（dry-run 模式）
 - Cron worker 寫 R2，但**不刪 D1**（DRY_RUN env flag）
