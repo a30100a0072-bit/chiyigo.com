@@ -100,11 +100,19 @@ export async function safeUserAudit(env, entry) {
       // Codex round-11 H-1 + 自審 H-1（PR 1.1）：deploy ordering 防呆。若 functions 比
       // migration 0038 先 deploy，cold_class 欄不存在會炸；外層 catch-all 會吞掉，
       // audit 靜默流失。
-      // 嚴格匹配 SQLite 「no such column: cold_class」字串；其他含 cold_class 字眼的錯誤
-      // （例如未來加 CHECK constraint 違例）會被外層 catch 吞掉，**不**走 fallback，
-      // 避免錯誤資料被壓進舊 schema row。
-      const msg = String(e?.message ?? '')
-      if (msg.includes('no such column: cold_class')) {
+      // 嚴格 regex 匹配 SQLite 兩種常見 missing-column 錯誤訊息：
+      //   1. 'no such column: cold_class'                                  (SELECT/UPDATE 路徑)
+      //   2. 'table audit_log has no column named cold_class'              (INSERT 路徑，現況常走這支)
+      // 其他含 cold_class 字眼的錯誤（例如未來加 CHECK constraint 違例）不走 fallback，
+      // 避免錯誤資料被壓進舊 schema row（codex r1+r3 都點到，PR 1.2）。
+      // 同步嘗試 e.cause.message — D1 有時把底層 SQLite 錯誤包在 cause 裡。
+      // 用 join 不用 ??：D1 若外層 message 是泛用字串（如 'D1_ERROR'），detail 在 cause，
+      // ?? 會被外層短路掉看不到 cause（codex r4 建議，PR 1.2）。
+      const msg = [e?.message, e?.cause?.message].filter(Boolean).join('\n')
+      const missingColdClass =
+        /\bno such column:\s*cold_class\b/i.test(msg) ||
+        /\btable\s+audit_log\s+has no column named\s+cold_class\b/i.test(msg)
+      if (missingColdClass) {
         // M-2：deploy 順序錯是 ops 警訊，發 console.error + 寫 critical audit 給監控抓
         console.error(
           '[deploy-ordering] cold_class column missing — run migration 0038 first; fallback INSERT engaged',

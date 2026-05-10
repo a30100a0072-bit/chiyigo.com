@@ -50,8 +50,8 @@ describe('classifyAuditEvent — immutable（金融/權限/安全狀態變更）
     expect(classifyAuditEvent(e)).toBe(AUDIT_CATEGORY.IMMUTABLE)
   })
 
-  // PR 1.1 自審 L-2：12 個 archive ops events + deploy_ordering fallback 顯式覆蓋
-  // （migration 0038 / safeUserAudit fallback；之前只 _registrySize 間接驗）
+  // PR 1.1 自審 L-2：12 個 archive ops events 顯式覆蓋
+  // PR 1.2 codex r3：deploy_ordering 拆 SYSTEM_OPS_IMMUTABLE
   it.each([
     'audit.archive.chunk_uploaded',
     'audit.archive.marked_archived',
@@ -65,9 +65,20 @@ describe('classifyAuditEvent — immutable（金融/權限/安全狀態變更）
     'audit.archive.partial_archive_mismatch',
     'audit.archive.purge_mismatch',
     'admin.audit.archive.read',
-    'audit.deploy_ordering.fallback_triggered',  // PR 1.1 M-2
   ])('%s (archive ops) → immutable', (e) => {
     expect(classifyAuditEvent(e)).toBe(AUDIT_CATEGORY.IMMUTABLE)
+  })
+
+  // PR 1.2：system ops immutable（deploy_ordering fallback 訊號）
+  it.each([
+    'audit.deploy_ordering.fallback_triggered',
+  ])('%s (system ops) → immutable', (e) => {
+    expect(classifyAuditEvent(e)).toBe(AUDIT_CATEGORY.IMMUTABLE)
+  })
+
+  // PR 1.2 codex r1+r3：補 5 個原本漏分類的 live events
+  it('payment.intent.anonymized → immutable（admin PII 抹除 forensic trail）', () => {
+    expect(classifyAuditEvent('payment.intent.anonymized')).toBe(AUDIT_CATEGORY.IMMUTABLE)
   })
 })
 
@@ -103,6 +114,11 @@ describe('classifyAuditEvent — read_audit（admin 讀敏感資料）', () => {
     'admin.requisitions.read',
     'admin.refund_requests.read',
     'payment.metadata_archive.viewed',
+    // PR 1.2：補 4 個漏分類 admin read/export events
+    'admin.deals.read',
+    'admin.deals.exported',
+    'admin.payments.intents.read',
+    'admin.payments.intents.exported',
   ])('%s → read_audit', (e) => {
     expect(classifyAuditEvent(e)).toBe(AUDIT_CATEGORY.READ_AUDIT)
   })
@@ -140,17 +156,18 @@ describe('registry coverage', () => {
       listEventsByCategory(AUDIT_CATEGORY.DEBUG_FAILURE).length
     expect(sum).toBe(_registrySize)
     // 2026-05-10 盤點 98（grep functions/）；migration 0038 加 12 archive ops + PR 1.1
-    // 加 1 個 deploy_ordering fallback → 111。新增 audit event 必須同 PR 補進 audit-policy.js
-    // + 同步更新本斷言。
-    expect(_registrySize).toBe(111)
+    // 加 1 個 deploy_ordering fallback → 111；
+    // PR 1.2 補 5 個漏分類 live events（4 read_audit + 1 immutable）→ 116。
+    // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
+    expect(_registrySize).toBe(116)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
-    // 0038 後 immutable 含 12 個 archive ops（總 58）
+    // 0038 後 immutable 含 12 archive ops + 1 system ops + 1 anonymized（總 59）
     expect(listEventsByCategory(AUDIT_CATEGORY.IMMUTABLE).length).toBeGreaterThanOrEqual(50)
     expect(listEventsByCategory(AUDIT_CATEGORY.SECURITY_SIGNAL).length).toBeGreaterThanOrEqual(20)
     expect(listEventsByCategory(AUDIT_CATEGORY.TELEMETRY).length).toBeGreaterThanOrEqual(5)
-    expect(listEventsByCategory(AUDIT_CATEGORY.READ_AUDIT).length).toBeGreaterThanOrEqual(3)
+    expect(listEventsByCategory(AUDIT_CATEGORY.READ_AUDIT).length).toBeGreaterThanOrEqual(8)
     expect(listEventsByCategory(AUDIT_CATEGORY.DEBUG_FAILURE).length).toBeGreaterThanOrEqual(5)
   })
 })

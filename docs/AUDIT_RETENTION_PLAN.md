@@ -888,9 +888,14 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 ### PR 1 — Schema + retention metadata（commit 9de0e15 已 commit）
 - ✅ migration 0038_audit_log_phase2.sql：audit_log 加 archived_at + cold_class、新建 chunks + 兩個 aggregate 表
 - ✅ aggregate UNIQUE bucket index（codex round-11 M/L-3：防 PR 3 重入）
-- ✅ audit-policy.js 加 12 個 archive ops events（registry 98 → 110）+ classifyForCold helper
-- ✅ user-audit.js INSERT 加 cold_class；含 deploy ordering fallback（codex round-11 H-1）
-- ✅ unit 187→214、int 462→468
+- ✅ audit-policy.js 加 12 archive ops + 1 system ops + 5 漏分類補丁（registry 98 → 116）+ classifyForCold helper
+- ✅ user-audit.js INSERT 加 cold_class；含 deploy ordering fallback（codex round-11 H-1 / PR 1.2 regex 收緊：含 SQLite 兩種 missing-column 訊息形態 + e.cause.message）
+- ✅ unit 187→232（PR 1.2 加 it.each 顯式 case）、int 462→468
+
+> PR 1.2 codex r1+r3 收尾：
+> - fallback regex 補 `table audit_log has no column named cold_class`（D1 INSERT 路徑常走這支）
+> - 補 5 個漏分類 live events：admin.deals.{read,exported} / admin.payments.intents.{read,exported} → READ_AUDIT；payment.intent.anonymized → IMMUTABLE
+> - SYSTEM_OPS_IMMUTABLE 從 ARCHIVE_OPS_IMMUTABLE 拆出（deploy_ordering 不是 archive 範圍）
 
 #### 🚨 Deploy ordering checklist（codex round-11 H-1）
 **部署順序硬性要求 — 否則 audit 會靜默流失**：

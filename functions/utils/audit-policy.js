@@ -41,11 +41,17 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.archive.partial_archive_mismatch',     // critical
   'audit.archive.purge_mismatch',               // critical
   'admin.audit.archive.read',                   // admin export 觸發
-  'audit.deploy_ordering.fallback_triggered',   // PR 1.1 自審 M-2：deploy 順序錯訊號
+]
+
+// F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。
+// 拆獨立 list 以免後續維護者 grep ARCHIVE_OPS 時誤以為是 archive worker 範圍。
+const SYSTEM_OPS_IMMUTABLE = [
+  'audit.deploy_ordering.fallback_triggered',   // PR 1.1 M-2：deploy 順序錯訊號（critical）
 ]
 
 const IMMUTABLE = [
   ...ARCHIVE_OPS_IMMUTABLE,
+  ...SYSTEM_OPS_IMMUTABLE,
   'account.delete',
   'account.email.verify',
   'account.password.change',
@@ -76,6 +82,7 @@ const IMMUTABLE = [
   'oauth.end_session',
   'oauth.identity.unbind',
   'payment.checkout.created',
+  'payment.intent.anonymized',                  // PR 1.2：admin 對 succeeded intent 做 PII 抹除（forensic trail，永久保留）
   'payment.intent.deleted',
   'payment.intent.succeeded_status_changed',
   'payment.refund.requested',
@@ -140,7 +147,11 @@ const TELEMETRY = [
 
 const READ_AUDIT = [
   'admin.audit.read',
+  'admin.deals.exported',                      // PR 1.2：admin CSV export deals
+  'admin.deals.read',                          // PR 1.2：admin 讀 deals list
   'admin.payment_webhook_dlq.read',
+  'admin.payments.intents.exported',           // PR 1.2：admin CSV export payment intents
+  'admin.payments.intents.read',               // PR 1.2：admin 讀 payment intents list
   'admin.refund_requests.read',
   'admin.requisitions.read',
   'payment.metadata_archive.viewed',

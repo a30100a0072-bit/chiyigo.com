@@ -13,6 +13,8 @@
 --     immutable 不需 UPDATE（DEFAULT 已是）。順序：security_critical → security_warn → 其他。
 --   - 5 個 cold_class 的 event_type IN (...) 列表是 functions/utils/audit-policy.js 的鏡射；
 --     兩邊未來改動需同步（PR 描述提一句 reviewer 看）。
+--   - PR 1.2 補：read_audit 9 events（補 admin.deals.* / admin.payments.intents.*）；
+--     payment.intent.anonymized 屬 immutable，DEFAULT 已對，不需 backfill UPDATE。
 
 -- ── Part 1：audit_log 加欄 + 索引 ──
 ALTER TABLE audit_log ADD COLUMN archived_at TEXT;
@@ -69,9 +71,13 @@ UPDATE audit_log SET cold_class = CASE
     THEN CASE WHEN severity = 'critical' THEN 'security_critical' ELSE 'security_warn' END
 
   WHEN event_type IN (
-    -- read_audit 5 events
+    -- read_audit 9 events（PR 1.2 補 admin.deals.* / admin.payments.intents.*）
     'admin.audit.read',
+    'admin.deals.exported',
+    'admin.deals.read',
     'admin.payment_webhook_dlq.read',
+    'admin.payments.intents.exported',
+    'admin.payments.intents.read',
     'admin.refund_requests.read',
     'admin.requisitions.read',
     'payment.metadata_archive.viewed'
