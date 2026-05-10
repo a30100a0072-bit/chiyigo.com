@@ -1,10 +1,19 @@
 # Audit Retention Plan — F-3 Phase 2
 
-> Status: v4 draft (round-4 codex feedback integrated) · 2026-05-10
+> Status: v5 draft (codex round-5 feedback integrated) · 2026-05-10
 > Phase 1 done (commit 97e1a72): event registry + warn-on-missing
 > Phase 2 scope: audit_log retention + R2 cold archive
 > Phase 2 **不**動 admin_audit_log hot D1（量小、hash chain 證據敏感、verifier 不改）
 > Phase 3 (條件觸發)：admin_audit_log size > 500k row 或 D1 壓力明顯時 → 加 audit_chain_anchor + hot purge
+
+## v5 主要變更（codex round-5 修正）
+
+| codex finding | v5 解法 |
+|---|---|
+| M/H 1：purged 升態同樣有 crash-after-delete-before-state hole | 加 purged 雙路徑：`deleted == row_count && still_archived == 0` 直升；`deleted == 0 && still_archived == 0 && remaining_in_range == 0 && prior_state == marked_archived` → recovery 升 |
+| M 2：cron-purge-worker 無法有效查詢「7 天後」 | `audit_archive_chunks` 加 `marked_archived_at` / `purge_after` / `cold_copied_at` 三欄；加 partial index `idx_archive_chunks_purge ON (state, purge_after) WHERE state='marked_archived'` |
+| M 3：新 v4 audit events 沒進 registry | 加進事件清單：`audit.archive.marked_archived` / `cold_copied` / `row_count_mismatch` / `partial_archive_mismatch` / `purge_mismatch` |
+| L/M 4：Goals/Tier wording 沒反映 admin_audit_log Phase 2 不 purge | 改寫 Goals + Tier 表，明確 admin_audit_log Phase 2 = hot 永久 append-only + 月度 cold copy |
 
 ## v4 主要變更（codex round-4 修正）
 
@@ -29,30 +38,33 @@
 
 ## Goals & non-goals
 
-**Goals**
-- 把 `audit_log` / `admin_audit_log` 從「無上限累積」變成「分級保留 + 冷存」。
+**Goals**（Phase 2 範圍，codex round-4 M-4 收緊）
+- 把 **`audit_log`** 從「無上限累積」變成「分級保留 + 冷存」（hot 30-180d、cold 1-7y）。
+- 把 **`admin_audit_log`** 增加 cold backup 能力（R2 月度 copy）；**hot D1 暫不受 retention 限制**（量小 + hash chain 證據敏感）。
 - 金融級稽核：mutation / security / read 類資料都能在規定保留期內查得到。
-- D1 不長期膨脹（D1 是 hot store，10GB 軟天花板要尊重）。
+- D1 不長期膨脹（D1 是 hot store，10GB 軟天花板要尊重）— 主要靠 audit_log 分級控管達成。
 - 失敗 fail-safe：R2 沒寫成功不刪 D1。
 - 操作可稽核：archive job 自身的成功/失敗/重試都進 audit_log。
 
-**Non-goals**
+**Non-goals**（Phase 2）
 - 不做即時查詢冷存資料（admin 要查 R2 archive 走 admin job export）。
 - 不做跨 region replication（R2 預設 11 9s 已夠）。
 - 不在這個 phase 做 PII redaction / GDPR right-to-be-forgotten；屬獨立議題。
+- **不對 admin_audit_log 做 hot D1 retention**（v3 user decision；條件觸發後走 Phase 3）。
 
 ## Tier 模型
 
-| Tier | 介質 | 用途 | TTL 上限 |
-|---|---|---|---|
-| Hot | D1 `audit_log` / `admin_audit_log` | admin UI 查詢 / on-call 即時排查 / event correlation | 30-180 天（依分類） |
-| Cold | R2 bucket `chiyigo-audit-archive` | 長期稽核 / 法遵 / 監管要求 / forensic | 1-7 年（依分類） |
-| Permanent | — | （不採用：所有事件最終都會被冷存或刪掉） | — |
+| Tier | 介質 | 用途 | audit_log TTL | admin_audit_log（Phase 2）|
+|---|---|---|---|---|
+| Hot | D1 | admin UI 查詢 / on-call 即時排查 / event correlation | 30-180 天（依分類） | **永久 append-only**（量小，verifyAuditChain 從 GENESIS 驗）|
+| Cold | R2 bucket `chiyigo-audit-archive` | 長期稽核 / 法遵 / 監管要求 / forensic | 1-7 年（依分類） | **每月 cold copy**（cold_copied 終態，不影響 hot）|
 
 **為什麼 R2 唯一 cold archive**
 - D1 archive table 會持續吃 D1 空間，跟 D1 的 hot 角色相衝。
 - R2 storage 0.015 USD/GB/month，全量 audit 估 < 50MB/month，10 年 < 6GB → 1 USD/year 級數，符合 $0 成本基線。
 - R2 immutable upload 配 versioning，可作為法遵 chain-of-custody。
+
+**Phase 3（條件觸發）**：當 admin_audit_log row count > 500k 或 D1 size 壓力明顯時，加 `audit_chain_anchor` + `archived_at` 欄 + 真 purge 流程；verifier 改從 anchor 起算。
 
 ## Retention Matrix
 
@@ -195,15 +207,34 @@ ELSE (0 < changed < row_count):
   ELSE → state=failed + audit.archive.partial_archive_mismatch（critical）
 ```
 
-**`purged` 升態驗證**
+**`purged` 升態雙路徑驗證**（codex round-4 M/H 1 修正）
+
+> 解 crash-after-delete-before-state 場景：worker DELETE 已成功、manifest state 還沒升前掛掉，retry 時 DELETE 看到的是已刪 row → `deleted = 0`、`still_archived = 0`。
+
 ```
 LET deleted = DELETE affected_rows
-LET still_archived = SELECT COUNT(*) FROM audit_log WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL
-IF deleted + 0 == manifest.row_count（所有目標 row 都被 DELETE 處理）
-  AND still_archived == 0（沒殘留）
-  → purged
-ELSE → state=failed + audit.archive.purge_mismatch（critical）
+LET still_archived = SELECT COUNT(*) FROM audit_log
+                       WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL
+LET remaining_in_range = SELECT COUNT(*) FROM audit_log WHERE id BETWEEN ? AND ?
+
+IF deleted == manifest.row_count AND still_archived == 0:
+  → purged（first-pass 成功）
+ELSE IF deleted == 0 AND still_archived == 0 AND remaining_in_range == 0
+        AND prior_state was 'marked_archived':
+  → purged（recovery 成功：前一輪已物理刪除完，state 沒升）
+ELSE IF deleted == 0 AND still_archived == manifest.row_count:
+  -- DELETE 條件沒命中（grace 還沒到 / archived_at 比較失敗）：留在 marked_archived
+  → 維持 marked_archived，下輪重試
+ELSE IF deleted > 0 AND deleted < manifest.row_count:
+  -- partial DELETE：手動補刪到 still_archived = 0
+  retry DELETE WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL
+  IF still_archived == 0 → purged
+  ELSE → state=failed + audit.archive.purge_mismatch（critical）
+ELSE:
+  → state=failed + audit.archive.purge_mismatch（critical）
 ```
+
+**recovery 條件靠 prior_state 是 `marked_archived`**：避免 deleted=0 + range 為空被誤判為 purged 完成（萬一 chunk 從來沒進到 marked_archived）。讀 audit_archive_chunks.state 即可確認。
 
 中斷恢復原則：cron 讀 manifest state + audit_archive_chunks state（兩者必同），該做什麼下一步直接決定，不必反推 audit events。
 
@@ -302,15 +333,27 @@ CREATE TABLE audit_archive_chunks (
   last_failure    TEXT,                       -- error reason
   next_reminder_at TEXT,                      -- 24h reminder due time
   blacklisted_at  TEXT,                       -- 連 3 次失敗後標記
+
+  marked_archived_at TEXT,                    -- 升 marked_archived 的時間（codex round-4 M-2）
+  purge_after        TEXT,                    -- = marked_archived_at + 7d；purge worker 只查此欄
+  cold_copied_at     TEXT,                    -- admin_audit_log 走到 cold_copied 終態的時間
+
   run_id          TEXT NOT NULL,              -- 最後一次處理的 run
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (env, table_name, archive_date, min_id, max_id, chunk_sha256)
 );
 CREATE INDEX idx_archive_chunks_state ON audit_archive_chunks(state, table_name);
+CREATE INDEX idx_archive_chunks_purge ON audit_archive_chunks(state, purge_after)
+  WHERE state = 'marked_archived';            -- cron-purge-worker 主查詢索引
 CREATE INDEX idx_archive_chunks_blacklist ON audit_archive_chunks(blacklisted_at)
   WHERE blacklisted_at IS NOT NULL;
 ```
+
+**升態同步寫時間欄位**：
+- `marked_archived` 升態時 `UPDATE SET marked_archived_at=NOW(), purge_after=datetime(NOW(), '+7 days')`
+- `cold_copied` 升態時 `UPDATE SET cold_copied_at=NOW()`
+- `purged` 升態時不另寫時間欄（updated_at 已記錄）
 
 **audit_log_aggregate_telemetry（M-5 修正：純 count，無 samples）**
 ```sql
@@ -350,13 +393,26 @@ CREATE INDEX idx_agg_debug_event ON audit_log_aggregate_debug(event_type, hour_b
 ## 新增 audit events（要進 audit-policy registry）
 
 全部歸 `immutable`（archive 操作本身要永留）：
-- `audit.archive.chunk_uploaded`
-- `audit.archive.d1_purged`
-- `audit.archive.verification_failed` （critical severity）
-- `audit.archive.upload_failed`
+
+**正常流程**
+- `audit.archive.chunk_uploaded`           — verified ok 後寫
+- `audit.archive.marked_archived`          — D1 archived_at SET 完成
+- `audit.archive.d1_purged`                — 物理 DELETE 完成
+- `audit.archive.cold_copied`              — admin_audit_log Phase 2 終態
 - `audit.archive.month_completed`
 - `audit.archive.aggregate_completed`
-- `admin.audit.archive.read` （admin export 觸發）
+
+**失敗 / 異常**（critical severity，觸發 Discord webhook）
+- `audit.archive.verification_failed`      — R2 GET 驗證 sha256 失敗
+- `audit.archive.upload_failed`            — R2 PUT 失敗（warn；3 次後升 critical）
+- `audit.archive.row_count_mismatch`       — marked_archived 升態時雙路徑都失敗（codex round-4 M-3）
+- `audit.archive.partial_archive_mismatch` — marked_archived partial UPDATE 後補齊失敗
+- `audit.archive.purge_mismatch`           — purged 升態時 deleted/still_archived 對不上
+
+**Admin 操作**
+- `admin.audit.archive.read`               — admin export 觸發
+
+> v4 起新事件需在 PR 1 同 PR 加進 `functions/utils/audit-policy.js`，否則 PR 2 dry-run 會觸發 `[audit-policy] unclassified` warning。
 
 ## Hash chain 策略（v3：admin_audit_log 不 purge hot）
 
@@ -394,7 +450,7 @@ Phase 3 加：
 | Job | 觸發 | 目的 |
 |---|---|---|
 | `cron-archive-worker` | 每日 18:00 UTC（= 02:00 Asia/Taipei 凌晨低峰）| 找 hot retention 過期的 row → 走完 planned→...→marked_archived 五狀態 |
-| `cron-purge-worker` | 每日 19:00 UTC | 對 `state='marked_archived'` 且 `archived_at < now-7d` 的 chunk 執行物理 DELETE，升 `purged` |
+| `cron-purge-worker` | 每日 19:00 UTC | `WHERE state='marked_archived' AND purge_after <= NOW()` 走 idx_archive_chunks_purge 索引；對命中 chunk 執行物理 DELETE，升 `purged` |
 | `cron-aggregate-worker` | 每週日 17:00 UTC（= 01:00 Asia/Taipei）| telemetry / debug_failure aggregate（先合併再讓 archive worker 接手）|
 | `cron-month-finalize-worker` | 每月 1 號 20:00 UTC（= 04:00 Asia/Taipei）| 上月所有 chunk 完成後寫月份 manifest |
 | `admin-job: audit-archive-retry` | 手動 / API | 補跑失敗的 chunk（`SELECT FROM audit_archive_chunks WHERE state IN ('failed','blacklisted')`）|
