@@ -94,26 +94,35 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // rate-limit（user-audit.js:46-75），採樣是現階段最低成本的方案。
   if (guest_id && !isValidGuestId) {
     try {
-      // 採樣：10% 寫入；攻擊者掃 1000 次平均只寫 100 筆。識別 pattern 已足夠
-      if (Math.random() < 0.1) {
-        const raw = String(guest_id)
-        const enc = new TextEncoder().encode(raw)
-        const hashBuf = await crypto.subtle.digest('SHA-256', enc)
-        const hash = Array.from(new Uint8Array(hashBuf))
-          .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16)
+      const raw  = String(guest_id)
+      const salt = env.AUDIT_IP_SALT || ''  // 沿用既有 IP 鹽；缺值則用空字串（仍比 plain SHA 強）
+      // Codex r7-2：keyed HMAC-SHA256 取代 raw SHA-256；防 audit DB 外洩後對低熵
+      // guest_id 字典反推。salt 缺值不擋（仍記錄事件），下游監控應檢查 salt 已配。
+      const key  = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(salt || 'dev-fallback-no-salt'),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+      )
+      const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw))
+      const sig    = Array.from(new Uint8Array(sigBuf))
+        .map(b => b.toString(16).padStart(2, '0')).join('')
+      // Codex r7-3：deterministic sampling — 用 hash 取模代 Math.random，同一 bad
+      // value 重試不會累積 audit。第一個 byte (0..255) < 26 ≈ 10.2%，與原機率近似。
+      const sampleByte = sigBuf instanceof ArrayBuffer ? new Uint8Array(sigBuf)[0] : sigBuf[0]
+      if (sampleByte < 26) {
         // prefix_class：分類 enum，不存任何明文（防 email/手機/姓名被當 guest_id 落 audit）
         let prefixClass = 'other'
-        if (/^web-/i.test(raw))       prefixClass = 'web_malformed'   // 'web-' 開頭但 uuid 格式錯
-        else if (/^guest-/i.test(raw)) prefixClass = 'guest_legacy'   // 舊 client 32-hex 格式
-        else if (/^[0-9a-f]+$/i.test(raw)) prefixClass = 'hex_only'   // 純 hex（可能舊隨機）
+        if (/^web-/i.test(raw))            prefixClass = 'web_malformed' // 'web-' 開頭但 uuid 格式錯
+        else if (/^guest-/i.test(raw))     prefixClass = 'guest_legacy'  // 舊 client 32-hex 格式
+        else if (/^[0-9a-f]+$/i.test(raw)) prefixClass = 'hex_only'      // 純 hex
         await safeUserAudit(env, {
           event_type: 'register.guest_id_invalid_format', severity: 'warn',
           user_id: null, request,
           data: {
             length:       raw.length,
             prefix_class: prefixClass,
-            hash16:       hash,        // 同 hash 重複 = 同一 client
-            sampled:      true,        // 提醒分析端真實量是 ×10
+            hmac16:       sig.slice(0, 16),  // 同 hmac → 同 client（HMAC keyed，無法字典反推）
+            sampled:      true,              // 提醒分析端真實量是 ×10（deterministic）
+            salted:       Boolean(salt),     // 提醒：若 false 表示 AUDIT_IP_SALT 未設，需修配置
           },
         })
       }

@@ -55,7 +55,13 @@ export async function requireRole(request, env, minRole) {
 
   // Codex r5 #2 / r6-1（2026-05-10）：actor role 不在 KNOWN_ROLES → DB drift 或竄改。
   // r5 原本只 audit 不擋（依賴下方 hierarchy 擋未知 -1），r6 改 fail-fast：audit + 立即 403。
-  // 理由：語意明確、避免未來某 caller 傳錯 minRole 造成意外路徑、攻擊者也無法觀測差異化回應。
+  // 理由：語意明確、避免未來某 caller 傳錯 minRole 造成意外路徑。
+  // Codex r7-1：注意 timing 並非與「known role insufficient」等價 — 本分支會 await
+  // safeUserAudit（DB write + critical 走 Discord webhook），下方 INSUFFICIENT_ROLE 直接回。
+  // 攻擊者透過 timing 可能區分「未知 role」vs「已知但不足」。可接受：unknown actor 是
+  // 異常事件（DB drift），洩漏其存在性對防禦不構成有效信號；且攻擊者無法控制 actor.role
+  // 必須先攻陷簽發端 / DB。若未來 audit pipeline 變慢需收斂，可改延遲一致化或對
+  // INSUFFICIENT_ROLE 也採樣 audit 補平 timing。
   if (!KNOWN_ROLES.has(user.role)) {
     await safeUserAudit(env, {
       event_type: 'admin.unknown_role_actor', severity: 'critical',
