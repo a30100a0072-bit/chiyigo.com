@@ -264,9 +264,9 @@ describe('requireRole', () => {
     await expectError(requireRole(reqWithAuth(tok), env, 'admin'), 403, { code: 'INSUFFICIENT_ROLE' })
   })
 
-  it('未知 role → 視為 -1，比 player 還低', async () => {
+  it('未知 actor role → 403 UNKNOWN_ACTOR_ROLE（Codex r6-1 fail-fast）', async () => {
     const tok = await tokenWithRole('weird-role')
-    await expectError(requireRole(reqWithAuth(tok), env, 'player'), 403, { code: 'INSUFFICIENT_ROLE' })
+    await expectError(requireRole(reqWithAuth(tok), env, 'player'), 403, { code: 'UNKNOWN_ACTOR_ROLE' })
   })
 
   it('未知 minRole 參數 → 永遠拒絕', async () => {

@@ -88,26 +88,35 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // requisition INSERT 端有驗，但 register 仍可能收到舊 client / 直接打 API 的雜值，
   // 不驗就送進 SQL 雖無 injection 但會做無謂查詢。
   const isValidGuestId = guest_id && /^web-[0-9a-f-]{36}$/i.test(guest_id)
-  // Codex r5 #3（2026-05-10）：guest_id 存在但格式不對 = 舊 client / 第三方 bot / 未授權呼叫
-  // 寫一筆 warn audit 用以偵測 client bug；只記 length + prefix（前 4 字元）+ hash，
-  // 不存明文（避免被掃 API 的攻擊資料污染 audit）。production safeUserAudit 內部已對
-  // critical/warn 分流，rate-limit 由 audit pipeline 統一管。
+  // Codex r5 #3 / r6-2（2026-05-10）：guest_id 存在但格式不對 = 舊 client / 第三方 bot / 未授權
+  // r5 原版存 prefix 前 4 字（明文），r6 改成分類 enum 防止 PII / email / 手機被當 guest_id 後
+  // 前 4 字落 audit；同時用 10% 採樣降低被掃 API 製造噪音。safeUserAudit 無 per-event
+  // rate-limit（user-audit.js:46-75），採樣是現階段最低成本的方案。
   if (guest_id && !isValidGuestId) {
     try {
-      const raw = String(guest_id)
-      const enc = new TextEncoder().encode(raw)
-      const hashBuf = await crypto.subtle.digest('SHA-256', enc)
-      const hash = Array.from(new Uint8Array(hashBuf))
-        .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16)
-      await safeUserAudit(env, {
-        event_type: 'register.guest_id_invalid_format', severity: 'warn',
-        user_id: null, request,
-        data: {
-          length:    raw.length,
-          prefix:    raw.slice(0, 4),  // 區分 'web-' typo / 'guest-' 舊格式 / 完全亂碼
-          hash16:    hash,             // 同 hash 重複可知是同一 client
-        },
-      })
+      // 採樣：10% 寫入；攻擊者掃 1000 次平均只寫 100 筆。識別 pattern 已足夠
+      if (Math.random() < 0.1) {
+        const raw = String(guest_id)
+        const enc = new TextEncoder().encode(raw)
+        const hashBuf = await crypto.subtle.digest('SHA-256', enc)
+        const hash = Array.from(new Uint8Array(hashBuf))
+          .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16)
+        // prefix_class：分類 enum，不存任何明文（防 email/手機/姓名被當 guest_id 落 audit）
+        let prefixClass = 'other'
+        if (/^web-/i.test(raw))       prefixClass = 'web_malformed'   // 'web-' 開頭但 uuid 格式錯
+        else if (/^guest-/i.test(raw)) prefixClass = 'guest_legacy'   // 舊 client 32-hex 格式
+        else if (/^[0-9a-f]+$/i.test(raw)) prefixClass = 'hex_only'   // 純 hex（可能舊隨機）
+        await safeUserAudit(env, {
+          event_type: 'register.guest_id_invalid_format', severity: 'warn',
+          user_id: null, request,
+          data: {
+            length:       raw.length,
+            prefix_class: prefixClass,
+            hash16:       hash,        // 同 hash 重複 = 同一 client
+            sampled:      true,        // 提醒分析端真實量是 ×10
+          },
+        })
+      }
     } catch { /* audit 失敗不阻流 */ }
   }
   if (isValidGuestId) {
@@ -147,10 +156,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
         await safeUserAudit(env, {
           event_type: 'requisition.takeover', severity: 'info',
           user_id: newUserId, request,
+          // Codex r6-3（2026-05-10）：移除 email — user-audit.js 設計原則明寫「email 不入」
+          // user_id 已可追溯帳號；email 在 admin audit API 也會被 redaction，留 raw 是雙標
           data: {
             requisition_ids: takenIds,
             guest_id_hash:   guestHash,
-            email:           emailLower,
             count:           allTakenIds.length,  // 真實命中數（未 cap）
             truncated,                            // true 表示 requisition_ids 被截
           },

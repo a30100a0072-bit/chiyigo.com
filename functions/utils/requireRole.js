@@ -53,10 +53,9 @@ export async function requireRole(request, env, minRole) {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
 
-  // Codex r5 #2（2026-05-10）：actor role 不在 KNOWN_ROLES → 通常是 DB drift 或竄改。
-  // 不影響流程（下方 hierarchy 仍會擋），但要寫 critical audit 讓 oncall 看見。
-  // 注意：actor.role 是 JWT claim，理論上在 token 簽發時就已是合法 role；不合法代表
-  // 簽發端 / DB / 中介有問題 — 對齊 unknown_role_target 用 critical 而非 warn。
+  // Codex r5 #2 / r6-1（2026-05-10）：actor role 不在 KNOWN_ROLES → DB drift 或竄改。
+  // r5 原本只 audit 不擋（依賴下方 hierarchy 擋未知 -1），r6 改 fail-fast：audit + 立即 403。
+  // 理由：語意明確、避免未來某 caller 傳錯 minRole 造成意外路徑、攻擊者也無法觀測差異化回應。
   if (!KNOWN_ROLES.has(user.role)) {
     await safeUserAudit(env, {
       event_type: 'admin.unknown_role_actor', severity: 'critical',
@@ -66,6 +65,10 @@ export async function requireRole(request, env, minRole) {
         min_role:   minRole,
       },
     })
+    return {
+      user:  null,
+      error: res({ error: 'Forbidden', code: 'UNKNOWN_ACTOR_ROLE' }, 403),
+    }
   }
 
   const userLevel     = ROLE_LEVEL[user.role]  ?? -1
