@@ -84,13 +84,18 @@ export async function onRequestPost({ request, env, waitUntil }) {
   ])
 
   // ── 6. 訪客轉正（Best-effort，僅轉同 guest_id 下尚未綁定的紀錄）────
-  if (guest_id) {
+  // Codex r4-bonus（2026-05-10）：register 端對 guest_id 也驗 web-<uuid> 格式（防禦深度）。
+  // requisition INSERT 端有驗，但 register 仍可能收到舊 client / 直接打 API 的雜值，
+  // 不驗就送進 SQL 雖無 injection 但會做無謂查詢。
+  const isValidGuestId = guest_id && /^web-[0-9a-f-]{36}$/i.test(guest_id)
+  if (isValidGuestId) {
     try {
       // Codex audit r2 #3（2026-05-10）：除了 owner_user_id，也同步寫 user_id。
       // 原因：requisition/me.js、[id].js、revoke.js 全用 WHERE user_id=? 查詢，只設
       // owner_user_id 會讓使用者在會員中心永遠看不到自己訪客時送的單，且無法撤回。
       // 條件加 user_id IS NULL 避免覆蓋他人已綁定的 row。
-      // 用 RETURNING 取受影響 row，給下方 audit 用（codex r3 補：保留 takeover 軌跡）
+      // Codex r3 #3：用 RETURNING 取受影響 row，給下方 audit 用（保留 takeover 軌跡）
+      // Codex r4 #3：RETURNING 也帶 user_id，audit 直接帶新 user_id 方便日後查
       const taken = await db
         .prepare(`
           UPDATE requisition
@@ -98,11 +103,13 @@ export async function onRequestPost({ request, env, waitUntil }) {
               user_id        = (SELECT id FROM users WHERE email = ?),
               owner_guest_id = NULL
           WHERE owner_guest_id = ? AND owner_user_id IS NULL AND user_id IS NULL
-          RETURNING id
+          RETURNING id, user_id
         `)
         .bind(emailLower, emailLower, guest_id)
         .all()
-      const takenIds = (taken?.results ?? []).map(r => r.id)
+      const takenRows = taken?.results ?? []
+      const takenIds  = takenRows.map(r => r.id)
+      const newUserId = takenRows[0]?.user_id ?? null
       if (takenIds.length) {
         // Codex audit r3 #3（2026-05-10）：takeover 後 owner_guest_id 變 NULL，
         // 失去訪客→user 軌跡。寫一筆 audit 記下 sha256(guest_id) + 受影響 requisition_ids，
@@ -113,7 +120,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
           .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
         await safeUserAudit(env, {
           event_type: 'requisition.takeover', severity: 'info',
-          user_id: null /* 新 user 還沒在 audit 抓到，下方 register audit 會接 */, request,
+          user_id: newUserId, request,
           data: {
             requisition_ids: takenIds,
             guest_id_hash:   guestHash,

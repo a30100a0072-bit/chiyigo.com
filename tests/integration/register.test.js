@@ -116,14 +116,16 @@ describe('POST /api/auth/local/register', () => {
   })
 
   it('訪客轉正：guest_id 已存在 + owner_user_id IS NULL → 該 requisition 被綁到新 user', async () => {
+    // Codex r4-bonus：register 端驗 guest_id 為 web-<uuid> 格式（防禦深度），測試對齊
+    const guestAbc = 'web-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
     await env.chiyigo_db.prepare(
       'INSERT INTO requisition (owner_guest_id, owner_user_id) VALUES (?, NULL)',
-    ).bind('guest-abc').run()
+    ).bind(guestAbc).run()
 
     const res = await callFunction(registerPost, regReq({
       email: 'guest@example.com',
       password: 'GoodPass#1234',
-      guest_id: 'guest-abc',
+      guest_id: guestAbc,
     }))
     expect(res.status).toBe(201)
     const body = await res.json()
@@ -138,26 +140,27 @@ describe('POST /api/auth/local/register', () => {
 
   it('訪客轉正：guest_id 已被別的 user 綁定 → 不覆蓋（M6 守門）', async () => {
     // 既存使用者已綁定 guest-xyz
+    const guestXyz = 'web-11111111-2222-3333-4444-555555555555'
     const existing = await seedUser({ email: 'old@example.com', password: 'OldPass#1234' })
     await env.chiyigo_db.prepare(
       'INSERT INTO requisition (owner_guest_id, owner_user_id) VALUES (?, ?)',
-    ).bind('guest-xyz', existing.id).run()
+    ).bind(guestXyz, existing.id).run()
 
     const res = await callFunction(registerPost, regReq({
       email: 'newcomer@example.com',
       password: 'GoodPass#1234',
-      guest_id: 'guest-xyz',
+      guest_id: guestXyz,
     }))
     expect(res.status).toBe(201)
 
     // 該 requisition 仍屬於 existing.id
     const row = await env.chiyigo_db.prepare(
       'SELECT owner_user_id FROM requisition WHERE owner_guest_id = ? OR owner_user_id IN (?, ?)',
-    ).bind('guest-xyz', existing.id, 0).first()
-    // 注意：UPDATE 不應發生 → owner_user_id 仍是 existing.id, owner_guest_id 仍是 'guest-xyz'
+    ).bind(guestXyz, existing.id, 0).first()
+    // 注意：UPDATE 不應發生 → owner_user_id 仍是 existing.id, owner_guest_id 仍是 guestXyz
     const stillBound = await env.chiyigo_db.prepare(
       'SELECT COUNT(*) AS n FROM requisition WHERE owner_user_id = ? AND owner_guest_id = ?',
-    ).bind(existing.id, 'guest-xyz').first()
+    ).bind(existing.id, guestXyz).first()
     expect(stillBound.n).toBe(1)
     expect(row.owner_user_id).toBe(existing.id)
   })

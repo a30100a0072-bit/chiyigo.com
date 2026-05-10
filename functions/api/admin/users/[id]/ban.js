@@ -13,7 +13,7 @@
  */
 
 import { res } from '../../../../utils/auth.js'
-import { requireRole, actorOutranksTarget } from '../../../../utils/requireRole.js'
+import { requireRole, actorOutranksTarget, isKnownRole } from '../../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes.js'
@@ -40,6 +40,15 @@ export async function onRequestPost({ request, env, params }) {
 
   if (!target) return res({ error: 'User not found' }, 404)
 
+  // Codex r4 #4：unknown target role = migration drift 或 DB 被改 → critical audit
+  if (!isKnownRole(target.role)) {
+    await safeUserAudit(env, {
+      event_type: 'admin.unknown_role_target', severity: 'critical',
+      user_id: targetId, request,
+      data: { action: 'ban', target_role: String(target.role).slice(0, 32), actor_id: Number(user.sub) },
+    })
+    return res({ error: 'Target user has unknown role; refused for safety', code: 'UNKNOWN_TARGET_ROLE' }, 403)
+  }
   if (!actorOutranksTarget(user.role, target.role))
     return res({ error: 'Cannot ban a user with equal or higher role' }, 403)
 

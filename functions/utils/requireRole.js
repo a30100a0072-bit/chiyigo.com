@@ -26,6 +26,14 @@ const ROLE_LEVEL = {
 }
 
 /**
+ * Codex r4 #4（2026-05-10）：未知 role 出現在 DB 通常代表
+ * （a）migration drift，或（b）資料庫被竄改。
+ * endpoint 應在拒絕前寫 critical audit 通知 oncall，給管理介面用。
+ */
+export const KNOWN_ROLES = new Set(Object.keys(ROLE_LEVEL))
+export function isKnownRole(role) { return KNOWN_ROLES.has(role) }
+
+/**
  * @param {Request} request
  * @param {object}  env
  * @param {string}  minRole  — 'player' | 'moderator' | 'admin' | 'developer'
