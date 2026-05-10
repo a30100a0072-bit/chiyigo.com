@@ -97,7 +97,7 @@ function applyLangI(lang) {
 const curLangI = localStorage.getItem('lang') || 'zh-TW';
 applyLangI(curLangI);
 
-const langDropI = document.getElementById('lang-drop-i');
+const langDropI = document.getElementById('lang-dropdown');
 function toggleLangDrop(e) {
   e.stopPropagation();
   langDropI?.classList.toggle('open');
@@ -108,7 +108,7 @@ function toggleTopLangDrop(e) {
   document.getElementById('m-top-lang-drop')?.classList.toggle('open');
   langDropI?.classList.remove('open');
 }
-document.getElementById('sb-lang-btn')?.addEventListener('click', toggleLangDrop);
+document.getElementById('lang-toggle-btn')?.addEventListener('click', toggleLangDrop);
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
 document.addEventListener('click', () => {
   langDropI?.classList.remove('open');

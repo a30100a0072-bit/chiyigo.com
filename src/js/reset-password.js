@@ -98,7 +98,7 @@ function applyLang(lang) {
 
 document.addEventListener('DOMContentLoaded', () => {
   applyLang(getLang());
-  // theme/lang 切換交給 sidebar-auth.js（partial 提供 #theme-toggle-btn / #sb-lang-btn）
+  // theme/lang 切換交給 sidebar-auth.js / 各頁 page JS（partial 提供 #theme-toggle-btn / #lang-toggle-btn / #lang-dropdown）
 });
 
 // ── 狀態 ─────────────────────────────────────────────────────

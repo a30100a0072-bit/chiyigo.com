@@ -49,7 +49,7 @@ function applyPageI18n(lang) {
 
 document.addEventListener('DOMContentLoaded', () => {
   applyPageI18n(getLang());
-  // theme/lang 切換交給 sidebar-auth.js（partial 提供 #theme-toggle-btn / #sb-lang-btn）
+  // theme/lang 切換交給 sidebar-auth.js / 各頁 page JS（partial 提供 #theme-toggle-btn / #lang-toggle-btn / #lang-dropdown）
 });
 
 async function handleSubmit(e) {
