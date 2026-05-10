@@ -7,124 +7,248 @@
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
-  <link rel="stylesheet" href="/css/_tokens.css?v=3a6a11e6" />
-  <link rel="stylesheet" href="/css/_components.css?v=3a6a11e6" />
-  <link rel="stylesheet" href="/css/tailwind.css?v=3a6a11e6" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/confirm-delete.css?v=3a6a11e6" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=596c017b" />
+  <link rel="stylesheet" href="/css/_components.css?v=596c017b" />
+  <link rel="stylesheet" href="/css/login.css?v=596c017b" />
+  <link rel="stylesheet" href="/css/confirm-delete.css?v=596c017b" />
+  <script defer src="/js/notify.js?v=596c017b"></script>
+  <script defer src="/js/confirm-dialog.js?v=596c017b"></script>
 </head>
-<body class="font-sans antialiased min-h-screen flex flex-col">
+<body>
 
-  <header class="fixed top-0 inset-x-0 z-50 border-b border-[#2a2a35] bg-[#0e0e12]/80 backdrop-blur-md">
-    <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between relative">
-      <a href="/login.html" class="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors group">
-        <svg class="w-4 h-4 transition-transform group-hover:-translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        <span data-i18n="back_login">返回登入</span>
+  <div class="dash-wrap">
+    <aside class="dash-sidebar" id="dash-sidebar">
+      <a href="/" class="sb-brand" aria-label="回到首頁">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="sb-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="sb-logo-img logo-dark">
       </a>
-      <a href="/" aria-label="CHIYIGO" class="absolute left-1/2 -translate-x-1/2 flex items-center">
-        <img src="/images/logo-light.png" alt="CHIYIGO" class="hdr-logo logo-light">
-        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="hdr-logo logo-dark">
-      </a>
-      <div class="flex items-center gap-2">
-        <div class="lang-wrap">
-          <button id="lang-btn" type="button" class="tool-btn" aria-label="Language">
-            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m-9 9h18" />
-            </svg>
-          </button>
-          <div id="lang-menu" class="lang-menu" role="menu">
-            <button class="lang-opt" data-lang="zh-TW" role="menuitem">繁體中文</button>
-            <button class="lang-opt" data-lang="en" role="menuitem">English</button>
-            <button class="lang-opt" data-lang="ja" role="menuitem">日本語</button>
-            <button class="lang-opt" data-lang="ko" role="menuitem">한국어</button>
+    
+      <nav class="sb-nav" aria-label="主要導覽">
+        <a href="/index.html" class="sb-item" aria-label="首頁">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_home">首頁</span>
+        </a>
+        <a href="/index.html#services" class="sb-item" aria-label="服務項目">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_services">服務項目</span>
+        </a>
+        <a href="/index.html#process" class="sb-item" aria-label="服務流程">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg>
+          <span class="sb-label" data-i18n="nav_process">服務流程</span>
+        </a>
+        <a href="/portfolio.html" class="sb-item" aria-label="案例作品">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_portfolio">案例作品</span>
+        </a>
+        <a href="/about.html" class="sb-item" aria-label="關於我們">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+          <span class="sb-label" data-i18n="nav_about">關於我們</span>
+        </a>
+        <a href="/requisition.html" class="sb-item" aria-label="接案諮詢">
+          <svg class="sb-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="sb-label" data-i18n="nav_contact">接案諮詢</span>
+        </a>
+      </nav>
+    
+      <div class="sb-bottom">
+        <div class="sb-cta">
+          <p class="sb-cta-desc" data-i18n="cta_desc">讓我一起打造最適合你的數位解決方案！</p>
+          <a href="/requisition.html" class="sb-cta-btn" data-i18n="cta_btn">開始諮詢</a>
+        </div>
+        <a href="/login.html" class="sb-login-link" data-auth="guest" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+          <span data-i18n="login">會員登入</span>
+        </a>
+        <a href="/dashboard.html" class="sb-login-link" data-auth="member" hidden aria-label="會員中心">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+          <span data-i18n="member_center">會員中心</span>
+        </a>
+        <button type="button" class="sb-login-link sb-logout-btn" data-auth="member" data-logout hidden aria-label="登出">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
+          <span data-i18n="logout">登出</span>
+        </button>
+        <div class="sb-footer">
+          <div class="lang-dropdown" id="lang-dropdown">
+            <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+            <button class="lang-opt" data-lang="en">English</button>
+            <button class="lang-opt" data-lang="ja">日本語</button>
+            <button class="lang-opt" data-lang="ko">한국어</button>
+          </div>
+          <div class="sb-foot-icons">
+            <button class="sb-foot-btn" aria-label="切換明暗" id="theme-toggle-btn" title="切換明暗">
+              <svg viewBox="0 0 24 14" fill="none" class="icon-theme" aria-hidden="true"><circle cx="5" cy="7" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M5 .5v1.5M5 11.5V13M.5 7H2M8 7H9.5M1.55 3.55l1.05 1.05M7.4 9.4l1.05 1.05M1.55 10.45l1.05-1.05M7.4 4.6l1.05-1.05" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M21.5 9.5A4.5 4.5 0 0 1 15.5 3a4.5 4.5 0 1 0 6 6.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+            </button>
+            <button class="sb-foot-btn" aria-label="切換語言" id="lang-toggle-btn" title="切換語言">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <span class="sb-copyright">© 2026 chiyigo</span>
+        </div>
+      </div>
+    </aside>
+    <div class="dash-main">
+      <main class="dash-content">
+        <div class="login-center">
+          <div class="login-wrap">
+
+            <div class="lp-logo-wrap">
+              <div class="lp-logo-icon cd-icon-danger">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <h1 class="lp-title" data-i18n="title">刪除帳號確認</h1>
+              <p class="lp-subtitle" data-i18n="subtitle">此操作不可逆，請謹慎確認</p>
+            </div>
+
+            <div class="card">
+              <div id="msg-box" class="msg-box"></div>
+
+              <!-- 確認面板 -->
+              <div id="panel-confirm" class="panel active">
+                <div class="cd-danger-box">
+                  <p class="cd-danger-title" data-i18n="danger_title">以下資料將被永久刪除：</p>
+                  <ul class="cd-danger-list">
+                    <li data-i18n="danger_li1">帳號登入資訊與密碼</li>
+                    <li data-i18n="danger_li2">雙重驗證設定與備用碼</li>
+                    <li data-i18n="danger_li3">OAuth 第三方綁定</li>
+                    <li data-i18n="danger_li4">所有個人資料與登入記錄</li>
+                  </ul>
+                </div>
+                <button id="confirm-btn" class="submit-btn cd-btn-danger" data-i18n="btn_confirm">確認永久刪除我的帳號</button>
+                <a href="/dashboard.html" class="totp-back-btn cd-cancel-link" data-i18n="btn_cancel">取消，返回帳號設定</a>
+              </div>
+
+              <!-- 成功面板 -->
+              <div id="panel-success" class="panel success-state">
+                <div class="success-icon-wrap">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                </div>
+                <p class="success-title" data-i18n="success_title">帳號已刪除</p>
+                <p class="success-desc" data-i18n="success_desc">你的帳號與個人資料已永久移除。感謝你使用 CHIYIGO。</p>
+                <p class="success-countdown">
+                  <span id="countdown">5</span><span data-i18n="countdown_suffix"> 秒後自動跳轉…</span>
+                </p>
+              </div>
+
+              <!-- Token 無效面板 -->
+              <div id="panel-invalid" class="panel error-state">
+                <div class="error-icon-wrap">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                  </svg>
+                </div>
+                <p class="error-title" data-i18n="invalid_title">連結無效或已過期</p>
+                <p class="error-desc" data-i18n="invalid_desc">刪除確認連結僅能使用一次，且有效期為 15 分鐘。</p>
+                <a href="/dashboard.html" class="submit-btn success-back-btn" data-i18n="btn_back_settings">返回帳號設定</a>
+              </div>
+
+            </div>
+
+            <p class="notice-text notice-text-spaced" data-i18n="footer_note">
+              若非本人操作，請忽略此頁面，你的帳號不會有任何變動。
+            </p>
+
           </div>
         </div>
-        <button id="theme-btn" type="button" class="tool-btn" aria-label="Toggle theme">
-          <svg viewBox="0 0 16 16" fill="none" class="icon-sun"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-          <svg viewBox="0 0 16 16" fill="none" class="icon-moon"><path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+      </main>
+    </div>
+  </div>
+
+  <div class="m-topbar" id="m-topbar">
+    <div class="m-tb-inner">
+      <a href="/index.html" class="m-tb-brand">
+        <img src="/images/logo-light.png" alt="CHIYIGO" class="m-logo-img logo-light">
+        <img src="/images/logo-dark.png"  alt="CHIYIGO" class="m-logo-img logo-dark">
+      </a>
+      <div class="m-tb-right">
+        <a href="/login.html" class="m-login-btn" data-auth="guest" aria-label="會員登入">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+        </a>
+        <a href="/dashboard.html" class="m-login-btn" data-auth="member" hidden aria-label="會員中心">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M2 13.5c0-2.5 2.5-4.5 6-4.5s6 2 6 4.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+        </a>
+        <button class="m-theme-btn" id="m-theme-btn" aria-label="切換主題">
+          <svg viewBox="0 0 24 14" fill="none" class="icon-theme" aria-hidden="true"><circle cx="5" cy="7" r="2" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M5 .5v1.5M5 11.5V13M.5 7H2M8 7H9.5M1.55 3.55l1.05 1.05M7.4 9.4l1.05 1.05M1.55 10.45l1.05-1.05M7.4 4.6l1.05-1.05" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M21.5 9.5A4.5 4.5 0 0 1 15.5 3a4.5 4.5 0 1 0 6 6.5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        </button>
+        <button class="m-theme-btn" id="m-lang-btn" aria-label="切換語言">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 2c-1.2 1.5-2 3.6-2 6s.8 4.5 2 6M8 2c1.2 1.5 2 3.6 2 6s-.8 4.5-2 6M2 8h12M2.8 5.5h10.4M2.8 10.5h10.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        </button>
+        <button class="m-ham-btn" id="m-ham-btn" aria-label="開啟選單" aria-expanded="false" aria-controls="m-overlay">
+          <span class="m-ham-line"></span>
+          <span class="m-ham-line"></span>
         </button>
       </div>
     </div>
-  </header>
-
-  <main class="flex-1 flex items-center justify-center px-4 pt-14">
-    <div class="w-full max-w-md animate-fade-up">
-
-      <div class="text-center mb-8 mt-6">
-        <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 mb-4">
-          <svg class="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-        </div>
-        <h1 class="text-2xl font-bold text-white" data-i18n="title">刪除帳號確認</h1>
-        <p class="text-gray-500 text-sm mt-1" data-i18n="subtitle">此操作不可逆，請謹慎確認</p>
-      </div>
-
-      <div class="rounded-2xl bg-[#16161d] border border-[#2a2a35] p-8 shadow-2xl">
-
-        <div id="msg-box" class="hidden mb-5 px-4 py-3 rounded-lg text-sm font-medium"></div>
-
-        <!-- 確認面板 -->
-        <div id="panel-confirm" class="panel active">
-          <div class="mb-6 p-4 rounded-xl bg-red-500/5 border border-red-500/20">
-            <p class="text-red-400 text-sm font-semibold mb-1" data-i18n="danger_title">以下資料將被永久刪除：</p>
-            <ul class="text-gray-400 text-sm space-y-1 list-disc list-inside">
-              <li data-i18n="danger_li1">帳號登入資訊與密碼</li>
-              <li data-i18n="danger_li2">雙重驗證設定與備用碼</li>
-              <li data-i18n="danger_li3">OAuth 第三方綁定</li>
-              <li data-i18n="danger_li4">所有個人資料與登入記錄</li>
-            </ul>
-          </div>
-          <button id="confirm-btn"
-            class="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100" data-i18n="btn_confirm">
-            確認永久刪除我的帳號
-          </button>
-          <a href="/dashboard.html"
-            class="block mt-3 w-full py-2 text-xs text-center text-gray-500 hover:text-gray-300 transition" data-i18n="btn_cancel">
-            取消，返回帳號設定
-          </a>
-        </div>
-
-        <!-- 成功面板 -->
-        <div id="panel-success" class="panel text-center py-2">
-          <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-500/10 border border-green-500/20 mb-4">
-            <svg class="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-          </div>
-          <p class="text-white font-semibold mb-1" data-i18n="success_title">帳號已刪除</p>
-          <p class="text-gray-500 text-sm" data-i18n="success_desc">你的帳號與個人資料已永久移除。感謝你使用 CHIYIGO。</p>
-          <p class="text-gray-600 text-xs mt-3">
-            <span id="countdown">5</span><span data-i18n="countdown_suffix"> 秒後自動跳轉…</span>
-          </p>
-        </div>
-
-        <!-- Token 無效面板 -->
-        <div id="panel-invalid" class="panel text-center py-2">
-          <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 mb-4">
-            <svg class="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
-          </div>
-          <p class="text-white font-semibold mb-1" data-i18n="invalid_title">連結無效或已過期</p>
-          <p class="text-gray-500 text-sm" data-i18n="invalid_desc">刪除確認連結僅能使用一次，且有效期為 15 分鐘。</p>
-          <a href="/dashboard.html"
-            class="inline-block mt-6 px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm transition-all hover:scale-[1.02] active:scale-[0.98]" data-i18n="btn_back_settings">
-            返回帳號設定
-          </a>
-        </div>
-
-      </div>
-
-      <p class="text-center text-xs text-gray-600 mt-6" data-i18n="footer_note">
-        若非本人操作，請忽略此頁面，你的帳號不會有任何變動。
-      </p>
+    <div class="m-top-lang-drop" id="m-top-lang-drop">
+      <button class="lang-opt active" data-lang="zh-TW">繁體中文</button>
+      <button class="lang-opt" data-lang="en">English</button>
+      <button class="lang-opt" data-lang="ja">日本語</button>
+      <button class="lang-opt" data-lang="ko">한국어</button>
     </div>
-  </main>
+  </div>
 
-  <script src="/js/confirm-delete.js?v=3a6a11e6" defer></script>
+  <div class="m-overlay" id="m-overlay">
+    <div class="m-ov-wrap">
+      <div class="m-ov-handle"></div>
+      <div class="m-ov-head">
+        <div class="m-ov-brand">
+          <img src="/images/logo-light.png" alt="CHIYIGO" class="m-ov-logo-img logo-light">
+          <img src="/images/logo-dark.png"  alt="CHIYIGO" class="m-ov-logo-img logo-dark">
+        </div>
+        <div class="m-ov-status">
+          <span class="m-ov-status-dot"></span>
+          <span class="m-ov-status-txt" data-i18n="status_open">接案中</span>
+        </div>
+      </div>
+      <nav class="m-ov-nav">
+        <a href="/index.html" class="m-ov-item" data-stagger="0">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_home">首頁</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/index.html#services" class="m-ov-item" data-stagger="1">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_services">服務項目</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/index.html#process" class="m-ov-item" data-stagger="2">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M4 5h9M4 8h9M4 11h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="2.2" cy="5" r="0.9" fill="currentColor"/><circle cx="2.2" cy="8" r="0.9" fill="currentColor"/><circle cx="2.2" cy="11" r="0.9" fill="currentColor"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_process">服務流程</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/portfolio.html" class="m-ov-item" data-stagger="3">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><path d="M2 5a1 1 0 0 1 1-1h3.5L8 6h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" stroke="currentColor" stroke-width="1.4" fill="none"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_portfolio">案例作品</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/about.html" class="m-ov-item" data-stagger="4">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 14.5a6 6 0 0 1 12 0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_about">關於我們</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="/requisition.html" class="m-ov-item" data-stagger="5">
+          <div class="m-ov-icon-wrap"><svg class="m-ov-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="3.5" width="12" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 5.5l6 4.5 6-4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+          <span class="m-ov-label" data-i18n="nav_contact">接案諮詢</span>
+          <svg class="m-ov-chevron" viewBox="0 0 6 10" fill="none"><path d="M1 1l4 4-4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </nav>
+      <div class="m-ov-cta">
+        <a href="/requisition.html" class="m-ov-cta-btn" data-i18n="cta_btn_m">開始諮詢 →</a>
+        <div class="m-ov-lang-row">
+          <button class="m-ov-lang-opt active" data-lang="zh-TW">繁中</button>
+          <button class="m-ov-lang-opt" data-lang="en">EN</button>
+          <button class="m-ov-lang-opt" data-lang="ja">日本語</button>
+          <button class="m-ov-lang-opt" data-lang="ko">한국어</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/sidebar-auth.js?v=596c017b" defer></script>
+  <script src="/js/confirm-delete.js?v=596c017b" defer></script>
 </body>
 </html>

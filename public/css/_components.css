@@ -6,6 +6,30 @@
  * Page CSS 因 cascade 在後，仍能覆寫本層；新頁面可直接用這些 class。
  * ============================================================ */
 
+/* utility：取代被砍掉的 tailwind .hidden（多頁 JS classList.add/remove('hidden') 仰賴這個） */
+.hidden { display: none !important; }
+
+/* ── Auth pages 共用的 success/error 面板（forgot-password / reset-password / verify-email / bind-email / confirm-delete） ── */
+.success-state,
+.error-state { text-align: center; padding: .25rem 0; }
+.success-icon-wrap,
+.error-icon-wrap {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; border-radius: 50%; margin-bottom: 1rem;
+}
+.success-icon-wrap { background: rgba(34,168,101,.10); border: 1px solid rgba(34,168,101,.25); color: #22a865; }
+.error-icon-wrap   { background: rgba(248,113,113,.10); border: 1px solid rgba(248,113,113,.25); color: #f87171; }
+.success-icon-wrap svg,
+.error-icon-wrap svg { width: 24px; height: 24px; }
+.success-title,
+.error-title   { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: .35rem; }
+.success-desc,
+.error-desc    { font-size: .85rem; color: var(--text-muted); white-space: pre-line; line-height: 1.65; }
+.success-countdown { font-size: .75rem; color: var(--text-dim); margin-top: .75rem; }
+.success-back-btn  { display: inline-block; width: auto; margin-top: 1.25rem; padding: .55rem 1.5rem; text-decoration: none; }
+/* .text-center utility for vertically centred panels */
+.text-center { text-align: center; }
+
 /* ── Button base ─────────────────────────────────── */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
@@ -252,10 +276,8 @@
 .sb-foot-btn{width:30px;height:30px;border:none;background:none;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-dim);transition:background .18s ease,color .18s ease}
 .sb-foot-btn:hover{background:var(--hover-overlay);color:var(--text-muted)}
 .sb-foot-btn svg{width:14px;height:14px}
-.sb-foot-btn .icon-moon{display:none}
-.sb-foot-btn .icon-sun{display:block}
-.theme-dark .sb-foot-btn .icon-sun{display:none}
-.theme-dark .sb-foot-btn .icon-moon{display:block}
+.sb-foot-btn .icon-theme{width:22px;height:13px}
+.tool-btn .icon-theme{width:22px;height:13px;display:block}
 .lang-dropdown{position:absolute;bottom:calc(100% + .45rem);left:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:10px;padding:.35rem;box-shadow:0 -4px 24px rgba(0,0,0,.16);display:none;flex-direction:column;gap:.1rem;z-index:200;min-width:128px}
 .lang-dropdown.open{display:flex}
 .lang-opt{display:block;width:100%;padding:.4rem .72rem;border:none;background:transparent;border-radius:7px;font-family:var(--font-sans);font-size:.8rem;color:var(--text-muted);cursor:pointer;text-align:left;transition:background .15s ease,color .15s ease;white-space:nowrap}

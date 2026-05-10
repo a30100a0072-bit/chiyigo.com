@@ -79,27 +79,9 @@ function applyLang(lang) {
   document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
-function applyTheme(isLight) {
-  document.documentElement.classList.toggle('theme-light', isLight);
-  document.documentElement.classList.toggle('theme-dark', !isLight);
-  try { localStorage.setItem('theme', isLight ? 'light' : 'dark') } catch {}
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   applyLang(getLang());
-  applyTheme(document.documentElement.classList.contains('theme-light'));
-
-  document.getElementById('theme-btn').addEventListener('click', () => {
-    applyTheme(!document.documentElement.classList.contains('theme-light'));
-  });
-  const langMenu = document.getElementById('lang-menu');
-  document.getElementById('lang-btn').addEventListener('click', e => {
-    e.stopPropagation(); langMenu.classList.toggle('open');
-  });
-  langMenu.querySelectorAll('.lang-opt').forEach(opt => {
-    opt.addEventListener('click', () => { applyLang(opt.dataset.lang); langMenu.classList.remove('open'); });
-  });
-  document.addEventListener('click', () => langMenu.classList.remove('open'));
+  // theme/lang 切換交給 sidebar-auth.js
 });
 
 // ── 驗證流程 ─────────────────────────────────────────────────
@@ -120,7 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (!token) {
     document.getElementById('btn-verify').disabled = true
-    document.getElementById('btn-verify').classList.add('opacity-50', 'cursor-not-allowed')
     document.getElementById('err-missing').classList.remove('hidden')
     return
   }

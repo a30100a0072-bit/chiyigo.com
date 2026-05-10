@@ -157,8 +157,7 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px var(--bg) inset!important;-
 .pre-notice{font-size:.875rem;font-weight:500;padding:.7rem 1rem;border-radius:10px;border:1px solid;margin-bottom:1rem}
 
 /* ── Lang dropdown (sidebar) ── */
-.sb-bottom{position:relative}
-.sb-lang-wrap{position:relative;display:inline-flex}
+/* .sb-bottom / .sb-lang-wrap 已隨 login 改用 sidebar-public-other partial 移除（partial 用 .sb-footer 內 .lang-dropdown 直貼，不需 wrap） */
 .m-ov-lang-opt.active{background:var(--accent-dim)!important;color:var(--accent)!important;border-color:rgba(108,110,229,.3)!important}
 
 /* ── Lang dropdown (mobile topbar) ── */
