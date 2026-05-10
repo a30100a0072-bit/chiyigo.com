@@ -15,7 +15,9 @@ import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto.js'
 import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh.js'
 
-async function seedRefresh(userId, { deviceUuid = null, expired = false, revoked = false } = {}) {
+async function seedRefresh(userId, {
+  deviceUuid = null, expired = false, revoked = false, issuedAud = null,
+} = {}) {
   const plain = generateSecureToken()
   const hash  = await hashToken(plain)
   const exp   = new Date(Date.now() + (expired ? -3600_000 : 7 * 86400_000))
@@ -23,9 +25,9 @@ async function seedRefresh(userId, { deviceUuid = null, expired = false, revoked
   const revokedAt = revoked
     ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null
   await env.chiyigo_db.prepare(
-    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, revoked_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).bind(userId, hash, deviceUuid, exp, revokedAt).run()
+    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, revoked_at, issued_aud)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(userId, hash, deviceUuid, exp, revokedAt, issuedAud).run()
   return plain
 }
 
@@ -125,5 +127,96 @@ describe('POST /api/auth/refresh — Phase D1 device binding', () => {
     const tok = await seedRefresh(u.id, { deviceUuid: null })
     const r = await call(refreshReq({ token: tok, headers: { 'X-Device-Id': 'dev-zzz' } }))
     expect(r.status).toBe(200)
+  })
+})
+
+// F-2 (codex r9-5 follow-up, commit b774b1a, 2026-05-10) — refresh aud 綁定 + mismatch 條件
+//
+// 設計要點：
+//  - issued_aud 主導 access token aud（攻擊者控制 body.aud 不能切換 audience）
+//  - rawAudProvided 條件：body 真的送 raw aud 才解析；缺省不誤報 mismatch
+//  - mismatch 升 critical（噪音排除後是攻擊者切換 audience 的明確訊號）
+//  - legacy NULL row 退回 resolveAud(body.aud)；F-1 已批次 revoke prod NULL row
+function decodeAud(token) {
+  // 不走 verifyJwt（會驗 aud='chiyigo' 失敗）；直接 decode payload 讀 aud claim
+  const [, payloadB64] = token.split('.')
+  const padded = payloadB64.replace(/-/g, '+').replace(/_/g, '/')
+  const json = atob(padded + '='.repeat((4 - padded.length % 4) % 4))
+  return JSON.parse(json).aud
+}
+async function findMismatchAudit(userId) {
+  return await env.chiyigo_db.prepare(
+    `SELECT severity, event_data FROM audit_log
+     WHERE user_id = ? AND event_type = 'auth.refresh.aud_mismatch'`,
+  ).bind(userId).first()
+}
+
+describe('POST /api/auth/refresh — F-2 audience binding', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('issued_aud=sport-app + body.aud 缺省 → access aud 仍 sport-app，不寫 mismatch', async () => {
+    const u = await seedUser({ email: 'aud1@x' })
+    const tok = await seedRefresh(u.id, { issuedAud: 'sport-app' })
+    const r = await call(refreshReq({ token: tok }))
+    expect(r.status).toBe(200)
+    expect(decodeAud(r.body.access_token)).toBe('sport-app')
+    expect(await findMismatchAudit(u.id)).toBeNull()
+  })
+
+  it('issued_aud=sport-app + body.aud=chiyigo → aud 仍 sport-app，寫 critical mismatch', async () => {
+    const u = await seedUser({ email: 'aud2@x' })
+    const tok = await seedRefresh(u.id, { issuedAud: 'sport-app' })
+    const r = await call(refreshReq({ token: tok, body: { aud: 'chiyigo' } }))
+    expect(r.status).toBe(200)
+    expect(decodeAud(r.body.access_token)).toBe('sport-app')
+    const audit = await findMismatchAudit(u.id)
+    expect(audit).not.toBeNull()
+    expect(audit.severity).toBe('critical')
+    const data = JSON.parse(audit.event_data)
+    expect(data.issued_aud).toBe('sport-app')
+    expect(data.requested_aud).toBe('chiyigo')
+  })
+
+  it('issued_aud=chiyigo + body.aud=chiyigo → 不寫 mismatch（同 aud）', async () => {
+    const u = await seedUser({ email: 'aud3@x' })
+    const tok = await seedRefresh(u.id, { issuedAud: 'chiyigo' })
+    const r = await call(refreshReq({ token: tok, body: { aud: 'chiyigo' } }))
+    expect(r.status).toBe(200)
+    expect(decodeAud(r.body.access_token)).toBe('chiyigo')
+    expect(await findMismatchAudit(u.id)).toBeNull()
+  })
+
+  it('legacy issued_aud=NULL + body.aud=sport-app → backward compat：access aud=sport-app', async () => {
+    const u = await seedUser({ email: 'aud4@x' })
+    const tok = await seedRefresh(u.id, { issuedAud: null })
+    const r = await call(refreshReq({ token: tok, body: { aud: 'sport-app' } }))
+    expect(r.status).toBe(200)
+    expect(decodeAud(r.body.access_token)).toBe('sport-app')
+    // legacy row 沒 issued_aud → mismatch 判斷不適用
+    expect(await findMismatchAudit(u.id)).toBeNull()
+  })
+
+  it('legacy issued_aud=NULL + body.aud 缺省 → access aud=chiyigo，不誤報 mismatch', async () => {
+    const u = await seedUser({ email: 'aud5@x' })
+    const tok = await seedRefresh(u.id, { issuedAud: null })
+    const r = await call(refreshReq({ token: tok }))
+    expect(r.status).toBe(200)
+    // effectiveAud = NULL || null || 'chiyigo' = 'chiyigo'
+    expect(decodeAud(r.body.access_token)).toBe('chiyigo')
+    expect(await findMismatchAudit(u.id)).toBeNull()
+  })
+
+  it('rotation 後新 row 透傳 issued_aud（不被 body.aud 改）', async () => {
+    const u = await seedUser({ email: 'aud6@x' })
+    const tok = await seedRefresh(u.id, { issuedAud: 'sport-app' })
+    await call(refreshReq({ token: tok, body: { aud: 'chiyigo' } }))  // 嘗試切 aud
+    const rows = await env.chiyigo_db
+      .prepare('SELECT issued_aud, revoked_at FROM refresh_tokens WHERE user_id=? ORDER BY id')
+      .bind(u.id).all()
+    expect(rows.results).toHaveLength(2)
+    expect(rows.results[0].revoked_at).not.toBeNull()
+    expect(rows.results[1].revoked_at).toBeNull()
+    expect(rows.results[1].issued_aud).toBe('sport-app')  // 不被 body.aud='chiyigo' 改
   })
 })
