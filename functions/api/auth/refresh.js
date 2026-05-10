@@ -54,8 +54,10 @@ export async function onRequestPost({ request, env }) {
   const refresh_token   = cookieToken ?? body?.refresh_token
   const isWeb           = !!cookieToken
   // Codex r2-5 / r9-5：body.aud 不再直接決定簽發 audience；下方讀 tokenRow.issued_aud。
-  // body.aud 仍解析作為 audit 比對用（mismatch → warn）
-  const requestedAud    = resolveAud(aud)
+  // Codex r9-5.1：只有 client 真的有送 raw aud 才解析 — resolveAud(undefined) 會折成 'chiyigo'，
+  // 對 sport-app/mbti/talo 用戶（issued_aud 非 chiyigo）會誤報 mismatch。
+  const rawAudProvided  = typeof aud === 'string' && aud.trim() !== ''
+  const requestedAud    = rawAudProvided ? resolveAud(aud) : null
 
   if (!refresh_token || typeof refresh_token !== 'string')
     return res({ error: 'refresh_token is required' }, 400, cors)
@@ -167,12 +169,14 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Refresh token has been revoked' }, 401, cors)
   }
   // Codex r9-5：簽 audience 改用 tokenRow.issued_aud（綁定發行時 aud）。
-  // 舊 row 沒 issued_aud（NULL）→ 退回 requestedAud 保 backward compat（7d 內 token 換完就純 issued_aud 路徑）
-  // body.aud 與 issued_aud 不一致 → 寫 warn audit（攻擊者試圖切換 aud 的訊號）
-  const effectiveAud = tokenRow.issued_aud || requestedAud
-  if (tokenRow.issued_aud && requestedAud && requestedAud !== tokenRow.issued_aud) {
+  // 舊 row 沒 issued_aud（NULL）→ 退回 requestedAud 保 backward compat。F-1 已批次 revoke
+  // NULL 舊 row（2026-05-10），仍保留 fallback 鏈以防未來邊界情境。
+  // F-2：mismatch 條件收緊 — 只有 client 明確送了 raw aud 且 ≠ issued_aud 時才 audit；
+  // 升 critical（攻擊者主動嘗試切換 audience 的訊號，非 client 缺送的噪音）。
+  const effectiveAud = tokenRow.issued_aud || requestedAud || 'chiyigo'
+  if (tokenRow.issued_aud && rawAudProvided && requestedAud !== tokenRow.issued_aud) {
     await safeUserAudit(env, {
-      event_type: 'auth.refresh.aud_mismatch', severity: 'warn',
+      event_type: 'auth.refresh.aud_mismatch', severity: 'critical',
       user_id: tokenRow.user_id, request,
       data: {
         issued_aud:    tokenRow.issued_aud,
