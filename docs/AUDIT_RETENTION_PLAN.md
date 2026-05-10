@@ -535,7 +535,7 @@ Phase 3 加：
 | 6 | Archive timing | **18:00 UTC = 02:00 Asia/Taipei 凌晨**（避日間流量；archive 03:00 / aggregate 17:00 週日 / month-finalize 19:00 月初）。 |
 | 7 | Sampling 規則 | bucket key = `(event_type, reason_code, hour)`，每組保留 first 100 raw samples + count；`critical` debug_failure 不採樣；`telemetry` 類只 aggregate 計數不留樣本。 |
 
-## Codex review 重點（v5 焦點）
+## Codex review 重點（v6 焦點）
 
 1. **R2 versioning fallback 是否守得住** — 沒有 retention lock 時，最小權限 token + runtime 禁 DELETE + break-glass 三層是否足夠抵 prod 操作意外？
 2. **5-狀態機對中斷的覆蓋** — `planned / uploaded / verified / marked_archived / purged` 五態（audit_log）+ `cold_copied`（admin_audit_log）+ `failed / blacklisted`（異常終態）。worker crash-after-update / crash-after-delete 兩種場景是否都被雙路徑驗證守住？
@@ -543,7 +543,7 @@ Phase 3 加：
 4. **purged 雙路徑 recovery 的 prior_state 條件** — recovery branch 靠 `prior_state == marked_archived` 防誤判（避免從未進 marked 的 chunk 被當成 purged 完成），這條件夠強嗎？
 5. **R2 寫成功但 D1 audit event 沒寫進**（例：R2 PUT ok 但寫 `audit.archive.marked_archived` 失敗）— manifest state 與 `audit_archive_chunks.state` 是否真能 cover、不依賴 audit event？
 6. **跨 chunk hash chain 驗證對 admin_audit_log（Phase 2 不 purge 後）** — admin_audit_log 仍 hot 全留時，cold copy chunk 跨月 prev_hash_of_first_row 是否真能離線串得起來？
-6. **chunk_sha256 嵌 key 的衝突風險** — key 含 `min_id-max_id-sha256` 三段，min_id+max_id 範圍跨 retention 邊界是否可能重疊？
+7. **chunk_sha256 嵌 key 的衝突風險** — key 含 `min_id-max_id-sha256` 三段，min_id+max_id 範圍跨 retention 邊界是否可能重疊？
 
 ## 下一步
 

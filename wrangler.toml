@@ -28,9 +28,16 @@ id = "e3ca0c13ce5a4ec9aee7d550b0596e04"
 [ai]
 binding = "AI"
 
-# P1-18 audit_log 合規 archive bucket（2026-05-09 建立）
-# 用途：cron cleanup 把超過 1 年的 info/warn audit_log 寫成 JSONL 進 R2 後刪除
-# critical 永不刪。沒這個 binding → cleanup 不會刪 row（合規優先，避免無備份就丟證據）
+# R2 bucket：audit_log 冷存（F-3 Phase 2，docs/AUDIT_RETENTION_PLAN.md）
+#
+# 歷史：P1-18（2026-05-09 commit ebd44d2）由 cron cleanup.js 寫 plain JSONL 進來，
+#      路徑無 manifest / 無 sha256 verify / 無 chunk state；codex round-3 H-1 指出
+#      此路徑與 Phase 2 設計不相容。
+# 現況：PR 0 Step 0.1（2026-05-10）已從 cleanup.js 移除 archiveAndDeleteAuditLog。
+#      此 binding 暫不會被 runtime 寫入；保留供 Phase 2 archive worker 接手。
+# Phase 2：archive worker 落地後改用 v6 schema（manifest + chunk_sha256 idempotent
+#      key + 5-state machine）。Legacy audit_log/{date}/{minId-maxId}.jsonl 物件
+#      由 admin job 一次性 re-process 為 v6 chunks 或標記為 legacy archive。
 [[r2_buckets]]
 binding     = "AUDIT_ARCHIVE_BUCKET"
 bucket_name = "chiyigo-audit-archive"
