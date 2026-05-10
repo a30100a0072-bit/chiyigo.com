@@ -83,6 +83,10 @@ export async function resetDb() {
     `ALTER TABLE requisition ADD COLUMN tg_message_id INTEGER`,
     `ALTER TABLE requisition ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'`,
     `ALTER TABLE requisition ADD COLUMN deleted_at TEXT`,
+    // migration 0036（owner_guest_id / owner_user_id）；_base.sql 移除這兩欄後
+    // 共用 D1 worker 跑 migrations.test.js 後 requisition 不會有 owner_*
+    `ALTER TABLE requisition ADD COLUMN owner_guest_id TEXT`,
+    `ALTER TABLE requisition ADD COLUMN owner_user_id INTEGER`,
   ]) {
     try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
   }

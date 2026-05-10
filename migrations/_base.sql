@@ -14,10 +14,10 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS requisition (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner_guest_id  TEXT,
-  owner_user_id   INTEGER,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+-- owner_guest_id / owner_user_id 由 migration 0036 加入；本檔是 0001 之前快照，
+-- 之前先有這兩欄會讓 0036 ALTER 重複欄位 fail（D1 不支援 IF NOT EXISTS on ADD COLUMN）。
 
 CREATE TABLE IF NOT EXISTS oauth_states (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,

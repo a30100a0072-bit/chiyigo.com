@@ -90,16 +90,38 @@ export async function onRequestPost({ request, env, waitUntil }) {
       // 原因：requisition/me.js、[id].js、revoke.js 全用 WHERE user_id=? 查詢，只設
       // owner_user_id 會讓使用者在會員中心永遠看不到自己訪客時送的單，且無法撤回。
       // 條件加 user_id IS NULL 避免覆蓋他人已綁定的 row。
-      await db
+      // 用 RETURNING 取受影響 row，給下方 audit 用（codex r3 補：保留 takeover 軌跡）
+      const taken = await db
         .prepare(`
           UPDATE requisition
           SET owner_user_id  = (SELECT id FROM users WHERE email = ?),
               user_id        = (SELECT id FROM users WHERE email = ?),
               owner_guest_id = NULL
           WHERE owner_guest_id = ? AND owner_user_id IS NULL AND user_id IS NULL
+          RETURNING id
         `)
         .bind(emailLower, emailLower, guest_id)
-        .run()
+        .all()
+      const takenIds = (taken?.results ?? []).map(r => r.id)
+      if (takenIds.length) {
+        // Codex audit r3 #3（2026-05-10）：takeover 後 owner_guest_id 變 NULL，
+        // 失去訪客→user 軌跡。寫一筆 audit 記下 sha256(guest_id) + 受影響 requisition_ids，
+        // 不存明文 device id（保護瀏覽器身份）。
+        const enc = new TextEncoder().encode(guest_id)
+        const guestHashBuf = await crypto.subtle.digest('SHA-256', enc)
+        const guestHash = Array.from(new Uint8Array(guestHashBuf))
+          .map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
+        await safeUserAudit(env, {
+          event_type: 'requisition.takeover', severity: 'info',
+          user_id: null /* 新 user 還沒在 audit 抓到，下方 register audit 會接 */, request,
+          data: {
+            requisition_ids: takenIds,
+            guest_id_hash:   guestHash,
+            email:           emailLower,
+            count:           takenIds.length,
+          },
+        })
+      }
     } catch {
       // 欄位不存在（schema 尚未遷移）時不中斷主流程
     }

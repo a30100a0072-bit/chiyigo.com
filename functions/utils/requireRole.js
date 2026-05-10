@@ -59,7 +59,9 @@ export async function requireRole(request, env, minRole) {
  * @returns {boolean}          actor strictly outranks target
  */
 export function actorOutranksTarget(actorRole, targetRole) {
-  const a = ROLE_LEVEL[actorRole]  ?? -1
-  const t = ROLE_LEVEL[targetRole] ?? -1
-  return a > t
+  // Codex r3 #4（2026-05-10）：未知 actor 一律拒絕；未知 target 也 fail closed
+  // （DB 若無 role CHECK constraint，避免 admin 因 target.role 拼錯就拿到 ban 權）
+  if (!(actorRole  in ROLE_LEVEL)) return false
+  if (!(targetRole in ROLE_LEVEL)) return false
+  return ROLE_LEVEL[actorRole] > ROLE_LEVEL[targetRole]
 }
