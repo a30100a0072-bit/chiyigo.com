@@ -52,6 +52,7 @@ function toggleOverlay() {
   if (open) closeOverlay()
   else {
     ov.classList.add('is-open')
+    ov.removeAttribute('aria-hidden')
     btn.classList.add('is-open')
     btn.setAttribute('aria-expanded','true')
     document.body.style.overflow = 'hidden'
@@ -61,6 +62,7 @@ function closeOverlay() {
   const ov  = document.getElementById('m-overlay')
   const btn = document.getElementById('m-ham-btn')
   ov.classList.remove('is-open')
+  ov.setAttribute('aria-hidden','true')
   btn.classList.remove('is-open')
   btn.setAttribute('aria-expanded','false')
   document.body.style.overflow = ''
