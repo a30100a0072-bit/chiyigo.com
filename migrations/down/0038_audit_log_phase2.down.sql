@@ -13,7 +13,9 @@ DROP TABLE IF EXISTS audit_archive_chunks;
 
 DROP INDEX IF EXISTS idx_agg_tele_event;
 DROP INDEX IF EXISTS idx_agg_tele_user;
+DROP INDEX IF EXISTS uniq_agg_tele_bucket;
 DROP TABLE IF EXISTS audit_log_aggregate_telemetry;
 
 DROP INDEX IF EXISTS idx_agg_debug_event;
+DROP INDEX IF EXISTS uniq_agg_debug_bucket;
 DROP TABLE IF EXISTS audit_log_aggregate_debug;

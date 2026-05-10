@@ -174,7 +174,7 @@ CREATE INDEX IF NOT EXISTS idx_archive_chunks_blacklist ON audit_archive_chunks(
 CREATE TABLE IF NOT EXISTS audit_log_aggregate_telemetry (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   event_type    TEXT NOT NULL,
-  user_id       INTEGER,
+  user_id       INTEGER,                         -- nullable（unauth events）；UNIQUE 用 COALESCE 處理
   severity      TEXT NOT NULL,
   hour_bucket   TEXT NOT NULL,                   -- YYYY-MM-DDTHH:00:00Z
   count         INTEGER NOT NULL,
@@ -184,11 +184,16 @@ CREATE TABLE IF NOT EXISTS audit_log_aggregate_telemetry (
 CREATE INDEX IF NOT EXISTS idx_agg_tele_event ON audit_log_aggregate_telemetry(event_type, hour_bucket);
 CREATE INDEX IF NOT EXISTS idx_agg_tele_user  ON audit_log_aggregate_telemetry(user_id, hour_bucket)
   WHERE user_id IS NOT NULL;
+-- Codex round-11 M/L-3：bucket 唯一約束，PR 3 aggregate worker crash/retry 時 idempotent。
+-- SQLite UNIQUE 認 NULL 為 distinct → 用 COALESCE 轉空字串/0 sentinel 確保正確去重。
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_agg_tele_bucket ON audit_log_aggregate_telemetry(
+  event_type, COALESCE(user_id, -1), severity, hour_bucket
+);
 
 CREATE TABLE IF NOT EXISTS audit_log_aggregate_debug (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   event_type      TEXT NOT NULL,
-  reason_code     TEXT,
+  reason_code     TEXT,                          -- nullable
   hour_bucket     TEXT NOT NULL,
   total_count     INTEGER NOT NULL,
   sample_count    INTEGER NOT NULL,
@@ -197,3 +202,7 @@ CREATE TABLE IF NOT EXISTS audit_log_aggregate_debug (
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_agg_debug_event ON audit_log_aggregate_debug(event_type, hour_bucket);
+-- 同上：bucket 唯一；reason_code NULL 用空字串 sentinel
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_agg_debug_bucket ON audit_log_aggregate_debug(
+  event_type, COALESCE(reason_code, ''), hour_bucket
+);

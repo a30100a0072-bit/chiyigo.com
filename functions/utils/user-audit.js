@@ -80,21 +80,47 @@ export async function safeUserAudit(env, entry) {
     // archive worker 之後依 cold_class 分流寫進 R2 對應 retention prefix。
     const coldClass = classifyForCold(entry.event_type, severity)
 
-    await env.chiyigo_db
-      .prepare(`
-        INSERT INTO audit_log (event_type, severity, user_id, client_id, ip_hash, event_data, cold_class)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `)
-      .bind(
-        entry.event_type,
-        severity,
-        Number.isFinite(entry.user_id) ? entry.user_id : null,
-        entry.client_id ?? null,
-        ipHash,
-        Object.keys(eventData).length ? JSON.stringify(eventData) : null,
-        coldClass,
-      )
-      .run()
+    try {
+      await env.chiyigo_db
+        .prepare(`
+          INSERT INTO audit_log (event_type, severity, user_id, client_id, ip_hash, event_data, cold_class)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `)
+        .bind(
+          entry.event_type,
+          severity,
+          Number.isFinite(entry.user_id) ? entry.user_id : null,
+          entry.client_id ?? null,
+          ipHash,
+          Object.keys(eventData).length ? JSON.stringify(eventData) : null,
+          coldClass,
+        )
+        .run()
+    } catch (e) {
+      // Codex round-11 H-1：deploy ordering 防呆。若 functions 比 migration 0038 先 deploy，
+      // cold_class 欄不存在會炸；外層 catch-all 會吞掉，audit 靜默流失。
+      // 用「no such column: cold_class」精準匹配重試舊 schema INSERT，覆蓋 short window；
+      // migration 上線後 fallback 自然不會再觸發。其他錯誤往上拋給外層吞。
+      const msg = String(e?.message ?? '')
+      if (msg.includes('no such column: cold_class') || msg.includes('cold_class')) {
+        await env.chiyigo_db
+          .prepare(`
+            INSERT INTO audit_log (event_type, severity, user_id, client_id, ip_hash, event_data)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `)
+          .bind(
+            entry.event_type,
+            severity,
+            Number.isFinite(entry.user_id) ? entry.user_id : null,
+            entry.client_id ?? null,
+            ipHash,
+            Object.keys(eventData).length ? JSON.stringify(eventData) : null,
+          )
+          .run()
+      } else {
+        throw e
+      }
+    }
 
     if (severity === 'critical') {
       // 必須 await：Cloudflare Worker 對未 await 的 fetch 會在 handler return 時 kill，

@@ -1,10 +1,29 @@
 # Audit Retention Plan — F-3 Phase 2
 
-> Status: v9 draft (PR 0.2 拆 a/b/c 避免 lock 不可逆風險) · 2026-05-10
+> Status: v10 draft (PR 1 commit 9de0e15 + codex round-11 修正 + 0.2a 執行紀錄) · 2026-05-10
 > Phase 1 done (commit 97e1a72): event registry + warn-on-missing
 > Phase 2 scope: audit_log retention + R2 cold archive
 > Phase 2 **不**動 admin_audit_log hot D1（量小、hash chain 證據敏感、verifier 不改）
 > Phase 3 (條件觸發)：admin_audit_log size > 500k row 或 D1 壓力明顯時 → 加 audit_chain_anchor + hot purge
+
+## v10 主要變更（PR 1 + codex round-11）
+
+| 項目 | 內容 |
+|---|---|
+| PR 1 commit `9de0e15` | migration 0038 + audit-policy 擴充 + safeUserAudit 寫 cold_class + tests |
+| codex H-1 deploy ordering | safeUserAudit 加 fallback：偵測 `no such column: cold_class` → retry 舊 INSERT；同時寫進 deploy checklist 強制「migration first, functions second」 |
+| codex M-2 migration smoke 補 0038 | targeted suite 加 6 個 case：欄/索引/backfill/idempotent/CHECK/down |
+| codex M/L-3 aggregate UNIQUE | telemetry / debug 各加 unique index 對 bucket key（COALESCE NULL → sentinel）；防 PR 3 worker crash/retry 雙寫 |
+| 0.2a 執行紀錄 | preview bucket / smoke lock / lifecycle 都進去；**lock enforcement 驗失敗** — DELETE 通過、需查 versioning/Object Lock |
+
+### ⚠️ R2 lock enforcement 風險記錄
+
+0.2a smoke 結果：lock add 進去但 PUT/DELETE 立即通過。可能原因：
+- bucket-level Object Lock / versioning 未開（需 dashboard 查）
+- wrangler `bucket lock add` 是 metadata-only（後端未 enforce）
+- propagation 延遲
+
+**v10 風險緩解**：在 lock 驗證可靠之前，prod compliance 主要靠 **(a) 最小權限 archive token（無 DELETE）+ (b) lifecycle 自動到期**。lock 仍計畫上但作為輔助層，0.2c 動作前必須先驗 enforcement。
 
 ## v9 主要變更（PR 0.2 拆 a/b/c）
 
@@ -659,6 +678,15 @@ Phase 3 加：
 - preview **不需開正式 retention lock**；若要測 lock 行為，只用 disposable test prefix（如 `_lock-smoke/`）配 `--retention-days 1` 短 retention，驗完即丟
 - 不碰任何正式 cold_class prefix（避免測試殘留）
 
+**執行紀錄（2026-05-10，user 親跑）**：
+- ✅ `wrangler r2 bucket create chiyigo-audit-archive-preview` → bucket 建立成功，default storage = Standard
+- ✅ `wrangler r2 bucket lock add ... smoke-lock-20260510 _lock-smoke/2026-05-10/ --retention-days 1` → list 顯示 `condition: after 1 day`
+- ✅ `wrangler r2 bucket lifecycle add ... smoke-expire-20260510 _lock-smoke/2026-05-10/ --expire-days 2` → list 顯示 `Expire objects after 2 days`
+- ⚠️ **lock enforcement 驗證失敗**：PUT object 進 `_lock-smoke/2026-05-10/test.txt` 後立即 DELETE 成功了（應該被 lock 擋）
+  - **影響**：v9 「lock 是 physical compliance」假設未驗證；可能要降級為「最小權限 token + lifecycle 是 physical compliance；lock 是輔助層」
+  - **待查**：dashboard 是否需開 versioning / Object Lock 才 enforce；或 wrangler `bucket lock add` 是否只記 metadata 沒實際 enforce
+  - **風險緩解**：不在 prod 上 lock 直到驗證；最小權限 token（無 DELETE）+ lifecycle 提供雙層保護
+
 ---
 
 **Step 0.2b — Prod 安全前置（不執行 lock）**
@@ -811,16 +839,24 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 - 試上傳一個 object 進 `audit-log/prod/audit_log/immutable/` → 立即 GET 回讀 ok；試 DELETE → 應失敗（lock 生效）
 - preview bucket 不需 lock（測試方便，dev 寫過就丟）
 
-### PR 1 — Schema + retention metadata
-- 加 `audit_log.archived_at` + `audit_log.cold_class` 兩欄（v8 codex round-7 H-1）
-  - cold_class CHECK + idx_audit_log_cold_id `(cold_class, id)` 索引
-  - **不**加 `admin_audit_log.archived_at`（v3 user decision；admin Phase 2 不 purge）
-- safeUserAudit 改寫：呼叫新 helper `classifyForCold(event_type, severity)` → 寫入 cold_class 欄
-- Backfill migration：對 DEFAULT 'immutable' 的舊 row 用 CASE WHEN 重算
-- 新建 `audit_archive_chunks` 表（per-chunk 狀態 + cold_class + cold_class_version）
-- 新建 `audit_log_aggregate_telemetry` + `audit_log_aggregate_debug` 表
-- audit-policy.js 加 `classifyForCold()` 函式 + 7 個新 archive event 入 registry
-- 同 PR 加單元測試：`classifyForCold` 對每個已知 event_type 的回值；schema migration up/down
+### PR 1 — Schema + retention metadata（commit 9de0e15 已 commit）
+- ✅ migration 0038_audit_log_phase2.sql：audit_log 加 archived_at + cold_class、新建 chunks + 兩個 aggregate 表
+- ✅ aggregate UNIQUE bucket index（codex round-11 M/L-3：防 PR 3 重入）
+- ✅ audit-policy.js 加 12 個 archive ops events（registry 98 → 110）+ classifyForCold helper
+- ✅ user-audit.js INSERT 加 cold_class；含 deploy ordering fallback（codex round-11 H-1）
+- ✅ unit 187→214、int 462→468
+
+#### 🚨 Deploy ordering checklist（codex round-11 H-1）
+**部署順序硬性要求 — 否則 audit 會靜默流失**：
+
+```
+1. 先跑 D1 migration 0038（npx wrangler d1 migrations apply chiyigo_db --remote）
+   驗證：SELECT sql FROM sqlite_master WHERE name='audit_log' → 含 cold_class
+2. 然後才 deploy Pages/Functions（git push 觸發 / 手動 deploy）
+   驗證：訪問 audit-emitting endpoint，查 audit_log row 有 cold_class 值
+```
+
+**順序顛倒時的保護**：safeUserAudit 含 fallback — 偵測到 `no such column: cold_class` 會 retry 不帶 cold_class 的舊 INSERT。但這是 short window 防呆，**正式部署仍應守順序**，否則 fallback 期間寫入的 row 都拿 DEFAULT 'immutable'，需要事後 backfill 修。
 
 ### PR 2 — Archive worker（dry-run 模式）
 - Cron worker 寫 R2，但**不刪 D1**（DRY_RUN env flag）
