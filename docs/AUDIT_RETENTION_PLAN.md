@@ -1,6 +1,6 @@
 # Audit Retention Plan — F-3 Phase 2
 
-> Status: v8.2 draft (codex round-9 wording 修正) · 2026-05-10
+> Status: v8.3 draft (codex round-10 wording 修正) · 2026-05-10
 > Phase 1 done (commit 97e1a72): event registry + warn-on-missing
 > Phase 2 scope: audit_log retention + R2 cold archive
 > Phase 2 **不**動 admin_audit_log hot D1（量小、hash chain 證據敏感、verifier 不改）
@@ -450,9 +450,11 @@ CREATE TABLE audit_archive_chunks (
   min_id          INTEGER NOT NULL,
   max_id          INTEGER NOT NULL,
   chunk_sha256    TEXT    NOT NULL,           -- jsonl 解壓後的 sha256
-  state           TEXT    NOT NULL            -- audit_log: planned→uploaded→verified→marked_archived→purged
-                                              -- admin_audit_log (Phase 2): planned→uploaded→verified→cold_copied (terminal)
-                                              -- failure terminal: failed / blacklisted
+  state           TEXT    NOT NULL            -- audit_log success terminal: purged
+                                              -- admin_audit_log (Phase 2) success terminal: cold_copied
+                                              -- blocking failure states（非完成 terminal）: failed / blacklisted
+                                              --   這兩態會卡 cursor / 月底 finalize / isChunkComplete()=false，
+                                              --   必須由 admin retry job 解開（force-purge / re-verify / mark resolved）
                   CHECK(state IN ('planned','uploaded','verified','marked_archived','purged','cold_copied','failed','blacklisted')),
   row_count       INTEGER NOT NULL,
   retry_count     INTEGER NOT NULL DEFAULT 0,
@@ -793,11 +795,11 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 | 6 | Archive timing | **18:00 UTC = 02:00 Asia/Taipei 凌晨**（避日間流量；archive 03:00 / aggregate 17:00 週日 / month-finalize 19:00 月初）。 |
 | 7 | Sampling 規則 | bucket key = `(event_type, reason_code, hour)`，每組保留 first 100 raw samples + count；`critical` debug_failure 不採樣；`telemetry` 類只 aggregate 計數不留樣本。 |
 
-## Codex review 重點（v6 焦點）
+## Codex review 重點（v8.2 焦點）
 
 1. **R2 versioning fallback 是否守得住** — 沒有 retention lock 時，最小權限 token + runtime 禁 DELETE + break-glass 三層是否足夠抵 prod 操作意外？
-2. **5-狀態機對中斷的覆蓋** — `planned / uploaded / verified / marked_archived / purged` 五態（audit_log）+ `cold_copied`（admin_audit_log）+ `failed / blacklisted`（異常終態）。worker crash-after-update / crash-after-delete 兩種場景是否都被雙路徑驗證守住？
-3. **table-specific terminal state 的 worker / monthly-finalize / 進度查詢** — 三處（writeFlow step 9、cron-month-finalize、`MAX(max_id)` 進度查詢）都改成 audit_log→purged / admin_audit_log→cold_copied 是否一致？是否還有遺漏的 `state='purged'` hardcode？
+2. **5-狀態機對中斷的覆蓋** — `planned / uploaded / verified / marked_archived / purged` 五態（audit_log）+ `cold_copied`（admin_audit_log）+ `failed / blacklisted`（blocking failure，非完成 terminal）。worker crash-after-update / crash-after-delete 兩種場景是否都被雙路徑驗證守住？
+3. **table-specific terminal state + contiguous prefix cursor** — 三處（writeFlow step 9、cron-month-finalize、cursor 查詢）都改成 audit_log→purged / admin_audit_log→cold_copied 是否一致？cursor 是否真的 stop-on-non-terminal（不是 raw MAX）？是否還有遺漏的 `state='purged'` 或 `MAX(max_id)` hardcode？
 4. **purged 雙路徑 recovery 的 prior_state 條件** — recovery branch 靠 `prior_state == marked_archived` 防誤判（避免從未進 marked 的 chunk 被當成 purged 完成），這條件夠強嗎？
 5. **R2 寫成功但 D1 audit event 沒寫進**（例：R2 PUT ok 但寫 `audit.archive.marked_archived` 失敗）— manifest state 與 `audit_archive_chunks.state` 是否真能 cover、不依賴 audit event？
 6. **跨 chunk hash chain 驗證對 admin_audit_log（Phase 2 不 purge 後）** — admin_audit_log 仍 hot 全留時，cold copy chunk 跨月 prev_hash_of_first_row 是否真能離線串得起來？
