@@ -40,6 +40,12 @@ import down0010 from '../../migrations/down/0010_oauth_states_nonce.down.sql?raw
 import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?raw'
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
+// I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
+// 至少要有 targeted smoke。完整 0013-0037 forward 因 _base.sql ↔ schema_iam_fresh.sql drift
+// 暫不做（refresh_tokens / auth_codes / local_accounts 等 prod 既有表不在 _base）。
+// schema baseline 重整為獨立技術債，見 memory project_db_schema_baseline_drift.md。
+import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
+
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
 const DOWNS = [down0001, down0002, down0003, down0004, down0005, down0006, down0007, down0008, down0009, down0010, down0011, down0012]
 
@@ -219,5 +225,103 @@ describe('migrations smoke', () => {
     }
     expect(await tableExists('ai_audit')).toBe(true)
     expect(await columnExists('requisition', 'user_id')).toBe(true)
+  })
+})
+
+// I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 migration smoke。
+//
+// 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
+// _base.sql 與 prod fresh schema (database/schema_iam_fresh.sql) 有 drift —
+// refresh_tokens / auth_codes / local_accounts 等 prod 既有表從未經 migration，直接寫進
+// fresh schema。因此無法從 _base 一路跑 0001..0037。完整 forward 需先重整 schema baseline
+// （獨立技術債，見 memory project_db_schema_baseline_drift.md）。
+//
+// 本 case 只手建 0037 必要的 fixture（users + pre-0037 refresh_tokens），跑 0037 migration，
+// 驗欄位/索引/NULL 行為/綁定持久化。F-2 refresh.js 邏輯（rawAudProvided 條件、effectiveAud
+// 由 issued_aud 主導）屬 handler integration test 範疇，不在此覆蓋；TODO 補 refresh.test.js。
+describe('migrations smoke 0037 targeted', () => {
+  beforeAll(async () => {
+    await dropAllTables()
+    // pre-0037 minimal fixture：模擬 0036 後狀態
+    // refresh_tokens 取自 schema_iam_fresh.sql 的 0037 前形狀（沒 issued_aud 欄）
+    await env.chiyigo_db.prepare(`
+      CREATE TABLE users (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        email           TEXT    NOT NULL UNIQUE,
+        email_verified  INTEGER NOT NULL DEFAULT 0,
+        role            TEXT    NOT NULL DEFAULT 'player',
+        status          TEXT    NOT NULL DEFAULT 'active',
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        deleted_at      TEXT,
+        token_version   INTEGER NOT NULL DEFAULT 0,
+        public_sub      TEXT
+      )
+    `).run()
+    await env.chiyigo_db.prepare(`
+      CREATE TABLE refresh_tokens (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash  TEXT    NOT NULL UNIQUE,
+        device_info TEXT,
+        device_uuid TEXT,
+        expires_at  TEXT    NOT NULL,
+        revoked_at  TEXT,
+        auth_time   TEXT,
+        scope       TEXT
+      )
+    `).run()
+    // 寫一筆 pre-0037 row（沒 issued_aud 欄）→ 模擬 prod legacy
+    await env.chiyigo_db.prepare(
+      `INSERT INTO users (email) VALUES ('legacy@test')`,
+    ).run()
+    const u = await env.chiyigo_db.prepare(
+      `SELECT id FROM users WHERE email='legacy@test'`,
+    ).first()
+    await env.chiyigo_db.prepare(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+       VALUES (?, 'h_legacy', datetime('now','+7 days'))`,
+    ).bind(u.id).run()
+    // apply 0037
+    await execAll(up0037)
+  })
+
+  it('issued_aud 欄存在 + 索引存在', async () => {
+    expect(await columnExists('refresh_tokens', 'issued_aud')).toBe(true)
+    expect(await indexExists('idx_refresh_tokens_issued_aud')).toBe(true)
+  })
+
+  it('legacy row（pre-0037 INSERT）issued_aud 為 NULL，不炸', async () => {
+    const r = await env.chiyigo_db.prepare(
+      `SELECT issued_aud FROM refresh_tokens WHERE token_hash='h_legacy'`,
+    ).first()
+    expect(r.issued_aud).toBeNull()
+  })
+
+  it('新 row 寫入 issued_aud 後持久化；後續 UPDATE 其他欄位不影響 issued_aud', async () => {
+    const u = await env.chiyigo_db.prepare(
+      `SELECT id FROM users WHERE email='legacy@test'`,
+    ).first()
+    await env.chiyigo_db.prepare(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, issued_aud)
+       VALUES (?, 'h_bound_sport', datetime('now','+7 days'), 'sport-app')`,
+    ).bind(u.id).run()
+    // 模擬 refresh.js rotation 不應改 issued_aud：UPDATE 只動 revoked_at
+    await env.chiyigo_db.prepare(
+      `UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE token_hash='h_bound_sport'`,
+    ).run()
+    const r = await env.chiyigo_db.prepare(
+      `SELECT issued_aud, revoked_at FROM refresh_tokens WHERE token_hash='h_bound_sport'`,
+    ).first()
+    expect(r.issued_aud).toBe('sport-app')
+    expect(r.revoked_at).toBeTruthy()
+  })
+
+  it('NULL 與 bound 兩種 row 可同表共存（F-1 batch revoke 前的 backward compat 狀態）', async () => {
+    const rows = await env.chiyigo_db.prepare(
+      `SELECT token_hash, issued_aud FROM refresh_tokens ORDER BY id`,
+    ).all()
+    const map = Object.fromEntries(rows.results.map(r => [r.token_hash, r.issued_aud]))
+    expect(map['h_legacy']).toBeNull()
+    expect(map['h_bound_sport']).toBe('sport-app')
   })
 })
