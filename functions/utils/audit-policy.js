@@ -26,7 +26,25 @@ export const AUDIT_CATEGORY = Object.freeze({
   DEBUG_FAILURE:   'debug_failure',
 })
 
+// F-3 Phase 2 archive 操作事件（commit 0038 起加入；全部歸 immutable category，
+// archive 操作本身要永久保留作 forensic trail）
+const ARCHIVE_OPS_IMMUTABLE = [
+  'audit.archive.chunk_uploaded',
+  'audit.archive.marked_archived',
+  'audit.archive.d1_purged',
+  'audit.archive.cold_copied',
+  'audit.archive.month_completed',
+  'audit.archive.aggregate_completed',
+  'audit.archive.verification_failed',          // critical severity 觸發 Discord
+  'audit.archive.upload_failed',
+  'audit.archive.row_count_mismatch',           // critical
+  'audit.archive.partial_archive_mismatch',     // critical
+  'audit.archive.purge_mismatch',               // critical
+  'admin.audit.archive.read',                   // admin export 觸發
+]
+
 const IMMUTABLE = [
+  ...ARCHIVE_OPS_IMMUTABLE,
   'account.delete',
   'account.email.verify',
   'account.password.change',
@@ -153,6 +171,38 @@ for (const e of DEBUG_FAILURE)    REGISTRY.set(e, AUDIT_CATEGORY.DEBUG_FAILURE)
  */
 export function classifyAuditEvent(eventType) {
   return REGISTRY.get(eventType) ?? null
+}
+
+/**
+ * F-3 Phase 2：把 (event_type, severity) 對應到 R2 cold archive class（六選一）。
+ * 是 audit_log.cold_class 欄的值來源；R2 prefix 對應 retention lock。
+ *
+ * 規則：
+ *   immutable          → 'immutable'
+ *   security_signal + critical → 'security_critical'
+ *   security_signal + warn/info → 'security_warn'
+ *   read_audit         → 'read_audit'
+ *   telemetry          → 'telemetry'
+ *   debug_failure      → 'debug_failure'
+ *   未分類             → 'immutable'（最長 retention，金融級保險）
+ *
+ * Deterministic：相同 (event_type, severity) 必回相同結果；archive worker 重跑 idempotent。
+ *
+ * @param {string} eventType
+ * @param {string} severity   'info' | 'warn' | 'critical'
+ * @returns {string}          immutable / security_critical / security_warn / read_audit / telemetry / debug_failure
+ */
+export function classifyForCold(eventType, severity) {
+  const category = REGISTRY.get(eventType)
+  // 未分類事件 fallback 'immutable'，與 audit-policy unclassified warn 並存
+  // （safeUserAudit 會 console.warn，但仍寫入；cold_class 拿最長 retention 保險）
+  if (!category) return 'immutable'
+
+  if (category === AUDIT_CATEGORY.SECURITY_SIGNAL) {
+    return severity === 'critical' ? 'security_critical' : 'security_warn'
+  }
+  // immutable / read_audit / telemetry / debug_failure 直接對應
+  return category
 }
 
 /**

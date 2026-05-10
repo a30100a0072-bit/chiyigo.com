@@ -190,6 +190,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
   client_id   TEXT,
   ip_hash     TEXT,
   event_data  TEXT,
+  archived_at TEXT,                                    -- migration 0038（F-3 Phase 2）
+  cold_class  TEXT    NOT NULL DEFAULT 'immutable',    -- migration 0038
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 

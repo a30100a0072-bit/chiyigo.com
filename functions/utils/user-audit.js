@@ -19,7 +19,7 @@
  *   trace_id, reason_code, provider, mode, jti（截斷）, device_uuid（截斷）...
  */
 
-import { classifyAuditEvent } from './audit-policy.js'
+import { classifyAuditEvent, classifyForCold } from './audit-policy.js'
 
 const KNOWN_SEVERITY = new Set(['info', 'warn', 'critical'])
 
@@ -76,10 +76,14 @@ export async function safeUserAudit(env, entry) {
     const eventData = { ...(entry.data ?? {}) }
     if (traceId) eventData.trace_id = traceId
 
+    // F-3 Phase 2（migration 0038）：cold_class 由 classifyForCold 衍生，存進 audit_log row。
+    // archive worker 之後依 cold_class 分流寫進 R2 對應 retention prefix。
+    const coldClass = classifyForCold(entry.event_type, severity)
+
     await env.chiyigo_db
       .prepare(`
-        INSERT INTO audit_log (event_type, severity, user_id, client_id, ip_hash, event_data)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO audit_log (event_type, severity, user_id, client_id, ip_hash, event_data, cold_class)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         entry.event_type,
@@ -88,6 +92,7 @@ export async function safeUserAudit(env, entry) {
         entry.client_id ?? null,
         ipHash,
         Object.keys(eventData).length ? JSON.stringify(eventData) : null,
+        coldClass,
       )
       .run()
 

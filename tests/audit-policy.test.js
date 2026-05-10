@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest'
 import {
   AUDIT_CATEGORY,
   classifyAuditEvent,
+  classifyForCold,
   listEventsByCategory,
   _registrySize,
 } from '../functions/utils/audit-policy.js'
@@ -118,16 +119,94 @@ describe('registry coverage', () => {
       listEventsByCategory(AUDIT_CATEGORY.READ_AUDIT).length +
       listEventsByCategory(AUDIT_CATEGORY.DEBUG_FAILURE).length
     expect(sum).toBe(_registrySize)
-    // 當下盤點 98（grep functions/ 後 unique 數，2026-05-10）；新增 audit event 必須
-    // 同 PR 補進 audit-policy.js 並更新本斷言。否則 prod 會出 [audit-policy] unclassified warn。
-    expect(_registrySize).toBe(98)
+    // 2026-05-10 盤點 98（grep functions/）；migration 0038 加 12 個 archive ops events
+    // → registry 110。新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
+    expect(_registrySize).toBe(110)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
-    expect(listEventsByCategory(AUDIT_CATEGORY.IMMUTABLE).length).toBeGreaterThanOrEqual(40)
+    // 0038 後 immutable 含 12 個 archive ops（總 58）
+    expect(listEventsByCategory(AUDIT_CATEGORY.IMMUTABLE).length).toBeGreaterThanOrEqual(50)
     expect(listEventsByCategory(AUDIT_CATEGORY.SECURITY_SIGNAL).length).toBeGreaterThanOrEqual(20)
     expect(listEventsByCategory(AUDIT_CATEGORY.TELEMETRY).length).toBeGreaterThanOrEqual(5)
     expect(listEventsByCategory(AUDIT_CATEGORY.READ_AUDIT).length).toBeGreaterThanOrEqual(3)
     expect(listEventsByCategory(AUDIT_CATEGORY.DEBUG_FAILURE).length).toBeGreaterThanOrEqual(5)
+  })
+})
+
+describe('classifyForCold — 6 cold archive classes（migration 0038）', () => {
+  it.each([
+    ['account.delete',                    'info',     'immutable'],
+    ['admin.user.banned',                 'critical', 'immutable'],
+    ['auth.refresh.aud_mismatch',         'critical', 'immutable'],   // F-2
+    ['payment.refund.success',            'info',     'immutable'],
+    ['audit.archive.chunk_uploaded',      'info',     'immutable'],   // archive ops
+    ['audit.archive.verification_failed', 'critical', 'immutable'],
+  ])('%s (severity=%s) → immutable', (e, sev, expected) => {
+    expect(classifyForCold(e, sev)).toBe(expected)
+  })
+
+  it.each([
+    ['auth.login.fail',           'critical'],
+    ['auth.refresh.fail',         'critical'],
+    ['mfa.totp.verify.replay',    'critical'],
+    ['auth.risk.blocked',         'critical'],
+  ])('%s critical → security_critical', (e, sev) => {
+    expect(classifyForCold(e, sev)).toBe('security_critical')
+  })
+
+  it.each([
+    ['auth.login.fail',     'warn'],
+    ['auth.login.success',  'info'],
+    ['auth.new_device',     'warn'],
+    ['mfa.totp.verify.fail', 'warn'],
+  ])('%s non-critical → security_warn', (e, sev) => {
+    expect(classifyForCold(e, sev)).toBe('security_warn')
+  })
+
+  it.each([
+    'admin.audit.read',
+    'admin.requisitions.read',
+    'payment.metadata_archive.viewed',
+  ])('%s → read_audit', (e) => {
+    expect(classifyForCold(e, 'info')).toBe('read_audit')
+  })
+
+  it.each([
+    'auth.login.rate_limited',
+    'oauth.backchannel.dispatch',
+    'webauthn.register.options',
+  ])('%s → telemetry', (e) => {
+    expect(classifyForCold(e, 'info')).toBe('telemetry')
+  })
+
+  it.each([
+    'auth.delete.exception',
+    'payment.refund.network_error',
+    'kyc.webhook.fail',
+  ])('%s → debug_failure', (e) => {
+    expect(classifyForCold(e, 'warn')).toBe('debug_failure')
+  })
+
+  it.each([
+    ['unknown.event',          'info',     'immutable'],   // 未分類 → fallback immutable（最長 retention 保險）
+    ['totally.fake',           'critical', 'immutable'],
+    ['',                       'info',     'immutable'],
+  ])('未知 %s → fallback immutable', (e, sev, expected) => {
+    expect(classifyForCold(e, sev)).toBe(expected)
+  })
+
+  it('deterministic：相同 input 多次呼叫結果一致（archive worker 重跑 idempotent 必要條件）', () => {
+    const cases = [
+      ['auth.login.fail', 'critical'],
+      ['auth.login.fail', 'warn'],
+      ['unknown.event',   'info'],
+    ]
+    for (const [e, sev] of cases) {
+      const first = classifyForCold(e, sev)
+      for (let i = 0; i < 5; i++) {
+        expect(classifyForCold(e, sev)).toBe(first)
+      }
+    }
   })
 })
