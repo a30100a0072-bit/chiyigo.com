@@ -107,6 +107,24 @@ body.has-sidebar{overflow:hidden}
 .sb-logout-pad { margin: 0 .5rem .35rem; }
 .dash-content-padded { padding: 1.5rem 1rem 0; position: relative; z-index: 1; }
 
+/* Dashboard 章節分組 — h2 小標 + sidebar 群組 label */
+.dash-group-title{
+  font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--text-muted);margin:1.75rem .25rem .65rem;padding-bottom:.55rem;
+  border-bottom:1px solid var(--border-dim);display:flex;align-items:center;gap:.5rem;
+}
+.dash-group-title:first-of-type{margin-top:.25rem}
+.dash-group-title .dgt-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.7}
+.sb-group-label{
+  font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--text-dim);padding:.7rem .9rem .25rem;
+}
+.sb-group-label:first-child{padding-top:.2rem}
+.m-ov-group-label{
+  font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.12em;
+  color:var(--text-dim);padding:.6rem .9rem .15rem;
+}
+
 /* 帳號綁定 — provider 顏色 dot (原 inline style="background:${color}" 改 CSS) */
 .bind-dot[data-provider="google"]   { background: #ea4335; }
 .bind-dot[data-provider="discord"]  { background: #5865f2; }
