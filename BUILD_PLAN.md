@@ -6,6 +6,32 @@
 
 ---
 
+## 近期重大進度（2026-05-10）
+
+### 第 1+2 類 16 頁版型對齊 — sidebar / topbar 100% partial 化（commits `447026c` `3919705` `3187b27`，總淨 -200 行）
+
+把第 2 類 6 個 auth 頁外殼 + form 收歸到第 1 類公開頁同一套 partial：
+
+| Commit | 範圍 | 主題 |
+|---|---|---|
+| `447026c` | 5 auth 頁（forgot/reset/verify/bind/confirm） | 拆 minimal `<header>` → `dash-wrap` + `sidebar-public-other` partial + `topbar-mobile` partial + m-overlay；form 從 tailwind utility → `login.css` 的 `.card / .field-wrap / .field-input / .submit-btn / .panel`；`.success-state / .error-state / .hidden / .text-center` 抽至 `_components.css`；4 JS 移除 theme/lang duplicate handlers，setMsg 改吃 `.msg-error / .msg-success` |
+| `3919705` | login.html | sidebar 收歸 `sidebar-public-other` partial（70 行 → 1 行）；`login.json` 3 keys × 4 lang 改名（`sb_cta_desc → cta_desc` / `sb_cta_btn → cta_btn` / `sb_login_link → login`）；`login.js` selector 更名（`#sb-lang-btn → #lang-toggle-btn` / `#lang-drop-i → #lang-dropdown`）；`login.css` 移除 `.sb-bottom / .sb-lang-wrap` 局部 override |
+| `3187b27` | login.html | mobile topbar 收歸 `topbar-mobile` partial（32 行 → 1 行）|
+
+**全站稽核（2026-05-10 重新驗）**：第 1+2 類 16 頁外殼骨架 6 大檢查全綠：
+- `sidebar-public-{home,other}` partial：16/16
+- `topbar-mobile` partial：16/16
+- `dash-wrap` 骨架：16/16
+- m-overlay 結構：16/16（仍 inline，未抽 partial）
+- `_tokens.css + _components.css`：16/16
+- 無 tailwind / hdr-logo / lang-wrap legacy 殘留：16/16
+
+**取代下面 2026-05-01 全站稽核段**：當時「5 auth 頁無地球儀按鈕、不需綁」+「login `sb-lang-btn`」描述已失效；今天 5 auth + login 全部走 `lang-toggle-btn`。
+
+> 16 檔（含 `_components.css` + 5 auth CSS / 5 page JS / 5 page HTML + `login.html` + `login.json` + `login.js` + `login.css`）由 user 自行跑 `npm run build`（避開另一 Claude code 的 `public/*` 衝突），未動 functions/* / requisition.js / auth-ui.js / migrations/* / tests/*
+
+---
+
 ## 近期重大進度（2026-05-01）
 
 ### UI bug 修復 + 預防性 lint（commits `4997901` `2352d95` `354f505`；talo 端 `3195ac8` 本地）
