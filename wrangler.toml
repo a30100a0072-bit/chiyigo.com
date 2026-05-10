@@ -35,9 +35,9 @@ binding = "AI"
 #      此路徑與 Phase 2 設計不相容。
 # 現況：PR 0 Step 0.1（2026-05-10）已從 cleanup.js 移除 archiveAndDeleteAuditLog。
 #      此 binding 暫不會被 runtime 寫入；保留供 Phase 2 archive worker 接手。
-# Phase 2：archive worker 落地後改用 v6 schema（manifest + chunk_sha256 idempotent
-#      key + 5-state machine）。Legacy audit_log/{date}/{minId-maxId}.jsonl 物件
-#      由 admin job 一次性 re-process 為 v6 chunks 或標記為 legacy archive。
+# Bucket 狀態：object_count=0（2026-05-10 wrangler r2 bucket info 確認）
+#      舊路徑雖 deploy 但 audit_log 累積不滿 1 年，從未實際寫過任何 R2 物件。
+#      → Phase 2 不需處理 legacy data，archive worker 直接寫 v6 schema 即可。
 [[r2_buckets]]
 binding     = "AUDIT_ARCHIVE_BUCKET"
 bucket_name = "chiyigo-audit-archive"
