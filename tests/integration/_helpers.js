@@ -66,6 +66,8 @@ export async function resetDb() {
     `ALTER TABLE auth_codes ADD COLUMN nonce TEXT`,
     `ALTER TABLE refresh_tokens ADD COLUMN auth_time TEXT`, // migration 0019
     `ALTER TABLE auth_codes ADD COLUMN auth_time TEXT`,     // migration 0019
+    `ALTER TABLE refresh_tokens ADD COLUMN scope TEXT`,     // migration 0035
+    `ALTER TABLE refresh_tokens ADD COLUMN issued_aud TEXT`, // migration 0037（Codex r9-5）
   ]) {
     try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
   }

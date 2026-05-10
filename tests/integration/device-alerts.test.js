@@ -117,7 +117,9 @@ describe('safeAlertAnomalies — checkNewDevice', () => {
         WHERE event_type = 'auth.new_device' AND user_id = ?`,
     ).bind(u.id).first()
     expect(audit?.severity).toBe('critical')
-    expect(audit.event_data).toMatch(/dev-new/)
+    // Codex r9-4：device_uuid 改 keyed HMAC，明文不入 audit
+    expect(audit.event_data).not.toMatch(/dev-new/)
+    expect(audit.event_data).toMatch(/"device_uuid_hmac16":"[0-9a-f]{16}"/)
     expect(audit.event_data).toMatch(/"country":"US"/)
 
     expect(mailLog).toHaveLength(1)

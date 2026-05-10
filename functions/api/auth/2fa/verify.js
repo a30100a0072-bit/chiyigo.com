@@ -156,10 +156,11 @@ async function respondWithToken(userId, record, db, deviceUuid, platform, env, a
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // Codex r9-5：issued_aud 鎖定發行時的 audience
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-    VALUES (?, ?, ?, ?, datetime('now'))
-  `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt).run()
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
+    VALUES (?, ?, ?, ?, datetime('now'), ?)
+  `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt, audience).run()
 
   // Phase D-4：登入完成 audit + 異常裝置警示
   // Phase E-2：risk check 已在 local/login.js password 階段做過，此處不重算；

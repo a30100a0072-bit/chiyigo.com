@@ -110,11 +110,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
           event_type: 'register.guest_id_invalid_format', severity: 'warn',
           user_id: null, request,
           data: {
-            length:       raw.length,
-            prefix_class: prefixClass,
-            hmac16:       sig.hex.slice(0, 16),  // domain-keyed HMAC，無法字典反推
-            sampled:      true,                   // 提醒分析端真實量是 ×10（deterministic）
-            salted:       sig.salted,             // false → AUDIT_IP_SALT 未設，需修配置
+            length:           raw.length,
+            prefix_class:     prefixClass,
+            guest_id_hmac16:  sig.hex.slice(0, 16),  // domain-keyed HMAC；同 raw → 同前 16 字
+            sampled:          true,                   // 真實量是 ×10（deterministic sampling）
+            salted:           sig.salted,             // false → AUDIT_IP_SALT 未設，需修配置
           },
         })
       }
@@ -160,11 +160,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
           // Codex r6-3（2026-05-10）：移除 email — user-audit.js 設計原則明寫「email 不入」
           // user_id 已可追溯帳號；email 在 admin audit API 也會被 redaction，留 raw 是雙標
           data: {
-            requisition_ids: takenIds,
-            guest_id_hash:   sig.hex.slice(0, 32),
-            salted:          sig.salted,
-            count:           allTakenIds.length,  // 真實命中數（未 cap）
-            truncated,                            // true 表示 requisition_ids 被截
+            requisition_ids:  takenIds,
+            guest_id_hmac32:  sig.hex.slice(0, 32),  // 同 invalid_format.guest_id_hmac16 同 domain，前 16 字相同 → 可 correlation
+            salted:           sig.salted,
+            count:            allTakenIds.length,    // 真實命中數（未 cap）
+            truncated,                               // true 表示 requisition_ids 被截
           },
         })
       }
@@ -185,10 +185,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // Codex r9-5：issued_aud 鎖定發行時的 audience（防 refresh body.aud 切換）
   await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-              VALUES (?, ?, ?, ?, datetime('now'))`)
-    .bind(user.id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt)
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
+              VALUES (?, ?, ?, ?, datetime('now'), ?)`)
+    .bind(user.id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience)
     .run()
 
   // ── 9. 簽發 Access Token（ES256）────────────────────────────

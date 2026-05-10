@@ -146,10 +146,11 @@ export async function onRequestPost(context) {
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 86400_000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // Codex r9-5：issued_aud 鎖定發行時的 audience
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-    VALUES (?, ?, NULL, ?, datetime('now'))
-  `).bind(userId, refreshTokenHash, refreshExpiresAt).run()
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
+    VALUES (?, ?, NULL, ?, datetime('now'), ?)
+  `).bind(userId, refreshTokenHash, refreshExpiresAt, audience).run()
 
   await safeUserAudit(env, { event_type: 'oauth.bind_email.success', user_id: userId, request, data: { provider } })
 

@@ -53,7 +53,9 @@ export async function onRequestPost({ request, env }) {
   const device_uuid     = (headerDeviceId && headerDeviceId.trim()) || body?.device_uuid || null
   const refresh_token   = cookieToken ?? body?.refresh_token
   const isWeb           = !!cookieToken
-  const audience        = resolveAud(aud)
+  // Codex r2-5 / r9-5：body.aud 不再直接決定簽發 audience；下方讀 tokenRow.issued_aud。
+  // body.aud 仍解析作為 audit 比對用（mismatch → warn）
+  const requestedAud    = resolveAud(aud)
 
   if (!refresh_token || typeof refresh_token !== 'string')
     return res({ error: 'refresh_token is required' }, 400, cors)
@@ -64,7 +66,7 @@ export async function onRequestPost({ request, env }) {
   const tokenHash = await hashToken(refresh_token)
   const tokenRow  = await db
     .prepare(`
-      SELECT id, user_id, device_uuid, revoked_at, auth_time, scope
+      SELECT id, user_id, device_uuid, revoked_at, auth_time, scope, issued_aud
       FROM refresh_tokens
       WHERE token_hash = ? AND expires_at > datetime('now')
     `)
@@ -164,11 +166,27 @@ export async function onRequestPost({ request, env }) {
     })
     return res({ error: 'Refresh token has been revoked' }, 401, cors)
   }
+  // Codex r9-5：簽 audience 改用 tokenRow.issued_aud（綁定發行時 aud）。
+  // 舊 row 沒 issued_aud（NULL）→ 退回 requestedAud 保 backward compat（7d 內 token 換完就純 issued_aud 路徑）
+  // body.aud 與 issued_aud 不一致 → 寫 warn audit（攻擊者試圖切換 aud 的訊號）
+  const effectiveAud = tokenRow.issued_aud || requestedAud
+  if (tokenRow.issued_aud && requestedAud && requestedAud !== tokenRow.issued_aud) {
+    await safeUserAudit(env, {
+      event_type: 'auth.refresh.aud_mismatch', severity: 'warn',
+      user_id: tokenRow.user_id, request,
+      data: {
+        issued_aud:    tokenRow.issued_aud,
+        requested_aud: requestedAud,
+        reason_code:   'body_aud_overridden_by_issued',
+      },
+    })
+  }
   // P1-5：把 OIDC scope 透傳到 rotation 後的新 row，避免遺失
+  // Codex r9-5：issued_aud 也透傳，rotation 後新 row 仍綁定原 aud
   await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope)
-              VALUES (?, ?, ?, ?, ?, ?)`)
-    .bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null)
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null, effectiveAud)
     .run()
 
   // ── 5. 簽發新 Access Token ───────────────────────────────────
@@ -181,7 +199,7 @@ export async function onRequestPost({ request, env }) {
     ver:            user.token_version ?? 0,
     // P1-5：buildTokenScope 帶第二參，保留原本 OIDC scope（openid/email/...）
     scope:          buildTokenScope(user.role, tokenRow.scope ?? ''),
-  }, ACCESS_TOKEN_TTL, env, { audience })
+  }, ACCESS_TOKEN_TTL, env, { audience: effectiveAud })
 
   // Web → 新 Cookie；App → JSON body
   if (isWeb) {

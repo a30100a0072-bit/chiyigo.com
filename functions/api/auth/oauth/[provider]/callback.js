@@ -323,10 +323,11 @@ async function handle(context) {
   // 能拆開顯示桌面 / 手機 / 不同 browser。沒 cookie 退回 NULL 行為（舊 client 相容）。
   const webDeviceUuid = readOAuthDeviceCookie(request)
 
+  // Codex r9-5：issued_aud 鎖定發行時的 audience
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-    VALUES (?, ?, ?, ?, datetime('now'))
-  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt).run()
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
+    VALUES (?, ?, ?, ?, datetime('now'), ?)
+  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience).run()
 
   // Phase D-4：登入 audit + 異常裝置警示。webDeviceUuid 有值 → 視作真實裝置，
   // 觸發新裝置 email；NULL → 只跑 country jump（OAuth 舊行為）

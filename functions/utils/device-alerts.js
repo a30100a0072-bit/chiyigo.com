@@ -18,7 +18,7 @@
  *    login.success audit 帶 country（4 個入口的 audit data 加 country）
  */
 
-import { safeUserAudit } from './user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from './user-audit.js'
 import { sendNewDeviceAlertEmail } from './email.js'
 
 /**
@@ -58,13 +58,16 @@ async function checkNewDevice(env, request, userId, email, deviceUuid) {
     // total>1 且 sameDevice==1 → 確實是新裝置
 
     const country = request?.cf?.country ?? null
+    // Codex r9-4：device_uuid_prefix → keyed HMAC（domain='device-uuid'）
+    const sig = await hashIdentifierForAudit(env, 'device-uuid', deviceUuid)
     await safeUserAudit(env, {
       event_type: 'auth.new_device',
       severity:   'critical',
       user_id:    userId,
       request,
       data: {
-        device_uuid_prefix: String(deviceUuid).slice(0, 8),
+        device_uuid_hmac16: sig.hex.slice(0, 16),
+        salted:             sig.salted,
         country,
       },
     })

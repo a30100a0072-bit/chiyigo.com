@@ -19,7 +19,7 @@
 import { requireStepUp, res } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
 import { SCOPES } from '../../../utils/scopes.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
 
 const ELEVATED_ACTION_UNBIND = 'unbind_wallet'
 
@@ -47,12 +47,14 @@ export async function onRequestDelete({ request, env, params }) {
     .prepare(`DELETE FROM user_wallets WHERE id = ? AND user_id = ?`)
     .bind(walletId, userId).run()
 
+  // Codex r9-4：address_prefix → keyed HMAC（domain='wallet-address'）
+  const sig = await hashIdentifierForAudit(env, 'wallet-address', String(row.address))
   await safeUserAudit(env, {
     event_type: 'wallet.unbind',
     severity:   'critical',
     user_id:    userId,
     request,
-    data: { address_prefix: String(row.address).slice(0, 10) },
+    data: { address_hmac16: sig.hex.slice(0, 16), salted: sig.salted },
   })
 
   return res({ id: walletId, deleted: true }, 200, cors)

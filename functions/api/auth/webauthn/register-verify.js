@@ -27,7 +27,7 @@ import { verifyRegistrationResponse } from '@simplewebauthn/server'
 import { requireAuth, res } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -129,13 +129,16 @@ export async function onRequestPost({ request, env }) {
       )
       .run()
 
+    // Codex r9-4：credential_id_prefix → keyed HMAC（domain='credential-id'）
+    const sig = await hashIdentifierForAudit(env, 'credential-id', credentialID)
     await safeUserAudit(env, {
       event_type: 'webauthn.register.success',
       severity:   'info',
       user_id:    userId,
       request,
       data: {
-        credential_id_prefix: credentialID.slice(0, 12),
+        credential_id_hmac16: sig.hex.slice(0, 16),
+        salted:               sig.salted,
         aaguid,
         backup_eligible: !!backupEligible,
       },

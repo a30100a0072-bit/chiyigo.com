@@ -26,7 +26,7 @@
 import { requireAuth, requireStepUp, res } from '../../../../utils/auth.js'
 import { getCorsHeaders } from '../../../../utils/cors.js'
 import { SCOPES } from '../../../../utils/scopes.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../../utils/user-audit.js'
 
 const ELEVATED_ACTION_REMOVE = 'remove_passkey'
 const NICKNAME_MAX = 64
@@ -93,12 +93,14 @@ export async function onRequestDelete({ request, env, params }) {
     .prepare(`DELETE FROM user_webauthn_credentials WHERE id = ? AND user_id = ?`)
     .bind(credPk, userId).run()
 
+  // Codex r9-4：credential_id_prefix → keyed HMAC
+  const sig = await hashIdentifierForAudit(env, 'credential-id', String(row.credential_id))
   await safeUserAudit(env, {
     event_type: 'webauthn.credential.deleted',
     severity:   'critical',                 // 移除 2FA 視同 mfa.disable 等級
     user_id:    userId,
     request,
-    data: { credential_id_prefix: String(row.credential_id).slice(0, 12) },
+    data: { credential_id_hmac16: sig.hex.slice(0, 16), salted: sig.salted },
   })
 
   return res({ id: credPk, deleted: true }, 200, cors)

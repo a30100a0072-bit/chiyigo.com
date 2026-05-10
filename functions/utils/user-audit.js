@@ -93,13 +93,14 @@ export async function safeUserAudit(env, entry) {
 }
 
 /**
- * Codex r8 helper（2026-05-10）：把 user-controlled 識別符（guest_id / 未來 device_id /
+ * Codex r8 / r9 helper（2026-05-10）：把 user-controlled 識別符（guest_id / device_uuid /
  * credential_id / wallet address）轉成可放 audit 的 keyed HMAC hex；防 audit DB 外洩
  * 後字典反推。
  *
- * Domain key 派生：HMAC(AUDIT_IP_SALT, "<domain>:v1") — 不直接用 root salt 簽 raw 值，
- * 不同 domain (guest-id / device-id / ...) key 互相獨立；rotation 時改派生字串版本即可，
- * 不影響其他 domain。
+ * Domain key 派生：HMAC(AUDIT_IP_SALT, "chiyigo.audit.<domain>:v1") — 不直接用 root salt
+ * 簽 raw 值；不同 domain (guest-id / device-uuid / credential-id / wallet-address) key 互相
+ * 獨立；rotation 時改派生字串版本即可，不影響其他 domain。
+ * Codex r9-1：namespace 加 chiyigo.audit. 前綴，避免未來多系統共用 AUDIT_IP_SALT 時撞名。
  *
  * 缺 AUDIT_IP_SALT 時 fallback 字串可被 audit DB 外洩者推出，但仍比 raw SHA 安全；
  * 回傳 `salted: false` 給 caller 寫入 audit data，下游監控可偵測 prod 缺 salt 配置。
@@ -116,7 +117,7 @@ export async function hashIdentifierForAudit(env, domain, raw) {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
   )
   const derivedBuf = await crypto.subtle.sign(
-    'HMAC', rootKey, new TextEncoder().encode(`${domain}:v1`),
+    'HMAC', rootKey, new TextEncoder().encode(`chiyigo.audit.${domain}:v1`),
   )
   const domainKey = await crypto.subtle.importKey(
     'raw', derivedBuf,

@@ -134,16 +134,18 @@ export async function onRequestPost({ request, env }) {
   // header 是事實來源（chiyigo SDK / sport-app SDK 都送 X-Device-Id）；缺值寫 null（web cookie 路徑）
   const headerDeviceId = request.headers.get('X-Device-Id') ?? request.headers.get('x-device-id')
   const deviceUuid     = (headerDeviceId && headerDeviceId.trim()) || null
+  // 簽發前先決定 aud（依 redirect_uri origin），下方 INSERT 也要把 issued_aud 寫入
+  const aud = resolveAud(redirect_uri)
   // P1-5：把 OIDC scope 落 refresh_tokens；refresh.js rotation 時透傳，
   // silent refresh 後 access_token 仍帶 openid/email 等
+  // Codex r9-5：issued_aud 鎖定發行時的 audience；refresh.js 用此簽新 token 防 body.aud 切換
   await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope)
-              VALUES (?, ?, ?, ?, ?, ?)`)
-    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime, authCode.scope ?? null)
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime, authCode.scope ?? null, aud)
     .run()
 
-  // 簽發 Access Token（ES256，15 分鐘） — aud 依 redirect_uri origin 決定
-  const aud = resolveAud(redirect_uri)
+  // 簽發 Access Token（ES256，15 分鐘） — 用上面決定好的 aud
   const accessToken = await signJwt({
     sub:            String(user.id),
     email:          user.email,

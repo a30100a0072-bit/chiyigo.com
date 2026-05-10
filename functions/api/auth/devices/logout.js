@@ -23,7 +23,7 @@
 
 import { requireAuth, res } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -73,13 +73,16 @@ export async function onRequestPost({ request, env }) {
 
   const revoked = upd.meta?.changes ?? 0
 
+  // Codex r9-4：device_uuid_prefix → keyed HMAC（domain='device-uuid'，與 device-alerts 同 domain）
+  const sig = dev === null ? null : await hashIdentifierForAudit(env, 'device-uuid', dev)
   await safeUserAudit(env, {
     event_type: 'auth.devices.logout',
     severity:   'info',
     user_id:    userId,
     request,
     data: {
-      device_uuid_prefix: dev === null ? null : dev.slice(0, 8),
+      device_uuid_hmac16: sig === null ? null : sig.hex.slice(0, 16),
+      salted:             sig === null ? null : sig.salted,
       revoked_count:      revoked,
     },
   })

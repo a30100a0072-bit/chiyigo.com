@@ -28,7 +28,7 @@
 import { requireAuth, res } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
 import { verifySiweMessage, consumeWalletNonce } from '../../../utils/siwe.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
 
 const NICKNAME_MAX = 64
 
@@ -101,12 +101,14 @@ export async function onRequestPost({ request, env }) {
       .bind(userId, address, chainId ?? nonceRow.chain_id ?? 1, nickname)
       .run()
 
+    // Codex r9-4：address_prefix → keyed HMAC（同 wallet/[id] 同 domain）
+    const sig = await hashIdentifierForAudit(env, 'wallet-address', address)
     await safeUserAudit(env, {
       event_type: 'wallet.bind.success',
       severity:   'critical',                 // 綁 wallet 是金流前置，視同 mfa.disable 等級需要 alert
       user_id:    userId,
       request,
-      data: { address_prefix: address.slice(0, 10), chain_id: chainId },
+      data: { address_hmac16: sig.hex.slice(0, 16), salted: sig.salted, chain_id: chainId },
     })
 
     return res({

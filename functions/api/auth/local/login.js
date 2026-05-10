@@ -237,10 +237,12 @@ export async function onRequestPost({ request, env }) {
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // Codex r9-5：issued_aud 鎖定發行時的 audience；refresh.js rotation 用此簽新 token，
+  // body.aud 不一致則 audit warn。防止子站共用 cookie 後切換 aud=chiyigo 取 token。
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-    VALUES (?, ?, ?, ?, datetime('now'))
-  `).bind(record.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt).run()
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
+    VALUES (?, ?, ?, ?, datetime('now'), ?)
+  `).bind(record.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience).run()
 
   const payload = {
     access_token:   accessToken,

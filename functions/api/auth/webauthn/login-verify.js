@@ -37,7 +37,7 @@ import { signJwt } from '../../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn.js'
 import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
@@ -224,11 +224,14 @@ export async function onRequestPost({ request, env }) {
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // Codex r9-5：issued_aud 鎖定發行時的 audience
   await env.chiyigo_db.prepare(
-    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time)
-     VALUES (?, ?, ?, ?, datetime('now'))`,
-  ).bind(cred.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt).run()
+    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
+     VALUES (?, ?, ?, ?, datetime('now'), ?)`,
+  ).bind(cred.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience).run()
 
+  // Codex r9-4：credential_id_prefix → keyed HMAC（同 register/delete 同 domain）
+  const credSig = await hashIdentifierForAudit(env, 'credential-id', credentialId)
   await safeUserAudit(env, {
     event_type: 'auth.login.success',
     user_id:    cred.user_id,
@@ -236,7 +239,8 @@ export async function onRequestPost({ request, env }) {
     data: {
       method: 'webauthn',
       amr,
-      credential_id_prefix: credentialId.slice(0, 12),
+      credential_id_hmac16: credSig.hex.slice(0, 16),
+      salted:               credSig.salted,
       user_verified: userVerified,
       country: risk.country,
       ua_hash: risk.ua_hash,
