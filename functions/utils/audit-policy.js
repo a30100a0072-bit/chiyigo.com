@@ -41,6 +41,7 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.archive.partial_archive_mismatch',     // critical
   'audit.archive.purge_mismatch',               // critical
   'admin.audit.archive.read',                   // admin export 觸發
+  'audit.deploy_ordering.fallback_triggered',   // PR 1.1 自審 M-2：deploy 順序錯訊號
 ]
 
 const IMMUTABLE = [

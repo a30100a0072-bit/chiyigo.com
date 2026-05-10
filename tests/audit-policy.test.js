@@ -49,6 +49,26 @@ describe('classifyAuditEvent — immutable（金融/權限/安全狀態變更）
   ])('%s → immutable', (e) => {
     expect(classifyAuditEvent(e)).toBe(AUDIT_CATEGORY.IMMUTABLE)
   })
+
+  // PR 1.1 自審 L-2：12 個 archive ops events + deploy_ordering fallback 顯式覆蓋
+  // （migration 0038 / safeUserAudit fallback；之前只 _registrySize 間接驗）
+  it.each([
+    'audit.archive.chunk_uploaded',
+    'audit.archive.marked_archived',
+    'audit.archive.d1_purged',
+    'audit.archive.cold_copied',
+    'audit.archive.month_completed',
+    'audit.archive.aggregate_completed',
+    'audit.archive.verification_failed',
+    'audit.archive.upload_failed',
+    'audit.archive.row_count_mismatch',
+    'audit.archive.partial_archive_mismatch',
+    'audit.archive.purge_mismatch',
+    'admin.audit.archive.read',
+    'audit.deploy_ordering.fallback_triggered',  // PR 1.1 M-2
+  ])('%s (archive ops) → immutable', (e) => {
+    expect(classifyAuditEvent(e)).toBe(AUDIT_CATEGORY.IMMUTABLE)
+  })
 })
 
 describe('classifyAuditEvent — security_signal（撞庫/釣魚/2FA fail）', () => {
@@ -119,9 +139,10 @@ describe('registry coverage', () => {
       listEventsByCategory(AUDIT_CATEGORY.READ_AUDIT).length +
       listEventsByCategory(AUDIT_CATEGORY.DEBUG_FAILURE).length
     expect(sum).toBe(_registrySize)
-    // 2026-05-10 盤點 98（grep functions/）；migration 0038 加 12 個 archive ops events
-    // → registry 110。新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(110)
+    // 2026-05-10 盤點 98（grep functions/）；migration 0038 加 12 archive ops + PR 1.1
+    // 加 1 個 deploy_ordering fallback → 111。新增 audit event 必須同 PR 補進 audit-policy.js
+    // + 同步更新本斷言。
+    expect(_registrySize).toBe(111)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

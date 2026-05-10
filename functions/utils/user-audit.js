@@ -97,12 +97,19 @@ export async function safeUserAudit(env, entry) {
         )
         .run()
     } catch (e) {
-      // Codex round-11 H-1：deploy ordering 防呆。若 functions 比 migration 0038 先 deploy，
-      // cold_class 欄不存在會炸；外層 catch-all 會吞掉，audit 靜默流失。
-      // 用「no such column: cold_class」精準匹配重試舊 schema INSERT，覆蓋 short window；
-      // migration 上線後 fallback 自然不會再觸發。其他錯誤往上拋給外層吞。
+      // Codex round-11 H-1 + 自審 H-1（PR 1.1）：deploy ordering 防呆。若 functions 比
+      // migration 0038 先 deploy，cold_class 欄不存在會炸；外層 catch-all 會吞掉，
+      // audit 靜默流失。
+      // 嚴格匹配 SQLite 「no such column: cold_class」字串；其他含 cold_class 字眼的錯誤
+      // （例如未來加 CHECK constraint 違例）會被外層 catch 吞掉，**不**走 fallback，
+      // 避免錯誤資料被壓進舊 schema row。
       const msg = String(e?.message ?? '')
-      if (msg.includes('no such column: cold_class') || msg.includes('cold_class')) {
+      if (msg.includes('no such column: cold_class')) {
+        // M-2：deploy 順序錯是 ops 警訊，發 console.error + 寫 critical audit 給監控抓
+        console.error(
+          '[deploy-ordering] cold_class column missing — run migration 0038 first; fallback INSERT engaged',
+          { event_type: entry.event_type },
+        )
         await env.chiyigo_db
           .prepare(`
             INSERT INTO audit_log (event_type, severity, user_id, client_id, ip_hash, event_data)
@@ -117,6 +124,20 @@ export async function safeUserAudit(env, entry) {
             Object.keys(eventData).length ? JSON.stringify(eventData) : null,
           )
           .run()
+        // 額外寫 deploy_ordering 訊號 row（同樣走 legacy schema，可被監控/admin 查詢抓到）
+        // 不 await Discord webhook（避免 fallback 路徑串接更多失敗模式；audit_log 已留證）
+        try {
+          await env.chiyigo_db
+            .prepare(`
+              INSERT INTO audit_log (event_type, severity, ip_hash, event_data)
+              VALUES ('audit.deploy_ordering.fallback_triggered', 'critical', ?, ?)
+            `)
+            .bind(ipHash, JSON.stringify({
+              original_event_type: entry.event_type,
+              hint: 'apply migration 0038, then redeploy functions',
+            }))
+            .run()
+        } catch { /* swallow：fallback 主路徑已成功，這只是 ops 訊號 */ }
       } else {
         throw e
       }

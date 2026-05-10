@@ -21,116 +21,89 @@ ALTER TABLE audit_log ADD COLUMN cold_class TEXT NOT NULL DEFAULT 'immutable';
 CREATE INDEX IF NOT EXISTS idx_audit_log_archived_at ON audit_log(archived_at);
 CREATE INDEX IF NOT EXISTS idx_audit_log_cold_id    ON audit_log(cold_class, id);
 
--- ── Part 2：backfill cold_class（idempotent；每 UPDATE 都帶 cold_class='immutable' guard）──
+-- ── Part 2：backfill cold_class（idempotent；單一 UPDATE，nested CASE 防 list 重複）──
+--
+-- 設計：
+--   security_signal 30 個 event 只列一次，nested CASE 依 severity 分流 critical/warn
+--   其他 4 個 cold_class 各自 IN list 不重複
+--   guard `cold_class = 'immutable'`：未跑過的 row 都是 DEFAULT 'immutable'，重跑只動沒分類過的
+--   ELSE 'immutable'：已是 'immutable'；以及未列的未知 event 也保留 'immutable'
+--     （safest fallback，最長 retention；safeUserAudit 會 console.warn unclassified）
+--
+-- ⚠️ 鏡射 audit-policy.js 的 5 個 cold_class 名單。改 audit-policy 時要同步改這裡，
+--    否則 backfill 會跟 runtime classifyForCold 不一致。PR 1 deploy checklist 提醒。
+UPDATE audit_log SET cold_class = CASE
+  WHEN event_type IN (
+    -- security_signal 30 events（functions/utils/audit-policy.js → SECURITY_SIGNAL）
+    'account.password.reset.backup_code_fail',
+    'admin.unknown_role_actor',
+    'admin.unknown_role_target',
+    'auth.country_jump',
+    'auth.login.banned_attempt',
+    'auth.login.cooldown',
+    'auth.login.fail',
+    'auth.login.ip_blacklist_added',
+    'auth.login.ip_blacklisted',
+    'auth.login.success',
+    'auth.new_device',
+    'auth.refresh.fail',
+    'auth.risk.blocked',
+    'auth.risk.medium',
+    'auth.step_up.fail',
+    'auth.step_up.success',
+    'kyc.gate.fail',
+    'mfa.totp.activate.fail',
+    'mfa.totp.disable.fail',
+    'mfa.totp.verify.fail',
+    'mfa.totp.verify.replay',
+    'mfa.totp.verify.success',
+    'oauth.bind_email.collision_blocked',
+    'oauth.callback.fail',
+    'oauth.code.exchange.fail',
+    'payment.gate.fail',
+    'payment.webhook.psp_direct_blocked',
+    'register.guest_id_invalid_format',
+    'wallet.bind.fail',
+    'webauthn.register.fail'
+  )
+    THEN CASE WHEN severity = 'critical' THEN 'security_critical' ELSE 'security_warn' END
 
--- security_critical：category=security_signal AND severity='critical'
-UPDATE audit_log SET cold_class = 'security_critical'
- WHERE cold_class = 'immutable' AND severity = 'critical' AND event_type IN (
-  'account.password.reset.backup_code_fail',
-  'admin.unknown_role_actor',
-  'admin.unknown_role_target',
-  'auth.country_jump',
-  'auth.login.banned_attempt',
-  'auth.login.cooldown',
-  'auth.login.fail',
-  'auth.login.ip_blacklist_added',
-  'auth.login.ip_blacklisted',
-  'auth.login.success',
-  'auth.new_device',
-  'auth.refresh.fail',
-  'auth.risk.blocked',
-  'auth.risk.medium',
-  'auth.step_up.fail',
-  'auth.step_up.success',
-  'kyc.gate.fail',
-  'mfa.totp.activate.fail',
-  'mfa.totp.disable.fail',
-  'mfa.totp.verify.fail',
-  'mfa.totp.verify.replay',
-  'mfa.totp.verify.success',
-  'oauth.bind_email.collision_blocked',
-  'oauth.callback.fail',
-  'oauth.code.exchange.fail',
-  'payment.gate.fail',
-  'payment.webhook.psp_direct_blocked',
-  'register.guest_id_invalid_format',
-  'wallet.bind.fail',
-  'webauthn.register.fail'
-);
+  WHEN event_type IN (
+    -- read_audit 5 events
+    'admin.audit.read',
+    'admin.payment_webhook_dlq.read',
+    'admin.refund_requests.read',
+    'admin.requisitions.read',
+    'payment.metadata_archive.viewed'
+  ) THEN 'read_audit'
 
--- security_warn：category=security_signal AND severity!='critical'（已先過 security_critical UPDATE）
-UPDATE audit_log SET cold_class = 'security_warn'
- WHERE cold_class = 'immutable' AND event_type IN (
-  'account.password.reset.backup_code_fail',
-  'admin.unknown_role_actor',
-  'admin.unknown_role_target',
-  'auth.country_jump',
-  'auth.login.banned_attempt',
-  'auth.login.cooldown',
-  'auth.login.fail',
-  'auth.login.ip_blacklist_added',
-  'auth.login.ip_blacklisted',
-  'auth.login.success',
-  'auth.new_device',
-  'auth.refresh.fail',
-  'auth.risk.blocked',
-  'auth.risk.medium',
-  'auth.step_up.fail',
-  'auth.step_up.success',
-  'kyc.gate.fail',
-  'mfa.totp.activate.fail',
-  'mfa.totp.disable.fail',
-  'mfa.totp.verify.fail',
-  'mfa.totp.verify.replay',
-  'mfa.totp.verify.success',
-  'oauth.bind_email.collision_blocked',
-  'oauth.callback.fail',
-  'oauth.code.exchange.fail',
-  'payment.gate.fail',
-  'payment.webhook.psp_direct_blocked',
-  'register.guest_id_invalid_format',
-  'wallet.bind.fail',
-  'webauthn.register.fail'
-);
+  WHEN event_type IN (
+    -- telemetry 7 events
+    'admin.read.rate_limited',
+    'auth.login.rate_limited',
+    'auth.refresh.rate_limited',
+    'auth.step_up.rate_limited',
+    'oauth.backchannel.dispatch',
+    'oauth.token.rate_limited',
+    'webauthn.register.options'
+  ) THEN 'telemetry'
 
--- read_audit
-UPDATE audit_log SET cold_class = 'read_audit'
- WHERE cold_class = 'immutable' AND event_type IN (
-  'admin.audit.read',
-  'admin.payment_webhook_dlq.read',
-  'admin.refund_requests.read',
-  'admin.requisitions.read',
-  'payment.metadata_archive.viewed'
-);
+  WHEN event_type IN (
+    -- debug_failure 9 events
+    'auth.delete.exception',
+    'kyc.webhook.fail',
+    'payment.refund.fail',
+    'payment.refund.network_error',
+    'payment.vendor.misconfigured',
+    'payment.webhook.fail',
+    'requisition.refund.fail',
+    'requisition.refund.network_error',
+    'requisition.save_as_deal.fail'
+  ) THEN 'debug_failure'
 
--- telemetry
-UPDATE audit_log SET cold_class = 'telemetry'
- WHERE cold_class = 'immutable' AND event_type IN (
-  'admin.read.rate_limited',
-  'auth.login.rate_limited',
-  'auth.refresh.rate_limited',
-  'auth.step_up.rate_limited',
-  'oauth.backchannel.dispatch',
-  'oauth.token.rate_limited',
-  'webauthn.register.options'
-);
-
--- debug_failure
-UPDATE audit_log SET cold_class = 'debug_failure'
- WHERE cold_class = 'immutable' AND event_type IN (
-  'auth.delete.exception',
-  'kyc.webhook.fail',
-  'payment.refund.fail',
-  'payment.refund.network_error',
-  'payment.vendor.misconfigured',
-  'payment.webhook.fail',
-  'requisition.refund.fail',
-  'requisition.refund.network_error',
-  'requisition.save_as_deal.fail'
-);
-
--- immutable：DEFAULT 已是 'immutable'；以及未列在上述 5 桶的未知 event_type 也保留 'immutable'
--- （safest fallback，最長 retention；prod 出現 unclassified event 時 audit-policy 會 console.warn）
+  ELSE 'immutable'
+END
+WHERE cold_class = 'immutable';
 
 -- ── Part 3：audit_archive_chunks 表（per-chunk 狀態機）──
 CREATE TABLE IF NOT EXISTS audit_archive_chunks (
