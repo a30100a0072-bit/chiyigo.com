@@ -414,19 +414,22 @@ const TAB_CONFIG = {
 };
 
 function switchTab(tab) {
-  // 1) 先切 active class，避免 render Turnstile iframe 到 display:none 的容器
-  //    （iOS Safari 對 hidden iframe 的尺寸/顯示有 race）
+  // 1) 先切 active class（這部分必須同步，否則 active 狀態錯亂）
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('form-' + tab).classList.add('active');
 
-  // 2) 移除非 active panel 的舊 widget（嚴格 single-widget）
-  _removeWidgetIfNotTab(tab);
-
-  // 3) 等下一個 frame 讓 layout 套用後再 render，避免 iframe 量到 0 寬高
+  // 2) Turnstile 清理/render 全延到下一幀，並以「rAF 觸發當下的 active tab」
+  //    重新判斷，避免快速切 tab 時 stale closure 把 widget render 進已切走的 panel。
+  //    這也讓 layout 先套用，iframe 量得到正確尺寸。
+  const applyTurnstile = () => {
+    const active = _getActiveTurnstileTab();
+    _removeWidgetIfNotTab(active);
+    if (active) _ensureWidgetForTab(active);
+  };
   if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => _ensureWidgetForTab(tab));
+    requestAnimationFrame(applyTurnstile);
   } else {
-    _ensureWidgetForTab(tab);
+    applyTurnstile();
   }
 
   // 更新標題
