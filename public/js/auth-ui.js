@@ -361,6 +361,21 @@ function _resetTurnstile(widgetId, containerId) {
   _setTsReady(el, false);
 }
 
+// 嚴格保證任何時刻只有 1 個 widget：切走時把 inactive 的整個 remove 掉
+function _removeWidgetIfNotTab(tab) {
+  if (typeof window.turnstile === 'undefined') return;
+  if (tab !== 'login' && _loginWidgetId != null) {
+    try { window.turnstile.remove(_loginWidgetId); } catch (_) {}
+    _loginWidgetId = null;
+    _setTsReady(document.getElementById('ts-login-container'), false);
+  }
+  if (tab !== 'register' && _registerWidgetId != null) {
+    try { window.turnstile.remove(_registerWidgetId); } catch (_) {}
+    _registerWidgetId = null;
+    _setTsReady(document.getElementById('ts-register-container'), false);
+  }
+}
+
 // 目前 active 的 panel 是哪個（panel.active class 為唯一真相）。
 function _getActiveTurnstileTab() {
   if (document.getElementById('form-register')?.classList.contains('active')) return 'register';
@@ -369,7 +384,8 @@ function _getActiveTurnstileTab() {
 }
 
 // 確保「目前 active 的 panel」widget 已 render；API 未 ready 時 no-op，
-// onloadTurnstile 之後會依當下 active tab 補 render（同時只會有 1 個 widget）。
+// onloadTurnstile 之後會依當下 active tab 補 render。配合 _removeWidgetIfNotTab
+// 一起達成「任何時刻只有 1 個 iframe」。
 function _ensureWidgetForTab(tab) {
   if (typeof window.turnstile === 'undefined') return;
   if (tab === 'login' && _loginWidgetId == null && document.getElementById('ts-login-container')) {
@@ -398,12 +414,20 @@ const TAB_CONFIG = {
 };
 
 function switchTab(tab) {
-  // 切 tab 時 lazy render 該 panel 的 widget（避免同頁同時跑 2 個 Turnstile challenge）
-  _ensureWidgetForTab(tab);
-
-  // 隱藏所有面板
+  // 1) 先切 active class，避免 render Turnstile iframe 到 display:none 的容器
+  //    （iOS Safari 對 hidden iframe 的尺寸/顯示有 race）
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('form-' + tab).classList.add('active');
+
+  // 2) 移除非 active panel 的舊 widget（嚴格 single-widget）
+  _removeWidgetIfNotTab(tab);
+
+  // 3) 等下一個 frame 讓 layout 套用後再 render，避免 iframe 量到 0 寬高
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => _ensureWidgetForTab(tab));
+  } else {
+    _ensureWidgetForTab(tab);
+  }
 
   // 更新標題
   const cfg = TAB_CONFIG[tab] || TAB_CONFIG.login;
