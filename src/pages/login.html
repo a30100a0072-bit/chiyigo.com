@@ -7,6 +7,8 @@
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
+  <!-- iOS 偵測：在 DOM 渲染前打上 html.is-ios，給 .ios-wait-hint 用；只控提示顯示，不做安全判斷 -->
+  <script>(function(){var ua=navigator.userAgent||'';if(/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/.test(ua)&&(navigator.maxTouchPoints||0)>1))document.documentElement.classList.add('is-ios')})();</script>
   <!-- 把 URL ?next=/path 寫入 sessionStorage（跨 OAuth flow 也能保留），auth-ui.js 登入成功後會讀此值跳轉 -->
   <script>(function(){try{var n=new URLSearchParams(location.search).get('next');if(n&&n.charAt(0)==='/'&&n.charAt(1)!=='/'){sessionStorage.setItem('auth_redirect',n)}}catch(_){}})();</script>
   <!-- 已登入：在 DOM 渲染前同步跳轉，避免閃一下登入表單。

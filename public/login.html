@@ -7,6 +7,8 @@
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
+  <!-- iOS 偵測：在 DOM 渲染前打上 html.is-ios，給 .ios-wait-hint 用；只控提示顯示，不做安全判斷 -->
+  <script>(function(){var ua=navigator.userAgent||'';if(/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/.test(ua)&&(navigator.maxTouchPoints||0)>1))document.documentElement.classList.add('is-ios')})();</script>
   <!-- 把 URL ?next=/path 寫入 sessionStorage（跨 OAuth flow 也能保留），auth-ui.js 登入成功後會讀此值跳轉 -->
   <script>(function(){try{var n=new URLSearchParams(location.search).get('next');if(n&&n.charAt(0)==='/'&&n.charAt(1)!=='/'){sessionStorage.setItem('auth_redirect',n)}}catch(_){}})();</script>
   <!-- 已登入：在 DOM 渲染前同步跳轉，避免閃一下登入表單。
@@ -30,12 +32,12 @@
     }catch(_){}
   })();</script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=08935272" />
-  <link rel="stylesheet" href="/css/_components.css?v=08935272" />
-  <link rel="stylesheet" href="/css/login.css?v=08935272" />
-  <script defer src="/js/notify.js?v=08935272"></script>
-  <script defer src="/js/confirm-dialog.js?v=08935272"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=08935272" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=36250afa" />
+  <link rel="stylesheet" href="/css/_components.css?v=36250afa" />
+  <link rel="stylesheet" href="/css/login.css?v=36250afa" />
+  <script defer src="/js/notify.js?v=36250afa"></script>
+  <script defer src="/js/confirm-dialog.js?v=36250afa"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=36250afa" />
   <!-- explicit rendering：避免同頁 2 個 .cf-turnstile 同時跑 challenge 造成 iOS Safari 主執行緒卡頓 -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstile" async defer></script>
 </head>
@@ -358,8 +360,8 @@
 
   </div>
 
-  <script src="/js/auth-ui.js?v=08935272"></script>
-  <script src="/js/sidebar-auth.js?v=08935272" defer></script>
-  <script src="/js/login.js?v=08935272" defer></script>
+  <script src="/js/auth-ui.js?v=36250afa"></script>
+  <script src="/js/sidebar-auth.js?v=36250afa" defer></script>
+  <script src="/js/login.js?v=36250afa" defer></script>
 </body>
 </html>
