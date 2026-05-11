@@ -93,7 +93,7 @@
       "audit": {
         "purpose": "Admin 後台 + 22 種 audit 事件 + 結構化 log + traceId 中介層 + Discord critical 告警 + F-3 Phase 2 冷封存（chunk + manifest 寫 R2，三態 state_history 防篡改）。",
         "flow": ["每個 endpoint → 中介層自動發 audit_log","分級：info / warn / critical","critical → 同步 Discord webhook","Admin Dashboard 可篩 user_id / event / time / severity","可清理白名單事件（payment/refund 不可清）","冷封存 job：D1 chunk + R2 manifest 寫入 → chunk_verified + verified_at 驗章 → state_history 三態追蹤"],
-        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","POST   /api/admin/audit/archive","GET    /api/admin/audit/archive/[id]","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log / audit_archive (chunk + manifest)","R2: audit-archive bucket"],
+        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","POST   /api/admin/cron/audit-archive (cron-triggered)","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log / audit_archive (chunk + manifest)","R2: audit-archive bucket"],
         "security": ["critical 事件不可刪","admin scope: admin.read / admin.write","step-up 必經 2FA","所有 admin 動作自身亦寫 audit","observability traceId 全鏈路追蹤","冷封存 manifest immutable，state_history append-only 防回溯改寫"],
         "tech": ["Cloudflare Real-time logs","traceId middleware","Discord webhook","admin RBAC","R2 cold archive","Phase F-3 Phase 2 manifest state_history"]
       },
@@ -112,11 +112,11 @@
         "tech": ["ECPay AIO","CheckMacValue","D1 cron 對帳","step-up scope"]
       },
       "wallet": {
-        "purpose": "EIP-4361 Sign-In with Ethereum 錢包綁定。MetaMask 連線 → 簽 SIWE 訊息 → 後端 viem 驗章 → 寫 user_wallets。Phase F-3。",
-        "flow": ["Dashboard → Connect MetaMask → eth_requestAccounts 拿 address","GET /api/auth/wallet/nonce 拿一次性 nonce（綁定當前 user + address）","前端組 EIP-4361 message（domain / chain_id / nonce / issued_at）→ personal_sign","POST /api/auth/wallet/verify 帶 message + signature","後端 viem verifyMessage + 比對 nonce.user_id / nonce.address → INSERT user_wallets","解綁 DELETE /api/auth/wallet/[id] → critical audit"],
+        "purpose": "EIP-4361 Sign-In with Ethereum 錢包綁定。MetaMask 連線 → 簽 SIWE 訊息 → 後端 @noble/curves ecrecover 自實作驗章 → 寫 user_wallets。Phase F-3。",
+        "flow": ["Dashboard → Connect MetaMask → eth_requestAccounts 拿 address","GET /api/auth/wallet/nonce 拿一次性 nonce（綁定當前 user + address）","前端組 EIP-4361 message（domain / chain_id / nonce / issued_at）→ personal_sign","POST /api/auth/wallet/verify 帶 message + signature","後端 secp256k1 ecrecover + keccak256 自實作 recoverAddress + 比對 nonce.user_id / nonce.address → INSERT user_wallets","解綁 DELETE /api/auth/wallet/[id] → critical audit"],
         "api": ["GET    /api/auth/wallet/nonce","POST   /api/auth/wallet/verify","GET    /api/auth/wallet（列表）","DELETE /api/auth/wallet/[id]","D1: user_wallets / wallet_nonces"],
         "security": ["nonce 一次性消耗 + atomic UPDATE...RETURNING 防 replay","nonce.user_id 必驗等於當前 user，防中間人換綁","nonce.address 必驗等於 SIWE message address，防換 address","domain + chain_id 寫入 SIWE message 防 cross-site / cross-chain replay","綁定/解綁皆寫 critical audit（金流前置）","UNIQUE (user_id, address) 撞 409"],
-        "tech": ["EIP-4361 SIWE","viem verifyMessage","MetaMask provider","Phase F-3","@noble crypto"]
+        "tech": ["EIP-4361 SIWE","@noble/curves secp256k1","keccak256 自實作 ecrecover","MetaMask provider","Phase F-3"]
       }
     }
   },
@@ -214,7 +214,7 @@
       "audit": {
         "purpose": "Admin console + 22 audit event types + structured logs + traceId middleware + Discord critical alerts + F-3 Phase 2 cold archive (chunks + manifest pushed to R2 with tamper-evident state_history).",
         "flow": ["Every endpoint → middleware emits audit_log","Severity: info / warn / critical","Critical → synchronous Discord webhook","Admin dashboard filters: user_id / event / time / severity","Whitelisted events purgeable; payment/refund are immutable","Cold archive job: write D1 chunk + R2 manifest → chunk_verified + verified_at → state_history three-state tracking"],
-        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","POST   /api/admin/audit/archive","GET    /api/admin/audit/archive/[id]","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log / audit_archive (chunk + manifest)","R2: audit-archive bucket"],
+        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","POST   /api/admin/cron/audit-archive (cron-triggered)","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log / audit_archive (chunk + manifest)","R2: audit-archive bucket"],
         "security": ["Critical events undeletable","admin scope: admin.read / admin.write","Step-up requires 2FA","All admin actions self-audited","Observability traceId end-to-end","Cold archive manifests immutable; state_history is append-only — no retro-rewrites"],
         "tech": ["Cloudflare Real-time logs","traceId middleware","Discord webhook","admin RBAC","R2 cold archive","Phase F-3 Phase 2 manifest state_history"]
       },
@@ -233,11 +233,11 @@
         "tech": ["ECPay AIO","CheckMacValue","D1 cron reconciliation","step-up scope"]
       },
       "wallet": {
-        "purpose": "EIP-4361 Sign-In with Ethereum wallet binding. MetaMask connect → sign SIWE message → server verifies via viem → INSERT user_wallets. Phase F-3.",
-        "flow": ["Dashboard → Connect MetaMask → eth_requestAccounts to get address","GET /api/auth/wallet/nonce for a single-use nonce bound to (user, address)","Frontend builds EIP-4361 message (domain / chain_id / nonce / issued_at) → personal_sign","POST /api/auth/wallet/verify with message + signature","Server: viem verifyMessage + nonce.user_id match + nonce.address match → INSERT user_wallets","Unbind: DELETE /api/auth/wallet/[id] → critical audit"],
+        "purpose": "EIP-4361 Sign-In with Ethereum wallet binding. MetaMask connect → sign SIWE message → server-side ecrecover (self-implemented with @noble/curves) → INSERT user_wallets. Phase F-3.",
+        "flow": ["Dashboard → Connect MetaMask → eth_requestAccounts to get address","GET /api/auth/wallet/nonce for a single-use nonce bound to (user, address)","Frontend builds EIP-4361 message (domain / chain_id / nonce / issued_at) → personal_sign","POST /api/auth/wallet/verify with message + signature","Server: self-implemented secp256k1 ecrecover + keccak256 → nonce.user_id match + nonce.address match → INSERT user_wallets","Unbind: DELETE /api/auth/wallet/[id] → critical audit"],
         "api": ["GET    /api/auth/wallet/nonce","POST   /api/auth/wallet/verify","GET    /api/auth/wallet (list)","DELETE /api/auth/wallet/[id]","D1: user_wallets / wallet_nonces"],
         "security": ["Nonce single-use, consumed via atomic UPDATE...RETURNING — no replay","nonce.user_id MUST equal current user — blocks MITM rebind","nonce.address MUST equal SIWE message address — blocks address swap","domain + chain_id in SIWE message prevent cross-site / cross-chain replay","Bind & unbind both write critical audit (wallet is a payment prerequisite)","UNIQUE (user_id, address) → 409 on duplicate"],
-        "tech": ["EIP-4361 SIWE","viem verifyMessage","MetaMask provider","Phase F-3","@noble crypto"]
+        "tech": ["EIP-4361 SIWE","@noble/curves secp256k1","Self-implemented keccak256 ecrecover","MetaMask provider","Phase F-3"]
       }
     }
   },
@@ -335,7 +335,7 @@
       "audit": {
         "purpose": "管理コンソール + 22種類のauditイベント + 構造化ログ + traceIdミドルウェア + Discord critical アラート + F-3 Phase 2 コールドアーカイブ（chunk + manifest を R2 に保存、state_history 三状態で改ざん検知）。",
         "flow": ["全endpoint → ミドルウェアが audit_log を発行","重要度：info / warn / critical","critical → 同期Discord webhook","管理ダッシュボードでフィルタ：user_id / event / 時間 / severity","ホワイトリストイベントは削除可、payment/refundは不変","コールドアーカイブジョブ：D1 chunk + R2 manifest 書き込み → chunk_verified + verified_at 検証 → state_history 三状態管理"],
-        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","POST   /api/admin/audit/archive","GET    /api/admin/audit/archive/[id]","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log / audit_archive (chunk + manifest)","R2: audit-archive bucket"],
+        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","POST   /api/admin/cron/audit-archive (cron-triggered)","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log / audit_archive (chunk + manifest)","R2: audit-archive bucket"],
         "security": ["Criticalイベント削除不可","admin scope: admin.read / admin.write","Step-up は2FA必須","管理操作も自身をaudit","Observability traceId 全リンク追跡","コールドアーカイブの manifest は不変、state_history は append-only で遡及改ざん不可"],
         "tech": ["Cloudflare Real-time logs","traceId middleware","Discord webhook","admin RBAC","R2 cold archive","Phase F-3 Phase 2 manifest state_history"]
       },
@@ -354,11 +354,11 @@
         "tech": ["ECPay AIO","CheckMacValue","D1 cron 突合","step-up scope"]
       },
       "wallet": {
-        "purpose": "EIP-4361 Sign-In with Ethereum によるウォレット連携。MetaMask 接続 → SIWE メッセージ署名 → サーバー側で viem 検証 → user_wallets に INSERT。Phase F-3。",
-        "flow": ["Dashboard → Connect MetaMask → eth_requestAccounts で address 取得","GET /api/auth/wallet/nonce で一回限りの nonce 取得（user + address に紐付け）","フロントで EIP-4361 メッセージ（domain / chain_id / nonce / issued_at）組立 → personal_sign","POST /api/auth/wallet/verify に message + signature を送信","サーバー：viem verifyMessage + nonce.user_id 一致 + nonce.address 一致 → user_wallets に INSERT","解除：DELETE /api/auth/wallet/[id] → critical audit"],
+        "purpose": "EIP-4361 Sign-In with Ethereum によるウォレット連携。MetaMask 接続 → SIWE メッセージ署名 → サーバー側で @noble/curves による自前 ecrecover 検証 → user_wallets に INSERT。Phase F-3。",
+        "flow": ["Dashboard → Connect MetaMask → eth_requestAccounts で address 取得","GET /api/auth/wallet/nonce で一回限りの nonce 取得（user + address に紐付け）","フロントで EIP-4361 メッセージ（domain / chain_id / nonce / issued_at）組立 → personal_sign","POST /api/auth/wallet/verify に message + signature を送信","サーバー：自前実装の secp256k1 ecrecover + keccak256 → nonce.user_id 一致 + nonce.address 一致 → user_wallets に INSERT","解除：DELETE /api/auth/wallet/[id] → critical audit"],
         "api": ["GET    /api/auth/wallet/nonce","POST   /api/auth/wallet/verify","GET    /api/auth/wallet（一覧）","DELETE /api/auth/wallet/[id]","D1: user_wallets / wallet_nonces"],
         "security": ["nonce は atomic UPDATE...RETURNING で一回限り消費、リプレイ防止","nonce.user_id は現在ユーザー必須一致、MITM 連携乗っ取り防止","nonce.address は SIWE メッセージ address 必須一致、address 差替え防止","domain + chain_id をメッセージに含め、cross-site / cross-chain リプレイ防止","連携・解除はいずれも critical audit（決済の前提条件）","UNIQUE (user_id, address) 衝突 → 409"],
-        "tech": ["EIP-4361 SIWE","viem verifyMessage","MetaMask provider","Phase F-3","@noble crypto"]
+        "tech": ["EIP-4361 SIWE","@noble/curves secp256k1","自前実装 keccak256 ecrecover","MetaMask provider","Phase F-3"]
       }
     }
   },
@@ -456,7 +456,7 @@
       "audit": {
         "purpose": "관리자 콘솔 + 22가지 audit 이벤트 + 구조화 로그 + traceId 미들웨어 + Discord critical 경고 + F-3 Phase 2 콜드 아카이브 (chunk + manifest를 R2에 저장, state_history 3단계로 변조 감지).",
         "flow": ["모든 endpoint → 미들웨어가 audit_log 발행","심각도: info / warn / critical","critical → 동기 Discord webhook","Admin Dashboard 필터: user_id / event / 시간 / severity","화이트리스트 이벤트만 삭제 가능, payment/refund는 불변","콜드 아카이브 job: D1 chunk + R2 manifest 작성 → chunk_verified + verified_at 검증 → state_history 3단계 추적"],
-        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","POST   /api/admin/audit/archive","GET    /api/admin/audit/archive/[id]","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log / audit_archive (chunk + manifest)","R2: audit-archive bucket"],
+        "api": ["GET    /api/admin/audit","DELETE /api/admin/audit/[id]","POST   /api/admin/cron/audit-archive (cron-triggered)","GET    /api/admin/users","POST   /api/admin/users/[id]/ban","POST   /api/admin/users/[id]/unban","GET/POST/PATCH/DELETE /api/admin/oauth-clients","GET    /api/admin/metrics","D1: audit_log / audit_archive (chunk + manifest)","R2: audit-archive bucket"],
         "security": ["Critical 이벤트 삭제 불가","admin scope: admin.read / admin.write","Step-up은 2FA 필수","모든 admin 작업도 audit","Observability traceId 전체 추적","콜드 아카이브 manifest는 불변, state_history는 append-only로 소급 변조 불가"],
         "tech": ["Cloudflare Real-time logs","traceId middleware","Discord webhook","admin RBAC","R2 cold archive","Phase F-3 Phase 2 manifest state_history"]
       },
@@ -475,11 +475,11 @@
         "tech": ["ECPay AIO","CheckMacValue","D1 cron 정산","step-up scope"]
       },
       "wallet": {
-        "purpose": "EIP-4361 Sign-In with Ethereum 지갑 연결. MetaMask 연결 → SIWE 메시지 서명 → 서버에서 viem 검증 → user_wallets INSERT. Phase F-3.",
-        "flow": ["Dashboard → Connect MetaMask → eth_requestAccounts로 address 획득","GET /api/auth/wallet/nonce로 일회성 nonce 발급 (user + address 바인딩)","프론트에서 EIP-4361 메시지 (domain / chain_id / nonce / issued_at) 조립 → personal_sign","POST /api/auth/wallet/verify에 message + signature 전송","서버: viem verifyMessage + nonce.user_id 일치 + nonce.address 일치 → user_wallets INSERT","해제: DELETE /api/auth/wallet/[id] → critical audit"],
+        "purpose": "EIP-4361 Sign-In with Ethereum 지갑 연결. MetaMask 연결 → SIWE 메시지 서명 → 서버에서 @noble/curves 기반 자체 구현 ecrecover 검증 → user_wallets INSERT. Phase F-3.",
+        "flow": ["Dashboard → Connect MetaMask → eth_requestAccounts로 address 획득","GET /api/auth/wallet/nonce로 일회성 nonce 발급 (user + address 바인딩)","프론트에서 EIP-4361 메시지 (domain / chain_id / nonce / issued_at) 조립 → personal_sign","POST /api/auth/wallet/verify에 message + signature 전송","서버: 자체 구현 secp256k1 ecrecover + keccak256 → nonce.user_id 일치 + nonce.address 일치 → user_wallets INSERT","해제: DELETE /api/auth/wallet/[id] → critical audit"],
         "api": ["GET    /api/auth/wallet/nonce","POST   /api/auth/wallet/verify","GET    /api/auth/wallet (목록)","DELETE /api/auth/wallet/[id]","D1: user_wallets / wallet_nonces"],
         "security": ["nonce는 atomic UPDATE...RETURNING으로 일회성 소비, replay 방지","nonce.user_id는 현재 user와 일치 필수, MITM 재바인딩 차단","nonce.address는 SIWE 메시지 address와 일치 필수, address 교체 차단","domain + chain_id를 SIWE 메시지에 포함, cross-site / cross-chain replay 차단","바인딩/해제 모두 critical audit 작성 (결제 전제 조건)","UNIQUE (user_id, address) 충돌 → 409"],
-        "tech": ["EIP-4361 SIWE","viem verifyMessage","MetaMask provider","Phase F-3","@noble crypto"]
+        "tech": ["EIP-4361 SIWE","@noble/curves secp256k1","자체 구현 keccak256 ecrecover","MetaMask provider","Phase F-3"]
       }
     }
   }
