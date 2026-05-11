@@ -183,27 +183,50 @@ describe('rowMatchesColdClass', () => {
   })
 })
 
-describe('deriveKeysFromChunk (PR 2.1a)', () => {
-  it('從 chunks row 反推與 buildChunkKeys 一致的 key', () => {
+describe('deriveKeysFromChunk (PR 2.1a + 2.1c provenance)', () => {
+  it('row.dry_run=1（INTEGER）→ dryrun prefix', () => {
     const row = {
       env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
       archive_date: '2026-05-11',
       min_id: 8, max_id: 922, chunk_sha256: 'abc',
+      dry_run: 1,
     }
-    const k = deriveKeysFromChunk(row, true)
+    const k = deriveKeysFromChunk(row)
     expect(k.dataKey).toBe('audit-log-dryrun/prod/audit_log/telemetry/2026/05/11/8-922-abc.jsonl')
     expect(k.manifestKey).toBe('manifest-dryrun/prod/audit_log/telemetry/2026/05/11/8-922-abc.json')
   })
 
-  it('live 模式切 prefix', () => {
+  it('row.dry_run=0 → live prefix', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-11',
+      min_id: 1, max_id: 2, chunk_sha256: 'dead',
+      dry_run: 0,
+    }
+    const k = deriveKeysFromChunk(row)
+    expect(k.dataKey.startsWith('audit-log/')).toBe(true)
+    expect(k.manifestKey.startsWith('manifest/')).toBe(true)
+  })
+
+  it('row.dry_run=true（BOOL，相容性）→ dryrun prefix', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-11',
+      min_id: 1, max_id: 2, chunk_sha256: 'dead',
+      dry_run: true,
+    }
+    const k = deriveKeysFromChunk(row)
+    expect(k.dataKey.startsWith('audit-log-dryrun/')).toBe(true)
+  })
+
+  it('row.dry_run 缺欄（極端 fallback）→ live prefix', () => {
     const row = {
       env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
       archive_date: '2026-05-11',
       min_id: 1, max_id: 2, chunk_sha256: 'dead',
     }
-    const k = deriveKeysFromChunk(row, false)
+    const k = deriveKeysFromChunk(row)
     expect(k.dataKey.startsWith('audit-log/')).toBe(true)
-    expect(k.manifestKey.startsWith('manifest/')).toBe(true)
   })
 })
 

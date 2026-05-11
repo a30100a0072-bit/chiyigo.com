@@ -219,6 +219,7 @@ CREATE TABLE IF NOT EXISTS audit_archive_chunks (
   purge_after        TEXT,
   cold_copied_at     TEXT,
   run_id             TEXT    NOT NULL,
+  dry_run            INTEGER NOT NULL DEFAULT 0,   -- PR 2.1c migration 0039：provenance
   created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at         TEXT    NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (env, table_name, cold_class, archive_date, min_id, max_id, chunk_sha256)

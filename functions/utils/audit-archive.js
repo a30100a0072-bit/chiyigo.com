@@ -152,10 +152,15 @@ export function buildChunkKeys({ env, tableName, coldClass, minId, maxId, sha256
 
 /**
  * 從 chunks row 反推 data/manifest key（recovery / verify 路徑會用）。
- * chunks row 不存 dryRun flag，dryRun 來自當前 env；同一 chunk 在 dry-run / live
- * 之間切換時 key 會變，但設計上 PR 4 一次性切換、key 變動就視為新 chunk，沒 partial state。
+ *
+ * PR 2.1c（codex H-1 修正）：dry_run 從 row 自身取，不再吃當前 env flag。
+ * 這是 provenance 防呆 — chunk 在 PR 4 flip flag 後，state 升 marked_archived
+ * 用的 key 仍對齊當初 PUT data 的 prefix（dryrun / live）。
+ *
+ * row 必須含：env, table_name, cold_class, archive_date, min_id, max_id,
+ * chunk_sha256, dry_run（migration 0039 後 schema）。
  */
-export function deriveKeysFromChunk(row, dryRun) {
+export function deriveKeysFromChunk(row) {
   return buildChunkKeys({
     env:         row.env,
     tableName:   row.table_name,
@@ -164,7 +169,7 @@ export function deriveKeysFromChunk(row, dryRun) {
     maxId:       row.max_id,
     sha256:      row.chunk_sha256,
     archiveDate: row.archive_date,
-    dryRun,
+    dryRun:      row.dry_run === 1 || row.dry_run === true,
   })
 }
 

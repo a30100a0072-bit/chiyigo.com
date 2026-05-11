@@ -1,0 +1,25 @@
+-- Down migration for 0039：把 dry_run 欄拿掉。
+-- SQLite < 3.35 不支援 DROP COLUMN；D1 雖然 ≥ 3.39 支援，但 ALTER DROP COLUMN
+-- 仍可能因為 INDEX 反向引用 / partial index 而 fail。
+--
+-- 安全 down 路徑（手動 runbook）：
+--   1) 倒備份 R2 manifest 對齊 chunks state（避免 down 後 PR 2.1a 認不出 prefix）
+--   2) PRAGMA foreign_keys = OFF;
+--   3) BEGIN;
+--      CREATE TABLE audit_archive_chunks_new (... 0038 原 schema ...);
+--      INSERT INTO audit_archive_chunks_new SELECT
+--        env, table_name, cold_class, cold_class_version, archive_date,
+--        min_id, max_id, chunk_sha256, state, row_count, retry_count,
+--        last_failure_at, last_failure, next_reminder_at, blacklisted_at,
+--        marked_archived_at, purge_after, cold_copied_at, run_id,
+--        created_at, updated_at
+--      FROM audit_archive_chunks;
+--      DROP TABLE audit_archive_chunks;
+--      ALTER TABLE audit_archive_chunks_new RENAME TO audit_archive_chunks;
+--      -- 重建 3 個 index（idx_archive_chunks_state / purge / blacklist）
+--      COMMIT;
+--
+-- 不自動執行：down 的代價遠高於 forward，加之 dry_run 欄不應該回退（會重新
+-- 引入 H-1 bug）。如果真的要 rollback PR 2.1c 應該配合 down 整個 phase。
+
+ALTER TABLE audit_archive_chunks DROP COLUMN dry_run;

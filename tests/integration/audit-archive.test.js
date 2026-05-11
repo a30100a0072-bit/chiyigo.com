@@ -173,11 +173,12 @@ describe('audit-archive cron — recovery 與失敗', () => {
     const archiveDate = '2026-05-11'
 
     // 種 planned chunks row（模擬上輪 worker manifest PUT 後 crash）
+    // PR 2.1c：dry_run=0 對齊本測試 default 走 live mode（DRY_RUN=false）
     await env.chiyigo_db.prepare(
       `INSERT INTO audit_archive_chunks
         (env, table_name, cold_class, cold_class_version, archive_date,
-         min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id)
-       VALUES (?, 'audit_log', 'telemetry', 1, ?, ?, ?, ?, 'planned', ?, 0, 'run-seed')`
+         min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run)
+       VALUES (?, 'audit_log', 'telemetry', 1, ?, ?, ?, ?, 'planned', ?, 0, 'run-seed', 0)`
     ).bind(ARCHIVE_ENV, archiveDate, minId, maxId, sha, rows.length).run()
 
     // 種 planned manifest 進 R2（recovery loadAndAppend 才有東西讀）
@@ -222,6 +223,93 @@ describe('audit-archive cron — recovery 與失敗', () => {
     expect(chunk.state).toBe('failed')
     expect(chunk.last_failure).toBe('verification_failed')
     expect(chunk.retry_count).toBe(1)
+  })
+})
+
+describe('audit-archive cron — PR 2.1c provenance & drift', () => {
+  it('H-1：dry-run chunk 在 env flip 為 live 後仍 skip mark_archived（看 chunk 自身 dry_run）', async () => {
+    // 模擬 PR 2.0/2.1a 留下的 dry-run chunk 已升 verified；之後 PR 4 直接 flip live。
+    // 預期：worker 看 chunk.dry_run=1 仍 skip，不會強行寫 archived_at 把資料炸了。
+    await seedTelemetry(2)
+    const rowsRes = await env.chiyigo_db.prepare(
+      `SELECT id FROM audit_log ORDER BY id ASC`
+    ).all()
+    const rows = rowsRes.results
+    const minId = rows[0].id, maxId = rows[rows.length - 1].id
+
+    // 直接種一筆 verified + dry_run=1 chunk（模擬 PR 2.0/2.1a steady state）
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+        (env, table_name, cold_class, cold_class_version, archive_date,
+         min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run)
+       VALUES (?, 'audit_log', 'telemetry', 1, '2026-05-11', ?, ?, 'fake-sha', 'verified', ?, 0, 'run-seed', 1)`
+    ).bind(ARCHIVE_ENV, minId, maxId, rows.length).run()
+
+    // env DRY_RUN=false（PR 4 切 live），但 chunk 自身是 dry-run
+    const report = await runCron({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(report.ok).toBe(true)
+    expect(report.blocker?.state).toBe('verified')
+    expect(report.skipped_reason).toBe('dry_run_skips_marked_archived')
+
+    // 關鍵驗：audit_log.archived_at 不能被誤標
+    const { results: marked } = await env.chiyigo_db
+      .prepare(`SELECT id FROM audit_log WHERE archived_at IS NOT NULL`).all()
+    expect(marked ?? []).toHaveLength(0)
+
+    // chunk 仍維持 verified（不會被推進）
+    const [chunk] = await getChunk()
+    expect(chunk.state).toBe('verified')
+    expect(chunk.dry_run).toBe(1)
+  })
+
+  it('M-1：cold_class drift candidate → fail-fast emit cold_class_drift、不建 chunk', async () => {
+    // 種 row：stored cold_class='telemetry'（matches WHERE）但 event_type
+    // 經 classifyForCold 回 'immutable' — 模擬 audit-policy 改後 backfill 沒同步。
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_log (event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+       VALUES ('account.password.change', 'info', NULL, 'h', '{}', 'telemetry', datetime('now','-1 hour'))`
+    ).run()
+
+    const report = await runCron()
+    // 設計：drift 不算 worker 系統失敗（不 set ok=false / HTTP 500），
+    // 但 emit critical + skipped_reason，由 alert pipeline 接 audit event。
+    expect(report.ok).toBe(true)
+    expect(report.skipped_reason).toBe('cold_class_drift_detected')
+    expect(report.errors?.[0]?.event).toBe('cold_class_drift')
+    expect(report.errors?.[0]?.drift_count).toBe(1)
+
+    // 不應該有 chunk 被建
+    const chunks = await getChunk()
+    expect(chunks).toHaveLength(0)
+
+    // R2 不應有 archive object
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
+    expect((list.objects ?? []).filter(o => o.key.endsWith('.jsonl'))).toHaveLength(0)
+  })
+
+  it('M-1：drift 與正常 row 混合 → 同樣 fail-fast（不可只 archive 對的那批）', async () => {
+    // 一個 drift row + 兩個正常 row。整批不能進，避免 partial archive。
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_log (event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+       VALUES ('account.password.change', 'info', NULL, 'h', '{}', 'telemetry', datetime('now','-1 hour'))`
+    ).run()
+    await seedTelemetry(2)
+
+    const report = await runCron()
+    expect(report.skipped_reason).toBe('cold_class_drift_detected')
+    expect(report.errors?.[0]?.drift_count).toBe(1)
+    const chunks = await getChunk()
+    expect(chunks).toHaveLength(0)
+  })
+
+  it('H-1：新 chunk 在 live env 寫入 → chunks.dry_run=0 + R2 走 live prefix', async () => {
+    await seedTelemetry(2)
+    const report = await runCron({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(report.ok).toBe(true)
+    const [chunk] = await getChunk()
+    expect(chunk.dry_run).toBe(0)
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
+    expect((list.objects ?? []).some(o => o.key.startsWith('audit-log/') && !o.key.startsWith('audit-log-dryrun/'))).toBe(true)
   })
 })
 

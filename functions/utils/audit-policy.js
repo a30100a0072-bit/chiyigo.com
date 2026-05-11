@@ -40,6 +40,7 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.archive.row_count_mismatch',           // critical
   'audit.archive.partial_archive_mismatch',     // critical
   'audit.archive.purge_mismatch',               // critical
+  'audit.archive.cold_class_drift',             // critical（PR 2.1c codex M-1：classifier 與 stored cold_class 不一致）
   'admin.audit.archive.read',                   // admin export 觸發
 ]
 

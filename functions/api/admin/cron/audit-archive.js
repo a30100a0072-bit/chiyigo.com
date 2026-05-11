@@ -103,9 +103,11 @@ export async function onRequestPost({ request, env }) {
 
   try {
     // ── Step 1：列出當前 (table, cold_class) 全部 chunks，算 cursor + blocker ──
+    // PR 2.1c 加 dry_run 欄：blocker 升態的 key derivation / mark_archived skip 邏輯
+    // 都要看 chunk 自身 provenance，不看當前 env flag（避免 H-1 dryrun→live flip 損毀）。
     const chunksRows = await db.prepare(
       `SELECT env, table_name, cold_class, archive_date,
-              min_id, max_id, state, chunk_sha256, row_count, retry_count
+              min_id, max_id, state, chunk_sha256, row_count, retry_count, dry_run
          FROM audit_archive_chunks
         WHERE env = ? AND table_name = ? AND cold_class = ?
         ORDER BY min_id ASC`
@@ -156,7 +158,9 @@ export async function onRequestPost({ request, env }) {
 // 場景：上輪 worker 寫了 planned manifest 與 chunks row，但 data PUT 失敗或 crash。
 // design doc §「marked_archived 升態雙路徑」前置的 idempotent recovery 概念。
 async function handlePlannedBlocker(ctx) {
-  const { envName, tableName, coldClass, dryRun, db, bucket, report, blocker } = ctx
+  const { envName, tableName, coldClass, db, bucket, report, blocker } = ctx
+  // PR 2.1c：dryRun 從 chunk row 自己取，不看 env flag（H-1 provenance fix）
+  const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
   report.blocker_action = 'recovery_planned'
 
   // 重撈：cold_class + archived_at IS NULL + id range
@@ -187,7 +191,7 @@ async function handlePlannedBlocker(ctx) {
     })
   }
 
-  const { dataKey, manifestKey } = deriveKeysFromChunk(blocker, dryRun)
+  const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
 
   // 1) PUT data（R2 PUT idempotent — 同 key 同 body 覆寫無副作用）
   await bucket.put(dataKey, jsonl, {
@@ -215,7 +219,7 @@ async function handlePlannedBlocker(ctx) {
     event_type: 'audit.archive.chunk_uploaded',
     severity:   'info',
     data: {
-      run_id: ctx.runId, dry_run: dryRun, env: envName, table: tableName, cold_class: coldClass,
+      run_id: ctx.runId, dry_run: chunkDryRun, env: envName, table: tableName, cold_class: coldClass,
       chunk_key: dataKey, manifest_key: manifestKey,
       row_count: rows.length, min_id: blocker.min_id, max_id: blocker.max_id,
       sha256_jsonl: sha, recovery: 'planned_to_uploaded',
@@ -225,10 +229,11 @@ async function handlePlannedBlocker(ctx) {
 
 // ── Uploaded blocker：R2 GET 回讀 + sha + row_count 比對 → verified ────────
 async function handleUploadedBlocker(ctx) {
-  const { envName, tableName, coldClass, dryRun, db, bucket, report, blocker } = ctx
+  const { envName, tableName, coldClass, db, bucket, report, blocker } = ctx
   report.blocker_action = 'verify_uploaded'
 
-  const { dataKey, manifestKey } = deriveKeysFromChunk(blocker, dryRun)
+  // PR 2.1c：用 chunk 自身 dry_run 算 key（H-1 provenance fix）
+  const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
   const obj = await bucket.get(dataKey)
   if (!obj) {
     return failChunkMismatch(ctx, 'verification_failed', {
@@ -271,12 +276,18 @@ async function handleUploadedBlocker(ctx) {
 // ── Verified blocker：marked_archived 雙路徑驗證（design doc §「升態雙路徑」）─
 // audit_log 專用；admin_audit_log（PR 2.2）不走此路（terminal=cold_copied）。
 async function handleVerifiedBlocker(ctx) {
-  const { envName, tableName, coldClass, dryRun, db, bucket, report, blocker } = ctx
+  const { envName, tableName, coldClass, db, bucket, report, blocker } = ctx
+  // PR 2.1c（codex H-1 修正）：是否 skip mark_archived 看「chunk 自己當初被 PUT 時是不是 dry-run」，
+  // 不看當前 env flag。若 env 已切 live 但這 chunk 是 dry-run 寫的，data 物件只存在
+  // dryrun prefix；強行 mark archived 後 cron-purge-worker 會刪掉沒備份的 D1 row。
+  const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
   report.blocker_action = 'mark_archived'
 
-  if (dryRun) {
-    // 設計：PR 2.1a 在 DRY_RUN 下 verified = 終點，不 UPDATE archived_at。
-    // 下一輪 cron 再 hit 同一 verified blocker → 仍 skip。PR 4 拆 flag 才解開。
+  if (chunkDryRun) {
+    // chunk 是 dry-run 寫的：verified = 終點，不 UPDATE archived_at。
+    // 下一輪 cron 再 hit 同一 verified blocker → 仍 skip。
+    // PR 4 跑「live 切換」前要先把所有 dry-run chunks 走完 purge/discard 流程，
+    // 不靠這條 skip 永久墊著。
     report.skipped_reason = 'dry_run_skips_marked_archived'
     return
   }
@@ -326,7 +337,7 @@ async function handleVerifiedBlocker(ctx) {
   if (!succeeded) return
 
   // 升 marked_archived：寫 manifest + chunks UPDATE（含 marked_archived_at / purge_after = +7d）
-  const { manifestKey } = deriveKeysFromChunk(blocker, dryRun)
+  const { manifestKey } = deriveKeysFromChunk(blocker)
   const markedManifest = await loadAndAppend(bucket, manifestKey, 'marked_archived')
   await bucket.put(manifestKey, JSON.stringify(markedManifest, null, 2), {
     httpMetadata: { contentType: 'application/json' },
@@ -349,7 +360,7 @@ async function handleVerifiedBlocker(ctx) {
     event_type: 'audit.archive.marked_archived',
     severity:   'info',
     data: {
-      run_id: ctx.runId, dry_run: dryRun, env: envName, table: tableName, cold_class: coldClass,
+      run_id: ctx.runId, dry_run: chunkDryRun, env: envName, table: tableName, cold_class: coldClass,
       manifest_key: manifestKey, row_count: blocker.row_count,
       min_id: blocker.min_id, max_id: blocker.max_id,
       path,
@@ -383,10 +394,40 @@ async function runFreshChunkPipeline(ctx) {
     return
   }
 
+  // PR 2.1c（codex M-1 修正）：candidates 是「stored cold_class 等於目標」的 row，
+  // 但 runtime classifier 可能因 audit-policy 改動而不一致。若任何 candidate 被
+  // classifier 排除 → 馬上 fail-fast 不建 chunk，因為：
+  //   - 將那些 row 進 jsonl 不對（classifier 說它不屬於這 class）
+  //   - 不進 jsonl 但仍處在 id range 內 → marked_archived 階段 UPDATE WHERE
+  //     id BETWEEN min AND max 會把它一起標 archived，但實際沒備份 → purge 後丟資料
+  // policy 與 backfill drift 是技術債，應由人介入決定 backfill 或改 classify；
+  // 在這之前 worker 不要自作主張處理半套資料。
+  const driftRows = candidates.filter(r => !rowMatchesColdClass(r, coldClass))
+  if (driftRows.length > 0) {
+    const sampleIds = driftRows.slice(0, 20).map(r => r.id)
+    report.skipped_reason = 'cold_class_drift_detected'
+    report.errors.push({
+      event: 'cold_class_drift',
+      drift_count: driftRows.length,
+      sample_ids: sampleIds,
+      stage: 'fresh_pipeline_classify',
+    })
+    await safeUserAudit(env, {
+      event_type: 'audit.archive.cold_class_drift',
+      severity:   'critical',
+      data: {
+        run_id: runId, env: envName, table: tableName, cold_class: coldClass,
+        drift_count: driftRows.length,
+        sample_ids: sampleIds,
+        sample_event_types: [...new Set(driftRows.slice(0, 20).map(r => r.event_type))],
+      },
+    })
+    return
+  }
+
   const rows = []
   let bytesEstimate = 0
   for (const r of candidates) {
-    if (!rowMatchesColdClass(r, coldClass)) continue
     const approxLen = (r.event_data?.length ?? 0) + 120
     if (rows.length >= CHUNK_MAX_ROWS) break
     if (bytesEstimate + approxLen > CHUNK_MAX_BYTES) break
@@ -394,7 +435,7 @@ async function runFreshChunkPipeline(ctx) {
     bytesEstimate += approxLen
   }
   if (rows.length === 0) {
-    report.skipped_reason = 'no_rows_match_cold_class_after_classify'
+    report.skipped_reason = 'no_rows_after_size_limit'
     return
   }
 
@@ -427,10 +468,10 @@ async function runFreshChunkPipeline(ctx) {
   await db.prepare(
     `INSERT OR IGNORE INTO audit_archive_chunks
       (env, table_name, cold_class, cold_class_version, archive_date,
-       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?)`
+       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?, ?)`
   ).bind(envName, tableName, coldClass, COLD_CLASS_VERSION, archiveDate,
-         minId, maxId, sha, rows.length, runId).run()
+         minId, maxId, sha, rows.length, runId, dryRun ? 1 : 0).run()
 
   report.chunks_planned = 1
 
@@ -468,7 +509,9 @@ async function runFreshChunkPipeline(ctx) {
 
 // ── 共用：失敗 → emit critical event + chunks.state='failed' + report.ok=false ─
 async function failChunkMismatch(ctx, eventName, data) {
-  const { envName, tableName, coldClass, db, report, blocker, runId, dryRun } = ctx
+  const { envName, tableName, coldClass, db, report, blocker, runId } = ctx
+  // PR 2.1c：audit event 帶 chunk 自身 dry_run（不是 env flag），方便 forensic 區分
+  const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
   report.ok = false
   report.errors.push({ event: eventName, ...data })
 
@@ -488,7 +531,7 @@ async function failChunkMismatch(ctx, eventName, data) {
     event_type: `audit.archive.${eventName}`,
     severity:   'critical',
     data: {
-      run_id: runId, dry_run: dryRun, env: envName, table: tableName, cold_class: coldClass,
+      run_id: runId, dry_run: chunkDryRun, env: envName, table: tableName, cold_class: coldClass,
       min_id: blocker.min_id, max_id: blocker.max_id,
       chunk_sha256: blocker.chunk_sha256,
       ...data,
