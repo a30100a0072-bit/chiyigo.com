@@ -1,0 +1,32 @@
+name: Cron — Audit Archive (F-3 Phase 2 PR 2.0 dry-run)
+
+# 每日 18:00 UTC（= 02:00 Asia/Taipei，凌晨低峰）跑一次。
+# 目前 PR 2.0 dry-run：寫 R2 audit-log-dryrun/ prefix；不 UPDATE / DELETE D1。
+# 詳見 docs/AUDIT_RETENTION_PLAN.md §「Cron / Job 拆分」。
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:        # 手動觸發（dry-run 觀察用）
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call audit-archive endpoint
+        run: |
+          set -euo pipefail
+          response=$(curl -sS -w "\n%{http_code}" \
+            -X POST https://chiyigo.com/api/admin/cron/audit-archive \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+
+          echo "Status: $status"
+          echo "Body:   $body"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::audit-archive endpoint returned $status"
+            exit 1
+          fi

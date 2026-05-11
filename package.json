@@ -6,7 +6,7 @@
   "scripts": {
     "build:partials": "node scripts/build-partials.js",
     "build:css": "tailwindcss -c tailwind.config.cjs -i src/css/tailwind.css -o public/css/tailwind.css --minify",
-    "build": "npm run build:partials && npm run build:css && npm run lint:handlers",
+    "build": "npm run build:partials && npm run build:css && npm run lint:handlers && npm run lint:archive-no-delete",
     "build:watch": "node scripts/build-partials.js --watch",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -15,7 +15,8 @@
     "test:all": "npm test && npm run test:int",
     "test:security:auth": "vitest run --config vitest.workers.config.js --testNamePattern=\"\\[J-\"",
     "lint": "eslint functions tests",
-    "lint:handlers": "node scripts/lint-handlers.js"
+    "lint:handlers": "node scripts/lint-handlers.js",
+    "lint:archive-no-delete": "node scripts/lint-archive-no-delete.js"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",
