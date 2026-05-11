@@ -333,6 +333,8 @@ function hidePassword(inputId, btnId) {
 const TURNSTILE_SITEKEY = '0x4AAAAAADISz6kSGZRC94TQ';
 let _loginWidgetId = null;
 let _registerWidgetId = null;
+// 使用者在 Turnstile API ready 前切到註冊 tab → 記錄意圖，API ready 後補 render
+let _registerWidgetPending = false;
 
 function _setTsReady(containerEl, ready) {
   const wrap = containerEl?.closest('.ts-wrap');
@@ -363,15 +365,23 @@ function _resetTurnstile(widgetId, containerId) {
 
 function _ensureRegisterWidget() {
   if (_registerWidgetId != null) return;
+  if (typeof window.turnstile === 'undefined') {
+    // API 還沒載完 → 留個 flag，等 onloadTurnstile 補 render
+    _registerWidgetPending = true;
+    return;
+  }
   _registerWidgetId = _renderTurnstile('ts-register-container');
 }
 
-// Turnstile API ready 時觸發（?onload=onloadTurnstile）。只 render 登入 widget；
-// 註冊 widget 延到使用者切 tab 才建立。
+// Turnstile API ready 時觸發（?onload=onloadTurnstile）。預設只 render 登入 widget；
+// 若使用者已先切到註冊 tab（_registerWidgetPending），一併補 render 註冊 widget。
 window.onloadTurnstile = function () {
-  if (_loginWidgetId != null) return;
-  if (document.getElementById('ts-login-container')) {
+  if (_loginWidgetId == null && document.getElementById('ts-login-container')) {
     _loginWidgetId = _renderTurnstile('ts-login-container');
+  }
+  if (_registerWidgetPending && _registerWidgetId == null) {
+    _registerWidgetId = _renderTurnstile('ts-register-container');
+    _registerWidgetPending = false;
   }
 };
 // 防 race：Turnstile script 是 async，可能在本檔執行前就跑完 onload；補一次。
@@ -452,9 +462,9 @@ async function handleLogin(event) {
   btn.dataset.label = uiT('btn_login');
 
   const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
-  // Turnstile widget 在頁面有掛但用戶搶在驗證完成前點 → 給本地 i18n 提示，不送 request
-  const hasTsWidget = !!document.querySelector('#form-login .cf-turnstile');
-  if (hasTsWidget && !tsToken) {
+  // explicit render 後 .cf-turnstile class 已不存在，改用 closure widgetId 判斷 widget 是否該存在
+  // （widgetId === null 代表 API 還沒 ready 或還沒 render，等於使用者搶在驗證完成前點）
+  if (!tsToken) {
     showMsg(uiT('err_captcha_pending'));
     return;
   }
@@ -528,8 +538,7 @@ async function handleRegister(event) {
   }
 
   const tsToken = document.querySelector('#form-register [name="cf-turnstile-response"]')?.value || '';
-  const hasTsWidget = !!document.querySelector('#form-register .cf-turnstile');
-  if (hasTsWidget && !tsToken) {
+  if (!tsToken) {
     showMsg(uiT('err_captcha_pending'));
     return;
   }
