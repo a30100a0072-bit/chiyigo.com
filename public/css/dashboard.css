@@ -115,6 +115,7 @@ body.has-sidebar{overflow:hidden}
 }
 .dash-group-title:first-of-type{margin-top:.25rem}
 .dash-group-title .dgt-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.7}
+.dash-group-title .dgt-dot--danger{background:#ef4444}
 .sb-group-label{
   font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.14em;
   color:var(--text-dim);padding:.7rem .9rem .25rem;
