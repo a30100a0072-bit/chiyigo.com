@@ -249,10 +249,11 @@ export async function onRequestPost({ request, env }) {
     report.rows_uploaded   = rows.length
 
     // ── Step 8：emit audit event ────────────────────────────
+    // safeUserAudit 約定：event_type（snake_case） + data（object，內部 JSON.stringify）
     await safeUserAudit(env, {
-      eventType: 'audit.archive.chunk_uploaded',
-      severity:  'info',
-      eventData: JSON.stringify({
+      event_type: 'audit.archive.chunk_uploaded',
+      severity:   'info',
+      data: {
         run_id: runId,
         dry_run: dryRun,
         env: envName,
@@ -264,7 +265,7 @@ export async function onRequestPost({ request, env }) {
         min_id: minId,
         max_id: maxId,
         sha256_jsonl: sha,
-      }),
+      },
     })
   } catch (e) {
     // 整輪失敗 — 不 emit audit.archive.upload_failed（PR 2.1 加 dedicated handler）；
@@ -278,7 +279,8 @@ export async function onRequestPost({ request, env }) {
   // （真正 enforcement 在 scripts/lint-archive-no-delete.js / CI）
 
   report.finished_at = new Date().toISOString()
-  return res(report, 200)
+  // 失敗回 500：GH Actions workflow 才會抓得到（workflow 只看 HTTP status）
+  return res(report, report.ok ? 200 : 500)
 }
 
 // NON_TERMINAL_STATES exported for test 用途的 referenced re-export

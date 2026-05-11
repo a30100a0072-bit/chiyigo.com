@@ -40,10 +40,16 @@ const FILE_PATTERN = /^audit-archive.*\.js$/
 
 const FORBIDDEN_PATTERNS = [
   { re: /AUDIT_ARCHIVE_BUCKET\s*\.\s*delete\s*\(/g,           desc: 'AUDIT_ARCHIVE_BUCKET.delete()' },
-  { re: /AUDIT_ARCHIVE_BUCKET\s*\[\s*['"]delete['"]\s*\]/g,   desc: "AUDIT_ARCHIVE_BUCKET['delete']" },
+  { re: /AUDIT_ARCHIVE_BUCKET\s*\[\s*['"`]delete['"`]\s*\]/g, desc: "AUDIT_ARCHIVE_BUCKET['delete']" },
   // alias 化 R2 binding 後呼叫 .delete(
   // 例：const bucket = env.AUDIT_ARCHIVE_BUCKET; bucket.delete('...')
   { re: /\bbucket\s*\.\s*delete\s*\(/g,                       desc: 'bucket.delete() (alias of AUDIT_ARCHIVE_BUCKET)' },
+  // alias 後用 bracket access：bucket['delete']('...') / bucket["delete"](...)
+  { re: /\bbucket\s*\[\s*['"`]delete['"`]\s*\]/g,             desc: "bucket['delete'] (alias bracket access)" },
+  // 解構 R2 binding 後拿 delete fn：const { delete: del } = env.AUDIT_ARCHIVE_BUCKET
+  // 注意「delete」是 JS 保留字，rename 解構幾乎必然；抓 'delete' 在解構左側
+  { re: /\{\s*[^}]*\bdelete\s*:\s*\w+[^}]*\}\s*=\s*[^;]*AUDIT_ARCHIVE_BUCKET/g,
+    desc: 'destructured { delete: alias } = ...AUDIT_ARCHIVE_BUCKET' },
 ]
 
 const ALLOW_TAG = 'archive-no-delete-allow'
