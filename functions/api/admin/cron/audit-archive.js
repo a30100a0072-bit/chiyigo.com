@@ -2,8 +2,16 @@
  * POST /api/admin/cron/audit-archive
  * Header: Authorization: Bearer <CRON_SECRET>
  *
- * F-3 Phase 2 PR 2.1a — Archive worker dry-run + state machine
+ * F-3 Phase 2 PR 2.1a / 2.1c / 2.1d — Archive worker dry-run + state machine
  * （design doc：docs/AUDIT_RETENTION_PLAN.md v11）
+ *
+ * PR 2.1d 範圍（codex F-1/F-2/F-3 收尾）：
+ *   - F-1：chunk_uploaded emit 點搬到 handleUploadedBlocker（verify ok 後）；
+ *          prod audit_log id=924 為舊語意，forensic 時要注意
+ *   - F-2：runFreshChunkPipeline 對 rows 做 severity reduce，塞進 manifest
+ *   - F-3：所有 R2 bucket.put 改走 archivePut（utils putWithRetry）— 1s/4s/16s
+ *          exponential backoff，每次 attempt 失敗 emit audit.archive.upload_failed
+ *          (warn)；最後 attempt 失敗 emit critical 並 throw
  *
  * PR 2.1a 範圍（user 在 2026-05-11 確認）：
  *   - 補三段升態：planned recovery → uploaded、uploaded → verified、verified → marked_archived
@@ -36,6 +44,8 @@ import {
   buildManifest,
   deriveKeysFromChunk,
   appendStateHistory,
+  aggregateSeverities,
+  putWithRetry,
   rowMatchesColdClass,
   newRunId,
   utcDate,
@@ -57,6 +67,48 @@ function isDryRun(env) {
 
 function archiveEnv(env) {
   return String(env.ARCHIVE_ENV ?? 'prod')
+}
+
+// PR 2.1d（codex F-3）：R2 PUT 失敗 emit audit.archive.upload_failed。
+//   - 非最後一次 attempt → severity='warn'
+//   - 最後一次 attempt    → severity='critical'
+// Helper 把 role / chunk 上下文塞進 data，方便事後 forensic 區分是 data 還 manifest PUT 失敗。
+function makePutAuditCallback(ctx, role, chunkInfo, maxAttempts) {
+  return async ({ attempt, error, willRetry, nextDelayMs, key }) => {
+    const sev = willRetry ? 'warn' : 'critical'
+    await safeUserAudit(ctx.env, {
+      event_type: 'audit.archive.upload_failed',
+      severity:   sev,
+      data: {
+        run_id:        ctx.runId,
+        dry_run:       chunkInfo.dryRun,
+        env:           ctx.envName,
+        table:         ctx.tableName,
+        cold_class:    ctx.coldClass,
+        role,
+        key,
+        attempt,
+        max_attempts:  maxAttempts,
+        next_delay_ms: nextDelayMs,
+        final:         !willRetry,
+        error:         String(error?.message ?? error),
+        min_id:        chunkInfo.minId,
+        max_id:        chunkInfo.maxId,
+      },
+    })
+  }
+}
+
+// Wrap putWithRetry with audit callback；retry 由 utils helper 負責。
+async function archivePut(ctx, role, chunkInfo, key, body, putOpts) {
+  const backoffMs = ctx.putRetryBackoffMs    // undefined → utils 用預設 [1s,4s,16s]
+  const sleep     = ctx.putRetrySleep        // undefined → utils 用 setTimeout
+  const maxAttempts = (backoffMs ?? [1000, 4000, 16000]).length + 1
+  return putWithRetry(ctx.bucket, key, body, putOpts, {
+    backoffMs,
+    sleep,
+    onAttemptFailed: makePutAuditCallback(ctx, role, chunkInfo, maxAttempts),
+  })
 }
 
 export async function onRequestPost({ request, env }) {
@@ -192,15 +244,16 @@ async function handlePlannedBlocker(ctx) {
   }
 
   const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
+  const chunkInfo = { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id }
 
   // 1) PUT data（R2 PUT idempotent — 同 key 同 body 覆寫無副作用）
-  await bucket.put(dataKey, jsonl, {
+  await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
     httpMetadata: { contentType: 'application/x-ndjson' },
   })
 
   // 2) Manifest 升 uploaded — 讀回現有 planned manifest append state_history
   const uploadedManifest = await loadAndAppend(bucket, manifestKey, 'uploaded')
-  await bucket.put(manifestKey, JSON.stringify(uploadedManifest, null, 2), {
+  await archivePut(ctx, 'manifest', chunkInfo, manifestKey, JSON.stringify(uploadedManifest, null, 2), {
     httpMetadata: { contentType: 'application/json' },
   })
 
@@ -214,25 +267,21 @@ async function handlePlannedBlocker(ctx) {
 
   report.chunks_uploaded = 1
   report.rows_uploaded   = rows.length
+  report.recovery        = 'planned_to_uploaded'
 
-  await safeUserAudit(ctx.env, {
-    event_type: 'audit.archive.chunk_uploaded',
-    severity:   'info',
-    data: {
-      run_id: ctx.runId, dry_run: chunkDryRun, env: envName, table: tableName, cold_class: coldClass,
-      chunk_key: dataKey, manifest_key: manifestKey,
-      row_count: rows.length, min_id: blocker.min_id, max_id: blocker.max_id,
-      sha256_jsonl: sha, recovery: 'planned_to_uploaded',
-    },
-  })
+  // PR 2.1d（codex F-1）：chunk_uploaded emit 已搬到 handleUploadedBlocker（verify ok 後），
+  // recovery 路徑也走同一個 emit 點 — 由 handleUploadedBlocker 在下一輪 cron 統一發。
+  // recovery 動作本身在 report.recovery 與 chunks row 留痕，需要 forensic 重建時靠
+  // chunks.run_id（fresh）+ 後續 verify 的 run_id（不同）即可區分。
 }
 
 // ── Uploaded blocker：R2 GET 回讀 + sha + row_count 比對 → verified ────────
 async function handleUploadedBlocker(ctx) {
-  const { envName, tableName, coldClass, db, bucket, report, blocker } = ctx
+  const { envName, tableName, coldClass, db, bucket, report, blocker, runId } = ctx
   report.blocker_action = 'verify_uploaded'
 
   // PR 2.1c：用 chunk 自身 dry_run 算 key（H-1 provenance fix）
+  const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
   const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
   const obj = await bucket.get(dataKey)
   if (!obj) {
@@ -259,9 +308,11 @@ async function handleUploadedBlocker(ctx) {
 
   // 升 verified
   const verifiedManifest = await loadAndAppend(bucket, manifestKey, 'verified')
-  await bucket.put(manifestKey, JSON.stringify(verifiedManifest, null, 2), {
-    httpMetadata: { contentType: 'application/json' },
-  })
+  await archivePut(ctx, 'manifest',
+    { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id },
+    manifestKey, JSON.stringify(verifiedManifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } },
+  )
 
   await db.prepare(
     `UPDATE audit_archive_chunks
@@ -271,6 +322,29 @@ async function handleUploadedBlocker(ctx) {
   ).bind(envName, tableName, coldClass, blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
 
   report.chunks_verified = 1
+
+  // PR 2.1d（codex F-1）：chunk_uploaded 在「verify ok 後」emit，對齊 design doc
+  // §「chunk_uploaded 語意」。歷史註記：prod audit_log id=924 是 PR 2.0 / 2.1a 舊
+  // 語意（upload 就 emit、沒驗 R2 sha 對齊就先發），forensic 比對時要意識到 924
+  // 以前的事件不保證 chunk 已 verified。PR 2.1d 起一律先 verified 才發。
+  await safeUserAudit(ctx.env, {
+    event_type: 'audit.archive.chunk_uploaded',
+    severity:   'info',
+    data: {
+      run_id:        runId,
+      dry_run:       chunkDryRun,
+      env:           envName,
+      table:         tableName,
+      cold_class:    coldClass,
+      chunk_key:     dataKey,
+      manifest_key:  manifestKey,
+      row_count:     blocker.row_count,
+      min_id:        blocker.min_id,
+      max_id:        blocker.max_id,
+      sha256_jsonl:  blocker.chunk_sha256,
+      verified_at:   new Date().toISOString(),
+    },
+  })
 }
 
 // ── Verified blocker：marked_archived 雙路徑驗證（design doc §「升態雙路徑」）─
@@ -339,9 +413,11 @@ async function handleVerifiedBlocker(ctx) {
   // 升 marked_archived：寫 manifest + chunks UPDATE（含 marked_archived_at / purge_after = +7d）
   const { manifestKey } = deriveKeysFromChunk(blocker)
   const markedManifest = await loadAndAppend(bucket, manifestKey, 'marked_archived')
-  await bucket.put(manifestKey, JSON.stringify(markedManifest, null, 2), {
-    httpMetadata: { contentType: 'application/json' },
-  })
+  await archivePut(ctx, 'manifest',
+    { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id },
+    manifestKey, JSON.stringify(markedManifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } },
+  )
 
   await db.prepare(
     `UPDATE audit_archive_chunks
@@ -452,16 +528,21 @@ async function runFreshChunkPipeline(ctx) {
     minId, maxId, sha256: sha, archiveDate, dryRun,
   })
 
+  // PR 2.1d（codex F-2）：manifest 帶 severities reduce 統計
+  const severities = aggregateSeverities(rows)
+
   const plannedAt = new Date().toISOString()
   const plannedManifest = buildManifest({
     env: envName, tableName, coldClass, coldClassVersion: COLD_CLASS_VERSION,
     runId, state: 'planned',
     stateHistory: [{ state: 'planned', at: plannedAt }],
     rowCount: rows.length, minId, maxId, minTs, maxTs,
-    sha256Jsonl: sha, dryRun, dataKey,
+    sha256Jsonl: sha, dryRun, dataKey, severities,
   })
 
-  await bucket.put(manifestKey, JSON.stringify(plannedManifest, null, 2), {
+  const chunkInfo = { dryRun, minId, maxId }
+
+  await archivePut(ctx, 'manifest', chunkInfo, manifestKey, JSON.stringify(plannedManifest, null, 2), {
     httpMetadata: { contentType: 'application/json' },
   })
 
@@ -476,12 +557,12 @@ async function runFreshChunkPipeline(ctx) {
   report.chunks_planned = 1
 
   // PUT data → 升 uploaded
-  await bucket.put(dataKey, jsonl, {
+  await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
     httpMetadata: { contentType: 'application/x-ndjson' },
   })
 
   const uploadedManifest = appendStateHistory(plannedManifest, 'uploaded', new Date().toISOString())
-  await bucket.put(manifestKey, JSON.stringify(uploadedManifest, null, 2), {
+  await archivePut(ctx, 'manifest', chunkInfo, manifestKey, JSON.stringify(uploadedManifest, null, 2), {
     httpMetadata: { contentType: 'application/json' },
   })
 
@@ -495,16 +576,8 @@ async function runFreshChunkPipeline(ctx) {
   report.chunks_uploaded = 1
   report.rows_uploaded   = rows.length
 
-  await safeUserAudit(env, {
-    event_type: 'audit.archive.chunk_uploaded',
-    severity:   'info',
-    data: {
-      run_id: runId, dry_run: dryRun, env: envName, table: tableName, cold_class: coldClass,
-      chunk_key: dataKey, manifest_key: manifestKey,
-      row_count: rows.length, min_id: minId, max_id: maxId,
-      sha256_jsonl: sha,
-    },
-  })
+  // PR 2.1d（codex F-1）：chunk_uploaded emit 已搬到 handleUploadedBlocker（verify ok 後）。
+  // 此處不再 emit；下一輪 cron 撈到 uploaded blocker → R2 GET 對齊 sha → 升 verified 時統一發。
 }
 
 // ── 共用：失敗 → emit critical event + chunks.state='failed' + report.ok=false ─

@@ -23,6 +23,9 @@ import {
   archivePrefixes,
   deriveKeysFromChunk,
   appendStateHistory,
+  aggregateSeverities,
+  putWithRetry,
+  DEFAULT_PUT_RETRY_BACKOFF_MS,
 } from '../functions/utils/audit-archive.js'
 
 describe('rowsToJsonl', () => {
@@ -267,5 +270,119 @@ describe('buildManifest', () => {
     expect(m.state).toBe('planned')
     expect(m.state_history).toHaveLength(1)
     expect(m.row_count).toBe(3)
+  })
+
+  it('PR 2.1d F-2：severities 參數帶入 → manifest 反映；不帶 → 空物件', () => {
+    const m1 = buildManifest({
+      env: 'prod', tableName: 'audit_log', coldClass: 'telemetry',
+      coldClassVersion: 1, runId: 'r', state: 'planned',
+      stateHistory: [], rowCount: 5, minId: 1, maxId: 5,
+      minTs: 't', maxTs: 't', sha256Jsonl: 'h',
+      dryRun: false, dataKey: 'k', severities: { info: 4, warn: 1 },
+    })
+    expect(m1.severities).toEqual({ info: 4, warn: 1 })
+
+    const m2 = buildManifest({
+      env: 'prod', tableName: 'audit_log', coldClass: 'telemetry',
+      coldClassVersion: 1, runId: 'r', state: 'planned',
+      stateHistory: [], rowCount: 0, minId: 0, maxId: 0,
+      minTs: 't', maxTs: 't', sha256Jsonl: 'h',
+      dryRun: false, dataKey: 'k',
+    })
+    expect(m2.severities).toEqual({})
+  })
+})
+
+describe('aggregateSeverities (PR 2.1d F-2)', () => {
+  it('計數 + 忽略 null/undefined severity', () => {
+    const rows = [
+      { severity: 'info' },
+      { severity: 'info' },
+      { severity: 'warn' },
+      { severity: 'critical' },
+      { severity: null },
+      { severity: undefined },
+      {},
+    ]
+    expect(aggregateSeverities(rows)).toEqual({ info: 2, warn: 1, critical: 1 })
+  })
+
+  it('空陣列回 {}', () => {
+    expect(aggregateSeverities([])).toEqual({})
+  })
+})
+
+describe('putWithRetry (PR 2.1d F-3)', () => {
+  it('預設 backoff schedule = [1000, 4000, 16000]', () => {
+    expect(DEFAULT_PUT_RETRY_BACKOFF_MS).toEqual([1000, 4000, 16000])
+  })
+
+  it('第一次成功 → 不重試、不 sleep、不 callback', async () => {
+    const calls = []
+    const bucket = { put: async (k, b) => { calls.push(k); return { ok: true } } }
+    const sleeps = []
+    const failed = []
+    const r = await putWithRetry(bucket, 'k', 'body', { ct: 'x' }, {
+      sleep: ms => { sleeps.push(ms); return Promise.resolve() },
+      onAttemptFailed: e => { failed.push(e); return Promise.resolve() },
+    })
+    expect(r).toEqual({ ok: true })
+    expect(calls).toEqual(['k'])
+    expect(sleeps).toEqual([])
+    expect(failed).toEqual([])
+  })
+
+  it('前 2 次失敗第 3 次成功 → callback 2 次 willRetry=true，sleep 對應 backoff', async () => {
+    let n = 0
+    const bucket = { put: async () => {
+      n++
+      if (n < 3) throw new Error(`fail-${n}`)
+      return { ok: true, attempt: n }
+    } }
+    const sleeps = []
+    const failed = []
+    const r = await putWithRetry(bucket, 'k', 'b', {}, {
+      backoffMs: [10, 20, 30],
+      sleep: ms => { sleeps.push(ms); return Promise.resolve() },
+      onAttemptFailed: e => { failed.push(e); return Promise.resolve() },
+    })
+    expect(r.attempt).toBe(3)
+    expect(failed).toHaveLength(2)
+    expect(failed[0].willRetry).toBe(true)
+    expect(failed[0].nextDelayMs).toBe(10)
+    expect(failed[1].willRetry).toBe(true)
+    expect(failed[1].nextDelayMs).toBe(20)
+    expect(sleeps).toEqual([10, 20])
+  })
+
+  it('全部失敗 → 最後一次 callback willRetry=false 後 throw', async () => {
+    const bucket = { put: async () => { throw new Error('always-fail') } }
+    const sleeps = []
+    const failed = []
+    await expect(putWithRetry(bucket, 'k', 'b', {}, {
+      backoffMs: [5, 10, 15],
+      sleep: ms => { sleeps.push(ms); return Promise.resolve() },
+      onAttemptFailed: e => { failed.push(e); return Promise.resolve() },
+    })).rejects.toThrow('always-fail')
+    expect(failed).toHaveLength(4)  // 1 + 3 retries
+    expect(failed[0].willRetry).toBe(true)
+    expect(failed[3].willRetry).toBe(false)
+    expect(failed[3].nextDelayMs).toBeNull()
+    expect(failed[3].attempt).toBe(4)
+    // 最後一次 attempt 不 sleep；只有前 3 次 retry 才 sleep
+    expect(sleeps).toEqual([5, 10, 15])
+  })
+
+  it('callback 自身 throw 不會中斷重試流程', async () => {
+    let n = 0
+    const bucket = { put: async () => {
+      n++; if (n < 2) throw new Error('boom'); return { ok: true }
+    } }
+    const r = await putWithRetry(bucket, 'k', 'b', {}, {
+      backoffMs: [1],
+      sleep: () => Promise.resolve(),
+      onAttemptFailed: () => Promise.reject(new Error('callback-broke')),
+    })
+    expect(r).toEqual({ ok: true })
   })
 })

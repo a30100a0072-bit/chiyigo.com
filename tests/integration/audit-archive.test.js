@@ -313,6 +313,98 @@ describe('audit-archive cron — PR 2.1c provenance & drift', () => {
   })
 })
 
+describe('audit-archive cron — PR 2.1d F-1 chunk_uploaded emission timing', () => {
+  async function selectChunkUploaded() {
+    const r = await env.chiyigo_db.prepare(
+      `SELECT id, event_type, event_data FROM audit_log
+        WHERE event_type = 'audit.archive.chunk_uploaded' ORDER BY id ASC`
+    ).all()
+    return r.results ?? []
+  }
+
+  it('fresh upload 不 emit chunk_uploaded；下一輪 verify 才 emit', async () => {
+    await seedTelemetry(2)
+
+    // 第 1 輪 cron：fresh → uploaded。F-1 後此處不 emit。
+    await runCron()
+    let evs = await selectChunkUploaded()
+    expect(evs).toHaveLength(0)
+
+    // 第 2 輪 cron：uploaded blocker → verified。F-1 後在此 emit。
+    await runCron()
+    evs = await selectChunkUploaded()
+    expect(evs).toHaveLength(1)
+    const data = JSON.parse(evs[0].event_data)
+    expect(data.verified_at).toBeTruthy()
+    expect(data.row_count).toBe(2)
+  })
+
+  it('planned recovery → uploaded 不 emit；下一輪 verify 才 emit', async () => {
+    await seedTelemetry(2)
+    const rowsRes = await env.chiyigo_db.prepare(
+      `SELECT id, event_type, severity, user_id, client_id, ip_hash, event_data, cold_class, created_at
+         FROM audit_log
+        WHERE event_type != 'audit.archive.chunk_uploaded'
+        ORDER BY id ASC`
+    ).all()
+    const rows = rowsRes.results
+    const jsonl = rowsToJsonl(rows)
+    const sha = await sha256Hex(jsonl)
+    const minId = rows[0].id, maxId = rows[rows.length - 1].id
+    const archiveDate = '2026-05-11'
+
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+        (env, table_name, cold_class, cold_class_version, archive_date,
+         min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run)
+       VALUES (?, 'audit_log', 'telemetry', 1, ?, ?, ?, ?, 'planned', ?, 0, 'run-seed', 0)`
+    ).bind(ARCHIVE_ENV, archiveDate, minId, maxId, sha, rows.length).run()
+
+    const { manifestKey } = buildChunkKeys({
+      env: ARCHIVE_ENV, tableName: 'audit_log', coldClass: 'telemetry',
+      minId, maxId, sha256: sha, archiveDate, dryRun: false,
+    })
+    await env.AUDIT_ARCHIVE_BUCKET.put(manifestKey, JSON.stringify({
+      state: 'planned',
+      state_history: [{ state: 'planned', at: '2026-05-11T00:00:00Z' }],
+    }))
+
+    // recovery_planned → uploaded：F-1 後此處不 emit
+    const r1 = await runCron()
+    expect(r1.recovery).toBe('planned_to_uploaded')
+    expect(await selectChunkUploaded()).toHaveLength(0)
+
+    // verify → verified：F-1 後此處 emit
+    await runCron()
+    expect(await selectChunkUploaded()).toHaveLength(1)
+  })
+})
+
+describe('audit-archive cron — PR 2.1d F-2 manifest severities', () => {
+  it('manifest.severities 為 row severities reduce 結果', async () => {
+    // 種 3 個 info + 1 個 warning 級 telemetry row
+    const db = env.chiyigo_db
+    for (let i = 0; i < 3; i++) {
+      await db.prepare(
+        `INSERT INTO audit_log (event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+         VALUES ('auth.login.rate_limited', 'info', NULL, 'h', '{}', 'telemetry', datetime('now','-1 hour'))`
+      ).run()
+    }
+    await db.prepare(
+      `INSERT INTO audit_log (event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+       VALUES ('auth.login.rate_limited', 'warn', NULL, 'h', '{}', 'telemetry', datetime('now','-1 hour'))`
+    ).run()
+
+    await runCron()
+    // 撈 manifest JSON
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })
+    const manifestObj = list.objects.find(o => o.key.endsWith('.json'))
+    const obj = await env.AUDIT_ARCHIVE_BUCKET.get(manifestObj.key)
+    const manifest = JSON.parse(await obj.text())
+    expect(manifest.severities).toEqual({ info: 3, warn: 1 })
+  })
+})
+
 describe('audit-archive cron — auth + binding 防線', () => {
   it('auth fail → 401', async () => {
     const r = await cronArchive({

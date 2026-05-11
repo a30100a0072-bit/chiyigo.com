@@ -187,12 +187,14 @@ export function appendStateHistory(manifest, state, at) {
 
 /**
  * 組 chunk manifest JSON（design doc §「Manifest 結構」）。
- * PR 2.0 不算 severities aggregation；留空物件即可（PR 2.1 補）。
+ *
+ * PR 2.1d（codex F-2）：severities 改吃外部 reduce 結果（{severity: count}）；
+ * 未提供時 fallback 空物件，保留向下相容。
  */
 export function buildManifest({
   env, tableName, coldClass, coldClassVersion, runId, state, stateHistory,
   rowCount, minId, maxId, minTs, maxTs, sha256Jsonl,
-  dryRun, dataKey,
+  dryRun, dataKey, severities,
 }) {
   return {
     schema_version:     ARCHIVE_SCHEMA_VERSION,
@@ -210,13 +212,74 @@ export function buildManifest({
     min_ts:             minTs,
     max_ts:             maxTs,
     sha256_jsonl:       sha256Jsonl,
-    sha256_zst:         null,            // PR 2.1 加 zstd 時填
-    compression:        'none',          // PR 2.1 改 'zstd-19'
-    severities:         {},              // PR 2.1 補摘要
+    sha256_zst:         null,            // PR 2.1b 加 zstd 時填
+    compression:        'none',          // PR 2.1b 改 'zstd-19'
+    severities:         severities ?? {},
     writer:             ARCHIVE_WRITER,
     writer_version:     ARCHIVE_WRITER_VERSION,
-    dry_run:            dryRun === true, // PR 2.0 顯式記，方便 admin / audit 反查
+    dry_run:            dryRun === true,
   }
+}
+
+/**
+ * 對 rows 做 severity 計數 reduce（design doc §「Manifest 結構」severities 段）。
+ * 用在 fresh chunk pipeline 給 buildManifest；忽略 null/undefined severity（理論
+ * 上不會有，audit_log.severity NOT NULL）。
+ */
+export function aggregateSeverities(rows) {
+  const acc = {}
+  for (const r of rows) {
+    const s = r?.severity
+    if (!s) continue
+    acc[s] = (acc[s] ?? 0) + 1
+  }
+  return acc
+}
+
+// PR 2.1d（codex F-3）：R2 PUT 三段 exponential backoff（design doc §「R2 PUT retry」）
+export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
+
+/**
+ * 包 bucket.put 加 exponential backoff retry。
+ *
+ * 每次 attempt 失敗會呼叫 onAttemptFailed callback；呼叫端（cron handler）
+ * 在 callback 內 emit audit.archive.upload_failed：
+ *   - willRetry=true  → severity='warn'
+ *   - willRetry=false → severity='critical'（已是最後一次 attempt）
+ *
+ * 為了單元測試可注入：
+ *   - opts.backoffMs：覆寫 backoff schedule（預設 [1000, 4000, 16000]）
+ *   - opts.sleep   ：覆寫 sleep 函式（預設 setTimeout）
+ *   - opts.onAttemptFailed：失敗時 callback（async OK）
+ *
+ * 三次 backoff（1s/4s/16s）= 4 次 attempt 機會 = 累計最多 21s wait。Pages Functions
+ * wallclock 在 await 期間不算 CPU，不會撞 30s 上限。
+ */
+export async function putWithRetry(bucket, key, body, putOpts, opts = {}) {
+  const backoff = opts.backoffMs ?? DEFAULT_PUT_RETRY_BACKOFF_MS
+  const sleep = opts.sleep ?? (ms => new Promise(r => setTimeout(r, ms)))
+  const onAttemptFailed = opts.onAttemptFailed
+  const maxAttempts = backoff.length + 1
+  let lastError
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await bucket.put(key, body, putOpts)
+    } catch (e) {
+      lastError = e
+      const willRetry = attempt < maxAttempts
+      const nextDelayMs = willRetry ? backoff[attempt - 1] : null
+      if (onAttemptFailed) {
+        try {
+          await onAttemptFailed({ attempt, error: e, willRetry, nextDelayMs, key })
+        } catch (callbackErr) {
+          console.error('[putWithRetry] onAttemptFailed callback threw:', callbackErr)
+        }
+      }
+      if (!willRetry) break
+      await sleep(nextDelayMs)
+    }
+  }
+  throw lastError
 }
 
 /**
