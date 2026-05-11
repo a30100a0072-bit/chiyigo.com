@@ -299,3 +299,7 @@ overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListe
 document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
 document.getElementById('m-theme-btn')?.addEventListener('click', () => document.getElementById('theme-toggle-btn')?.click());
 overlay?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+const mTopLangDrop = document.getElementById('m-top-lang-drop');
+document.getElementById('m-lang-btn')?.addEventListener('click', e => { e.stopPropagation(); mTopLangDrop?.classList.toggle('open'); langDrop?.classList.remove('open'); });
+document.addEventListener('click', () => mTopLangDrop?.classList.remove('open'));
+mTopLangDrop?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); mTopLangDrop.classList.remove('open'); });
