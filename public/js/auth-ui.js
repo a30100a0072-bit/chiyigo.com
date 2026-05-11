@@ -77,7 +77,11 @@ const UI_I18N = {
   err_network:    { 'zh-TW':'網路錯誤，請檢查連線後重試', en:'Network error, please check your connection and retry', ja:'ネットワークエラーです。接続を確認してもう一度お試しください', ko:'네트워크 오류입니다. 연결을 확인하고 다시 시도해주세요' },
   err_pkce:       { 'zh-TW':'PKCE 授權失敗，請重試', en:'PKCE authorization failed, please try again', ja:'PKCE認可に失敗しました。もう一度お試しください', ko:'PKCE 인증에 실패했습니다. 다시 시도해주세요' },
   err_captcha_pending: { 'zh-TW':'人機驗證尚未完成，請稍候再點一次', en:'Captcha is still verifying, please wait and try again', ja:'ボット認証が完了していません。少々お待ちください', ko:'봇 검증이 아직 완료되지 않았습니다. 잠시만 기다려 주세요' },
-  ts_loading_hint: { 'zh-TW':'資安驗證準備中，可先填寫帳號與密碼', en:'Preparing security check — feel free to fill in your account and password', ja:'セキュリティ確認の準備中です。先にアカウントとパスワードをご入力いただけます', ko:'보안 확인 준비 중입니다. 계정과 비밀번호를 먼저 입력하셔도 됩니다' },
+  err_captcha_failed:  { 'zh-TW':'資安驗證未通過，請再試一次', en:'Security check failed, please try again', ja:'セキュリティ確認に失敗しました。もう一度お試しください', ko:'보안 확인에 실패했습니다. 다시 시도해 주세요' },
+  // 兩段式 loading：先「安全驗證中」（execute Turnstile），再「登入中 / 建立中」（fetch）
+  verifying:    { 'zh-TW':'安全驗證中…', en:'Verifying…', ja:'セキュリティ確認中…', ko:'보안 확인 중…' },
+  logging_in:   { 'zh-TW':'登入中…', en:'Signing in…', ja:'ログイン中…', ko:'로그인 중…' },
+  creating:     { 'zh-TW':'建立中…', en:'Creating…', ja:'作成中…', ko:'생성 중…' },
   // Phase D-3c：passkey 登入入口
   login_passkey_btn: { 'zh-TW':'用 Passkey 登入', en:'Sign in with Passkey', ja:'パスキーでログイン', ko:'Passkey로 로그인' },
   passkey_logging_in: { 'zh-TW':'請依瀏覽器提示完成驗證…', en:'Follow the browser prompt to continue…', ja:'ブラウザの指示に従って認証してください…', ko:'브라우저 안내에 따라 인증을 완료하세요…' },
@@ -327,52 +331,88 @@ function hidePassword(inputId, btnId) {
   clearTimeout(_pwdTimers[inputId]);
 }
 
-// ── Turnstile：explicit rendering + lazy + closure widgetId ──────
-// 同頁 2 個 widget 會在 iOS Safari 主執行緒同時跑 challenge 卡輸入，
-// 改成只在需要時 render 該 panel 的 widget；fail 必 reset 否則 token 一次性會 403。
+// ── Turnstile：execute 模式 + submit 時觸發 challenge ─────────────
+// iOS Safari 即使只跑 1 個 Turnstile widget 也會在 load 後 challenge 期間吃滿主執行緒
+// 害打字卡。改成 execution:'execute' + appearance:'interaction-only'：
+// render 只蓋空 iframe 不跑驗證；按下登入/註冊才 turnstile.execute(id) 觸發。
+// 使用者打字期間 0 challenge，CPU 工作搬到按鈕點擊後。
 const TURNSTILE_SITEKEY = '0x4AAAAAADISz6kSGZRC94TQ';
-let _loginWidgetId = null;
-let _registerWidgetId = null;
+const TS_CONTAINER = { login: 'ts-login-container', register: 'ts-register-container' };
+const _ts = {
+  login:    { id: null, resolve: null, reject: null },
+  register: { id: null, resolve: null, reject: null },
+};
 
-function _setTsReady(containerEl, ready) {
-  const wrap = containerEl?.closest('.ts-wrap');
-  if (!wrap) return;
-  wrap.classList.toggle('is-ready', !!ready);
+// 清掉 pending promise（callback fire / reset / remove / switchTab 都會用到）
+function _clearTsPending(tab, reason) {
+  const state = _ts[tab];
+  const rj = state.reject;
+  state.resolve = state.reject = null;
+  if (rj && reason) rj(new Error(reason));
 }
 
-function _renderTurnstile(containerId) {
+function _renderTurnstile(tab) {
   if (typeof window.turnstile === 'undefined') return null;
-  const el = document.getElementById(containerId);
-  if (!el) return null;
+  const containerId = TS_CONTAINER[tab];
+  if (!containerId || !document.getElementById(containerId)) return null;
   return window.turnstile.render('#' + containerId, {
-    sitekey: TURNSTILE_SITEKEY,
-    theme:   'auto',
-    callback:           () => _setTsReady(el, true),
-    'expired-callback': () => _setTsReady(el, false),
-    'error-callback':   () => _setTsReady(el, false),
-    'timeout-callback': () => _setTsReady(el, false),
+    sitekey:    TURNSTILE_SITEKEY,
+    theme:      'auto',
+    execution:  'execute',           // render 不跑 challenge，要等 turnstile.execute(id)
+    appearance: 'interaction-only',  // 預設不顯示，只有需要使用者互動時才出現
+    callback: (token) => {
+      const r = _ts[tab].resolve;
+      _ts[tab].resolve = _ts[tab].reject = null;
+      if (r) r(token);
+    },
+    'error-callback':   () => _clearTsPending(tab, 'turnstile-error'),
+    'expired-callback': () => _clearTsPending(tab, 'turnstile-expired'),
+    'timeout-callback': () => _clearTsPending(tab, 'turnstile-timeout'),
   });
 }
 
-function _resetTurnstile(widgetId, containerId) {
-  if (widgetId == null || typeof window.turnstile === 'undefined') return;
-  try { window.turnstile.reset(widgetId); } catch (_) {}
-  const el = document.getElementById(containerId);
-  _setTsReady(el, false);
+function _resetTurnstile(tab) {
+  const state = _ts[tab];
+  if (state.id == null || typeof window.turnstile === 'undefined') return;
+  _clearTsPending(tab, 'turnstile-reset');
+  try { window.turnstile.reset(state.id); } catch (_) {}
 }
 
-// 嚴格保證任何時刻只有 1 個 widget：切走時把 inactive 的整個 remove 掉
+// 按下 submit 時呼叫；render 時掛的 callback 收到 token 才 resolve。
+function _executeTurnstile(tab) {
+  return new Promise((resolve, reject) => {
+    const state = _ts[tab];
+    if (typeof window.turnstile === 'undefined' || state.id == null) {
+      reject(new Error('turnstile-not-ready'));
+      return;
+    }
+    if (state.resolve) {
+      // 不該發生（按鈕在 execute 期間已 disable），保險
+      reject(new Error('turnstile-already-pending'));
+      return;
+    }
+    state.resolve = resolve;
+    state.reject  = reject;
+    try {
+      window.turnstile.execute(state.id);
+    } catch (e) {
+      _clearTsPending(tab);
+      reject(e);
+    }
+  });
+}
+
+// 嚴格保證任何時刻只有 1 個 widget：切走時把 inactive 的整個 remove 掉，連 pending 一起清。
 function _removeWidgetIfNotTab(tab) {
   if (typeof window.turnstile === 'undefined') return;
-  if (tab !== 'login' && _loginWidgetId != null) {
-    try { window.turnstile.remove(_loginWidgetId); } catch (_) {}
-    _loginWidgetId = null;
-    _setTsReady(document.getElementById('ts-login-container'), false);
-  }
-  if (tab !== 'register' && _registerWidgetId != null) {
-    try { window.turnstile.remove(_registerWidgetId); } catch (_) {}
-    _registerWidgetId = null;
-    _setTsReady(document.getElementById('ts-register-container'), false);
+  for (const t of ['login', 'register']) {
+    if (t === tab) continue;
+    const state = _ts[t];
+    if (state.id != null) {
+      _clearTsPending(t, 'turnstile-widget-removed');
+      try { window.turnstile.remove(state.id); } catch (_) {}
+      state.id = null;
+    }
   }
 }
 
@@ -383,21 +423,16 @@ function _getActiveTurnstileTab() {
   return null;
 }
 
-// 確保「目前 active 的 panel」widget 已 render；API 未 ready 時 no-op，
-// onloadTurnstile 之後會依當下 active tab 補 render。配合 _removeWidgetIfNotTab
-// 一起達成「任何時刻只有 1 個 iframe」。
 function _ensureWidgetForTab(tab) {
   if (typeof window.turnstile === 'undefined') return;
-  if (tab === 'login' && _loginWidgetId == null && document.getElementById('ts-login-container')) {
-    _loginWidgetId = _renderTurnstile('ts-login-container');
-  } else if (tab === 'register' && _registerWidgetId == null && document.getElementById('ts-register-container')) {
-    _registerWidgetId = _renderTurnstile('ts-register-container');
-  }
+  if (tab !== 'login' && tab !== 'register') return;
+  const state = _ts[tab];
+  if (state.id != null) return;
+  if (!document.getElementById(TS_CONTAINER[tab])) return;
+  state.id = _renderTurnstile(tab);
 }
 
-// Turnstile API ready 時觸發（?onload=onloadTurnstile）。只 render 目前 active panel
-// 的 widget；若使用者在 API ready 前已切到註冊，這裡會自然只 render 註冊，不會
-// 同時跑兩個 widget 害 iOS 卡頓。
+// Turnstile API ready 時觸發（?onload=onloadTurnstile）。只 render 目前 active panel 的 widget。
 window.onloadTurnstile = function () {
   const tab = _getActiveTurnstileTab();
   if (tab) _ensureWidgetForTab(tab);
@@ -469,11 +504,11 @@ function clearMsg() {
   box.textContent = '';
 }
 
-function setLoading(btnId, loading) {
+function setLoading(btnId, loading, msgKey) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
   btn.disabled = loading;
-  btn.textContent = loading ? uiT('loading') : btn.dataset.label || btn.textContent;
+  btn.textContent = loading ? uiT(msgKey || 'loading') : (btn.dataset.label || btn.textContent);
 }
 
 // ── 登入處理 ─────────────────────────────────────────────────────
@@ -490,14 +525,20 @@ async function handleLogin(event) {
   const btn      = document.getElementById('login-btn');
   btn.dataset.label = uiT('btn_login');
 
-  const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
-  // login.html 一定有 Turnstile widget，所以這頁 token 必填；空字串 = 使用者搶在驗證完成前點
-  if (!tsToken) {
-    showMsg(uiT('err_captcha_pending'));
+  // 立刻 lock 防 double submit；先顯示「安全驗證中」
+  setLoading('login-btn', true, 'verifying');
+
+  let tsToken;
+  try {
+    tsToken = await _executeTurnstile('login');
+  } catch {
+    _resetTurnstile('login');
+    setLoading('login-btn', false);
+    showMsg(uiT('err_captcha_failed'));
     return;
   }
 
-  setLoading('login-btn', true);
+  setLoading('login-btn', true, 'logging_in');
 
   try {
     const res = await fetch(API.login, {
@@ -516,16 +557,16 @@ async function handleLogin(event) {
 
     if (res.status === 403 && data.code === 'TOTP_REQUIRED') {
       _preAuthToken = data.pre_auth_token;
-      // token 已被後端核銷一次；若使用者從 TOTP 返回登入再送一次會帶舊 token → 先 reset
-      _resetTurnstile(_loginWidgetId, 'ts-login-container');
+      // switchTab('totp') 會 remove login widget；返回登入時會 render 全新乾淨的，這裡 reset 為保險
+      _resetTurnstile('login');
       switchTab('totp');
       document.getElementById('totp-code').focus();
       return;
     }
 
     if (!res.ok) {
-      // token 一次性，失敗後必 reset 才能讓使用者再送一次
-      _resetTurnstile(_loginWidgetId, 'ts-login-container');
+      // token 已被後端核銷，下次 execute 前必 reset
+      _resetTurnstile('login');
       showMsg(t(data.error) || uiT('err_login_fail'));
       return;
     }
@@ -536,7 +577,7 @@ async function handleLogin(event) {
     redirectAfterAuth();
 
   } catch {
-    _resetTurnstile(_loginWidgetId, 'ts-login-container');
+    _resetTurnstile('login');
     showMsg(uiT('err_network'));
   } finally {
     setLoading('login-btn', false);
@@ -567,13 +608,20 @@ async function handleRegister(event) {
     return;
   }
 
-  const tsToken = document.querySelector('#form-register [name="cf-turnstile-response"]')?.value || '';
-  if (!tsToken) {
-    showMsg(uiT('err_captcha_pending'));
+  // 立刻 lock 防 double submit；先顯示「安全驗證中」
+  setLoading('reg-btn', true, 'verifying');
+
+  let tsToken;
+  try {
+    tsToken = await _executeTurnstile('register');
+  } catch {
+    _resetTurnstile('register');
+    setLoading('reg-btn', false);
+    showMsg(uiT('err_captcha_failed'));
     return;
   }
 
-  setLoading('reg-btn', true);
+  setLoading('reg-btn', true, 'creating');
 
   try {
     const res = await fetch(API.register, {
@@ -591,7 +639,7 @@ async function handleRegister(event) {
     const data = await res.json();
 
     if (!res.ok) {
-      _resetTurnstile(_registerWidgetId, 'ts-register-container');
+      _resetTurnstile('register');
       showMsg(t(data.error) || uiT('err_reg_fail'));
       return;
     }
@@ -604,7 +652,7 @@ async function handleRegister(event) {
     setTimeout(redirectAfterAuth, 800);
 
   } catch {
-    _resetTurnstile(_registerWidgetId, 'ts-register-container');
+    _resetTurnstile('register');
     showMsg(uiT('err_network'));
   } finally {
     setLoading('reg-btn', false);
