@@ -182,5 +182,6 @@ if (STAGE) {
   buildNodes();
   buildLines();
   window.cpArchSetLang(curLang);
-  if (!isMobile()) setActive('login');
+  // 首頁嵌入版預設空 panel：讓 "點擊任一節點" hint 誘導探索，
+  // 不像獨立 case-platform.html 那樣強塞細節搶注意。
 }
