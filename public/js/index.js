@@ -31,6 +31,7 @@ function applyLangI(lang) {
   document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
+  window.cpArchSetLang?.(lang);
 }
 const langTogBtnI = document.getElementById('lang-toggle-btn');
 const langDropI   = document.getElementById('lang-dropdown');

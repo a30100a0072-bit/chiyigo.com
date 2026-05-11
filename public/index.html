@@ -21,12 +21,13 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=dbb74efe" />
-  <link rel="stylesheet" href="/css/_components.css?v=dbb74efe" />
-  <link rel="stylesheet" href="/css/index.css?v=dbb74efe" />
-  <script defer src="/js/notify.js?v=dbb74efe"></script>
-  <script defer src="/js/confirm-dialog.js?v=dbb74efe"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=dbb74efe" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=6942a157" />
+  <link rel="stylesheet" href="/css/_components.css?v=6942a157" />
+  <link rel="stylesheet" href="/css/index.css?v=6942a157" />
+  <link rel="stylesheet" href="/css/case-platform.css?v=6942a157" />
+  <script defer src="/js/notify.js?v=6942a157"></script>
+  <script defer src="/js/confirm-dialog.js?v=6942a157"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=6942a157" />
 </head>
 <body>
 
@@ -193,6 +194,54 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Interactive Architecture (embedded from case-platform) -->
+        <section id="cp-arch-embed" class="cp-section">
+          <div class="cp-arch" data-reveal>
+            <div class="cp-arch-head">
+              <h2 class="cp-arch-title" data-i18n="arch_title">// 互動式系統架構</h2>
+              <p class="cp-arch-hint" data-i18n="arch_hint">點擊任一節點，查看模組細節 →</p>
+            </div>
+            <div class="cp-arch-grid">
+              <div class="cp-stage" id="cp-stage" role="group" aria-label="系統架構圖">
+                <svg class="cp-lines" id="cp-lines" aria-hidden="true" preserveAspectRatio="none"></svg>
+              </div>
+              <aside class="cp-panel" id="cp-panel" aria-live="polite">
+                <div class="cp-panel-empty" id="cp-panel-empty">
+                  <div class="cp-panel-icon" aria-hidden="true">◆</div>
+                  <p class="cp-panel-empty-text" data-i18n="panel_hint">選擇左側任一節點，這裡會顯示功能用途、使用者流程、後端 API、安全設計與技術亮點。</p>
+                </div>
+                <div class="cp-panel-body" id="cp-panel-body" hidden>
+                  <div class="cp-panel-head">
+                    <span class="cp-panel-tag" id="cp-panel-tag"></span>
+                    <h3 class="cp-panel-title" id="cp-panel-title"></h3>
+                    <button class="cp-panel-close" id="cp-panel-close" aria-label="關閉" type="button">×</button>
+                  </div>
+                  <div class="cp-panel-block">
+                    <h4 class="cp-panel-h" data-i18n="lab_purpose">功能用途</h4>
+                    <p class="cp-panel-p" id="cp-panel-purpose"></p>
+                  </div>
+                  <div class="cp-panel-block">
+                    <h4 class="cp-panel-h" data-i18n="lab_flow">使用者流程</h4>
+                    <ol class="cp-panel-list" id="cp-panel-flow"></ol>
+                  </div>
+                  <div class="cp-panel-block">
+                    <h4 class="cp-panel-h" data-i18n="lab_api">後端 API / 資料表</h4>
+                    <ul class="cp-panel-list cp-mono" id="cp-panel-api"></ul>
+                  </div>
+                  <div class="cp-panel-block">
+                    <h4 class="cp-panel-h" data-i18n="lab_security">安全設計</h4>
+                    <ul class="cp-panel-list" id="cp-panel-security"></ul>
+                  </div>
+                  <div class="cp-panel-block">
+                    <h4 class="cp-panel-h" data-i18n="lab_tech">技術亮點</h4>
+                    <div class="cp-panel-tags" id="cp-panel-tech"></div>
+                  </div>
+                </div>
+              </aside>
             </div>
           </div>
         </section>
@@ -428,7 +477,8 @@
     </div>
   </div>
 
-  <script src="/js/sidebar-auth.js?v=dbb74efe" defer></script>
-  <script src="/js/index.js?v=dbb74efe" defer></script>
+  <script src="/js/sidebar-auth.js?v=6942a157" defer></script>
+  <script src="/js/index.js?v=6942a157" defer></script>
+  <script src="/js/case-platform-embed.js?v=6942a157" defer></script>
 </body>
 </html>

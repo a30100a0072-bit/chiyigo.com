@@ -57,7 +57,8 @@ const OUT_JS = path.join(OUT_DIR, 'js')
 const OUT_CSS = path.join(OUT_DIR, 'css')
 
 // 支援任意變數名（LANGS_I18N / LANGS_D / LANGS / ...），sentinel 統一為 /*@i18n@*/{}
-const I18N_SENTINEL = /const (\w+) = \/\*@i18n@\*\/\{\};/g
+// 也支援 /*@i18n:NAME@*/{} 指向 src/i18n/NAME.json（讓多檔共用同字典，例：embed 元件）
+const I18N_SENTINEL = /const (\w+) = \/\*@i18n(?::([a-zA-Z0-9_-]+))?@\*\/\{\};/g
 
 // ── Helpers ─────────────────────────────────────────────
 Handlebars.registerHelper('eq', (a, b) => a === b)
@@ -91,29 +92,46 @@ async function loadPartials() {
 async function injectI18n(filename, html) {
   // 收集所有 sentinel 出現（一頁可能有多個字典，例如 LANGS_I18N + LANGS_D）
   const matches = [...html.matchAll(I18N_SENTINEL)]
-  const jsonPath = path.join(SRC_I18N, filename.replace(/\.(html|js)$/, '.json'))
-  let dict
-  try { dict = JSON.parse(await fs.readFile(jsonPath, 'utf8')) }
-  catch (e) { if (e.code !== 'ENOENT') throw e }
+  if (!matches.length) {
+    const defaultJson = path.join(SRC_I18N, filename.replace(/\.(html|js)$/, '.json'))
+    try { await fs.access(defaultJson); console.warn(`[warn] ${path.relative(ROOT, defaultJson)} exists but ${filename} has no @i18n@ sentinel`) }
+    catch {}
+    return html
+  }
 
-  if (matches.length && !dict)
-    throw new Error(`${filename} has @i18n@ sentinel but ${path.relative(ROOT, jsonPath)} not found`)
-  if (!matches.length && dict)
-    console.warn(`[warn] ${path.relative(ROOT, jsonPath)} exists but ${filename} has no @i18n@ sentinel`)
-  if (!matches.length) return html
+  // 將 sentinel 依「來源 JSON 檔名」分群：未指定 → 用 filename 對應；指定 → 用該 name
+  const dictCache = new Map() // jsonName -> parsed dict
+  async function loadDict(jsonName) {
+    if (dictCache.has(jsonName)) return dictCache.get(jsonName)
+    const p = path.join(SRC_I18N, jsonName + '.json')
+    let d
+    try { d = JSON.parse(await fs.readFile(p, 'utf8')) }
+    catch (e) {
+      if (e.code === 'ENOENT') throw new Error(`${filename} references i18n '${jsonName}' but ${path.relative(ROOT, p)} not found`)
+      throw e
+    }
+    dictCache.set(jsonName, d)
+    return d
+  }
 
-  // 多 sentinel 情境：JSON 頂層用變數名分組 { LANGS_I18N: {...}, LANGS_D: {...} }
-  // 單 sentinel 情境：JSON 頂層直接是字典 { 'zh-TW': {...}, ... }
-  const isMulti = matches.length > 1
-  if (isMulti) {
-    for (const [, varName] of matches) {
-      if (!dict[varName])
-        throw new Error(`${filename}: sentinel '${varName}' but ${jsonPath} missing key '${varName}'`)
+  // 預先把每個 sentinel 對應的 source name 算好，並計算同 source 的 sentinel 數量（用來判斷 multi 結構）
+  const defaultName = filename.replace(/\.(html|js)$/, '')
+  const sentinelMeta = matches.map(m => ({ varName: m[1], jsonName: m[2] || defaultName }))
+  const countPerSource = sentinelMeta.reduce((acc, s) => { acc[s.jsonName] = (acc[s.jsonName] || 0) + 1; return acc }, {})
+
+  // 預載所有需要的 dict + 結構檢查
+  for (const s of sentinelMeta) {
+    const dict = await loadDict(s.jsonName)
+    if (countPerSource[s.jsonName] > 1 && !dict[s.varName]) {
+      throw new Error(`${filename}: sentinel '${s.varName}' for ${s.jsonName}.json but missing key '${s.varName}'`)
     }
   }
 
-  return html.replace(I18N_SENTINEL, (_, varName) => {
-    const data = isMulti ? dict[varName] : dict
+  let idx = 0
+  return html.replace(I18N_SENTINEL, () => {
+    const { varName, jsonName } = sentinelMeta[idx++]
+    const dict = dictCache.get(jsonName)
+    const data = countPerSource[jsonName] > 1 ? dict[varName] : dict
     return `const ${varName} = ${JSON.stringify(data)};`
   })
 }
