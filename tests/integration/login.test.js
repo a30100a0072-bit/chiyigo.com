@@ -10,8 +10,13 @@ import {
 const URL_LOGIN = 'http://localhost/api/auth/local/login'
 const TEST_SECRET = 'JBSWY3DPEHPK3PXP'
 
-function loginReq(body, ip = '1.2.3.4') {
-  return jsonPost(URL_LOGIN, body, { 'CF-Connecting-IP': ip })
+function loginReq(body, ip = '1.2.3.4', extraHeaders = {}) {
+  return jsonPost(URL_LOGIN, body, { 'CF-Connecting-IP': ip, ...extraHeaders })
+}
+
+// 預設 web client：帶 chiyigo Origin，期待 Set-Cookie / 無 body refresh_token
+function webLoginReq(body, ip = '1.2.3.4') {
+  return loginReq(body, ip, { Origin: 'https://chiyigo.com' })
 }
 
 beforeAll(async () => {
@@ -23,7 +28,7 @@ beforeEach(resetDb)
 describe('POST /api/auth/local/login — happy path & failures', () => {
   it('密碼正確 + 無 2FA → 200 + access_token + refresh cookie + refresh_tokens DB row', async () => {
     const u = await seedUser({ email: 'a@b.com', password: 'GoodPass#1234' })
-    const res = await callFunction(loginPost, loginReq({ email: 'a@b.com', password: 'GoodPass#1234' }))
+    const res = await callFunction(loginPost, webLoginReq({ email: 'a@b.com', password: 'GoodPass#1234' }))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.access_token).toBeTruthy()
@@ -165,6 +170,70 @@ describe('POST /api/auth/local/login — happy path & failures', () => {
     expect(r1.status).toBe(400)
     const r2 = await callFunction(loginPost, loginReq({ password: 'x' }))
     expect(r2.status).toBe(400)
+  })
+})
+
+describe('POST /api/auth/local/login — isWebClient channel matrix (規格 B)', () => {
+  // 鎖 P2 bug：device_uuid 不參與 cookie/body 通道判斷
+  const matrix = [
+    {
+      name: 'web Origin + 無 platform + 無 device_uuid → Set-Cookie，body 無 refresh_token',
+      headers: { Origin: 'https://chiyigo.com' },
+      body: {},
+      expect: 'cookie',
+    },
+    {
+      name: 'web Origin + 誤帶 device_uuid → 仍 Set-Cookie（regression：device_uuid 不影響）',
+      headers: { Origin: 'https://chiyigo.com' },
+      body: { device_uuid: 'web-00000000-0000-0000-0000-000000000001' },
+      expect: 'cookie',
+    },
+    {
+      name: '無 Origin + platform=ios + device_uuid → body 含 refresh_token，無 cookie',
+      headers: {},
+      body: { platform: 'ios', device_uuid: 'ios-dev-1' },
+      expect: 'body',
+    },
+    {
+      name: '無 Origin + 無 platform + 無 device_uuid → body（舊 App / programmatic regression）',
+      headers: {},
+      body: {},
+      expect: 'body',
+    },
+    {
+      name: 'evil.com Origin + platform=web → body（跨站偽造 platform 不該升級為 web）',
+      headers: { Origin: 'https://evil.com' },
+      body: { platform: 'web' },
+      expect: 'body',
+    },
+    {
+      name: 'chiyigo Origin + platform=ios（hybrid webview）→ body，無 cookie',
+      headers: { Origin: 'https://chiyigo.com' },
+      body: { platform: 'ios', device_uuid: 'ios-hybrid-1' },
+      expect: 'body',
+    },
+  ]
+  matrix.forEach((c, i) => {
+    it(c.name, async () => {
+      // beforeEach 已 resetDb → fresh DB；IP 也每 case 不同避開 cross-user IP scan 防護
+      const email = `mx${i}@b.com`
+      await seedUser({ email, password: 'GoodPass#1234' })
+      const res = await callFunction(loginPost, loginReq(
+        { email, password: 'GoodPass#1234', ...c.body },
+        `5.5.5.${10 + i}`,
+        c.headers,
+      ))
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      const cookie = res.headers.get('Set-Cookie')
+      if (c.expect === 'cookie') {
+        expect(cookie).toMatch(/^chiyigo_refresh=/)
+        expect(body.refresh_token).toBeUndefined()
+      } else {
+        expect(cookie).toBeNull()
+        expect(body.refresh_token).toMatch(/^[0-9a-f]{64}$/)
+      }
+    })
   })
 })
 

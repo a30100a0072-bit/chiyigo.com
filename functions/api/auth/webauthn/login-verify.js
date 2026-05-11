@@ -21,8 +21,8 @@
  * 反帳號枚舉：
  *   challenge 不存在 / credential 找不到 / verify 失敗 → 一律 401 同訊息。
  *
- * Web 偵測：與 login.js 一致 — `!device_uuid && (!platform || platform==='web')`
- *           → 用 chiyigo_refresh cookie；否則 JSON body 回 refresh_token。
+ * Web 偵測：與 login.js 一致 — isWebClient(request, { platform })，
+ *           Origin 為 source of truth → 用 chiyigo_refresh cookie；否則 JSON body 回 refresh_token。
  *
  * 回傳：
  *   200 → { access_token, user_id, email, role, status, [refresh_token] }
@@ -36,7 +36,7 @@ import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
-import { refreshCookie } from '../../../utils/cookies.js'
+import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn.js'
@@ -265,7 +265,7 @@ export async function onRequestPost({ request, env }) {
     status:         cred.status,
   }
 
-  const isWeb = !device_uuid && (!platform || platform === 'web')
+  const isWeb = isWebClient(request, { platform })
   if (isWeb) {
     return new Response(JSON.stringify(payload), {
       status: 200,

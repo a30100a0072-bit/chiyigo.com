@@ -536,6 +536,54 @@ describe('POST /api/auth/oauth/token — code exchange', () => {
     expect(body.scope).toBe('email')  // scope 仍照映回應，方便 client 確認
   })
 
+  // ── isWebClient cookie / body channel matrix（規格 B）─────────────
+  // 每個 Origin case 各自 fresh seed auth_code，因為 token endpoint DELETE...RETURNING
+  // 原子消耗 code，無法跨 case 共用。
+  const originMatrix = [
+    {
+      name: 'chiyigo Origin → cookie 模式（Set-Cookie，body 無 refresh_token）',
+      origin: 'https://chiyigo.com',
+      expect: 'cookie',
+    },
+    {
+      name: '無 Origin → body 模式（programmatic / curl / native client regression）',
+      origin: null,
+      expect: 'body',
+    },
+    {
+      name: 'evil.com Origin → body 模式（CORS 也擋；雙保險）',
+      origin: 'https://evil.com',
+      expect: 'body',
+    },
+  ]
+  originMatrix.forEach((c, i) => {
+    it(`channel matrix: ${c.name}`, async () => {
+      const user = await seedUser({ email: `tok-mx-${i}@example.com` })
+      const { verifier, challenge } = await newPkcePair()
+      const redirectUri = 'https://mbti.chiyigo.com/login.html'
+      const code = await seedAuthCode({ userId: user.id, codeChallenge: challenge, redirectUri })
+
+      const headers = { 'Content-Type': 'application/json' }
+      if (c.origin) headers.Origin = c.origin
+      const req = new Request(`${ORIGIN}/api/auth/oauth/token`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ code, code_verifier: verifier, redirect_uri: redirectUri }),
+      })
+      const res  = await tokenPost({ request: req, env })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      const cookie = res.headers.get('Set-Cookie')
+      if (c.expect === 'cookie') {
+        expect(cookie).toMatch(/^chiyigo_refresh=/)
+        expect(body.refresh_token).toBeUndefined()
+      } else {
+        expect(cookie).toBeNull()
+        expect(body.refresh_token).toMatch(/^[a-f0-9]+$/)
+      }
+    })
+  })
+
   it('被封禁用戶 → 403 ACCOUNT_BANNED', async () => {
     const user = await seedUser({ email: 'banned@example.com' })
     await env.chiyigo_db

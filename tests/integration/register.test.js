@@ -20,8 +20,11 @@ const { onRequestPost: registerPost } = await import(
 )
 
 const URL_REG = 'http://localhost/api/auth/local/register'
-function regReq(body) {
-  return jsonPost(URL_REG, body, { 'CF-Connecting-IP': '1.2.3.4' })
+function regReq(body, extraHeaders = {}) {
+  return jsonPost(URL_REG, body, { 'CF-Connecting-IP': '1.2.3.4', ...extraHeaders })
+}
+function webRegReq(body) {
+  return regReq(body, { Origin: 'https://chiyigo.com' })
 }
 
 beforeAll(async () => {
@@ -42,14 +45,14 @@ beforeEach(async () => {
 describe('POST /api/auth/local/register', () => {
   it('happy path → 201 + access_token + refresh cookie + DB rows（web 預設走 cookie）', async () => {
     env.RESEND_API_KEY = 'test-key'
-    const res = await callFunction(registerPost, regReq({
+    const res = await callFunction(registerPost, webRegReq({
       email: 'new@example.com',
       password: 'GoodPass#1234',
     }))
     expect(res.status).toBe(201)
     const body = await res.json()
     expect(body.access_token).toBeTruthy()
-    // 對齊 login.js：web（無 device_uuid）走 HttpOnly cookie，body 不應暴露 refresh_token
+    // 對齊 login.js：web（chiyigo Origin）走 HttpOnly cookie，body 不應暴露 refresh_token
     expect(body.refresh_token).toBeUndefined()
     const cookie = res.headers.get('Set-Cookie') ?? ''
     expect(cookie).toMatch(/^chiyigo_refresh=[0-9a-f]{64};/)
@@ -203,4 +206,52 @@ describe('POST /api/auth/local/register', () => {
     const r2 = await callFunction(registerPost, regReq({ password: 'GoodPass#1234' }))
     expect(r2.status).toBe(400)
   })
+})
+
+describe('POST /api/auth/local/register — isWebClient channel matrix (規格 B)', () => {
+  const matrix = [
+    {
+      name: 'web Origin → Set-Cookie，body 無 refresh_token',
+      headers: { Origin: 'https://chiyigo.com' },
+      body: {},
+      expect: 'cookie',
+    },
+    {
+      name: 'web Origin + 誤帶 device_uuid → 仍 Set-Cookie',
+      headers: { Origin: 'https://chiyigo.com' },
+      body: { device_uuid: 'web-00000000-0000-0000-0000-000000000002' },
+      expect: 'cookie',
+    },
+    {
+      name: '無 Origin + platform=ios → body',
+      headers: {},
+      body: { platform: 'ios', device_uuid: 'ios-r1' },
+      expect: 'body',
+    },
+    {
+      name: 'evil.com Origin + platform=web → body',
+      headers: { Origin: 'https://evil.com' },
+      body: { platform: 'web' },
+      expect: 'body',
+    },
+  ]
+  for (const c of matrix) {
+    it(c.name, async () => {
+      const email = `reg-${Math.random().toString(36).slice(2, 10)}@example.com`
+      const res = await callFunction(registerPost, regReq(
+        { email, password: 'GoodPass#1234', ...c.body },
+        c.headers,
+      ))
+      expect(res.status).toBe(201)
+      const body = await res.json()
+      const cookie = res.headers.get('Set-Cookie')
+      if (c.expect === 'cookie') {
+        expect(cookie).toMatch(/^chiyigo_refresh=/)
+        expect(body.refresh_token).toBeUndefined()
+      } else {
+        expect(cookie).toBeNull()
+        expect(body.refresh_token).toMatch(/^[0-9a-f]{64}$/)
+      }
+    })
+  }
 })
