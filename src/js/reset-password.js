@@ -21,7 +21,7 @@ function applyLang(lang) {
   document.querySelectorAll('[data-i18n-ph]').forEach(el => {
     const k = el.dataset.i18nPh; if (dict[k] != null) el.placeholder = dict[k];
   });
-  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -163,4 +163,41 @@ document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit)
   overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
   overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
+})();
+
+// ── theme toggle + lang dropdown (sidebar / mobile topbar) ──
+(function () {
+  function applyTheme(dark) {
+    document.documentElement.classList.toggle('theme-dark', dark);
+    document.documentElement.classList.toggle('theme-light', !dark);
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch {}
+  }
+  const toggleTheme = () => applyTheme(!document.documentElement.classList.contains('theme-dark'));
+  document.getElementById('theme-toggle-btn')?.addEventListener('click', toggleTheme);
+  document.getElementById('m-theme-btn')?.addEventListener('click', toggleTheme);
+
+  const langDrop  = document.getElementById('lang-dropdown');
+  const mLangDrop = document.getElementById('m-top-lang-drop');
+  document.getElementById('lang-toggle-btn')?.addEventListener('click', e => {
+    e.stopPropagation(); langDrop?.classList.toggle('open'); mLangDrop?.classList.remove('open');
+  });
+  document.getElementById('m-lang-btn')?.addEventListener('click', e => {
+    e.stopPropagation(); mLangDrop?.classList.toggle('open'); langDrop?.classList.remove('open');
+  });
+  document.addEventListener('click', () => {
+    langDrop?.classList.remove('open');
+    mLangDrop?.classList.remove('open');
+  });
+  langDrop?.addEventListener('click', e => {
+    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    applyLang(opt.dataset.lang); langDrop.classList.remove('open');
+  });
+  mLangDrop?.addEventListener('click', e => {
+    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    applyLang(opt.dataset.lang); mLangDrop.classList.remove('open');
+  });
+  document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
+    const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+    applyLang(opt.dataset.lang);
+  });
 })();
