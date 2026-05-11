@@ -30,12 +30,12 @@
     }catch(_){}
   })();</script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=3d5b22f2" />
-  <link rel="stylesheet" href="/css/_components.css?v=3d5b22f2" />
-  <link rel="stylesheet" href="/css/login.css?v=3d5b22f2" />
-  <script defer src="/js/notify.js?v=3d5b22f2"></script>
-  <script defer src="/js/confirm-dialog.js?v=3d5b22f2"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=3d5b22f2" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=08935272" />
+  <link rel="stylesheet" href="/css/_components.css?v=08935272" />
+  <link rel="stylesheet" href="/css/login.css?v=08935272" />
+  <script defer src="/js/notify.js?v=08935272"></script>
+  <script defer src="/js/confirm-dialog.js?v=08935272"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=08935272" />
   <!-- explicit rendering：避免同頁 2 個 .cf-turnstile 同時跑 challenge 造成 iOS Safari 主執行緒卡頓 -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstile" async defer></script>
 </head>
@@ -224,6 +224,7 @@
 
               <!-- ── 登入表單 ── -->
               <form id="form-login" class="panel active">
+                <p class="ios-wait-hint" data-i18n="ios_wait_captcha_hint">iOS 系統請稍等驗證通過再輸入</p>
                 <div class="field-wrap">
                   <label for="login-email" class="field-label" data-i18n="login_email_lbl">電子信箱</label>
                   <input id="login-email" type="email" autocomplete="email" required placeholder="you@example.com" class="field-input" />
@@ -237,9 +238,10 @@
                     </button>
                   </div>
                 </div>
-                <!-- Turnstile execute 模式：render 不跑 challenge，按下登入才 turnstile.execute(id)
-                     觸發；iOS 主執行緒不會在打字時被 challenge 吃滿。appearance:interaction-only 預設不顯示 -->
+                <!-- Turnstile widget mode 在 CF dashboard 設為 Non-Interactive：
+                     比 Managed 快很多、保留 security presence；不用 Invisible 以保留視覺安全感 -->
                 <div class="ts-wrap">
+                  <p class="ts-hint" data-i18n="ts_loading_hint">資安驗證準備中，可先填寫帳號與密碼</p>
                   <div id="ts-login-container"></div>
                 </div>
                 <button type="submit" id="login-btn" class="submit-btn" data-i18n="login_btn">登入</button>
@@ -274,6 +276,7 @@
 
               <!-- ── 註冊表單 ── -->
               <form id="form-register" class="panel">
+                <p class="ios-wait-hint" data-i18n="ios_wait_captcha_hint">iOS 系統請稍等驗證通過再輸入</p>
                 <div class="field-wrap">
                   <label for="reg-email" class="field-label" data-i18n="login_email_lbl">電子信箱</label>
                   <input id="reg-email" type="email" autocomplete="email" required placeholder="you@example.com" class="field-input" />
@@ -355,8 +358,8 @@
 
   </div>
 
-  <script src="/js/auth-ui.js?v=3d5b22f2"></script>
-  <script src="/js/sidebar-auth.js?v=3d5b22f2" defer></script>
-  <script src="/js/login.js?v=3d5b22f2" defer></script>
+  <script src="/js/auth-ui.js?v=08935272"></script>
+  <script src="/js/sidebar-auth.js?v=08935272" defer></script>
+  <script src="/js/login.js?v=08935272" defer></script>
 </body>
 </html>

@@ -101,8 +101,11 @@ body{min-height:100vh;overflow:hidden}
 .field-label{display:block;font-size:.75rem;font-weight:500;color:var(--text-muted);margin-bottom:.4rem}
 .field-label span{color:var(--text-dim);font-weight:400}
 .field-hint{font-size:.7rem;color:var(--text-dim);line-height:1.5;margin:-.15rem 0 .45rem}
-/* Turnstile execute 模式 + interaction-only：widget 平時不顯示，需要互動時才彈出 */
-.ts-wrap{margin:0;display:flex;flex-direction:column;justify-content:center}
+/* iOS Turnstile 載入時主執行緒會卡，提示使用者等驗證完成後再輸入 */
+.ios-wait-hint{font-size:.75rem;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(123,108,255,.22);border-radius:8px;padding:.5rem .75rem;margin:0 0 1rem;text-align:center;line-height:1.4}
+.ts-wrap{min-height:65px;margin:.5rem 0;display:flex;flex-direction:column;justify-content:center}
+.ts-hint{font-size:.72rem;color:var(--text-dim);line-height:1.4;margin:0 0 .4rem;text-align:center;transition:opacity .2s ease}
+.ts-wrap.is-ready .ts-hint{display:none}
 .field-input{width:100%;padding:.72rem 1rem;border-radius:10px;background:var(--bg);border:1px solid var(--border-mid);color:var(--text);font-size:.875rem;font-family:var(--font-sans);outline:none;transition:border-color .18s ease,box-shadow .18s ease}
 .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
 .field-input::placeholder{color:var(--text-dim)}
