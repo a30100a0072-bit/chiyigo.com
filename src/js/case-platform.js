@@ -1,17 +1,18 @@
 // ── case-platform.js — CHIYIGO 會員系統 互動式架構 ──
 
 const NODES = [
-  // x/y as percentage of stage; positions form an ellipse around the core
-  { id:'login',   x:18, y:14, tag:'AUTH' },
-  { id:'oauth',   x:50, y:8,  tag:'AUTH' },
-  { id:'email',   x:82, y:14, tag:'AUTH' },
-  { id:'mfa',     x:8,  y:38, tag:'SECURITY' },
-  { id:'device',  x:92, y:38, tag:'SECURITY' },
-  { id:'token',   x:8,  y:65, tag:'CORE' },
-  { id:'audit',   x:92, y:65, tag:'OPS' },
-  { id:'kyc',     x:28, y:88, tag:'COMPLIANCE' },
-  { id:'payment', x:72, y:88, tag:'BUSINESS' },
-  { id:'wallet',  x:50, y:93, tag:'SECURITY' },
+  // x/y as percentage of stage; positions form an ellipse around the core.
+  // 左右兩側保留 ≥17% margin 給長標籤（Token / Session / Revoke、Email 驗證/重設密碼）。
+  { id:'login',   x:22, y:12, tag:'AUTH' },
+  { id:'oauth',   x:50, y:6,  tag:'AUTH' },
+  { id:'email',   x:78, y:12, tag:'AUTH' },
+  { id:'mfa',     x:17, y:30, tag:'SECURITY' },
+  { id:'device',  x:83, y:30, tag:'SECURITY' },
+  { id:'token',   x:17, y:58, tag:'CORE' },
+  { id:'audit',   x:83, y:58, tag:'OPS' },
+  { id:'kyc',     x:30, y:82, tag:'COMPLIANCE' },
+  { id:'payment', x:70, y:82, tag:'BUSINESS' },
+  { id:'wallet',  x:50, y:92, tag:'SECURITY' },
 ];
 
 const CORE = { x:50, y:50 };
