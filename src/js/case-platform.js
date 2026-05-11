@@ -9,8 +9,9 @@ const NODES = [
   { id:'device',  x:92, y:38, tag:'SECURITY' },
   { id:'token',   x:8,  y:65, tag:'CORE' },
   { id:'audit',   x:92, y:65, tag:'OPS' },
-  { id:'kyc',     x:28, y:90, tag:'COMPLIANCE' },
-  { id:'payment', x:72, y:90, tag:'BUSINESS' },
+  { id:'kyc',     x:28, y:88, tag:'COMPLIANCE' },
+  { id:'payment', x:72, y:88, tag:'BUSINESS' },
+  { id:'wallet',  x:50, y:96, tag:'SECURITY' },
 ];
 
 const CORE = { x:50, y:50 };
@@ -22,6 +23,7 @@ const EDGES = [
   ['token','device'],
   ['payment','kyc'], ['payment','audit'],
   ['mfa','payment'],
+  ['wallet','login'], ['wallet','token'], ['wallet','audit'],
 ];
 
 // DETAILS / node labels live in case-platform.json per locale.
