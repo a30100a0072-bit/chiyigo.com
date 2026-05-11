@@ -105,9 +105,18 @@ body{min-height:100vh;overflow:hidden}
    預設 display:none，由 <head> inline script 在 iOS 上打 html.is-ios 才顯示。 */
 .ios-wait-hint{display:none;font-size:.75rem;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(123,108,255,.22);border-radius:8px;padding:.5rem .75rem;margin:0 0 1rem;text-align:center;line-height:1.4}
 html.is-ios .ios-wait-hint{display:block}
-.ts-wrap{min-height:65px;margin:.5rem 0;display:flex;flex-direction:column;justify-content:center}
+.ts-wrap{min-height:65px;margin:.5rem 0;display:flex;flex-direction:column;justify-content:center;align-items:center}
 .ts-hint{font-size:.72rem;color:var(--text-dim);line-height:1.4;margin:0 0 .4rem;text-align:center;transition:opacity .2s ease}
 .ts-wrap.is-ready .ts-hint{display:none}
+/* Turnstile widget 是固定 300px 寬 iframe；在窄螢幕（≤380px）卡內可用寬會小於 300px 造成溢出，用 transform scale 視覺收進來 */
+@media(max-width:380px){
+  .ts-wrap>div{transform:scale(.9);transform-origin:center top}
+  .ts-wrap{min-height:60px}
+}
+@media(max-width:340px){
+  .ts-wrap>div{transform:scale(.82)}
+  .ts-wrap{min-height:55px}
+}
 .field-input{width:100%;padding:.72rem 1rem;border-radius:10px;background:var(--bg);border:1px solid var(--border-mid);color:var(--text);font-size:.875rem;font-family:var(--font-sans);outline:none;transition:border-color .18s ease,box-shadow .18s ease}
 .field-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
 .field-input::placeholder{color:var(--text-dim)}
