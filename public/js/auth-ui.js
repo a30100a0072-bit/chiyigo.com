@@ -333,8 +333,6 @@ function hidePassword(inputId, btnId) {
 const TURNSTILE_SITEKEY = '0x4AAAAAADISz6kSGZRC94TQ';
 let _loginWidgetId = null;
 let _registerWidgetId = null;
-// 使用者在 Turnstile API ready 前切到註冊 tab → 記錄意圖，API ready 後補 render
-let _registerWidgetPending = false;
 
 function _setTsReady(containerEl, ready) {
   const wrap = containerEl?.closest('.ts-wrap');
@@ -363,26 +361,30 @@ function _resetTurnstile(widgetId, containerId) {
   _setTsReady(el, false);
 }
 
-function _ensureRegisterWidget() {
-  if (_registerWidgetId != null) return;
-  if (typeof window.turnstile === 'undefined') {
-    // API 還沒載完 → 留個 flag，等 onloadTurnstile 補 render
-    _registerWidgetPending = true;
-    return;
-  }
-  _registerWidgetId = _renderTurnstile('ts-register-container');
+// 目前 active 的 panel 是哪個（panel.active class 為唯一真相）。
+function _getActiveTurnstileTab() {
+  if (document.getElementById('form-register')?.classList.contains('active')) return 'register';
+  if (document.getElementById('form-login')?.classList.contains('active')) return 'login';
+  return null;
 }
 
-// Turnstile API ready 時觸發（?onload=onloadTurnstile）。預設只 render 登入 widget；
-// 若使用者已先切到註冊 tab（_registerWidgetPending），一併補 render 註冊 widget。
-window.onloadTurnstile = function () {
-  if (_loginWidgetId == null && document.getElementById('ts-login-container')) {
+// 確保「目前 active 的 panel」widget 已 render；API 未 ready 時 no-op，
+// onloadTurnstile 之後會依當下 active tab 補 render（同時只會有 1 個 widget）。
+function _ensureWidgetForTab(tab) {
+  if (typeof window.turnstile === 'undefined') return;
+  if (tab === 'login' && _loginWidgetId == null && document.getElementById('ts-login-container')) {
     _loginWidgetId = _renderTurnstile('ts-login-container');
-  }
-  if (_registerWidgetPending && _registerWidgetId == null) {
+  } else if (tab === 'register' && _registerWidgetId == null && document.getElementById('ts-register-container')) {
     _registerWidgetId = _renderTurnstile('ts-register-container');
-    _registerWidgetPending = false;
   }
+}
+
+// Turnstile API ready 時觸發（?onload=onloadTurnstile）。只 render 目前 active panel
+// 的 widget；若使用者在 API ready 前已切到註冊，這裡會自然只 render 註冊，不會
+// 同時跑兩個 widget 害 iOS 卡頓。
+window.onloadTurnstile = function () {
+  const tab = _getActiveTurnstileTab();
+  if (tab) _ensureWidgetForTab(tab);
 };
 // 防 race：Turnstile script 是 async，可能在本檔執行前就跑完 onload；補一次。
 if (typeof window.turnstile !== 'undefined') window.onloadTurnstile();
@@ -396,8 +398,8 @@ const TAB_CONFIG = {
 };
 
 function switchTab(tab) {
-  // 切到註冊時才 lazy render 註冊 widget（避免同頁同時跑 2 個 Turnstile challenge）
-  if (tab === 'register') _ensureRegisterWidget();
+  // 切 tab 時 lazy render 該 panel 的 widget（避免同頁同時跑 2 個 Turnstile challenge）
+  _ensureWidgetForTab(tab);
 
   // 隱藏所有面板
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -462,8 +464,7 @@ async function handleLogin(event) {
   btn.dataset.label = uiT('btn_login');
 
   const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
-  // explicit render 後 .cf-turnstile class 已不存在，改用 closure widgetId 判斷 widget 是否該存在
-  // （widgetId === null 代表 API 還沒 ready 或還沒 render，等於使用者搶在驗證完成前點）
+  // login.html 一定有 Turnstile widget，所以這頁 token 必填；空字串 = 使用者搶在驗證完成前點
   if (!tsToken) {
     showMsg(uiT('err_captcha_pending'));
     return;
@@ -488,6 +489,8 @@ async function handleLogin(event) {
 
     if (res.status === 403 && data.code === 'TOTP_REQUIRED') {
       _preAuthToken = data.pre_auth_token;
+      // token 已被後端核銷一次；若使用者從 TOTP 返回登入再送一次會帶舊 token → 先 reset
+      _resetTurnstile(_loginWidgetId, 'ts-login-container');
       switchTab('totp');
       document.getElementById('totp-code').focus();
       return;
