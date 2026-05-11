@@ -319,10 +319,10 @@
   </div><!-- /dash-wrap -->
 
   <!-- ══ Mobile: Top Bar ══ -->
-  {{> topbar-mobile brandHref="index.html" loginHref="/login.html" loginLabel="會員登入"}}
+  {{> topbar-mobile pathPrefix="/" brandHref="/index.html" loginHref="/login.html" loginLabel="會員登入"}}
 
   <!-- Mobile bottom-sheet menu -->
-  {{> m-overlay-public-other active="contact"}}
+  {{> m-overlay-public-other pathPrefix="/" active="contact"}}
 
 
   <!-- Neural network animation -->

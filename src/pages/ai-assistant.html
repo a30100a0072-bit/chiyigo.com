@@ -197,9 +197,9 @@
   </div>
 
   <!-- Mobile topbar -->
-  {{> topbar-mobile brandHref="index.html" loginHref="/login.html" loginLabel="會員登入"}}
+  {{> topbar-mobile pathPrefix="/" brandHref="/index.html" loginHref="/login.html" loginLabel="會員登入"}}
 
-  {{> m-overlay-public-other active="portfolio"}}
+  {{> m-overlay-public-other pathPrefix="/" active="portfolio"}}
 
   <!-- Cloudflare Turnstile（部署後設定 window.TURNSTILE_SITEKEY 才會啟用 widget；後端對應設 env.TURNSTILE_SECRET）-->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
