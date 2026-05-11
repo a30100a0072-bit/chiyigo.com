@@ -17,7 +17,7 @@ import { resolveAud } from '../../../utils/cors.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
-import { refreshCookie } from '../../../utils/cookies.js'
+import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -222,9 +222,9 @@ export async function onRequestPost({ request, env, waitUntil }) {
     status:         user.status,
   }
 
-  // Web 瀏覽器（無 device_uuid 且非明確 App 平台）→ HttpOnly cookie，
-  // 不把 refresh_token 暴露到 JSON body。對齊 local/login.js 273。
-  const isWeb = !device_uuid && (!platform || platform === 'web')
+  // Web 瀏覽器（Origin 屬於 chiyigo + platform 非明確 non-web）→ HttpOnly cookie，
+  // 不把 refresh_token 暴露到 JSON body。規格 B：見 functions/utils/cookies.js isWebClient
+  const isWeb = isWebClient(request, { platform })
   if (isWeb) {
     return new Response(JSON.stringify(payload), {
       status: 201,

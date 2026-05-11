@@ -240,7 +240,7 @@ describe('POST /api/auth/webauthn/login-verify', () => {
     const resp = await verifyHandler({
       request: jsonPost('http://x/api/auth/webauthn/login-verify', {
         response: fakeAssertion('ch-happy-login', 'cred-happy'),
-      }),
+      }, { Origin: 'https://chiyigo.com' }),
       env,
     })
     expect(resp.status).toBe(200)
@@ -277,6 +277,64 @@ describe('POST /api/auth/webauthn/login-verify', () => {
     ).bind(u.id).first()
     expect(audit).not.toBeNull()
     expect(audit.event_data).toMatch(/webauthn/)
+  })
+
+  // isWebClient channel matrix（規格 B）— 每 case fresh challenge / fresh credential
+  const channelMatrix = [
+    {
+      name: 'web Origin → cookie',
+      headers: { Origin: 'https://chiyigo.com' },
+      body:    {},
+      expect:  'cookie',
+    },
+    {
+      name: 'web Origin + 誤帶 device_uuid → 仍 cookie（regression）',
+      headers: { Origin: 'https://chiyigo.com' },
+      body:    { device_uuid: 'web-00000000-0000-0000-0000-000000000003' },
+      expect:  'cookie',
+    },
+    {
+      name: '無 Origin + platform=ios → body',
+      headers: {},
+      body:    { platform: 'ios', device_uuid: 'ios-wa-1' },
+      expect:  'body',
+    },
+    {
+      name: 'evil.com Origin + platform=web → body',
+      headers: { Origin: 'https://evil.com' },
+      body:    { platform: 'web' },
+      expect:  'body',
+    },
+  ]
+  channelMatrix.forEach((c, i) => {
+    it(`channel matrix: ${c.name}`, async () => {
+      const u = await seedUser({ email: `wa-mx-${i}@x` })
+      const credId = `cred-wa-mx-${i}`
+      const challenge = `ch-wa-mx-${i}`
+      await seedCredential(u.id, credId)
+      await seedChallenge(challenge, null)
+      mockState.verifyResult = {
+        verified: true,
+        authenticationInfo: { newCounter: 1, userVerified: true },
+      }
+      const resp = await verifyHandler({
+        request: jsonPost('http://x/api/auth/webauthn/login-verify', {
+          response: fakeAssertion(challenge, credId),
+          ...c.body,
+        }, c.headers),
+        env,
+      })
+      expect(resp.status).toBe(200)
+      const body = await resp.json()
+      const cookie = resp.headers.get('Set-Cookie')
+      if (c.expect === 'cookie') {
+        expect(cookie).toMatch(/^chiyigo_refresh=/)
+        expect(body.refresh_token).toBeUndefined()
+      } else {
+        expect(cookie).toBeNull()
+        expect(body.refresh_token).toMatch(/^[0-9a-f]{64}$/)
+      }
+    })
   })
 
   it('App 路徑：device_uuid + platform=app → JSON refresh_token + 綁 device', async () => {

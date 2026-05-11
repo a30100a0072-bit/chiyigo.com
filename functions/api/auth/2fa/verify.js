@@ -20,7 +20,7 @@ import { verifyTotpReplaySafe } from '../../../utils/totp.js'
 import { requireAuth, res } from '../../../utils/auth.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
-import { refreshCookie } from '../../../utils/cookies.js'
+import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
@@ -194,9 +194,10 @@ async function respondWithToken(userId, record, db, deviceUuid, platform, env, a
     status:         record.status,
   }
 
-  // Web 瀏覽器（無 device_uuid 且非明確 App 平台）→ HttpOnly cookie，
-  // 不把 refresh_token 暴露到 JSON body / Network panel。對齊 local/login.js 273。
-  const isWeb = !deviceUuid && (!platform || platform === 'web')
+  // Web 瀏覽器（Origin 屬於 chiyigo + platform 非明確 non-web）→ HttpOnly cookie，
+  // 不把 refresh_token 暴露到 JSON body / Network panel。
+  // 規格 B：device_uuid 不參與通道判斷；見 functions/utils/cookies.js isWebClient
+  const isWeb = isWebClient(request, { platform })
   if (isWeb) {
     return new Response(JSON.stringify(payload), {
       status: 200,

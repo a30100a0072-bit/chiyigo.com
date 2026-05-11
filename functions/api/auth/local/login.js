@@ -17,7 +17,7 @@ import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { verifyTurnstile } from '../../../utils/turnstile.js'
 import { res } from '../../../utils/auth.js'
-import { refreshCookie } from '../../../utils/cookies.js'
+import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
@@ -270,8 +270,9 @@ export async function onRequestPost({ request, env }) {
     deviceUuid: device_uuid ?? null,
   })
 
-  // Web 瀏覽器（無 device_uuid 且非明確 App 平台）→ Cookie
-  const isWeb = !device_uuid && (!platform || platform === 'web')
+  // Web 瀏覽器（Origin 屬於 chiyigo + platform 非明確 non-web）→ Cookie
+  // 規格 B：device_uuid 不參與通道判斷；見 functions/utils/cookies.js isWebClient
+  const isWeb = isWebClient(request, { platform })
   if (isWeb) {
     return new Response(JSON.stringify(payload), {
       status: 200,
