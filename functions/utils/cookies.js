@@ -29,6 +29,26 @@ const OAUTH_DEVICE_BASE = 'chiyigo_oauth_device=%VAL%; Path=/; SameSite=Lax; Sec
 
 export const CLEAR_OAUTH_DEVICE_COOKIE = OAUTH_DEVICE_BASE.replace('%VAL%', '') + '; Max-Age=0'
 
+// ── Web client 判定 ──────────────────────────────────────────
+// 規格 B：Origin 為 source of truth，platform 只用來把 chiyigo-origin 的
+// explicit non-web client（hybrid webview 宣告 platform=ios 等）排除掉。
+//
+// 刻意不看 device_uuid：device_uuid 是「裝置綁定」概念，與「response 通道
+// 是 cookie 還是 body」正交。舊版用 `!device_uuid && (!platform || platform==='web')`
+// 會在 web client 不小心送 device_uuid 時把 refresh_token 寫進 body / Network panel，
+// 違反 HttpOnly 設計；且 App 沒送 platform 又沒送 device_uuid 時誤判 web，
+// 嘗試 Set-Cookie 又不回 body refresh_token → App 登入靜默失敗。
+export function isWebClient(request, { platform } = {}) {
+  // 顯式 non-web platform → 永遠 non-web（含 hybrid webview 在 chiyigo 開但宣告 ios）
+  if (platform && platform !== 'web') return false
+  // Origin 必須屬於 chiyigo（含子網域）
+  const origin = request.headers.get('Origin') || ''
+  try {
+    const host = new URL(origin).host
+    return host === 'chiyigo.com' || host.endsWith('.chiyigo.com')
+  } catch { return false }
+}
+
 export function readOAuthDeviceCookie(request) {
   const c = request.headers.get('cookie') || ''
   const m = c.match(/(?:^|;\s*)chiyigo_oauth_device=([^;]+)/)

@@ -26,7 +26,7 @@ import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypt
 import { signJwt } from '../../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
-import { refreshCookie } from '../../../utils/cookies.js'
+import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
@@ -34,16 +34,10 @@ import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）
 
-// Web client（chiyigo.com 子網域）→ cookie 模式：refresh_token 改種 HttpOnly cookie，
-// body 不回傳 refresh_token。Mobile / app（無 Origin）→ body 模式維持。
-function isWebClient(request) {
-  const origin = request.headers.get('Origin') || ''
-  try {
-    const host = new URL(origin).host
-    return host === 'chiyigo.com' || host.endsWith('.chiyigo.com')
-  } catch { return false }
-}
-
+// Web client 判定走共用 isWebClient（規格 B，Origin 為 source of truth）。
+// 此 endpoint 沒有 platform 欄位（OAuth code exchange spec 不帶），所以只看 Origin：
+//   chiyigo Origin → cookie 模式（HttpOnly，body 無 refresh_token）
+//   無 Origin / 跨站 Origin → body 模式（programmatic / curl / native client 保留）
 
 export async function onRequestOptions({ request, env }) {
   const cors = isWebClient(request)
