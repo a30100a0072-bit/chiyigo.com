@@ -195,6 +195,35 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- F-3 Phase 2 migration 0038：audit_archive_chunks（per-chunk 狀態機）
+-- 整合測試需要這張表才能跑 archive worker 的 planned→uploaded→verified→marked_archived 升態。
+CREATE TABLE IF NOT EXISTS audit_archive_chunks (
+  env                TEXT    NOT NULL,
+  table_name         TEXT    NOT NULL,
+  cold_class         TEXT    NOT NULL
+                     CHECK(cold_class IN ('immutable','security_critical','security_warn','read_audit','telemetry','debug_failure')),
+  cold_class_version INTEGER NOT NULL DEFAULT 1,
+  archive_date       TEXT    NOT NULL,
+  min_id             INTEGER NOT NULL,
+  max_id             INTEGER NOT NULL,
+  chunk_sha256       TEXT    NOT NULL,
+  state              TEXT    NOT NULL
+                     CHECK(state IN ('planned','uploaded','verified','marked_archived','purged','cold_copied','failed','blacklisted')),
+  row_count          INTEGER NOT NULL,
+  retry_count        INTEGER NOT NULL DEFAULT 0,
+  last_failure_at    TEXT,
+  last_failure       TEXT,
+  next_reminder_at   TEXT,
+  blacklisted_at     TEXT,
+  marked_archived_at TEXT,
+  purge_after        TEXT,
+  cold_copied_at     TEXT,
+  run_id             TEXT    NOT NULL,
+  created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (env, table_name, cold_class, archive_date, min_id, max_id, chunk_sha256)
+);
+
 CREATE TABLE IF NOT EXISTS revoked_jti (
   jti        TEXT    PRIMARY KEY,
   expires_at TEXT    NOT NULL,

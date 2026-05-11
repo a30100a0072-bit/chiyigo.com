@@ -2,14 +2,16 @@
  * POST /api/admin/cron/audit-archive
  * Header: Authorization: Bearer <CRON_SECRET>
  *
- * F-3 Phase 2 PR 2.0 — Archive worker dry-run（design doc：docs/AUDIT_RETENTION_PLAN.md）
+ * F-3 Phase 2 PR 2.1a — Archive worker dry-run + state machine
+ * （design doc：docs/AUDIT_RETENTION_PLAN.md v11）
  *
- * 範圍（PR 2.0，scope 由 user 在 2026-05-11 切確認）：
- *   - 只跑 audit_log / cold_class='telemetry'（PR 2.2 才 expand 到 6 個）
- *   - 只走 planned → uploaded（PR 2.1 補 verified / marked_archived）
- *   - Unfinished-chunk-first gate 從 PR 2.0 就強制：遇 non-terminal chunk 先處理、不掃新範圍
- *   - 預設 AUDIT_ARCHIVE_DRY_RUN=true → R2 prefix 走 audit-log-dryrun/
- *   - 任何狀況都不 UPDATE archived_at、不 DELETE D1 row
+ * PR 2.1a 範圍（user 在 2026-05-11 確認）：
+ *   - 補三段升態：planned recovery → uploaded、uploaded → verified、verified → marked_archived
+ *   - planned/uploaded blocker recovery：從 D1 重撈 row id range + 重 serialize + sha 對齊
+ *   - marked_archived 升態走 design doc 「雙路徑驗證」（first-pass / recovery）
+ *   - 仍只跑 (audit_log, telemetry)；6 cold_class expand 留 PR 2.2
+ *   - zstd 壓縮獨立 PR 2.1b（避免 WASM bundle 風險與狀態機 review 混在一起）
+ *   - DRY_RUN=true 時 verified 為終點：不 UPDATE archived_at，下輪 cron 仍會 hit verified blocker 並 skip
  *
  * 🔴 no-delete discipline：
  *   本檔禁止呼叫 env.AUDIT_ARCHIVE_BUCKET.delete( 任何形式（含 .delete、['delete']、解構）。
@@ -30,9 +32,10 @@ import {
   computeCursorAndBlocker,
   rowsToJsonl,
   sha256Hex,
-  archivePrefixes,
   buildChunkKeys,
   buildManifest,
+  deriveKeysFromChunk,
+  appendStateHistory,
   rowMatchesColdClass,
   newRunId,
   utcDate,
@@ -42,20 +45,16 @@ import {
 // PR 2.0：cold_class 版本固定 1。audit-policy 改動時 bump（design doc v8 cold_class_version）
 const COLD_CLASS_VERSION = 1
 
-// Hot retention（PR 2.0 預設 telemetry 30d）。可由 env.AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS 覆蓋，
-// 方便 dry-run 期間故意調低觀察 worker 行為。<= 0 視為「不設下限、全撈」（仍受 archived_at IS NULL 收斂）。
 function hotRetentionDays(env) {
   const raw = Number(env.AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS ?? 30)
   return Number.isFinite(raw) ? raw : 30
 }
 
-// dry-run flag — 預設 true（PR 2.0 必為 dry-run；要關必須顯式設 'false'）
 function isDryRun(env) {
   const v = String(env.AUDIT_ARCHIVE_DRY_RUN ?? 'true').toLowerCase()
   return v !== 'false'
 }
 
-// env 名稱（R2 key 用） — 預設 'prod'，dev 可覆蓋
 function archiveEnv(env) {
   return String(env.ARCHIVE_ENV ?? 'prod')
 }
@@ -78,7 +77,6 @@ export async function onRequestPost({ request, env }) {
   const runId    = newRunId()
   const startedAt = new Date().toISOString()
 
-  // PR 2.0 鎖死 (table, cold_class) — 跨類由 PR 2.2 接手
   const tableName = PR20_SUPPORTED_TABLE
   const coldClass = PR20_SUPPORTED_COLD_CLASS
 
@@ -91,10 +89,14 @@ export async function onRequestPost({ request, env }) {
     cold_class: coldClass,
     writer_version: ARCHIVE_WRITER_VERSION,
     blocker: null,
+    blocker_action: null,
     cursor: 0,
     chunks_planned: 0,
     chunks_uploaded: 0,
+    chunks_verified: 0,
+    chunks_marked_archived: 0,
     rows_uploaded: 0,
+    rows_marked_archived: 0,
     skipped_reason: null,
     errors: [],
   }
@@ -102,7 +104,8 @@ export async function onRequestPost({ request, env }) {
   try {
     // ── Step 1：列出當前 (table, cold_class) 全部 chunks，算 cursor + blocker ──
     const chunksRows = await db.prepare(
-      `SELECT min_id, max_id, state, chunk_sha256, row_count, retry_count
+      `SELECT env, table_name, cold_class, archive_date,
+              min_id, max_id, state, chunk_sha256, row_count, retry_count
          FROM audit_archive_chunks
         WHERE env = ? AND table_name = ? AND cold_class = ?
         ORDER BY min_id ASC`
@@ -112,178 +115,400 @@ export async function onRequestPost({ request, env }) {
     const { cursor, blocker } = computeCursorAndBlocker(chunks, tableName)
     report.cursor = cursor
 
-    // ── Step 2：unfinished-chunk-first gate ─────────────────
-    // PR 2.0 只能處理 state='planned' 的 blocker（推它到 uploaded）。
-    // 其他 non-terminal state（uploaded/verified/marked_archived/failed/blacklisted）→
-    //   PR 2.1+ 才能升態；PR 2.0 不掃新範圍，回報後直接停。
+    // ── Step 2：unfinished-chunk-first gate — 依 blocker.state 分派 ──
     if (blocker) {
       report.blocker = {
         state: blocker.state,
         min_id: blocker.min_id,
         max_id: blocker.max_id,
       }
-      if (blocker.state === 'planned') {
-        // PR 2.0 recovery：planned blocker 嘗試重 PUT 一次（R2 idempotent by chunk_sha256 key）
-        // 但 PR 2.0 還沒實作「從 D1 重撈 row 對齊既存 sha256」的安全 reattempt 機制
-        // （需要 row id range 重撈、jsonl 重組、sha 校驗 — 留 PR 2.1 recovery path）。
-        // 暫處理：標 skipped + 等 PR 2.1 接手；不掃新範圍。
-        report.skipped_reason = 'planned_blocker_present_pr20_skips_recovery'
-      } else {
-        report.skipped_reason = `non_terminal_blocker_state_${blocker.state}`
+      const ctx = { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, blocker }
+      switch (blocker.state) {
+        case 'planned':         await handlePlannedBlocker(ctx);  break
+        case 'uploaded':        await handleUploadedBlocker(ctx); break
+        case 'verified':        await handleVerifiedBlocker(ctx); break
+        case 'marked_archived': // PR 4 才做 purge；PR 2.1a 等 grace 不動
+        case 'failed':
+        case 'blacklisted':
+        default:
+          report.skipped_reason = `non_terminal_blocker_state_${blocker.state}`
+          break
       }
       report.finished_at = new Date().toISOString()
-      return res(report, 200)
+      return res(report, report.ok ? 200 : 500)
     }
 
-    // ── Step 3：從 cursor+1 起撈下一批 telemetry row ──────────
-    //   hot retention：created_at < now - {hotDays} days；hotDays<=0 → 不設下限
-    const hotDays = hotRetentionDays(env)
-    const retentionPredicate = hotDays > 0
-      ? `AND created_at < datetime('now', '-${hotDays} days')`
-      : ''
-
-    // LIMIT = CHUNK_MAX_ROWS + 1：拿 +1 觀察「是否還有更多」用，但 PR 2.0 一輪只做 1 chunk
-    const candidatesRes = await db.prepare(
-      `SELECT id, event_type, severity, user_id, client_id, ip_hash, event_data, cold_class, created_at
-         FROM audit_log
-        WHERE id > ?
-          AND cold_class = ?
-          AND archived_at IS NULL
-          ${retentionPredicate}
-        ORDER BY id ASC
-        LIMIT ?`
-    ).bind(cursor, coldClass, CHUNK_MAX_ROWS + 1).all()
-
-    const candidates = candidatesRes.results ?? []
-    if (candidates.length === 0) {
-      report.skipped_reason = 'no_rows_eligible'
-      report.finished_at = new Date().toISOString()
-      return res(report, 200)
-    }
-
-    // ── Step 4：runtime classify 過濾 — 防 audit-policy 改動後 row 的 cold_class
-    //   欄位過時。對不上的 row 不能進當前 chunk，下輪 worker 對應 class 再撈。
-    //   PR 2.0 範圍內 cold_class 寫死 'telemetry'，這層主要是金融級保險。
-    const rows = []
-    let bytesEstimate = 0
-    for (const r of candidates) {
-      if (!rowMatchesColdClass(r, coldClass)) continue
-      // 粗估每行 jsonl 大小（JSON.stringify 一次太貴；估 row 字串長度即可）
-      const approxLen = (r.event_data?.length ?? 0) + 120
-      if (rows.length >= CHUNK_MAX_ROWS) break
-      if (bytesEstimate + approxLen > CHUNK_MAX_BYTES) break
-      rows.push(r)
-      bytesEstimate += approxLen
-    }
-    if (rows.length === 0) {
-      report.skipped_reason = 'no_rows_match_cold_class_after_classify'
-      report.finished_at = new Date().toISOString()
-      return res(report, 200)
-    }
-
-    // ── Step 5：算 jsonl + sha256 + chunk key ───────────────
-    const jsonl = rowsToJsonl(rows)
-    const sha   = await sha256Hex(jsonl)
-    const minId = rows[0].id
-    const maxId = rows[rows.length - 1].id
-    const minTs = rows[0].created_at
-    const maxTs = rows[rows.length - 1].created_at
-    const archiveDate = utcDate()
-
-    const { dataKey, manifestKey } = buildChunkKeys({
-      env: envName, tableName, coldClass,
-      minId, maxId, sha256: sha, archiveDate, dryRun,
-    })
-
-    // ── Step 6：寫 'planned' manifest 進 R2，INSERT chunks 表 ──
-    const plannedAt = new Date().toISOString()
-    const plannedManifest = buildManifest({
-      env: envName, tableName, coldClass, coldClassVersion: COLD_CLASS_VERSION,
-      runId, state: 'planned',
-      stateHistory: [{ state: 'planned', at: plannedAt }],
-      rowCount: rows.length, minId, maxId, minTs, maxTs,
-      sha256Jsonl: sha, dryRun, dataKey,
-    })
-
-    await bucket.put(manifestKey, JSON.stringify(plannedManifest, null, 2), {
-      httpMetadata: { contentType: 'application/json' },
-    })
-
-    // chunks 表 row：用 INSERT OR IGNORE — PK 含 chunk_sha256，同資料重跑 idempotent
-    await db.prepare(
-      `INSERT OR IGNORE INTO audit_archive_chunks
-        (env, table_name, cold_class, cold_class_version, archive_date,
-         min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?)`
-    ).bind(envName, tableName, coldClass, COLD_CLASS_VERSION, archiveDate,
-           minId, maxId, sha, rows.length, runId).run()
-
-    report.chunks_planned = 1
-
-    // ── Step 7：PUT 資料 jsonl → 升 'uploaded' manifest + UPDATE chunks 表 ──
-    await bucket.put(dataKey, jsonl, {
-      httpMetadata: { contentType: 'application/x-ndjson' },
-    })
-
-    const uploadedAt = new Date().toISOString()
-    const uploadedManifest = {
-      ...plannedManifest,
-      state: 'uploaded',
-      state_history: [
-        ...plannedManifest.state_history,
-        { state: 'uploaded', at: uploadedAt },
-      ],
-    }
-    await bucket.put(manifestKey, JSON.stringify(uploadedManifest, null, 2), {
-      httpMetadata: { contentType: 'application/json' },
-    })
-
-    await db.prepare(
-      `UPDATE audit_archive_chunks
-          SET state = 'uploaded', updated_at = datetime('now')
-        WHERE env = ? AND table_name = ? AND cold_class = ?
-          AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
-    ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha).run()
-
-    report.chunks_uploaded = 1
-    report.rows_uploaded   = rows.length
-
-    // ── Step 8：emit audit event ────────────────────────────
-    // safeUserAudit 約定：event_type（snake_case） + data（object，內部 JSON.stringify）
-    await safeUserAudit(env, {
-      event_type: 'audit.archive.chunk_uploaded',
-      severity:   'info',
-      data: {
-        run_id: runId,
-        dry_run: dryRun,
-        env: envName,
-        table: tableName,
-        cold_class: coldClass,
-        chunk_key: dataKey,
-        manifest_key: manifestKey,
-        row_count: rows.length,
-        min_id: minId,
-        max_id: maxId,
-        sha256_jsonl: sha,
-      },
+    // ── Step 3：無 blocker — 走 PR 2.0 既有 planned→uploaded 主流程 ──
+    await runFreshChunkPipeline({
+      env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, cursor,
     })
   } catch (e) {
-    // 整輪失敗 — 不 emit audit.archive.upload_failed（PR 2.1 加 dedicated handler）；
-    // PR 2.0 只把錯誤回傳 + 結構化 log，讓 GH Actions workflow 失敗推 alert。
-    console.error('[audit-archive] PR 2.0 cron failed:', e)
+    console.error('[audit-archive] PR 2.1a cron failed:', e)
     report.ok = false
     report.errors.push({ message: e.message ?? String(e) })
   }
 
-  // 防衛：再次 grep 自己防 `.delete(` — 純執行期 sanity check（無 bucket.delete 呼叫）
-  // （真正 enforcement 在 scripts/lint-archive-no-delete.js / CI）
-
   report.finished_at = new Date().toISOString()
-  // 失敗回 500：GH Actions workflow 才會抓得到（workflow 只看 HTTP status）
   return res(report, report.ok ? 200 : 500)
 }
 
-// NON_TERMINAL_STATES exported for test 用途的 referenced re-export
-export { NON_TERMINAL_STATES }
+// ── Planned blocker：D1 重撈 + 重 serialize + sha 對齊 → uploaded ─────────
+// 場景：上輪 worker 寫了 planned manifest 與 chunks row，但 data PUT 失敗或 crash。
+// design doc §「marked_archived 升態雙路徑」前置的 idempotent recovery 概念。
+async function handlePlannedBlocker(ctx) {
+  const { envName, tableName, coldClass, dryRun, db, bucket, report, blocker } = ctx
+  report.blocker_action = 'recovery_planned'
 
-// 不要在此檔加任何 R2 .delete( 呼叫。Lint 規則 + code review 一起把關。
+  // 重撈：cold_class + archived_at IS NULL + id range
+  const rowsRes = await db.prepare(
+    `SELECT id, event_type, severity, user_id, client_id, ip_hash, event_data, cold_class, created_at
+       FROM audit_log
+      WHERE id BETWEEN ? AND ?
+        AND cold_class = ?
+        AND archived_at IS NULL
+      ORDER BY id ASC`
+  ).bind(blocker.min_id, blocker.max_id, coldClass).all()
+  const rows = rowsRes.results ?? []
+
+  if (rows.length !== blocker.row_count) {
+    return failChunkMismatch(ctx, 'row_count_mismatch', {
+      expected: blocker.row_count,
+      actual: rows.length,
+      stage: 'planned_recovery',
+    })
+  }
+  const jsonl = rowsToJsonl(rows)
+  const sha   = await sha256Hex(jsonl)
+  if (sha !== blocker.chunk_sha256) {
+    return failChunkMismatch(ctx, 'row_count_mismatch', {
+      expected_sha256: blocker.chunk_sha256,
+      actual_sha256:   sha,
+      stage: 'planned_recovery',
+    })
+  }
+
+  const { dataKey, manifestKey } = deriveKeysFromChunk(blocker, dryRun)
+
+  // 1) PUT data（R2 PUT idempotent — 同 key 同 body 覆寫無副作用）
+  await bucket.put(dataKey, jsonl, {
+    httpMetadata: { contentType: 'application/x-ndjson' },
+  })
+
+  // 2) Manifest 升 uploaded — 讀回現有 planned manifest append state_history
+  const uploadedManifest = await loadAndAppend(bucket, manifestKey, 'uploaded')
+  await bucket.put(manifestKey, JSON.stringify(uploadedManifest, null, 2), {
+    httpMetadata: { contentType: 'application/json' },
+  })
+
+  // 3) chunks.state planned → uploaded
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'uploaded', updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(envName, tableName, coldClass, blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
+
+  report.chunks_uploaded = 1
+  report.rows_uploaded   = rows.length
+
+  await safeUserAudit(ctx.env, {
+    event_type: 'audit.archive.chunk_uploaded',
+    severity:   'info',
+    data: {
+      run_id: ctx.runId, dry_run: dryRun, env: envName, table: tableName, cold_class: coldClass,
+      chunk_key: dataKey, manifest_key: manifestKey,
+      row_count: rows.length, min_id: blocker.min_id, max_id: blocker.max_id,
+      sha256_jsonl: sha, recovery: 'planned_to_uploaded',
+    },
+  })
+}
+
+// ── Uploaded blocker：R2 GET 回讀 + sha + row_count 比對 → verified ────────
+async function handleUploadedBlocker(ctx) {
+  const { envName, tableName, coldClass, dryRun, db, bucket, report, blocker } = ctx
+  report.blocker_action = 'verify_uploaded'
+
+  const { dataKey, manifestKey } = deriveKeysFromChunk(blocker, dryRun)
+  const obj = await bucket.get(dataKey)
+  if (!obj) {
+    return failChunkMismatch(ctx, 'verification_failed', {
+      reason: 'r2_object_not_found',
+      data_key: dataKey,
+      stage: 'uploaded_verify',
+    })
+  }
+  const text = await obj.text()
+  const sha  = await sha256Hex(text)
+  // jsonl trailing newline → 行數 = newline 數
+  const rowCount = text.length === 0 ? 0 : (text.match(/\n/g) ?? []).length
+
+  if (sha !== blocker.chunk_sha256 || rowCount !== blocker.row_count) {
+    return failChunkMismatch(ctx, 'verification_failed', {
+      expected_sha256: blocker.chunk_sha256,
+      actual_sha256:   sha,
+      expected_row_count: blocker.row_count,
+      actual_row_count:   rowCount,
+      stage: 'uploaded_verify',
+    })
+  }
+
+  // 升 verified
+  const verifiedManifest = await loadAndAppend(bucket, manifestKey, 'verified')
+  await bucket.put(manifestKey, JSON.stringify(verifiedManifest, null, 2), {
+    httpMetadata: { contentType: 'application/json' },
+  })
+
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'verified', updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(envName, tableName, coldClass, blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
+
+  report.chunks_verified = 1
+}
+
+// ── Verified blocker：marked_archived 雙路徑驗證（design doc §「升態雙路徑」）─
+// audit_log 專用；admin_audit_log（PR 2.2）不走此路（terminal=cold_copied）。
+async function handleVerifiedBlocker(ctx) {
+  const { envName, tableName, coldClass, dryRun, db, bucket, report, blocker } = ctx
+  report.blocker_action = 'mark_archived'
+
+  if (dryRun) {
+    // 設計：PR 2.1a 在 DRY_RUN 下 verified = 終點，不 UPDATE archived_at。
+    // 下一輪 cron 再 hit 同一 verified blocker → 仍 skip。PR 4 拆 flag 才解開。
+    report.skipped_reason = 'dry_run_skips_marked_archived'
+    return
+  }
+
+  // 一階：UPDATE archived_at；對齊 design doc：
+  //   WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at IS NULL
+  const upd = await db.prepare(
+    `UPDATE audit_log
+        SET archived_at = datetime('now')
+      WHERE id BETWEEN ? AND ?
+        AND cold_class = ?
+        AND archived_at IS NULL`
+  ).bind(blocker.min_id, blocker.max_id, coldClass).run()
+
+  const changes = upd?.meta?.changes ?? 0
+
+  let succeeded = false
+  let path
+  if (changes === blocker.row_count) {
+    succeeded = true
+    path = 'first_pass'
+  } else {
+    // 雙路徑：UPDATE 沒命中預期數量 → 查實際已標記 count
+    //   changes==0 → crash-after-update recovery
+    //   0<changes<row_count → partial UPDATE（worker 半途 retry）
+    const cntRes = await db.prepare(
+      `SELECT COUNT(*) AS c
+         FROM audit_log
+        WHERE id BETWEEN ? AND ?
+          AND cold_class = ?
+          AND archived_at IS NOT NULL`
+    ).bind(blocker.min_id, blocker.max_id, coldClass).first()
+    const archivedCount = Number(cntRes?.c ?? 0)
+    if (archivedCount === blocker.row_count) {
+      succeeded = true
+      path = changes === 0 ? 'recovery' : 'partial_then_recovery'
+    } else {
+      return failChunkMismatch(ctx, 'partial_archive_mismatch', {
+        expected: blocker.row_count,
+        update_changes: changes,
+        archived_count: archivedCount,
+        stage: 'verified_mark_archived',
+      })
+    }
+  }
+
+  if (!succeeded) return
+
+  // 升 marked_archived：寫 manifest + chunks UPDATE（含 marked_archived_at / purge_after = +7d）
+  const { manifestKey } = deriveKeysFromChunk(blocker, dryRun)
+  const markedManifest = await loadAndAppend(bucket, manifestKey, 'marked_archived')
+  await bucket.put(manifestKey, JSON.stringify(markedManifest, null, 2), {
+    httpMetadata: { contentType: 'application/json' },
+  })
+
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'marked_archived',
+            marked_archived_at = datetime('now'),
+            purge_after = datetime('now', '+7 days'),
+            updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(envName, tableName, coldClass, blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
+
+  report.chunks_marked_archived = 1
+  report.rows_marked_archived   = blocker.row_count
+
+  await safeUserAudit(ctx.env, {
+    event_type: 'audit.archive.marked_archived',
+    severity:   'info',
+    data: {
+      run_id: ctx.runId, dry_run: dryRun, env: envName, table: tableName, cold_class: coldClass,
+      manifest_key: manifestKey, row_count: blocker.row_count,
+      min_id: blocker.min_id, max_id: blocker.max_id,
+      path,
+    },
+  })
+}
+
+// ── 沒 blocker：撈新範圍 + planned→uploaded 一氣呵成（PR 2.0 既有路徑）─────
+async function runFreshChunkPipeline(ctx) {
+  const { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, cursor } = ctx
+
+  const hotDays = hotRetentionDays(env)
+  const retentionPredicate = hotDays > 0
+    ? `AND created_at < datetime('now', '-${hotDays} days')`
+    : ''
+
+  const candidatesRes = await db.prepare(
+    `SELECT id, event_type, severity, user_id, client_id, ip_hash, event_data, cold_class, created_at
+       FROM audit_log
+      WHERE id > ?
+        AND cold_class = ?
+        AND archived_at IS NULL
+        ${retentionPredicate}
+      ORDER BY id ASC
+      LIMIT ?`
+  ).bind(cursor, coldClass, CHUNK_MAX_ROWS + 1).all()
+
+  const candidates = candidatesRes.results ?? []
+  if (candidates.length === 0) {
+    report.skipped_reason = 'no_rows_eligible'
+    return
+  }
+
+  const rows = []
+  let bytesEstimate = 0
+  for (const r of candidates) {
+    if (!rowMatchesColdClass(r, coldClass)) continue
+    const approxLen = (r.event_data?.length ?? 0) + 120
+    if (rows.length >= CHUNK_MAX_ROWS) break
+    if (bytesEstimate + approxLen > CHUNK_MAX_BYTES) break
+    rows.push(r)
+    bytesEstimate += approxLen
+  }
+  if (rows.length === 0) {
+    report.skipped_reason = 'no_rows_match_cold_class_after_classify'
+    return
+  }
+
+  const jsonl = rowsToJsonl(rows)
+  const sha   = await sha256Hex(jsonl)
+  const minId = rows[0].id
+  const maxId = rows[rows.length - 1].id
+  const minTs = rows[0].created_at
+  const maxTs = rows[rows.length - 1].created_at
+  const archiveDate = utcDate()
+
+  const { dataKey, manifestKey } = buildChunkKeys({
+    env: envName, tableName, coldClass,
+    minId, maxId, sha256: sha, archiveDate, dryRun,
+  })
+
+  const plannedAt = new Date().toISOString()
+  const plannedManifest = buildManifest({
+    env: envName, tableName, coldClass, coldClassVersion: COLD_CLASS_VERSION,
+    runId, state: 'planned',
+    stateHistory: [{ state: 'planned', at: plannedAt }],
+    rowCount: rows.length, minId, maxId, minTs, maxTs,
+    sha256Jsonl: sha, dryRun, dataKey,
+  })
+
+  await bucket.put(manifestKey, JSON.stringify(plannedManifest, null, 2), {
+    httpMetadata: { contentType: 'application/json' },
+  })
+
+  await db.prepare(
+    `INSERT OR IGNORE INTO audit_archive_chunks
+      (env, table_name, cold_class, cold_class_version, archive_date,
+       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?)`
+  ).bind(envName, tableName, coldClass, COLD_CLASS_VERSION, archiveDate,
+         minId, maxId, sha, rows.length, runId).run()
+
+  report.chunks_planned = 1
+
+  // PUT data → 升 uploaded
+  await bucket.put(dataKey, jsonl, {
+    httpMetadata: { contentType: 'application/x-ndjson' },
+  })
+
+  const uploadedManifest = appendStateHistory(plannedManifest, 'uploaded', new Date().toISOString())
+  await bucket.put(manifestKey, JSON.stringify(uploadedManifest, null, 2), {
+    httpMetadata: { contentType: 'application/json' },
+  })
+
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'uploaded', updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha).run()
+
+  report.chunks_uploaded = 1
+  report.rows_uploaded   = rows.length
+
+  await safeUserAudit(env, {
+    event_type: 'audit.archive.chunk_uploaded',
+    severity:   'info',
+    data: {
+      run_id: runId, dry_run: dryRun, env: envName, table: tableName, cold_class: coldClass,
+      chunk_key: dataKey, manifest_key: manifestKey,
+      row_count: rows.length, min_id: minId, max_id: maxId,
+      sha256_jsonl: sha,
+    },
+  })
+}
+
+// ── 共用：失敗 → emit critical event + chunks.state='failed' + report.ok=false ─
+async function failChunkMismatch(ctx, eventName, data) {
+  const { envName, tableName, coldClass, db, report, blocker, runId, dryRun } = ctx
+  report.ok = false
+  report.errors.push({ event: eventName, ...data })
+
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'failed',
+            last_failure = ?,
+            last_failure_at = datetime('now'),
+            retry_count = retry_count + 1,
+            updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(eventName, envName, tableName, coldClass,
+         blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
+
+  await safeUserAudit(ctx.env, {
+    event_type: `audit.archive.${eventName}`,
+    severity:   'critical',
+    data: {
+      run_id: runId, dry_run: dryRun, env: envName, table: tableName, cold_class: coldClass,
+      min_id: blocker.min_id, max_id: blocker.max_id,
+      chunk_sha256: blocker.chunk_sha256,
+      ...data,
+    },
+  })
+}
+
+// 從 R2 讀回 manifest JSON → append 升態紀錄。manifest 不存在 → 用最小 fallback。
+async function loadAndAppend(bucket, manifestKey, nextState) {
+  const obj = await bucket.get(manifestKey)
+  const now = new Date().toISOString()
+  if (!obj) {
+    // 不該發生：planned/uploaded blocker 表示 manifest 已寫過。降級 fallback：
+    // 寫一個僅含 state_history 的最小 manifest（不阻斷狀態機推進）。
+    return { state: nextState, state_history: [{ state: nextState, at: now }] }
+  }
+  const text = await obj.text()
+  let prev
+  try { prev = JSON.parse(text) } catch { prev = { state_history: [] } }
+  return appendStateHistory(prev, nextState, now)
+}
+
+export { NON_TERMINAL_STATES }

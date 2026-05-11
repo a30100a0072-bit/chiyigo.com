@@ -151,6 +151,36 @@ export function buildChunkKeys({ env, tableName, coldClass, minId, maxId, sha256
 }
 
 /**
+ * 從 chunks row 反推 data/manifest key（recovery / verify 路徑會用）。
+ * chunks row 不存 dryRun flag，dryRun 來自當前 env；同一 chunk 在 dry-run / live
+ * 之間切換時 key 會變，但設計上 PR 4 一次性切換、key 變動就視為新 chunk，沒 partial state。
+ */
+export function deriveKeysFromChunk(row, dryRun) {
+  return buildChunkKeys({
+    env:         row.env,
+    tableName:   row.table_name,
+    coldClass:   row.cold_class,
+    minId:       row.min_id,
+    maxId:       row.max_id,
+    sha256:      row.chunk_sha256,
+    archiveDate: row.archive_date,
+    dryRun,
+  })
+}
+
+/**
+ * 升態時往 state_history append 一條紀錄。manifest 物件不就地改，回傳新物件
+ * 以保留呼叫端的 immutability 假設（design doc §「Manifest 結構」state_history）。
+ */
+export function appendStateHistory(manifest, state, at) {
+  return {
+    ...manifest,
+    state,
+    state_history: [...(manifest.state_history ?? []), { state, at }],
+  }
+}
+
+/**
  * 組 chunk manifest JSON（design doc §「Manifest 結構」）。
  * PR 2.0 不算 severities aggregation；留空物件即可（PR 2.1 補）。
  */

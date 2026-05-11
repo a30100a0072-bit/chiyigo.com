@@ -120,6 +120,7 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM kyc_webhook_events'),
     env.chiyigo_db.prepare('DELETE FROM payment_webhook_events'),
     env.chiyigo_db.prepare('DELETE FROM payment_intents'),
+    env.chiyigo_db.prepare('DELETE FROM audit_archive_chunks'),  // F-3 Phase 2 PR 2.1a
   ])
 
   // oauth-clients 模組級 cache 也歸零（避免跨 test file 撞資料）

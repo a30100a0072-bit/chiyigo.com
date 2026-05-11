@@ -21,6 +21,8 @@ import {
   isChunkTerminal,
   NON_TERMINAL_STATES,
   archivePrefixes,
+  deriveKeysFromChunk,
+  appendStateHistory,
 } from '../functions/utils/audit-archive.js'
 
 describe('rowsToJsonl', () => {
@@ -178,6 +180,48 @@ describe('rowMatchesColdClass', () => {
     const row = { event_type: 'totally.unknown.event', severity: 'info' }
     expect(rowMatchesColdClass(row, 'immutable')).toBe(true)
     expect(rowMatchesColdClass(row, 'telemetry')).toBe(false)
+  })
+})
+
+describe('deriveKeysFromChunk (PR 2.1a)', () => {
+  it('從 chunks row 反推與 buildChunkKeys 一致的 key', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-11',
+      min_id: 8, max_id: 922, chunk_sha256: 'abc',
+    }
+    const k = deriveKeysFromChunk(row, true)
+    expect(k.dataKey).toBe('audit-log-dryrun/prod/audit_log/telemetry/2026/05/11/8-922-abc.jsonl')
+    expect(k.manifestKey).toBe('manifest-dryrun/prod/audit_log/telemetry/2026/05/11/8-922-abc.json')
+  })
+
+  it('live 模式切 prefix', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-11',
+      min_id: 1, max_id: 2, chunk_sha256: 'dead',
+    }
+    const k = deriveKeysFromChunk(row, false)
+    expect(k.dataKey.startsWith('audit-log/')).toBe(true)
+    expect(k.manifestKey.startsWith('manifest/')).toBe(true)
+  })
+})
+
+describe('appendStateHistory (PR 2.1a)', () => {
+  it('append 不就地改、回新物件', () => {
+    const m = { state: 'planned', state_history: [{ state: 'planned', at: 't0' }], extra: 'k' }
+    const next = appendStateHistory(m, 'uploaded', 't1')
+    expect(next).not.toBe(m)
+    expect(m.state_history).toHaveLength(1)
+    expect(next.state).toBe('uploaded')
+    expect(next.state_history).toHaveLength(2)
+    expect(next.state_history[1]).toEqual({ state: 'uploaded', at: 't1' })
+    expect(next.extra).toBe('k')
+  })
+
+  it('state_history 缺失也 ok（fallback 空陣列）', () => {
+    const next = appendStateHistory({ state: 'planned' }, 'uploaded', 't1')
+    expect(next.state_history).toEqual([{ state: 'uploaded', at: 't1' }])
   })
 })
 
