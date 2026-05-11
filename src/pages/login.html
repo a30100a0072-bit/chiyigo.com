@@ -35,8 +35,7 @@
   <link rel="stylesheet" href="/css/_tokens.css" />
   <link rel="stylesheet" href="/css/_components.css" />
   <link rel="stylesheet" href="/css/login.css" />
-  <script defer src="/js/notify.js"></script>
-  <script defer src="/js/confirm-dialog.js"></script>
+  {{> head-foot}}
   <link rel="stylesheet" href="/css/sidebar-auth.css" />
   <!-- explicit rendering：避免同頁 2 個 .cf-turnstile 同時跑 challenge 造成 iOS Safari 主執行緒卡頓 -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstile" async defer></script>
