@@ -30,13 +30,14 @@
     }catch(_){}
   })();</script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=d5078539" />
-  <link rel="stylesheet" href="/css/_components.css?v=d5078539" />
-  <link rel="stylesheet" href="/css/login.css?v=d5078539" />
-  <script defer src="/js/notify.js?v=d5078539"></script>
-  <script defer src="/js/confirm-dialog.js?v=d5078539"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=d5078539" />
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <link rel="stylesheet" href="/css/_tokens.css?v=0257c928" />
+  <link rel="stylesheet" href="/css/_components.css?v=0257c928" />
+  <link rel="stylesheet" href="/css/login.css?v=0257c928" />
+  <script defer src="/js/notify.js?v=0257c928"></script>
+  <script defer src="/js/confirm-dialog.js?v=0257c928"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=0257c928" />
+  <!-- explicit rendering：避免同頁 2 個 .cf-turnstile 同時跑 challenge 造成 iOS Safari 主執行緒卡頓 -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstile" async defer></script>
 </head>
 <body>
 
@@ -240,7 +241,7 @@
                      比 Managed 快很多、保留 security presence；不用 Invisible 以保留視覺安全感 -->
                 <div class="ts-wrap">
                   <p class="ts-hint" data-i18n="ts_loading_hint">資安驗證準備中，可先填寫帳號與密碼</p>
-                  <div class="cf-turnstile" data-sitekey="0x4AAAAAADISz6kSGZRC94TQ" data-theme="auto" data-callback="onTurnstileReady"></div>
+                  <div id="ts-login-container"></div>
                 </div>
                 <button type="submit" id="login-btn" class="submit-btn" data-i18n="login_btn">登入</button>
                 <a href="/forgot-password.html" class="forgot-link" data-i18n="forgot_link">忘記密碼？</a>
@@ -299,7 +300,7 @@
                 </div>
                 <div class="ts-wrap">
                   <p class="ts-hint" data-i18n="ts_loading_hint">資安驗證準備中，可先填寫帳號與密碼</p>
-                  <div class="cf-turnstile" data-sitekey="0x4AAAAAADISz6kSGZRC94TQ" data-theme="auto" data-callback="onTurnstileReady"></div>
+                  <div id="ts-register-container"></div>
                 </div>
                 <button type="submit" id="reg-btn" class="submit-btn" data-i18n="reg_btn">建立帳號</button>
                 <div class="divider"><div class="divider-line"></div><span class="divider-text" data-i18n="divider_or">或</span><div class="divider-line"></div></div>
@@ -355,8 +356,8 @@
 
   </div>
 
-  <script src="/js/auth-ui.js?v=d5078539"></script>
-  <script src="/js/sidebar-auth.js?v=d5078539" defer></script>
-  <script src="/js/login.js?v=d5078539" defer></script>
+  <script src="/js/auth-ui.js?v=0257c928"></script>
+  <script src="/js/sidebar-auth.js?v=0257c928" defer></script>
+  <script src="/js/login.js?v=0257c928" defer></script>
 </body>
 </html>

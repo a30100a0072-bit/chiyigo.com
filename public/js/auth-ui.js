@@ -327,6 +327,56 @@ function hidePassword(inputId, btnId) {
   clearTimeout(_pwdTimers[inputId]);
 }
 
+// ── Turnstile：explicit rendering + lazy + closure widgetId ──────
+// 同頁 2 個 widget 會在 iOS Safari 主執行緒同時跑 challenge 卡輸入，
+// 改成只在需要時 render 該 panel 的 widget；fail 必 reset 否則 token 一次性會 403。
+const TURNSTILE_SITEKEY = '0x4AAAAAADISz6kSGZRC94TQ';
+let _loginWidgetId = null;
+let _registerWidgetId = null;
+
+function _setTsReady(containerEl, ready) {
+  const wrap = containerEl?.closest('.ts-wrap');
+  if (!wrap) return;
+  wrap.classList.toggle('is-ready', !!ready);
+}
+
+function _renderTurnstile(containerId) {
+  if (typeof window.turnstile === 'undefined') return null;
+  const el = document.getElementById(containerId);
+  if (!el) return null;
+  return window.turnstile.render('#' + containerId, {
+    sitekey: TURNSTILE_SITEKEY,
+    theme:   'auto',
+    callback:           () => _setTsReady(el, true),
+    'expired-callback': () => _setTsReady(el, false),
+    'error-callback':   () => _setTsReady(el, false),
+    'timeout-callback': () => _setTsReady(el, false),
+  });
+}
+
+function _resetTurnstile(widgetId, containerId) {
+  if (widgetId == null || typeof window.turnstile === 'undefined') return;
+  try { window.turnstile.reset(widgetId); } catch (_) {}
+  const el = document.getElementById(containerId);
+  _setTsReady(el, false);
+}
+
+function _ensureRegisterWidget() {
+  if (_registerWidgetId != null) return;
+  _registerWidgetId = _renderTurnstile('ts-register-container');
+}
+
+// Turnstile API ready 時觸發（?onload=onloadTurnstile）。只 render 登入 widget；
+// 註冊 widget 延到使用者切 tab 才建立。
+window.onloadTurnstile = function () {
+  if (_loginWidgetId != null) return;
+  if (document.getElementById('ts-login-container')) {
+    _loginWidgetId = _renderTurnstile('ts-login-container');
+  }
+};
+// 防 race：Turnstile script 是 async，可能在本檔執行前就跑完 onload；補一次。
+if (typeof window.turnstile !== 'undefined') window.onloadTurnstile();
+
 // ── 分頁切換 ─────────────────────────────────────────────────────
 
 const TAB_CONFIG = {
@@ -336,6 +386,9 @@ const TAB_CONFIG = {
 };
 
 function switchTab(tab) {
+  // 切到註冊時才 lazy render 註冊 widget（避免同頁同時跑 2 個 Turnstile challenge）
+  if (tab === 'register') _ensureRegisterWidget();
+
   // 隱藏所有面板
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('form-' + tab).classList.add('active');
@@ -431,6 +484,8 @@ async function handleLogin(event) {
     }
 
     if (!res.ok) {
+      // token 一次性，失敗後必 reset 才能讓使用者再送一次
+      _resetTurnstile(_loginWidgetId, 'ts-login-container');
       showMsg(t(data.error) || uiT('err_login_fail'));
       return;
     }
@@ -441,6 +496,7 @@ async function handleLogin(event) {
     redirectAfterAuth();
 
   } catch {
+    _resetTurnstile(_loginWidgetId, 'ts-login-container');
     showMsg(uiT('err_network'));
   } finally {
     setLoading('login-btn', false);
@@ -496,6 +552,7 @@ async function handleRegister(event) {
     const data = await res.json();
 
     if (!res.ok) {
+      _resetTurnstile(_registerWidgetId, 'ts-register-container');
       showMsg(t(data.error) || uiT('err_reg_fail'));
       return;
     }
@@ -508,6 +565,7 @@ async function handleRegister(event) {
     setTimeout(redirectAfterAuth, 800);
 
   } catch {
+    _resetTurnstile(_registerWidgetId, 'ts-register-container');
     showMsg(uiT('err_network'));
   } finally {
     setLoading('reg-btn', false);
@@ -816,9 +874,4 @@ document.addEventListener('click', function (e) {
     '; Path=/; Max-Age=600; SameSite=Lax; Secure';
 });
 
-// Turnstile data-callback：token 簽完 → 標記所在 .ts-wrap is-ready，CSS 隱藏 hint。
-// 不用 setTimeout/poll；callback 由 widget 自己觸發。
-window.onTurnstileReady = function (_token, widgetId) {
-  const widgets = document.querySelectorAll('.ts-wrap');
-  widgets.forEach((w) => w.classList.add('is-ready'));
-};
+// 舊版 window.onTurnstileReady 全域 callback 已改成 closure-scoped（見檔頭 Turnstile 區段）。
