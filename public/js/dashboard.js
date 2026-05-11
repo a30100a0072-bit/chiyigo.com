@@ -2172,6 +2172,13 @@ function redirectToEcpay(url, fields) {
   form.submit();
 }
 
+// 阻擋只為 password manager a11y 而存在的 wrapper form 預設提交（避免 Enter 觸發 reload）
+document.addEventListener('submit', e => {
+  if (e.target instanceof HTMLFormElement && e.target.matches('form[data-noop-submit]')) {
+    e.preventDefault();
+  }
+});
+
 // ── Phase C-3 unified click delegation ──
 // 用 document-level delegation 統一處理；id 與 data-* 都在這裡分派。
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
