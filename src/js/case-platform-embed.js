@@ -2,7 +2,12 @@
 // 首頁 (index.html) 嵌入版本：只保留 nodes / lines / panel 邏輯。
 // theme / 語言切換 / hamburger / canvas 由 host 頁 (index.js) 處理。
 // 對外暴露 window.cpArchSetLang(lang)，由 index.js 的 applyLangI 觸發。
+//
+// 必須包在 IIFE 內：index.js 也用了 top-level `const NODES`（neural canvas
+// 動畫），跟這支同 global scope 會 SyntaxError「Identifier 'NODES' has
+// already been declared」。
 
+(function(){
 const NODES = [
   { id:'login',   x:22, y:12, tag:'AUTH' },
   { id:'oauth',   x:50, y:6,  tag:'AUTH' },
@@ -185,3 +190,4 @@ if (STAGE) {
   // 首頁嵌入版預設空 panel：讓 "點擊任一節點" hint 誘導探索，
   // 不像獨立 case-platform.html 那樣強塞細節搶注意。
 }
+})();
