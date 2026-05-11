@@ -405,6 +405,86 @@ describe('audit-archive cron — PR 2.1d F-2 manifest severities', () => {
   })
 })
 
+describe('audit-archive cron — PR 2.1d F-3 archivePut e2e (callback glue)', () => {
+  // 把 bucket.put 用 wrapper 替換：前 N 次 throw，第 N+1 次成功。
+  // 注意：env.AUDIT_ARCHIVE_BUCKET 是 miniflare 內建 R2，我們在 makeEnv 注入
+  // 一層 facade，讓 cron handler 走我們的 stub。
+  function wrapBucketWithFailingPut(realBucket, failTimes) {
+    let n = 0
+    return {
+      get:    (...a) => realBucket.get(...a),
+      list:   (...a) => realBucket.list(...a),
+      delete: (...a) => realBucket.delete(...a),
+      head:   (...a) => realBucket.head(...a),
+      put:    async (k, b, o) => {
+        n++
+        if (n <= failTimes) throw new Error(`stub-put-fail-${n}`)
+        return realBucket.put(k, b, o)
+      },
+    }
+  }
+
+  async function selectUploadFailed() {
+    const r = await env.chiyigo_db.prepare(
+      `SELECT id, severity, event_data FROM audit_log
+        WHERE event_type = 'audit.archive.upload_failed' ORDER BY id ASC`
+    ).all()
+    return r.results ?? []
+  }
+
+  it('前 2 次 PUT 失敗、第 3 次成功 → 2 個 warn upload_failed row + chunk 仍升 uploaded', async () => {
+    await seedTelemetry(2)
+    const stubBucket = wrapBucketWithFailingPut(env.AUDIT_ARCHIVE_BUCKET, 2)
+    const r = await cronArchive({
+      request: makeRequest(),
+      env: {
+        ...makeEnv(),
+        AUDIT_ARCHIVE_BUCKET: stubBucket,
+        AUDIT_ARCHIVE_PUT_RETRY_BACKOFF_MS: '0,0,0',   // 不等 21s
+      },
+    })
+    const report = await r.json()
+    expect(report.ok).toBe(true)
+    expect(report.chunks_uploaded).toBe(1)
+
+    const events = await selectUploadFailed()
+    expect(events).toHaveLength(2)
+    for (const ev of events) {
+      expect(ev.severity).toBe('warn')
+      const data = JSON.parse(ev.event_data)
+      expect(data.final).toBe(false)
+      expect(data.role).toBe('manifest')        // 第一個 PUT 是 planned manifest
+      expect(data.attempt).toBeGreaterThanOrEqual(1)
+      expect(data.error).toMatch(/stub-put-fail/)
+    }
+  })
+
+  it('全部 4 次 PUT 都失敗 → 3 個 warn + 1 個 critical（final=true）+ ok=false', async () => {
+    await seedTelemetry(2)
+    const stubBucket = wrapBucketWithFailingPut(env.AUDIT_ARCHIVE_BUCKET, 999)
+    const r = await cronArchive({
+      request: makeRequest(),
+      env: {
+        ...makeEnv(),
+        AUDIT_ARCHIVE_BUCKET: stubBucket,
+        AUDIT_ARCHIVE_PUT_RETRY_BACKOFF_MS: '0,0,0',
+      },
+    })
+    expect(r.status).toBe(500)
+    const report = await r.json()
+    expect(report.ok).toBe(false)
+
+    const events = await selectUploadFailed()
+    expect(events).toHaveLength(4)
+    expect(events.slice(0, 3).every(e => e.severity === 'warn')).toBe(true)
+    expect(events[3].severity).toBe('critical')
+    const lastData = JSON.parse(events[3].event_data)
+    expect(lastData.final).toBe(true)
+    expect(lastData.attempt).toBe(4)
+    expect(lastData.next_delay_ms).toBeNull()
+  })
+})
+
 describe('audit-archive cron — auth + binding 防線', () => {
   it('auth fail → 401', async () => {
     const r = await cronArchive({

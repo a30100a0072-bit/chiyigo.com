@@ -69,6 +69,16 @@ function archiveEnv(env) {
   return String(env.ARCHIVE_ENV ?? 'prod')
 }
 
+// PR 2.1d：可選的 backoff schedule env 注入（CSV 毫秒數）。空字串/缺值 → 用 utils 預設。
+// 主要供整合測試把 backoff 設 [0,0,0] 避免真的等 21 秒；prod 不該設此 env。
+function parseRetryBackoffMs(env) {
+  const raw = String(env.AUDIT_ARCHIVE_PUT_RETRY_BACKOFF_MS ?? '').trim()
+  if (!raw) return undefined
+  const parts = raw.split(',').map(s => Number(s.trim()))
+  if (parts.some(n => !Number.isFinite(n) || n < 0)) return undefined
+  return parts
+}
+
 // PR 2.1d（codex F-3）：R2 PUT 失敗 emit audit.archive.upload_failed。
 //   - 非最後一次 attempt → severity='warn'
 //   - 最後一次 attempt    → severity='critical'
@@ -124,10 +134,11 @@ export async function onRequestPost({ request, env }) {
   const db = env.chiyigo_db
   if (!db)     return res({ error: 'chiyigo_db binding missing' }, 500)
 
-  const dryRun   = isDryRun(env)
-  const envName  = archiveEnv(env)
-  const runId    = newRunId()
-  const startedAt = new Date().toISOString()
+  const dryRun           = isDryRun(env)
+  const envName          = archiveEnv(env)
+  const runId            = newRunId()
+  const startedAt        = new Date().toISOString()
+  const putRetryBackoffMs = parseRetryBackoffMs(env)
 
   const tableName = PR20_SUPPORTED_TABLE
   const coldClass = PR20_SUPPORTED_COLD_CLASS
@@ -176,7 +187,7 @@ export async function onRequestPost({ request, env }) {
         min_id: blocker.min_id,
         max_id: blocker.max_id,
       }
-      const ctx = { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, blocker }
+      const ctx = { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, blocker, putRetryBackoffMs }
       switch (blocker.state) {
         case 'planned':         await handlePlannedBlocker(ctx);  break
         case 'uploaded':        await handleUploadedBlocker(ctx); break
@@ -194,7 +205,7 @@ export async function onRequestPost({ request, env }) {
 
     // ── Step 3：無 blocker — 走 PR 2.0 既有 planned→uploaded 主流程 ──
     await runFreshChunkPipeline({
-      env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, cursor,
+      env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, cursor, putRetryBackoffMs,
     })
   } catch (e) {
     console.error('[audit-archive] PR 2.1a cron failed:', e)
