@@ -3,8 +3,8 @@
 const hamBtn  = document.getElementById('m-ham-btn');
 const overlay = document.getElementById('m-overlay');
 const topbar  = document.getElementById('m-topbar');
-function openMenu() { hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open'); overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden'); topbar?.classList.add('menu-open'); document.body.style.overflow='hidden'; }
-function closeMenu() { hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open'); overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true'); topbar?.classList.remove('menu-open'); document.body.style.overflow=''; }
+function openMenu() { hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open'); overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden'); topbar?.classList.add('menu-open'); document.body.classList.add('body-lock'); }
+function closeMenu() { hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open'); overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true'); topbar?.classList.remove('menu-open'); document.body.classList.remove('body-lock'); }
 hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
 overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
 overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
@@ -83,9 +83,9 @@ async function logout() {
 document.getElementById('logout-btn').addEventListener('click', logout)
 
 function showError(msg) {
-  document.getElementById('loading').style.display = 'none'
-  document.getElementById('content').style.display = 'none'
-  document.getElementById('error-msg').style.display = 'block'
+  document.getElementById('loading').hidden = true
+  document.getElementById('content').hidden = true
+  document.getElementById('error-msg').hidden = false
   document.getElementById('error-text').textContent = `// error: ${msg}`
 }
 
@@ -116,9 +116,9 @@ async function load(page = 1, q = '') {
   const t = T()
   if (!token) { showError(t.err_login_required); return }
 
-  document.getElementById('loading').style.display = 'block'
-  document.getElementById('content').style.display = 'none'
-  document.getElementById('error-msg').style.display = 'none'
+  document.getElementById('loading').hidden = false
+  document.getElementById('content').hidden = true
+  document.getElementById('error-msg').hidden = true
 
   const params = new URLSearchParams({ page, limit: 20 })
   if (q) params.set('q', q)
@@ -130,8 +130,8 @@ async function load(page = 1, q = '') {
 
   const data = await res.json()
   window._lastData = data
-  document.getElementById('loading').style.display = 'none'
-  document.getElementById('content').style.display = 'block'
+  document.getElementById('loading').hidden = true
+  document.getElementById('content').hidden = false
 
   renderTable(data.requisitions)
   renderCards(data.requisitions)
@@ -295,7 +295,7 @@ async function openAuditCleanup() {
         </div>
         <div class="refund-row__sub">actor=${escA(actor)} · ${escA(row.created_at)}</div>
         <div class="refund-row__actions">
-          <button class="reject" data-audit-del="${row.id}" data-armed="0">清除（兩段式 + OTP）</button>
+          <button class="reject danger-idle" data-audit-del="${row.id}" data-armed="0">清除（兩段式 + OTP）</button>
         </div>
       </div>`;
   }).join('');
@@ -307,19 +307,17 @@ async function auditDelGo(auditId, btn) {
     document.querySelectorAll('[data-audit-del]').forEach(b => {
       if (b !== btn) {
         b.dataset.armed = '0'; b.textContent = '清除';
-        b.style.background = 'rgba(239,68,68,.12)'; b.style.borderColor = 'rgba(239,68,68,.3)'; b.style.color = '#fca5a5';
+        b.classList.remove('is-armed');
       }
     });
     btn.dataset.armed = '1';
     btn.textContent = '確認清除';
-    btn.style.background = 'rgba(239,68,68,.4)';
-    btn.style.borderColor = 'rgba(239,68,68,.7)';
-    btn.style.color = '#fee2e2';
+    btn.classList.add('is-armed');
     if (_auditDelTimer) clearTimeout(_auditDelTimer);
     _auditDelTimer = setTimeout(() => {
       if (!btn.isConnected) return;
       btn.dataset.armed = '0'; btn.textContent = '清除';
-      btn.style.background = 'rgba(239,68,68,.12)'; btn.style.borderColor = 'rgba(239,68,68,.3)'; btn.style.color = '#fca5a5';
+      btn.classList.remove('is-armed');
     }, 4000);
     return;
   }
@@ -458,10 +456,7 @@ function openRefundDecide(id, action) {
   const btn = document.getElementById('rd-confirm-btn');
   btn.disabled = false;
   btn.textContent = isApprove ? '確認通過並退款' : '確認拒絕';
-  btn.className = isApprove ? 'confirm' : 'cancel';
-  btn.style.cssText = isApprove
-    ? ''
-    : 'background:#dc2626;border-color:#dc2626;color:#fff';
+  btn.className = isApprove ? 'confirm' : 'cancel is-danger';
   document.getElementById('modal-refund-decide').classList.add('open');
   setTimeout(() => document.getElementById('rd-otp')?.focus(), 50);
 }
@@ -546,7 +541,6 @@ function openReqAction(action, id) {
   btn.dataset.armed = '0';
   btn.textContent = isSave ? '下一步：確認保存' : '下一步：確認刪除';
   btn.disabled = false;
-  btn.style.cssText = ''; // 走 class，不再 inline
   btn.className = isSave ? 'btn-pill btn-pill--primary' : 'btn-pill btn-pill--danger';
   // cancel 也統一用 secondary class
   document.querySelector('#modal-req-action [data-modal-close="modal-req-action"].cancel')?.classList.add('btn-pill', 'btn-pill--secondary');

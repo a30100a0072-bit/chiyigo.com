@@ -181,9 +181,7 @@ function openDecide(id, action) {
   btn.textContent = isApprove
     ? (t.modal_confirm_approve || '確認通過並退款')
     : (t.modal_confirm_reject  || '確認拒絕');
-  btn.className = isApprove ? 'confirm' : 'cancel';
-  if (!isApprove) btn.style.cssText = 'background:#dc2626;border-color:#dc2626;color:#fff';
-  else btn.style.cssText = '';
+  btn.className = isApprove ? 'confirm' : 'cancel is-danger';
   document.getElementById('modal-refund-decide').classList.add('open');
   setTimeout(() => document.getElementById('rd-otp')?.focus(), 50);
 }
@@ -247,8 +245,8 @@ load();
 const hamBtn  = document.getElementById('m-ham-btn');
 const overlay = document.getElementById('m-overlay');
 const mTopbar = document.getElementById('m-topbar');
-function openMenu() { hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open'); overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden'); mTopbar?.classList.add('menu-open'); document.body.style.overflow='hidden'; }
-function closeMenu() { hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open'); overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true'); mTopbar?.classList.remove('menu-open'); document.body.style.overflow=''; }
+function openMenu() { hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.classList.add('is-open'); overlay?.classList.add('is-open'); overlay?.removeAttribute('aria-hidden'); mTopbar?.classList.add('menu-open'); document.body.classList.add('body-lock'); }
+function closeMenu() { hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open'); overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true'); mTopbar?.classList.remove('menu-open'); document.body.classList.remove('body-lock'); }
 hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
 overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
 overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));

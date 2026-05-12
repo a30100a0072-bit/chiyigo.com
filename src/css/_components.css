@@ -313,6 +313,7 @@
 .sb-login-link:hover{color:var(--accent);background:var(--bg-elevated)}
 .sb-login-link svg{width:14px;height:14px;flex-shrink:0}
 .sb-login-link[hidden],.m-login-btn[hidden]{display:none!important}
+.body-lock{overflow:hidden}
 .m-login-btn{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;color:var(--text-dim);text-decoration:none;transition:color .18s}
 .m-login-btn:hover{color:var(--text)}
 .m-login-btn svg{width:17px;height:17px}

@@ -195,6 +195,10 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .refund-modal-body .refund-actions .confirm:hover{filter:brightness(1.08)}
 .refund-modal-body .refund-actions .confirm:disabled{opacity:.5;cursor:not-allowed}
 .refund-modal-body .refund-actions .confirm.armed{background:#b91c1c;border-color:#b91c1c;animation:armed-pulse 1.4s ease-in-out infinite}
+.refund-modal-body .refund-actions .cancel.is-danger{background:#dc2626;border-color:#dc2626;color:#fff}
+.refund-modal-body .refund-actions .cancel.is-danger:hover{filter:brightness(1.08)}
+.refund-row__actions .reject.danger-idle{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.3);color:#fca5a5}
+.refund-row__actions .reject.danger-idle.is-armed{background:rgba(239,68,68,.4);border-color:rgba(239,68,68,.7);color:#fee2e2}
 
 /* 頁面風格的右上動作鍵 */
 .head-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;margin-left:auto}
