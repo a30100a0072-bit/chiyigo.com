@@ -254,26 +254,8 @@ loadProfile();
 // ── HTML 轉義 helper（防 XSS）────────────────────────────────
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 
-// ── 後端英文錯誤訊息 → i18n key（dashboard 共用映射）──────────
-const BACKEND_ERR_MAP = {
-  'Invalid OTP code':            'err_invalid_otp',
-  'Invalid OTP or backup code':  'err_invalid_otp',
-  'Token revoked':               'err_token_revoked',
-  'Unauthorized':                'err_unauthorized',
-  'Too many requests':           'err_too_many',
-  'Too many requests. Please try again later.': 'err_too_many',
-  'Account is banned':           'err_account_banned',
-  'Incorrect password':          'err_invalid_password',
-  'Account not found':           'err_user_not_found',
-  'captcha_failed':              'err_captcha',
-}
-// 把 ApiError 翻成本地化 + traceId 字串；非 ApiError 退回 fallback
-function tApiError(e, fallback) {
-  if (!(e instanceof ApiError) || e.status === 0) return fallback
-  const k    = BACKEND_ERR_MAP[e.body?.error]
-  const base = k ? T(k) : (e.message ?? fallback)
-  return e.traceId ? `${base}（#${e.traceId}）` : base
-}
+// tApiError 由 api.js 統一提供（window.tApiError，code-based + 4 lang 翻譯）
+// 本檔的 tApiError(...) 呼叫透過 global 解析到 window.tApiError，不需另存區域 alias
 
 // ── 需求單 ───────────────────────────────────────────────────
 

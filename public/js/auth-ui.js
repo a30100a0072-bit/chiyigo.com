@@ -96,6 +96,20 @@ function t(msg) {
   return entry[getLang()] || entry['zh-TW'] || msg
 }
 
+// 偏好 api.js 的 code-based 映射（涵蓋 RISK_BLOCKED / COOLDOWN 等），
+// 沒命中就退回到本檔 ERROR_I18N 的英文 string 映射。auth-ui 走 raw fetch 沒 ApiError instance，所以走 tApiErrorData。
+function _tApiErrData(data) {
+  if (!data) return null
+  if (typeof window.tApiErrorData === 'function') {
+    const code = data.code || null
+    if (code && window.__apiErrorI18n) {
+      const dict = window.__apiErrorI18n[getLang()] || window.__apiErrorI18n['zh-TW']
+      if (dict && dict[code]) return window.tApiErrorData(data, null)
+    }
+  }
+  return data.error ? t(data.error) : null
+}
+
 // 前端 UI 字串翻譯
 function uiT(key) {
   const entry = UI_I18N[key]
@@ -272,7 +286,7 @@ async function handlePkceRedirect(accessToken) {
     });
     const data = await res.json();
     if (!res.ok) {
-      showMsg(t(data.error) || uiT('err_pkce'));
+      showMsg(_tApiErrData(data) || uiT('err_pkce'));
       return;
     }
     // 跳轉至 App（chiyigo:// 或 loopback 或 https://）
@@ -526,7 +540,7 @@ async function handleLogin(event) {
     if (!res.ok) {
       // token 一次性，失敗後必 reset 才能讓使用者再送一次
       _resetTurnstile(_loginWidgetId, 'ts-login-container');
-      showMsg(t(data.error) || uiT('err_login_fail'));
+      showMsg(_tApiErrData(data) || uiT('err_login_fail'));
       return;
     }
 
@@ -592,7 +606,7 @@ async function handleRegister(event) {
 
     if (!res.ok) {
       _resetTurnstile(_registerWidgetId, 'ts-register-container');
-      showMsg(t(data.error) || uiT('err_reg_fail'));
+      showMsg(_tApiErrData(data) || uiT('err_reg_fail'));
       return;
     }
 
@@ -647,7 +661,7 @@ async function handleTotp(event) {
     const data = await res.json();
 
     if (!res.ok) {
-      showMsg(t(data.error) || uiT('err_otp_invalid'));
+      showMsg(_tApiErrData(data) || uiT('err_otp_invalid'));
       return;
     }
 
@@ -848,7 +862,7 @@ async function handlePasskeyLogin() {
     });
     const data = await verifyRes.json();
     if (!verifyRes.ok) {
-      showPasskeyMsg(t(data.error) || uiT('passkey_login_fail'), 'err');
+      showPasskeyMsg(_tApiErrData(data) || uiT('passkey_login_fail'), 'err');
       if (btn) btn.disabled = false;
       return;
     }
