@@ -149,6 +149,7 @@ export async function requireScope(request, env, ...requiredScopes) {
         error:   'Forbidden',
         code:    'INSUFFICIENT_SCOPE',
         missing: requiredScopes.filter(s => !eff.has(s)),
+        required: requiredScopes.join(' '),
       }, 403),
     }
   }
@@ -181,6 +182,7 @@ export async function requireAnyScope(request, env, ...acceptedScopes) {
         error:    'Forbidden',
         code:     'INSUFFICIENT_SCOPE',
         accepted: acceptedScopes,
+        required: acceptedScopes.join(' or '),
       }, 403),
     }
   }
