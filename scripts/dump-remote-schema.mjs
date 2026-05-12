@@ -89,12 +89,17 @@ function shortErr(e) {
   return m ? m[0] : String(e.message || e).slice(0, 80);
 }
 
-// CF migration ledger (may be empty — that's the whole point of this audit)
+// D1 migration ledger (table name = d1_migrations on prod; _cf_d1_migrations
+// is the older convention from very early wrangler builds — keep as fallback)
 let cfMigrations = [];
 try {
-  cfMigrations = d1(`SELECT id, name, applied_at FROM _cf_d1_migrations ORDER BY id`);
+  cfMigrations = d1(`SELECT id, name, applied_at FROM d1_migrations ORDER BY id`);
 } catch {
-  cfMigrations = '__table_missing__';
+  try {
+    cfMigrations = d1(`SELECT id, name, applied_at FROM _cf_d1_migrations ORDER BY id`);
+  } catch {
+    cfMigrations = '__table_missing__';
+  }
 }
 
 // ---------- write SQL ----------

@@ -1,8 +1,11 @@
 -- 0036: requisition.owner_user_id / owner_guest_id（Codex audit 2026-05-10 #1）
 --
--- migrations/_base.sql 已加這兩欄，但沒有 numbered migration → 任何只跑 numbered
--- migrations 的環境（fresh D1 / staging）會缺欄位，requisition.js INSERT 直接 500。
--- prod 已透過 schema_iam_prod.sql 套用，這條 IF NOT EXISTS 安全 no-op。
+-- 歷史背景（2026-05-10 起草時）：舊 _base.sql 已加 owner_*，但沒對應 numbered
+-- migration → fresh D1 / staging 缺欄位，prod 已透過 schema_iam_prod.sql 套用。
+--
+-- 🔄 2026-05-12 後 baseline 重整（A'+X）：0000_base.sql 刻意 **不含** owner_*
+-- （它是 numbered migrations 之後加的欄）；本 migration 才是 owner_* 的權威來源。
+-- 0040_requisition_index_align.sql 接續把索引命名對齊 prod。
 --
 -- 用途：訪客先送需求單時寫 owner_guest_id（device_uuid）；同一裝置之後註冊，
 -- register.js 會 takeover 這條 row 為新 user 所屬。

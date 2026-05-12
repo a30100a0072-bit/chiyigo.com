@@ -3,7 +3,7 @@
 ⚠️ **ARCHIVED — DO NOT TREAT AS SOURCE OF TRUTH.**
 
 這目錄收的是 2026-05-12 schema baseline 重整前的歷史快照與一次性腳本。
-**新的 truth = `migrations/_base.sql` + `migrations/0001..NNNN`**。
+**新的 truth = `migrations/0000_base.sql` + `migrations/0001..NNNN`**。
 
 ## 為何留著
 

@@ -468,7 +468,7 @@ describe('full forward chain 0001..0040 vs prod snapshot', () => {
 
   it('關鍵 index 存在性 spot check', async () => {
     const indexes = await listIndexes()
-    // baseline-only indexes (來自 _base.sql)
+    // baseline-only indexes (來自 0000_base.sql)
     expect(indexes).toContain('idx_users_status')
     expect(indexes).toContain('idx_backup_codes_user_id')
     expect(indexes).toContain('idx_auth_codes_user_id')
@@ -479,6 +479,61 @@ describe('full forward chain 0001..0040 vs prod snapshot', () => {
     expect(indexes).toContain('idx_archive_chunks_state')           // 0038
     expect(indexes).toContain('uq_rrr_intent_pending')              // 0034
     expect(indexes).toContain('uniq_agg_tele_bucket')               // 0038
+  })
+
+  // codex round-12 medium：補 FK + index DDL semantic 驗證。
+  // 不只看 column / index 名字，要驗 FK target + ON DELETE + partial index 條件。
+  // 這抓的是 0029/0030 那種「typo 改 FK target → end-state 仍同名但 cascade 行為不對」
+  // 的 silent semantic drift。
+  it('FK semantic：payment_intents.requisition_id → requisition(id) ON DELETE SET NULL', async () => {
+    const fks = await env.chiyigo_db.prepare(
+      `SELECT "table", "from", "to", on_delete FROM pragma_foreign_key_list('payment_intents')`,
+    ).all()
+    const reqFk = fks.results.find(f => f.from === 'requisition_id')
+    expect(reqFk).toBeTruthy()
+    expect(reqFk.table).toBe('requisition')           // 不該是 requisitions 複數
+    expect(reqFk.to).toBe('id')
+    expect(reqFk.on_delete).toBe('SET NULL')          // 0030 P0-2 改的
+    const userFk = fks.results.find(f => f.from === 'user_id')
+    expect(userFk.on_delete).toBe('SET NULL')         // 0029 P0-2
+  })
+
+  it('FK semantic：refresh_tokens / backup_codes / user_identities.user_id → users(id) ON DELETE CASCADE', async () => {
+    for (const t of ['refresh_tokens', 'backup_codes', 'user_identities', 'local_accounts', 'password_resets']) {
+      const fks = await env.chiyigo_db.prepare(
+        `SELECT "table", "from", "to", on_delete FROM pragma_foreign_key_list(?)`,
+      ).bind(t).all()
+      const userFk = fks.results.find(f => f.from === 'user_id')
+      expect({ table: t, on_delete: userFk?.on_delete }).toEqual({ table: t, on_delete: 'CASCADE' })
+    }
+  })
+
+  it('Index DDL：partial / unique / column set 對齊', async () => {
+    // 抽 4 條容易因 typo / refactor 漂移的 index 驗 DDL
+    const rows = await env.chiyigo_db.prepare(
+      `SELECT name, sql FROM sqlite_master WHERE type='index' AND name IN (
+        'uq_rrr_intent_pending',
+        'idx_payment_intents_requisition',
+        'idx_archive_chunks_purge',
+        'uniq_agg_tele_bucket'
+      )`,
+    ).all()
+    const byName = Object.fromEntries(rows.results.map(r => [r.name, r.sql]))
+
+    // 0034: partial unique on requisition_refund_request(intent_id) WHERE status='pending'
+    expect(byName.uq_rrr_intent_pending).toMatch(/UNIQUE INDEX/i)
+    expect(byName.uq_rrr_intent_pending).toMatch(/\bintent_id\b/)
+    expect(byName.uq_rrr_intent_pending).toMatch(/WHERE\s+status\s*=\s*'pending'/i)
+
+    // 0030: partial on payment_intents(requisition_id) WHERE requisition_id IS NOT NULL
+    expect(byName.idx_payment_intents_requisition).toMatch(/WHERE\s+requisition_id\s+IS\s+NOT\s+NULL/i)
+
+    // 0038: partial on audit_archive_chunks WHERE state='marked_archived'
+    expect(byName.idx_archive_chunks_purge).toMatch(/WHERE\s+state\s*=\s*'marked_archived'/i)
+
+    // 0038: unique aggregate bucket with COALESCE sentinel for nullable user_id
+    expect(byName.uniq_agg_tele_bucket).toMatch(/UNIQUE INDEX/i)
+    expect(byName.uniq_agg_tele_bucket).toMatch(/COALESCE\s*\(\s*user_id\s*,\s*-1\s*\)/i)
   })
 })
 
