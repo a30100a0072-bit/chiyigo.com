@@ -81,6 +81,11 @@ import up0040 from '../../migrations/0040_requisition_index_align.sql?raw'
 // test-only 修：把 typo 替換成正確表名，效果跟 prod 走 PRAGMA OFF 等價（0030 之後
 // 仍會 rebuild 一次蓋掉本次 CREATE）。不改 migration 檔本身（prod 已套用，動了反而
 // 破壞 ledger 對齊）。
+//
+// 🔴 COUPLING：本 patch 的「end-state 等價於 prod」結論依賴 0030 仍在 chain 裡
+//    全 rebuild payment_intents。若未來砍 0030 或拆掉它的 rebuild，本 patch 會悄悄
+//    把 test 帶向「prod 從未存在過」的中間態（FK 有效的 0029 形）。要砍 0030 前
+//    先重評本 patch。
 const up0029_typoFixed = up0029.replace(
   /REFERENCES requisitions\(id\)/g,
   'REFERENCES requisition(id)',
@@ -454,7 +459,7 @@ describe('full forward chain 0001..0040 vs prod snapshot', () => {
     }
   })
 
-  it('table set 對齊 prod snapshot（34 表）', async () => {
+  it('table set 對齊 prod snapshot（35 表）', async () => {
     const tables = await listTables()
     expect(tables).toEqual(EXPECTED_TABLES)
   })
