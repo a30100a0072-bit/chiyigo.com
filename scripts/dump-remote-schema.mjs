@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Read-only dump of prod D1 schema + _cf_d1_migrations state.
+// Read-only dump of prod D1 schema + d1_migrations state.
 // Usage: node scripts/dump-remote-schema.mjs [--db chiyigo_db] [--out database/legacy_snapshots/schema_iam_prod.sql]
 //
 // Output (default lands in legacy_snapshots/ — this is an archival dump tool,
-// NOT a schema source of truth; truth = migrations/_base.sql + migrations/0001..NNNN):
+// NOT a schema source of truth; truth = migrations/0000_base.sql + migrations/0001..NNNN):
 //   database/legacy_snapshots/schema_iam_prod.sql      — CREATE TABLE / INDEX / TRIGGER / VIEW DDL (sorted, deterministic)
-//   database/legacy_snapshots/schema_iam_prod.meta.json — table row counts + _cf_d1_migrations rows + per-table column list
+//   database/legacy_snapshots/schema_iam_prod.meta.json — table row counts + d1_migrations rows + per-table column list
 //
 // Does NOT mutate anything. Safe to run anytime.
 
