@@ -204,7 +204,7 @@ function renderCards(rows) {
     const isRefundPending = r.refund_request_status === 'pending';
     const canRefund = status === 'succeeded' && r.vendor === 'ecpay' && !isRefundPending;
     const actions = canRefund
-      ? `<button class="pay-action-btn" data-action="open-refund" data-intent-id="${r.id}" style="margin-top:.6rem">${esc(t.action_refund)}</button>`
+      ? `<button class="pay-action-btn btn-mt-sm" data-action="open-refund" data-intent-id="${r.id}">${esc(t.action_refund)}</button>`
       : '';
     const statusBadge = isRefundPending
       ? `<span class="pay-badge refund-pending">申請退款</span>`
@@ -218,7 +218,7 @@ function renderCards(rows) {
           </div>
           ${statusBadge}
         </div>
-        <div class="row" style="font-family:var(--font-mono);font-size:.78rem">${formatAmount(r)}</div>
+        <div class="row row--mono-sm">${formatAmount(r)}</div>
         <div class="when">${esc(formatDate(r.created_at))}</div>
         ${actions}
       </div>`;
@@ -394,7 +394,7 @@ function openAdminDelete(id) {
   m.id = 'admin-del-modal';
   m.className = 'modal-bd open';
   m.innerHTML = `
-    <div class="modal-card" style="max-width:440px">
+    <div class="modal-card modal-card--narrow">
       <div class="modal-head">
         <h2>${isHard ? '強制刪除' : 'Anonymize'} #${row.id}</h2>
         <button class="modal-close" data-action="admin-del-cancel" aria-label="close">
@@ -403,7 +403,7 @@ function openAdminDelete(id) {
       </div>
       <div class="modal-body refund-modal-body">
         <p class="msg-block">user ${esc(row.user_id)} · ${esc(row.vendor)} · ${formatAmount(row)} · <b>${esc(row.status)}</b></p>
-        <p class="msg-label" style="color:#dc2626">${modeText} audit log 會留 critical 記錄。</p>
+        <p class="msg-label text-danger">${modeText} audit log 會留 critical 記錄。</p>
         <input id="admin-del-otp" type="text" inputmode="numeric" maxlength="6" placeholder="6 位 2FA OTP" autocomplete="one-time-code" data-enter-click="#admin-del-go">
         <p id="admin-del-msg" class="refund-msg"></p>
         <div class="refund-actions">

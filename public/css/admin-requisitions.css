@@ -264,3 +264,25 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .input-note{text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem}
 /* accent 強調文字 */
 .text-accent{color:var(--accent)}
+
+/* ══════════════════════════════════════════════════
+   admin-* innerHTML utility classes
+   取代 src/js/admin-*.js 的 inline style="..."（CSP style-src 無 'unsafe-inline'）
+   ══════════════════════════════════════════════════ */
+.mono-dim{color:#6b7280}
+.mono-link-accent{color:var(--accent);text-decoration:none}
+.mono-link-accent--intent{font-size:.72rem;margin-right:.4rem}
+.sub-meta-dim{font-size:.7rem;color:#9aa0aa}
+.sub-meta-dim-md{font-size:.75rem;color:#9aa0aa}
+.cell-sm{font-size:.78rem}
+.cell-xs{font-size:.72rem}
+.cell-xxs{font-size:.7rem}
+.txt-hint-dim{font-size:.78rem;color:var(--text-dim)}
+.push-right{margin-left:auto}
+.empty-state--error{color:#dc2626}
+.text-danger{color:#dc2626}
+.btn-mt-sm{margin-top:.6rem}
+.row--mono-sm{font-family:var(--font-mono);font-size:.78rem}
+.modal-card--narrow{max-width:440px}
+.refund-amt{color:#9aa0aa}
+.refund-amt--pos{color:#fdba74}

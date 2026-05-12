@@ -137,9 +137,9 @@ function renderTotals(total, totals) {
 
 function reqCell(r) {
   if (r.requisition_id) {
-    return `<a class="mono" href="/admin-requisitions.html#req-${r.requisition_id}" style="color:var(--accent);text-decoration:none">#${r.requisition_id}</a>`;
+    return `<a class="mono mono-link-accent" href="/admin-requisitions.html#req-${r.requisition_id}">#${r.requisition_id}</a>`;
   }
-  return '<span class="mono" style="color:#6b7280">—</span>';
+  return '<span class="mono mono-dim">—</span>';
 }
 
 function renderTable(rows) {
@@ -168,13 +168,13 @@ function renderCards(rows) {
     <div class="req-card">
       <div class="card-head">
         <span class="card-id">#${r.id}</span>
-        <span class="mono" style="font-size:.75rem;color:#9aa0aa">${esc(r.vendor)}</span>
+        <span class="mono sub-meta-dim-md">${esc(r.vendor)}</span>
       </div>
       <div class="card-row"><span class="lbl">User</span><span>${esc(r.user_id ?? '—')}</span></div>
-      <div class="card-row"><span class="lbl">流水號</span><span class="mono" style="font-size:.7rem">${esc(r.vendor_intent_id)}</span></div>
+      <div class="card-row"><span class="lbl">流水號</span><span class="mono cell-xxs">${esc(r.vendor_intent_id)}</span></div>
       <div class="card-row"><span class="lbl">金額</span><span class="mono">${formatAmount(r)}</span></div>
       <div class="card-row"><span class="lbl">需求單</span><span>${reqCell(r)}</span></div>
-      <div class="card-row"><span class="lbl">時間</span><span class="mono" style="font-size:.7rem">${esc(formatDate(r.created_at))}</span></div>
+      <div class="card-row"><span class="lbl">時間</span><span class="mono cell-xxs">${esc(formatDate(r.created_at))}</span></div>
     </div>
   `).join('');
 }
@@ -244,13 +244,13 @@ async function loadAgg() {
     data = await apiFetch(`/api/admin/payments/aggregate?period=${aggPeriod}&status=succeeded`);
   } catch (e) {
     if (e?.code === 'SESSION_EXPIRED') { ld.hidden = true; return; }
-    wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(e?.message || '載入失敗')}</p>`;
+    wrap.innerHTML = `<p class="txt-hint-dim">${esc(e?.message || '載入失敗')}</p>`;
     ld.hidden = true; return;
   }
   ld.hidden = true;
   const buckets = data?.buckets ?? [];
   const t = T();
-  if (!buckets.length) { wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(t.agg_empty || '無資料')}</p>`; return; }
+  if (!buckets.length) { wrap.innerHTML = `<p class="txt-hint-dim">${esc(t.agg_empty || '無資料')}</p>`; return; }
   const rows = buckets.map(b => `
     <tr>
       <td>${esc(b.bucket)}</td>

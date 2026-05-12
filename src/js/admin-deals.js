@@ -136,13 +136,13 @@ function renderTotals(totals) {
 }
 
 function intentLinks(ids) {
-  if (!ids.length) return '<span class="mono" style="color:#6b7280">—</span>';
-  return ids.map(id => `<a class="mono" href="/admin-payment-records.html?intent=${id}" style="color:var(--accent);text-decoration:none;font-size:.72rem;margin-right:.4rem">#${id}</a>`).join('');
+  if (!ids.length) return '<span class="mono mono-dim">—</span>';
+  return ids.map(id => `<a class="mono mono-link-accent mono-link-accent--intent" href="/admin-payment-records.html?intent=${id}">#${id}</a>`).join('');
 }
 
 function reqLink(id) {
-  if (!id) return `<span class="mono" style="color:#6b7280">${esc(T().deleted_req || '已刪')}</span>`;
-  return `<a class="mono" href="/admin-requisitions.html#req-${id}" style="color:var(--accent);text-decoration:none">#${id}</a>`;
+  if (!id) return `<span class="mono mono-dim">${esc(T().deleted_req || '已刪')}</span>`;
+  return `<a class="mono mono-link-accent" href="/admin-requisitions.html#req-${id}">#${id}</a>`;
 }
 
 function renderTable(rows) {
@@ -156,14 +156,14 @@ function renderTable(rows) {
     return `
       <tr>
         <td class="id">${r.id}</td>
-        <td>${esc(r.customer_name)}${r.customer_company ? `<br><span style="font-size:.7rem;color:#9aa0aa">${esc(r.customer_company)}</span>` : ''}</td>
-        <td class="mono" style="font-size:.78rem">${esc(r.customer_contact)}</td>
-        <td>${esc(r.service_type || '—')}${r.budget ? `<br><span style="font-size:.7rem;color:#9aa0aa">${esc(r.budget)}</span>` : ''}</td>
+        <td>${esc(r.customer_name)}${r.customer_company ? `<br><span class="sub-meta-dim">${esc(r.customer_company)}</span>` : ''}</td>
+        <td class="mono cell-sm">${esc(r.customer_contact)}</td>
+        <td>${esc(r.service_type || '—')}${r.budget ? `<br><span class="sub-meta-dim">${esc(r.budget)}</span>` : ''}</td>
         <td class="mono">${fmtMoney(r.total_amount_subunit, r.currency)}</td>
-        <td class="mono" style="color:${r.refunded_amount_subunit > 0 ? '#fdba74' : '#9aa0aa'}">${fmtMoney(r.refunded_amount_subunit, r.currency)}</td>
+        <td class="mono refund-amt${r.refunded_amount_subunit > 0 ? ' refund-amt--pos' : ''}">${fmtMoney(r.refunded_amount_subunit, r.currency)}</td>
         <td>${intentLinks(ids)}</td>
         <td>${reqLink(r.source_requisition_id)}</td>
-        <td class="mono" style="font-size:.72rem">${esc(fmtDate(r.saved_at))}</td>
+        <td class="mono cell-xs">${esc(fmtDate(r.saved_at))}</td>
       </tr>
     `;
   }).join('');
@@ -178,10 +178,10 @@ function renderCards(rows) {
       <div class="req-card">
         <div class="card-head">
           <span class="card-id">#${r.id}</span>
-          <span class="mono" style="font-size:.7rem;color:#9aa0aa">${esc(fmtDate(r.saved_at))}</span>
+          <span class="mono sub-meta-dim">${esc(fmtDate(r.saved_at))}</span>
         </div>
         <div class="card-row"><span class="lbl">客戶</span><span>${esc(r.customer_name)}${r.customer_company?` · ${esc(r.customer_company)}`:''}</span></div>
-        <div class="card-row"><span class="lbl">聯絡</span><span class="mono" style="font-size:.72rem">${esc(r.customer_contact)}</span></div>
+        <div class="card-row"><span class="lbl">聯絡</span><span class="mono cell-xs">${esc(r.customer_contact)}</span></div>
         <div class="card-row"><span class="lbl">需求</span><span>${esc(r.service_type || '—')}</span></div>
         <div class="card-row"><span class="lbl">已收 / 已退</span><span class="mono">${fmtMoney(r.total_amount_subunit, r.currency)} / ${fmtMoney(r.refunded_amount_subunit, r.currency)}</span></div>
         <div class="card-row"><span class="lbl">Intents</span><span>${intentLinks(ids)}</span></div>
@@ -252,13 +252,13 @@ async function loadAgg() {
     data = await apiFetch(`/api/admin/deals/aggregate?period=${aggPeriod}`);
   } catch (e) {
     if (e?.code === 'SESSION_EXPIRED') { ld.hidden = true; return; }
-    wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(e?.message || '載入失敗')}</p>`;
+    wrap.innerHTML = `<p class="txt-hint-dim">${esc(e?.message || '載入失敗')}</p>`;
     ld.hidden = true; return;
   }
   ld.hidden = true;
   const buckets = data?.buckets ?? [];
   const tt = T();
-  if (!buckets.length) { wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(tt.agg_empty || '無資料')}</p>`; return; }
+  if (!buckets.length) { wrap.innerHTML = `<p class="txt-hint-dim">${esc(tt.agg_empty || '無資料')}</p>`; return; }
   const rows = buckets.map(b => `
     <tr>
       <td>${esc(b.bucket)}</td>

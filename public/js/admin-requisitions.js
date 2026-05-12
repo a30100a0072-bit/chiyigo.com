@@ -228,7 +228,7 @@ function openModal(id) {
   body.innerHTML = `
     <div class="modal-meta">
       <span>#${r.id}</span><span>·</span><span>${formatDate(r.created_at)}</span>
-      <span style="margin-left:auto">${statusPill(status)}</span>
+      <span class="push-right">${statusPill(status)}</span>
     </div>
     ${field(t.field_name, r.name)}
     ${r.company ? field(t.field_company, r.company) : ''}
@@ -270,12 +270,12 @@ async function openAuditCleanup() {
   const list = document.getElementById('audit-cleanup-list');
   list.innerHTML = `<p class="empty-state">載入中…</p>`;
   const tok = getToken();
-  if (!tok) { list.innerHTML = `<p class="empty-state" style="color:#dc2626">未登入</p>`; return; }
+  if (!tok) { list.innerHTML = `<p class="empty-state empty-state--error">未登入</p>`; return; }
 
   const r = await fetch('/api/admin/audit?event_type=requisition.deleted&limit=200', {
     headers: { Authorization: `Bearer ${tok}` },
   }).catch(() => null);
-  if (!r || !r.ok) { list.innerHTML = `<p class="empty-state" style="color:#dc2626">載入失敗</p>`; return; }
+  if (!r || !r.ok) { list.innerHTML = `<p class="empty-state empty-state--error">載入失敗</p>`; return; }
   const j = await r.json();
   const rows = j.rows ?? [];
   if (!rows.length) { list.innerHTML = `<p class="empty-state">沒有刪除紀錄</p>`; return; }
@@ -391,11 +391,11 @@ async function openRefundReview() {
   list.innerHTML = `<p class="empty-state">載入中…</p>`;
 
   const tok = getToken();
-  if (!tok) { list.innerHTML = `<p class="empty-state" style="color:#dc2626">未登入</p>`; return; }
+  if (!tok) { list.innerHTML = `<p class="empty-state empty-state--error">未登入</p>`; return; }
   const r = await fetch('/api/admin/requisition-refund?status=pending&limit=200', {
     headers: { Authorization: `Bearer ${tok}` },
   }).catch(() => null);
-  if (!r || !r.ok) { list.innerHTML = `<p class="empty-state" style="color:#dc2626">載入失敗</p>`; return; }
+  if (!r || !r.ok) { list.innerHTML = `<p class="empty-state empty-state--error">載入失敗</p>`; return; }
   const j = await r.json();
   _rrCache = j.rows ?? [];
   renderRefundReviewList();
@@ -536,7 +536,7 @@ function openReqAction(action, id) {
   document.getElementById('ra-summary').innerHTML = isSave
     ? `將 req #${id}（${escA(r.name)} / ${escA(r.contact)}）寫入「成交資料庫」。
        後續可在 deals 表追蹤；TG 訊息會更新成 ✅ 已成交（含付款摘要）。`
-    : `<strong style="color:#dc2626">⚠️ 永久刪除 req #${id}</strong>
+    : `<strong class="text-danger">⚠️ 永久刪除 req #${id}</strong>
        — DB row 直接消失；如有未退款的 succeeded payment 後端會擋下。
        TG 訊息更新成 🗑 已刪除。`;
   document.getElementById('ra-note-label').textContent = isSave ? '備註（選填，會寫入 deal.notes）' : '刪除原因（建議填，存 audit）';
