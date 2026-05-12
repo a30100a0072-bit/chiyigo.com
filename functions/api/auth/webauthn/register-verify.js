@@ -42,31 +42,31 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400, cors) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, cors) }
 
   const credResponse = body?.response
   const nickname     = typeof body?.nickname === 'string' ? body.nickname.slice(0, 64) : null
   if (!credResponse?.response?.clientDataJSON) {
-    return res({ error: 'response is required' }, 400, cors)
+    return res({ error: 'response is required', code: 'RESPONSE_REQUIRED' }, 400, cors)
   }
 
   // 1. 從 clientDataJSON 抽 challenge → 一次性消耗
   const challenge = extractChallenge(credResponse.response.clientDataJSON)
-  if (!challenge) return res({ error: 'Invalid clientDataJSON' }, 400, cors)
+  if (!challenge) return res({ error: 'Invalid clientDataJSON', code: 'INVALID_CLIENT_DATA' }, 400, cors)
   const challengeRow = await consumeChallenge(env, { challenge, ceremony: 'register' })
   if (!challengeRow) {
     await safeUserAudit(env, {
       event_type: 'webauthn.register.fail', severity: 'warn',
       user_id: userId, request, data: { reason_code: 'challenge_invalid' },
     })
-    return res({ error: 'Challenge invalid or expired' }, 400, cors)
+    return res({ error: 'Challenge invalid or expired', code: 'CHALLENGE_INVALID_OR_EXPIRED' }, 400, cors)
   }
   if (challengeRow.user_id !== userId) {
     await safeUserAudit(env, {
       event_type: 'webauthn.register.fail', severity: 'critical',
       user_id: userId, request, data: { reason_code: 'challenge_user_mismatch' },
     })
-    return res({ error: 'Challenge mismatch' }, 400, cors)
+    return res({ error: 'Challenge mismatch', code: 'CHALLENGE_MISMATCH' }, 400, cors)
   }
 
   // 2. SimpleWebAuthn 驗 attestation
@@ -85,7 +85,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'webauthn.register.fail', severity: 'warn',
       user_id: userId, request, data: { reason_code: 'verify_threw', message: String(e?.message ?? e).slice(0, 120) },
     })
-    return res({ error: 'Verification failed' }, 400, cors)
+    return res({ error: 'Verification failed', code: 'WEBAUTHN_VERIFICATION_FAILED' }, 400, cors)
   }
 
   if (!verification.verified || !verification.registrationInfo) {
@@ -93,7 +93,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'webauthn.register.fail', severity: 'warn',
       user_id: userId, request, data: { reason_code: 'not_verified' },
     })
-    return res({ error: 'Verification failed' }, 400, cors)
+    return res({ error: 'Verification failed', code: 'WEBAUTHN_VERIFICATION_FAILED' }, 400, cors)
   }
 
   // 3. 取出 credential 資料 → INSERT
@@ -109,7 +109,7 @@ export async function onRequestPost({ request, env }) {
   const backupState     = info.credentialDeviceType === 'multiDevice' ? 1 : 0
 
   if (!credentialID || !publicKeyBytes) {
-    return res({ error: 'Verification produced incomplete credential' }, 500, cors)
+    return res({ error: 'Verification produced incomplete credential', code: 'WEBAUTHN_VERIFICATION_INCOMPLETE' }, 500, cors)
   }
 
   const publicKeyB64 = bytesToBase64url(publicKeyBytes)
@@ -156,7 +156,7 @@ export async function onRequestPost({ request, env }) {
         event_type: 'webauthn.register.fail', severity: 'warn',
         user_id: userId, request, data: { reason_code: 'duplicate_credential' },
       })
-      return res({ error: 'Credential already registered' }, 409, cors)
+      return res({ error: 'Credential already registered', code: 'CREDENTIAL_ALREADY_REGISTERED' }, 409, cors)
     }
     throw e
   }

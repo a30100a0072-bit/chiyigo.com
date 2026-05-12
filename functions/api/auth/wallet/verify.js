@@ -44,7 +44,7 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400, cors) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, cors) }
 
   const messageRaw = typeof body?.message === 'string' ? body.message : null
   const signature  = typeof body?.signature === 'string' ? body.signature : null
@@ -52,7 +52,7 @@ export async function onRequestPost({ request, env }) {
     ? body.nickname.slice(0, NICKNAME_MAX) : null
 
   if (!messageRaw || !signature) {
-    return res({ error: 'message and signature are required' }, 400, cors)
+    return res({ error: 'message and signature are required', code: 'WALLET_MESSAGE_SIGNATURE_REQUIRED' }, 400, cors)
   }
 
   // 1. SIWE 驗章
@@ -73,7 +73,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'wallet.bind.fail', severity: 'warn', user_id: userId, request,
       data: { reason: 'nonce_invalid_or_expired' },
     })
-    return res({ error: 'Nonce invalid or expired' }, 401, cors)
+    return res({ error: 'Nonce invalid or expired', code: 'NONCE_INVALID_OR_EXPIRED' }, 401, cors)
   }
   if (nonceRow.user_id !== userId) {
     // 高度可疑：拿別人的 nonce 來綁
@@ -81,14 +81,14 @@ export async function onRequestPost({ request, env }) {
       event_type: 'wallet.bind.fail', severity: 'critical', user_id: userId, request,
       data: { reason: 'nonce_user_mismatch', nonce_user: nonceRow.user_id },
     })
-    return res({ error: 'Nonce mismatch' }, 401, cors)
+    return res({ error: 'Nonce mismatch', code: 'NONCE_MISMATCH' }, 401, cors)
   }
   if (nonceRow.address !== address) {
     await safeUserAudit(env, {
       event_type: 'wallet.bind.fail', severity: 'warn', user_id: userId, request,
       data: { reason: 'address_mismatch', expected: nonceRow.address.slice(0, 10), actual: address.slice(0, 10) },
     })
-    return res({ error: 'Address does not match nonce' }, 400, cors)
+    return res({ error: 'Address does not match nonce', code: 'WALLET_ADDRESS_MISMATCH' }, 400, cors)
   }
 
   // 3. INSERT；UNIQUE(user_id, address) 撞 → 409

@@ -69,11 +69,11 @@ export async function onRequestGet(context) {
 
   // ── 1. 驗證 provider ────────────────────────────────────────
   if (!SUPPORTED_PROVIDERS.includes(provider))
-    return res({ error: `不支援的登入方式：${provider}` }, 400)
+    return res({ error: `不支援的登入方式：${provider}`, code: 'UNSUPPORTED_PROVIDER' }, 400)
 
   const cfg = getProvider(provider, env)
   if (!cfg?.clientId)
-    return res({ error: `${provider} 尚未設定，請稍後再試` }, 503)
+    return res({ error: `${provider} 尚未設定，請稍後再試`, code: 'PROVIDER_NOT_CONFIGURED' }, 503)
 
   // ── per-IP rate limit（防 oauth_states 表灌爆）──────────────
   const ip = request.headers.get('CF-Connecting-IP') ?? null
@@ -92,7 +92,7 @@ export async function onRequestGet(context) {
 
   // Apple 需要特殊處理（form_post + JWT client_secret），目前預留
   if (provider === 'apple')
-    return res({ error: 'Apple 登入尚未開放' }, 503)
+    return res({ error: 'Apple 登入尚未開放', code: 'APPLE_LOGIN_NOT_AVAILABLE' }, 503)
 
   const url        = new URL(request.url)
   const platform   = url.searchParams.get('platform') ?? 'web'
@@ -105,7 +105,7 @@ export async function onRequestGet(context) {
   const audience   = isBinding ? 'chiyigo' : resolveAud(audInput)
 
   if (!['web', 'pc', 'mobile'].includes(platform))
-    return res({ error: 'platform 必須為 web、pc 或 mobile' }, 400)
+    return res({ error: 'platform 必須為 web、pc 或 mobile', code: 'INVALID_PLATFORM' }, 400)
 
   // ── 綁定模式：JWT 驗證，取得當前登入用戶 ───────────────────
   let bindingUserId = null
@@ -174,7 +174,7 @@ export async function onRequestGet(context) {
       .bind(state, code_verifier, nonce, redirect_uri, platform, client_callback ?? '', expires_at, ip, audience)
       .run()
   } catch {
-    return res({ error: 'OAuth 狀態儲存失敗，請重試' }, 500)
+    return res({ error: 'OAuth 狀態儲存失敗，請重試', code: 'OAUTH_STATE_SAVE_FAILED' }, 500)
   }
 
   // ── 6. 建構授權 URL ─────────────────────────────────────────

@@ -32,32 +32,32 @@ export async function onRequestPost(context) {
   try {
     body = await request.json()
   } catch {
-    return res({ error: '無效的請求格式' }, 400)
+    return res({ error: '無效的請求格式', code: 'INVALID_REQUEST_FORMAT' }, 400)
   }
 
   const { token, email, aud } = body ?? {}
   const audience = resolveAud(aud)
 
-  if (!token || !email) return res({ error: '缺少必要欄位' }, 400)
+  if (!token || !email) return res({ error: '缺少必要欄位', code: 'MISSING_REQUIRED_FIELD' }, 400)
 
   const emailLower = email.trim().toLowerCase()
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLower))
-    return res({ error: '信箱格式無效' }, 400)
+    return res({ error: '信箱格式無效', code: 'INVALID_EMAIL_FORMAT' }, 400)
 
   // ── 1. 驗證 temp_bind_token ────────────────────────────────────
   let payload
   try {
     payload = await verifyJwt(token, env)
   } catch {
-    return res({ error: '連結無效或已過期，請重新登入' }, 401)
+    return res({ error: '連結無效或已過期，請重新登入', code: 'LINK_INVALID_OR_EXPIRED' }, 401)
   }
 
   if (payload.scope !== 'temp_bind')
-    return res({ error: '連結類型錯誤' }, 401)
+    return res({ error: '連結類型錯誤', code: 'LINK_TYPE_INVALID' }, 401)
 
   const { sub: provider_id, provider, name, avatar } = payload
   if (!provider_id || !provider)
-    return res({ error: 'Token 資料不完整' }, 401)
+    return res({ error: 'Token 資料不完整', code: 'TOKEN_DATA_INCOMPLETE' }, 401)
 
   const cfg = getProvider(provider, env)
   const db  = env.chiyigo_db
@@ -97,6 +97,8 @@ export async function onRequestPost(context) {
       })
       return res({
         error: `此信箱已被既有帳號使用。請改用既有方式登入，登入後可在帳號設定中綁定 ${provider} 帳號。`,
+        code: 'EMAIL_USED_BIND_AFTER_LOGIN',
+        provider,
       }, 409)
 
     } else {
@@ -125,8 +127,8 @@ export async function onRequestPost(context) {
     .bind(userId)
     .first()
 
-  if (!userRow) return res({ error: '帳號建立後無法查詢，請稍後重試' }, 500)
-  if (userRow.status === 'banned') return res({ error: '此帳號已被停用' }, 403)
+  if (!userRow) return res({ error: '帳號建立後無法查詢，請稍後重試', code: 'ACCOUNT_LOOKUP_FAILED_AFTER_CREATE' }, 500)
+  if (userRow.status === 'banned') return res({ error: '此帳號已被停用', code: 'ACCOUNT_DISABLED' }, 403)
 
   // ── 6. 簽發 Access Token ───────────────────────────────────────
   const accessToken = await signJwt({

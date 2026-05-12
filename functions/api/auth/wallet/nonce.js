@@ -33,13 +33,13 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400, cors) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, cors) }
 
   const address = typeof body?.address === 'string' ? body.address : null
   const chainId = Number.isFinite(body?.chain_id) ? Number(body.chain_id) : 1
 
   if (!isValidEthAddress(address)) {
-    return res({ error: 'Invalid Ethereum address' }, 400, cors)
+    return res({ error: 'Invalid Ethereum address', code: 'INVALID_WALLET_ADDRESS' }, 400, cors)
   }
 
   const userId = Number(user.sub)

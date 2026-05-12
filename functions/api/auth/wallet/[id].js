@@ -36,12 +36,12 @@ export async function onRequestDelete({ request, env, params }) {
 
   const userId = Number(user.sub)
   const walletId = Number(params?.id)
-  if (!Number.isFinite(walletId)) return res({ error: 'Invalid id' }, 400, cors)
+  if (!Number.isFinite(walletId)) return res({ error: 'Invalid id', code: 'INVALID_ID' }, 400, cors)
 
   const row = await env.chiyigo_db
     .prepare(`SELECT address FROM user_wallets WHERE id = ? AND user_id = ?`)
     .bind(walletId, userId).first()
-  if (!row) return res({ error: 'Wallet not found' }, 404, cors)
+  if (!row) return res({ error: 'Wallet not found', code: 'WALLET_NOT_FOUND' }, 404, cors)
 
   await env.chiyigo_db
     .prepare(`DELETE FROM user_wallets WHERE id = ? AND user_id = ?`)

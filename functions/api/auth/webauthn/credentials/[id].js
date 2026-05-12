@@ -42,15 +42,15 @@ export async function onRequestPatch({ request, env, params }) {
 
   const userId = Number(user.sub)
   const credPk = Number(params?.id)
-  if (!Number.isFinite(credPk)) return res({ error: 'Invalid id' }, 400, cors)
+  if (!Number.isFinite(credPk)) return res({ error: 'Invalid id', code: 'INVALID_ID' }, 400, cors)
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400, cors) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, cors) }
 
   const nickname = body?.nickname
   if (typeof nickname !== 'string' || nickname.length === 0 || nickname.length > NICKNAME_MAX) {
-    return res({ error: `nickname must be a non-empty string up to ${NICKNAME_MAX} chars` }, 400, cors)
+    return res({ error: `nickname must be a non-empty string up to ${NICKNAME_MAX} chars`, code: 'INVALID_NICKNAME' }, 400, cors)
   }
 
   const upd = await env.chiyigo_db
@@ -63,7 +63,7 @@ export async function onRequestPatch({ request, env, params }) {
     .run()
 
   if ((upd.meta?.changes ?? 0) === 0) {
-    return res({ error: 'Credential not found' }, 404, cors)
+    return res({ error: 'Credential not found', code: 'CREDENTIAL_NOT_FOUND' }, 404, cors)
   }
 
   return res({ id: credPk, nickname }, 200, cors)
@@ -78,7 +78,7 @@ export async function onRequestDelete({ request, env, params }) {
 
   const userId = Number(user.sub)
   const credPk = Number(params?.id)
-  if (!Number.isFinite(credPk)) return res({ error: 'Invalid id' }, 400, cors)
+  if (!Number.isFinite(credPk)) return res({ error: 'Invalid id', code: 'INVALID_ID' }, 400, cors)
 
   // 撈 credential_id 給 audit 用（雖然只回 prefix）
   const row = await env.chiyigo_db

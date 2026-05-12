@@ -56,28 +56,28 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400, cors) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, cors) }
 
   const credResponse = body?.response
   const { device_uuid, platform, aud } = body ?? {}
   const audience = resolveAud(aud)
 
   if (!credResponse?.id || !credResponse?.response?.clientDataJSON || !credResponse?.response?.authenticatorData) {
-    return res({ error: 'response is required' }, 400, cors)
+    return res({ error: 'response is required', code: 'RESPONSE_REQUIRED' }, 400, cors)
   }
 
   const credentialId = credResponse.id
 
   // 1. challenge 一次性消耗
   const challenge = extractChallenge(credResponse.response.clientDataJSON)
-  if (!challenge) return res({ error: 'Invalid clientDataJSON' }, 400, cors)
+  if (!challenge) return res({ error: 'Invalid clientDataJSON', code: 'INVALID_CLIENT_DATA' }, 400, cors)
   const challengeRow = await consumeChallenge(env, { challenge, ceremony: 'login' })
   if (!challengeRow) {
     await safeUserAudit(env, {
       event_type: 'auth.login.fail', severity: 'warn',
       request, data: { reason_code: 'webauthn_challenge_invalid' },
     })
-    return res({ error: 'Invalid credentials' }, 401, cors)
+    return res({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' }, 401, cors)
   }
 
   // 2. 找 credential（同步取 user 與 status）
@@ -106,7 +106,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'auth.login.fail', severity: 'warn',
       request, data: { reason_code: 'webauthn_unknown_credential' },
     })
-    return res({ error: 'Invalid credentials' }, 401, cors)
+    return res({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' }, 401, cors)
   }
 
   // 若 challenge 帶 user_id（前端有給 email）→ 比對；不符 = 用別人 challenge 拿自己 cred 換 token，記 critical
@@ -116,7 +116,7 @@ export async function onRequestPost({ request, env }) {
       user_id: cred.user_id, request,
       data: { reason_code: 'webauthn_challenge_user_mismatch' },
     })
-    return res({ error: 'Invalid credentials' }, 401, cors)
+    return res({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' }, 401, cors)
   }
 
   // 3. SimpleWebAuthn 驗 assertion
@@ -142,7 +142,7 @@ export async function onRequestPost({ request, env }) {
       user_id: cred.user_id, request,
       data: { reason_code: 'webauthn_verify_threw', message: String(e?.message ?? e).slice(0, 120) },
     })
-    return res({ error: 'Invalid credentials' }, 401, cors)
+    return res({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' }, 401, cors)
   }
 
   if (!verification.verified || !verification.authenticationInfo) {
@@ -150,7 +150,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'auth.login.fail', severity: 'warn',
       user_id: cred.user_id, request, data: { reason_code: 'webauthn_not_verified' },
     })
-    return res({ error: 'Invalid credentials' }, 401, cors)
+    return res({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' }, 401, cors)
   }
 
   // 4. 帳號封禁

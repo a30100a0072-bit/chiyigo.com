@@ -89,13 +89,13 @@ export async function onRequestGet({ request, env }) {
   }
 
   if (responseType !== 'code')
-    return res({ error: 'Only response_type=code is supported' }, 400)
+    return res({ error: 'Only response_type=code is supported', code: 'OAUTH_UNSUPPORTED_RESPONSE_TYPE' }, 400)
   if (!redirectUri || !codeChallenge || !state)
-    return res({ error: 'redirect_uri, code_challenge, and state are required' }, 400)
+    return res({ error: 'redirect_uri, code_challenge, and state are required', code: 'OAUTH_AUTHORIZE_REQUIRED_FIELDS' }, 400)
   if (codeChallengeMethod !== 'S256')
-    return res({ error: 'Only code_challenge_method=S256 is supported' }, 400)
+    return res({ error: 'Only code_challenge_method=S256 is supported', code: 'OAUTH_UNSUPPORTED_PKCE_METHOD' }, 400)
   if (!isAllowedRedirectUri(redirectUri))
-    return res({ error: 'redirect_uri not allowed' }, 400)
+    return res({ error: 'redirect_uri not allowed', code: 'REDIRECT_URI_NOT_ALLOWED' }, 400)
 
   // ── Silent SSO（OIDC prompt 處理）──────────────────────────────
   // prompt=login 一律跳過 silent，強制顯示 login UI（即使有 session）。

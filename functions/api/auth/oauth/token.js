@@ -52,12 +52,12 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400, cors) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, cors) }
 
   const { code, code_verifier, redirect_uri } = body ?? {}
 
   if (!code || !code_verifier || !redirect_uri)
-    return res({ error: 'code, code_verifier, and redirect_uri are required' }, 400, cors)
+    return res({ error: 'code, code_verifier, and redirect_uri are required', code: 'OAUTH_CODE_REQUIRED_FIELDS' }, 400, cors)
 
   const db       = env.chiyigo_db
   const ip       = request.headers.get('CF-Connecting-IP') ?? null
@@ -90,20 +90,20 @@ export async function onRequestPost({ request, env }) {
 
   if (!authCode) {
     await safeUserAudit(env, { event_type: 'oauth.code.exchange.fail', severity: 'warn', request, data: { reason_code: 'invalid_or_expired_code' } })
-    return res({ error: 'Invalid or expired authorization code' }, 400, cors)
+    return res({ error: 'Invalid or expired authorization code', code: 'INVALID_AUTHORIZATION_CODE' }, 400, cors)
   }
 
   // redirect_uri 必須完全吻合（RFC 6749 §4.1.3）
   if (authCode.redirect_uri !== redirect_uri) {
     await safeUserAudit(env, { event_type: 'oauth.code.exchange.fail', severity: 'warn', user_id: authCode.user_id, request, data: { reason_code: 'redirect_mismatch' } })
-    return res({ error: 'redirect_uri mismatch' }, 400, cors)
+    return res({ error: 'redirect_uri mismatch', code: 'REDIRECT_URI_MISMATCH' }, 400, cors)
   }
 
   // PKCE 驗證
   const pkceOk = await pkceVerify(code_verifier, authCode.code_challenge)
   if (!pkceOk) {
     await safeUserAudit(env, { event_type: 'oauth.code.exchange.fail', severity: 'warn', user_id: authCode.user_id, request, data: { reason_code: 'pkce_failed' } })
-    return res({ error: 'PKCE verification failed' }, 400, cors)
+    return res({ error: 'PKCE verification failed', code: 'PKCE_VERIFICATION_FAILED' }, 400, cors)
   }
 
   // 取用戶資料
@@ -112,7 +112,7 @@ export async function onRequestPost({ request, env }) {
     .bind(authCode.user_id)
     .first()
 
-  if (!user) return res({ error: 'User not found' }, 404, cors)
+  if (!user) return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404, cors)
   if (user.status === 'banned') return res({ error: 'Account banned', code: 'ACCOUNT_BANNED' }, 403, cors)
 
   // 簽發 Refresh Token（遊戲端 30 天）

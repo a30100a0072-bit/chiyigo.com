@@ -26,10 +26,10 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { pkce_key } = body ?? {}
-  if (!pkce_key) return res({ error: 'pkce_key is required' }, 400)
+  if (!pkce_key) return res({ error: 'pkce_key is required', code: 'PKCE_KEY_REQUIRED' }, 400)
 
   const db = env.chiyigo_db
 
@@ -43,7 +43,7 @@ export async function onRequestPost({ request, env }) {
     .bind(pkce_key)
     .first()
 
-  if (!session) return res({ error: 'Invalid or expired PKCE session' }, 400)
+  if (!session) return res({ error: 'Invalid or expired PKCE session', code: 'INVALID_PKCE_SESSION' }, 400)
 
   // 生成一次性授權碼
   const code       = generateSecureToken()
