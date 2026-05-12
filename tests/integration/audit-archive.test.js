@@ -659,6 +659,45 @@ describe('audit-archive cron — PR 2.2a round-robin 6 cold_class + MAX_CHUNKS_P
     expect(byClass.debug_failure.skipped_reason).toBe('max_chunks_per_run_reached')
   })
 
+  it('codex r2：AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN 空字串 → 預設 2（不要夾到 1）', async () => {
+    await seedRow('immutable')
+    await seedRow('telemetry')
+    const r = await runCron({ ...noHotRetentionOverrides(), AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '' })
+    expect(r.max_chunks_per_run).toBe(2)
+    expect(r.chunks_uploaded).toBe(2)
+  })
+
+  it('codex r2：uploaded blocker R2 GET 失敗 → attempted_write=true 消配額', async () => {
+    // 種兩個 class，第一個 class 留 uploaded chunk，bucket.get throw 模擬 R2 GET outage
+    await seedRow('immutable')
+    await seedRow('telemetry')
+    await runCron({ ...noHotRetentionOverrides(), AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '2' })  // → 兩個 uploaded
+
+    const realBucket = env.AUDIT_ARCHIVE_BUCKET
+    const stub = {
+      list: (...a) => realBucket.list(...a),
+      put:  (...a) => realBucket.put(...a),
+      head: (...a) => realBucket.head?.(...a),
+      get:  async () => { throw new Error('r2-get-outage') },
+    }
+    const r = await cronArchive({
+      request: makeRequest(),
+      env: {
+        ...makeEnv(noHotRetentionOverrides()),
+        AUDIT_ARCHIVE_BUCKET: stub,
+        AUDIT_ARCHIVE_PUT_RETRY_BACKOFF_MS: '0,0,0',
+        AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '1',
+      },
+    })
+    const report = await r.json()
+    const byClass = Object.fromEntries(report.cold_classes.map(s => [s.cold_class, s]))
+    // immutable verify GET throw → attempted_write=true → 消 1 配額；
+    // telemetry 應被 max_chunks_per_run_reached 擋住（不該還跑進來嘗試 GET）
+    expect(byClass.immutable.attempted_write).toBe(true)
+    expect(byClass.immutable.ok).toBe(false)
+    expect(byClass.telemetry.skipped_reason).toBe('max_chunks_per_run_reached')
+  })
+
   it('codex r1：parseMaxChunksPerRun — 0 / 負數 → 夾到 1；非數字 → 預設 2', async () => {
     // 種 immutable + telemetry。max=0 → 夾到 1 → 只推第一個（immutable）。
     await seedRow('immutable')

@@ -63,9 +63,11 @@ const COLD_CLASS_VERSION = 1
 
 // PR 2.2a：單輪 cron 最多寫幾個 chunk。預設 2 — 6 class × 21s retry 最壞累積 126s wallclock
 // 過大，2 取「比 1 有效率（驗 F-2 比較自然）+ 比 6 安全」的平衡。
-// 非數字 / 缺值 → 預設 2；<1 也夾回 1（不讓 worker 完全卡死）。
+// PR 2.2a codex r2：空字串 / null / undefined → 預設 2（Number('') === 0 會誤夾到 1）；
+//                  其他非數字 → 預設 2；<1 也夾回 1（不讓 worker 完全卡死）。
 function parseMaxChunksPerRun(env) {
   const raw = env?.AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN
+  if (raw == null || raw === '') return 2
   const n = Number(raw)
   if (!Number.isFinite(n)) return 2
   if (n < 1) return 1
@@ -416,6 +418,11 @@ async function handleUploadedBlocker(ctx) {
   const { envName, tableName, coldClass, db, bucket, report, blocker, runId } = ctx
   report.blocker_action = 'verify_uploaded'
 
+  // PR 2.2a codex r2：整個 verify_uploaded 動作（R2 GET + sha + PUT manifest +
+  // D1 UPDATE）算單一 quota unit；GET 端 throw 也應消配額，所以 attempted_write
+  // 提早到 GET 之前標。
+  report.attempted_write = true
+
   // PR 2.1c：用 chunk 自身 dry_run 算 key（H-1 provenance fix）
   const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
   const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
@@ -441,9 +448,6 @@ async function handleUploadedBlocker(ctx) {
       stage: 'uploaded_verify',
     })
   }
-
-  // PR 2.2a codex r1：標記 quota 消耗點。
-  report.attempted_write = true
 
   // 升 verified
   const verifiedManifest = await loadAndAppend(bucket, manifestKey, 'verified')
