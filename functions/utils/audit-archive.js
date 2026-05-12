@@ -314,7 +314,7 @@ export async function putWithRetry(bucket, key, body, putOpts, opts = {}) {
   let lastError
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await bucket.put(key, body, putOpts)
+      return await bucket.put(key, body, putOpts) // archive-no-delete-allow: putWithRetry 是唯一合法 bare bucket.put site（PR 2.2c lint）
     } catch (e) {
       lastError = e
       const willRetry = attempt < maxAttempts
