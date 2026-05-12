@@ -41,11 +41,11 @@ export async function onRequestPost({ request, env }) {
   // ── 2. 解析 Body ─────────────────────────────────────────────
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { otp_code, device_uuid, platform, aud } = body ?? {}
   if (!otp_code || typeof otp_code !== 'string')
-    return res({ error: 'otp_code is required' }, 400)
+    return res({ error: 'otp_code is required', code: 'OTP_CODE_REQUIRED' }, 400)
   const audience = resolveAud(aud)
 
   const sanitized = otp_code.replace(/[\s-]/g, '')
@@ -88,7 +88,7 @@ export async function onRequestPost({ request, env }) {
     .first()
 
   if (!record || !record.totp_enabled)
-    return res({ error: 'Invalid request' }, 400)
+    return res({ error: 'Invalid request', code: 'INVALID_REQUEST' }, 400)
 
   // ── 4a. 嘗試 TOTP 驗證（6 位數字）— P1-8 補 used_totp replay 防護 ─
   if (/^\d{6}$/.test(sanitized)) {
@@ -137,7 +137,7 @@ export async function onRequestPost({ request, env }) {
   // 失敗：寫一筆記錄（user 維度），下次 check 會 +1
   await recordRateLimit(db, { kind: '2fa', userId, ip })
   await safeUserAudit(env, { event_type: 'mfa.totp.verify.fail', severity: 'warn', user_id: userId, request })
-  return res({ error: 'Invalid OTP or backup code' }, 401)
+  return res({ error: 'Invalid OTP or backup code', code: 'INVALID_OTP_OR_BACKUP_CODE' }, 401)
 }
 
 async function respondWithToken(userId, record, db, deviceUuid, platform, env, audience, request, riskClaims, method) {

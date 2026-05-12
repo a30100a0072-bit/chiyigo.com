@@ -59,8 +59,8 @@ export async function onRequestPost({ request, env }) {
     .bind(userId)
     .first()
 
-  if (!account) return res({ error: 'Local account not found' }, 404)
-  if (account.totp_enabled) return res({ error: '2FA is already enabled' }, 409)
+  if (!account) return res({ error: 'Local account not found', code: 'LOCAL_ACCOUNT_NOT_FOUND' }, 404)
+  if (account.totp_enabled) return res({ error: '2FA is already enabled', code: 'TFA_ALREADY_ENABLED' }, 409)
 
   // ── 3. 取得 email（供 otpauth URI label 使用）────────────────
   const userRow = await db

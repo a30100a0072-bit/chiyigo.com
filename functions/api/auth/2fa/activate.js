@@ -39,17 +39,17 @@ export async function onRequestPost({ request, env }) {
   // ── 2. 解析 Body ─────────────────────────────────────────────
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { otp_code, current_password } = body ?? {}
   if (!otp_code || typeof otp_code !== 'string')
-    return res({ error: 'otp_code is required' }, 400)
+    return res({ error: 'otp_code is required', code: 'OTP_CODE_REQUIRED' }, 400)
   if (!current_password || typeof current_password !== 'string')
     return res({ error: 'current_password is required', code: 'PASSWORD_REQUIRED' }, 400)
 
   const sanitized = otp_code.replace(/\s/g, '')
   if (!/^\d{6}$/.test(sanitized))
-    return res({ error: 'otp_code must be 6 digits' }, 400)
+    return res({ error: 'otp_code must be 6 digits', code: 'OTP_CODE_INVALID_FORMAT' }, 400)
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
@@ -69,9 +69,9 @@ export async function onRequestPost({ request, env }) {
     .bind(userId)
     .first()
 
-  if (!account)             return res({ error: 'Local account not found' }, 404)
-  if (account.totp_enabled) return res({ error: '2FA is already enabled' }, 409)
-  if (!account.totp_secret) return res({ error: 'Run /api/auth/2fa/setup first' }, 400)
+  if (!account)             return res({ error: 'Local account not found', code: 'LOCAL_ACCOUNT_NOT_FOUND' }, 404)
+  if (account.totp_enabled) return res({ error: '2FA is already enabled', code: 'TFA_ALREADY_ENABLED' }, 409)
+  if (!account.totp_secret) return res({ error: 'Run /api/auth/2fa/setup first', code: 'TFA_SETUP_REQUIRED' }, 400)
   if (!account.password_hash || !account.password_salt) {
     // OAuth-only 帳號沒設密碼 → 不能啟用 2FA（也不該到這，前端應提示先設密碼）
     return res({ error: 'Set a login password first', code: 'PASSWORD_NOT_SET' }, 400)

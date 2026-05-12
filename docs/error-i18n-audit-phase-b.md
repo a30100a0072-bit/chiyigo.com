@@ -3,9 +3,9 @@
 > Phase A 已建 `public/js/api.js#API_ERROR_I18N` 前端字典。本 doc 列出 `functions/` 下所有 `res({ error: '...' })` 缺 `code:` 欄位的處，作為 Phase B 漸進補碼依據。**本 PR 只盤點，不改 code**。
 
 ## 摘要
-- 總計：**249 處**缺 `code`
-- 涉及檔案：**59 個**
-- 推薦新增 / 既有 i18n key：**139 個**（去重後）
+- 總計：**223 處**缺 `code`
+- 涉及檔案：**54 個**
+- 推薦新增 / 既有 i18n key：**131 個**（去重後）
 - 仍標 `NEEDS_REVIEW` 待人工命名：**0 處**（佔 0%）
 - 變數型 `error: <expr>` 警告：**6 處**（列在文末警告區）
 
@@ -19,26 +19,21 @@
 
 | code | 出現處數 | 建議 zh-TW | 建議 en |
 |---|---:|---|---|
-| `INVALID_JSON` | 25 | 請求格式錯誤 | Invalid JSON |
+| `INVALID_JSON` | 21 | 請求格式錯誤 | Invalid JSON |
 | `USER_NOT_FOUND` | 11 | 找不到使用者 | User not found |
 | `INTENT_NOT_FOUND` | 10 | 找不到付款單 | not_found |
 | `REQUISITION_NOT_FOUND` | 8 | 找不到該需求單 | not_found |
 | `INVALID_CREDENTIALS` | 5 | 帳號或密碼錯誤 | Invalid credentials |
 | `CLIENT_NOT_FOUND` | 4 | 找不到應用程式 | Client not found |
-| `LOCAL_ACCOUNT_NOT_FOUND` | 4 | 尚未建立本地帳號 | Local account not found |
-| `OTP_CODE_INVALID_FORMAT` | 4 | 驗證碼需為 6 位數字 | otp_code must be 6 digits |
 | `REFUND_REQUEST_NOT_FOUND` | 4 | 找不到退款申請 | not_found |
 | `FROM_DATE_INVALID` | 3 | 起始日期格式錯誤（需為 ISO 8601） | from must be ISO 8601 date/datetime |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:clients:write scope required |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:payments scope required |
 | `INVALID_ID` | 3 | 識別碼格式錯誤 | Invalid id |
 | `INVALID_STATUS` | 3 | 狀態值無效 | invalid status |
-| `OTP_OR_BACKUP_CODE_REQUIRED` | 3 | 請輸入驗證碼或備援碼 | otp_code or backup_code is required |
 | `TO_DATE_INVALID` | 3 | 結束日期格式錯誤（需為 ISO 8601） | to must be ISO 8601 date/datetime |
 | `UNAUTHORIZED` | 3 | 未登入或登入已過期 | Unauthorized |
 | `USER_ID_INVALID` | 3 | user_id 需為數字 | user_id must be a number |
-| `2FA_ALREADY_ENABLED` | 2 | 兩步驟驗證已啟用 | 2FA is already enabled |
-| `2FA_NOT_ENABLED` | 2 | 尚未啟用兩步驟驗證 | 2FA is not enabled |
 | `AUDIT_NOT_FOUND` | 2 | 找不到稽核紀錄 | not_found |
 | `CREDENTIAL_NOT_FOUND` | 2 | 找不到憑證 | Credential not found |
 | `CRON_SECRET_NOT_CONFIGURED` | 2 | 排程密鑰未設定 | CRON_SECRET not configured |
@@ -48,12 +43,8 @@
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:users:write scope required |
 | `INTERNAL_ERROR` | 2 | 系統錯誤，請稍後再試 | Internal error |
 | `INVALID_CLIENT_DATA` | 2 | clientDataJSON 格式錯誤 | Invalid clientDataJSON |
-| `INVALID_OR_USED_BACKUP_CODE` | 2 | 備援碼錯誤或已使用過 | Invalid or already used backup code |
-| `INVALID_OTP` | 2 | 驗證碼錯誤 | Invalid OTP code |
-| `INVALID_OTP_OR_BACKUP_CODE` | 2 | 驗證碼或備援碼錯誤 | Invalid OTP or backup code |
 | `INVALID_TOKEN_SUBJECT` | 2 | Token subject 無效 | Invalid token subject |
 | `INVALID_USER_ID` | 2 | 使用者 ID 格式錯誤 | Invalid user id |
-| `OTP_CODE_REQUIRED` | 2 | 請輸入驗證碼 | otp_code is required |
 | `RATE_LIMITED` | 2 | 請求過於頻繁，請稍後再試 | Too many requests. Please try again later. |
 | `REFRESH_TOKEN_REVOKED` | 2 | 登入憑證已失效，請重新登入 | Refresh token has been revoked |
 | `REFUND_NOT_IMPLEMENTED` | 2 | 此金流供應商尚未支援退款 | refund not implemented for vendor: ${intent.vendor} |
@@ -101,11 +92,11 @@
 | `INVALID_FOR_ACTION` | 1 | for_action 格式錯誤 | for_action must be a non-empty string when provided |
 | `INVALID_MODE` | 1 | mode 參數無效 | mode must be one of: ${[...VALID_MODES].join(', ')} |
 | `INVALID_NICKNAME` | 1 | 暱稱格式錯誤 | nickname must be a non-empty string up to ${NICKNAME_MAX} chars |
+| `INVALID_OTP_OR_BACKUP_CODE` | 1 | 驗證碼或備援碼錯誤 | Invalid OTP or backup code |
 | `INVALID_PKCE_SESSION` | 1 | PKCE Session 無效或已過期 | Invalid or expired PKCE session |
 | `INVALID_PLATFORM` | 1 | platform 必須為 web、pc 或 mobile | Invalid platform. Must be web, pc, or mobile. |
 | `INVALID_PLATFORM` | 1 | platform 必須為 web、pc 或 mobile | platform 必須為 web、pc 或 mobile |
 | `INVALID_REFRESH_TOKEN` | 1 | Refresh Token 無效或已過期 | Invalid or expired refresh token |
-| `INVALID_REQUEST` | 1 | 請求格式錯誤 | Invalid request |
 | `INVALID_REQUEST_FORMAT` | 1 | 無效的請求格式 | 無效的請求格式 |
 | `INVALID_SCOPE` | 1 | scope 參數無效 | scope must be one of: ${[...KNOWN_ELEVATED_SCOPES].join(', ')} |
 | `INVALID_SEVERITY` | 1 | severity 必須為 info / warn / critical | severity must be info \| warn \| critical |
@@ -125,6 +116,8 @@
 | `OAUTH_STATE_SAVE_FAILED` | 1 | OAuth 狀態儲存失敗，請重試 | OAuth 狀態儲存失敗，請重試 |
 | `OAUTH_UNSUPPORTED_PKCE_METHOD` | 1 | 僅支援 code_challenge_method=S256 | Only code_challenge_method=S256 is supported |
 | `OAUTH_UNSUPPORTED_RESPONSE_TYPE` | 1 | 僅支援 response_type=code | Only response_type=code is supported |
+| `OTP_CODE_INVALID_FORMAT` | 1 | 驗證碼需為 6 位數字 | otp_code must be 6 digits |
+| `OTP_OR_BACKUP_CODE_REQUIRED` | 1 | 請輸入驗證碼或備援碼 | otp_code or backup_code is required |
 | `PASSWORD_REQUIRED` | 1 | 請提供密碼 | password is required |
 | `PC_PORT_REQUIRED` | 1 | 桌面登入需提供有效 port | platform=pc requires a valid port parameter (4-5 digits) |
 | `PKCE_KEY_REQUIRED` | 1 | 請提供 pkce_key | pkce_key is required |
@@ -140,7 +133,6 @@
 | `REQUISITION_ID_REQUIRED` | 1 | 請提供 requisition_id | requisition_id is required |
 | `REQUISITION_IN_PROCESS` | 1 | 此單已在處理中，無法撤銷 | 此單已在處理中，無法撤銷 |
 | `REQUISITION_NOT_FOUND` | 1 | 找不到該需求單 | 找不到該需求單 |
-| `TFA_SETUP_REQUIRED` | 1 | 請先完成兩步驟驗證設定 | Run /api/auth/2fa/setup first |
 | `TOKEN_DATA_INCOMPLETE` | 1 | Token 資料不完整 | Token 資料不完整 |
 | `TOKEN_INVALID_OR_EXPIRED` | 1 | 連結無效或已過期 | Token is invalid or has expired |
 | `TOKEN_REQUIRED` | 1 | 請提供 Token | token is required |
@@ -331,42 +323,6 @@
 - L95 `'Invalid JSON'` → `INVALID_JSON`
 - L102 `'prompt is required'` → `PROMPT_REQUIRED`
 - L154 `'今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單'` → `AI_DAILY_LIMIT`
-
-### functions/api/auth/2fa/activate.js（6 處）
-- L42 `'Invalid JSON'` → `INVALID_JSON`
-- L46 `'otp_code is required'` → `OTP_CODE_REQUIRED`
-- L52 `'otp_code must be 6 digits'` → `OTP_CODE_INVALID_FORMAT`
-- L72 `'Local account not found'` → `LOCAL_ACCOUNT_NOT_FOUND`
-- L73 `'2FA is already enabled'` → `2FA_ALREADY_ENABLED`
-- L74 `'Run /api/auth/2fa/setup first'` → `TFA_SETUP_REQUIRED`
-
-### functions/api/auth/2fa/backup-codes/regenerate.js（7 處）
-- L22 `'Invalid JSON'` → `INVALID_JSON`
-- L26 `'otp_code or backup_code is required'` → `OTP_OR_BACKUP_CODE_REQUIRED`
-- L46 `'Local account not found'` → `LOCAL_ACCOUNT_NOT_FOUND`
-- L47 `'2FA is not enabled'` → `2FA_NOT_ENABLED`
-- L53 `'otp_code must be 6 digits'` → `OTP_CODE_INVALID_FORMAT`
-- L55 `'Invalid OTP code'` → `INVALID_OTP`
-- L73 `'Invalid or already used backup code'` → `INVALID_OR_USED_BACKUP_CODE`
-
-### functions/api/auth/2fa/disable.js（7 處）
-- L25 `'Invalid JSON'` → `INVALID_JSON`
-- L29 `'otp_code or backup_code is required'` → `OTP_OR_BACKUP_CODE_REQUIRED`
-- L48 `'Local account not found'` → `LOCAL_ACCOUNT_NOT_FOUND`
-- L49 `'2FA is not enabled'` → `2FA_NOT_ENABLED`
-- L55 `'otp_code must be 6 digits'` → `OTP_CODE_INVALID_FORMAT`
-- L61 `'Invalid OTP code'` → `INVALID_OTP`
-- L80 `'Invalid or already used backup code'` → `INVALID_OR_USED_BACKUP_CODE`
-
-### functions/api/auth/2fa/setup.js（2 處）
-- L62 `'Local account not found'` → `LOCAL_ACCOUNT_NOT_FOUND`
-- L63 `'2FA is already enabled'` → `2FA_ALREADY_ENABLED`
-
-### functions/api/auth/2fa/verify.js（4 處）
-- L44 `'Invalid JSON'` → `INVALID_JSON`
-- L48 `'otp_code is required'` → `OTP_CODE_REQUIRED`
-- L91 `'Invalid request'` → `INVALID_REQUEST`
-- L140 `'Invalid OTP or backup code'` → `INVALID_OTP_OR_BACKUP_CODE`
 
 ### functions/api/auth/account/change-password.js（4 處）
 - L50 `'Invalid JSON'` → `INVALID_JSON`
@@ -585,14 +541,6 @@
 > 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
 
 ## 後續 PR 切分建議
-
-### PR B-1b (2FA)
-- 檔案：5 個，處數：**26**
-  - functions/api/auth/2fa/activate.js
-  - functions/api/auth/2fa/backup-codes/regenerate.js
-  - functions/api/auth/2fa/disable.js
-  - functions/api/auth/2fa/setup.js
-  - functions/api/auth/2fa/verify.js
 
 ### PR B-1c (OAuth / WebAuthn / Wallet)
 - 檔案：11 個，處數：**59**
