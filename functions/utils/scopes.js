@@ -55,6 +55,14 @@ export const SCOPES = Object.freeze({
   ADMIN_PAYMENTS_REFUND:  'admin:payments:refund', // 退款（最敏感金流動作）
   ADMIN_PAYMENTS_APPROVE: 'admin:payments:approve', // 退款審核 approve（P1-17 Phase 2 latent；目前 endpoint 仍走 :refund）
 
+  // ── F-3 Phase 2 PR 2.2d — audit archive 三段 fine（codex r1 建議）
+  // 把 admin retry endpoint 從 admin:audit:write 拆出來：retry 影響面小、resolve/purge
+  // 不可逆，未來真有 finance/ops 二級 admin 時可只發 :retry 不發 :resolve|:purge。
+  ADMIN_AUDIT_ARCHIVE:         'admin:audit_archive',
+  ADMIN_AUDIT_ARCHIVE_RETRY:   'admin:audit_archive:retry',   // re_verify failed → uploaded
+  ADMIN_AUDIT_ARCHIVE_RESOLVE: 'admin:audit_archive:resolve', // mark_resolved failed → blacklisted
+  ADMIN_AUDIT_ARCHIVE_PURGE:   'admin:audit_archive:purge',   // force_purge（PR 2.3 真實作前 stub）
+
   // 高權限（Phase C-3）— **絕對不出現在 ROLE_BASE_SCOPES**，只能透過 step-up flow 取得
   ELEVATED_ACCOUNT:   'elevated:account',     // 改密碼 / 改 email / 刪帳號
   ELEVATED_PAYMENT:   'elevated:payment',     // 任何金流操作
@@ -84,6 +92,11 @@ const SCOPE_HIERARCHY = Object.freeze({
   [SCOPES.ADMIN_PAYMENTS]: [
     SCOPES.ADMIN_PAYMENTS_READ, SCOPES.ADMIN_PAYMENTS_WRITE,
     SCOPES.ADMIN_PAYMENTS_REFUND, SCOPES.ADMIN_PAYMENTS_APPROVE,
+  ],
+  [SCOPES.ADMIN_AUDIT_ARCHIVE]: [
+    SCOPES.ADMIN_AUDIT_ARCHIVE_RETRY,
+    SCOPES.ADMIN_AUDIT_ARCHIVE_RESOLVE,
+    SCOPES.ADMIN_AUDIT_ARCHIVE_PURGE,
   ],
 })
 
@@ -134,10 +147,12 @@ const ROLE_BASE_SCOPES = {
   admin: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
+    SCOPES.ADMIN_AUDIT_ARCHIVE,
   ],
   developer: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
+    SCOPES.ADMIN_AUDIT_ARCHIVE,
   ],
 
   // ── P1-17 Phase 2 latent roles ──────────────────────────────
@@ -145,6 +160,7 @@ const ROLE_BASE_SCOPES = {
   super_admin: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
+    SCOPES.ADMIN_AUDIT_ARCHIVE,
   ],
   // finance：金流 read + 退款 + 退款審核 + webhook-dlq（dlq endpoint 用 ADMIN_PAYMENTS gate）
   // 嚴禁：admin:users（避免改 role/ban）、admin:clients（OAuth RP）、admin:audit（avoid PII access）

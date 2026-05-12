@@ -200,3 +200,54 @@ describe('P1-17 hierarchical scope expansion', () => {
     expect(hasAllScopes(payload, [SCOPES.ADMIN_PAYMENTS_REFUND])).toBe(false)
   })
 })
+
+describe('PR 2.2d — admin:audit_archive fine scope（retry / resolve / purge）', () => {
+  it('admin role 透過 ROLE_BASE_SCOPES → 自動含 audit_archive 三 fine', () => {
+    const eff = effectiveScopesFromJwt({ role: 'admin' })
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RETRY)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RESOLVE)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_PURGE)).toBe(true)
+  })
+
+  it('developer / super_admin 同等', () => {
+    for (const role of ['developer', 'super_admin']) {
+      const eff = effectiveScopesFromJwt({ role })
+      expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RETRY)).toBe(true)
+      expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RESOLVE)).toBe(true)
+      expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_PURGE)).toBe(true)
+    }
+  })
+
+  it('coarse admin:audit_archive token → 自動展開 3 fine', () => {
+    const eff = effectiveScopesFromJwt({ scope: 'admin:audit_archive', role: 'player' })
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RETRY)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RESOLVE)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_PURGE)).toBe(true)
+  })
+
+  it('只給 :retry fine → 不會長出 :resolve / :purge（最少特權）', () => {
+    const eff = effectiveScopesFromJwt({ scope: 'admin:audit_archive:retry', role: 'player' })
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RETRY)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RESOLVE)).toBe(false)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_PURGE)).toBe(false)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE)).toBe(false)
+  })
+
+  it('admin:audit coarse 不會誤展開 audit_archive（兩個獨立 namespace）', () => {
+    const eff = effectiveScopesFromJwt({ scope: 'admin:audit', role: 'player' })
+    expect(eff.has(SCOPES.ADMIN_AUDIT_WRITE)).toBe(true)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE)).toBe(false)
+    expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RETRY)).toBe(false)
+  })
+
+  it('finance / support 不得有 audit_archive 任何 fine（避免金流/客服 role 升權）', () => {
+    for (const role of ['finance', 'support']) {
+      const eff = effectiveScopesFromJwt({ role })
+      expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE)).toBe(false)
+      expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RETRY)).toBe(false)
+      expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_RESOLVE)).toBe(false)
+      expect(eff.has(SCOPES.ADMIN_AUDIT_ARCHIVE_PURGE)).toBe(false)
+    }
+  })
+})

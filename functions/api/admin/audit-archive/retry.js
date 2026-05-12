@@ -1,12 +1,16 @@
 /**
  * POST /api/admin/audit-archive/retry
  *
- * Auth（依 action 分兩級，PR 2.2b codex r1 P1）：
- *   - re_verify                  : role>=admin + scope admin:audit:write
+ * Auth（依 action 分兩級；PR 2.2d 把 baseline scope 由 admin:audit:write 拆細）：
+ *   - re_verify                  : role>=admin + scope admin:audit_archive:retry
  *     Header: Authorization: Bearer <admin_access_token>
- *   - mark_resolved / force_purge: 上述 + step-up（elevated:account scope claim +
- *     for_action='audit_archive_mark_resolved' / 'audit_archive_force_purge'）
+ *   - mark_resolved              : 上述 base 改成 admin:audit_archive:resolve
+ *                                  + step-up（elevated:account + for_action='audit_archive_mark_resolved'）
+ *   - force_purge                : 上述 base 改成 admin:audit_archive:purge
+ *                                  + step-up（for_action='audit_archive_force_purge'）
  *     Header: Authorization: Bearer <step_up_token>
+ *   既有 admin / developer / super_admin role 透過 ROLE_BASE_SCOPES 的
+ *   admin:audit_archive coarse 自動含全 3 個 fine（向後相容，prod token 不必重簽）。
  *
  * F-3 Phase 2 PR 2.2b — admin retry endpoint stub
  *
@@ -42,9 +46,18 @@ import { SUPPORTED_COLD_CLASSES, PR20_SUPPORTED_TABLE } from '../../../utils/aud
 
 const VALID_ACTIONS = new Set(['re_verify', 'mark_resolved', 'force_purge'])
 
+// PR 2.2d：per-action fine scope（codex r1 fine-grain 建議落地）。
+// 既有 admin/developer/super_admin role 因 ROLE_BASE_SCOPES 含 admin:audit_archive
+// coarse，三個 fine 經 SCOPE_HIERARCHY 全展開 → backward compat。
+const SCOPE_FOR_ACTION = {
+  re_verify:     SCOPES.ADMIN_AUDIT_ARCHIVE_RETRY,
+  mark_resolved: SCOPES.ADMIN_AUDIT_ARCHIVE_RESOLVE,
+  force_purge:   SCOPES.ADMIN_AUDIT_ARCHIVE_PURGE,
+}
+
 // PR 2.2b codex r1（P1）：mark_resolved / force_purge 屬「不可逆 / 高影響面」action，
 // 需 step-up（elevated:account + for_action 對應）。re_verify 只是把 chunk 推回 pipeline
-// 重新走流程，影響面有限，留在 admin role + admin:audit:write 即可。
+// 重新走流程，影響面有限。
 const STEP_UP_FOR_ACTION = {
   mark_resolved: 'audit_archive_mark_resolved',
   force_purge:   'audit_archive_force_purge',
@@ -91,12 +104,9 @@ async function emitRejected(env, request, ctx, reason) {
 }
 
 export async function onRequestPost({ request, env }) {
-  // 1) Baseline auth：role >= admin + admin:audit:write scope（所有 action 都要過）
+  // 1) Role gate：role >= admin（per-action fine scope 留 action validate 後再驗）
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
-  if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_AUDIT_WRITE)) {
-    return res({ error: 'admin:audit:write scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:audit:write' }, 403)
-  }
 
   const db = env.chiyigo_db
   if (!db) return res({ error: 'chiyigo_db binding missing', code: 'INTERNAL_ERROR' }, 500)
@@ -113,6 +123,14 @@ export async function onRequestPost({ request, env }) {
     await emitRejected(env, request, ctxBase, 'invalid_action')
     return res({ error: `action must be one of ${[...VALID_ACTIONS].join(', ')}`, code: 'INVALID_ACTION' }, 400)
   }
+
+  // PR 2.2d：action 確定後驗 fine scope（讓 invalid_action 走 400 而非 403）
+  const requiredScope = SCOPE_FOR_ACTION[action]
+  if (!effectiveScopesFromJwt(user).has(requiredScope)) {
+    await emitRejected(env, request, ctxBase, `insufficient_scope:${requiredScope}`)
+    return res({ error: `${requiredScope} scope required`, code: 'INSUFFICIENT_SCOPE', required: requiredScope }, 403)
+  }
+
   const tgtErr = validateTarget(target)
   if (tgtErr) {
     await emitRejected(env, request, ctxBase, `invalid_target:${tgtErr}`)
