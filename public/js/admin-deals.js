@@ -251,7 +251,7 @@ async function loadAgg() {
   try {
     data = await apiFetch(`/api/admin/deals/aggregate?period=${aggPeriod}`);
   } catch (e) {
-    if (e?.code === 'SESSION_EXPIRED') return;
+    if (e?.code === 'SESSION_EXPIRED') { ld.hidden = true; return; }
     wrap.innerHTML = `<p style="font-size:.78rem;color:var(--text-dim)">${esc(e?.message || '載入失敗')}</p>`;
     ld.hidden = true; return;
   }
