@@ -61,7 +61,13 @@ function reportViolation(file, lineNum, lineText, pattern, extraNote) {
   const waiverHint = pattern.scope === 'source'
     ? `match span 任一行加 tag: // ${ALLOW_TAGS[pattern.kind]}`
     : `同行豁免 tag: // ${ALLOW_TAGS[pattern.kind]}`
-  console.error(`    ${waiverHint}（僅限合法例外，目前只給 utils#putWithRetry 用 archive-put-allow）`)
+  // codex r4 nit：put kind 有唯一合法 site（utils#putWithRetry）；delete / sql
+  // 目前 0 合法 site，trailing 例外提示只對 put 印，對 sql/delete 不再硬塞
+  // put-specific 字樣。
+  const exceptionNote = pattern.kind === 'put'
+    ? '（僅限合法例外，目前只給 utils#putWithRetry 用）'
+    : '（目前 0 合法例外；若新增請同 PR 補 design rationale）'
+  console.error(`    ${waiverHint} ${exceptionNote}`)
 }
 
 function scan(file) {

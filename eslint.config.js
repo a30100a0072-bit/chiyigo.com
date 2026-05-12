@@ -33,7 +33,8 @@ const archiveDisciplinePlugin = {
         docs: { description: 'Forbid R2 .delete()/.put() bypass and SQL DELETE on audit tables in archive worker codepath.' },
         schema: [],
         messages: {
-          forbidden: 'archive-discipline [{{kind}}]: forbidden {{desc}}. 同行豁免 tag `// {{tag}}`（目前唯一合法 bare put site：functions/utils/audit-archive.js#putWithRetry）。詳見 scripts/_archive-lint-patterns.js / docs/AUDIT_RETENTION_PLAN.md。',
+          // codex r4 nit：exception 字樣按 kind 拆，sql/delete 不再硬塞 put-specific 字
+          forbidden: 'archive-discipline [{{kind}}]: forbidden {{desc}}. 豁免 tag `// {{tag}}`（{{exception}}）。詳見 scripts/_archive-lint-patterns.js / docs/AUDIT_RETENTION_PLAN.md。',
         },
       },
       create(context) {
@@ -60,6 +61,9 @@ const archiveDisciplinePlugin = {
                     kind: pattern.kind,
                     desc: pattern.desc,
                     tag: ARCHIVE_ALLOW_TAGS[pattern.kind],
+                    exception: pattern.kind === 'put'
+                      ? '目前唯一合法 bare put site：functions/utils/audit-archive.js#putWithRetry'
+                      : '目前 0 合法例外；若新增請同 PR 補 design rationale',
                   },
                 })
               }
@@ -81,6 +85,9 @@ const archiveDisciplinePlugin = {
                       kind: pattern.kind,
                       desc: pattern.desc,
                       tag: ARCHIVE_ALLOW_TAGS[pattern.kind],
+                      exception: pattern.kind === 'put'
+                        ? '目前唯一合法 bare put site：functions/utils/audit-archive.js#putWithRetry'
+                        : '目前 0 合法例外；若新增請同 PR 補 design rationale',
                     },
                   })
                 }
