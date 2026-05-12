@@ -47,6 +47,53 @@ import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
 import down0038    from '../../migrations/down/0038_audit_log_phase2.down.sql?raw'
 
+// Full forward chain 0013..0040（不含 down，僅驗 forward shape）
+import up0013 from '../../migrations/0013_oauth_states_aud.sql?raw'
+import up0014 from '../../migrations/0014_pkce_oidc_fields.sql?raw'
+import up0015 from '../../migrations/0015_oauth_clients.sql?raw'
+import up0016 from '../../migrations/0016_revoked_jti.sql?raw'
+import up0017 from '../../migrations/0017_audit_log.sql?raw'
+import up0018 from '../../migrations/0018_users_public_sub.sql?raw'
+import up0019 from '../../migrations/0019_refresh_tokens_auth_time.sql?raw'
+import up0020 from '../../migrations/0020_oauth_clients_seed.sql?raw'
+import up0021 from '../../migrations/0021_webauthn.sql?raw'
+import up0022 from '../../migrations/0022_ip_blacklist.sql?raw'
+import up0023 from '../../migrations/0023_user_wallets.sql?raw'
+import up0024 from '../../migrations/0024_user_kyc.sql?raw'
+import up0025 from '../../migrations/0025_payment_intents.sql?raw'
+import up0026 from '../../migrations/0026_requisition_refund_request.sql?raw'
+import up0027 from '../../migrations/0027_rrr_requisition_nullable.sql?raw'
+import up0028 from '../../migrations/0028_deals.sql?raw'
+import up0029 from '../../migrations/0029_payment_intents_hardening.sql?raw' // typo 修補見下方 up0029_typoFixed
+import up0030 from '../../migrations/0030_fix_payment_intents_requisition_fk.sql?raw'
+import up0031 from '../../migrations/0031_refund_request_amount.sql?raw'
+import up0032 from '../../migrations/0032_payment_metadata_archive.sql?raw'
+import up0033 from '../../migrations/0033_payment_webhook_dlq.sql?raw'
+import up0034 from '../../migrations/0034_refund_request_unique_pending.sql?raw'
+import up0035 from '../../migrations/0035_p1_used_totp_and_refresh_scope.sql?raw'
+import up0036 from '../../migrations/0036_requisition_owner_columns.sql?raw'
+import up0039 from '../../migrations/0039_audit_archive_chunks_dry_run.sql?raw'
+import up0040 from '../../migrations/0040_requisition_index_align.sql?raw'
+
+// 0029 含已知 typo（REFERENCES requisitions 複數）；prod 走 PRAGMA foreign_keys=OFF
+// 規避（SQLite 對 FK target 表名做 lazy check），但 cloudflare:test 環境的 D1
+// PRAGMA via prepared statement 不生效，FK 啟動就會炸 INSERT...SELECT。
+// test-only 修：把 typo 替換成正確表名，效果跟 prod 走 PRAGMA OFF 等價（0030 之後
+// 仍會 rebuild 一次蓋掉本次 CREATE）。不改 migration 檔本身（prod 已套用，動了反而
+// 破壞 ledger 對齊）。
+const up0029_typoFixed = up0029.replace(
+  /REFERENCES requisitions\(id\)/g,
+  'REFERENCES requisition(id)',
+)
+
+const ALL_UPS = [
+  up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008,
+  up0009, up0010, up0011, up0012, up0013, up0014, up0015, up0016,
+  up0017, up0018, up0019, up0020, up0021, up0022, up0023, up0024,
+  up0025, up0026, up0027, up0028, up0029_typoFixed, up0030, up0031, up0032,
+  up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
+]
+
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
 const DOWNS = [down0001, down0002, down0003, down0004, down0005, down0006, down0007, down0008, down0009, down0010, down0011, down0012]
 
@@ -324,6 +371,122 @@ describe('migrations smoke 0037 targeted', () => {
     const map = Object.fromEntries(rows.results.map(r => [r.token_hash, r.issued_aud]))
     expect(map['h_legacy']).toBeNull()
     expect(map['h_bound_sport']).toBe('sport-app')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Full forward chain 0001..0040 vs prod snapshot
+//
+// 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0040 跑完後的 schema shape
+// 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
+//
+// 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
+// + pragma_table_info），改 schema 時要同步更新此處。
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function listTables() {
+  const r = await env.chiyigo_db.prepare(
+    `SELECT name FROM sqlite_master WHERE type='table'
+     AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'd1_%'
+     ORDER BY name`,
+  ).all()
+  return r.results.map(x => x.name).sort()
+}
+async function listIndexes() {
+  const r = await env.chiyigo_db.prepare(
+    `SELECT name FROM sqlite_master WHERE type='index'
+     AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'
+     ORDER BY name`,
+  ).all()
+  return r.results.map(x => x.name).sort()
+}
+async function listColumns(table) {
+  const r = await env.chiyigo_db.prepare(
+    `SELECT name FROM pragma_table_info(?) ORDER BY name`,
+  ).bind(table).all()
+  return r.results.map(x => x.name).sort()
+}
+
+const EXPECTED_TABLES = [
+  'admin_audit_log', 'ai_audit', 'audit_archive_chunks', 'audit_log',
+  'audit_log_aggregate_debug', 'audit_log_aggregate_telemetry',
+  'auth_codes', 'backup_codes', 'deals', 'email_verifications',
+  'ip_blacklist', 'kyc_webhook_events', 'local_accounts', 'login_attempts',
+  'oauth_clients', 'oauth_states', 'password_resets', 'payment_intents',
+  'payment_metadata_archive', 'payment_webhook_dlq', 'payment_webhook_events',
+  'pkce_sessions', 'portfolio', 'refresh_tokens', 'requisition',
+  'requisition_refund_request', 'revoked_jti', 'used_totp', 'user_identities',
+  'user_kyc', 'user_wallets', 'user_webauthn_credentials', 'users',
+  'wallet_nonces', 'webauthn_challenges',
+].sort()
+
+// Per-table expected column sets（baseline 12 表 + 部分 ALTER 重點目標）
+const EXPECTED_COLUMNS = {
+  portfolio: ['category', 'created_at', 'description', 'id', 'image_url', 'link_url', 'sort_order', 'tags', 'title'],
+  users: ['created_at', 'deleted_at', 'email', 'email_verified', 'id', 'public_sub', 'role', 'status', 'token_version'],
+  requisition: ['budget', 'company', 'contact', 'created_at', 'deleted_at', 'id', 'message', 'name', 'owner_guest_id', 'owner_user_id', 'service_type', 'source_ip', 'status', 'tg_message_id', 'timeline', 'user_id'],
+  local_accounts: ['password_hash', 'password_salt', 'totp_enabled', 'totp_secret', 'user_id'],
+  backup_codes: ['code_hash', 'id', 'used_at', 'user_id'],
+  user_identities: ['avatar_url', 'created_at', 'display_name', 'id', 'metadata', 'provider', 'provider_id', 'updated_at', 'user_id'],
+  password_resets: ['expires_at', 'token_hash', 'user_id'],
+  refresh_tokens: ['auth_time', 'device_info', 'device_uuid', 'expires_at', 'id', 'issued_aud', 'revoked_at', 'scope', 'token_hash', 'user_id'],
+  oauth_states: ['aud', 'client_callback', 'code_verifier', 'created_at', 'expires_at', 'ip_address', 'nonce', 'platform', 'redirect_uri', 'state_token'],
+  pkce_sessions: ['code_challenge', 'created_at', 'expires_at', 'ip_address', 'nonce', 'redirect_uri', 'scope', 'session_key', 'state'],
+  auth_codes: ['auth_time', 'code_challenge', 'code_hash', 'expires_at', 'nonce', 'redirect_uri', 'scope', 'state', 'user_id'],
+  email_verifications: ['created_at', 'expires_at', 'id', 'ip_address', 'token_hash', 'token_type', 'used_at', 'user_id'],
+  audit_log: ['archived_at', 'client_id', 'cold_class', 'created_at', 'event_data', 'event_type', 'id', 'ip_hash', 'severity', 'user_id'],
+  audit_archive_chunks: ['archive_date', 'blacklisted_at', 'chunk_sha256', 'cold_class', 'cold_class_version', 'cold_copied_at', 'created_at', 'dry_run', 'env', 'last_failure', 'last_failure_at', 'marked_archived_at', 'max_id', 'min_id', 'next_reminder_at', 'purge_after', 'retry_count', 'row_count', 'run_id', 'state', 'table_name', 'updated_at'],
+}
+
+// 對齊後（0040 exact-parity）的 requisition 索引
+const EXPECTED_REQUISITION_INDEXES = [
+  'idx_requisition_guest_id',  // 0040 對齊；prod 命名（無 owner_ 前綴）
+  'idx_requisition_ip',         // 0006
+]
+
+describe('full forward chain 0001..0040 vs prod snapshot', () => {
+  beforeAll(async () => {
+    await dropAllTables()
+    await execAll(baseSql)
+    for (const sql of ALL_UPS) {
+      await execAll(sql)
+    }
+  })
+
+  it('table set 對齊 prod snapshot（34 表）', async () => {
+    const tables = await listTables()
+    expect(tables).toEqual(EXPECTED_TABLES)
+  })
+
+  it('baseline 12 表 + 部分 ALTER 重點 column set 對齊', async () => {
+    for (const [table, expected] of Object.entries(EXPECTED_COLUMNS)) {
+      const got = await listColumns(table)
+      expect({ table, columns: got }).toEqual({ table, columns: expected })
+    }
+  })
+
+  it('0040 對齊：requisition 索引集合 = prod 命名（idx_requisition_guest_id），無 idx_requisition_owner_*', async () => {
+    const indexes = await listIndexes()
+    const reqIdx = indexes.filter(n => n.startsWith('idx_requisition'))
+    expect(reqIdx.sort()).toEqual(EXPECTED_REQUISITION_INDEXES)
+    expect(indexes).not.toContain('idx_requisition_owner_guest_id')
+    expect(indexes).not.toContain('idx_requisition_owner_user_id')
+  })
+
+  it('關鍵 index 存在性 spot check', async () => {
+    const indexes = await listIndexes()
+    // baseline-only indexes (來自 _base.sql)
+    expect(indexes).toContain('idx_users_status')
+    expect(indexes).toContain('idx_backup_codes_user_id')
+    expect(indexes).toContain('idx_auth_codes_user_id')
+    // migration-created indexes（抽樣）
+    expect(indexes).toContain('idx_oauth_states_expires')          // 0004
+    expect(indexes).toContain('idx_audit_log_event_created')        // 0017
+    expect(indexes).toContain('idx_refresh_tokens_issued_aud')      // 0037
+    expect(indexes).toContain('idx_archive_chunks_state')           // 0038
+    expect(indexes).toContain('uq_rrr_intent_pending')              // 0034
+    expect(indexes).toContain('uniq_agg_tele_bucket')               // 0038
   })
 })
 
