@@ -4,6 +4,7 @@ import {
   ALLOW_TAGS as ARCHIVE_ALLOW_TAGS,
   isWaived as archiveIsWaived,
   isCommentLine as archiveIsCommentLine,
+  findSourceMatch as archiveFindSourceMatch,
 } from './scripts/_archive-lint-patterns.js'
 
 const browserGlobals = {
@@ -39,11 +40,35 @@ const archiveDisciplinePlugin = {
         return {
           Program(node) {
             const src = context.sourceCode ?? context.getSourceCode()
+            const text  = src.text
             const lines = src.lines
+
+            // source-scope（如 SQL multiline DELETE — codex r2 M-1'）
+            for (const pattern of ARCHIVE_FORBIDDEN_PATTERNS) {
+              if (pattern.scope !== 'source') continue
+              const m = archiveFindSourceMatch(text, lines, pattern)
+              if (!m || m.waived) continue
+              context.report({
+                node,
+                loc: {
+                  start: { line: m.startLine, column: 0 },
+                  end:   { line: m.endLine,   column: (lines[m.endLine - 1] || '').length },
+                },
+                messageId: 'forbidden',
+                data: {
+                  kind: pattern.kind,
+                  desc: pattern.desc,
+                  tag: ARCHIVE_ALLOW_TAGS[pattern.kind],
+                },
+              })
+            }
+
+            // line-scope（R2 method 等）
             for (let i = 0; i < lines.length; i++) {
               const line = lines[i]
               if (archiveIsCommentLine(line)) continue
               for (const pattern of ARCHIVE_FORBIDDEN_PATTERNS) {
+                if (pattern.scope !== 'line') continue
                 if (archiveIsWaived(line, pattern)) continue
                 if (pattern.re.test(line)) {
                   context.report({
