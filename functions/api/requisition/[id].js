@@ -14,7 +14,7 @@ export async function onRequestGet({ request, env, params }) {
   if (error) return error
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'REQUISITION_NOT_FOUND' }, 404)
   const userId = Number(user.sub)
 
   const row = await env.chiyigo_db
@@ -26,7 +26,7 @@ export async function onRequestGet({ request, env, params }) {
     `)
     .bind(id, userId).first()
 
-  if (!row) return res({ error: 'not_found' }, 404)
+  if (!row) return res({ error: 'not_found', code: 'REQUISITION_NOT_FOUND' }, 404)
 
   // 串付款狀態：requisition_id FK（P0-3，2026-05-06）
   const payQuery = await env.chiyigo_db
@@ -47,14 +47,14 @@ export async function onRequestDelete({ request, env, params }) {
   if (error) return error
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'REQUISITION_NOT_FOUND' }, 404)
   const userId = Number(user.sub)
 
   const row = await env.chiyigo_db
     .prepare('SELECT id, status FROM requisition WHERE id = ? AND user_id = ? AND deleted_at IS NULL')
     .bind(id, userId).first()
 
-  if (!row) return res({ error: 'not_found' }, 404)
+  if (!row) return res({ error: 'not_found', code: 'REQUISITION_NOT_FOUND' }, 404)
   if (row.status !== 'revoked') {
     return res({ error: 'must_revoke_first', code: 'MUST_REVOKE_FIRST', status: row.status }, 403)
   }

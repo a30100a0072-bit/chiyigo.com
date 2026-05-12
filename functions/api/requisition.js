@@ -73,7 +73,7 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const err = validate(body)
   if (err) return res({ error: err }, 422)
@@ -109,7 +109,7 @@ export async function onRequestPost({ request, env }) {
 
   const dayLimit = userId !== null ? 10 : 5
   if (countRow && (countRow.cnt ?? 0) >= dayLimit)
-    return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們' }, 429)
+    return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們', code: 'REQUISITION_DAILY_LIMIT' }, 429)
 
   // ── 2b. 每 IP 限流：3 單/日（防單一機器人耗光訪客全域配額）──
   if (ip) {
@@ -120,7 +120,7 @@ export async function onRequestPost({ request, env }) {
         AND deleted_at IS NULL
     `).bind(ip).first()
     if ((ipRow?.cnt ?? 0) >= 3)
-      return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們' }, 429)
+      return res({ error: '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們', code: 'REQUISITION_DAILY_LIMIT' }, 429)
   }
 
   try {
@@ -172,6 +172,6 @@ export async function onRequestPost({ request, env }) {
 
     return res({ success: true, id: reqId }, 201)
   } catch {
-    return res({ error: 'Server error' }, 500)
+    return res({ error: 'Server error', code: 'INTERNAL_ERROR' }, 500)
   }
 }

@@ -46,10 +46,10 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { requisition_id, reason } = body ?? {}
-  if (!requisition_id) return res({ error: 'requisition_id is required' }, 400)
+  if (!requisition_id) return res({ error: 'requisition_id is required', code: 'REQUISITION_ID_REQUIRED' }, 400)
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
@@ -63,9 +63,9 @@ export async function onRequestPost({ request, env }) {
     .bind(Number(requisition_id), userId)
     .first()
 
-  if (!row) return res({ error: '找不到該需求單' }, 404)
+  if (!row) return res({ error: '找不到該需求單', code: 'REQUISITION_NOT_FOUND' }, 404)
   if (row.status !== 'pending')
-    return res({ error: '此單已在處理中，無法撤銷', status: row.status }, 403)
+    return res({ error: '此單已在處理中，無法撤銷', code: 'REQUISITION_IN_PROCESS', status: row.status }, 403)
 
   // 找這張單關聯的 succeeded payment_intent（最新一筆）
   // P0-3: 用 requisition_id FK（2026-05-06）

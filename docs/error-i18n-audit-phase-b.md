@@ -3,10 +3,10 @@
 > Phase A 已建 `public/js/api.js#API_ERROR_I18N` 前端字典。本 doc 列出 `functions/` 下所有 `res({ error: '...' })` 缺 `code:` 欄位的處，作為 Phase B 漸進補碼依據。**本 PR 只盤點，不改 code**。
 
 ## 摘要
-- 總計：**112 處**缺 `code`
-- 涉及檔案：**31 個**
-- 推薦新增 / 既有 i18n key：**58 個**（去重後）
-- 仍標 `NEEDS_REVIEW` 待人工命名：**2 處**（佔 3%）
+- 總計：**97 處**缺 `code`
+- 涉及檔案：**27 個**
+- 推薦新增 / 既有 i18n key：**51 個**（去重後）
+- 仍標 `NEEDS_REVIEW` 待人工命名：**2 處**（佔 4%）
 - 變數型 `error: <expr>` 警告：**7 處**（列在文末警告區）
 - 已有 code 但前端 dict 缺翻譯：**0 個 code**（列在「漏譯」區）
 
@@ -20,11 +20,11 @@
 
 | code | 出現處數 | 建議 zh-TW | 建議 en |
 |---|---:|---|---|
-| `REQUISITION_NOT_FOUND` | 8 | 找不到該需求單 | not_found |
-| `INVALID_JSON` | 7 | 請求格式錯誤 | Invalid JSON |
 | `INTENT_NOT_FOUND` | 6 | 找不到付款單 | not_found |
 | `CLIENT_NOT_FOUND` | 4 | 找不到應用程式 | Client not found |
+| `INVALID_JSON` | 4 | 請求格式錯誤 | Invalid JSON |
 | `REFUND_REQUEST_NOT_FOUND` | 4 | 找不到退款申請 | not_found |
+| `REQUISITION_NOT_FOUND` | 4 | 找不到該需求單 | not_found |
 | `FROM_DATE_INVALID` | 3 | 起始日期格式錯誤（需為 ISO 8601） | from must be ISO 8601 date/datetime |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:clients:write scope required |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:payments scope required |
@@ -43,11 +43,9 @@
 | `INTERNAL_ERROR` | 2 | 系統錯誤，請稍後再試 | chiyigo_db binding missing |
 | `INVALID_USER_ID` | 2 | 使用者 ID 格式錯誤 | Invalid user id |
 | `REFUND_NOT_IMPLEMENTED` | 2 | 此金流供應商尚未支援退款 | refund not implemented for vendor: ${intent.vendor} |
-| `REQUISITION_DAILY_LIMIT` | 2 | 今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們 | 今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們 |
 | `TRADE_NO_NOT_FOUND` | 2 | 找不到交易序號 | TradeNo not found; cannot call refund API |
 | `UNAUTHORIZED` | 2 | 未登入或登入已過期 | unauthorized |
 | `WEBHOOK_VALIDATION_FAILED` | 2 | Webhook 驗證失敗 | Webhook validation failed |
-| `AI_DAILY_LIMIT` | 1 | 今日 AI 助手呼叫次數已達上限 | 今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單 |
 | `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot revoke a user with equal or higher role |
 | `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot ban a user with equal or higher role |
 | `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot unban a user with equal or higher role |
@@ -58,7 +56,6 @@
 | `DEVICE_UUID_REQUIRED` | 1 | 請提供 device_uuid | device_uuid is required for mode=device |
 | `INTENT_ID_REQUIRED` | 1 | 請提供 intent_id | intent_id required |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | AUDIT_ARCHIVE_BUCKET binding missing |
-| `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | Server error |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | requireStepUp must check an elevated:* scope |
 | `INVALID_MODE` | 1 | mode 參數無效 | mode must be one of: ${[...VALID_MODES].join(', ')} |
 | `INVALID_SEVERITY` | 1 | severity 必須為 info / warn / critical | severity must be info \| warn \| critical |
@@ -68,10 +65,6 @@
 | `NEEDS_REVIEW` ⚠️ | 1 | （待補） | action must be one of ${[...VALID_ACTIONS].join(', ')} |
 | `NO_UPDATABLE_FIELDS` | 1 | 沒有可更新的欄位 | No updatable fields provided |
 | `PRE_AUTH_TOKEN_FORBIDDEN` | 1 | Token 權限不足，請先完成兩步驟驗證 | Forbidden: pre_auth token cannot access this resource |
-| `PROMPT_REQUIRED` | 1 | 請提供 prompt | prompt is required |
-| `REQUISITION_ID_REQUIRED` | 1 | 請提供 requisition_id | requisition_id is required |
-| `REQUISITION_IN_PROCESS` | 1 | 此單已在處理中，無法撤銷 | 此單已在處理中，無法撤銷 |
-| `REQUISITION_NOT_FOUND` | 1 | 找不到該需求單 | 找不到該需求單 |
 | `UNKNOWN_KYC_VENDOR` | 1 | 未知的 KYC 廠商 | Unknown KYC vendor: ${vendor} |
 | `UNKNOWN_PAYMENT_VENDOR` | 1 | 未知的金流廠商 | Unknown payment vendor: ${vendor} |
 | `USER_ALREADY_BANNED` | 1 | 使用者已被停用 | User is already banned |
@@ -85,9 +78,6 @@
 ### 命名衝突 / 故意合併（同 code 對應多字串）
 
 > 多數為**故意合併**（大小寫不同、措辭微異但語意一致），實作 PR 補 code 時挑一個對應的英文字串即可；真要拆碼會在這次 review 標註。
-- `REQUISITION_NOT_FOUND`：
-  - "not_found"
-  - "找不到該需求單"
 - `UNAUTHORIZED`：
   - "Unauthorized"
   - "unauthorized"
@@ -97,7 +87,6 @@
 - `INTERNAL_ERROR`：
   - "chiyigo_db binding missing"
   - "AUDIT_ARCHIVE_BUCKET binding missing"
-  - "Server error"
   - "requireStepUp must check an elevated:* scope"
 - `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`：
   - "Cannot revoke a user with equal or higher role"
@@ -239,33 +228,10 @@
 - L55 `'Cannot unban a user with equal or higher role'` → `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`
 - L57 `'User is not banned'` → `USER_NOT_BANNED`
 
-### functions/api/ai/assist.js（3 處）
-- L95 `'Invalid JSON'` → `INVALID_JSON`
-- L102 `'prompt is required'` → `PROMPT_REQUIRED`
-- L154 `'今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單'` → `AI_DAILY_LIMIT`
-
 ### functions/api/payments/intents/[id]/refund-request.js（3 處）
 - L25 `'not_found'` → `INTENT_NOT_FOUND`
 - L29 `'Invalid JSON'` → `INVALID_JSON`
 - L40 `'not_found'` → `INTENT_NOT_FOUND`
-
-### functions/api/requisition.js（4 處）
-- L76 `'Invalid JSON'` → `INVALID_JSON`
-- L112 `'今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們'` → `REQUISITION_DAILY_LIMIT`
-- L123 `'今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們'` → `REQUISITION_DAILY_LIMIT`
-- L175 `'Server error'` → `INTERNAL_ERROR`
-
-### functions/api/requisition/[id].js（4 處）
-- L17 `'not_found'` → `REQUISITION_NOT_FOUND`
-- L29 `'not_found'` → `REQUISITION_NOT_FOUND`
-- L50 `'not_found'` → `REQUISITION_NOT_FOUND`
-- L57 `'not_found'` → `REQUISITION_NOT_FOUND`
-
-### functions/api/requisition/revoke.js（4 處）
-- L49 `'Invalid JSON'` → `INVALID_JSON`
-- L52 `'requisition_id is required'` → `REQUISITION_ID_REQUIRED`
-- L66 `'找不到該需求單'` → `REQUISITION_NOT_FOUND`
-- L68 `'此單已在處理中，無法撤銷'` → `REQUISITION_IN_PROCESS`
 
 ### functions/api/webhooks/kyc/[vendor].js（2 處）
 - L28 `'Unknown KYC vendor: ${vendor}'` → `UNKNOWN_KYC_VENDOR`
@@ -299,13 +265,6 @@
 > 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
 
 ## 後續 PR 切分建議
-
-### PR B-3 (公開頁 / Requisition / AI)
-- 檔案：4 個，處數：**15**
-  - functions/api/ai/assist.js
-  - functions/api/requisition.js
-  - functions/api/requisition/[id].js
-  - functions/api/requisition/revoke.js
 
 ### PR B-4 (Admin 後台)
 - 檔案：22 個，處數：**83**

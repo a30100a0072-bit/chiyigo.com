@@ -92,14 +92,14 @@ export async function onRequestPost({ request, env }) {
   // ── 2. 解析 body ────────────────────────────────────────────
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const prompt          = String(body?.prompt ?? '').trim()
   const fingerprint     = body?.fingerprint ? String(body.fingerprint).slice(0, 64) : null
   const sessionId       = body?.session_id  ? String(body.session_id).slice(0, 64)  : null
   const turnstileToken  = body?.turnstile_token
 
-  if (!prompt) return res({ error: 'prompt is required' }, 422)
+  if (!prompt) return res({ error: 'prompt is required', code: 'PROMPT_REQUIRED' }, 422)
 
   // ── 3. 長度檢查 ────────────────────────────────────────────
   if (prompt.length > MAX_PROMPT_LEN) {
@@ -151,7 +151,7 @@ export async function onRequestPost({ request, env }) {
     if ((row?.cnt ?? 0) >= c.limit) {
       await logAudit(db, { userId, ip, fingerprint, sessionId, prompt,
         status: 'rate_limited', blockReason: c.code, durationMs: Date.now() - startedAt })
-      return res({ error: '今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單', code: c.code }, 429)
+      return res({ error: '今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單', code: 'AI_DAILY_LIMIT', limit_type: c.code }, 429)
     }
   }
 

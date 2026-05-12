@@ -336,6 +336,13 @@
       INVALID_DEVICE_UUID:       '裝置識別碼格式錯誤',
       DEVICE_NOT_FOUND:          '找不到此裝置',
       INTENT_NOT_FOUND:          '找不到付款單',
+      // ── B-1f：Requisition / AI ─
+      PROMPT_REQUIRED:           '請輸入問題內容',
+      AI_DAILY_LIMIT:            '今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單',
+      REQUISITION_DAILY_LIMIT:   '今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們',
+      REQUISITION_NOT_FOUND:     '找不到該需求單',
+      REQUISITION_ID_REQUIRED:   '請提供需求單編號',
+      REQUISITION_IN_PROCESS:    '此單已在處理中，無法撤銷',
     },
     en: {
       INVALID_OTP:               'Invalid code, please try again',
@@ -483,6 +490,13 @@
       INVALID_DEVICE_UUID:       'Invalid device identifier format',
       DEVICE_NOT_FOUND:          'Device not found',
       INTENT_NOT_FOUND:          'Payment intent not found',
+      // ── B-1f：Requisition / AI ─
+      PROMPT_REQUIRED:           'Please enter your question',
+      AI_DAILY_LIMIT:            'AI assistant daily limit reached. Please try later or fill out the form directly.',
+      REQUISITION_DAILY_LIMIT:   'Daily requisition submission limit reached. For urgent matters, please call or contact us via LINE.',
+      REQUISITION_NOT_FOUND:     'Requisition not found',
+      REQUISITION_ID_REQUIRED:   'requisition_id is required',
+      REQUISITION_IN_PROCESS:    'This requisition is already in process and cannot be revoked',
     },
     ja: {
       INVALID_OTP:               '認証コードが正しくありません',
@@ -630,6 +644,13 @@
       INVALID_DEVICE_UUID:       'デバイス識別子の形式が正しくありません',
       DEVICE_NOT_FOUND:          'デバイスが見つかりません',
       INTENT_NOT_FOUND:          '決済情報が見つかりません',
+      // ── B-1f：Requisition / AI ─
+      PROMPT_REQUIRED:           'ご質問内容を入力してください',
+      AI_DAILY_LIMIT:            '本日の AI アシスタント利用上限に達しました。後ほどお試しいただくか、フォームから直接お問い合わせください',
+      REQUISITION_DAILY_LIMIT:   '本日のお問い合わせ送信上限に達しました。お急ぎの場合はお電話または LINE でご連絡ください',
+      REQUISITION_NOT_FOUND:     'お問い合わせが見つかりません',
+      REQUISITION_ID_REQUIRED:   'requisition_id を指定してください',
+      REQUISITION_IN_PROCESS:    'このお問い合わせは処理中のため取り消せません',
     },
     ko: {
       INVALID_OTP:               '인증 코드가 올바르지 않습니다',
@@ -777,6 +798,13 @@
       INVALID_DEVICE_UUID:       '장치 식별자 형식이 올바르지 않습니다',
       DEVICE_NOT_FOUND:          '장치를 찾을 수 없습니다',
       INTENT_NOT_FOUND:          '결제 정보를 찾을 수 없습니다',
+      // ── B-1f：Requisition / AI ─
+      PROMPT_REQUIRED:           '질문 내용을 입력해주세요',
+      AI_DAILY_LIMIT:            '오늘 AI 어시스턴트 호출 한도에 도달했습니다. 나중에 다시 시도하거나 양식을 직접 작성해주세요',
+      REQUISITION_DAILY_LIMIT:   '오늘 문의 제출 한도에 도달했습니다. 긴급한 경우 전화 또는 LINE 으로 연락해주세요',
+      REQUISITION_NOT_FOUND:     '요청을 찾을 수 없습니다',
+      REQUISITION_ID_REQUIRED:   'requisition_id가 필요합니다',
+      REQUISITION_IN_PROCESS:    '이 요청은 처리 중이므로 취소할 수 없습니다',
     },
   }
 
