@@ -40,7 +40,7 @@ export async function onRequestGet({ request, env }) {
     .first()
 
   if (!userRow)
-    return res({ error: 'User not found' }, 404)
+    return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404)
 
   // DB 層即時封禁檢查（覆蓋 JWT 簽發時的 status 快照）
   if (userRow.status === 'banned')

@@ -62,22 +62,22 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { scope, for_action, otp_code, backup_code, aud } = body ?? {}
 
   // ── 1. 參數驗證 ──────────────────────────────────────────────
   if (!scope || !KNOWN_ELEVATED_SCOPES.has(scope))
-    return res({ error: `scope must be one of: ${[...KNOWN_ELEVATED_SCOPES].join(', ')}` }, 400)
+    return res({ error: `scope must be one of: ${[...KNOWN_ELEVATED_SCOPES].join(', ')}`, code: 'INVALID_SCOPE' }, 400)
 
   if (!otp_code && !backup_code)
-    return res({ error: 'otp_code or backup_code is required' }, 400)
+    return res({ error: 'otp_code or backup_code is required', code: 'OTP_OR_BACKUP_CODE_REQUIRED' }, 400)
 
   if (for_action !== undefined && (typeof for_action !== 'string' || !for_action))
-    return res({ error: 'for_action must be a non-empty string when provided' }, 400)
+    return res({ error: 'for_action must be a non-empty string when provided', code: 'INVALID_FOR_ACTION' }, 400)
 
   const userId = Number(user.sub)
-  if (!Number.isFinite(userId)) return res({ error: 'Invalid token subject' }, 401)
+  if (!Number.isFinite(userId)) return res({ error: 'Invalid token subject', code: 'INVALID_TOKEN_SUBJECT' }, 401)
 
   const db = env.chiyigo_db
   const ip = request.headers.get('CF-Connecting-IP') ?? null
@@ -102,7 +102,7 @@ export async function onRequestPost({ request, env }) {
     `)
     .bind(userId).first()
 
-  if (!record) return res({ error: 'User not found' }, 404)
+  if (!record) return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404)
   if (record.status === 'banned') return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
 
   if (!record.totp_enabled) {
@@ -118,7 +118,7 @@ export async function onRequestPost({ request, env }) {
   if (otp_code) {
     const r = await verifyTotpReplaySafe(env, { userId, secret: record.totp_secret, code: otp_code })
     if (r.ok) amr = ['pwd', 'totp']
-    else if (r.reason === 'bad_format') return res({ error: 'otp_code must be 6 digits' }, 400)
+    else if (r.reason === 'bad_format') return res({ error: 'otp_code must be 6 digits', code: 'OTP_CODE_INVALID_FORMAT' }, 400)
     // r.reason === 'replay' → 統一走下面 amr 判失敗，audit 帶 reason_code 區分
   } else if (backup_code) {
     const normalized = String(backup_code).replace(/[-\s]/g, '').toLowerCase()
@@ -148,7 +148,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'auth.step_up.fail', severity: 'warn', user_id: userId, request,
       data: { reason_code: otp_code ? 'bad_totp' : 'bad_backup_code', scope },
     })
-    return res({ error: 'Invalid OTP or backup code' }, 401)
+    return res({ error: 'Invalid OTP or backup code', code: 'INVALID_OTP_OR_BACKUP_CODE' }, 401)
   }
 
   await clearRateLimit(db, { kind: 'step_up', userId })

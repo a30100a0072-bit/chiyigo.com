@@ -21,11 +21,11 @@ export async function onRequestGet({ request }) {
 export async function onRequestPost({ request, env }) {
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const token = body?.token ?? ''
   if (!token || typeof token !== 'string')
-    return res({ error: 'Token is required' }, 400)
+    return res({ error: 'Token is required', code: 'TOKEN_REQUIRED' }, 400)
 
   const db        = env.chiyigo_db
   const tokenHash = await hashToken(token)
@@ -44,7 +44,7 @@ export async function onRequestPost({ request, env }) {
     .bind(tokenHash)
     .first()
 
-  if (!row) return res({ error: 'Token is invalid or has expired' }, 400)
+  if (!row) return res({ error: 'Token is invalid or has expired', code: 'TOKEN_INVALID_OR_EXPIRED' }, 400)
 
   await db
     .prepare('UPDATE users SET email_verified = 1 WHERE id = ?')

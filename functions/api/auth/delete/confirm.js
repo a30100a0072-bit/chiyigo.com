@@ -10,10 +10,10 @@ export async function onRequestPost({ request, env }) {
   // ── 1. 解析 Body ─────────────────────────────────────────────
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { token } = body ?? {}
-  if (!token) return res({ error: 'token is required' }, 400)
+  if (!token) return res({ error: 'token is required', code: 'TOKEN_REQUIRED' }, 400)
 
   const db        = env.chiyigo_db
   const tokenHash = await hashToken(token)
@@ -30,7 +30,7 @@ export async function onRequestPost({ request, env }) {
     .bind(tokenHash)
     .first()
 
-  if (!record) return res({ error: 'Invalid or expired deletion token' }, 400)
+  if (!record) return res({ error: 'Invalid or expired deletion token', code: 'INVALID_DELETION_TOKEN' }, 400)
 
   const userId = record.user_id
 
@@ -41,7 +41,7 @@ export async function onRequestPost({ request, env }) {
     .first()
 
   if (!userRow || userRow.deleted_at)
-    return res({ error: 'Account not found or already deleted' }, 404)
+    return res({ error: 'Account not found or already deleted', code: 'ACCOUNT_NOT_FOUND' }, 404)
 
   // ── 4. 先消耗 Token（防重放攻擊）────────────────────────────
   await db.prepare('DELETE FROM email_verifications WHERE token_hash = ?').bind(tokenHash).run()

@@ -27,7 +27,7 @@ export async function onRequestPost(ctx) {
     return await handle(ctx)
   } catch (err) {
     console.error('[send-verification] unhandled', err)
-    return res({ error: 'Internal error' }, 500)
+    return res({ error: 'Internal error', code: 'INTERNAL_ERROR' }, 500)
   }
 }
 
@@ -57,7 +57,7 @@ async function handle({ request, env }) {
       .bind(ip)
       .first()
     if ((ipCount?.cnt ?? 0) >= IP_HOURLY_LIMIT)
-      return res({ error: 'Too many requests. Please try again later.' }, 429)
+      return res({ error: 'Too many requests. Please try again later.', code: 'RATE_LIMITED' }, 429)
 
     // 通過 → 寫入短視窗計數（成功 / 失敗都算一次嘗試）
     await recordRateLimit(db, { kind: 'email_send', ip, userId: Number(user.sub) })
@@ -68,9 +68,9 @@ async function handle({ request, env }) {
     .bind(user.sub)
     .first()
 
-  if (!userRow) return res({ error: 'User not found' }, 404)
+  if (!userRow) return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404)
   if (userRow.email_verified === 1)
-    return res({ error: 'Email already verified' }, 400)
+    return res({ error: 'Email already verified', code: 'EMAIL_ALREADY_VERIFIED' }, 400)
 
   const recent = await db
     .prepare(`
@@ -112,7 +112,7 @@ async function handle({ request, env }) {
       .prepare('DELETE FROM email_verifications WHERE token_hash = ?')
       .bind(tokenHash)
       .run()
-    return res({ error: 'Failed to send email, please try again later' }, 502)
+    return res({ error: 'Failed to send email, please try again later', code: 'EMAIL_SEND_FAILED' }, 502)
   }
 
   return res({ message: 'Verification email sent' })

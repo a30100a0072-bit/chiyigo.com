@@ -3,10 +3,10 @@
 > Phase A 已建 `public/js/api.js#API_ERROR_I18N` 前端字典。本 doc 列出 `functions/` 下所有 `res({ error: '...' })` 缺 `code:` 欄位的處，作為 Phase B 漸進補碼依據。**本 PR 只盤點，不改 code**。
 
 ## 摘要
-- 總計：**169 處**缺 `code`
-- 涉及檔案：**45 個**
-- 推薦新增 / 既有 i18n key：**93 個**（去重後）
-- 仍標 `NEEDS_REVIEW` 待人工命名：**2 處**（佔 2%）
+- 總計：**123 處**缺 `code`
+- 涉及檔案：**34 個**
+- 推薦新增 / 既有 i18n key：**62 個**（去重後）
+- 仍標 `NEEDS_REVIEW` 待人工命名：**2 處**（佔 3%）
 - 變數型 `error: <expr>` 警告：**7 處**（列在文末警告區）
 - 已有 code 但前端 dict 缺翻譯：**0 個 code**（列在「漏譯」區）
 
@@ -20,12 +20,12 @@
 
 | code | 出現處數 | 建議 zh-TW | 建議 en |
 |---|---:|---|---|
-| `INVALID_JSON` | 14 | 請求格式錯誤 | Invalid JSON |
 | `INTENT_NOT_FOUND` | 10 | 找不到付款單 | not_found |
-| `USER_NOT_FOUND` | 10 | 找不到使用者 | User not found |
+| `INVALID_JSON` | 9 | 請求格式錯誤 | Invalid JSON |
 | `REQUISITION_NOT_FOUND` | 8 | 找不到該需求單 | not_found |
 | `CLIENT_NOT_FOUND` | 4 | 找不到應用程式 | Client not found |
 | `REFUND_REQUEST_NOT_FOUND` | 4 | 找不到退款申請 | not_found |
+| `USER_NOT_FOUND` | 4 | 找不到使用者 | User not found |
 | `FROM_DATE_INVALID` | 3 | 起始日期格式錯誤（需為 ISO 8601） | from must be ISO 8601 date/datetime |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:clients:write scope required |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:payments scope required |
@@ -41,19 +41,12 @@
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:* scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:users:write scope required |
 | `INTERNAL_ERROR` | 2 | 系統錯誤，請稍後再試 | chiyigo_db binding missing |
-| `INTERNAL_ERROR` | 2 | 系統錯誤，請稍後再試 | Internal error |
-| `INVALID_TOKEN_SUBJECT` | 2 | Token subject 無效 | Invalid token subject |
 | `INVALID_USER_ID` | 2 | 使用者 ID 格式錯誤 | Invalid user id |
-| `RATE_LIMITED` | 2 | 請求過於頻繁，請稍後再試 | Too many requests. Please try again later. |
-| `REFRESH_TOKEN_REVOKED` | 2 | 登入憑證已失效，請重新登入 | Refresh token has been revoked |
 | `REFUND_NOT_IMPLEMENTED` | 2 | 此金流供應商尚未支援退款 | refund not implemented for vendor: ${intent.vendor} |
 | `REQUISITION_DAILY_LIMIT` | 2 | 今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們 | 今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們 |
 | `TRADE_NO_NOT_FOUND` | 2 | 找不到交易序號 | TradeNo not found; cannot call refund API |
 | `UNAUTHORIZED` | 2 | 未登入或登入已過期 | unauthorized |
 | `WEBHOOK_VALIDATION_FAILED` | 2 | Webhook 驗證失敗 | Webhook validation failed |
-| `ACCOUNT_BANNED` | 1 | 帳號已被停用 | Account is banned |
-| `ACCOUNT_NOT_FOUND` | 1 | 找不到帳號 | Account not found or already deleted |
-| `ACCOUNT_NOT_FOUND` | 1 | 找不到帳號 | Account not found |
 | `AI_DAILY_LIMIT` | 1 | 今日 AI 助手呼叫次數已達上限 | 今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單 |
 | `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot revoke a user with equal or higher role |
 | `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot ban a user with equal or higher role |
@@ -62,53 +55,29 @@
 | `CANNOT_TARGET_SELF` | 1 | 無法對自己執行此操作 | Cannot ban yourself |
 | `CAPTCHA_FAILED` | 1 | 人機驗證失敗 | captcha_failed |
 | `CLIENT_ALREADY_DISABLED` | 1 | 應用程式已被停用 | Client already disabled |
-| `CREDENTIAL_NOT_FOUND` | 1 | 找不到憑證 | Credential not found |
-| `DEVICE_MISMATCH` | 1 | 裝置不符 | Device mismatch |
 | `DEVICE_NOT_FOUND` | 1 | 找不到裝置 | Device not found |
 | `DEVICE_UUID_REQUIRED` | 1 | 請提供 device_uuid | device_uuid is required for mode=device |
-| `EMAIL_ALREADY_VERIFIED` | 1 | Email 已驗證 | Email already verified |
-| `EMAIL_SEND_FAILED` | 1 | 寄送 Email 失敗，請稍後再試 | Failed to send confirmation email, please try again later |
-| `EMAIL_SEND_FAILED` | 1 | 寄送 Email 失敗，請稍後再試 | Failed to send email, please try again later |
-| `INCORRECT_PASSWORD` | 1 | 密碼錯誤 | Incorrect password |
 | `INTENT_ID_REQUIRED` | 1 | 請提供 intent_id | intent_id required |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | AUDIT_ARCHIVE_BUCKET binding missing |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | Server error |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | requireStepUp must check an elevated:* scope |
-| `INVALID_DELETION_TOKEN` | 1 | 刪除帳號 Token 無效或已過期 | Invalid or expired deletion token |
 | `INVALID_DEVICE_UUID` | 1 | device_uuid 格式錯誤 | device_uuid must be string or null |
-| `INVALID_FOR_ACTION` | 1 | for_action 格式錯誤 | for_action must be a non-empty string when provided |
 | `INVALID_MODE` | 1 | mode 參數無效 | mode must be one of: ${[...VALID_MODES].join(', ')} |
-| `INVALID_OTP_OR_BACKUP_CODE` | 1 | 驗證碼或備援碼錯誤 | Invalid OTP or backup code |
-| `INVALID_PLATFORM` | 1 | platform 必須為 web、pc 或 mobile | Invalid platform. Must be web, pc, or mobile. |
-| `INVALID_REFRESH_TOKEN` | 1 | Refresh Token 無效或已過期 | Invalid or expired refresh token |
-| `INVALID_SCOPE` | 1 | scope 參數無效 | scope must be one of: ${[...KNOWN_ELEVATED_SCOPES].join(', ')} |
 | `INVALID_SEVERITY` | 1 | severity 必須為 info / warn / critical | severity must be info \| warn \| critical |
+| `INVALID_TOKEN_SUBJECT` | 1 | Token subject 無效 | Invalid token subject |
 | `JTI_REQUIRED` | 1 | 請提供 jti | jti is required for mode=jti |
-| `LAST_AUTH_METHOD` | 1 | 無法移除最後一個登入方式 | Cannot remove the last authentication method. |
 | `LINKED_INTENT_NOT_FOUND` | 1 | 找不到關聯的付款單 | linked intent not found |
 | `NEEDS_REVIEW` ⚠️ | 1 | （待補） | invalid JSON body |
 | `NEEDS_REVIEW` ⚠️ | 1 | （待補） | action must be one of ${[...VALID_ACTIONS].join(', ')} |
 | `NEW_PASSWORD_REQUIRED` | 1 | 請提供新密碼 | new_password is required |
 | `NO_UPDATABLE_FIELDS` | 1 | 沒有可更新的欄位 | No updatable fields provided |
-| `OTP_CODE_INVALID_FORMAT` | 1 | 驗證碼需為 6 位數字 | otp_code must be 6 digits |
-| `OTP_OR_BACKUP_CODE_REQUIRED` | 1 | 請輸入驗證碼或備援碼 | otp_code or backup_code is required |
-| `PASSWORD_REQUIRED` | 1 | 請提供密碼 | password is required |
-| `PC_PORT_REQUIRED` | 1 | 桌面登入需提供有效 port | platform=pc requires a valid port parameter (4-5 digits) |
 | `PRE_AUTH_TOKEN_FORBIDDEN` | 1 | Token 權限不足，請先完成兩步驟驗證 | Forbidden: pre_auth token cannot access this resource |
 | `PROMPT_REQUIRED` | 1 | 請提供 prompt | prompt is required |
-| `PROVIDER_NOT_BOUND` | 1 | 尚未綁定此登入方式 | No binding found for provider: ${provider} |
-| `PROVIDER_REQUIRED` | 1 | 請選擇登入方式 | provider is required |
-| `REFRESH_TOKEN_REQUIRED` | 1 | 請提供 refresh_token | refresh_token is required |
 | `REQUISITION_ID_REQUIRED` | 1 | 請提供 requisition_id | requisition_id is required |
 | `REQUISITION_IN_PROCESS` | 1 | 此單已在處理中，無法撤銷 | 此單已在處理中，無法撤銷 |
 | `REQUISITION_NOT_FOUND` | 1 | 找不到該需求單 | 找不到該需求單 |
-| `TOKEN_INVALID_OR_EXPIRED` | 1 | 連結無效或已過期 | Token is invalid or has expired |
-| `TOKEN_REQUIRED` | 1 | 請提供 Token | token is required |
-| `TOKEN_REQUIRED` | 1 | 請提供 Token | Token is required |
 | `UNKNOWN_KYC_VENDOR` | 1 | 未知的 KYC 廠商 | Unknown KYC vendor: ${vendor} |
 | `UNKNOWN_PAYMENT_VENDOR` | 1 | 未知的金流廠商 | Unknown payment vendor: ${vendor} |
-| `UNSUPPORTED_PROVIDER` | 1 | 不支援的登入方式 | Unsupported provider: ${provider}. Supported: ${SUPPORTED_PROVIDERS.join(', ')} |
-| `UNSUPPORTED_PROVIDER` | 1 | 不支援的登入方式 | Unsupported provider: ${provider} |
 | `USER_ALREADY_BANNED` | 1 | 使用者已被停用 | User is already banned |
 | `USER_ID_INVALID` | 1 | user_id 需為數字 | user_id must be a positive integer |
 | `USER_NOT_BANNED` | 1 | 使用者並未被停用 | User is not banned |
@@ -131,13 +100,9 @@
   - "user_id must be a positive integer"
 - `INTERNAL_ERROR`：
   - "chiyigo_db binding missing"
-  - "Internal error"
   - "AUDIT_ARCHIVE_BUCKET binding missing"
   - "Server error"
   - "requireStepUp must check an elevated:* scope"
-- `ACCOUNT_NOT_FOUND`：
-  - "Account not found or already deleted"
-  - "Account not found"
 - `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`：
   - "Cannot revoke a user with equal or higher role"
   - "Cannot ban a user with equal or higher role"
@@ -145,18 +110,9 @@
 - `CANNOT_TARGET_SELF`：
   - "Cannot revoke your own tokens via admin API"
   - "Cannot ban yourself"
-- `EMAIL_SEND_FAILED`：
-  - "Failed to send confirmation email, please try again later"
-  - "Failed to send email, please try again later"
 - `NEEDS_REVIEW`：
   - "invalid JSON body"
   - "action must be one of ${[...VALID_ACTIONS].join(', ')}"
-- `TOKEN_REQUIRED`：
-  - "token is required"
-  - "Token is required"
-- `UNSUPPORTED_PROVIDER`：
-  - "Unsupported provider: ${provider}. Supported: ${SUPPORTED_PROVIDERS.join(', ')}"
-  - "Unsupported provider: ${provider}"
 
 ## 逐檔清單
 
@@ -298,84 +254,16 @@
 - L59 `'Invalid token subject'` → `INVALID_TOKEN_SUBJECT`
 - L67 `'User not found'` → `USER_NOT_FOUND`
 
-### functions/api/auth/delete.js（7 處）
-- L26 `'Internal error'` → `INTERNAL_ERROR`
-- L39 `'Invalid JSON'` → `INVALID_JSON`
-- L42 `'password is required'` → `PASSWORD_REQUIRED`
-- L58 `'Too many requests. Please try again later.'` → `RATE_LIMITED`
-- L72 `'Account not found'` → `ACCOUNT_NOT_FOUND`
-- L75 `'Incorrect password'` → `INCORRECT_PASSWORD`
-- L114 `'Failed to send confirmation email, please try again later'` → `EMAIL_SEND_FAILED`
-
-### functions/api/auth/delete/confirm.js（4 處）
-- L13 `'Invalid JSON'` → `INVALID_JSON`
-- L16 `'token is required'` → `TOKEN_REQUIRED`
-- L33 `'Invalid or expired deletion token'` → `INVALID_DELETION_TOKEN`
-- L44 `'Account not found or already deleted'` → `ACCOUNT_NOT_FOUND`
-
 ### functions/api/auth/devices/logout.js（3 處）
 - L41 `'Invalid JSON'` → `INVALID_JSON`
 - L45 `'device_uuid must be string or null'` → `INVALID_DEVICE_UUID`
 - L60 `'Device not found'` → `DEVICE_NOT_FOUND`
-
-### functions/api/auth/email/send-verification.js（5 處）
-- L30 `'Internal error'` → `INTERNAL_ERROR`
-- L60 `'Too many requests. Please try again later.'` → `RATE_LIMITED`
-- L71 `'User not found'` → `USER_NOT_FOUND`
-- L73 `'Email already verified'` → `EMAIL_ALREADY_VERIFIED`
-- L115 `'Failed to send email, please try again later'` → `EMAIL_SEND_FAILED`
-
-### functions/api/auth/email/verify.js（3 處）
-- L24 `'Invalid JSON'` → `INVALID_JSON`
-- L28 `'Token is required'` → `TOKEN_REQUIRED`
-- L47 `'Token is invalid or has expired'` → `TOKEN_INVALID_OR_EXPIRED`
-
-### functions/api/auth/game/login.js（3 處）
-- L44 `'Invalid platform. Must be web, pc, or mobile.'` → `INVALID_PLATFORM`
-- L47 `'Unsupported provider: ${provider}. Supported: ${SUPPORTED_PROVIDERS.join(', ')}'` → `UNSUPPORTED_PROVIDER`
-- L52 `'platform=pc requires a valid port parameter (4-5 digits)'` → `PC_PORT_REQUIRED`
-
-### functions/api/auth/identity/unbind.js（7 處）
-- L24 `'Invalid JSON'` → `INVALID_JSON`
-- L29 `'provider is required'` → `PROVIDER_REQUIRED`
-- L32 `'Unsupported provider: ${provider}'` → `UNSUPPORTED_PROVIDER`
-- L43 `'User not found'` → `USER_NOT_FOUND`
-- L44 `'Account is banned'` → `ACCOUNT_BANNED`
-- L56 `'Cannot remove the last authentication method.'` → `LAST_AUTH_METHOD`
-- L65 `'No binding found for provider: ${provider}'` → `PROVIDER_NOT_BOUND`
-
-### functions/api/auth/me.js（1 處）
-- L43 `'User not found'` → `USER_NOT_FOUND`
 
 ### functions/api/auth/payments/intents/[id].js（4 處）
 - L34 `'not_found'` → `INTENT_NOT_FOUND`
 - L38 `'not_found'` → `INTENT_NOT_FOUND`
 - L49 `'not_found'` → `INTENT_NOT_FOUND`
 - L53 `'not_found'` → `INTENT_NOT_FOUND`
-
-### functions/api/auth/refresh.js（6 處）
-- L63 `'refresh_token is required'` → `REFRESH_TOKEN_REQUIRED`
-- L80 `'Invalid or expired refresh token'` → `INVALID_REFRESH_TOKEN`
-- L86 `'Refresh token has been revoked'` → `REFRESH_TOKEN_REVOKED`
-- L127 `'Device mismatch'` → `DEVICE_MISMATCH`
-- L141 `'User not found'` → `USER_NOT_FOUND`
-- L169 `'Refresh token has been revoked'` → `REFRESH_TOKEN_REVOKED`
-
-### functions/api/auth/step-up.js（8 處）
-- L65 `'Invalid JSON'` → `INVALID_JSON`
-- L71 `'scope must be one of: ${[...KNOWN_ELEVATED_SCOPES].join(', ')}'` → `INVALID_SCOPE`
-- L74 `'otp_code or backup_code is required'` → `OTP_OR_BACKUP_CODE_REQUIRED`
-- L77 `'for_action must be a non-empty string when provided'` → `INVALID_FOR_ACTION`
-- L80 `'Invalid token subject'` → `INVALID_TOKEN_SUBJECT`
-- L105 `'User not found'` → `USER_NOT_FOUND`
-- L121 `'otp_code must be 6 digits'` → `OTP_CODE_INVALID_FORMAT`
-- L151 `'Invalid OTP or backup code'` → `INVALID_OTP_OR_BACKUP_CODE`
-
-### functions/api/auth/userinfo.js（1 處）
-- L48 `'User not found'` → `USER_NOT_FOUND`
-
-### functions/api/auth/webauthn/credentials/[id].js（1 處）
-- L90 `'Credential not found'` → `CREDENTIAL_NOT_FOUND`
 
 ### functions/api/payments/intents/[id]/refund-request.js（3 處）
 - L25 `'not_found'` → `INTENT_NOT_FOUND`
@@ -432,23 +320,6 @@
 > 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
 
 ## 後續 PR 切分建議
-
-### PR B-1c (OAuth / WebAuthn / Wallet)
-- 檔案：1 個，處數：**1**
-  - functions/api/auth/webauthn/credentials/[id].js
-
-### PR B-1d (Auth 其他)
-- 檔案：10 個，處數：**45**
-  - functions/api/auth/delete.js
-  - functions/api/auth/delete/confirm.js
-  - functions/api/auth/email/send-verification.js
-  - functions/api/auth/email/verify.js
-  - functions/api/auth/game/login.js
-  - functions/api/auth/identity/unbind.js
-  - functions/api/auth/me.js
-  - functions/api/auth/refresh.js
-  - functions/api/auth/step-up.js
-  - functions/api/auth/userinfo.js
 
 ### PR B-2 (會員 Dashboard)
 - 檔案：3 個，處數：**11**

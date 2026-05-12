@@ -45,7 +45,7 @@ export async function onRequestGet({ request, env }) {
     .first()
 
   if (!userRow)
-    return res({ error: 'User not found' }, 404)
+    return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404)
 
   if (userRow.status === 'banned')
     return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)

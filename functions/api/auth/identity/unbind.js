@@ -21,15 +21,15 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { provider } = body ?? {}
 
   if (!provider)
-    return res({ error: 'provider is required' }, 400)
+    return res({ error: 'provider is required', code: 'PROVIDER_REQUIRED' }, 400)
 
   if (!ALLOWED_PROVIDERS.has(provider))
-    return res({ error: `Unsupported provider: ${provider}` }, 400)
+    return res({ error: `Unsupported provider: ${provider}`, code: 'UNSUPPORTED_PROVIDER' }, 400)
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
@@ -40,8 +40,8 @@ export async function onRequestPost({ request, env }) {
     .bind(userId)
     .first()
 
-  if (!userRow)                    return res({ error: 'User not found' }, 404)
-  if (userRow.status === 'banned') return res({ error: 'Account is banned' }, 403)
+  if (!userRow)                    return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404)
+  if (userRow.status === 'banned') return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
 
   // 防自殺：計算剩餘登入方式
   const [localRow, identityRow] = await Promise.all([
@@ -53,7 +53,7 @@ export async function onRequestPost({ request, env }) {
   const identityCount = identityRow?.cnt ?? 0
 
   if (localCount + identityCount <= 1)
-    return res({ error: 'Cannot remove the last authentication method.' }, 400)
+    return res({ error: 'Cannot remove the last authentication method.', code: 'LAST_AUTH_METHOD' }, 400)
 
   // 確認該 provider 確實已綁定此帳號
   const bound = await db
@@ -62,7 +62,7 @@ export async function onRequestPost({ request, env }) {
     .first()
 
   if (!bound)
-    return res({ error: `No binding found for provider: ${provider}` }, 404)
+    return res({ error: `No binding found for provider: ${provider}`, code: 'PROVIDER_NOT_BOUND' }, 404)
 
   // 執行解綁
   await db

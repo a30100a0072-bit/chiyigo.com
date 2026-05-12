@@ -60,7 +60,7 @@ export async function onRequestPost({ request, env }) {
   const requestedAud    = rawAudProvided ? resolveAud(aud) : null
 
   if (!refresh_token || typeof refresh_token !== 'string')
-    return res({ error: 'refresh_token is required' }, 400, cors)
+    return res({ error: 'refresh_token is required', code: 'REFRESH_TOKEN_REQUIRED' }, 400, cors)
 
   const db = env.chiyigo_db
 
@@ -77,13 +77,13 @@ export async function onRequestPost({ request, env }) {
 
   if (!tokenRow) {
     await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', request, data: { reason_code: 'invalid_or_expired' } })
-    return res({ error: 'Invalid or expired refresh token' }, 401, cors)
+    return res({ error: 'Invalid or expired refresh token', code: 'INVALID_REFRESH_TOKEN' }, 401, cors)
   }
 
   if (tokenRow.revoked_at) {
     // 已撤銷 token 重放 = 高度可疑（refresh rotation 設計下偷 token 必中此分支）
     await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'reuse_detected' } })
-    return res({ error: 'Refresh token has been revoked' }, 401, cors)
+    return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
   }
 
   // ── 1.5 Rate limit（Phase E3）─ 30/user/min；spec 寫 per-token，per-user 涵蓋更廣（持多 token 不能繞）
@@ -124,7 +124,7 @@ export async function onRequestPost({ request, env }) {
           claimed_device: (device_uuid ?? '').slice(0, 8),
         },
       })
-      return res({ error: 'Device mismatch' }, 401, cors)
+      return res({ error: 'Device mismatch', code: 'DEVICE_MISMATCH' }, 401, cors)
     }
   }
 
@@ -138,7 +138,7 @@ export async function onRequestPost({ request, env }) {
     .bind(tokenRow.user_id)
     .first()
 
-  if (!user) return res({ error: 'User not found' }, 401, cors)
+  if (!user) return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 401, cors)
   if (user.status === 'banned') return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403, cors)
 
   // ── 4. Refresh Token Rotation（原子輪換）─────────────────────
@@ -166,7 +166,7 @@ export async function onRequestPost({ request, env }) {
       user_id: tokenRow.user_id, request,
       data: { reason_code: 'reuse_race_lost' },
     })
-    return res({ error: 'Refresh token has been revoked' }, 401, cors)
+    return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
   }
   // Codex r9-5：簽 audience 改用 tokenRow.issued_aud（綁定發行時 aud）。
   // 舊 row 沒 issued_aud（NULL）→ 退回 requestedAud 保 backward compat。F-1 已批次 revoke

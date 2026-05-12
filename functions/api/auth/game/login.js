@@ -41,15 +41,16 @@ export async function onRequestGet({ request, env }) {
 
   // ── 參數驗證 ─────────────────────────────────────────────────
   if (!['web', 'pc', 'mobile'].includes(platform))
-    return res({ error: 'Invalid platform. Must be web, pc, or mobile.' }, 400)
+    return res({ error: 'Invalid platform. Must be web, pc, or mobile.', code: 'INVALID_PLATFORM' }, 400)
 
   if (!SUPPORTED_PROVIDERS.includes(provider))
     return res({
       error: `Unsupported provider: ${provider}. Supported: ${SUPPORTED_PROVIDERS.join(', ')}`,
+      code: 'UNSUPPORTED_PROVIDER',
     }, 400)
 
   if (platform === 'pc' && (!port || !/^\d{4,5}$/.test(port)))
-    return res({ error: 'platform=pc requires a valid port parameter (4-5 digits)' }, 400)
+    return res({ error: 'platform=pc requires a valid port parameter (4-5 digits)', code: 'PC_PORT_REQUIRED' }, 400)
 
   // ── 建構 SSO 啟動 URL ────────────────────────────────────────
   const baseUrl  = env.IAM_BASE_URL ?? 'https://chiyigo.com'

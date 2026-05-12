@@ -23,7 +23,7 @@ export async function onRequestPost(ctx) {
       request: ctx.request,
       data: { message: String(e?.message ?? e).slice(0, 1000) },
     })
-    return res({ error: 'Internal error' }, 500)
+    return res({ error: 'Internal error', code: 'INTERNAL_ERROR' }, 500)
   }
 }
 
@@ -36,10 +36,10 @@ async function handleDelete({ request, env }) {
   // ── 2. 解析 Body ─────────────────────────────────────────────
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { password } = body ?? {}
-  if (!password) return res({ error: 'password is required' }, 400)
+  if (!password) return res({ error: 'password is required', code: 'PASSWORD_REQUIRED' }, 400)
 
   const userId = Number(user.sub)
   const db     = env.chiyigo_db
@@ -55,7 +55,7 @@ async function handleDelete({ request, env }) {
       .bind(ip)
       .first()
     if ((ipCount?.cnt ?? 0) >= IP_HOURLY_LIMIT)
-      return res({ error: 'Too many requests. Please try again later.' }, 429)
+      return res({ error: 'Too many requests. Please try again later.', code: 'RATE_LIMITED' }, 429)
   }
 
   // ── 3. 驗證密碼 & 帳號狀態 ───────────────────────────────────
@@ -69,10 +69,10 @@ async function handleDelete({ request, env }) {
   ])
 
   if (!account || !userRow || userRow.deleted_at)
-    return res({ error: 'Account not found' }, 404)
+    return res({ error: 'Account not found', code: 'ACCOUNT_NOT_FOUND' }, 404)
 
   const valid = await verifyPassword(password, account.password_salt, account.password_hash)
-  if (!valid) return res({ error: 'Incorrect password' }, 401)
+  if (!valid) return res({ error: 'Incorrect password', code: 'INCORRECT_PASSWORD' }, 401)
 
   // ── 4. 60 秒冷卻（防止重複請求發信）────────────────────────
   const recent = await db
@@ -111,7 +111,7 @@ async function handleDelete({ request, env }) {
     await sendDeleteConfirmationEmail(env.RESEND_API_KEY, userRow.email, token, env)
   } catch {
     await db.prepare('DELETE FROM email_verifications WHERE token_hash = ?').bind(tokenHash).run()
-    return res({ error: 'Failed to send confirmation email, please try again later' }, 502)
+    return res({ error: 'Failed to send confirmation email, please try again later', code: 'EMAIL_SEND_FAILED' }, 502)
   }
 
   return res({
