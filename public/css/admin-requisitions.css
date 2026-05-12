@@ -274,15 +274,15 @@ table.req-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .mono-link-accent--intent{font-size:.72rem;margin-right:.4rem}
 .sub-meta-dim{font-size:.7rem;color:#9aa0aa}
 .sub-meta-dim-md{font-size:.75rem;color:#9aa0aa}
-.cell-sm{font-size:.78rem}
-.cell-xs{font-size:.72rem}
-.cell-xxs{font-size:.7rem}
+.cell-sm,.req-table td.cell-sm{font-size:.78rem}
+.cell-xs,.req-table td.cell-xs{font-size:.72rem}
+.cell-xxs,.req-table td.cell-xxs{font-size:.7rem}
 .txt-hint-dim{font-size:.78rem;color:var(--text-dim)}
 .push-right{margin-left:auto}
-.empty-state--error{color:#dc2626}
+.empty-state.empty-state--error{color:#dc2626}
 .text-danger{color:#dc2626}
 .btn-mt-sm{margin-top:.6rem}
 .row--mono-sm{font-family:var(--font-mono);font-size:.78rem}
 .modal-card--narrow{max-width:440px}
-.refund-amt{color:#9aa0aa}
-.refund-amt--pos{color:#fdba74}
+.refund-amt,.req-table td.refund-amt{color:#9aa0aa}
+.refund-amt--pos,.req-table td.refund-amt.refund-amt--pos{color:#fdba74}
