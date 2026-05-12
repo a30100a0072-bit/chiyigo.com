@@ -331,6 +331,11 @@
       INVALID_SCOPE:             'scope 參數無效',
       INVALID_FOR_ACTION:        'for_action 格式錯誤',
       INVALID_TOKEN_SUBJECT:     'Token subject 無效',
+      // ── B-1e：Dashboard（change-password / devices logout / payment intent）─
+      NEW_PASSWORD_REQUIRED:     '請輸入新密碼',
+      INVALID_DEVICE_UUID:       '裝置識別碼格式錯誤',
+      DEVICE_NOT_FOUND:          '找不到此裝置',
+      INTENT_NOT_FOUND:          '找不到付款單',
     },
     en: {
       INVALID_OTP:               'Invalid code, please try again',
@@ -473,6 +478,11 @@
       INVALID_SCOPE:             'Invalid scope parameter',
       INVALID_FOR_ACTION:        'Invalid for_action format',
       INVALID_TOKEN_SUBJECT:     'Invalid token subject',
+      // ── B-1e：Dashboard ─
+      NEW_PASSWORD_REQUIRED:     'New password is required',
+      INVALID_DEVICE_UUID:       'Invalid device identifier format',
+      DEVICE_NOT_FOUND:          'Device not found',
+      INTENT_NOT_FOUND:          'Payment intent not found',
     },
     ja: {
       INVALID_OTP:               '認証コードが正しくありません',
@@ -615,6 +625,11 @@
       INVALID_SCOPE:             'scope パラメーターが無効です',
       INVALID_FOR_ACTION:        'for_action の形式が正しくありません',
       INVALID_TOKEN_SUBJECT:     'Token subject が無効です',
+      // ── B-1e：Dashboard ─
+      NEW_PASSWORD_REQUIRED:     '新しいパスワードを入力してください',
+      INVALID_DEVICE_UUID:       'デバイス識別子の形式が正しくありません',
+      DEVICE_NOT_FOUND:          'デバイスが見つかりません',
+      INTENT_NOT_FOUND:          '決済情報が見つかりません',
     },
     ko: {
       INVALID_OTP:               '인증 코드가 올바르지 않습니다',
@@ -757,6 +772,11 @@
       INVALID_SCOPE:             'scope 매개변수가 유효하지 않습니다',
       INVALID_FOR_ACTION:        'for_action 형식이 올바르지 않습니다',
       INVALID_TOKEN_SUBJECT:     'Token subject 가 유효하지 않습니다',
+      // ── B-1e：Dashboard ─
+      NEW_PASSWORD_REQUIRED:     '새 비밀번호를 입력해주세요',
+      INVALID_DEVICE_UUID:       '장치 식별자 형식이 올바르지 않습니다',
+      DEVICE_NOT_FOUND:          '장치를 찾을 수 없습니다',
+      INTENT_NOT_FOUND:          '결제 정보를 찾을 수 없습니다',
     },
   }
 
