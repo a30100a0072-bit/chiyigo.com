@@ -42,6 +42,11 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.archive.purge_mismatch',               // critical
   'audit.archive.cold_class_drift',             // critical（PR 2.1c codex M-1：classifier 與 stored cold_class 不一致）
   'admin.audit.archive.read',                   // admin export 觸發
+  // PR 2.2b admin retry endpoint（POST /api/admin/audit-archive/retry）
+  'audit.archive.retry_requested',              // info — endpoint 收到合法請求（auth+schema 通過）
+  'audit.archive.retry_succeeded',              // info — re_verify / mark_resolved 真實 UPDATE 成功
+  'audit.archive.retry_rejected',               // warn — 404/409/validation：找不到 chunk 或狀態不符
+  'audit.archive.force_purge_requested',        // critical — stub action：admin 申請 force_purge，PR 2.2b 一律 501
 ]
 
 // F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。

@@ -159,8 +159,10 @@ describe('registry coverage', () => {
     // 加 1 個 deploy_ordering fallback → 111；
     // PR 1.2 補 5 個漏分類 live events（4 read_audit + 1 immutable）→ 116。
     // PR 2.1c 加 audit.archive.cold_class_drift（codex M-1）→ 117。
+    // PR 2.2b 加 4 個 admin retry endpoint events
+    //   （retry_requested / retry_succeeded / retry_rejected / force_purge_requested）→ 121。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(117)
+    expect(_registrySize).toBe(121)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
