@@ -54,7 +54,7 @@ themeBtn?.addEventListener('click', () => {
   applyTheme(d);
 });
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 function fmtDate(s) {
   if (!s) return '—';
   const d = new Date(s.replace(' ', 'T') + 'Z');
