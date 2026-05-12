@@ -411,3 +411,98 @@ export function newRunId() {
 export function utcDate(d = new Date()) {
   return d.toISOString().slice(0, 10)
 }
+
+/**
+ * F-3 Phase 2 PR 2.3 — manual force_purge helper（admin-driven，唯一合法的
+ * R2 DELETE / chunks-row DELETE 入口；cron worker code 仍走 no-delete discipline）。
+ *
+ * 範圍（user 2026-05-12 拍板，feedback_force_purge_semantics）：
+ *   ✅ R2 chunk object DELETE
+ *   ✅ R2 manifest object DELETE
+ *   ✅ D1 audit_archive_chunks row DELETE（state='blacklisted' guard）
+ *   ❌ audit_log raw row 不刪 — 屬 PR 4 marked_archived→7d→purged lifecycle
+ *
+ * 為何只接受 state='blacklisted'：
+ *   force_purge 是 mark_resolved 的「真正清除」收尾。state machine 路徑為
+ *   failed → mark_resolved → blacklisted → force_purge → row gone。
+ *   讓 admin 從 uploaded / planned 等 in-flight state 直接 purge 太容易誤殺
+ *   pipeline；要清這些先 mark_resolved。
+ *
+ * R2 lock 分支（PR 0.2c 之後啟用）：
+ *   lock 設下後 R2 DELETE 會回 403/409。本 helper 把 R2 SDK 例外 propagate 出去，
+ *   呼叫端 catch 後可 emit force_purge_failed + reason='r2_locked' 回 423。
+ *   PR 2.3 不模擬 lock 邏輯（lock 尚未設）；lock 後再加 catch 分支 + 1 個 int test。
+ *
+ * 順序刻意：R2 chunk → R2 manifest → D1 row。前面失敗 → 中止、D1 row 留著，admin
+ * 可重新呼叫；R2 DELETE missing key 是 no-op（idempotent），不會 propagate error。
+ *
+ * @param {object} args
+ * @param {object} args.env                 Workers env（需 AUDIT_ARCHIVE_BUCKET）
+ * @param {object} args.db                  D1 binding
+ * @param {object} args.target              retry endpoint validateTarget 過的 target
+ * @returns {Promise<{
+ *   chunks_row_deleted: boolean,
+ *   source_rows_deleted: false,
+ *   data_key: string,
+ *   manifest_key: string,
+ * }>}
+ * @throws Error                           R2 / D1 操作失敗（呼叫端轉 502 / 423）
+ */
+export async function purgeChunk({ env, db, target }) {
+  const bucket = env?.AUDIT_ARCHIVE_BUCKET
+  if (!bucket) throw new Error('AUDIT_ARCHIVE_BUCKET binding missing')
+
+  // 1) 從 D1 撈 chunk row，取 dry_run / compression 反推 R2 key（與 retry.js 的
+  //    target 不必含 dry_run / compression — 那是 server side schema 細節）
+  const row = await db.prepare(
+    `SELECT env, table_name, cold_class, archive_date,
+            min_id, max_id, chunk_sha256, state, dry_run, compression
+       FROM audit_archive_chunks
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(
+    target.env, target.table_name, target.cold_class,
+    target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
+  ).first()
+
+  if (!row) {
+    const e = new Error('chunk_not_found')
+    e.code = 'CHUNK_NOT_FOUND'
+    throw e
+  }
+  if (row.state !== 'blacklisted') {
+    const e = new Error(`chunk_state_must_be_blacklisted; got '${row.state}'`)
+    e.code = 'CHUNK_STATE_MISMATCH'
+    e.actualState = row.state
+    throw e
+  }
+
+  const { dataKey, manifestKey } = deriveKeysFromChunk(row)
+
+  // 2) R2 chunk DELETE（missing-key 為 no-op，propagate 其他 SDK exception）
+  //    waiver tag 必須同行（lint per-line scan，scripts/_archive-lint-patterns.js#isWaived）
+  await bucket.delete(dataKey) // archive-delete-allow: PR 2.3 force_purge chunk object
+  // 3) R2 manifest DELETE
+  await bucket.delete(manifestKey) // archive-delete-allow: PR 2.3 force_purge manifest object
+
+  // 4) D1 chunks row DELETE — 嚴格 state='blacklisted' 再驗一次（race 防禦：上面
+  //    SELECT 後若有 worker 升態，這裡 changes=0 就 abort，不污染 cursor 狀態）
+  //    SQL waiver tag 必須在 match span 內（與下方 SQL 同一行；archive-sql-allow）
+  const del = await db.prepare(
+    `DELETE FROM audit_archive_chunks /* archive-sql-allow: PR 2.3 force_purge */
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND state = 'blacklisted'`
+  ).bind(
+    target.env, target.table_name, target.cold_class,
+    target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
+  ).run()
+
+  const changes = del?.meta?.changes ?? 0
+  return {
+    chunks_row_deleted:  changes === 1,
+    source_rows_deleted: false,
+    data_key:            dataKey,
+    manifest_key:        manifestKey,
+  }
+}

@@ -46,7 +46,11 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.archive.retry_requested',              // info — endpoint 收到合法請求（auth+schema 通過）
   'audit.archive.retry_succeeded',              // info — re_verify / mark_resolved 真實 UPDATE 成功
   'audit.archive.retry_rejected',               // warn — 404/409/validation：找不到 chunk 或狀態不符
-  'audit.archive.force_purge_requested',        // critical — stub action：admin 申請 force_purge，PR 2.2b 一律 501
+  'audit.archive.force_purge_requested',        // critical — admin 申請 force_purge（PR 2.2b stub→PR 2.3 真實作）
+  // PR 2.3 force_purge 真實作（manual R2 + chunks-row DELETE；audit_log raw 不刪，留 PR 4）
+  'audit.archive.force_purge_succeeded',        // critical — R2 chunk+manifest+chunks row 全刪成功
+  'audit.archive.force_purge_failed',           // critical — R2/D1 操作中斷（含未來 retention lock 423 路徑）
+  'audit.archive.force_purge_disabled',         // warn — AUDIT_ARCHIVE_PURGE_ENABLED 未設，endpoint 拒絕
 ]
 
 // F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。

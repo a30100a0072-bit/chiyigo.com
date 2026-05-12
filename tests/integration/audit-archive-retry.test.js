@@ -348,53 +348,181 @@ describe('admin retry endpoint — mark_resolved（step-up required）', () => {
   })
 })
 
-describe('admin retry endpoint — force_purge stub（step-up required）', () => {
+describe('admin retry endpoint — force_purge（PR 2.3 真實作；step-up + env flag）', () => {
   beforeAll(async () => { await ensureJwtKeys() })
-  beforeEach(async () => { await resetDb() })
+  beforeEach(async () => {
+    await resetDb()
+    // 清 R2 — purge 測試會 seed 真實 R2 object
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ limit: 1000 })
+    for (const o of list.objects ?? []) await env.AUDIT_ARCHIVE_BUCKET.delete(o.key)
+  })
 
-  it('PR 2.2b codex r1 P1：普通 admin token → 403 STEP_UP_REQUIRED（不會 emit force_purge_requested）', async () => {
+  // 模擬 prod 設了 AUDIT_ARCHIVE_PURGE_ENABLED='1' 的 env（test env override）
+  function purgeEnv() {
+    return { ...env, AUDIT_ARCHIVE_PURGE_ENABLED: '1' }
+  }
+  async function callRetryWithEnv({ token, body, envObj }) {
+    const req = new Request('http://x/api/admin/audit-archive/retry', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const r = await retryHandler({ request: req, env: envObj })
+    return { status: r.status, body: await r.json() }
+  }
+
+  // 把 chunk 對應的 R2 key 兩個物件種起來（與 deriveKeysFromChunk 對齊）
+  async function seedR2ForChunk(chunk, { compression = 'none', dryRun = false } = {}) {
+    const [yyyy, mm, dd] = chunk.archive_date.split('-')
+    const tail = `${chunk.min_id}-${chunk.max_id}-${chunk.chunk_sha256}`
+    const dataPrefix     = dryRun ? 'audit-log-dryrun' : 'audit-log'
+    const manifestPrefix = dryRun ? 'manifest-dryrun'  : 'manifest'
+    const ext = compression === 'gzip' ? '.jsonl.gz' : '.jsonl'
+    const dataKey     = `${dataPrefix}/${chunk.env}/${chunk.table_name}/${chunk.cold_class}/${yyyy}/${mm}/${dd}/${tail}${ext}`
+    const manifestKey = `${manifestPrefix}/${chunk.env}/${chunk.table_name}/${chunk.cold_class}/${yyyy}/${mm}/${dd}/${tail}.json`
+    await env.AUDIT_ARCHIVE_BUCKET.put(dataKey,     new Uint8Array([1, 2, 3]))
+    await env.AUDIT_ARCHIVE_BUCKET.put(manifestKey, JSON.stringify({ state: 'verified' }))
+    return { dataKey, manifestKey }
+  }
+
+  it('普通 admin token → 403 STEP_UP_REQUIRED（不會 emit force_purge_requested）', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
-    const tok = await adminToken(id)  // 沒 elevated:account
-    const chunk = await seedChunk()
+    const tok = await adminToken(id)
+    const chunk = await seedChunk({ state: 'blacklisted' })
     const r = await callRetry({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) } })
     expect(r.status).toBe(403)
     expect(r.body.code).toBe('STEP_UP_REQUIRED')
-    // critical event 不該被觸發（連 step-up gate 都沒過）
     const critEvs = await selectAudit('audit.archive.force_purge_requested')
     expect(critEvs.length).toBe(0)
   })
 
-  it('step-up token → 501 + emit force_purge_requested critical；chunk state 不動；response 含 archived:false', async () => {
+  it('env flag 未設 → 503 PURGE_DISABLED + emit force_purge_disabled warn；R2 / chunks 全不動', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
     const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
-    const chunk = await seedChunk()
+    const chunk = await seedChunk({ state: 'blacklisted' })
+    const seeded = await seedR2ForChunk(chunk)
+
     const r = await callRetry({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) } })
-    expect(r.status).toBe(501)
-    expect(r.body.code).toBe('NOT_IMPLEMENTED')
+    expect(r.status).toBe(503)
+    expect(r.body.code).toBe('PURGE_DISABLED')
     expect(r.body.archived).toBe(false)
     expect(r.body.blocks_cursor).toBe(true)
 
-    // chunk state 必須不動
-    expect((await getChunkState(chunk)).state).toBe('failed')
+    // chunk row 與 R2 obj 一動不動
+    expect((await getChunkState(chunk)).state).toBe('blacklisted')
+    expect(await env.AUDIT_ARCHIVE_BUCKET.get(seeded.dataKey)).not.toBeNull()
+    expect(await env.AUDIT_ARCHIVE_BUCKET.get(seeded.manifestKey)).not.toBeNull()
 
-    const critEvs = await selectAudit('audit.archive.force_purge_requested')
-    expect(critEvs.length).toBe(1)
-    expect(critEvs[0].severity).toBe('critical')
-    const data = JSON.parse(critEvs[0].event_data)
-    expect(data.status).toBe('not_implemented')
+    // requested critical 已 emit（為 admin 留申請紀錄），disabled warn 也 emit
+    const reqEv = await selectAudit('audit.archive.force_purge_requested')
+    expect(reqEv.length).toBe(1)
+    expect(reqEv[0].severity).toBe('critical')
+    const disEv = await selectAudit('audit.archive.force_purge_disabled')
+    expect(disEv.length).toBe(1)
+    expect(disEv[0].severity).toBe('warn')
 
-    // admin_audit_log 仍有 row（admin 已留證據申請了 force_purge）
+    // admin_audit_log hash chain row 留著
     const adminRows = await adminAuditRows('audit_archive.retry.force_purge')
     expect(adminRows.length).toBe(1)
   })
 
-  it('step-up token → force_purge 對 uploaded chunk 也 501（不檢 state；stub 一律拒絕）', async () => {
+  it('chunk state != blacklisted → 409 CHUNK_STATE_MISMATCH（要先 mark_resolved）；R2 不動', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
     const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
-    const chunk = await seedChunk({ state: 'uploaded' })
-    const r = await callRetry({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) } })
-    expect(r.status).toBe(501)
-    expect((await getChunkState(chunk)).state).toBe('uploaded')
+    const chunk = await seedChunk({ state: 'failed' })
+    const seeded = await seedR2ForChunk(chunk)
+
+    const r = await callRetryWithEnv({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) }, envObj: purgeEnv() })
+    expect(r.status).toBe(409)
+    expect(r.body.code).toBe('CHUNK_STATE_MISMATCH')
+    expect(r.body.actual_state).toBe('failed')
+
+    expect((await getChunkState(chunk)).state).toBe('failed')
+    expect(await env.AUDIT_ARCHIVE_BUCKET.get(seeded.dataKey)).not.toBeNull()
+    expect(await env.AUDIT_ARCHIVE_BUCKET.get(seeded.manifestKey)).not.toBeNull()
+
+    const rej = await selectAudit('audit.archive.retry_rejected')
+    expect(rej.length).toBeGreaterThan(0)
+    expect(JSON.parse(rej[0].event_data).reason).toMatch(/state_not_blacklisted/)
+  })
+
+  it('chunk 不存在 → 404 CHUNK_NOT_FOUND', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
+    const chunk = await seedChunk({ state: 'blacklisted' })
+    const t = targetOf(chunk)
+    t.chunk_sha256 = 'b'.repeat(64)
+    const r = await callRetryWithEnv({ token: tok, body: { action: 'force_purge', target: t }, envObj: purgeEnv() })
+    expect(r.status).toBe(404)
+    expect(r.body.code).toBe('CHUNK_NOT_FOUND')
+  })
+
+  it('happy path：blacklisted + env flag 設好 → R2 chunk+manifest+D1 row 三刪、emit succeeded critical', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
+    const chunk = await seedChunk({ state: 'blacklisted' })
+    const seeded = await seedR2ForChunk(chunk)
+
+    const r = await callRetryWithEnv({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) }, envObj: purgeEnv() })
+    expect(r.status).toBe(200)
+    expect(r.body.ok).toBe(true)
+    expect(r.body.chunks_row_deleted).toBe(true)
+    expect(r.body.source_rows_deleted).toBe(false)
+    expect(r.body.data_key).toBe(seeded.dataKey)
+    expect(r.body.manifest_key).toBe(seeded.manifestKey)
+    expect(r.body.message).toMatch(/NOT deleted/)
+
+    // R2 全清
+    expect(await env.AUDIT_ARCHIVE_BUCKET.get(seeded.dataKey)).toBeNull()
+    expect(await env.AUDIT_ARCHIVE_BUCKET.get(seeded.manifestKey)).toBeNull()
+    // D1 chunks row 不見
+    expect(await getChunkState(chunk)).toBeNull()
+
+    const succ = await selectAudit('audit.archive.force_purge_succeeded')
+    expect(succ.length).toBe(1)
+    expect(succ[0].severity).toBe('critical')
+    const data = JSON.parse(succ[0].event_data)
+    expect(data.source_rows_deleted).toBe(false)
+    expect(data.chunks_row_deleted).toBe(true)
+
+    const adminRows = await adminAuditRows('audit_archive.retry.force_purge')
+    expect(adminRows.length).toBe(1)
+  })
+
+  it('R2 missing key 仍 idempotent：blacklisted chunk 但 R2 object 已不在 → 仍刪 D1 row 並 200', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
+    const chunk = await seedChunk({ state: 'blacklisted' })
+    // 沒 seedR2ForChunk — 模擬 R2 已被人工清掉
+
+    const r = await callRetryWithEnv({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) }, envObj: purgeEnv() })
+    expect(r.status).toBe(200)
+    expect(r.body.chunks_row_deleted).toBe(true)
+    expect(await getChunkState(chunk)).toBeNull()
+  })
+
+  it('R2 SDK throw → 502 FORCE_PURGE_FAILED + emit failed critical；chunks row 不刪（admin 可重 retry）', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
+    const chunk = await seedChunk({ state: 'blacklisted' })
+
+    const failingBucket = {
+      delete: async () => { throw new Error('simulated R2 lock 403') },
+    }
+    const envWithFail = { ...env, AUDIT_ARCHIVE_PURGE_ENABLED: '1', AUDIT_ARCHIVE_BUCKET: failingBucket }
+
+    const r = await callRetryWithEnv({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) }, envObj: envWithFail })
+    expect(r.status).toBe(502)
+    expect(r.body.code).toBe('FORCE_PURGE_FAILED')
+    expect(r.body.detail).toMatch(/simulated R2 lock 403/)
+
+    // chunk row 仍在（admin 可改 enable 後 retry）
+    expect((await getChunkState(chunk)).state).toBe('blacklisted')
+
+    const failed = await selectAudit('audit.archive.force_purge_failed')
+    expect(failed.length).toBe(1)
+    expect(failed[0].severity).toBe('critical')
+    expect(JSON.parse(failed[0].event_data).reason).toBe('r2_or_d1_exception')
   })
 })
 

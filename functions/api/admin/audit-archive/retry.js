@@ -22,14 +22,20 @@
  *                              不再嘗試。**不代表資料已歸檔**，只表示「admin 已決定放棄
  *                              這個 chunk 不再 retry」。命名取 mark_resolved 是 ops UX，
  *                              audit data / chunk state 都明寫 failed_to_blacklisted。）
- *   action='force_purge'    → ⚠️ **stub only**。回 501 + emit critical event。
- *                              R2 / D1 真正 DELETE 留 PR 2.3 + retention lock 設計補齊。
+ *   action='force_purge'    → PR 2.3 真實作：R2 chunk + R2 manifest + D1 chunks row
+ *                              全刪。要求 chunk state='blacklisted'（mark_resolved 收尾路徑）
+ *                              + env AUDIT_ARCHIVE_PURGE_ENABLED='1'（未設回 503 PURGE_DISABLED）。
+ *                              **不刪 audit_log raw row**（屬 PR 4 lifecycle，response 帶
+ *                              source_rows_deleted:false 顯示分界）。
+ *                              retention lock（PR 0.2c）後 R2 DELETE 會 throw → catch
+ *                              落 502 + force_purge_failed；lock 上後再細分 423 路徑。
  *
  * 護欄（user 2026-05-12 拍板）：
  *   - re_verify / mark_resolved UPDATE 必帶完整 target key
  *     (env, table_name, cold_class, archive_date, min_id, max_id, chunk_sha256)
  *     + state='failed'；changes !== 1 嚴格判斷 404（chunk 不存在）vs 409（狀態不符）。
- *   - force_purge 第一版完全不碰 R2 / D1 delete。
+ *   - force_purge：(1) env flag 未設一律 503 拒絕；(2) state 必須 'blacklisted'；
+ *     (3) R2 chunk → R2 manifest → D1 chunks row 順序；(4) audit_log raw 不刪。
  *
  * 觀測：每次呼叫都 emit `audit.archive.retry_requested`（info）；成功 emit
  *   `audit.archive.retry_succeeded`；validation / 404 / 409 emit `audit.archive.retry_rejected`
@@ -42,7 +48,7 @@ import { requireRole } from '../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
-import { SUPPORTED_COLD_CLASSES, PR20_SUPPORTED_TABLE } from '../../../utils/audit-archive.js'
+import { SUPPORTED_COLD_CLASSES, PR20_SUPPORTED_TABLE, purgeChunk } from '../../../utils/audit-archive.js'
 
 const VALID_ACTIONS = new Set(['re_verify', 'mark_resolved', 'force_purge'])
 
@@ -175,25 +181,115 @@ export async function onRequestPost({ request, env }) {
   })
 
   if (action === 'force_purge') {
-    // PR 2.2b 護欄：force_purge 第一版完全不碰 R2 / D1 delete。
-    // R2 retention lock（PR 0.2c）尚未設，現在 DELETE 可動但 lock 後鎖死，
-    // 行為差異要等 PR 2.3 補設計 + lock 之前/之後分支邏輯。
+    // PR 2.3 force_purge 真實作（feedback_force_purge_semantics）：
+    //   - 必走 env flag AUDIT_ARCHIVE_PURGE_ENABLED='1' gate；未設回 503 + warn event
+    //   - 只刪 R2 chunk + R2 manifest + D1 chunks row；audit_log raw 不刪（留 PR 4）
+    //   - chunk 必須 state='blacklisted'（mark_resolved 收尾路徑）
+    //   - R2 retention lock（PR 0.2c）尚未設；lock 後 R2 DELETE 會 throw → 落到 catch
+    //     回 423 LOCKED，同段 code 涵蓋 pre/post lock 兩個時代
     await safeUserAudit(env, {
       event_type: 'audit.archive.force_purge_requested',
       severity:   'critical',
       user_id:    ctxBase.admin_id,
       request,
-      data: { admin_id: ctxBase.admin_id, target, chunk_id: chunkId, status: 'not_implemented' },
+      data: { admin_id: ctxBase.admin_id, target, chunk_id: chunkId },
     })
-    return res({
-      error:  'force_purge not implemented in PR 2.2b (stub)',
-      code:   'NOT_IMPLEMENTED',
-      action,
-      chunk_id: chunkId,
-      archived: false,
-      blocks_cursor: true,
-      message: 'force_purge is a stub in PR 2.2b. R2 / D1 delete semantics await retention lock design (PR 0.2c) and purge worker (PR 2.3).',
-    }, 501)
+
+    if (env.AUDIT_ARCHIVE_PURGE_ENABLED !== '1') {
+      await safeUserAudit(env, {
+        event_type: 'audit.archive.force_purge_disabled',
+        severity:   'warn',
+        user_id:    ctxBase.admin_id,
+        request,
+        data: { admin_id: ctxBase.admin_id, target, chunk_id: chunkId },
+      })
+      return res({
+        error:  'force_purge disabled (AUDIT_ARCHIVE_PURGE_ENABLED not set)',
+        code:   'PURGE_DISABLED',
+        action,
+        chunk_id: chunkId,
+        archived: false,
+        blocks_cursor: true,
+        message: 'force_purge requires env AUDIT_ARCHIVE_PURGE_ENABLED=1. Set the secret on the deployment to enable manual R2/chunks-row purge.',
+      }, 503)
+    }
+
+    try {
+      const result = await purgeChunk({ env, db, target })
+      if (!result.chunks_row_deleted) {
+        // 通常代表 race（select 後狀態被升）— state 不是 blacklisted 了
+        await safeUserAudit(env, {
+          event_type: 'audit.archive.force_purge_failed',
+          severity:   'critical',
+          user_id:    ctxBase.admin_id,
+          request,
+          data: {
+            admin_id: ctxBase.admin_id, target, chunk_id: chunkId,
+            reason: 'd1_chunks_row_delete_changes_zero',
+            data_key: result.data_key, manifest_key: result.manifest_key,
+          },
+        })
+        return res({
+          error: 'chunks row delete affected 0 rows (state changed mid-flight?)',
+          code:  'CHUNK_DELETE_NO_CHANGES',
+          chunk_id: chunkId,
+        }, 409)
+      }
+      await safeUserAudit(env, {
+        event_type: 'audit.archive.force_purge_succeeded',
+        severity:   'critical',
+        user_id:    ctxBase.admin_id,
+        request,
+        data: {
+          admin_id: ctxBase.admin_id, target, chunk_id: chunkId,
+          data_key: result.data_key, manifest_key: result.manifest_key,
+          source_rows_deleted: false,
+          chunks_row_deleted:  true,
+        },
+      })
+      return res({
+        ok: true, action, chunk_id: chunkId,
+        chunks_row_deleted:  true,
+        source_rows_deleted: false,
+        data_key:    result.data_key,
+        manifest_key: result.manifest_key,
+        message: 'R2 chunk + manifest + D1 chunks row deleted. audit_log raw rows are NOT deleted (lifecycle in PR 4).',
+      })
+    } catch (e) {
+      const code = e?.code
+      if (code === 'CHUNK_NOT_FOUND') {
+        await emitRejected(env, request, ctxBase, 'chunk_not_found')
+        return res({ error: 'chunk not found', code: 'CHUNK_NOT_FOUND', chunk_id: chunkId }, 404)
+      }
+      if (code === 'CHUNK_STATE_MISMATCH') {
+        await emitRejected(env, request, ctxBase, `state_not_blacklisted:${e.actualState}`)
+        return res({
+          error: `chunk state must be 'blacklisted' to force_purge; got '${e.actualState}' (use mark_resolved first)`,
+          code:  'CHUNK_STATE_MISMATCH',
+          chunk_id: chunkId,
+          actual_state: e.actualState,
+        }, 409)
+      }
+      // R2 SDK / D1 throw — 含未來 retention lock 的 403/409 路徑（lock 上後再加 423 分支）
+      const msg = String(e?.message ?? e)
+      await safeUserAudit(env, {
+        event_type: 'audit.archive.force_purge_failed',
+        severity:   'critical',
+        user_id:    ctxBase.admin_id,
+        request,
+        data: {
+          admin_id: ctxBase.admin_id, target, chunk_id: chunkId,
+          reason: 'r2_or_d1_exception',
+          error:  msg,
+        },
+      })
+      return res({
+        error: 'force_purge failed during R2 / D1 operation',
+        code:  'FORCE_PURGE_FAILED',
+        chunk_id: chunkId,
+        detail: msg,
+      }, 502)
+    }
   }
 
   // re_verify / mark_resolved 共享：strict UPDATE failed→<next>

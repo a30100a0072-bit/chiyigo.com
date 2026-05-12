@@ -958,7 +958,14 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
   - finance/support 嚴格驗證**不**取得任何 audit_archive fine（避免誤升權）
   - 現況為 architectural prep：現役 admin-role token 皆含全套，差異化要等未來 audit_ops 之類窄 role 才 activate
   - 測試：unit 281→287（+6 in `tests/scopes.test.js`），int 544 不變
-- **PR 2.3** force_purge 真實作（R2 + D1 delete + retention lock 分支） — 🟡 待
+- **PR 2.3** force_purge 真實作 ✅ — endpoint + `purgeChunk` helper（manual R2 chunk+manifest+chunks row delete）
+  - retry.js `force_purge`：501 stub → 真實作；要求 chunk state='blacklisted'（接 mark_resolved 收尾）+ step-up + env `AUDIT_ARCHIVE_PURGE_ENABLED='1'`，未設回 503 PURGE_DISABLED + emit `audit.archive.force_purge_disabled` warn
+  - `purgeChunk(env, db, target)`（functions/utils/audit-archive.js）：SELECT row → R2 chunk DELETE → R2 manifest DELETE → D1 chunks row DELETE（嚴格 `state='blacklisted'` 再驗一次防 race）；前面失敗 propagate exception，D1 row 留著可重試
+  - **audit_log raw row 不刪**：response 帶 `source_rows_deleted: false / chunks_row_deleted: true` 明示分界；raw 真刪屬 PR 4 marked_archived→7d→purged lifecycle。只刪 chunks row 代表「移除壞掉的 archive attempt / 讓 pipeline 可重跑」，不是「永久跳過該段 raw audit_log」；若未來需永久跳過要另設 tombstone state，不偷靠 raw DELETE
+  - 3 新 events 入 registry（121→124）：`force_purge_succeeded` / `_failed` / `_disabled` 全 immutable category
+  - lint waiver：helper 內單點同行 tag — `// archive-delete-allow: PR 2.3 force_purge`（line-scope, R2 .delete）+ `/* archive-sql-allow: PR 2.3 force_purge */`（source-scope, SQL DELETE）；不改 lint script 白名單
+  - retention lock（PR 0.2c）後 R2 DELETE 會 throw → 落 catch 回 502 FORCE_PURGE_FAILED；lock 上後再加 423 LOCKED 細分支 + 1 個 int test
+  - 測試：unit 297→304（+7：missing binding / not_found / state_mismatch / happy gzip path / dry-run prefix 路徑 / R2 throw propagate / D1 changes=0 race）；int 549→553（+4：disabled 503 / state!=blacklisted 409 / R2 SDK throw 502 / happy 200）
 - F-2 manifest.severities prod 驗收 — 等 2026-05-13 02:00 cron 自然帶
 
 ### PR 3 — Aggregate worker

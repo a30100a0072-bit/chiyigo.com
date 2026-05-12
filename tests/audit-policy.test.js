@@ -161,8 +161,10 @@ describe('registry coverage', () => {
     // PR 2.1c 加 audit.archive.cold_class_drift（codex M-1）→ 117。
     // PR 2.2b 加 4 個 admin retry endpoint events
     //   （retry_requested / retry_succeeded / retry_rejected / force_purge_requested）→ 121。
+    // PR 2.3 加 3 個 force_purge 真實作 events
+    //   （force_purge_succeeded / _failed / _disabled）→ 124。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(121)
+    expect(_registrySize).toBe(124)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

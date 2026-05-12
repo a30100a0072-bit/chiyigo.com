@@ -31,6 +31,7 @@ import {
   DEFAULT_PUT_RETRY_BACKOFF_MS,
   SUPPORTED_COLD_CLASSES,
   hotRetentionDaysFor,
+  purgeChunk,
 } from '../functions/utils/audit-archive.js'
 
 describe('rowsToJsonl', () => {
@@ -509,5 +510,139 @@ describe('PR 2.2a SUPPORTED_COLD_CLASSES + hotRetentionDaysFor', () => {
   it('hotRetentionDaysFor：非數值 env → 走預設', () => {
     expect(hotRetentionDaysFor({ AUDIT_ARCHIVE_HOT_DAYS_IMMUTABLE: 'foo' }, 'immutable')).toBe(180)
     expect(hotRetentionDaysFor({ AUDIT_ARCHIVE_HOT_DAYS_TELEMETRY: '' }, 'telemetry')).toBe(30)
+  })
+})
+
+describe('purgeChunk — PR 2.3 manual force_purge helper', () => {
+  // 共用 stubs：D1 prepare/bind/first/run chain + R2 bucket delete tracker
+  function makeRowFromTarget(t, overrides = {}) {
+    return {
+      env: t.env, table_name: t.table_name, cold_class: t.cold_class,
+      archive_date: t.archive_date,
+      min_id: t.min_id, max_id: t.max_id, chunk_sha256: t.chunk_sha256,
+      state: 'blacklisted', dry_run: 0, compression: 'gzip',
+      ...overrides,
+    }
+  }
+  function makeDb({ selectRow, deleteChanges = 1, throwOnDelete = false }) {
+    return {
+      prepare(sql) {
+        const isSelect = /^SELECT/i.test(sql.trim())
+        const isDelete = /^\s*DELETE/i.test(sql)
+        return {
+          bind() { return this },
+          first: async () => isSelect ? selectRow : null,
+          run:   async () => {
+            if (isDelete && throwOnDelete) throw new Error('d1 throw')
+            return isDelete ? { meta: { changes: deleteChanges } } : { meta: { changes: 0 } }
+          },
+        }
+      },
+    }
+  }
+  function makeBucket({ throwAt = null } = {}) {
+    const deleted = []
+    return {
+      deleted,
+      delete: async (key) => {
+        deleted.push(key)
+        if (throwAt && deleted.length === throwAt) throw new Error('r2 lock 403')
+      },
+    }
+  }
+
+  const target = {
+    env: 'test', table_name: 'audit_log', cold_class: 'telemetry',
+    archive_date: '2026-05-11', min_id: 1, max_id: 100,
+    chunk_sha256: 'a'.repeat(64),
+  }
+
+  it('AUDIT_ARCHIVE_BUCKET 缺 binding → throw', async () => {
+    await expect(purgeChunk({ env: {}, db: makeDb({ selectRow: null }), target }))
+      .rejects.toThrow(/AUDIT_ARCHIVE_BUCKET/)
+  })
+
+  it('chunk not found → throw CHUNK_NOT_FOUND', async () => {
+    const bucket = makeBucket()
+    await expect(purgeChunk({
+      env: { AUDIT_ARCHIVE_BUCKET: bucket },
+      db: makeDb({ selectRow: null }),
+      target,
+    })).rejects.toMatchObject({ code: 'CHUNK_NOT_FOUND' })
+    expect(bucket.deleted.length).toBe(0)
+  })
+
+  it('chunk state != blacklisted → throw CHUNK_STATE_MISMATCH（含 actualState）；R2 不動', async () => {
+    const bucket = makeBucket()
+    const row = makeRowFromTarget(target, { state: 'failed' })
+    try {
+      await purgeChunk({ env: { AUDIT_ARCHIVE_BUCKET: bucket }, db: makeDb({ selectRow: row }), target })
+      throw new Error('should have thrown')
+    } catch (e) {
+      expect(e.code).toBe('CHUNK_STATE_MISMATCH')
+      expect(e.actualState).toBe('failed')
+    }
+    expect(bucket.deleted.length).toBe(0)
+  })
+
+  it('happy path：依 row.compression=gzip 推 .jsonl.gz key；R2 兩刪 + D1 一刪', async () => {
+    const bucket = makeBucket()
+    const row = makeRowFromTarget(target, { compression: 'gzip' })
+    const r = await purgeChunk({
+      env: { AUDIT_ARCHIVE_BUCKET: bucket },
+      db: makeDb({ selectRow: row, deleteChanges: 1 }),
+      target,
+    })
+    expect(r.chunks_row_deleted).toBe(true)
+    expect(r.source_rows_deleted).toBe(false)
+    expect(r.data_key).toMatch(/\.jsonl\.gz$/)
+    expect(r.data_key).toContain('audit-log/test/audit_log/telemetry/2026/05/11/')
+    expect(r.manifest_key).toMatch(/\.json$/)
+    expect(bucket.deleted).toEqual([r.data_key, r.manifest_key])
+  })
+
+  it('PR 2.0 dry-run chunk（compression=none, dry_run=1）→ key 走 audit-log-dryrun + .jsonl', async () => {
+    const bucket = makeBucket()
+    const row = makeRowFromTarget(target, { compression: 'none', dry_run: 1 })
+    const r = await purgeChunk({
+      env: { AUDIT_ARCHIVE_BUCKET: bucket },
+      db: makeDb({ selectRow: row }),
+      target,
+    })
+    expect(r.data_key).toMatch(/^audit-log-dryrun\//)
+    expect(r.data_key).toMatch(/\.jsonl$/)
+    expect(r.manifest_key).toMatch(/^manifest-dryrun\//)
+  })
+
+  it('R2 第一刪 throw → propagate；不會走到第二個 delete / D1', async () => {
+    const bucket = makeBucket({ throwAt: 1 })
+    const row = makeRowFromTarget(target)
+    let dbDeleteCalled = false
+    const db = {
+      prepare(sql) {
+        const isSelect = /^SELECT/i.test(sql.trim())
+        return {
+          bind() { return this },
+          first: async () => isSelect ? row : null,
+          run:   async () => { dbDeleteCalled = true; return { meta: { changes: 1 } } },
+        }
+      },
+    }
+    await expect(purgeChunk({ env: { AUDIT_ARCHIVE_BUCKET: bucket }, db, target }))
+      .rejects.toThrow(/r2 lock 403/)
+    expect(bucket.deleted.length).toBe(1)
+    expect(dbDeleteCalled).toBe(false)
+  })
+
+  it('chunks row DELETE changes=0（race，state 被偷升）→ chunks_row_deleted=false 回去（呼叫端轉 409）', async () => {
+    const bucket = makeBucket()
+    const row = makeRowFromTarget(target)
+    const r = await purgeChunk({
+      env: { AUDIT_ARCHIVE_BUCKET: bucket },
+      db: makeDb({ selectRow: row, deleteChanges: 0 }),
+      target,
+    })
+    expect(r.chunks_row_deleted).toBe(false)
+    expect(bucket.deleted.length).toBe(2)  // R2 已刪（不可逆）
   })
 })
