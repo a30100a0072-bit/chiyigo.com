@@ -128,7 +128,7 @@ function openMenu() {
   overlay?.classList.add('is-open');
   overlay?.removeAttribute('aria-hidden');
   topbar?.classList.add('menu-open');
-  document.body.style.overflow = 'hidden';
+  document.body.classList.add('body-lock');
 }
 function closeMenu() {
   hamBtn?.setAttribute('aria-expanded', 'false');
@@ -136,7 +136,7 @@ function closeMenu() {
   overlay?.classList.remove('is-open');
   overlay?.setAttribute('aria-hidden', 'true');
   topbar?.classList.remove('menu-open');
-  document.body.style.overflow = '';
+  document.body.classList.remove('body-lock');
 }
 hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
 overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
@@ -194,7 +194,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay?.c
         btn?.classList.remove('is-open')
         btn?.setAttribute('aria-expanded', 'false')
         document.getElementById('m-topbar')?.classList.remove('menu-open')
-        document.body.style.overflow = ''
+        document.body.classList.remove('body-lock')
       }, 260)
     } else {
       wrap.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1)'

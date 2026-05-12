@@ -1211,8 +1211,8 @@ async function submitDeleteAccount() {
 (function() {
   const ham = document.getElementById('m-ham-btn');
   const ov  = document.getElementById('m-overlay');
-  const open = () => { ham?.classList.add('is-open'); ham?.setAttribute('aria-expanded','true'); ov?.classList.add('is-open'); ov?.removeAttribute('aria-hidden'); document.body.style.overflow='hidden'; };
-  const close = () => { ham?.classList.remove('is-open'); ham?.setAttribute('aria-expanded','false'); ov?.classList.remove('is-open'); ov?.setAttribute('aria-hidden','true'); document.body.style.overflow=''; };
+  const open = () => { ham?.classList.add('is-open'); ham?.setAttribute('aria-expanded','true'); ov?.classList.add('is-open'); ov?.removeAttribute('aria-hidden'); document.body.classList.add('body-lock'); };
+  const close = () => { ham?.classList.remove('is-open'); ham?.setAttribute('aria-expanded','false'); ov?.classList.remove('is-open'); ov?.setAttribute('aria-hidden','true'); document.body.classList.remove('body-lock'); };
   ham?.addEventListener('click', () => ov?.classList.contains('is-open') ? close() : open());
   ov?.addEventListener('click', e => { if (e.target === ov) close(); });
   ov?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(close, 120)));

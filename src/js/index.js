@@ -56,7 +56,7 @@ function toggleOverlay() {
     ov.removeAttribute('aria-hidden')
     btn.classList.add('is-open')
     btn.setAttribute('aria-expanded','true')
-    document.body.style.overflow = 'hidden'
+    document.body.classList.add('body-lock')
   }
 }
 function closeOverlay() {
@@ -66,7 +66,7 @@ function closeOverlay() {
   ov.setAttribute('aria-hidden','true')
   btn.classList.remove('is-open')
   btn.setAttribute('aria-expanded','false')
-  document.body.style.overflow = ''
+  document.body.classList.remove('body-lock')
 }
 function handleOverlayClick(e) {
   if (e.target === document.getElementById('m-overlay')) closeOverlay()
@@ -126,7 +126,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.g
         btn?.classList.remove('is-open')
         btn?.setAttribute('aria-expanded', 'false')
         document.getElementById('m-topbar')?.classList.remove('menu-open')
-        document.body.style.overflow = ''
+        document.body.classList.remove('body-lock')
       }, 260)
     } else {
       wrap.style.transition = 'transform .42s cubic-bezier(.22,1,.36,1)'
