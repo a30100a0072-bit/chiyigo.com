@@ -166,8 +166,7 @@ export function totalCutoffHours(hotDays, leadHours) {
  * @param {{ event_type, user_id, severity, ip_hash, created_at }[]} rows
  * @returns {Map<string, {
  *   event_type: string, user_id: number|null, severity: string,
- *   hour_bucket: string, count: number, ip_hash_top: string|null,
- *   _ip_hashes: Map<string, number>  // internal — caller 不該依賴
+ *   hour_bucket: string, count: number, ip_hash_top: string|null
  * }>}
  */
 export function reduceTelemetryBuckets(rows) {

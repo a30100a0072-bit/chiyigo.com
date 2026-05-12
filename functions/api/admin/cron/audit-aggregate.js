@@ -28,7 +28,8 @@
  *   aggregate cutoff = now - (hotDays - 1) days；archive fresh pipeline = now - hotDays days
  *   兩條 cutoff 之間 24h 緩衝；同 row 在 aggregate UPSERT 後 24h 才會被 archive 撈進 R2。
  *
- * Cron 觸發：.github/workflows/cron-audit-aggregate.yml（每週日 17:00 UTC = 01:00 週一 Asia/Taipei）
+ * Cron 觸發：.github/workflows/cron-audit-aggregate.yml（每日 17:00 UTC = 01:00 隔日 Asia/Taipei，
+ * archive worker 18:00 UTC 之前 1 小時；codex r1 H-1 改 daily 避開 archived_at IS NULL 漏網）
  */
 
 import { res } from '../../../utils/auth.js'
@@ -39,7 +40,6 @@ import {
   PR30_SUPPORTED_COLD_CLASS,
   parseMaxRowsPerRun,
   parseLeadHours,
-  telemetryCutoffISO,
   totalCutoffHours,
   reduceTelemetryBuckets,
   rowIsTelemetry,
@@ -69,7 +69,16 @@ export async function onRequestPost({ request, env }) {
   const leadHours  = parseLeadHours(env)
   const maxRows    = parseMaxRowsPerRun(env)
   const hotDays    = hotRetentionDaysFor(env, PR30_SUPPORTED_COLD_CLASS)
-  const cutoffISO  = telemetryCutoffISO(hotDays, leadHours, new Date())
+
+  // codex r2 L-2：report.cutoff 與 SQL `datetime('now','-N hours')` 必須 same source。
+  // 原本 cutoffISO 走 telemetryCutoffISO（吃 raw hotDays/leadHours）、SQL 走
+  // totalCutoffHours（clamped）。極端 env（1e308）下 cutoffISO 拋 null 提早走
+  // hot_days_disabled、跳過 clamp 後的 SQL path，observability 與行為脫鉤。
+  // 改成都從 effectiveHours 推導：clamped → SQL；同一個值 → cutoffISO。
+  const effectiveHours = totalCutoffHours(hotDays, leadHours)
+  const cutoffISO = (hotDays > 0 && effectiveHours > 0)
+    ? new Date(Date.now() - effectiveHours * 3600 * 1000).toISOString()
+    : null
 
   const report = {
     ok: true,
@@ -79,6 +88,7 @@ export async function onRequestPost({ request, env }) {
     writer_version: AGGREGATE_WRITER_VERSION,
     hot_days: hotDays,
     lead_hours: leadHours,
+    effective_cutoff_hours: effectiveHours,   // codex r2 L-2：揭露真正用於 SQL 的 clamped 值
     cutoff: cutoffISO,
     max_rows_per_run: maxRows,
     rows_scanned: 0,
@@ -87,7 +97,7 @@ export async function onRequestPost({ request, env }) {
     errors: [],
   }
 
-  // ── Step 1：cutoff 無效（hotDays<=0）→ skip ─────────────
+  // ── Step 1：cutoff 無效（hotDays<=0 或 effectiveHours<=0）→ skip ─────────────
   if (cutoffISO == null) {
     report.skipped_reason = 'hot_days_disabled'
     await emitSkipped(env, report, { reason: report.skipped_reason })
@@ -106,8 +116,8 @@ export async function onRequestPost({ request, env }) {
   // vs 'T'(0x54) — 同日期但 SQL row 時間 > cutoff 時間的 row 會被誤判 < cutoff。
   // 最壞 1 天 23 小時的 row 被偷渡進 aggregate（破壞 24h archive buffer 設計）。
   // 直接用 datetime modifier 讓 SQLite 自己算 → 格式一致、bug 不存在。
-  // codex r1 L-1：totalCutoffHours clamp 到 [0, 100年] 防 Infinity 內嵌 SQL。
-  const totalHours = totalCutoffHours(hotDays, leadHours)
+  // codex r1 L-1：effectiveHours 已 clamp 到 [0, 100年] 防 Infinity 內嵌 SQL。
+  // codex r2 L-2：與 report.cutoff 同源（上方 effectiveHours = totalCutoffHours(...)）。
   let candidates
   try {
     const rs = await db.prepare(
@@ -115,7 +125,7 @@ export async function onRequestPost({ request, env }) {
          FROM audit_log
         WHERE cold_class = ?
           AND archived_at IS NULL
-          AND created_at < datetime('now', '-${totalHours} hours')
+          AND created_at < datetime('now', '-${effectiveHours} hours')
         ORDER BY id ASC
         LIMIT ?`
     ).bind(PR30_SUPPORTED_COLD_CLASS, maxRows + 1).all()
@@ -206,12 +216,13 @@ export async function onRequestPost({ request, env }) {
       run_id:           runId,
       env:              envName,
       cold_class:       PR30_SUPPORTED_COLD_CLASS,
-      hot_days:         hotDays,
-      lead_hours:       leadHours,
-      cutoff:           cutoffISO,
-      rows_scanned:     candidates.length,
-      buckets_upserted: upserts,
-      writer_version:   AGGREGATE_WRITER_VERSION,
+      hot_days:               hotDays,
+      lead_hours:             leadHours,
+      effective_cutoff_hours: effectiveHours,
+      cutoff:                 cutoffISO,
+      rows_scanned:           candidates.length,
+      buckets_upserted:       upserts,
+      writer_version:         AGGREGATE_WRITER_VERSION,
     },
   })
 
@@ -224,12 +235,13 @@ async function emitSkipped(env, report, data) {
     event_type: 'audit.aggregate.run_skipped',
     severity:   'info',
     data: {
-      run_id:         report.run_id,
-      cold_class:     PR30_SUPPORTED_COLD_CLASS,
-      hot_days:       report.hot_days,
-      lead_hours:     report.lead_hours,
-      cutoff:         report.cutoff,
-      writer_version: AGGREGATE_WRITER_VERSION,
+      run_id:                 report.run_id,
+      cold_class:             PR30_SUPPORTED_COLD_CLASS,
+      hot_days:               report.hot_days,
+      lead_hours:             report.lead_hours,
+      effective_cutoff_hours: report.effective_cutoff_hours,
+      cutoff:                 report.cutoff,
+      writer_version:         AGGREGATE_WRITER_VERSION,
       ...data,
     },
   })
@@ -242,13 +254,14 @@ async function fail(env, report, eventCode, data) {
     event_type: 'audit.aggregate.run_failed',
     severity:   'critical',
     data: {
-      run_id:         report.run_id,
-      cold_class:     PR30_SUPPORTED_COLD_CLASS,
-      hot_days:       report.hot_days,
-      lead_hours:     report.lead_hours,
-      cutoff:         report.cutoff,
-      writer_version: AGGREGATE_WRITER_VERSION,
-      reason:         eventCode,
+      run_id:                 report.run_id,
+      cold_class:             PR30_SUPPORTED_COLD_CLASS,
+      hot_days:               report.hot_days,
+      lead_hours:             report.lead_hours,
+      effective_cutoff_hours: report.effective_cutoff_hours,
+      cutoff:                 report.cutoff,
+      writer_version:         AGGREGATE_WRITER_VERSION,
+      reason:                 eventCode,
       ...data,
     },
   })

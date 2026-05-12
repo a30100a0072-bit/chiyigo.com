@@ -688,7 +688,7 @@ Phase 3 加：
 |---|---|---|
 | `cron-archive-worker` | 每日 18:00 UTC（= 02:00 Asia/Taipei 凌晨低峰）| 找 hot retention 過期的 row → 走完 planned→...→marked_archived 五狀態 |
 | `cron-purge-worker` | 每日 19:00 UTC | `WHERE state='marked_archived' AND purge_after <= NOW()` 走 idx_archive_chunks_purge 索引；對命中 chunk 執行物理 DELETE，升 `purged` |
-| `cron-aggregate-worker` | 每週日 17:00 UTC（= 01:00 Asia/Taipei）| telemetry / debug_failure aggregate（先合併再讓 archive worker 接手）|
+| `cron-aggregate-worker` | 每日 17:00 UTC（= 01:00 隔日 Asia/Taipei，archive 前 1h）| telemetry / debug_failure aggregate（先合併再讓 archive worker 接手）。**v12 codex r1 H-1 改 daily**：weekly 會漏 archive 每天標 archived_at 的 24h row（PR 4 翻 dry_run 後資料永久流失）|
 | `cron-month-finalize-worker` | 每月 1 號 20:00 UTC（= 04:00 Asia/Taipei）| 上月 chunk 全部進 terminal（audit_log→purged / admin_audit_log→cold_copied）後寫月份 manifest |
 | `admin-job: audit-archive-retry` | 手動 / API | 補跑失敗的 chunk（`SELECT FROM audit_archive_chunks WHERE state IN ('failed','blacklisted')`）|
 | `admin-job: audit-archive-export` | 手動 / API | 讀 R2，組合月份檔回 admin |
@@ -986,7 +986,7 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 | 3 | admin_audit_log 跨 chunk hash chain | manifest 記 `first_row_hash` / `last_row_hash` / `prev_hash_of_first_row`；驗證離線可做（`chunk[N].prev_hash_of_first_row === chunk[N-1].last_row_hash`），不依賴 D1。 |
 | 4 | R2 binding 命名 | `AUDIT_ARCHIVE_BUCKET`（保留命名空間）；prod/preview 分 bucket；env 入 R2 key 前綴防汙染。 |
 | 5 | Failed chunk 告警 | 第 1-2 次 warn；**第 3 次升 critical**（Discord/PagerDuty）；之後每 24h 一次 reminder（避免風暴）。Webhook 重用 `DISCORD_AUDIT_WEBHOOK`。 |
-| 6 | Archive timing | **18:00 UTC = 02:00 Asia/Taipei 凌晨**（避日間流量；archive 03:00 / aggregate 17:00 週日 / month-finalize 19:00 月初）。 |
+| 6 | Archive timing | **18:00 UTC = 02:00 Asia/Taipei 凌晨**（避日間流量；archive 18:00 daily / **aggregate 17:00 daily**（v12 codex r1 H-1）/ month-finalize 20:00 月 1 號）。 |
 | 7 | Sampling 規則 | bucket key = `(event_type, reason_code, hour)`，每組保留 first 100 raw samples + count；`critical` debug_failure 不採樣；`telemetry` 類只 aggregate 計數不留樣本。 |
 
 ## Codex review 重點（v8.2 焦點）
