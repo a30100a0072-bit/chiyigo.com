@@ -41,9 +41,8 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0013-0037 forward 因 _base.sql ↔ schema_iam_fresh.sql drift
-// 暫不做（refresh_tokens / auth_codes / local_accounts 等 prod 既有表不在 _base）。
-// schema baseline 重整為獨立技術債，見 memory project_db_schema_baseline_drift.md。
+// 至少要有 targeted smoke。完整 0001..0040 forward 仍是 TODO（見 memory
+// project_db_schema_baseline_drift.md task #4）；本 case 維持手建 fixture 形式。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
 import down0038    from '../../migrations/down/0038_audit_log_phase2.down.sql?raw'
@@ -233,10 +232,10 @@ describe('migrations smoke', () => {
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 migration smoke。
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
-// _base.sql 與 prod fresh schema (database/schema_iam_fresh.sql) 有 drift —
-// refresh_tokens / auth_codes / local_accounts 等 prod 既有表從未經 migration，直接寫進
-// fresh schema。因此無法從 _base 一路跑 0001..0037。完整 forward 需先重整 schema baseline
-// （獨立技術債，見 memory project_db_schema_baseline_drift.md）。
+// 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0040 已可行，
+// 待擴 test（見 memory project_db_schema_baseline_drift.md task #4）。本 case
+// 維持手建 fixture 形式作 0037 issued_aud 行為 targeted 驗證。
 //
 // 本 case 只手建 0037 必要的 fixture（users + pre-0037 refresh_tokens），跑 0037 migration，
 // 驗欄位/索引/NULL 行為/綁定持久化。F-2 refresh.js 邏輯（rawAudProvided 條件、effectiveAud
@@ -245,7 +244,7 @@ describe('migrations smoke 0037 targeted', () => {
   beforeAll(async () => {
     await dropAllTables()
     // pre-0037 minimal fixture：模擬 0036 後狀態
-    // refresh_tokens 取自 schema_iam_fresh.sql 的 0037 前形狀（沒 issued_aud 欄）
+    // refresh_tokens 0037 前形狀（_base.sql + 0019/0035 後、0037 前；沒 issued_aud 欄）
     await env.chiyigo_db.prepare(`
       CREATE TABLE users (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,

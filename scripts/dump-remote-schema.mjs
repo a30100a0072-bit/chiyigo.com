@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Read-only dump of prod D1 schema + _cf_d1_migrations state.
-// Usage: node scripts/dump-remote-schema.mjs [--db chiyigo_db] [--out database/schema_iam_prod.sql]
+// Usage: node scripts/dump-remote-schema.mjs [--db chiyigo_db] [--out database/legacy_snapshots/schema_iam_prod.sql]
 //
-// Output:
-//   database/schema_iam_prod.sql      — CREATE TABLE / INDEX / TRIGGER / VIEW DDL (sorted, deterministic)
-//   database/schema_iam_prod.meta.json — table row counts + _cf_d1_migrations rows + per-table column list
+// Output (default lands in legacy_snapshots/ — this is an archival dump tool,
+// NOT a schema source of truth; truth = migrations/_base.sql + migrations/0001..NNNN):
+//   database/legacy_snapshots/schema_iam_prod.sql      — CREATE TABLE / INDEX / TRIGGER / VIEW DDL (sorted, deterministic)
+//   database/legacy_snapshots/schema_iam_prod.meta.json — table row counts + _cf_d1_migrations rows + per-table column list
 //
 // Does NOT mutate anything. Safe to run anytime.
 
@@ -18,7 +19,7 @@ function arg(name, def) {
   return i >= 0 ? args[i + 1] : def;
 }
 const DB = arg('--db', 'chiyigo_db');
-const OUT_SQL = resolve(arg('--out', 'database/schema_iam_prod.sql'));
+const OUT_SQL = resolve(arg('--out', 'database/legacy_snapshots/schema_iam_prod.sql'));
 const OUT_META = OUT_SQL.replace(/\.sql$/, '.meta.json');
 
 // Wrangler quirks we must work around:
