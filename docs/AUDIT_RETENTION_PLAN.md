@@ -913,6 +913,24 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 - Cron worker 寫 R2，但**不刪 D1**（DRY_RUN env flag）
 - 跑 1 個月觀察 R2 寫入正確性、體積、效能
 
+實施拆 sub-phases（HEAD `759b198`，2026-05-12 全結；細節見 memory `project_audit_phase2`）：
+- **PR 2.0** archive worker skeleton（planned→uploaded + unfinished-gate + no-delete lint）✅
+- **PR 2.1a/c/d/d.1** state machine（verified / marked_archived / recovery / putWithRetry）✅
+- **PR 2.2a** 6 cold_class round-robin + MAX_CHUNKS_PER_RUN ✅
+- **PR 2.2b**（含 codex r1+r2）admin retry endpoint stub + step-up gate ✅
+- **PR 2.2c**（含 codex r1+r2+r3+r4）archive worker code discipline lint hardening：
+  - 禁裸 `bucket.put` 必走 archivePut wrapper
+  - 禁 `DELETE FROM audit_log` / `audit_archive_chunks`
+  - ESLint inline plugin `archive-discipline/no-forbidden-r2-or-sql` + grep `scripts/lint-archive-no-delete.js` 兩道防線
+  - shared module `scripts/_archive-lint-patterns.js` 兩處共用
+  - per-kind ALLOW_TAG（archive-put-allow / archive-delete-allow / archive-sql-allow），cross-kind 不互相豁免
+  - 覆蓋形狀：direct / optional chaining / bracket / paren-wrap / destructure / method-extraction / SQL multiline whole-source
+  - best-effort 邊界明列；完整 alias-flow tracking 留 AST 版 ESLint rule 未來 PR
+- **PR 2.1b** zstd compression（獨立小 PR）— 🟡 待
+- **PR 2.2d**（可選）fine-grain scope `admin:audit_archive:retry|resolve|purge` — 🟡 待
+- **PR 2.3** force_purge 真實作（R2 + D1 delete + retention lock 分支） — 🟡 待
+- F-2 manifest.severities prod 驗收 — 等 2026-05-13 02:00 cron 自然帶
+
 ### PR 3 — Aggregate worker
 - 對 telemetry / debug_failure 跑 bucket 合併
 - 仍 dry-run（產 aggregate 表但不刪 raw）
