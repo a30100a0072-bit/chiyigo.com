@@ -195,7 +195,7 @@ function suggestCode(file, s) {
 const byCodeStr = new Map();
 for (const r of results) {
   const { code, confident, scope } = suggestCode(r.file, r.errorStr);
-  const key = `${code} ${r.errorStr}`;
+  const key = `${code}\u0000${r.errorStr}`;
   if (!byCodeStr.has(key)) byCodeStr.set(key, { code, errorStr: r.errorStr, count: 0, confident, scope });
   byCodeStr.get(key).count++;
 }
