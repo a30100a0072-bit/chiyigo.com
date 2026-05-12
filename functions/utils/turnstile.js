@@ -12,7 +12,7 @@
  *
  * 端點要怎麼接：
  *   const ts = await verifyTurnstile(request, body, env)
- *   if (!ts.ok) return res({ error: 'captcha_failed', reason: ts.reason }, 403)
+ *   if (!ts.ok) return res({ error: 'captcha_failed', code: 'CAPTCHA_FAILED', reason: ts.reason }, 403)
  *
  * 不在 _middleware 統一接的理由：
  *   - 不是所有 endpoint 都需要 captcha（GET / 已驗證的 API）

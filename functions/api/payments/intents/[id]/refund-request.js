@@ -22,11 +22,11 @@ export async function onRequestPost({ request, env, params }) {
   if (error) return error
 
   const intentId = Number(params?.id)
-  if (!Number.isFinite(intentId) || intentId < 1) return res({ error: 'not_found' }, 404)
+  if (!Number.isFinite(intentId) || intentId < 1) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404)
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
   const reason = String(body?.reason ?? '').trim()
   if (!reason) return res({ error: '退款原因必填', code: 'REASON_REQUIRED' }, 400)
 
@@ -37,7 +37,7 @@ export async function onRequestPost({ request, env, params }) {
     .prepare(`SELECT id, user_id, status, metadata, amount_subunit, currency, vendor
                 FROM payment_intents WHERE id = ?`)
     .bind(intentId).first()
-  if (!intent || Number(intent.user_id) !== userId) return res({ error: 'not_found' }, 404)
+  if (!intent || Number(intent.user_id) !== userId) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404)
   if (intent.status !== 'succeeded') {
     return res({ error: '只有已成功的充值可申請退款', code: 'INVALID_STATUS', actual_status: intent.status }, 409)
   }

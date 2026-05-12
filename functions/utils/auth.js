@@ -28,12 +28,12 @@ import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedS
 export async function requireAuth(request, env, requiredScope = null, opts = {}) {
   const authHeader = request.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) {
-    return { user: null, error: res({ error: 'Unauthorized' }, 401) }
+    return { user: null, error: res({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401) }
   }
 
   const token = authHeader.slice(7).trim()
   if (!token) {
-    return { user: null, error: res({ error: 'Unauthorized' }, 401) }
+    return { user: null, error: res({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401) }
   }
 
   let payload
@@ -42,7 +42,7 @@ export async function requireAuth(request, env, requiredScope = null, opts = {})
     if (opts.audience !== undefined) verifyOpts.audience = opts.audience
     payload = await verifyJwt(token, env, verifyOpts)
   } catch {
-    return { user: null, error: res({ error: 'Unauthorized' }, 401) }
+    return { user: null, error: res({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401) }
   }
 
   // 封禁帳號：無論任何 scope，一律阻斷
@@ -63,12 +63,12 @@ export async function requireAuth(request, env, requiredScope = null, opts = {})
 
   // scope 檢查：若要求特定 scope 但 JWT 不符，拒絕存取
   if (requiredScope !== null && payload.scope !== requiredScope) {
-    return { user: null, error: res({ error: 'Forbidden: wrong token scope' }, 403) }
+    return { user: null, error: res({ error: 'Forbidden: wrong token scope', code: 'WRONG_TOKEN_SCOPE' }, 403) }
   }
 
   // 一般存取時，拒絕受限的 pre_auth_token
   if (requiredScope === null && payload.scope === 'pre_auth') {
-    return { user: null, error: res({ error: 'Forbidden: pre_auth token cannot access this resource' }, 403) }
+    return { user: null, error: res({ error: 'Forbidden: pre_auth token cannot access this resource', code: 'PRE_AUTH_TOKEN_FORBIDDEN' }, 403) }
   }
 
   // token_version 全域 revoke 比對：
@@ -210,7 +210,7 @@ export async function requireAnyScope(request, env, ...acceptedScopes) {
 export async function requireStepUp(request, env, requiredScope, requiredAction = null) {
   if (!isElevatedScope(requiredScope)) {
     // 程式錯誤而非 user 錯誤：caller 給了非 elevated 的 scope
-    return { user: null, error: res({ error: 'requireStepUp must check an elevated:* scope' }, 500) }
+    return { user: null, error: res({ error: 'requireStepUp must check an elevated:* scope', code: 'INTERNAL_ERROR' }, 500) }
   }
 
   const { user, error } = await requireAuth(request, env)

@@ -29,7 +29,7 @@ export async function onRequestPost({ request, env, params }) {
   const vendor = String(params?.vendor ?? '').toLowerCase()
   const adapter = resolvePaymentAdapter(vendor)
   if (!adapter) {
-    return res({ error: `Unknown payment vendor: ${vendor}` }, 400)
+    return res({ error: `Unknown payment vendor: ${vendor}`, code: 'UNKNOWN_PAYMENT_VENDOR', vendor }, 400)
   }
 
   // T17 DLQ：讀 raw body 一次（adapter 可能也會讀），失敗時落 DLQ
@@ -57,7 +57,7 @@ export async function onRequestPost({ request, env, params }) {
     if (typeof adapter.failureResponse === 'function') {
       return adapter.failureResponse(parsed.error)
     }
-    return res({ error: 'Webhook validation failed' }, 401)
+    return res({ error: 'Webhook validation failed', code: 'WEBHOOK_VALIDATION_FAILED' }, 401)
   }
 
   // 找對應的 intent — 從這裡之後任何 throw 都進 DLQ

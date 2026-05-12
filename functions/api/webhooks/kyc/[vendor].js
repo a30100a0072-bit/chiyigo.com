@@ -25,7 +25,7 @@ export async function onRequestPost({ request, env, params }) {
   const vendor = String(params?.vendor ?? '').toLowerCase()
   const adapter = resolveKycAdapter(vendor)
   if (!adapter) {
-    return res({ error: `Unknown KYC vendor: ${vendor}` }, 400)
+    return res({ error: `Unknown KYC vendor: ${vendor}`, code: 'UNKNOWN_KYC_VENDOR', vendor }, 400)
   }
 
   const parsed = await adapter.parseWebhook(request, env)
@@ -35,7 +35,7 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'kyc.webhook.fail', severity: 'warn', request,
       data: { vendor, reason: parsed.error },
     })
-    return res({ error: 'Webhook validation failed' }, 401)
+    return res({ error: 'Webhook validation failed', code: 'WEBHOOK_VALIDATION_FAILED' }, 401)
   }
 
   // dedupe — 寫 kyc_webhook_events 撞 UNIQUE 即代表重送
