@@ -35,13 +35,13 @@ export async function onRequestGet({ request, env }) {
   const ok = effective.has(SCOPES.ADMIN_PAYMENTS_READ) || effective.has(SCOPES.ADMIN_PAYMENTS_WRITE) ||
              effective.has(SCOPES.ADMIN_PAYMENTS_REFUND) || effective.has(SCOPES.ADMIN_PAYMENTS_APPROVE)
   if (!ok) {
-    return res({ error: 'admin:payments:* scope required' }, 403, cors)
+    return res({ error: 'admin:payments:* scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:payments:*' }, 403, cors)
   }
 
   const url = new URL(request.url)
   const intentId = Number(url.searchParams.get('intent_id'))
   if (!Number.isFinite(intentId) || intentId < 1) {
-    return res({ error: 'intent_id required' }, 400, cors)
+    return res({ error: 'intent_id required', code: 'INTENT_ID_REQUIRED' }, 400, cors)
   }
 
   const { results } = await env.chiyigo_db

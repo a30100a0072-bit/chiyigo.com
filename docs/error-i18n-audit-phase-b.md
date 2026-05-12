@@ -3,9 +3,9 @@
 > Phase A 已建 `public/js/api.js#API_ERROR_I18N` 前端字典。本 doc 列出 `functions/` 下所有 `res({ error: '...' })` 缺 `code:` 欄位的處，作為 Phase B 漸進補碼依據。**本 PR 只盤點，不改 code**。
 
 ## 摘要
-- 總計：**66 處**缺 `code`
-- 涉及檔案：**19 個**
-- 推薦新增 / 既有 i18n key：**38 個**（去重後）
+- 總計：**14 處**缺 `code`
+- 涉及檔案：**5 個**
+- 推薦新增 / 既有 i18n key：**10 個**（去重後）
 - 仍標 `NEEDS_REVIEW` 待人工命名：**0 處**（佔 0%）
 - 變數型 `error: <expr>` 警告：**7 處**（列在文末警告區）
 - 已有 code 但前端 dict 缺翻譯：**0 個 code**（列在「漏譯」區）
@@ -20,143 +20,24 @@
 
 | code | 出現處數 | 建議 zh-TW | 建議 en |
 |---|---:|---|---|
-| `INTENT_NOT_FOUND` | 6 | 找不到付款單 | not_found |
-| `REFUND_REQUEST_NOT_FOUND` | 4 | 找不到退款申請 | not_found |
-| `REQUISITION_NOT_FOUND` | 4 | 找不到該需求單 | not_found |
-| `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:payments scope required |
-| `INVALID_STATUS` | 3 | 狀態值無效 | invalid status |
 | `UNAUTHORIZED` | 3 | 未登入或登入已過期 | Unauthorized |
-| `USER_NOT_FOUND` | 3 | 找不到使用者 | User not found |
-| `ECPAY_REFUND_FAILED` | 2 | 綠界退款失敗 | ECPay refund failed |
-| `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:refund scope required |
-| `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:* scope required |
-| `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:users:write scope required |
-| `INVALID_JSON` | 2 | 請求格式錯誤 | Invalid JSON |
-| `INVALID_USER_ID` | 2 | 使用者 ID 格式錯誤 | Invalid user id |
-| `REFUND_NOT_IMPLEMENTED` | 2 | 此金流供應商尚未支援退款 | refund not implemented for vendor: ${intent.vendor} |
-| `TRADE_NO_NOT_FOUND` | 2 | 找不到交易序號 | TradeNo not found; cannot call refund API |
+| `INTENT_NOT_FOUND` | 2 | 找不到付款單 | not_found |
 | `WEBHOOK_VALIDATION_FAILED` | 2 | Webhook 驗證失敗 | Webhook validation failed |
-| `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot revoke a user with equal or higher role |
-| `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot ban a user with equal or higher role |
-| `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot unban a user with equal or higher role |
-| `CANNOT_TARGET_SELF` | 1 | 無法對自己執行此操作 | Cannot revoke your own tokens via admin API |
-| `CANNOT_TARGET_SELF` | 1 | 無法對自己執行此操作 | Cannot ban yourself |
 | `CAPTCHA_FAILED` | 1 | 人機驗證失敗 | captcha_failed |
-| `DEVICE_UUID_REQUIRED` | 1 | 請提供 device_uuid | device_uuid is required for mode=device |
-| `FROM_DATE_INVALID` | 1 | 起始日期格式錯誤（需為 ISO 8601） | from must be ISO 8601 date/datetime |
-| `INTENT_ID_REQUIRED` | 1 | 請提供 intent_id | intent_id required |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | requireStepUp must check an elevated:* scope |
-| `INVALID_MODE` | 1 | mode 參數無效 | mode must be one of: ${[...VALID_MODES].join(', ')} |
-| `JTI_REQUIRED` | 1 | 請提供 jti | jti is required for mode=jti |
-| `LINKED_INTENT_NOT_FOUND` | 1 | 找不到關聯的付款單 | linked intent not found |
+| `INVALID_JSON` | 1 | 請求格式錯誤 | Invalid JSON |
 | `PRE_AUTH_TOKEN_FORBIDDEN` | 1 | Token 權限不足，請先完成兩步驟驗證 | Forbidden: pre_auth token cannot access this resource |
-| `TO_DATE_INVALID` | 1 | 結束日期格式錯誤（需為 ISO 8601） | to must be ISO 8601 date/datetime |
 | `UNKNOWN_KYC_VENDOR` | 1 | 未知的 KYC 廠商 | Unknown KYC vendor: ${vendor} |
 | `UNKNOWN_PAYMENT_VENDOR` | 1 | 未知的金流廠商 | Unknown payment vendor: ${vendor} |
-| `USER_ALREADY_BANNED` | 1 | 使用者已被停用 | User is already banned |
-| `USER_ID_INVALID` | 1 | user_id 需為數字 | user_id must be a number |
-| `USER_ID_INVALID` | 1 | user_id 需為數字 | user_id must be a positive integer |
-| `USER_NOT_BANNED` | 1 | 使用者並未被停用 | User is not banned |
 | `WRONG_TOKEN_SCOPE` | 1 | Token 權限範圍錯誤 | Forbidden: wrong token scope |
 
 > ⚠️ = 仍標 `NEEDS_REVIEW`，建議實作 PR 動工時逐條定名
 > `INSUFFICIENT_SCOPE` 樣板化：i18n 字串內含 `{required}` 參數，傳入後端的 scope 字串
 
-### 命名衝突 / 故意合併（同 code 對應多字串）
-
-> 多數為**故意合併**（大小寫不同、措辭微異但語意一致），實作 PR 補 code 時挑一個對應的英文字串即可；真要拆碼會在這次 review 標註。
-- `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`：
-  - "Cannot revoke a user with equal or higher role"
-  - "Cannot ban a user with equal or higher role"
-  - "Cannot unban a user with equal or higher role"
-- `CANNOT_TARGET_SELF`：
-  - "Cannot revoke your own tokens via admin API"
-  - "Cannot ban yourself"
-- `USER_ID_INVALID`：
-  - "user_id must be a number"
-  - "user_id must be a positive integer"
+### 命名衝突
+無（INSUFFICIENT_SCOPE 樣板化處理不算衝突）
 
 ## 逐檔清單
-
-### functions/api/admin/payments/aggregate.js（1 處）
-- L45 `'invalid status'` → `INVALID_STATUS`
-
-### functions/api/admin/payments/intents.js（5 處）
-- L48 `'admin:payments scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:payments`）
-- L83 `'user_id must be a number'` → `USER_ID_INVALID`
-- L89 `'invalid status'` → `INVALID_STATUS`
-- L101 `'from must be ISO 8601 date/datetime'` → `FROM_DATE_INVALID`
-- L106 `'to must be ISO 8601 date/datetime'` → `TO_DATE_INVALID`
-
-### functions/api/admin/payments/intents/[id]/delete.js（3 處）
-- L47 `'admin:payments scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:payments`）
-- L51 `'not_found'` → `INTENT_NOT_FOUND`
-- L54 `'not_found'` → `INTENT_NOT_FOUND`
-
-### functions/api/admin/payments/intents/[id]/refund.js（6 處）
-- L61 `'admin:payments:refund scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:payments:refund`）
-- L65 `'not_found'` → `INTENT_NOT_FOUND`
-- L68 `'not_found'` → `INTENT_NOT_FOUND`
-- L79 `'refund not implemented for vendor: ${intent.vendor}'` → `REFUND_NOT_IMPLEMENTED`
-- L100 `'TradeNo not found; cannot call refund API'` → `TRADE_NO_NOT_FOUND`
-- L160 `'ECPay refund failed'` → `ECPAY_REFUND_FAILED`
-
-### functions/api/admin/payments/metadata-archive.js（2 處）
-- L38 `'admin:payments:* scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:payments:*`）
-- L44 `'intent_id required'` → `INTENT_ID_REQUIRED`
-
-### functions/api/admin/payments/webhook-dlq.js（1 處）
-- L39 `'admin:payments:* scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:payments:*`）
-
-### functions/api/admin/requisition-refund.js（1 處）
-- L53 `'invalid status'` → `INVALID_STATUS`
-
-### functions/api/admin/requisition-refund/[id]/approve.js（7 處）
-- L51 `'admin:payments:refund scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:payments:refund`）
-- L55 `'not_found'` → `REFUND_REQUEST_NOT_FOUND`
-- L62 `'not_found'` → `REFUND_REQUEST_NOT_FOUND`
-- L72 `'linked intent not found'` → `LINKED_INTENT_NOT_FOUND`
-- L81 `'refund not implemented for vendor: ${intent.vendor}'` → `REFUND_NOT_IMPLEMENTED`
-- L105 `'TradeNo not found; cannot call refund API'` → `TRADE_NO_NOT_FOUND`
-- L163 `'ECPay refund failed'` → `ECPAY_REFUND_FAILED`
-
-### functions/api/admin/requisition-refund/[id]/reject.js（3 處）
-- L38 `'admin:payments scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:payments`）
-- L42 `'not_found'` → `REFUND_REQUEST_NOT_FOUND`
-- L49 `'not_found'` → `REFUND_REQUEST_NOT_FOUND`
-
-### functions/api/admin/requisitions/[id]/delete.js（2 處）
-- L37 `'not_found'` → `REQUISITION_NOT_FOUND`
-- L43 `'not_found'` → `REQUISITION_NOT_FOUND`
-
-### functions/api/admin/requisitions/[id]/save.js（2 處）
-- L42 `'not_found'` → `REQUISITION_NOT_FOUND`
-- L49 `'not_found'` → `REQUISITION_NOT_FOUND`
-
-### functions/api/admin/revoke.js（8 處）
-- L48 `'Invalid JSON'` → `INVALID_JSON`
-- L52 `'mode must be one of: ${[...VALID_MODES].join(', ')}'` → `INVALID_MODE`
-- L59 `'jti is required for mode=jti'` → `JTI_REQUIRED`
-- L86 `'user_id must be a positive integer'` → `USER_ID_INVALID`
-- L89 `'Cannot revoke your own tokens via admin API'` → `CANNOT_TARGET_SELF`
-- L95 `'User not found'` → `USER_NOT_FOUND`
-- L107 `'Cannot revoke a user with equal or higher role'` → `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`
-- L141 `'device_uuid is required for mode=device'` → `DEVICE_UUID_REQUIRED`
-
-### functions/api/admin/users/[id]/ban.js（6 處）
-- L27 `'admin:users:write scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:users:write`）
-- L31 `'Invalid user id'` → `INVALID_USER_ID`
-- L32 `'Cannot ban yourself'` → `CANNOT_TARGET_SELF`
-- L41 `'User not found'` → `USER_NOT_FOUND`
-- L53 `'Cannot ban a user with equal or higher role'` → `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`
-- L55 `'User is already banned'` → `USER_ALREADY_BANNED`
-
-### functions/api/admin/users/[id]/unban.js（5 處）
-- L30 `'admin:users:write scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:users:write`）
-- L34 `'Invalid user id'` → `INVALID_USER_ID`
-- L43 `'User not found'` → `USER_NOT_FOUND`
-- L55 `'Cannot unban a user with equal or higher role'` → `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`
-- L57 `'User is not banned'` → `USER_NOT_BANNED`
 
 ### functions/api/payments/intents/[id]/refund-request.js（3 處）
 - L25 `'not_found'` → `INTENT_NOT_FOUND`
@@ -177,7 +58,7 @@
 - L45 `'Unauthorized'` → `UNAUTHORIZED`
 - L66 `'Forbidden: wrong token scope'` → `WRONG_TOKEN_SCOPE`
 - L71 `'Forbidden: pre_auth token cannot access this resource'` → `PRE_AUTH_TOKEN_FORBIDDEN`
-- L211 `'requireStepUp must check an elevated:* scope'` → `INTERNAL_ERROR`
+- L213 `'requireStepUp must check an elevated:* scope'` → `INTERNAL_ERROR`
 
 ### functions/utils/turnstile.js（1 處）
 - L15 `'captcha_failed'` → `CAPTCHA_FAILED`
@@ -195,23 +76,6 @@
 > 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
 
 ## 後續 PR 切分建議
-
-### PR B-4 (Admin 後台)
-- 檔案：14 個，處數：**52**
-  - functions/api/admin/payments/aggregate.js
-  - functions/api/admin/payments/intents.js
-  - functions/api/admin/payments/intents/[id]/delete.js
-  - functions/api/admin/payments/intents/[id]/refund.js
-  - functions/api/admin/payments/metadata-archive.js
-  - functions/api/admin/payments/webhook-dlq.js
-  - functions/api/admin/requisition-refund.js
-  - functions/api/admin/requisition-refund/[id]/approve.js
-  - functions/api/admin/requisition-refund/[id]/reject.js
-  - functions/api/admin/requisitions/[id]/delete.js
-  - functions/api/admin/requisitions/[id]/save.js
-  - functions/api/admin/revoke.js
-  - functions/api/admin/users/[id]/ban.js
-  - functions/api/admin/users/[id]/unban.js
 
 ### PR B-5 (Payments / Webhooks)
 - 檔案：3 個，處數：**7**

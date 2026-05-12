@@ -50,7 +50,7 @@ export async function onRequestGet({ request, env }) {
 
   const url    = new URL(request.url)
   const status = url.searchParams.get('status') ?? 'pending'
-  if (!VALID_STATUS.has(status)) return res({ error: 'invalid status' }, 400, cors)
+  if (!VALID_STATUS.has(status)) return res({ error: 'invalid status', code: 'INVALID_STATUS' }, 400, cors)
   const page   = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10))
   const limit  = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10)))
   const offset = (page - 1) * limit

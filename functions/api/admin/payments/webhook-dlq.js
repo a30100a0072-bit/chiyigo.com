@@ -36,7 +36,7 @@ export async function onRequestGet({ request, env }) {
   const ok = eff.has(SCOPES.ADMIN_PAYMENTS_READ) || eff.has(SCOPES.ADMIN_PAYMENTS_WRITE) ||
              eff.has(SCOPES.ADMIN_PAYMENTS_REFUND) || eff.has(SCOPES.ADMIN_PAYMENTS_APPROVE)
   if (!ok) {
-    return res({ error: 'admin:payments:* scope required' }, 403, cors)
+    return res({ error: 'admin:payments:* scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:payments:*' }, 403, cors)
   }
 
   const url     = new URL(request.url)

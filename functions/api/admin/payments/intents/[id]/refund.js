@@ -58,14 +58,14 @@ export async function onRequestPost({ request, env, params }) {
   // 含 :refund，相容無痛；外洩的 read-only token（admin:payments:read）會被擋。
   const effective = effectiveScopesFromJwt(stepCheck.user)
   if (!effective.has(SCOPES.ADMIN_PAYMENTS_REFUND)) {
-    return res({ error: 'admin:payments:refund scope required' }, 403, cors)
+    return res({ error: 'admin:payments:refund scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:payments:refund' }, 403, cors)
   }
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404, cors)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404, cors)
 
   const intent = await getPaymentIntent(env, { id })
-  if (!intent) return res({ error: 'not_found' }, 404, cors)
+  if (!intent) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404, cors)
 
   if (intent.status !== PAYMENT_STATUS.SUCCEEDED) {
     return res({
@@ -76,7 +76,7 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   if (intent.vendor !== 'ecpay') {
-    return res({ error: `refund not implemented for vendor: ${intent.vendor}` }, 400, cors)
+    return res({ error: `refund not implemented for vendor: ${intent.vendor}`, code: 'REFUND_NOT_IMPLEMENTED' }, 400, cors)
   }
 
   // P0-10：優先讀 intent.metadata.trade_no（webhook succeeded 時寫入，正規來源）；
@@ -97,7 +97,7 @@ export async function onRequestPost({ request, env, params }) {
       : null
   }
   if (!tradeNo) {
-    return res({ error: 'TradeNo not found; cannot call refund API' }, 400, cors)
+    return res({ error: 'TradeNo not found; cannot call refund API', code: 'TRADE_NO_NOT_FOUND' }, 400, cors)
   }
 
   let body = {}
@@ -159,6 +159,7 @@ export async function onRequestPost({ request, env, params }) {
     })
     return res({
       error:    'ECPay refund failed',
+      code:     'ECPAY_REFUND_FAILED',
       rtn_code: refundResult.rtn_code,
       rtn_msg:  refundResult.rtn_msg,
     }, 400, cors)

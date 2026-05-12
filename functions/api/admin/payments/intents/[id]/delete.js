@@ -44,14 +44,14 @@ export async function onRequestPost({ request, env, params }) {
 
   const effective = effectiveScopesFromJwt(stepCheck.user)
   if (!effective.has(SCOPES.ADMIN_PAYMENTS)) {
-    return res({ error: 'admin:payments scope required' }, 403, cors)
+    return res({ error: 'admin:payments scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:payments' }, 403, cors)
   }
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404, cors)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404, cors)
 
   const intent = await getPaymentIntent(env, { id })
-  if (!intent) return res({ error: 'not_found' }, 404, cors)
+  if (!intent) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404, cors)
 
   // 鎖死狀態：refunded 不可被任何形式刪除/匿名化
   if (LOCKED_STATUSES.has(intent.status)) {

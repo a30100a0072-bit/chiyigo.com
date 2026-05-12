@@ -45,7 +45,7 @@ export async function onRequestGet({ request, env }) {
     if (stepCheck.error) return stepCheck.error
     user = stepCheck.user
     if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_PAYMENTS)) {
-      return res({ error: 'admin:payments scope required' }, 403, cors)
+      return res({ error: 'admin:payments scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:payments' }, 403, cors)
     }
   } else {
     // P1-17 Phase 3: 任一金流 fine scope 即可讀（finance/support 透過 :read 通過）
@@ -80,13 +80,13 @@ export async function onRequestGet({ request, env }) {
   const userId = url.searchParams.get('user_id')
   if (userId) {
     const n = Number(userId)
-    if (!Number.isFinite(n)) return res({ error: 'user_id must be a number' }, 400, cors)
+    if (!Number.isFinite(n)) return res({ error: 'user_id must be a number', code: 'USER_ID_INVALID' }, 400, cors)
     conds.push('pi.user_id = ?'); binds.push(n)
   }
 
   const status = url.searchParams.get('status')
   if (status) {
-    if (!VALID_STATUSES.has(status)) return res({ error: 'invalid status' }, 400, cors)
+    if (!VALID_STATUSES.has(status)) return res({ error: 'invalid status', code: 'INVALID_STATUS' }, 400, cors)
     conds.push('pi.status = ?'); binds.push(status)
   }
 
@@ -98,12 +98,12 @@ export async function onRequestGet({ request, env }) {
   const ISO_RE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
   const from = url.searchParams.get('from')
   if (from) {
-    if (!ISO_RE.test(from)) return res({ error: 'from must be ISO 8601 date/datetime' }, 400, cors)
+    if (!ISO_RE.test(from)) return res({ error: 'from must be ISO 8601 date/datetime', code: 'FROM_DATE_INVALID' }, 400, cors)
     conds.push('pi.created_at >= ?'); binds.push(from)
   }
   const to   = url.searchParams.get('to')
   if (to)   {
-    if (!ISO_RE.test(to)) return res({ error: 'to must be ISO 8601 date/datetime' }, 400, cors)
+    if (!ISO_RE.test(to)) return res({ error: 'to must be ISO 8601 date/datetime', code: 'TO_DATE_INVALID' }, 400, cors)
     conds.push('pi.created_at < ?');  binds.push(to)
   }
 

@@ -48,18 +48,18 @@ export async function onRequestPost({ request, env, params }) {
   // P1-17：fine-grain admin:payments:refund（coarse admin:payments token 仍通過 hierarchy）
   const effective = effectiveScopesFromJwt(stepCheck.user)
   if (!effective.has(SCOPES.ADMIN_PAYMENTS_REFUND)) {
-    return res({ error: 'admin:payments:refund scope required' }, 403, cors)
+    return res({ error: 'admin:payments:refund scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:payments:refund' }, 403, cors)
   }
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404, cors)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'REFUND_REQUEST_NOT_FOUND' }, 404, cors)
 
   const db = env.chiyigo_db
 
   const rr = await db
     .prepare(`SELECT * FROM requisition_refund_request WHERE id = ?`)
     .bind(id).first()
-  if (!rr) return res({ error: 'not_found' }, 404, cors)
+  if (!rr) return res({ error: 'not_found', code: 'REFUND_REQUEST_NOT_FOUND' }, 404, cors)
   if (rr.status !== 'pending') {
     return res({
       error: 'only pending refund requests can be approved',
@@ -69,7 +69,7 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   const intent = rr.intent_id ? await getPaymentIntent(env, { id: rr.intent_id }) : null
-  if (!intent) return res({ error: 'linked intent not found' }, 404, cors)
+  if (!intent) return res({ error: 'linked intent not found', code: 'LINKED_INTENT_NOT_FOUND' }, 404, cors)
   if (intent.status !== PAYMENT_STATUS.SUCCEEDED) {
     return res({
       error: 'linked intent is not in succeeded status',
@@ -78,7 +78,7 @@ export async function onRequestPost({ request, env, params }) {
     }, 409, cors)
   }
   if (intent.vendor !== 'ecpay') {
-    return res({ error: `refund not implemented for vendor: ${intent.vendor}` }, 400, cors)
+    return res({ error: `refund not implemented for vendor: ${intent.vendor}`, code: 'REFUND_NOT_IMPLEMENTED' }, 400, cors)
   }
 
   let body = {}
@@ -102,7 +102,7 @@ export async function onRequestPost({ request, env, params }) {
       : null
   }
   if (!tradeNo) {
-    return res({ error: 'TradeNo not found; cannot call refund API' }, 400, cors)
+    return res({ error: 'TradeNo not found; cannot call refund API', code: 'TRADE_NO_NOT_FOUND' }, 400, cors)
   }
 
   // P0-7 atomic lock：與 admin/payments/intents/:id/refund 共用 helper，
@@ -162,6 +162,7 @@ export async function onRequestPost({ request, env, params }) {
     })
     return res({
       error:    'ECPay refund failed',
+      code:     'ECPAY_REFUND_FAILED',
       rtn_code: refundResult.rtn_code,
       rtn_msg:  refundResult.rtn_msg,
     }, 400, cors)

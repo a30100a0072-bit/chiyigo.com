@@ -45,18 +45,18 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const mode = body?.mode
   if (!VALID_MODES.has(mode))
-    return res({ error: `mode must be one of: ${[...VALID_MODES].join(', ')}` }, 400)
+    return res({ error: `mode must be one of: ${[...VALID_MODES].join(', ')}`, code: 'INVALID_MODE' }, 400)
 
   const db = env.chiyigo_db
   const ip = request.headers.get('CF-Connecting-IP') ?? null
 
   if (mode === 'jti') {
     const jti = typeof body.jti === 'string' ? body.jti.trim() : ''
-    if (!jti) return res({ error: 'jti is required for mode=jti' }, 400)
+    if (!jti) return res({ error: 'jti is required for mode=jti', code: 'JTI_REQUIRED' }, 400)
 
     const exp = Number.isFinite(body.exp) ? body.exp : Math.floor(Date.now() / 1000) + 3600
 
@@ -83,16 +83,16 @@ export async function onRequestPost({ request, env }) {
   // mode='user' / 'device' 共用：先驗 target user
   const targetId = Number(body.user_id)
   if (!Number.isFinite(targetId) || targetId <= 0)
-    return res({ error: 'user_id must be a positive integer' }, 400)
+    return res({ error: 'user_id must be a positive integer', code: 'USER_ID_INVALID' }, 400)
 
   if (targetId === Number(user.sub))
-    return res({ error: 'Cannot revoke your own tokens via admin API' }, 400)
+    return res({ error: 'Cannot revoke your own tokens via admin API', code: 'CANNOT_TARGET_SELF' }, 400)
 
   const target = await db
     .prepare(`SELECT id, email, role FROM users WHERE id = ? AND deleted_at IS NULL`)
     .bind(targetId)
     .first()
-  if (!target) return res({ error: 'User not found' }, 404)
+  if (!target) return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404)
 
   // Codex r4 #4：unknown target role critical audit
   if (!isKnownRole(target.role)) {
@@ -104,7 +104,7 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Target user has unknown role; refused for safety', code: 'UNKNOWN_TARGET_ROLE' }, 403)
   }
   if (!actorOutranksTarget(user.role, target.role))
-    return res({ error: 'Cannot revoke a user with equal or higher role' }, 403)
+    return res({ error: 'Cannot revoke a user with equal or higher role', code: 'CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE' }, 403)
 
   if (mode === 'user') {
     // P1-15：先寫 hash-chain；失敗拒動
@@ -138,7 +138,7 @@ export async function onRequestPost({ request, env }) {
 
   // mode === 'device'
   const deviceUuid = typeof body.device_uuid === 'string' ? body.device_uuid.trim() : ''
-  if (!deviceUuid) return res({ error: 'device_uuid is required for mode=device' }, 400)
+  if (!deviceUuid) return res({ error: 'device_uuid is required for mode=device', code: 'DEVICE_UUID_REQUIRED' }, 400)
 
   // P1-15：先寫 hash-chain
   try {

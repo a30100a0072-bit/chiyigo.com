@@ -35,18 +35,18 @@ export async function onRequestPost({ request, env, params }) {
 
   const effective = effectiveScopesFromJwt(stepCheck.user)
   if (!effective.has(SCOPES.ADMIN_PAYMENTS)) {
-    return res({ error: 'admin:payments scope required' }, 403, cors)
+    return res({ error: 'admin:payments scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:payments' }, 403, cors)
   }
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404, cors)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'REFUND_REQUEST_NOT_FOUND' }, 404, cors)
 
   const db = env.chiyigo_db
 
   const rr = await db
     .prepare(`SELECT id, requisition_id, user_id, intent_id, status FROM requisition_refund_request WHERE id = ?`)
     .bind(id).first()
-  if (!rr) return res({ error: 'not_found' }, 404, cors)
+  if (!rr) return res({ error: 'not_found', code: 'REFUND_REQUEST_NOT_FOUND' }, 404, cors)
   if (rr.status !== 'pending') {
     return res({
       error: 'only pending refund requests can be rejected',

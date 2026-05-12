@@ -42,7 +42,7 @@ export async function onRequestGet({ request, env }) {
   const url    = new URL(request.url)
   const period = url.searchParams.get('period') === 'monthly' ? 'monthly' : 'daily'
   const status = url.searchParams.get('status') ?? PAYMENT_STATUS.SUCCEEDED
-  if (!VALID_STATUSES.has(status)) return res({ error: 'invalid status' }, 400, cors)
+  if (!VALID_STATUSES.has(status)) return res({ error: 'invalid status', code: 'INVALID_STATUS' }, 400, cors)
 
   const from = url.searchParams.get('from') ?? null
   const to   = url.searchParams.get('to')   ?? null

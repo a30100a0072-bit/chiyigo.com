@@ -39,14 +39,14 @@ export async function onRequestPost({ request, env, params }) {
   if (error) return error
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404, cors)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'REQUISITION_NOT_FOUND' }, 404, cors)
 
   const db = env.chiyigo_db
   const row = await db
     .prepare(`SELECT id, user_id, name, company, contact, service_type, budget, timeline, message, status
                 FROM requisition WHERE id = ? AND deleted_at IS NULL`)
     .bind(id).first()
-  if (!row) return res({ error: 'not_found' }, 404, cors)
+  if (!row) return res({ error: 'not_found', code: 'REQUISITION_NOT_FOUND' }, 404, cors)
   if (row.status !== 'pending') {
     return res({
       error: '只能保存 pending 狀態的需求單',

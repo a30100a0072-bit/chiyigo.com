@@ -34,13 +34,13 @@ export async function onRequestPost({ request, env, params }) {
   if (error) return error
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404, cors)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'REQUISITION_NOT_FOUND' }, 404, cors)
 
   const db = env.chiyigo_db
   const row = await db
     .prepare(`SELECT * FROM requisition WHERE id = ? AND deleted_at IS NULL`)
     .bind(id).first()
-  if (!row) return res({ error: 'not_found' }, 404, cors)
+  if (!row) return res({ error: 'not_found', code: 'REQUISITION_NOT_FOUND' }, 404, cors)
 
   // 防帳務黑洞：若還有 succeeded 但未退款的 payment_intent → 拒絕
   // P0-3: 主路徑用 requisition_id FK

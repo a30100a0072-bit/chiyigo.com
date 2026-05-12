@@ -24,12 +24,12 @@ export async function onRequestPost({ request, env, params }) {
 
   // P1-17：fine-grain admin:users:write 守門
   if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_USERS_WRITE)) {
-    return res({ error: 'admin:users:write scope required' }, 403)
+    return res({ error: 'admin:users:write scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:users:write' }, 403)
   }
 
   const targetId = parseInt(params.id, 10)
-  if (isNaN(targetId)) return res({ error: 'Invalid user id' }, 400)
-  if (targetId === Number(user.sub)) return res({ error: 'Cannot ban yourself' }, 400)
+  if (isNaN(targetId)) return res({ error: 'Invalid user id', code: 'USER_ID_INVALID' }, 400)
+  if (targetId === Number(user.sub)) return res({ error: 'Cannot ban yourself', code: 'CANNOT_TARGET_SELF' }, 400)
 
   const db = env.chiyigo_db
 
@@ -38,7 +38,7 @@ export async function onRequestPost({ request, env, params }) {
     .bind(targetId)
     .first()
 
-  if (!target) return res({ error: 'User not found' }, 404)
+  if (!target) return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404)
 
   // Codex r4 #4：unknown target role = migration drift 或 DB 被改 → critical audit
   if (!isKnownRole(target.role)) {
@@ -50,9 +50,9 @@ export async function onRequestPost({ request, env, params }) {
     return res({ error: 'Target user has unknown role; refused for safety', code: 'UNKNOWN_TARGET_ROLE' }, 403)
   }
   if (!actorOutranksTarget(user.role, target.role))
-    return res({ error: 'Cannot ban a user with equal or higher role' }, 403)
+    return res({ error: 'Cannot ban a user with equal or higher role', code: 'CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE' }, 403)
 
-  if (target.status === 'banned') return res({ error: 'User is already banned' }, 400)
+  if (target.status === 'banned') return res({ error: 'User is already banned', code: 'USER_ALREADY_BANNED' }, 400)
 
   // P1-15：先寫 hash-chain admin_audit_log。失敗即拒絕，不允許「動作成功但無證據」。
   try {
