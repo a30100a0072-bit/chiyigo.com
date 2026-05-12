@@ -2,8 +2,22 @@
  * POST /api/admin/cron/audit-archive
  * Header: Authorization: Bearer <CRON_SECRET>
  *
- * F-3 Phase 2 PR 2.1a / 2.1c / 2.1d — Archive worker dry-run + state machine
+ * F-3 Phase 2 PR 2.2a — Archive worker dry-run + round-robin 6 cold_class
  * （design doc：docs/AUDIT_RETENTION_PLAN.md v11）
+ *
+ * PR 2.2a 範圍（2026-05-12）：
+ *   - 從 PR 2.1d 的「只跑 telemetry」expand 到 6 cold_class round-robin
+ *   - 新 env AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN（預設 2）控制單輪 cron 最多寫幾個 chunk
+ *     - 一個「work unit」= 一次 R2 PUT-bearing 動作（fresh planned→uploaded /
+ *       planned recovery / uploaded verify / verified mark_archived）
+ *     - dry_run skip / non-terminal-other skip / no_rows_eligible / drift fail-fast
+ *       = 0 unit（純查詢 / emit critical，沒寫 R2 / 沒升態，不算配額）
+ *   - per-class hot retention：utils.hotRetentionDaysFor(env, coldClass)；
+ *     telemetry 維持 AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS（PR 2.0 起 prod 部署），
+ *     其餘類別吃 AUDIT_ARCHIVE_HOT_DAYS_<COLD_CLASS_UPPER> 或 design doc 預設
+ *   - report 加 `cold_classes: [...]` 陣列；同時保留頂層 chunks_/rows_/blocker/
+ *     skipped_reason/recovery 作 PR 2.1d 既有測試與 prod cron 監控的 back-compat
+ *     mirror（鏡射「primary class」= 該輪首個有實質結果的 sub-report）
  *
  * PR 2.1d 範圍（codex F-1/F-2/F-3 收尾）：
  *   - F-1：chunk_uploaded emit 點搬到 handleUploadedBlocker（verify ok 後）；
@@ -11,15 +25,6 @@
  *   - F-2：runFreshChunkPipeline 對 rows 做 severity reduce，塞進 manifest
  *   - F-3：所有 R2 bucket.put 改走 archivePut（utils putWithRetry）— 1s/4s/16s
  *          exponential backoff，每次 attempt 失敗 emit audit.archive.upload_failed
- *          (warn)；最後 attempt 失敗 emit critical 並 throw
- *
- * PR 2.1a 範圍（user 在 2026-05-11 確認）：
- *   - 補三段升態：planned recovery → uploaded、uploaded → verified、verified → marked_archived
- *   - planned/uploaded blocker recovery：從 D1 重撈 row id range + 重 serialize + sha 對齊
- *   - marked_archived 升態走 design doc 「雙路徑驗證」（first-pass / recovery）
- *   - 仍只跑 (audit_log, telemetry)；6 cold_class expand 留 PR 2.2
- *   - zstd 壓縮獨立 PR 2.1b（避免 WASM bundle 風險與狀態機 review 混在一起）
- *   - DRY_RUN=true 時 verified 為終點：不 UPDATE archived_at，下輪 cron 仍會 hit verified blocker 並 skip
  *
  * 🔴 no-delete discipline：
  *   本檔禁止呼叫 env.AUDIT_ARCHIVE_BUCKET.delete( 任何形式（含 .delete、['delete']、解構）。
@@ -33,7 +38,7 @@ import { res } from '../../../utils/auth.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import {
   PR20_SUPPORTED_TABLE,
-  PR20_SUPPORTED_COLD_CLASS,
+  SUPPORTED_COLD_CLASSES,
   CHUNK_MAX_ROWS,
   CHUNK_MAX_BYTES,
   NON_TERMINAL_STATES,
@@ -47,6 +52,7 @@ import {
   aggregateSeverities,
   putWithRetry,
   rowMatchesColdClass,
+  hotRetentionDaysFor,
   newRunId,
   utcDate,
   ARCHIVE_WRITER_VERSION,
@@ -55,9 +61,15 @@ import {
 // PR 2.0：cold_class 版本固定 1。audit-policy 改動時 bump（design doc v8 cold_class_version）
 const COLD_CLASS_VERSION = 1
 
-function hotRetentionDays(env) {
-  const raw = Number(env.AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS ?? 30)
-  return Number.isFinite(raw) ? raw : 30
+// PR 2.2a：單輪 cron 最多寫幾個 chunk。預設 2 — 6 class × 21s retry 最壞累積 126s wallclock
+// 過大，2 取「比 1 有效率（驗 F-2 比較自然）+ 比 6 安全」的平衡。
+// 非數字 / 缺值 → 預設 2；<1 也夾回 1（不讓 worker 完全卡死）。
+function parseMaxChunksPerRun(env) {
+  const raw = env?.AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return 2
+  if (n < 1) return 1
+  return Math.floor(n)
 }
 
 function isDryRun(env) {
@@ -121,6 +133,45 @@ async function archivePut(ctx, role, chunkInfo, key, body, putOpts) {
   })
 }
 
+// PR 2.2a：建立 per-class sub-report 容器。所有 handler 改吃 sub-report（不再共用 top-level）。
+function newSubReport(coldClass) {
+  return {
+    cold_class: coldClass,
+    cursor: 0,
+    blocker: null,
+    blocker_action: null,
+    chunks_planned: 0,
+    chunks_uploaded: 0,
+    chunks_verified: 0,
+    chunks_marked_archived: 0,
+    rows_uploaded: 0,
+    rows_marked_archived: 0,
+    skipped_reason: null,
+    recovery: null,
+    errors: [],
+    ok: true,
+    // PR 2.2a codex r1：handler 一進入 R2 PUT-bearing 路徑就標 true；
+    // 在 archivePut 真正 throw 之前已記錄，可避免「PUT fail → 0 counter → 不消配額
+    // → 整輪 6 class 依序失敗」把 max_chunks_per_run wallclock budget 打爆。
+    // 計入 didConsumeQuota；didWriteWork 仍只看實際升態 counter，給 mirror predicate 用。
+    attempted_write: false,
+  }
+}
+
+// PR 2.2a：sub-report 是否實質「做了一次 R2 PUT-bearing 動作 + 完成 D1 升態」。
+// mirror primary 預測用：升態完成的 class 比「嘗試但失敗」優先映射上頂層。
+function didWriteWork(sub) {
+  return (sub.chunks_planned + sub.chunks_uploaded
+        + sub.chunks_verified + sub.chunks_marked_archived) > 0
+}
+
+// PR 2.2a codex r1 修正：是否消耗 max_chunks_per_run 配額。
+// = didWriteWork OR 已嘗試 PUT 但中途 throw（archivePut / D1 失敗都算）。
+// 失敗 attempt 也計入 → 整輪 R2 / D1 大規模故障時不會把 6 class 全跑一遍。
+function didConsumeQuota(sub) {
+  return didWriteWork(sub) || sub.attempted_write === true
+}
+
 export async function onRequestPost({ request, env }) {
   // ── Auth ─────────────────────────────────────────────────
   const auth = request.headers.get('Authorization') ?? ''
@@ -134,14 +185,14 @@ export async function onRequestPost({ request, env }) {
   const db = env.chiyigo_db
   if (!db)     return res({ error: 'chiyigo_db binding missing' }, 500)
 
-  const dryRun           = isDryRun(env)
-  const envName          = archiveEnv(env)
-  const runId            = newRunId()
-  const startedAt        = new Date().toISOString()
+  const dryRun            = isDryRun(env)
+  const envName           = archiveEnv(env)
+  const runId             = newRunId()
+  const startedAt         = new Date().toISOString()
   const putRetryBackoffMs = parseRetryBackoffMs(env)
+  const maxChunks         = parseMaxChunksPerRun(env)
 
   const tableName = PR20_SUPPORTED_TABLE
-  const coldClass = PR20_SUPPORTED_COLD_CLASS
 
   const report = {
     ok: true,
@@ -149,72 +200,143 @@ export async function onRequestPost({ request, env }) {
     run_id: runId,
     started_at: startedAt,
     table: tableName,
-    cold_class: coldClass,
     writer_version: ARCHIVE_WRITER_VERSION,
-    blocker: null,
-    blocker_action: null,
-    cursor: 0,
+    max_chunks_per_run: maxChunks,
     chunks_planned: 0,
     chunks_uploaded: 0,
     chunks_verified: 0,
     chunks_marked_archived: 0,
     rows_uploaded: 0,
     rows_marked_archived: 0,
-    skipped_reason: null,
     errors: [],
+    cold_classes: [],
+    // PR 2.2a back-compat fields — mirror primary sub-report 後填
+    cold_class: null,
+    cursor: 0,
+    blocker: null,
+    blocker_action: null,
+    skipped_reason: null,
   }
 
-  try {
-    // ── Step 1：列出當前 (table, cold_class) 全部 chunks，算 cursor + blocker ──
-    // PR 2.1c 加 dry_run 欄：blocker 升態的 key derivation / mark_archived skip 邏輯
-    // 都要看 chunk 自身 provenance，不看當前 env flag（避免 H-1 dryrun→live flip 損毀）。
-    const chunksRows = await db.prepare(
-      `SELECT env, table_name, cold_class, archive_date,
-              min_id, max_id, state, chunk_sha256, row_count, retry_count, dry_run
-         FROM audit_archive_chunks
-        WHERE env = ? AND table_name = ? AND cold_class = ?
-        ORDER BY min_id ASC`
-    ).bind(envName, tableName, coldClass).all()
-
-    const chunks = chunksRows.results ?? []
-    const { cursor, blocker } = computeCursorAndBlocker(chunks, tableName)
-    report.cursor = cursor
-
-    // ── Step 2：unfinished-chunk-first gate — 依 blocker.state 分派 ──
-    if (blocker) {
-      report.blocker = {
-        state: blocker.state,
-        min_id: blocker.min_id,
-        max_id: blocker.max_id,
-      }
-      const ctx = { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, blocker, putRetryBackoffMs }
-      switch (blocker.state) {
-        case 'planned':         await handlePlannedBlocker(ctx);  break
-        case 'uploaded':        await handleUploadedBlocker(ctx); break
-        case 'verified':        await handleVerifiedBlocker(ctx); break
-        case 'marked_archived': // PR 4 才做 purge；PR 2.1a 等 grace 不動
-        case 'failed':
-        case 'blacklisted':
-        default:
-          report.skipped_reason = `non_terminal_blocker_state_${blocker.state}`
-          break
-      }
-      report.finished_at = new Date().toISOString()
-      return res(report, report.ok ? 200 : 500)
+  let workUnits = 0
+  // 6 cold_class round-robin。順序在 utils SUPPORTED_COLD_CLASSES 固定 → forensic 可重現。
+  for (const coldClass of SUPPORTED_COLD_CLASSES) {
+    if (workUnits >= maxChunks) {
+      // 配額用盡 — 仍把剩餘 class 紀錄一筆 skipped，方便監控觀察是否常態化撐爆。
+      const sub = newSubReport(coldClass)
+      sub.skipped_reason = 'max_chunks_per_run_reached'
+      report.cold_classes.push(sub)
+      continue
     }
+    const sub = newSubReport(coldClass)
+    try {
+      await processColdClass({
+        env, envName, tableName, coldClass, dryRun, runId, db, bucket,
+        report: sub, putRetryBackoffMs,
+      })
+    } catch (e) {
+      console.error(`[audit-archive] PR 2.2a class=${coldClass} crashed:`, e)
+      sub.ok = false
+      sub.errors.push({ message: e.message ?? String(e) })
+    }
+    if (didConsumeQuota(sub)) workUnits++
+    report.cold_classes.push(sub)
+  }
 
-    // ── Step 3：無 blocker — 走 PR 2.0 既有 planned→uploaded 主流程 ──
-    await runFreshChunkPipeline({
-      env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, cursor, putRetryBackoffMs,
-    })
-  } catch (e) {
-    console.error('[audit-archive] PR 2.1a cron failed:', e)
-    report.ok = false
-    report.errors.push({ message: e.message ?? String(e) })
+  // ── 彙整 sub-reports 到頂層 ─────────────────────────────
+  for (const s of report.cold_classes) {
+    report.chunks_planned         += s.chunks_planned         ?? 0
+    report.chunks_uploaded        += s.chunks_uploaded        ?? 0
+    report.chunks_verified        += s.chunks_verified        ?? 0
+    report.chunks_marked_archived += s.chunks_marked_archived ?? 0
+    report.rows_uploaded          += s.rows_uploaded          ?? 0
+    report.rows_marked_archived   += s.rows_marked_archived   ?? 0
+    if (s.errors?.length) for (const e of s.errors) report.errors.push({ cold_class: s.cold_class, ...e })
+    if (s.ok === false) report.ok = false
+  }
+
+  // ── back-compat：頂層 mirror「primary」sub-report ───────
+  // PR 2.2a codex r1：兩段挑選。
+  //   1) 「有意義訊號」優先：實質升態 / blocker / drift / dry_run skip / failed blocker
+  //      skip / ok=false / recovery — PR 2.1d 行為（只 seed 一個 class 時頂層 mirror
+  //      那個 class）對應這層。
+  //   2) 上一層找不到才落 fallback：第一個 no_rows_eligible / no_rows_after_size_limit
+  //      / max_chunks_per_run_reached / attempted-write-but-no-success 等普通 skip
+  //      訊號。這層存在的目的是避免「全 6 class 都沒事做」的正常 run 頂層出現
+  //      cold_class=null / skipped_reason=null，讓 prod cron 監控誤判 blank run。
+  //   全 6 class 完全空（沒任何 skipped_reason，不該發生）才落最終 null。
+  const isMeaningfulSignal = s =>
+    didWriteWork(s)
+    || s.blocker
+    || s.recovery
+    || s.ok === false
+    || s.skipped_reason === 'cold_class_drift_detected'
+    || s.skipped_reason === 'dry_run_skips_marked_archived'
+  const primary =
+    report.cold_classes.find(isMeaningfulSignal)
+    ?? report.cold_classes.find(s => s.skipped_reason)
+  if (primary) {
+    report.cold_class     = primary.cold_class
+    report.cursor         = primary.cursor
+    report.blocker        = primary.blocker
+    report.blocker_action = primary.blocker_action
+    if (primary.skipped_reason) report.skipped_reason = primary.skipped_reason
+    if (primary.recovery)       report.recovery       = primary.recovery
   }
 
   report.finished_at = new Date().toISOString()
   return res(report, report.ok ? 200 : 500)
+}
+
+// PR 2.2a：單一 cold_class 完整推進邏輯（PR 2.1d 的 main body 抽出來）。
+//   - Step 1：列出當前 (env, table, cold_class) 全部 chunks → cursor + blocker
+//   - Step 2：unfinished-chunk-first gate；blocker 依 state 分派
+//   - Step 3：無 blocker → fresh chunk pipeline（受 per-class hot retention 限制）
+async function processColdClass(args) {
+  const { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, putRetryBackoffMs } = args
+
+  // ── Step 1：算 cursor + blocker（PR 2.1c：chunks 帶 dry_run 欄）────────
+  const chunksRows = await db.prepare(
+    `SELECT env, table_name, cold_class, archive_date,
+            min_id, max_id, state, chunk_sha256, row_count, retry_count, dry_run
+       FROM audit_archive_chunks
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+      ORDER BY min_id ASC`
+  ).bind(envName, tableName, coldClass).all()
+
+  const chunks = chunksRows.results ?? []
+  const { cursor, blocker } = computeCursorAndBlocker(chunks, tableName)
+  report.cursor = cursor
+
+  // ── Step 2：blocker 分派 ────────────────────────────────
+  if (blocker) {
+    report.blocker = {
+      state: blocker.state,
+      min_id: blocker.min_id,
+      max_id: blocker.max_id,
+    }
+    const ctx = {
+      env, envName, tableName, coldClass, dryRun, runId, db, bucket, report,
+      blocker, putRetryBackoffMs,
+    }
+    switch (blocker.state) {
+      case 'planned':  await handlePlannedBlocker(ctx);  break
+      case 'uploaded': await handleUploadedBlocker(ctx); break
+      case 'verified': await handleVerifiedBlocker(ctx); break
+      case 'marked_archived': // PR 4 才做 purge；PR 2.1a 等 grace 不動
+      case 'failed':
+      case 'blacklisted':
+      default:
+        report.skipped_reason = `non_terminal_blocker_state_${blocker.state}`
+        break
+    }
+    return
+  }
+
+  // ── Step 3：無 blocker — fresh chunk pipeline ──────────
+  await runFreshChunkPipeline({
+    env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, cursor, putRetryBackoffMs,
+  })
 }
 
 // ── Planned blocker：D1 重撈 + 重 serialize + sha 對齊 → uploaded ─────────
@@ -256,6 +378,9 @@ async function handlePlannedBlocker(ctx) {
 
   const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
   const chunkInfo = { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id }
+
+  // PR 2.2a codex r1：標記 quota 消耗點 — 即使下面 PUT throw 也已記錄一次嘗試。
+  report.attempted_write = true
 
   // 1) PUT data（R2 PUT idempotent — 同 key 同 body 覆寫無副作用）
   await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
@@ -317,6 +442,9 @@ async function handleUploadedBlocker(ctx) {
     })
   }
 
+  // PR 2.2a codex r1：標記 quota 消耗點。
+  report.attempted_write = true
+
   // 升 verified
   const verifiedManifest = await loadAndAppend(bucket, manifestKey, 'verified')
   await archivePut(ctx, 'manifest',
@@ -359,7 +487,7 @@ async function handleUploadedBlocker(ctx) {
 }
 
 // ── Verified blocker：marked_archived 雙路徑驗證（design doc §「升態雙路徑」）─
-// audit_log 專用；admin_audit_log（PR 2.2）不走此路（terminal=cold_copied）。
+// audit_log 專用；admin_audit_log（PR 2.2 後續）不走此路（terminal=cold_copied）。
 async function handleVerifiedBlocker(ctx) {
   const { envName, tableName, coldClass, db, bucket, report, blocker } = ctx
   // PR 2.1c（codex H-1 修正）：是否 skip mark_archived 看「chunk 自己當初被 PUT 時是不是 dry-run」，
@@ -376,6 +504,10 @@ async function handleVerifiedBlocker(ctx) {
     report.skipped_reason = 'dry_run_skips_marked_archived'
     return
   }
+
+  // PR 2.2a codex r1：live mark_archived 牽涉 audit_log UPDATE + R2 PUT，
+  // 失敗中途也算 quota 消耗 — 不可讓 6 class 連續失敗把 wallclock 打爆。
+  report.attempted_write = true
 
   // 一階：UPDATE archived_at；對齊 design doc：
   //   WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at IS NULL
@@ -459,7 +591,8 @@ async function handleVerifiedBlocker(ctx) {
 async function runFreshChunkPipeline(ctx) {
   const { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, cursor } = ctx
 
-  const hotDays = hotRetentionDays(env)
+  // PR 2.2a：per-class hot retention（design doc §「Retention Matrix」）
+  const hotDays = hotRetentionDaysFor(env, coldClass)
   const retentionPredicate = hotDays > 0
     ? `AND created_at < datetime('now', '-${hotDays} days')`
     : ''
@@ -552,6 +685,9 @@ async function runFreshChunkPipeline(ctx) {
   })
 
   const chunkInfo = { dryRun, minId, maxId }
+
+  // PR 2.2a codex r1：跨過所有 fail-fast skip 後，下面就要寫 R2 + D1 — 標記 quota 消耗。
+  report.attempted_write = true
 
   await archivePut(ctx, 'manifest', chunkInfo, manifestKey, JSON.stringify(plannedManifest, null, 2), {
     httpMetadata: { contentType: 'application/json' },

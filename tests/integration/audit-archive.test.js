@@ -485,6 +485,190 @@ describe('audit-archive cron — PR 2.1d F-3 archivePut e2e (callback glue)', ()
   })
 })
 
+describe('audit-archive cron — PR 2.2a round-robin 6 cold_class + MAX_CHUNKS_PER_RUN', () => {
+  // 種一筆 row 到任意 cold_class。event_type 在 audit-policy 對應到對應 class。
+  // immutable=account.password.change/info、security_critical=auth.refresh.aud_mismatch/critical、
+  // security_warn=auth.refresh.aud_mismatch/warn、read_audit=admin.deals.read/info、
+  // telemetry=auth.login.rate_limited/info、debug_failure=client.network.error/info
+  async function seedRow(coldClass, severity = 'info', minutesAgo = 60) {
+    const evMap = {
+      immutable:         'account.password.change',
+      security_critical: 'auth.refresh.aud_mismatch',
+      security_warn:     'auth.refresh.aud_mismatch',
+      read_audit:        'admin.deals.read',
+      telemetry:         'auth.login.rate_limited',
+      debug_failure:     'client.network.error',
+    }
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_log (event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+       VALUES (?, ?, NULL, 'h', '{}', ?, datetime('now','-${minutesAgo} minutes'))`
+    ).bind(evMap[coldClass], severity, coldClass).run()
+  }
+
+  // PR 2.2a：所有 class hot retention 都歸 0（不設下限），讓測試 row 不被 hotDays 過濾掉
+  function noHotRetentionOverrides() {
+    return {
+      AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS:        '0',
+      AUDIT_ARCHIVE_HOT_DAYS_IMMUTABLE:        '0',
+      AUDIT_ARCHIVE_HOT_DAYS_SECURITY_CRITICAL: '0',
+      AUDIT_ARCHIVE_HOT_DAYS_SECURITY_WARN:    '0',
+      AUDIT_ARCHIVE_HOT_DAYS_READ_AUDIT:       '0',
+      AUDIT_ARCHIVE_HOT_DAYS_DEBUG_FAILURE:    '0',
+    }
+  }
+
+  it('預設 max=2：seed 兩個 class 各 1 row → 兩個 class 各 produce 1 chunk', async () => {
+    await seedRow('immutable')
+    await seedRow('telemetry')
+
+    const report = await runCron(noHotRetentionOverrides())
+    expect(report.ok).toBe(true)
+    expect(report.max_chunks_per_run).toBe(2)
+    expect(report.chunks_uploaded).toBe(2)
+    expect(report.rows_uploaded).toBe(2)
+    expect(report.cold_classes).toHaveLength(6)
+
+    // immutable / telemetry 應各 produce 1；其餘四 class 'no_rows_eligible'
+    const byClass = Object.fromEntries(report.cold_classes.map(s => [s.cold_class, s]))
+    expect(byClass.immutable.chunks_uploaded).toBe(1)
+    expect(byClass.telemetry.chunks_uploaded).toBe(1)
+    expect(byClass.security_critical.skipped_reason).toBe('no_rows_eligible')
+    // debug_failure 排第 6；max=2 配額在 telemetry 後用光 → reached
+    expect(byClass.debug_failure.skipped_reason).toBe('max_chunks_per_run_reached')
+
+    // R2 應有 immutable + telemetry 兩個 prefix
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
+    const keys = (list.objects ?? []).map(o => o.key)
+    expect(keys.some(k => k.includes('/audit_log/immutable/'))).toBe(true)
+    expect(keys.some(k => k.includes('/audit_log/telemetry/'))).toBe(true)
+  })
+
+  it('max=1：兩個 class 都有 row → 只推第一個（順序：immutable 先於 telemetry）', async () => {
+    await seedRow('immutable')
+    await seedRow('telemetry')
+
+    const report = await runCron({ ...noHotRetentionOverrides(), AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '1' })
+    expect(report.ok).toBe(true)
+    expect(report.max_chunks_per_run).toBe(1)
+    expect(report.chunks_uploaded).toBe(1)
+
+    const byClass = Object.fromEntries(report.cold_classes.map(s => [s.cold_class, s]))
+    // immutable 先 produce
+    expect(byClass.immutable.chunks_uploaded).toBe(1)
+    // telemetry 排第 5 — 配額用盡前先掃過 security_critical/warn/read_audit（無 row → no_rows_eligible，不消配額）
+    // 配額用盡後 telemetry 應被標 max_chunks_per_run_reached
+    expect(byClass.telemetry.skipped_reason).toBe('max_chunks_per_run_reached')
+    expect(byClass.debug_failure.skipped_reason).toBe('max_chunks_per_run_reached')
+
+    // 下一輪 cron 應該先處理 immutable uploaded blocker，但 max=1 配額用掉
+    // 為了驗 round-robin 真的繞回 telemetry，下面這條測試。
+  })
+
+  it('多輪 cron 推進：immutable 過了 marked_archived 後，telemetry 才會被處理', async () => {
+    await seedRow('immutable')
+    await seedRow('telemetry')
+
+    // 輪 1：immutable planned→uploaded（max=1）；telemetry max_chunks_per_run_reached
+    await runCron({ ...noHotRetentionOverrides(), AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '1' })
+    // 輪 2：immutable uploaded→verified（max=1）；telemetry 仍 reached
+    await runCron({ ...noHotRetentionOverrides(), AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '1' })
+    // 輪 3：immutable verified→marked_archived（max=1）；telemetry 仍 reached
+    const r3 = await runCron({ ...noHotRetentionOverrides(), AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '1' })
+    expect(r3.chunks_marked_archived).toBe(1)
+    // 輪 4：immutable 已 marked_archived（terminal-non-progress on PR 2.1d；
+    // computeCursorAndBlocker 視 marked_archived 為 non-terminal-other → blocker
+    // 但 handleVerifiedBlocker 不會再觸發；class skip non_terminal_blocker_state_marked_archived。
+    // 配額沒被吃 → telemetry 第 1 chunk planned→uploaded。
+    const r4 = await runCron({ ...noHotRetentionOverrides(), AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '1' })
+    expect(r4.ok).toBe(true)
+    const byClass4 = Object.fromEntries(r4.cold_classes.map(s => [s.cold_class, s]))
+    expect(byClass4.immutable.skipped_reason).toBe('non_terminal_blocker_state_marked_archived')
+    expect(byClass4.telemetry.chunks_uploaded).toBe(1)
+  })
+
+  it('一個 class blocker uploaded、第二個 class 空 → blocker verify 推進 + 另 class no_rows', async () => {
+    // 種 telemetry → uploaded
+    await seedRow('telemetry')
+    await runCron(noHotRetentionOverrides())  // → uploaded
+
+    // 再跑一輪：telemetry uploaded→verified（1 work unit），其他 class 無 row → no_rows
+    const r = await runCron(noHotRetentionOverrides())
+    expect(r.ok).toBe(true)
+    expect(r.chunks_verified).toBe(1)
+    const byClass = Object.fromEntries(r.cold_classes.map(s => [s.cold_class, s]))
+    expect(byClass.telemetry.blocker?.state).toBe('uploaded')
+    expect(byClass.telemetry.chunks_verified).toBe(1)
+    expect(byClass.immutable.skipped_reason).toBe('no_rows_eligible')
+  })
+
+  it('per-class hot retention：immutable 預設 180d → 60min row 不該被撈進 chunk', async () => {
+    // 不設 AUDIT_ARCHIVE_HOT_DAYS_IMMUTABLE，吃 design doc 預設 180d
+    await seedRow('immutable')  // 60 分鐘前
+    const r = await runCron({})  // 仍用 makeEnv 預設（AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS=0）
+    expect(r.ok).toBe(true)
+    const byClass = Object.fromEntries(r.cold_classes.map(s => [s.cold_class, s]))
+    expect(byClass.immutable.skipped_reason).toBe('no_rows_eligible')
+  })
+
+  it('back-compat：頂層 mirror primary class（只有 telemetry 動 → 頂層 = telemetry）', async () => {
+    await seedRow('telemetry')
+    const r = await runCron(noHotRetentionOverrides())
+    expect(r.cold_class).toBe('telemetry')
+    expect(r.chunks_uploaded).toBe(1)
+    expect(r.cursor).toBeGreaterThanOrEqual(0)
+  })
+
+  it('codex r1：全 6 class 沒 row → 頂層仍 mirror no_rows_eligible（不是 blank）', async () => {
+    const r = await runCron(noHotRetentionOverrides())
+    expect(r.ok).toBe(true)
+    expect(r.cold_class).toBe('immutable')        // round-robin 第一個
+    expect(r.skipped_reason).toBe('no_rows_eligible')
+  })
+
+  it('codex r1：R2 PUT 全失敗 → attempted_write 消配額，不會繞跑後續 5 class', async () => {
+    // 種 immutable + telemetry 各 1 row。把 bucket.put 全 throw 模擬 R2 outage。
+    await seedRow('immutable')
+    await seedRow('telemetry')
+    const realBucket = env.AUDIT_ARCHIVE_BUCKET
+    const stub = {
+      get: (...a) => realBucket.get(...a),
+      list: (...a) => realBucket.list(...a),
+      head: (...a) => realBucket.head?.(...a),
+      put: async () => { throw new Error('r2-outage') },
+    }
+    const r = await cronArchive({
+      request: makeRequest(),
+      env: {
+        ...makeEnv(noHotRetentionOverrides()),
+        AUDIT_ARCHIVE_BUCKET: stub,
+        AUDIT_ARCHIVE_PUT_RETRY_BACKOFF_MS: '0,0,0',
+        AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '2',
+      },
+    })
+    const report = await r.json()
+    expect(report.ok).toBe(false)
+    // immutable 失敗 → attempted_write=true → 消 1 配額；
+    // 沒 row 的 4 class（security_*/read_audit）= 0 配額；
+    // telemetry 失敗 → 消第 2 配額；
+    // debug_failure 應被 max_chunks_per_run_reached 擋住（即使有 row 也不再嘗試）
+    const byClass = Object.fromEntries(report.cold_classes.map(s => [s.cold_class, s]))
+    expect(byClass.immutable.attempted_write).toBe(true)
+    expect(byClass.immutable.ok).toBe(false)
+    expect(byClass.telemetry.attempted_write).toBe(true)
+    expect(byClass.telemetry.ok).toBe(false)
+    expect(byClass.debug_failure.skipped_reason).toBe('max_chunks_per_run_reached')
+  })
+
+  it('codex r1：parseMaxChunksPerRun — 0 / 負數 → 夾到 1；非數字 → 預設 2', async () => {
+    // 種 immutable + telemetry。max=0 → 夾到 1 → 只推第一個（immutable）。
+    await seedRow('immutable')
+    await seedRow('telemetry')
+    const r1 = await runCron({ ...noHotRetentionOverrides(), AUDIT_ARCHIVE_MAX_CHUNKS_PER_RUN: '0' })
+    expect(r1.max_chunks_per_run).toBe(1)
+    expect(r1.chunks_uploaded).toBe(1)
+  })
+})
+
 describe('audit-archive cron — auth + binding 防線', () => {
   it('auth fail → 401', async () => {
     const r = await cronArchive({

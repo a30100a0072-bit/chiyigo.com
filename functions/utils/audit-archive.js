@@ -21,9 +21,60 @@ export const ARCHIVE_SCHEMA_VERSION = '2.0'
 export const ARCHIVE_WRITER         = 'cron-archive-worker'
 export const ARCHIVE_WRITER_VERSION = '2.0.0-pr2.0-dryrun'
 
-// PR 2.0 範圍：只跑 telemetry；PR 2.2 才會展開到 6 cold_class
+// PR 2.0 範圍：只跑 telemetry；PR 2.2a 起 expand 到 6 cold_class round-robin
+// PR20_SUPPORTED_TABLE 仍是 'audit_log'（admin_audit_log 留 PR 3 月度 copy 路徑）
 export const PR20_SUPPORTED_TABLE       = 'audit_log'
+// PR 2.2a deprecated 但保留 export — 任何剩餘 import 不破；新程式碼用 SUPPORTED_COLD_CLASSES
 export const PR20_SUPPORTED_COLD_CLASS  = 'telemetry'
+
+// PR 2.2a：6 cold_class round-robin 順序固定 — round-robin 公平性 + 測試/forensic 可重現
+// 順序刻意把 immutable / security_critical 排前面（金融級資料先進冷存防 D1 暴漲時被擠掉）
+export const SUPPORTED_COLD_CLASSES = Object.freeze([
+  'immutable',
+  'security_critical',
+  'security_warn',
+  'read_audit',
+  'telemetry',
+  'debug_failure',
+])
+
+// PR 2.2a：per-class hot retention 預設（design doc §「Retention Matrix」）
+// 設計值 immutable / security_* / read_audit = 180d；telemetry = 90d；debug_failure = 30-90d。
+// 注意 telemetry 預設 30 (= 既有 AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS 預設) — 與 prod 部署一致，
+// 不在 PR 2.2a 改 prod 行為；要對齊 design 90d 留 ops 自己改 env。
+const DEFAULT_HOT_DAYS_BY_CLASS = Object.freeze({
+  immutable:          180,
+  security_critical:  180,
+  security_warn:      180,
+  read_audit:         180,
+  telemetry:          30,
+  debug_failure:      90,
+})
+
+/**
+ * 對指定 cold_class 取 hot retention 天數。env key 規則：
+ *   - telemetry：相容既有 AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS（PR 2.0 起，prod 部署過）
+ *   - 6 class 通用：AUDIT_ARCHIVE_HOT_DAYS_<COLD_CLASS_UPPER>
+ *     例：AUDIT_ARCHIVE_HOT_DAYS_IMMUTABLE / _SECURITY_CRITICAL / _READ_AUDIT 等
+ *   - 缺值 / 非有限數值 → 走 DEFAULT_HOT_DAYS_BY_CLASS
+ *   - <=0：worker 解讀為「不設下限，撈所有未 archive row」（與 PR 2.0 行為一致）
+ *
+ * 回傳整數天數（>=0）。
+ */
+export function hotRetentionDaysFor(env, coldClass) {
+  // back-compat：PR 2.0 起 telemetry 一直走 AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS
+  if (coldClass === 'telemetry' && env?.AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS != null) {
+    const v = Number(env.AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS)
+    if (Number.isFinite(v)) return v
+  }
+  const key = `AUDIT_ARCHIVE_HOT_DAYS_${coldClass.toUpperCase()}`
+  const raw = env?.[key]
+  if (raw != null && raw !== '') {
+    const v = Number(raw)
+    if (Number.isFinite(v)) return v
+  }
+  return DEFAULT_HOT_DAYS_BY_CLASS[coldClass] ?? 0
+}
 
 // chunk 切片條件（design doc §「Chunk 切片條件」）
 //   PR 2.0 暫不上 zstd；MAX_BYTES 以 decompressed jsonl 估，避開單檔過大

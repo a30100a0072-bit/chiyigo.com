@@ -26,6 +26,8 @@ import {
   aggregateSeverities,
   putWithRetry,
   DEFAULT_PUT_RETRY_BACKOFF_MS,
+  SUPPORTED_COLD_CLASSES,
+  hotRetentionDaysFor,
 } from '../functions/utils/audit-archive.js'
 
 describe('rowsToJsonl', () => {
@@ -384,5 +386,38 @@ describe('putWithRetry (PR 2.1d F-3)', () => {
       onAttemptFailed: () => Promise.reject(new Error('callback-broke')),
     })
     expect(r).toEqual({ ok: true })
+  })
+})
+
+describe('PR 2.2a SUPPORTED_COLD_CLASSES + hotRetentionDaysFor', () => {
+  it('SUPPORTED_COLD_CLASSES 固定 6 個順序', () => {
+    expect(SUPPORTED_COLD_CLASSES).toEqual([
+      'immutable', 'security_critical', 'security_warn',
+      'read_audit', 'telemetry', 'debug_failure',
+    ])
+  })
+
+  it('hotRetentionDaysFor：telemetry 走 AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS（back-compat）', () => {
+    expect(hotRetentionDaysFor({ AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS: '7' }, 'telemetry')).toBe(7)
+    expect(hotRetentionDaysFor({ AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS: '0' }, 'telemetry')).toBe(0)
+  })
+
+  it('hotRetentionDaysFor：immutable 預設 180d / debug_failure 預設 90d / telemetry 預設 30d', () => {
+    expect(hotRetentionDaysFor({}, 'immutable')).toBe(180)
+    expect(hotRetentionDaysFor({}, 'security_critical')).toBe(180)
+    expect(hotRetentionDaysFor({}, 'security_warn')).toBe(180)
+    expect(hotRetentionDaysFor({}, 'read_audit')).toBe(180)
+    expect(hotRetentionDaysFor({}, 'telemetry')).toBe(30)
+    expect(hotRetentionDaysFor({}, 'debug_failure')).toBe(90)
+  })
+
+  it('hotRetentionDaysFor：per-class env override 生效', () => {
+    expect(hotRetentionDaysFor({ AUDIT_ARCHIVE_HOT_DAYS_IMMUTABLE: '365' }, 'immutable')).toBe(365)
+    expect(hotRetentionDaysFor({ AUDIT_ARCHIVE_HOT_DAYS_DEBUG_FAILURE: '0' }, 'debug_failure')).toBe(0)
+  })
+
+  it('hotRetentionDaysFor：非數值 env → 走預設', () => {
+    expect(hotRetentionDaysFor({ AUDIT_ARCHIVE_HOT_DAYS_IMMUTABLE: 'foo' }, 'immutable')).toBe(180)
+    expect(hotRetentionDaysFor({ AUDIT_ARCHIVE_HOT_DAYS_TELEMETRY: '' }, 'telemetry')).toBe(30)
   })
 })
