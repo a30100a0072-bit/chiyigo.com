@@ -99,6 +99,7 @@ function buildQs(page, limit) {
 }
 
 async function load() {
+  if (!getToken()) { showError('請先登入'); return; }
   document.getElementById('loading').hidden = false;
   document.getElementById('content').hidden = true;
   document.getElementById('error-msg').hidden = true;
@@ -106,7 +107,7 @@ async function load() {
   try {
     data = await apiFetch(`/api/admin/deals?${buildQs(currentPage, 50)}`);
   } catch (e) {
-    if (e?.code === 'SESSION_EXPIRED') return;
+    if (e?.code === 'SESSION_EXPIRED') return showError('請先登入');
     if (e?.status === 403) return showError('權限不足');
     return showError(e?.message || '網路錯誤');
   }
