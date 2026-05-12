@@ -1,7 +1,16 @@
--- Migration: requisition table — email→contact, service→service_type, description→message, add timeline
--- Run via: wrangler d1 execute chiyigo_db --file=database/migration_001_requisition_contact.sql
+-- ⚠️ DEPRECATED — DO NOT RE-RUN
+--
+-- 這是 pre-numbered-migration 時代的一次性 RENAME 腳本，prod 已套用一次。
+-- 其結果（contact / service_type / message / timeline）現已收進
+-- migrations/_base.sql 的 requisition baseline。
+--
+-- 重新執行會在 prod 立刻 fail（欄位已 rename），fresh D1 也不該跑（_base.sql 已含結果）。
+-- 此檔僅保留作歷史證據，避免日後 git blame 困惑。
+--
+-- 真正的 baseline 與 ledger：migrations/_base.sql + migrations/0001..NNNN
 
-ALTER TABLE requisition RENAME COLUMN email       TO contact;
-ALTER TABLE requisition RENAME COLUMN service     TO service_type;
-ALTER TABLE requisition RENAME COLUMN description TO message;
-ALTER TABLE requisition ADD COLUMN timeline TEXT;
+-- Original content (preserved for archaeology):
+-- ALTER TABLE requisition RENAME COLUMN email       TO contact;
+-- ALTER TABLE requisition RENAME COLUMN service     TO service_type;
+-- ALTER TABLE requisition RENAME COLUMN description TO message;
+-- ALTER TABLE requisition ADD COLUMN timeline TEXT;
