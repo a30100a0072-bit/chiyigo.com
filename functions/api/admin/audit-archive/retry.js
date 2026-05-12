@@ -1,6 +1,12 @@
 /**
  * POST /api/admin/audit-archive/retry
- * Header: Authorization: Bearer <access_token>  (role >= admin + scope admin:audit:write)
+ *
+ * Auth（依 action 分兩級，PR 2.2b codex r1 P1）：
+ *   - re_verify                  : role>=admin + scope admin:audit:write
+ *     Header: Authorization: Bearer <admin_access_token>
+ *   - mark_resolved / force_purge: 上述 + step-up（elevated:account scope claim +
+ *     for_action='audit_archive_mark_resolved' / 'audit_archive_force_purge'）
+ *     Header: Authorization: Bearer <step_up_token>
  *
  * F-3 Phase 2 PR 2.2b — admin retry endpoint stub
  *
