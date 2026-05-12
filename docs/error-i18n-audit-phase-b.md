@@ -8,7 +8,7 @@
 - 推薦新增 / 既有 i18n key：**133 個**（去重後）
 - 仍標 `NEEDS_REVIEW` 待人工命名：**2 處**（佔 2%）
 - 變數型 `error: <expr>` 警告：**7 處**（列在文末警告區）
-- 已有 code 但前端 dict 缺翻譯：**42 個 code**（列在「漏譯」區）
+- 已有 code 但前端 dict 缺翻譯：**0 個 code**（列在「漏譯」區）
 
 ### 判定規則
 - 掃描 `res({ ... })` 物件 literal 字面值；同一物件 literal 內若有 `code: '...'` 字串欄位則跳過（已 OK）
@@ -552,55 +552,6 @@
 - functions/api/requisition.js:L79 — `error: err`
 
 > 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
-
-## 漏譯區（已有 code 但 public/js/api.js#API_ERROR_I18N dict 缺鍵）
-
-> 後端已附 code，但前端字典任一語言缺對應 key → `tApiError` fallback 回英文 `error` 字串。補上即多 1 個 code 走 i18n 路徑。
-
-| code | 缺 lang | 出現處數 | 範例 site |
-|---|---|---:|---|
-| `AUDIT_CHAIN_FAILED` | zh-TW/en/ja/ko | 10 | functions/api/admin/audit/[id].js:L59 …+5 |
-| `INVALID_STATUS` | zh-TW/en/ja/ko | 5 | functions/api/admin/payments/intents/[id]/refund.js:L71 |
-| `REFUND_ALREADY_PENDING` | zh-TW/en/ja/ko | 3 | functions/api/payments/intents/[id]/refund-request.js:L64 |
-| `UNKNOWN_TARGET_ROLE` | zh-TW/en/ja/ko | 3 | functions/api/admin/revoke.js:L104 |
-| `ALREADY_BOUND` | zh-TW/en/ja/ko | 2 | functions/api/auth/wallet/nonce.js:L52 |
-| `INSUFFICIENT_SCOPE` | zh-TW/en/ja/ko | 2 | functions/utils/auth.js:L148 |
-| `INTENT_RACE_CONFLICT` | zh-TW/en/ja/ko | 2 | functions/api/admin/payments/intents/[id]/refund.js:L112 |
-| `KYC_LEVEL_INSUFFICIENT` | zh-TW/en/ja/ko | 2 | functions/utils/kyc.js:L157 |
-| `KYC_REQUIRED` | zh-TW/en/ja/ko | 2 | functions/utils/kyc.js:L145 |
-| `REASON_REQUIRED` | zh-TW/en/ja/ko | 2 | functions/api/payments/intents/[id]/refund-request.js:L31 |
-| `REFUND_PENDING_RECONCILIATION` | zh-TW/en/ja/ko | 2 | functions/api/admin/payments/intents/[id]/refund.js:L141 |
-| `STATUS_LOCKED` | zh-TW/en/ja/ko | 2 | functions/api/admin/payments/intents/[id]/delete.js:L58 |
-| `AI_ERROR` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L174 |
-| `AMOUNT_OVERFLOW` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/save.js:L109 |
-| `BLOCKED` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L117 |
-| `CHUNK_NOT_FOUND` | zh-TW/en/ja/ko | 1 | functions/api/admin/audit-archive/retry.js:L198 |
-| `CHUNK_STATE_MISMATCH` | zh-TW/en/ja/ko | 1 | functions/api/admin/audit-archive/retry.js:L201 |
-| `CLIENT_ID_TAKEN` | zh-TW/en/ja/ko | 1 | functions/api/admin/oauth-clients.js:L152 |
-| `DEAL_INSERT_FAILED` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/save.js:L163 |
-| `EVENT_NOT_DELETABLE` | zh-TW/en/ja/ko | 1 | functions/api/admin/audit/[id].js:L39 |
-| `HAS_UNREFUNDED_PAYMENT` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/delete.js:L59 |
-| `INSUFFICIENT_ROLE` | zh-TW/en/ja/ko | 1 | functions/utils/requireRole.js:L86 |
-| `INTENT_INVALID_STATUS` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisition-refund/[id]/approve.js:L74 |
-| `INVALID_AMOUNT` | zh-TW/en/ja/ko | 1 | functions/api/auth/payments/checkout/ecpay.js:L65 |
-| `INVALID_OUTPUT` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L183 |
-| `IP_BLOCKED` | zh-TW/en/ja/ko | 1 | functions/api/auth/local/login.js:L64 |
-| `MIXED_CURRENCY` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/save.js:L91 |
-| `MUST_REVOKE_FIRST` | zh-TW/en/ja/ko | 1 | functions/api/requisition/[id].js:L59 |
-| `NOT_IMPLEMENTED` | zh-TW/en/ja/ko | 1 | functions/api/admin/audit-archive/retry.js:L145 |
-| `PAYMENT_VENDOR_MISCONFIGURED` | zh-TW/en/ja/ko | 1 | functions/api/auth/payments/checkout/ecpay.js:L85 |
-| `SAVE_RACE_CONFLICT` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/save.js:L123 |
-| `SIGNATURE_INVALID` | zh-TW/en/ja/ko | 1 | functions/api/auth/wallet/verify.js:L65 |
-| `STEP_UP_ACTION_MISMATCH` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L233 |
-| `STEP_UP_REQUIRED` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L221 |
-| `STEP_UP_REQUIRES_2FA` | zh-TW/en/ja/ko | 1 | functions/api/auth/step-up.js:L111 |
-| `STEP_UP_REVOKED` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L260 |
-| `STEP_UP_ROLE_DRIFT` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L263 |
-| `STEP_UP_USER_GONE` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L252 |
-| `TOO_LONG` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L108 |
-| `TURNSTILE_FAILED` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L129 |
-| `TURNSTILE_REQUIRED` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L124 |
-| `UNKNOWN_ACTOR_ROLE` | zh-TW/en/ja/ko | 1 | functions/utils/requireRole.js:L76 |
 
 ## 後續 PR 切分建議
 
