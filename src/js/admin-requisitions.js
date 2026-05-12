@@ -340,7 +340,7 @@ async function auditDelGo(auditId, btn) {
     headers: { Authorization: `Bearer ${step_up_token}` },
   }).catch(() => null);
   if (!r || !r.ok) { btn.disabled = false; btn.textContent = '清除'; window.notify.error('刪除失敗'); return; }
-  btn.closest('div[style*="border:1px solid"]')?.remove();
+  btn.closest('.refund-row')?.remove();
 }
 
 document.getElementById('audit-cleanup-btn')?.addEventListener('click', openAuditCleanup);
