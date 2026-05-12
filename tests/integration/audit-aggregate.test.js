@@ -129,8 +129,12 @@ describe('audit-aggregate cron — happy path', () => {
   })
 
   it('Step 2：idempotent — 連跑兩次 count 不疊', async () => {
-    await seed({ created_at: "datetime('now','-29 days','-1 hours')" })
-    await seed({ created_at: "datetime('now','-29 days','-1 hours','+10 minutes')" })
+    // codex r1 M-2：用完全 literal 時戳兩筆，完全 deterministic 不靠 wall-clock。
+    // 2025-06-15 12:00:00 比 cutoff (now-29d) 早很多 → 一定被撈到；同一 timestamp
+    // → bucket key (event_type, user_id, severity, hour_bucket) 完全一致。
+    const t = "'2025-06-15 12:00:00'"
+    await seed({ created_at: t })
+    await seed({ created_at: t })
 
     await runCron()
     const after1 = await listBuckets()

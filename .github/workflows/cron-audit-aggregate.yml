@@ -1,13 +1,20 @@
 name: Cron — Audit Aggregate (F-3 Phase 2 PR 3.0 telemetry skeleton)
 
-# 每週日 17:00 UTC（= 週一 01:00 Asia/Taipei）跑一次。
-# 與每日 audit-archive cron 錯開：archive 18:00 UTC / aggregate 17:00 週日。
-# 目前 PR 3.0 只動 telemetry — 把 hot 過期前 24h 的 audit_log row UPSERT 進
-# audit_log_aggregate_telemetry。Raw row 不刪（PR 4 才動）。
-# 詳見 docs/AUDIT_RETENTION_PLAN.md §「Aggregate 規則 v3」。
+# 每日 17:00 UTC（= 01:00 隔日 Asia/Taipei）跑一次；archive worker 每日 18:00 UTC，
+# aggregate 跑在 archive 之前 1 小時。
+#
+# 🔴 為什麼 daily 不是 weekly（codex r1 H-1 修正，2026-05-12）：
+# aggregate cutoff = `now - 29d`，archive cutoff = `now - 30d`。row 每天會
+# 「新跨進」aggregate 範圍 24h 份；若 aggregate 一週才跑一次，那一週內每天的
+# 24h row 進到 aggregate 窗口、但隔天就被 archive 標 archived_at → 下次 aggregate
+# 永遠撈不到（archive 用 archived_at IS NULL 過濾）。要等 PR 4 把 archive 翻成
+# live 才會炸；dry-run 期間 archived_at 不會被設因此假裝沒事，但設計級 hole。
+# Daily aggregate + 1h before archive 確保每天的 24h row 都被 aggregate 抓走。
+#
+# 詳見 docs/AUDIT_RETENTION_PLAN.md §「Aggregate 規則 v3」+ §「Cron 拆分」。
 on:
   schedule:
-    - cron: '0 17 * * 0'
+    - cron: '0 17 * * *'
   workflow_dispatch:        # 手動觸發（驗收 / 例外 backlog 用）
 
 jobs:

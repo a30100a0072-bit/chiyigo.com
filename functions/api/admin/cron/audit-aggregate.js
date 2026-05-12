@@ -40,6 +40,7 @@ import {
   parseMaxRowsPerRun,
   parseLeadHours,
   telemetryCutoffISO,
+  totalCutoffHours,
   reduceTelemetryBuckets,
   rowIsTelemetry,
 } from '../../../utils/audit-aggregate.js'
@@ -105,7 +106,8 @@ export async function onRequestPost({ request, env }) {
   // vs 'T'(0x54) — 同日期但 SQL row 時間 > cutoff 時間的 row 會被誤判 < cutoff。
   // 最壞 1 天 23 小時的 row 被偷渡進 aggregate（破壞 24h archive buffer 設計）。
   // 直接用 datetime modifier 讓 SQLite 自己算 → 格式一致、bug 不存在。
-  const totalHours = Math.max(0, Math.round(hotDays * 24 - leadHours))
+  // codex r1 L-1：totalCutoffHours clamp 到 [0, 100年] 防 Infinity 內嵌 SQL。
+  const totalHours = totalCutoffHours(hotDays, leadHours)
   let candidates
   try {
     const rs = await db.prepare(

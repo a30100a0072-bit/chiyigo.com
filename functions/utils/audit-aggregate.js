@@ -67,13 +67,33 @@ export function parseLeadHours(env) {
 }
 
 /**
- * 算 hour_bucket 字串：把 ISO timestamp 對齊到當前小時（UTC）。
+ * 算 hour_bucket 字串：把 timestamp 對齊到當前小時（UTC）。
  * 結果格式 `YYYY-MM-DDTHH:00:00Z` — 對齊 design doc 範例與 unique index 規範。
  *
- * 支援輸入：ISO string 或 Date instance。
+ * 支援輸入：
+ *   - SQLite 預設 datetime() 格式 `'YYYY-MM-DD HH:MM:SS'`（空白分隔、無 TZ）
+ *   - ISO 8601 `'YYYY-MM-DDTHH:MM:SS[.sss]Z'`
+ *   - Date instance
+ *
+ * 🔴 codex r1 M-1 修正（2026-05-12）：SQLite datetime() 預設儲存無 TZ；JS
+ * `new Date('2026-05-12 03:15:00')` 會被當 **local time** parse（如 Asia/Taipei
+ * +08：toISOString() 變 `'2026-05-11T19:15:00Z'`），bucket 偏 8 小時。Workers
+ * runtime 預設 UTC 無此問題，但 Node 整合測試 / 本機 Pages dev 會中招。
+ * 規範化為 UTC 'T...Z' 後再 parse 避坑。
  */
 export function hourBucket(input) {
-  const d = input instanceof Date ? input : new Date(input)
+  let v = input
+  if (typeof v === 'string') {
+    // SQLite '2026-05-12 03:15:00' → '2026-05-12T03:15:00Z'
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(v)) {
+      v = v.replace(' ', 'T')
+    }
+    // 補 Z 給沒帶 TZ 的 ISO（有 +HH:MM / -HH:MM / Z 都不動）
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(v)) {
+      v = v + 'Z'
+    }
+  }
+  const d = v instanceof Date ? v : new Date(v)
   if (Number.isNaN(d.getTime())) throw new Error(`hourBucket: invalid input ${input}`)
   const yyyy = d.getUTCFullYear()
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
@@ -96,10 +116,41 @@ export function hourBucket(input) {
  */
 export function telemetryCutoffISO(hotDays, leadHours = AGGREGATE_LEAD_HOURS_DEFAULT, now = new Date()) {
   if (!Number.isFinite(hotDays) || hotDays <= 0) return null
+  if (!Number.isFinite(leadHours)) return null
   const leadMs = leadHours * 3600 * 1000
   const hotMs = hotDays * 86400 * 1000
   const cutoffMs = now.getTime() - hotMs + leadMs
+  // codex r1 L-1：1e308 級 finite hotDays 乘 ms 後 overflow → Infinity → Date 炸 RangeError；
+  //               同樣保護 -Infinity / NaN 從異常 leadHours 傳出。
+  if (!Number.isFinite(cutoffMs)) return null
   return new Date(cutoffMs).toISOString()
+}
+
+/**
+ * 算 SQL-side cutoff 用的整數小時數（hotDays * 24 - leadHours）。
+ *
+ * 整數內嵌進 `datetime('now', '-N hours')` template literal（與 archive worker
+ * 模式一致避開 JS↔SQLite 格式比較坑，見 feedback_sqlite_iso_datetime_compare）。
+ *
+ * codex r1 L-1：clamp 到 [0, 100年] 防 Infinity / NaN 內嵌 SQL；
+ *               下限 0 = 表示「無 lead，aggregate 直到 now」（不該發生但保 fallback）。
+ */
+export const MAX_TOTAL_HOURS = 100 * 365 * 24  // 100 年
+const MAX_HOT_DAYS = 100 * 365                  // 對齊 100 年
+
+// 將 number clamp 到 [0, max]；NaN / 非數字 → 0
+function clampNonNeg(n, max) {
+  if (typeof n !== 'number' || Number.isNaN(n) || n < 0) return 0
+  if (n > max) return max
+  return n
+}
+export function totalCutoffHours(hotDays, leadHours) {
+  const safeHot  = clampNonNeg(hotDays,  MAX_HOT_DAYS)
+  const safeLead = clampNonNeg(leadHours, MAX_TOTAL_HOURS)
+  const raw = Math.round(safeHot * 24 - safeLead)
+  if (raw < 0) return 0
+  if (raw > MAX_TOTAL_HOURS) return MAX_TOTAL_HOURS
+  return raw
 }
 
 /**
@@ -156,6 +207,8 @@ export function reduceTelemetryBuckets(rows) {
       }
     }
     b.ip_hash_top = topHash
+    // codex r1 L：清掉內部 reduce 用的暫存，避免 caller serialize / log bucket 時帶出去
+    delete b._ip_hashes
   }
   return buckets
 }
