@@ -116,7 +116,7 @@ export async function onRequestPost({ request, env }) {
   const tgtErr = validateTarget(target)
   if (tgtErr) {
     await emitRejected(env, request, ctxBase, `invalid_target:${tgtErr}`)
-    return res({ error: tgtErr }, 400)
+    return res({ error: tgtErr, code: 'INVALID_TARGET' }, 400)
   }
 
   // 2) PR 2.2b codex r1（P1）：mark_resolved / force_purge 加 step-up。

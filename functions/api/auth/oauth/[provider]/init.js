@@ -129,7 +129,7 @@ export async function onRequestGet(context) {
   try {
     client_callback = buildClientCallback(platform, port)
   } catch (err) {
-    return res({ error: err.message }, 400)
+    return res({ error: err.message, code: 'PC_PORT_REQUIRED' }, 400)
   }
 
   // Web + PKCE 模式：將 pkce_key 存入 client_callback，供 callback 回傳登入頁

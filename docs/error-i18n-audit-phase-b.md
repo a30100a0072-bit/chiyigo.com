@@ -7,7 +7,7 @@
 - 涉及檔案：**0 個**
 - 推薦新增 / 既有 i18n key：**0 個**（去重後）
 - 仍標 `NEEDS_REVIEW` 待人工命名：**0 處**（佔 NaN%）
-- 變數型 `error: <expr>` 警告：**7 處**（列在文末警告區）
+- 變數型 `error: <expr>` 警告：**0 處**（列在文末警告區）
 - 已有 code 但前端 dict 缺翻譯：**0 個 code**（列在「漏譯」區）
 
 ### 判定規則
@@ -28,18 +28,6 @@
 無（INSUFFICIENT_SCOPE 樣板化處理不算衝突）
 
 ## 逐檔清單
-
-## 警告區（error 是變數 / 表達式，無從翻譯）
-
-- functions/api/admin/audit-archive/retry.js:L119 — `error: tgtErr`
-- functions/api/admin/oauth-clients.js:L145 — `error: v.error`
-- functions/api/auth/account/change-password.js:L56 — `error: pwCheck.error`
-- functions/api/auth/local/register.js:L42 — `error: pwCheck.error`
-- functions/api/auth/local/reset-password.js:L36 — `error: pwCheck.error`
-- functions/api/auth/oauth/[provider]/init.js:L132 — `error: err.message`
-- functions/api/requisition.js:L79 — `error: err`
-
-> 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
 
 ## 後續 PR 切分建議
 

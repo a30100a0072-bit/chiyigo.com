@@ -142,7 +142,7 @@ export async function onRequestPost({ request, env }) {
   catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const v = validateCreateBody(body)
-  if (!v.ok) return res({ error: v.error }, 400)
+  if (!v.ok) return res({ error: v.error, code: 'INVALID_CLIENT_BODY' }, 400)
   const n = v.normalized
 
   // 重複 client_id → 409

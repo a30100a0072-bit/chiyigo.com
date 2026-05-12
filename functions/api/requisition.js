@@ -76,7 +76,7 @@ export async function onRequestPost({ request, env }) {
   catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const err = validate(body)
-  if (err) return res({ error: err }, 422)
+  if (err) return res({ error: err, code: 'INVALID_REQUISITION_BODY' }, 422)
 
   const db = env.chiyigo_db
   const ip = request.headers.get('CF-Connecting-IP') ?? null

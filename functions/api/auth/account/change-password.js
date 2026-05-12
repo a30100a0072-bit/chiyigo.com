@@ -53,7 +53,7 @@ export async function onRequestPost({ request, env }) {
   if (!new_password) return res({ error: 'new_password is required', code: 'NEW_PASSWORD_REQUIRED' }, 400)
 
   const pwCheck = validatePassword(new_password)
-  if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
+  if (!pwCheck.ok) return res({ error: pwCheck.error, code: 'WEAK_PASSWORD' }, 400)
 
   const userId = Number(user.sub)
   if (!Number.isFinite(userId)) return res({ error: 'Invalid token subject', code: 'INVALID_TOKEN_SUBJECT' }, 401)

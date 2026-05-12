@@ -39,7 +39,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
   if (!EMAIL_RE.test(email))
     return res({ error: 'Invalid email format', code: 'INVALID_EMAIL_FORMAT' }, 400)
   const pwCheck = validatePassword(password)
-  if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
+  if (!pwCheck.ok) return res({ error: pwCheck.error, code: 'WEAK_PASSWORD' }, 400)
 
   // Turnstile（key 未設時 skip，不破壞既有流程）
   const ts = await verifyTurnstile(request, body, env)

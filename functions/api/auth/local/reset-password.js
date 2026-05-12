@@ -33,7 +33,7 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'token and new_password are required', code: 'TOKEN_AND_PASSWORD_REQUIRED' }, 400)
 
   const pwCheck = validatePassword(new_password)
-  if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
+  if (!pwCheck.ok) return res({ error: pwCheck.error, code: 'WEAK_PASSWORD' }, 400)
 
   const db        = env.chiyigo_db
   const tokenHash = await hashToken(token)
