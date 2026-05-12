@@ -3,9 +3,9 @@
 > Phase A 已建 `public/js/api.js#API_ERROR_I18N` 前端字典。本 doc 列出 `functions/` 下所有 `res({ error: '...' })` 缺 `code:` 欄位的處，作為 Phase B 漸進補碼依據。**本 PR 只盤點，不改 code**。
 
 ## 摘要
-- 總計：**268 處**缺 `code`
-- 涉及檔案：**63 個**
-- 推薦新增 / 既有 i18n key：**146 個**（去重後）
+- 總計：**249 處**缺 `code`
+- 涉及檔案：**59 個**
+- 推薦新增 / 既有 i18n key：**139 個**（去重後）
 - 仍標 `NEEDS_REVIEW` 待人工命名：**0 處**（佔 0%）
 - 變數型 `error: <expr>` 警告：**6 處**（列在文末警告區）
 
@@ -19,34 +19,30 @@
 
 | code | 出現處數 | 建議 zh-TW | 建議 en |
 |---|---:|---|---|
-| `INVALID_JSON` | 29 | 請求格式錯誤 | Invalid JSON |
+| `INVALID_JSON` | 25 | 請求格式錯誤 | Invalid JSON |
 | `USER_NOT_FOUND` | 11 | 找不到使用者 | User not found |
 | `INTENT_NOT_FOUND` | 10 | 找不到付款單 | not_found |
 | `REQUISITION_NOT_FOUND` | 8 | 找不到該需求單 | not_found |
-| `INVALID_CREDENTIALS` | 7 | 帳號或密碼錯誤 | Invalid credentials |
+| `INVALID_CREDENTIALS` | 5 | 帳號或密碼錯誤 | Invalid credentials |
 | `CLIENT_NOT_FOUND` | 4 | 找不到應用程式 | Client not found |
 | `LOCAL_ACCOUNT_NOT_FOUND` | 4 | 尚未建立本地帳號 | Local account not found |
 | `OTP_CODE_INVALID_FORMAT` | 4 | 驗證碼需為 6 位數字 | otp_code must be 6 digits |
 | `REFUND_REQUEST_NOT_FOUND` | 4 | 找不到退款申請 | not_found |
-| `TOKEN_INVALID_OR_EXPIRED` | 4 | 連結無效或已過期 | Token is invalid or has expired |
 | `FROM_DATE_INVALID` | 3 | 起始日期格式錯誤（需為 ISO 8601） | from must be ISO 8601 date/datetime |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:clients:write scope required |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:payments scope required |
 | `INVALID_ID` | 3 | 識別碼格式錯誤 | Invalid id |
 | `INVALID_STATUS` | 3 | 狀態值無效 | invalid status |
 | `OTP_OR_BACKUP_CODE_REQUIRED` | 3 | 請輸入驗證碼或備援碼 | otp_code or backup_code is required |
-| `RATE_LIMITED` | 3 | 請求過於頻繁，請稍後再試 | Too many requests. Please try again later. |
 | `TO_DATE_INVALID` | 3 | 結束日期格式錯誤（需為 ISO 8601） | to must be ISO 8601 date/datetime |
 | `UNAUTHORIZED` | 3 | 未登入或登入已過期 | Unauthorized |
 | `USER_ID_INVALID` | 3 | user_id 需為數字 | user_id must be a number |
 | `2FA_ALREADY_ENABLED` | 2 | 兩步驟驗證已啟用 | 2FA is already enabled |
 | `2FA_NOT_ENABLED` | 2 | 尚未啟用兩步驟驗證 | 2FA is not enabled |
-| `ACCOUNT_NOT_FOUND` | 2 | 找不到帳號 | Account not found |
 | `AUDIT_NOT_FOUND` | 2 | 找不到稽核紀錄 | not_found |
 | `CREDENTIAL_NOT_FOUND` | 2 | 找不到憑證 | Credential not found |
 | `CRON_SECRET_NOT_CONFIGURED` | 2 | 排程密鑰未設定 | CRON_SECRET not configured |
 | `ECPAY_REFUND_FAILED` | 2 | 綠界退款失敗 | ECPay refund failed |
-| `EMAIL_PASSWORD_REQUIRED` | 2 | 請輸入 Email 與密碼 | email and password are required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:refund scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:* scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:users:write scope required |
@@ -58,6 +54,7 @@
 | `INVALID_TOKEN_SUBJECT` | 2 | Token subject 無效 | Invalid token subject |
 | `INVALID_USER_ID` | 2 | 使用者 ID 格式錯誤 | Invalid user id |
 | `OTP_CODE_REQUIRED` | 2 | 請輸入驗證碼 | otp_code is required |
+| `RATE_LIMITED` | 2 | 請求過於頻繁，請稍後再試 | Too many requests. Please try again later. |
 | `REFRESH_TOKEN_REVOKED` | 2 | 登入憑證已失效，請重新登入 | Refresh token has been revoked |
 | `REFUND_NOT_IMPLEMENTED` | 2 | 此金流供應商尚未支援退款 | refund not implemented for vendor: ${intent.vendor} |
 | `REQUISITION_DAILY_LIMIT` | 2 | 今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們 | 今日提單次數已達上限，如有急件請直接致電或 LINE 聯絡我們 |
@@ -70,6 +67,7 @@
 | `ACCOUNT_DISABLED` | 1 | 此帳號已被停用 | 此帳號已被停用 |
 | `ACCOUNT_LOOKUP_FAILED_AFTER_CREATE` | 1 | 帳號建立後無法查詢，請稍後重試 | 帳號建立後無法查詢，請稍後重試 |
 | `ACCOUNT_NOT_FOUND` | 1 | 找不到帳號 | Account not found or already deleted |
+| `ACCOUNT_NOT_FOUND` | 1 | 找不到帳號 | Account not found |
 | `AI_DAILY_LIMIT` | 1 | 今日 AI 助手呼叫次數已達上限 | 今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單 |
 | `APPLE_LOGIN_NOT_AVAILABLE` | 1 | Apple 登入尚未開放 | Apple 登入尚未開放 |
 | `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot revoke a user with equal or higher role |
@@ -85,9 +83,7 @@
 | `DEVICE_MISMATCH` | 1 | 裝置不符 | Device mismatch |
 | `DEVICE_NOT_FOUND` | 1 | 找不到裝置 | Device not found |
 | `DEVICE_UUID_REQUIRED` | 1 | 請提供 device_uuid | device_uuid is required for mode=device |
-| `EMAIL_ALREADY_REGISTERED` | 1 | 此 Email 已註冊 | Email already registered |
 | `EMAIL_ALREADY_VERIFIED` | 1 | Email 已驗證 | Email already verified |
-| `EMAIL_REQUIRED` | 1 | 請提供 Email | email is required |
 | `EMAIL_SEND_FAILED` | 1 | 寄送 Email 失敗，請稍後再試 | Failed to send confirmation email, please try again later |
 | `EMAIL_SEND_FAILED` | 1 | 寄送 Email 失敗，請稍後再試 | Failed to send email, please try again later |
 | `EMAIL_USED_BIND_AFTER_LOGIN` | 1 | 此信箱已被既有帳號使用，請改用既有方式登入後綁定 | 此信箱已被既有帳號使用。請改用既有方式登入，登入後可在帳號設定中綁定 ${provider} 帳號。 |
@@ -101,12 +97,10 @@
 | `INVALID_AUTHORIZATION_CODE` | 1 | 授權碼無效或已過期 | Invalid or expired authorization code |
 | `INVALID_DELETION_TOKEN` | 1 | 刪除帳號 Token 無效或已過期 | Invalid or expired deletion token |
 | `INVALID_DEVICE_UUID` | 1 | device_uuid 格式錯誤 | device_uuid must be string or null |
-| `INVALID_EMAIL_FORMAT` | 1 | 信箱格式無效 | Invalid email format |
 | `INVALID_EMAIL_FORMAT` | 1 | 信箱格式無效 | 信箱格式無效 |
 | `INVALID_FOR_ACTION` | 1 | for_action 格式錯誤 | for_action must be a non-empty string when provided |
 | `INVALID_MODE` | 1 | mode 參數無效 | mode must be one of: ${[...VALID_MODES].join(', ')} |
 | `INVALID_NICKNAME` | 1 | 暱稱格式錯誤 | nickname must be a non-empty string up to ${NICKNAME_MAX} chars |
-| `INVALID_OTP` | 1 | 驗證碼錯誤 | Invalid 2FA code |
 | `INVALID_PKCE_SESSION` | 1 | PKCE Session 無效或已過期 | Invalid or expired PKCE session |
 | `INVALID_PLATFORM` | 1 | platform 必須為 web、pc 或 mobile | Invalid platform. Must be web, pc, or mobile. |
 | `INVALID_PLATFORM` | 1 | platform 必須為 web、pc 或 mobile | platform 必須為 web、pc 或 mobile |
@@ -147,9 +141,8 @@
 | `REQUISITION_IN_PROCESS` | 1 | 此單已在處理中，無法撤銷 | 此單已在處理中，無法撤銷 |
 | `REQUISITION_NOT_FOUND` | 1 | 找不到該需求單 | 找不到該需求單 |
 | `TFA_SETUP_REQUIRED` | 1 | 請先完成兩步驟驗證設定 | Run /api/auth/2fa/setup first |
-| `TFA_VERIFICATION_REQUIRED` | 1 | 需通過兩步驟驗證 | 2FA verification required |
-| `TOKEN_AND_PASSWORD_REQUIRED` | 1 | 請提供 Token 與新密碼 | token and new_password are required |
 | `TOKEN_DATA_INCOMPLETE` | 1 | Token 資料不完整 | Token 資料不完整 |
+| `TOKEN_INVALID_OR_EXPIRED` | 1 | 連結無效或已過期 | Token is invalid or has expired |
 | `TOKEN_REQUIRED` | 1 | 請提供 Token | token is required |
 | `TOKEN_REQUIRED` | 1 | 請提供 Token | Token is required |
 | `UNKNOWN_KYC_VENDOR` | 1 | 未知的 KYC 廠商 | Unknown KYC vendor: ${vendor} |
@@ -181,18 +174,15 @@
 - `USER_ID_INVALID`：
   - "user_id must be a number"
   - "user_id must be a positive integer"
-- `ACCOUNT_NOT_FOUND`：
-  - "Account not found"
-  - "Account not found or already deleted"
 - `INTERNAL_ERROR`：
   - "Internal error"
   - "AUDIT_ARCHIVE_BUCKET binding missing"
   - "chiyigo_db binding missing"
   - "Server error"
   - "requireStepUp must check an elevated:* scope"
-- `INVALID_OTP`：
-  - "Invalid OTP code"
-  - "Invalid 2FA code"
+- `ACCOUNT_NOT_FOUND`：
+  - "Account not found or already deleted"
+  - "Account not found"
 - `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`：
   - "Cannot revoke a user with equal or higher role"
   - "Cannot ban a user with equal or higher role"
@@ -203,9 +193,6 @@
 - `EMAIL_SEND_FAILED`：
   - "Failed to send confirmation email, please try again later"
   - "Failed to send email, please try again later"
-- `INVALID_EMAIL_FORMAT`：
-  - "Invalid email format"
-  - "信箱格式無效"
 - `INVALID_PLATFORM`：
   - "Invalid platform. Must be web, pc, or mobile."
   - "platform 必須為 web、pc 或 mobile"
@@ -231,10 +218,10 @@
 - L36 `'not_found'` → `AUDIT_NOT_FOUND`
 
 ### functions/api/admin/cron/audit-archive.js（4 處）
-- L165 `'CRON_SECRET not configured'` → `CRON_SECRET_NOT_CONFIGURED`
-- L166 `'unauthorized'` → `UNAUTHORIZED`
-- L170 `'AUDIT_ARCHIVE_BUCKET binding missing'` → `INTERNAL_ERROR`
-- L172 `'chiyigo_db binding missing'` → `INTERNAL_ERROR`
+- L181 `'CRON_SECRET not configured'` → `CRON_SECRET_NOT_CONFIGURED`
+- L182 `'unauthorized'` → `UNAUTHORIZED`
+- L186 `'AUDIT_ARCHIVE_BUCKET binding missing'` → `INTERNAL_ERROR`
+- L188 `'chiyigo_db binding missing'` → `INTERNAL_ERROR`
 
 ### functions/api/admin/cron/cleanup.js（2 處）
 - L82 `'CRON_SECRET not configured'` → `CRON_SECRET_NOT_CONFIGURED`
@@ -433,33 +420,6 @@
 - L56 `'Cannot remove the last authentication method.'` → `LAST_AUTH_METHOD`
 - L65 `'No binding found for provider: ${provider}'` → `PROVIDER_NOT_BOUND`
 
-### functions/api/auth/local/forgot-password.js（3 處）
-- L26 `'Invalid JSON'` → `INVALID_JSON`
-- L29 `'email is required'` → `EMAIL_REQUIRED`
-- L68 `'Too many requests. Please try again later.'` → `RATE_LIMITED`
-
-### functions/api/auth/local/login.js（4 處）
-- L41 `'Invalid JSON'` → `INVALID_JSON`
-- L47 `'email and password are required'` → `EMAIL_PASSWORD_REQUIRED`
-- L139 `'Invalid credentials'` → `INVALID_CREDENTIALS`
-- L161 `'Invalid credentials'` → `INVALID_CREDENTIALS`
-
-### functions/api/auth/local/register.js（4 處）
-- L32 `'Invalid JSON'` → `INVALID_JSON`
-- L38 `'email and password are required'` → `EMAIL_PASSWORD_REQUIRED`
-- L40 `'Invalid email format'` → `INVALID_EMAIL_FORMAT`
-- L55 `'Email already registered'` → `EMAIL_ALREADY_REGISTERED`
-
-### functions/api/auth/local/reset-password.js（8 處）
-- L28 `'Invalid JSON'` → `INVALID_JSON`
-- L33 `'token and new_password are required'` → `TOKEN_AND_PASSWORD_REQUIRED`
-- L54 `'Token is invalid or has expired'` → `TOKEN_INVALID_OR_EXPIRED`
-- L70 `'Account not found'` → `ACCOUNT_NOT_FOUND`
-- L79 `'2FA verification required'` → `TFA_VERIFICATION_REQUIRED`
-- L98 `'Token is invalid or has expired'` → `TOKEN_INVALID_OR_EXPIRED`
-- L124 `'Invalid 2FA code'` → `INVALID_OTP`
-- L137 `'Token is invalid or has expired'` → `TOKEN_INVALID_OR_EXPIRED`
-
 ### functions/api/auth/me.js（1 處）
 - L43 `'User not found'` → `USER_NOT_FOUND`
 
@@ -625,13 +585,6 @@
 > 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
 
 ## 後續 PR 切分建議
-
-### PR B-1a (Auth local 入口)
-- 檔案：4 個，處數：**19**
-  - functions/api/auth/local/forgot-password.js
-  - functions/api/auth/local/login.js
-  - functions/api/auth/local/register.js
-  - functions/api/auth/local/reset-password.js
 
 ### PR B-1b (2FA)
 - 檔案：5 個，處數：**26**

@@ -25,12 +25,12 @@ import { safeUserAudit } from '../../../utils/user-audit.js'
 export async function onRequestPost({ request, env }) {
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { token, new_password, totp_code } = body ?? {}
 
   if (!token || !new_password)
-    return res({ error: 'token and new_password are required' }, 400)
+    return res({ error: 'token and new_password are required', code: 'TOKEN_AND_PASSWORD_REQUIRED' }, 400)
 
   const pwCheck = validatePassword(new_password)
   if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
@@ -51,7 +51,7 @@ export async function onRequestPost({ request, env }) {
     .bind(tokenHash)
     .first()
 
-  if (!tokenRow) return res({ error: 'Token is invalid or has expired' }, 400)
+  if (!tokenRow) return res({ error: 'Token is invalid or has expired', code: 'TOKEN_INVALID_OR_EXPIRED' }, 400)
 
   const userId = tokenRow.user_id
 
@@ -67,7 +67,7 @@ export async function onRequestPost({ request, env }) {
     .bind(userId)
     .first()
 
-  if (!record || record.deleted_at) return res({ error: 'Account not found' }, 400)
+  if (!record || record.deleted_at) return res({ error: 'Account not found', code: 'ACCOUNT_NOT_FOUND' }, 400)
 
   // ── 3. 2FA 閉環 ──────────────────────────────────────────────
   // P2-2：TOTP 與 backup_code 兩條 path 對 race 的暴露不同 —
@@ -76,7 +76,7 @@ export async function onRequestPost({ request, env }) {
   let tokenConsumed = false
   if (record.totp_enabled === 1) {
     if (!totp_code)
-      return res({ requires_2fa: true, error: '2FA verification required' }, 403)
+      return res({ requires_2fa: true, error: '2FA verification required', code: 'TFA_VERIFICATION_REQUIRED' }, 403)
 
     const sanitized = totp_code.replace(/[\s-]/g, '')
     let passed = false
@@ -95,7 +95,7 @@ export async function onRequestPost({ request, env }) {
           RETURNING user_id
         `)
         .bind(tokenHash).first()
-      if (!lockToken) return res({ error: 'Token is invalid or has expired' }, 400)
+      if (!lockToken) return res({ error: 'Token is invalid or has expired', code: 'TOKEN_INVALID_OR_EXPIRED' }, 400)
       tokenConsumed = true
 
       const codes = await db
@@ -121,7 +121,7 @@ export async function onRequestPost({ request, env }) {
       }
     }
 
-    if (!passed) return res({ error: 'Invalid 2FA code' }, 401)
+    if (!passed) return res({ error: 'Invalid 2FA code', code: 'INVALID_OTP' }, 401)
   }
 
   // ── 4. 原子核銷 token（若 backup_code path 已消耗則 skip）──────
@@ -134,7 +134,7 @@ export async function onRequestPost({ request, env }) {
         RETURNING user_id
       `)
       .bind(tokenHash).first()
-    if (!consumed) return res({ error: 'Token is invalid or has expired' }, 400)
+    if (!consumed) return res({ error: 'Token is invalid or has expired', code: 'TOKEN_INVALID_OR_EXPIRED' }, 400)
   }
 
   // ── 5. UPSERT 密碼（新 salt + PBKDF2；OAuth-only 用戶首次建立密碼）──

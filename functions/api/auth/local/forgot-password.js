@@ -23,10 +23,10 @@ const IP_HOURLY_LIMIT   = 5   // per IP, across all token types
 export async function onRequestPost({ request, env, waitUntil }) {
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { email } = body ?? {}
-  if (!email) return res({ error: 'email is required' }, 400)
+  if (!email) return res({ error: 'email is required', code: 'EMAIL_REQUIRED' }, 400)
   const emailLower = email.toLowerCase().trim()
 
   // Turnstile：匿名請求（login 頁的 forgot-password）必驗。
@@ -65,7 +65,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
       .bind(ip)
       .first()
     if ((ipCount?.cnt ?? 0) >= IP_HOURLY_LIMIT)
-      return res({ error: 'Too many requests. Please try again later.' }, 429)
+      return res({ error: 'Too many requests. Please try again later.', code: 'RATE_LIMITED' }, 429)
   }
 
   // ── 1. 查詢帳號（不透過回應時間洩漏是否存在）───────────────────

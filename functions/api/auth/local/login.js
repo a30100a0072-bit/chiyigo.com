@@ -38,13 +38,13 @@ export async function onRequestPost({ request, env }) {
   // ── 1. 解析 Body ────────────────────────────────────────────
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { email, password, device_uuid, platform, aud } = body ?? {}
   const audience = resolveAud(aud)
 
   if (!email || !password)
-    return res({ error: 'email and password are required' }, 400)
+    return res({ error: 'email and password are required', code: 'EMAIL_PASSWORD_REQUIRED' }, 400)
 
   // Turnstile（key 未設時 verifyTurnstile 會 skip，不破壞既有流程）
   const ts = await verifyTurnstile(request, body, env)
@@ -136,7 +136,7 @@ export async function onRequestPost({ request, env }) {
         })
       }
     }
-    return res({ error: 'Invalid credentials' }, 401)
+    return res({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' }, 401)
   }
 
   // ── 5. 驗證密碼 ──────────────────────────────────────────────
@@ -158,7 +158,7 @@ export async function onRequestPost({ request, env }) {
         })
       }
     }
-    return res({ error: 'Invalid credentials' }, 401)
+    return res({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' }, 401)
   }
 
   // ── 5.5 封禁帳號：密碼正確但帳號已被封禁，禁止取得新 token ──

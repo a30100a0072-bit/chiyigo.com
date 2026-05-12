@@ -29,15 +29,15 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // ── 1. 解析 Body ────────────────────────────────────────────
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { email, password, guest_id, device_uuid, platform, aud } = body ?? {}
   const audience = resolveAud(aud)
 
   if (!email || !password)
-    return res({ error: 'email and password are required' }, 400)
+    return res({ error: 'email and password are required', code: 'EMAIL_PASSWORD_REQUIRED' }, 400)
   if (!EMAIL_RE.test(email))
-    return res({ error: 'Invalid email format' }, 400)
+    return res({ error: 'Invalid email format', code: 'INVALID_EMAIL_FORMAT' }, 400)
   const pwCheck = validatePassword(password)
   if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
 
@@ -52,7 +52,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     .prepare('SELECT id FROM users WHERE email = ? AND deleted_at IS NULL')
     .bind(email.toLowerCase())
     .first()
-  if (existing) return res({ error: 'Email already registered' }, 409)
+  if (existing) return res({ error: 'Email already registered', code: 'EMAIL_ALREADY_REGISTERED' }, 409)
 
   // ── 3. 密碼雜湊 ─────────────────────────────────────────────
   const salt = generateSalt()
