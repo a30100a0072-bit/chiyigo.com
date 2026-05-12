@@ -1,14 +1,18 @@
--- migrations/_base.sql — post-fresh-rebuild baseline @ 2026-05-12
+-- migrations/0000_base.sql — post-fresh-rebuild baseline @ 2026-05-12
+--
+-- 全表為 CREATE TABLE / CREATE INDEX **IF NOT EXISTS**，純 idempotent：
+--   - 對 prod（既有完整 schema）：全 no-op，只在 d1_migrations ledger 新增 row
+--   - 對 fresh D1（local / staging / preview）：bootstrap 出 12 表 baseline，
+--     後續 0001..NNNN 接著套
 --
 -- ⚠️  這不是「最古老 legacy schema」。
 --    prod 的 oauth_states / pkce_sessions / requisition 在某次 fresh-rebuild 中被
 --    重寫過（從未走 numbered migration ledger），此檔忠實反映 prod **真實 bootstrap
 --    起點**，即 0001 套用之前 prod 應該長的樣子。
 --
--- 用途：
---   - migration smoke / forward test：_base + 0001..0039 必須對得上 prod snapshot
---   - fresh D1（local / staging / preview）初始化骨架
---   - prod 不會執行此檔（既有資料）
+-- 命名：用 0000_ 前綴讓 wrangler `migrations apply` 把它排在 0001 之前
+--    （原本叫 _base.sql，但 ASCII 下 `_` > `0`，會跑到 0040 之後 → fresh D1 從空
+--     開始時 0001 找不到 requisition 直接炸）。
 --
 -- 不含內容（由 numbered migrations 加入）：
 --   users.token_version (0009) / public_sub (0018)

@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { env } from 'cloudflare:test'
 
-import baseSql from '../../migrations/_base.sql?raw'
+import baseSql from '../../migrations/0000_base.sql?raw'
 import up0001 from '../../migrations/0001_requisition_upgrade.sql?raw'
 import up0002 from '../../migrations/0002_login_attempts.sql?raw'
 import up0003 from '../../migrations/0003_admin_audit_log.sql?raw'
@@ -64,7 +64,7 @@ import up0025 from '../../migrations/0025_payment_intents.sql?raw'
 import up0026 from '../../migrations/0026_requisition_refund_request.sql?raw'
 import up0027 from '../../migrations/0027_rrr_requisition_nullable.sql?raw'
 import up0028 from '../../migrations/0028_deals.sql?raw'
-import up0029 from '../../migrations/0029_payment_intents_hardening.sql?raw' // typo 修補見下方 up0029_typoFixed
+import up0029 from '../../migrations/0029_payment_intents_hardening.sql?raw'
 import up0030 from '../../migrations/0030_fix_payment_intents_requisition_fk.sql?raw'
 import up0031 from '../../migrations/0031_refund_request_amount.sql?raw'
 import up0032 from '../../migrations/0032_payment_metadata_archive.sql?raw'
@@ -75,27 +75,14 @@ import up0036 from '../../migrations/0036_requisition_owner_columns.sql?raw'
 import up0039 from '../../migrations/0039_audit_archive_chunks_dry_run.sql?raw'
 import up0040 from '../../migrations/0040_requisition_index_align.sql?raw'
 
-// 0029 含已知 typo（REFERENCES requisitions 複數）；prod 走 PRAGMA foreign_keys=OFF
-// 規避（SQLite 對 FK target 表名做 lazy check），但 cloudflare:test 環境的 D1
-// PRAGMA via prepared statement 不生效，FK 啟動就會炸 INSERT...SELECT。
-// test-only 修：把 typo 替換成正確表名，效果跟 prod 走 PRAGMA OFF 等價（0030 之後
-// 仍會 rebuild 一次蓋掉本次 CREATE）。不改 migration 檔本身（prod 已套用，動了反而
-// 破壞 ledger 對齊）。
-//
-// 🔴 COUPLING：本 patch 的「end-state 等價於 prod」結論依賴 0030 仍在 chain 裡
-//    全 rebuild payment_intents。若未來砍 0030 或拆掉它的 rebuild，本 patch 會悄悄
-//    把 test 帶向「prod 從未存在過」的中間態（FK 有效的 0029 形）。要砍 0030 前
-//    先重評本 patch。
-const up0029_typoFixed = up0029.replace(
-  /REFERENCES requisitions\(id\)/g,
-  'REFERENCES requisition(id)',
-)
-
+// 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
+// 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
+// rebuild；fresh D1 走 migration ledger bootstrap 也能跑通。
 const ALL_UPS = [
   up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008,
   up0009, up0010, up0011, up0012, up0013, up0014, up0015, up0016,
   up0017, up0018, up0019, up0020, up0021, up0022, up0023, up0024,
-  up0025, up0026, up0027, up0028, up0029_typoFixed, up0030, up0031, up0032,
+  up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
 ]
 

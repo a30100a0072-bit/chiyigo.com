@@ -13,6 +13,13 @@
 --         查詢更快、判斷更準
 --
 -- 因為要重建表，順便恢復索引。
+--
+-- 🔧 2026-05-12 retroactive typo fix：原檔寫 `REFERENCES requisitions(id)`（複數），
+--    prod 跑時 PRAGMA foreign_keys=OFF 讓 SQLite 不檢查 FK target 存在性 → 套用成功
+--    但 FK 從未生效（也因此 0030 才必須 rebuild 修 FK target）。`wrangler d1
+--    migrations apply` 不吃 inline PRAGMA，新 fresh D1 走 migration ledger
+--    bootstrap 會直接炸。改為單數 `requisition` 與 prod 真實 FK target 對齊，
+--    schema end-state 完全不變（0030 仍會再 rebuild 一次）。
 
 PRAGMA foreign_keys = OFF;
 
@@ -28,7 +35,7 @@ CREATE TABLE payment_intents_new (
   currency            TEXT    NOT NULL,
   metadata            TEXT,
   failure_reason      TEXT,
-  requisition_id      INTEGER REFERENCES requisitions(id) ON DELETE SET NULL,
+  requisition_id      INTEGER REFERENCES requisition(id) ON DELETE SET NULL,
   created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(vendor, vendor_intent_id)
