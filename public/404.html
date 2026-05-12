@@ -10,12 +10,12 @@
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=b3883b56" />
-  <link rel="stylesheet" href="/css/_components.css?v=b3883b56" />
-  <link rel="stylesheet" href="/css/404.css?v=b3883b56" />
-  <script defer src="/js/notify.js?v=b3883b56"></script>
-  <script defer src="/js/confirm-dialog.js?v=b3883b56"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=b3883b56" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=3c915605" />
+  <link rel="stylesheet" href="/css/_components.css?v=3c915605" />
+  <link rel="stylesheet" href="/css/404.css?v=3c915605" />
+  <script defer src="/js/notify.js?v=3c915605"></script>
+  <script defer src="/js/confirm-dialog.js?v=3c915605"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=3c915605" />
 </head>
 <body>
 
@@ -103,10 +103,10 @@
               <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 9L8 3l6 6v6H10v-4H6v4H2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/></svg>
               <span data-i18n="nf_home_label">回到首頁</span>
             </a>
-            <a href="javascript:history.back()" class="nf-btn nf-btn-ghost" data-i18n="nf_back">
+            <button type="button" id="nf-back-btn" class="nf-btn nf-btn-ghost" data-i18n="nf_back">
               <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span data-i18n="nf_back_label">返回上一頁</span>
-            </a>
+            </button>
           </div>
           <div class="nf-links">
             <p class="nf-links-title" data-i18n="nf_links_title">熱門連結</p>
@@ -244,8 +244,8 @@
 
 
   <!-- Neural canvas (same as about.html) -->
-  <script src="/js/sidebar-auth.js?v=b3883b56" defer></script>
-  <script src="/js/404.js?v=b3883b56" defer></script>
+  <script src="/js/sidebar-auth.js?v=3c915605" defer></script>
+  <script src="/js/404.js?v=3c915605" defer></script>
 
 </body>
 </html>

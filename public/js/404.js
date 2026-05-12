@@ -90,3 +90,6 @@ applyLangI(curLangI);
 
 // ── Phase C-3 m-lang-btn wire ──
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
+
+// 返回上一頁（取代原 href="javascript:history.back()" CSP 違規）
+document.getElementById('nf-back-btn')?.addEventListener('click', () => history.back());
