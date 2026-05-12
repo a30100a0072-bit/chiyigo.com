@@ -27,7 +27,7 @@
  *   admin 身份 / IP / action。
  */
 
-import { res } from '../../../utils/auth.js'
+import { res, requireStepUp } from '../../../utils/auth.js'
 import { requireRole } from '../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
@@ -35,6 +35,14 @@ import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
 import { SUPPORTED_COLD_CLASSES, PR20_SUPPORTED_TABLE } from '../../../utils/audit-archive.js'
 
 const VALID_ACTIONS = new Set(['re_verify', 'mark_resolved', 'force_purge'])
+
+// PR 2.2b codex r1（P1）：mark_resolved / force_purge 屬「不可逆 / 高影響面」action，
+// 需 step-up（elevated:account + for_action 對應）。re_verify 只是把 chunk 推回 pipeline
+// 重新走流程，影響面有限，留在 admin role + admin:audit:write 即可。
+const STEP_UP_FOR_ACTION = {
+  mark_resolved: 'audit_archive_mark_resolved',
+  force_purge:   'audit_archive_force_purge',
+}
 
 // PR 2.2b：target schema 嚴格驗證。所有欄位必填 + 型別正確 + 在白名單。
 function validateTarget(t) {
@@ -77,10 +85,9 @@ async function emitRejected(env, request, ctx, reason) {
 }
 
 export async function onRequestPost({ request, env }) {
+  // 1) Baseline auth：role >= admin + admin:audit:write scope（所有 action 都要過）
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
-
-  // fine-grain scope：re-use admin:audit:write（DELETE audit_log 也走這個）
   if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_AUDIT_WRITE)) {
     return res({ error: 'admin:audit:write scope required' }, 403)
   }
@@ -104,6 +111,18 @@ export async function onRequestPost({ request, env }) {
   if (tgtErr) {
     await emitRejected(env, request, ctxBase, `invalid_target:${tgtErr}`)
     return res({ error: tgtErr }, 400)
+  }
+
+  // 2) PR 2.2b codex r1（P1）：mark_resolved / force_purge 加 step-up。
+  //    elevated:account 必須在 token claim 內（不接受 admin role fallback），
+  //    for_action 必對齊。re_verify 不走此 gate（低影響面，下輪 cron 自動接手）。
+  const stepUpAction = STEP_UP_FOR_ACTION[action]
+  if (stepUpAction) {
+    const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, stepUpAction)
+    if (stepCheck.error) {
+      await emitRejected(env, request, ctxBase, `step_up_required:${stepUpAction}`)
+      return stepCheck.error
+    }
   }
 
   const chunkId = chunkIdString(target)
@@ -147,27 +166,65 @@ export async function onRequestPost({ request, env }) {
       code:   'NOT_IMPLEMENTED',
       action,
       chunk_id: chunkId,
+      archived: false,
+      blocks_cursor: true,
+      message: 'force_purge is a stub in PR 2.2b. R2 / D1 delete semantics await retention lock design (PR 0.2c) and purge worker (PR 2.3).',
     }, 501)
   }
 
   // re_verify / mark_resolved 共享：strict UPDATE failed→<next>
+  //   - re_verify    : state→'uploaded'；保留 retry_count / last_failure（歷史不抹）
+  //   - mark_resolved: state→'blacklisted' + 同步寫 blacklisted_at（PR 2.2b codex r1
+  //                    P3：schema 有此欄 + index，後續 ops 用 blacklisted_at IS NOT NULL
+  //                    篩人工黑名單若不寫會漏）+ last_failure='admin_mark_resolved' /
+  //                    last_failure_at（forensic：留下「管理員介入，不是 worker 失敗」標記）
   const nextState = action === 're_verify' ? 'uploaded' : 'blacklisted'
-  // re_verify 對 retry_count 不清零（保留歷史）；mark_resolved 也不動 retry_count。
-  // 兩者都 bump updated_at。
-  const upd = await db.prepare(
-    `UPDATE audit_archive_chunks
-        SET state = ?, updated_at = datetime('now')
-      WHERE env = ? AND table_name = ? AND cold_class = ?
-        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
-        AND state = 'failed'`
-  ).bind(
-    nextState,
-    target.env, target.table_name, target.cold_class,
-    target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
-  ).run()
+  const stmt = nextState === 'blacklisted'
+    ? db.prepare(
+        `UPDATE audit_archive_chunks
+            SET state = 'blacklisted',
+                blacklisted_at = datetime('now'),
+                last_failure = 'admin_mark_resolved',
+                last_failure_at = datetime('now'),
+                updated_at = datetime('now')
+          WHERE env = ? AND table_name = ? AND cold_class = ?
+            AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+            AND state = 'failed'`
+      ).bind(
+        target.env, target.table_name, target.cold_class,
+        target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
+      )
+    : db.prepare(
+        `UPDATE audit_archive_chunks
+            SET state = 'uploaded', updated_at = datetime('now')
+          WHERE env = ? AND table_name = ? AND cold_class = ?
+            AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+            AND state = 'failed'`
+      ).bind(
+        target.env, target.table_name, target.cold_class,
+        target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
+      )
 
+  const upd = await stmt.run()
   const changes = upd?.meta?.changes ?? 0
   if (changes === 1) {
+    // PR 2.2b codex r1（P2）：response/audit 明寫此 action **不代表已歸檔**，cron
+    // cursor 仍會被卡住（blacklisted / uploaded 都在 NON_TERMINAL_STATES）。
+    //   - mark_resolved：chunk 永遠卡 blacklisted，**整條 cold_class cursor 不前進**，
+    //     直到 PR 2.3 force_purge 真實作能把它從 chunks 表移除。
+    //   - re_verify   ：chunk 進 uploaded，下輪 cron 會嘗試 R2 GET+verify，
+    //     pipeline 重新走，**cursor 暫時仍卡此 chunk** 直到驗證通過。
+    const archivedFalseInfo = nextState === 'blacklisted'
+      ? {
+          archived: false,
+          blocks_cursor: true,
+          message: 'Chunk marked blacklisted. Data is NOT archived to R2. Pipeline cursor for this cold_class remains blocked at this chunk until force_purge (PR 2.3) removes it.',
+        }
+      : {
+          archived: false,
+          blocks_cursor: true,
+          message: 'Chunk reset to uploaded; next cron will retry R2 GET + sha verification. Cursor remains blocked at this chunk until it advances to a terminal state.',
+        }
     await safeUserAudit(env, {
       event_type: 'audit.archive.retry_succeeded',
       severity:   'info',
@@ -178,9 +235,14 @@ export async function onRequestPost({ request, env }) {
         from_state: 'failed',
         to_state:   nextState,
         transition: `failed_to_${nextState}`,
+        ...archivedFalseInfo,
       },
     })
-    return res({ ok: true, action, chunk_id: chunkId, from_state: 'failed', to_state: nextState })
+    return res({
+      ok: true, action, chunk_id: chunkId,
+      from_state: 'failed', to_state: nextState,
+      ...archivedFalseInfo,
+    })
   }
 
   // changes === 0 → 區分 404（無此 chunk）vs 409（狀態不是 failed）

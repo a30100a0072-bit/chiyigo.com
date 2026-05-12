@@ -29,6 +29,17 @@ async function adminToken(userId, role = 'admin') {
   )
 }
 
+// PR 2.2b codex r1（P1）：mark_resolved / force_purge 改吃 step-up token
+// （elevated:account scope claim + for_action 對齊）。一般 admin access token 不行。
+async function adminStepUpToken(userId, forAction) {
+  return signJwt(
+    { sub: String(userId), email: 'a@x', role: 'admin', status: 'active', ver: 0,
+      scope: 'elevated:account', for_action: forAction,
+      amr: ['pwd', 'totp'], acr: 'urn:chiyigo:loa:2' },
+    '5m', env,
+  )
+}
+
 async function callRetry({ token, body }) {
   const headers = token
     ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
@@ -192,6 +203,11 @@ describe('admin retry endpoint — re_verify happy path + 護欄', () => {
     expect(r.body.from_state).toBe('failed')
     expect(r.body.to_state).toBe('uploaded')
 
+    // PR 2.2b codex r1（P2）：response 明寫 archived:false / blocks_cursor:true / message
+    expect(r.body.archived).toBe(false)
+    expect(r.body.blocks_cursor).toBe(true)
+    expect(r.body.message).toMatch(/retry|verification/i)
+
     const after = await getChunkState(chunk)
     expect(after.state).toBe('uploaded')
     expect(after.retry_count).toBe(3)  // 保留歷史，不清零
@@ -199,7 +215,10 @@ describe('admin retry endpoint — re_verify happy path + 護欄', () => {
     const succ = await selectAudit('audit.archive.retry_succeeded')
     expect(succ.length).toBe(1)
     expect(succ[0].severity).toBe('info')
-    expect(JSON.parse(succ[0].event_data).transition).toBe('failed_to_uploaded')
+    const succData = JSON.parse(succ[0].event_data)
+    expect(succData.transition).toBe('failed_to_uploaded')
+    expect(succData.archived).toBe(false)
+    expect(succData.blocks_cursor).toBe(true)
 
     const adminRows = await adminAuditRows('audit_archive.retry.re_verify')
     expect(adminRows.length).toBe(1)
@@ -254,27 +273,66 @@ describe('admin retry endpoint — re_verify happy path + 護欄', () => {
   })
 })
 
-describe('admin retry endpoint — mark_resolved', () => {
+describe('admin retry endpoint — mark_resolved（step-up required）', () => {
   beforeAll(async () => { await ensureJwtKeys() })
   beforeEach(async () => { await resetDb() })
 
-  it('failed → blacklisted；transition 標 failed_to_blacklisted（非 archived）', async () => {
+  it('PR 2.2b codex r1 P1：普通 admin token → 403 STEP_UP_REQUIRED', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
-    const tok = await adminToken(id)
+    const tok = await adminToken(id)  // 沒 elevated:account
+    const chunk = await seedChunk()
+    const r = await callRetry({ token: tok, body: { action: 'mark_resolved', target: targetOf(chunk) } })
+    expect(r.status).toBe(403)
+    expect(r.body.code).toBe('STEP_UP_REQUIRED')
+    // chunk state 不能動
+    expect((await getChunkState(chunk)).state).toBe('failed')
+    // 留 audit row（admin role + scope 已過，知道誰嘗試了）
+    const rej = await selectAudit('audit.archive.retry_rejected')
+    expect(rej.length).toBeGreaterThan(0)
+    expect(JSON.parse(rej[0].event_data).reason).toMatch(/step_up_required/)
+  })
+
+  it('PR 2.2b codex r1 P1：step-up token for_action 不對 → 403 STEP_UP_ACTION_MISMATCH', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'wrong_action')
+    const chunk = await seedChunk()
+    const r = await callRetry({ token: tok, body: { action: 'mark_resolved', target: targetOf(chunk) } })
+    expect(r.status).toBe(403)
+    expect(r.body.code).toBe('STEP_UP_ACTION_MISMATCH')
+  })
+
+  it('step-up token → failed → blacklisted；transition 標 failed_to_blacklisted（非 archived）', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_archive_mark_resolved')
     const chunk = await seedChunk()
     const r = await callRetry({ token: tok, body: { action: 'mark_resolved', target: targetOf(chunk) } })
     expect(r.status).toBe(200)
     expect(r.body.to_state).toBe('blacklisted')
 
-    const after = await getChunkState(chunk)
+    // PR 2.2b codex r1（P2）：response 明寫 archived:false / blocks_cursor:true / message
+    expect(r.body.archived).toBe(false)
+    expect(r.body.blocks_cursor).toBe(true)
+    expect(r.body.message).toMatch(/NOT archived/)
+
+    // PR 2.2b codex r1（P3）：blacklisted_at / last_failure 寫入 chunks row
+    const after = await env.chiyigo_db.prepare(
+      `SELECT state, blacklisted_at, last_failure, last_failure_at FROM audit_archive_chunks
+        WHERE env=? AND table_name=? AND cold_class=? AND archive_date=?
+          AND min_id=? AND max_id=? AND chunk_sha256=?`
+    ).bind(chunk.env, chunk.table_name, chunk.cold_class, chunk.archive_date,
+           chunk.min_id, chunk.max_id, chunk.chunk_sha256).first()
     expect(after.state).toBe('blacklisted')
+    expect(after.blacklisted_at).toBeTruthy()
+    expect(after.last_failure).toBe('admin_mark_resolved')
+    expect(after.last_failure_at).toBeTruthy()
 
     const succ = await selectAudit('audit.archive.retry_succeeded')
     const data = JSON.parse(succ[0].event_data)
-    // user 在意：audit 必須明寫 failed_to_blacklisted，避免日後看到 mark_resolved 以為已成功歸檔
     expect(data.transition).toBe('failed_to_blacklisted')
     expect(data.action).toBe('mark_resolved')
     expect(data.to_state).toBe('blacklisted')
+    expect(data.archived).toBe(false)
+    expect(data.blocks_cursor).toBe(true)
 
     const adminRows = await adminAuditRows('audit_archive.retry.mark_resolved')
     expect(adminRows.length).toBe(1)
@@ -282,7 +340,7 @@ describe('admin retry endpoint — mark_resolved', () => {
 
   it('對 uploaded chunk 用 mark_resolved → 409（同 re_verify 嚴格性）', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
-    const tok = await adminToken(id)
+    const tok = await adminStepUpToken(id, 'audit_archive_mark_resolved')
     const chunk = await seedChunk({ state: 'uploaded' })
     const r = await callRetry({ token: tok, body: { action: 'mark_resolved', target: targetOf(chunk) } })
     expect(r.status).toBe(409)
@@ -290,17 +348,31 @@ describe('admin retry endpoint — mark_resolved', () => {
   })
 })
 
-describe('admin retry endpoint — force_purge stub', () => {
+describe('admin retry endpoint — force_purge stub（step-up required）', () => {
   beforeAll(async () => { await ensureJwtKeys() })
   beforeEach(async () => { await resetDb() })
 
-  it('force_purge 一律 501 + emit force_purge_requested critical；chunk state 不動', async () => {
+  it('PR 2.2b codex r1 P1：普通 admin token → 403 STEP_UP_REQUIRED（不會 emit force_purge_requested）', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
-    const tok = await adminToken(id)
+    const tok = await adminToken(id)  // 沒 elevated:account
+    const chunk = await seedChunk()
+    const r = await callRetry({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) } })
+    expect(r.status).toBe(403)
+    expect(r.body.code).toBe('STEP_UP_REQUIRED')
+    // critical event 不該被觸發（連 step-up gate 都沒過）
+    const critEvs = await selectAudit('audit.archive.force_purge_requested')
+    expect(critEvs.length).toBe(0)
+  })
+
+  it('step-up token → 501 + emit force_purge_requested critical；chunk state 不動；response 含 archived:false', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
     const chunk = await seedChunk()
     const r = await callRetry({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) } })
     expect(r.status).toBe(501)
     expect(r.body.code).toBe('NOT_IMPLEMENTED')
+    expect(r.body.archived).toBe(false)
+    expect(r.body.blocks_cursor).toBe(true)
 
     // chunk state 必須不動
     expect((await getChunkState(chunk)).state).toBe('failed')
@@ -316,9 +388,9 @@ describe('admin retry endpoint — force_purge stub', () => {
     expect(adminRows.length).toBe(1)
   })
 
-  it('force_purge 對 uploaded chunk 也 501（不檢 state；stub 一律拒絕）', async () => {
+  it('step-up token → force_purge 對 uploaded chunk 也 501（不檢 state；stub 一律拒絕）', async () => {
     const { id } = await seedUser({ email: 'a@x', role: 'admin' })
-    const tok = await adminToken(id)
+    const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
     const chunk = await seedChunk({ state: 'uploaded' })
     const r = await callRetry({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) } })
     expect(r.status).toBe(501)
