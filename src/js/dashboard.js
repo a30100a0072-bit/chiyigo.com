@@ -1409,14 +1409,16 @@ async function logoutDevice(deviceUuidAttr) {
       loadDevices();
       return;
     }
-    showBindToast(T('device_logout_success'), 'ok');
     if (isMyOwnRow) {
+      showBindToast(T('device_logout_success'), 'ok');
       // 撤的就是當下 session → 自己也清掉
       try { sessionStorage.removeItem('access_token'); } catch (_) {}
       try { if ('BroadcastChannel' in window) new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' }); } catch (_) {}
       setTimeout(() => { location.replace('/login.html?logout=device'); }, 800);
       return;
     }
+    // 對端裝置：refresh_token 已撤，但其 access_token 還有最多 15 min TTL
+    showBindToast(T('device_logout_success_other'), 'ok');
     loadDevices();
   } catch (e) {
     showBindToast(tApiError(e, T('net_err')), 'err');
