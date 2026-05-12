@@ -1,0 +1,34 @@
+name: Cron — Audit Aggregate (F-3 Phase 2 PR 3.0 telemetry skeleton)
+
+# 每週日 17:00 UTC（= 週一 01:00 Asia/Taipei）跑一次。
+# 與每日 audit-archive cron 錯開：archive 18:00 UTC / aggregate 17:00 週日。
+# 目前 PR 3.0 只動 telemetry — 把 hot 過期前 24h 的 audit_log row UPSERT 進
+# audit_log_aggregate_telemetry。Raw row 不刪（PR 4 才動）。
+# 詳見 docs/AUDIT_RETENTION_PLAN.md §「Aggregate 規則 v3」。
+on:
+  schedule:
+    - cron: '0 17 * * 0'
+  workflow_dispatch:        # 手動觸發（驗收 / 例外 backlog 用）
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call audit-aggregate endpoint
+        run: |
+          set -euo pipefail
+          response=$(curl -sS -w "\n%{http_code}" \
+            -X POST https://chiyigo.com/api/admin/cron/audit-aggregate \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+
+          echo "Status: $status"
+          echo "Body:   $body"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::audit-aggregate endpoint returned $status"
+            exit 1
+          fi

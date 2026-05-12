@@ -51,6 +51,10 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.archive.force_purge_succeeded',        // critical — R2 chunk+manifest+chunks row 全刪成功
   'audit.archive.force_purge_failed',           // critical — R2/D1 操作中斷（含未來 retention lock 423 路徑）
   'audit.archive.force_purge_disabled',         // warn — AUDIT_ARCHIVE_PURGE_ENABLED 未設，endpoint 拒絕
+  // PR 3.0 aggregate worker（POST /api/admin/cron/audit-aggregate, telemetry-only skeleton）
+  'audit.aggregate.run_completed',              // info — 整輪成功 + summary（rows_scanned / buckets_upserted）
+  'audit.aggregate.run_skipped',                // info — hot_days_disabled / no_rows_eligible 等正常 skip
+  'audit.aggregate.run_failed',                 // critical — drift / partial upsert / D1 select 失敗
 ]
 
 // F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。

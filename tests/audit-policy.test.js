@@ -163,8 +163,10 @@ describe('registry coverage', () => {
     //   （retry_requested / retry_succeeded / retry_rejected / force_purge_requested）→ 121。
     // PR 2.3 加 3 個 force_purge 真實作 events
     //   （force_purge_succeeded / _failed / _disabled）→ 124。
+    // PR 3.0 加 3 個 aggregate worker events
+    //   （audit.aggregate.run_completed / _skipped / _failed）→ 127。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(124)
+    expect(_registrySize).toBe(127)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
