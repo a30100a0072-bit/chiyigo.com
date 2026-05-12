@@ -927,7 +927,14 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
   - 覆蓋形狀：direct / optional chaining / bracket / paren-wrap / destructure / method-extraction / SQL multiline whole-source
   - best-effort 邊界明列；完整 alias-flow tracking 留 AST 版 ESLint rule 未來 PR
 - **PR 2.1b** zstd compression（獨立小 PR）— 🟡 待
-- **PR 2.2d**（可選）fine-grain scope `admin:audit_archive:retry|resolve|purge` — 🟡 待
+- **PR 2.2d** fine-grain scope `admin:audit_archive:retry|resolve|purge` ✅ commit `57763cb`（2026-05-12）
+  - 新增 coarse `admin:audit_archive` + 3 fine（`:retry/:resolve/:purge`）入 `SCOPES`
+  - `SCOPE_HIERARCHY`：coarse → 3 fine（fine→fine 不互相蘊含，最少特權）
+  - `ROLE_BASE_SCOPES`：admin/developer/super_admin 加 coarse → 經 role fallback 自動含全套（prod token 不必重簽）
+  - `retry.js` baseline gate 拆 per-action fine（re_verify→retry / mark_resolved→resolve / force_purge→purge），fine scope check 放在 action validate 後，保留 invalid_action=400 而非被 scope gate 吃成 403
+  - finance/support 嚴格驗證**不**取得任何 audit_archive fine（避免誤升權）
+  - 現況為 architectural prep：現役 admin-role token 皆含全套，差異化要等未來 audit_ops 之類窄 role 才 activate
+  - 測試：unit 281→287（+6 in `tests/scopes.test.js`），int 544 不變
 - **PR 2.3** force_purge 真實作（R2 + D1 delete + retention lock 分支） — 🟡 待
 - F-2 manifest.severities prod 驗收 — 等 2026-05-13 02:00 cron 自然帶
 
