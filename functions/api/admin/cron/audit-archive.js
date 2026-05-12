@@ -399,8 +399,10 @@ async function handlePlannedBlocker(ctx) {
   // PR 2.1b：依 chunk 自己當初寫入的 compression 決定 body / contentEncoding。
   //   - 'gzip'：重新 gzip jsonl（chunk_sha256 仍對齊 decompressed jsonl，不影響 idempotency）
   //   - 'none'：直送 jsonl（PR 2.0 既有 planned chunk recovery 場景）
+  let recoveryGzSha = null
   if (blockerCompression === 'gzip') {
     const gzBody = await gzipCompress(jsonl)
+    recoveryGzSha = await sha256Hex(gzBody)
     await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
       httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
     })
@@ -411,7 +413,11 @@ async function handlePlannedBlocker(ctx) {
   }
 
   // 2) Manifest 升 uploaded — 讀回現有 planned manifest append state_history
+  // PR 2.1b codex r1（P2）：recovery 重新 gzip 後 bytes 必與 fresh run 寫入時不同
+  // （gzip 含 mtime 非 byte-identical）→ 原 planned manifest 內的 sha256_gz 過期。
+  // 覆寫對齊本次 PUT 的 gz bytes，sha256_jsonl / chunk_sha256 不動（data identity 保持）。
   const uploadedManifest = await loadAndAppend(bucket, manifestKey, 'uploaded')
+  if (recoveryGzSha) uploadedManifest.sha256_gz = recoveryGzSha
   await archivePut(ctx, 'manifest', chunkInfo, manifestKey, JSON.stringify(uploadedManifest, null, 2), {
     httpMetadata: { contentType: 'application/json' },
   })
@@ -458,13 +464,28 @@ async function handleUploadedBlocker(ctx) {
   }
   // PR 2.1b：依 chunk 自身 compression 還原 jsonl bytes，再算 sha256 對齊
   // chunk_sha256（永遠是 decompressed jsonl 的 sha，design doc § Manifest 結構）。
+  //
+  // PR 2.1b codex r1（P2）：壞掉/截斷的 .jsonl.gz 會讓 DecompressionStream throw；
+  // 不捕捉的話會冒泡到 processColdClass catch → ok=false，但 chunk 卡 uploaded、
+  // retry_count 不加、不 emit verification_failed → 監控盲區。包 try/catch 走
+  // failChunkMismatch 把它降級為「正規 verify 失敗」可被 admin retry endpoint 接手。
   let text
-  if (blockerCompression === 'gzip') {
-    const gzBytes = new Uint8Array(await obj.arrayBuffer())
-    const jsonlBytes = await gzipDecompress(gzBytes)
-    text = new TextDecoder().decode(jsonlBytes)
-  } else {
-    text = await obj.text()
+  try {
+    if (blockerCompression === 'gzip') {
+      const gzBytes = new Uint8Array(await obj.arrayBuffer())
+      const jsonlBytes = await gzipDecompress(gzBytes)
+      text = new TextDecoder().decode(jsonlBytes)
+    } else {
+      text = await obj.text()
+    }
+  } catch (e) {
+    return failChunkMismatch(ctx, 'verification_failed', {
+      reason: 'gzip_decompress_failed',
+      data_key: dataKey,
+      compression: blockerCompression,
+      error: String(e?.message ?? e),
+      stage: 'uploaded_verify',
+    })
   }
   const sha  = await sha256Hex(text)
   // jsonl trailing newline → 行數 = newline 數

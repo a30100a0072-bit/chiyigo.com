@@ -215,6 +215,85 @@ describe('audit-archive cron — PR 2.1b gzip 壓縮', () => {
     expect(chunk.state).toBe('verified')
     expect(chunk.compression).toBe('gzip')
   })
+
+  it('codex r1 P2：R2 gz 物件被截斷 → DecompressionStream throw 走 failChunkMismatch', async () => {
+    await seedTelemetry(2)
+    await runCron()                       // → uploaded
+
+    // 把 .jsonl.gz 物件覆寫成壞 gz bytes（只前 10 bytes，無 gzip footer / 不完整 deflate stream）
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
+    const gzKey = list.objects.find(o => o.key.endsWith('.jsonl.gz')).key
+    const gzObj = await env.AUDIT_ARCHIVE_BUCKET.get(gzKey)
+    const corrupted = new Uint8Array(await gzObj.arrayBuffer()).slice(0, 10)
+    await env.AUDIT_ARCHIVE_BUCKET.put(gzKey, corrupted, {
+      httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
+    })
+
+    const r = await cronArchive({ request: makeRequest(), env: makeEnv() })
+    expect(r.status).toBe(500)
+    const report = await r.json()
+    expect(report.ok).toBe(false)
+    expect(report.errors?.[0]?.event).toBe('verification_failed')
+    expect(report.errors?.[0]?.reason).toBe('gzip_decompress_failed')
+    expect(report.errors?.[0]?.compression).toBe('gzip')
+
+    // chunk 應升 failed + retry_count=1（不能卡在 uploaded 監控盲區）
+    const [chunk] = await getChunk()
+    expect(chunk.state).toBe('failed')
+    expect(chunk.last_failure).toBe('verification_failed')
+    expect(chunk.retry_count).toBe(1)
+  })
+
+  it('codex r1 P2：planned recovery（gzip）→ uploadedManifest.sha256_gz 覆寫對齊新 PUT bytes', async () => {
+    await seedTelemetry(2)
+    const rowsRes = await env.chiyigo_db.prepare(
+      `SELECT id, event_type, severity, user_id, client_id, ip_hash, event_data, cold_class, created_at
+         FROM audit_log ORDER BY id ASC`
+    ).all()
+    const rows = rowsRes.results
+    const jsonl = rowsToJsonl(rows)
+    const sha = await sha256Hex(jsonl)
+    const minId = rows[0].id, maxId = rows[rows.length - 1].id
+    const archiveDate = '2026-05-11'
+
+    // 種 planned chunks row（compression='gzip'）+ planned manifest 帶 stale sha256_gz
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+        (env, table_name, cold_class, cold_class_version, archive_date,
+         min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run, compression)
+       VALUES (?, 'audit_log', 'telemetry', 1, ?, ?, ?, ?, 'planned', ?, 0, 'run-seed', 0, 'gzip')`
+    ).bind(ARCHIVE_ENV, archiveDate, minId, maxId, sha, rows.length).run()
+
+    const { manifestKey } = buildChunkKeys({
+      env: ARCHIVE_ENV, tableName: 'audit_log', coldClass: 'telemetry',
+      minId, maxId, sha256: sha, archiveDate, dryRun: false, compression: 'gzip',
+    })
+    const STALE_SHA = 'dead'.repeat(16)   // 假裝原 fresh run 寫入的 sha256_gz
+    await env.AUDIT_ARCHIVE_BUCKET.put(manifestKey, JSON.stringify({
+      state: 'planned',
+      state_history: [{ state: 'planned', at: '2026-05-11T00:00:00Z' }],
+      sha256_gz: STALE_SHA,
+      compression: 'gzip',
+    }))
+
+    const report = await runCron()
+    expect(report.ok).toBe(true)
+    expect(report.blocker_action).toBe('recovery_planned')
+
+    // uploaded manifest 內 sha256_gz 必已被覆寫成新 PUT 的 gz bytes sha
+    const manifestObj = await env.AUDIT_ARCHIVE_BUCKET.get(manifestKey)
+    const uploadedManifest = JSON.parse(await manifestObj.text())
+    expect(uploadedManifest.state).toBe('uploaded')
+    expect(uploadedManifest.sha256_gz).not.toBe(STALE_SHA)
+    expect(uploadedManifest.sha256_gz).toMatch(/^[0-9a-f]{64}$/)
+
+    // 對齊 R2 實體 gz bytes
+    const gzList = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
+    const gzKey = gzList.objects.find(o => o.key.endsWith('.jsonl.gz')).key
+    const gzObj = await env.AUDIT_ARCHIVE_BUCKET.get(gzKey)
+    const gzBytes = new Uint8Array(await gzObj.arrayBuffer())
+    expect(await sha256Hex(gzBytes)).toBe(uploadedManifest.sha256_gz)
+  })
 })
 
 describe('audit-archive cron — recovery 與失敗', () => {
