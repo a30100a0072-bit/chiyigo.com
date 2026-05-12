@@ -10,3 +10,6 @@ dist/
 # 修改流程：改 src/ → npm run build → commit src/ 與 public/ 一起推。
 # （階段 7 會加 pre-commit hook 自動 build。）
 .scripts/
+
+# audit 中介產物（用 scripts/audit-error-i18n.mjs 重跑即可）
+scripts/audit-error-i18n.out.json
