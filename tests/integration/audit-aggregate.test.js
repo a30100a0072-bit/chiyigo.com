@@ -255,11 +255,35 @@ describe('audit-aggregate cron — skip / auth', () => {
     expect(status).toBe(200)
     expect(body.skipped_reason).toBe('hot_days_disabled')
     expect(body.cutoff).toBeNull()
+    expect(body.effective_cutoff_hours).toBe(0)
 
     const events = await listAuditEvents()
     expect(events[0].event_type).toBe('audit.aggregate.run_skipped')
     const data = JSON.parse(events[0].event_data)
     expect(data.reason).toBe('hot_days_disabled')
+  })
+
+  it('cutoff_hours_collapsed (leadHours >= hotDays*24) → 200 + run_skipped 不同 reason', async () => {
+    // codex r3 L：hotDays=30 但 leadHours=720（=30*24）→ effectiveHours=0
+    // 不可走 SQL `datetime('now','-0 hours')` = now（會撈到尚未跨 hot 窗口的 row），
+    // 但要與 hot_days_disabled 區分，方便 ops 看出是 misconfig 而非顯式關閉
+    await seed({ created_at: "datetime('now','-29 days')" })
+    const { status, body } = await runCron({
+      AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS: '30',
+      AUDIT_AGGREGATE_LEAD_HOURS: '720',
+    })
+    expect(status).toBe(200)
+    expect(body.skipped_reason).toBe('cutoff_hours_collapsed')
+    expect(body.cutoff).toBeNull()
+    expect(body.effective_cutoff_hours).toBe(0)
+    expect(body.hot_days).toBe(30)
+    expect(body.lead_hours).toBe(720)
+
+    const events = await listAuditEvents()
+    const ev = events.find(e => e.event_type === 'audit.aggregate.run_skipped')
+    const data = JSON.parse(ev.event_data)
+    expect(data.reason).toBe('cutoff_hours_collapsed')
+    expect(data.effective_cutoff_hours).toBe(0)
   })
 
   it('沒 Authorization → 401', async () => {

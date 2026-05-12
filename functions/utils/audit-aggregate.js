@@ -132,8 +132,14 @@ export function telemetryCutoffISO(hotDays, leadHours = AGGREGATE_LEAD_HOURS_DEF
  * 整數內嵌進 `datetime('now', '-N hours')` template literal（與 archive worker
  * 模式一致避開 JS↔SQLite 格式比較坑，見 feedback_sqlite_iso_datetime_compare）。
  *
- * codex r1 L-1：clamp 到 [0, 100年] 防 Infinity / NaN 內嵌 SQL；
- *               下限 0 = 表示「無 lead，aggregate 直到 now」（不該發生但保 fallback）。
+ * codex r1 L-1：clamp 到 [0, 100年] 防 Infinity / NaN 內嵌 SQL。
+ *
+ * codex r3 L 語意澄清：回傳 0 表示「cutoff 退化到 now」（hotDays<=0 或
+ * leadHours>=hotDays*24 的 over-aggressive lead）。**呼叫端應 skip 不要查**，
+ * 因為 `datetime('now','-0 hours')` = now，會撈到所有 cold_class='telemetry'
+ * 未來 row 邊界以內的 row（含剛寫進來、尚未跨進 hot 過期窗口的 row），與 PR 3.0
+ * 「hot 過期前 24h reduce」設計意圖衝突。handler 對 effectiveHours===0 走
+ * skip 路徑（區分 hot_days_disabled vs cutoff_hours_collapsed 兩 reason）。
  */
 export const MAX_TOTAL_HOURS = 100 * 365 * 24  // 100 年
 const MAX_HOT_DAYS = 100 * 365                  // 對齊 100 年

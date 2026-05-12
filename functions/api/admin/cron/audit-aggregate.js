@@ -97,9 +97,14 @@ export async function onRequestPost({ request, env }) {
     errors: [],
   }
 
-  // ── Step 1：cutoff 無效（hotDays<=0 或 effectiveHours<=0）→ skip ─────────────
+  // ── Step 1：cutoff 無效 → skip ───────────────────────────────────────────
+  // codex r3 L 拆 reason：
+  //   - hotDays<=0          → hot_days_disabled（operator 顯式關閉 hot 保留 = 不該走 aggregate）
+  //   - hotDays>0 但 eff<=0 → cutoff_hours_collapsed（leadHours 過大壓死 cutoff，
+  //                          可能是 ops 誤設 AUDIT_AGGREGATE_LEAD_HOURS；
+  //                          仍 skip 因為 effectiveHours=0 會撈到 now-邊界內所有 row）
   if (cutoffISO == null) {
-    report.skipped_reason = 'hot_days_disabled'
+    report.skipped_reason = hotDays <= 0 ? 'hot_days_disabled' : 'cutoff_hours_collapsed'
     await emitSkipped(env, report, { reason: report.skipped_reason })
     report.finished_at = new Date().toISOString()
     return res(report, 200)
