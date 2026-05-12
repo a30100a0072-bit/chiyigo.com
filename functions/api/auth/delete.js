@@ -88,6 +88,7 @@ async function handleDelete({ request, env }) {
   if (recent)
     return res({
       error: 'Please wait before requesting another confirmation email',
+      code: 'COOLDOWN',
       retry_after: COOLDOWN_SECONDS,
     }, 429)
 

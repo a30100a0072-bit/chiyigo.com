@@ -83,7 +83,7 @@ async function handle({ request, env }) {
     .first()
 
   if (recent)
-    return res({ error: 'Please wait before requesting another email', retry_after: COOLDOWN_SECONDS }, 429)
+    return res({ error: 'Please wait before requesting another email', code: 'COOLDOWN', retry_after: COOLDOWN_SECONDS }, 429)
 
   const token     = generateSecureToken()
   const tokenHash = await hashToken(token)
