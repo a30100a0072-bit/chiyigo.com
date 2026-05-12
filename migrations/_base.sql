@@ -22,6 +22,10 @@
 -- 歷史 legacy 對照：
 --   database/migration_001_requisition_contact.sql 是 pre-numbered 一次性 RENAME 腳本，
 --   已標 deprecated；其 RENAME 後形（contact/service_type/message + timeline）併入本 baseline。
+--
+-- Note: requisition.timeline is folded into this baseline even though prod column
+-- order suggests it was added by a legacy one-shot after owner_*; column order is
+-- intentionally not treated as migration truth.
 
 PRAGMA defer_foreign_keys=TRUE;
 
