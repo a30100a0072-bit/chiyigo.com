@@ -109,23 +109,30 @@ export function isCommentLine(line) {
   return t.startsWith('//') || t.startsWith('*') || t.startsWith('/*')
 }
 
-// Helper: 從整個 source 找 source-scope pattern 的 match 並算出起/止行號 +
-// 每行內容（給 caller 判斷 ALLOW_TAG 跨行豁免）。回傳 null 表示無 match。
-export function findSourceMatch(src, lines, pattern) {
-  pattern.re.lastIndex = 0
-  const m = pattern.re.exec(src)
-  if (!m) return null
-  const startIdx = m.index
-  const endIdx   = m.index + m[0].length
-  const startLine = src.slice(0, startIdx).split('\n').length         // 1-based
-  const endLine   = src.slice(0, endIdx).split('\n').length           // 1-based
-  // match span 內任一行含 ALLOW_TAG 即豁免（multiline statement 任一行放 tag 都算）
+// Helper: 從整個 source 找 source-scope pattern 的 **所有** match 並算出
+// 起/止行號 + waiver 狀態（codex r3 M-3：原 findSourceMatch 只回第一個 match，
+// 若第一個被 waive 則後續 unwaived 漏抓）。回空陣列表示無 match。
+//
+// 用法：caller 拿到陣列後逐個處理；waived=true 的 entry caller 自行 skip。
+export function findSourceMatches(src, lines, pattern) {
+  // re.matchAll 需要 g flag；pattern.re 不一定有，in-flight 補
+  const reG = pattern.re.global
+    ? pattern.re
+    : new RegExp(pattern.re.source, pattern.re.flags + 'g')
   const tag = ALLOW_TAGS[pattern.kind]
-  let waived = false
-  if (tag) {
-    for (let i = startLine - 1; i <= endLine - 1 && i < lines.length; i++) {
-      if (lines[i].includes(tag)) { waived = true; break }
+  const out = []
+  for (const m of src.matchAll(reG)) {
+    const startIdx = m.index
+    const endIdx   = m.index + m[0].length
+    const startLine = src.slice(0, startIdx).split('\n').length         // 1-based
+    const endLine   = src.slice(0, endIdx).split('\n').length           // 1-based
+    let waived = false
+    if (tag) {
+      for (let i = startLine - 1; i <= endLine - 1 && i < lines.length; i++) {
+        if (lines[i].includes(tag)) { waived = true; break }
+      }
     }
+    out.push({ startLine, endLine, waived, snippet: lines[startLine - 1] })
   }
-  return { startLine, endLine, waived, snippet: lines[startLine - 1] }
+  return out
 }

@@ -33,7 +33,7 @@ import {
   FILE_PATTERN,
   isWaived,
   isCommentLine,
-  findSourceMatch,
+  findSourceMatches,
 } from './_archive-lint-patterns.js'
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
@@ -57,7 +57,11 @@ function reportViolation(file, lineNum, lineText, pattern, extraNote) {
   console.error(`[archive-no-delete] ${rel}:${lineNum}: [${pattern.kind}] forbidden ${pattern.desc}`)
   if (lineText) console.error(`    > ${lineText.trim()}`)
   if (extraNote) console.error(`    ${extraNote}`)
-  console.error(`    同行豁免 tag: // ${ALLOW_TAGS[pattern.kind]}（僅限合法例外，目前只給 utils#putWithRetry 用 archive-put-allow）`)
+  // codex r3 L-1：source-scope 是 span 任一行豁免、line-scope 是同行豁免，wording 分開
+  const waiverHint = pattern.scope === 'source'
+    ? `match span 任一行加 tag: // ${ALLOW_TAGS[pattern.kind]}`
+    : `同行豁免 tag: // ${ALLOW_TAGS[pattern.kind]}`
+  console.error(`    ${waiverHint}（僅限合法例外，目前只給 utils#putWithRetry 用 archive-put-allow）`)
 }
 
 function scan(file) {
@@ -66,14 +70,17 @@ function scan(file) {
   const lines = src.split(/\r?\n/)
 
   // ── source-scope patterns（如 SQL multiline DELETE） ────────────
+  // codex r3 M-3：每 pattern 找所有 match，逐個處理 waiver — 第一個被 waive
+  // 不會讓後續同 pattern unwaived 漏抓。
   for (const pattern of FORBIDDEN_PATTERNS) {
     if (pattern.scope !== 'source') continue
-    const m = findSourceMatch(src, lines, pattern)
-    if (!m || m.waived) continue
-    const extraNote = m.startLine !== m.endLine
-      ? `(spans lines ${m.startLine}-${m.endLine}; 任一行加 tag 即豁免)`
-      : null
-    reportViolation(file, m.startLine, m.snippet, pattern, extraNote)
+    for (const m of findSourceMatches(src, lines, pattern)) {
+      if (m.waived) continue
+      const extraNote = m.startLine !== m.endLine
+        ? `(spans lines ${m.startLine}-${m.endLine})`
+        : null
+      reportViolation(file, m.startLine, m.snippet, pattern, extraNote)
+    }
   }
 
   // ── line-scope patterns（R2 method 等） ──────────────────────────
