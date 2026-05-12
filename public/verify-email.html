@@ -9,12 +9,12 @@
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/_components.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/login.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/verify-email.css?v=d74f2956" />
-  <script defer src="/js/notify.js?v=d74f2956"></script>
-  <script defer src="/js/confirm-dialog.js?v=d74f2956"></script>
+  <link rel="stylesheet" href="/css/_tokens.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/_components.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/login.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/verify-email.css?v=57763cba" />
+  <script defer src="/js/notify.js?v=57763cba"></script>
+  <script defer src="/js/confirm-dialog.js?v=57763cba"></script>
 </head>
 <body>
 
@@ -92,15 +92,15 @@
 
               <!-- 初始：等待使用者點擊 -->
               <div id="panel-confirm" class="panel active text-center">
-                <div class="lp-logo-icon" style="margin-bottom:1rem">
+                <div class="lp-logo-icon ve-logo-mb">
                   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
                 </div>
                 <h1 class="lp-title" data-i18n="title">驗證 Email</h1>
-                <p class="lp-subtitle" style="margin-bottom:1.5rem" data-i18n="desc">請按下方按鈕完成 Email 驗證。連結 1 小時內有效，且僅能使用一次。</p>
+                <p class="lp-subtitle ve-subtitle-mb" data-i18n="desc">請按下方按鈕完成 Email 驗證。連結 1 小時內有效，且僅能使用一次。</p>
                 <button id="btn-verify" class="submit-btn" data-i18n="btn_verify">確認驗證</button>
-                <p id="err-missing" class="hidden field-hint" style="text-align:center;color:#f87171;margin-top:1rem" data-i18n="err_missing">缺少驗證 token，請從 Email 內連結再試一次。</p>
+                <p id="err-missing" class="hidden field-hint ve-err-msg" data-i18n="err_missing">缺少驗證 token，請從 Email 內連結再試一次。</p>
               </div>
 
               <!-- 處理中 -->
@@ -225,7 +225,7 @@
     </div>
   </div>
 
-  <script src="/js/sidebar-auth.js?v=d74f2956" defer></script>
-  <script src="/js/verify-email.js?v=d74f2956" defer></script>
+  <script src="/js/sidebar-auth.js?v=57763cba" defer></script>
+  <script src="/js/verify-email.js?v=57763cba" defer></script>
 </body>
 </html>

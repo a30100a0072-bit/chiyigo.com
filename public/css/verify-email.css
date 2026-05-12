@@ -11,3 +11,9 @@
 
 .ve-btn-secondary { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border); }
 .ve-btn-secondary:hover { filter: brightness(1.05); }
+
+/* panel-confirm 區域內距微調 */
+.ve-logo-mb { margin-bottom: 1rem; }
+.ve-subtitle-mb { margin-bottom: 1.5rem; }
+/* 缺 token 錯誤提示 */
+.ve-err-msg { text-align: center; color: #f87171; margin-top: 1rem; }

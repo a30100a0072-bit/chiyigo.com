@@ -9,12 +9,12 @@
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/_components.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/admin-requisitions.css?v=d74f2956" />
-  <script defer src="/js/notify.js?v=d74f2956"></script>
-  <script defer src="/js/confirm-dialog.js?v=d74f2956"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=d74f2956" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/_components.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/admin-requisitions.css?v=57763cba" />
+  <script defer src="/js/notify.js?v=57763cba"></script>
+  <script defer src="/js/confirm-dialog.js?v=57763cba"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=57763cba" />
 </head>
 <body>
 
@@ -205,7 +205,7 @@
         </button>
       </div>
       <div class="modal-body">
-        <p class="msg-label">已付款的需求單 user 撤銷需走此審核。<strong style="color:var(--accent)">通過 = 全額退款 + 撤銷</strong>，動作不可逆，需 2FA OTP 確認。</p>
+        <p class="msg-label">已付款的需求單 user 撤銷需走此審核。<strong class="text-accent">通過 = 全額退款 + 撤銷</strong>，動作不可逆，需 2FA OTP 確認。</p>
         <div id="refund-review-list" class="refund-review-list">
           <p class="empty-state">載入中…</p>
         </div>
@@ -244,7 +244,7 @@
         <p id="ra-summary" class="msg-block"></p>
         <div>
           <p class="msg-label" id="ra-note-label">備註（選填）</p>
-          <input id="ra-note" type="text" maxlength="500" placeholder="處理備註" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem" />
+          <input id="ra-note" type="text" maxlength="500" placeholder="處理備註" class="input-note" />
         </div>
         <p id="ra-msg" class="refund-msg"></p>
         <div class="refund-actions">
@@ -268,7 +268,7 @@
         <p id="rd-summary" class="msg-block"></p>
         <div>
           <p class="msg-label" id="rd-note-label">審核備註（建議填寫）</p>
-          <input id="rd-note" type="text" maxlength="500" placeholder="備註原因 / 處理方式" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem" />
+          <input id="rd-note" type="text" maxlength="500" placeholder="備註原因 / 處理方式" class="input-note" />
         </div>
         <div>
           <p class="msg-label">請輸入 6 位 2FA 驗證碼</p>
@@ -376,10 +376,10 @@
 
 
   <!-- Neural canvas -->
-  <script src="/js/sidebar-auth.js?v=d74f2956" defer></script>
-  <script src="/js/api.js?v=d74f2956"></script>
-  <script src="/js/form-enter.js?v=d74f2956" defer></script>
-  <script src="/js/admin-requisitions.js?v=d74f2956" defer></script>
+  <script src="/js/sidebar-auth.js?v=57763cba" defer></script>
+  <script src="/js/api.js?v=57763cba"></script>
+  <script src="/js/form-enter.js?v=57763cba" defer></script>
+  <script src="/js/admin-requisitions.js?v=57763cba" defer></script>
 
 </body>
 </html>

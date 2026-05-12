@@ -7,37 +7,16 @@
   <meta name="robots" content="noindex, nofollow" />
   <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "be8c93305dda4f16b57c925bc681b2f6"}'></script>
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
-  <!-- iOS 偵測：在 DOM 渲染前打上 html.is-ios，給 .ios-wait-hint 用；只控提示顯示，不做安全判斷 -->
-  <script>(function(){var ua=navigator.userAgent||'';if(/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/.test(ua)&&(navigator.maxTouchPoints||0)>1))document.documentElement.classList.add('is-ios')})();</script>
-  <!-- 把 URL ?next=/path 寫入 sessionStorage（跨 OAuth flow 也能保留），auth-ui.js 登入成功後會讀此值跳轉 -->
-  <script>(function(){try{var n=new URLSearchParams(location.search).get('next');if(n&&n.charAt(0)==='/'&&n.charAt(1)!=='/'){sessionStorage.setItem('auth_redirect',n)}}catch(_){}})();</script>
-  <!-- 已登入：在 DOM 渲染前同步跳轉，避免閃一下登入表單。
-       規則：有 PKCE / 跨域 redirect / OAuth callback 參數時不攔截，交給 auth-ui.js 處理；其餘場景優先用 ?next= 或 sessionStorage('auth_redirect')，預設 /dashboard.html -->
-  <script>(function(){
-    try{
-      var p = new URLSearchParams(location.search);
-      if (p.get('pkce_key') || p.get('redirect') || p.get('access_token') || p.get('code')) return;
-      var tok = null;
-      try { tok = sessionStorage.getItem('access_token'); } catch(_) {}
-      if (!tok) return;
-      var target = null;
-      try { target = sessionStorage.getItem('auth_redirect'); } catch(_) {}
-      if (!target) {
-        var n = p.get('next');
-        if (n && n.charAt(0)==='/' && n.charAt(1)!=='/') target = n;
-      }
-      target = target || '/dashboard.html';
-      try { sessionStorage.removeItem('auth_redirect'); } catch(_) {}
-      location.replace(target);
-    }catch(_){}
-  })();</script>
+  <!-- login-boot.js：iOS 偵測 / ?next= sessionStorage / 已登入早跳轉
+       須同步載入（不加 defer），在 body 解析前跑 -->
+  <script src="/js/login-boot.js?v=57763cba"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/_components.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/login.css?v=d74f2956" />
-  <script defer src="/js/notify.js?v=d74f2956"></script>
-  <script defer src="/js/confirm-dialog.js?v=d74f2956"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=d74f2956" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/_components.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/login.css?v=57763cba" />
+  <script defer src="/js/notify.js?v=57763cba"></script>
+  <script defer src="/js/confirm-dialog.js?v=57763cba"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=57763cba" />
   <!-- explicit rendering：避免同頁 2 個 .cf-turnstile 同時跑 challenge 造成 iOS Safari 主執行緒卡頓 -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstile" async defer></script>
 </head>
@@ -255,7 +234,7 @@
                   </svg>
                   <span data-i18n="login_passkey_btn">用 Passkey 登入</span>
                 </button>
-                <p id="passkey-login-msg" class="field-hint" style="text-align:center;margin-top:8px" hidden></p>
+                <p id="passkey-login-msg" class="field-hint msg-center" hidden></p>
                 <div class="oauth-grid">
                   <a href="/api/auth/oauth/discord/init?platform=web" class="oauth-btn oauth-discord">
                     <svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
@@ -360,9 +339,9 @@
 
   </div>
 
-  <script src="/js/api.js?v=d74f2956"></script>
-  <script src="/js/auth-ui.js?v=d74f2956"></script>
-  <script src="/js/sidebar-auth.js?v=d74f2956" defer></script>
-  <script src="/js/login.js?v=d74f2956" defer></script>
+  <script src="/js/api.js?v=57763cba"></script>
+  <script src="/js/auth-ui.js?v=57763cba"></script>
+  <script src="/js/sidebar-auth.js?v=57763cba" defer></script>
+  <script src="/js/login.js?v=57763cba" defer></script>
 </body>
 </html>

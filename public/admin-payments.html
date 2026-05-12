@@ -9,11 +9,11 @@
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/_components.css?v=d74f2956" />
-  <link rel="stylesheet" href="/css/admin-requisitions.css?v=d74f2956" />
-  <script defer src="/js/notify.js?v=d74f2956"></script>
-  <script defer src="/js/confirm-dialog.js?v=d74f2956"></script>
+  <link rel="stylesheet" href="/css/_tokens.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/_components.css?v=57763cba" />
+  <link rel="stylesheet" href="/css/admin-requisitions.css?v=57763cba" />
+  <script defer src="/js/notify.js?v=57763cba"></script>
+  <script defer src="/js/confirm-dialog.js?v=57763cba"></script>
 </head>
 <body>
 
@@ -179,7 +179,7 @@
         <p id="refund-summary" class="msg-block"></p>
         <p data-i18n="refund_otp_label" class="msg-label">請輸入 6 位 2FA 驗證碼以執行退款（會記錄至 audit_log）</p>
         <input id="refund-otp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" data-enter-click="#refund-confirm-btn" />
-        <input id="refund-reason" type="text" maxlength="200" placeholder="退款原因（選填）" data-i18n-ph="refund_reason_ph" data-enter-click="#refund-confirm-btn" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem" />
+        <input id="refund-reason" type="text" maxlength="200" placeholder="退款原因（選填）" data-i18n-ph="refund_reason_ph" data-enter-click="#refund-confirm-btn" class="input-note" />
         <p id="refund-msg" class="refund-msg"></p>
         <div class="refund-actions">
           <button class="cancel" data-modal-close="modal-refund" data-i18n="refund_cancel">取消</button>
@@ -279,10 +279,10 @@
     </div>
   </div>
 
-  <script src="/js/sidebar-auth.js?v=d74f2956" defer></script>
-  <script src="/js/api.js?v=d74f2956"></script>
-  <script src="/js/form-enter.js?v=d74f2956" defer></script>
-  <script src="/js/admin-payments.js?v=d74f2956" defer></script>
+  <script src="/js/sidebar-auth.js?v=57763cba" defer></script>
+  <script src="/js/api.js?v=57763cba"></script>
+  <script src="/js/form-enter.js?v=57763cba" defer></script>
+  <script src="/js/admin-payments.js?v=57763cba" defer></script>
 
 </body>
 </html>

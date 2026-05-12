@@ -55,6 +55,7 @@ body{min-height:100vh;overflow:hidden}
 .field-label{display:block;font-size:.75rem;font-weight:500;color:var(--text-muted);margin-bottom:.4rem}
 .field-label span{color:var(--text-dim);font-weight:400}
 .field-hint{font-size:.7rem;color:var(--text-dim);line-height:1.5;margin:-.15rem 0 .45rem}
+.field-hint.msg-center{text-align:center;margin-top:8px}
 /* Turnstile 載入時 iOS/Android 主執行緒都會卡，提示使用者等驗證完成後再輸入。
    預設 display:none，由 <head> inline script 在 iOS 打 html.is-ios，或 pointer:coarse 觸控裝置（Android 手機/平板）顯示。 */
 .ios-wait-hint{display:none;font-size:.75rem;color:var(--accent);background:var(--accent-dim);border:1px solid rgba(123,108,255,.22);border-radius:8px;padding:.5rem .75rem;margin:0 0 1rem;text-align:center;line-height:1.4}
