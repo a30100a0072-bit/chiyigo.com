@@ -87,7 +87,7 @@ export async function onRequestDelete({ request, env, params }) {
         WHERE id = ? AND user_id = ?`,
     )
     .bind(credPk, userId).first()
-  if (!row) return res({ error: 'Credential not found' }, 404, cors)
+  if (!row) return res({ error: 'Credential not found', code: 'CREDENTIAL_NOT_FOUND' }, 404, cors)
 
   await env.chiyigo_db
     .prepare(`DELETE FROM user_webauthn_credentials WHERE id = ? AND user_id = ?`)
