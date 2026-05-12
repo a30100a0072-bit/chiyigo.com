@@ -404,7 +404,7 @@ function openAdminDelete(id) {
       <div class="modal-body refund-modal-body">
         <p class="msg-block">user ${esc(row.user_id)} · ${esc(row.vendor)} · ${formatAmount(row)} · <b>${esc(row.status)}</b></p>
         <p class="msg-label" style="color:#dc2626">${modeText} audit log 會留 critical 記錄。</p>
-        <input id="admin-del-otp" type="text" inputmode="numeric" maxlength="6" placeholder="6 位 2FA OTP" autocomplete="one-time-code">
+        <input id="admin-del-otp" type="text" inputmode="numeric" maxlength="6" placeholder="6 位 2FA OTP" autocomplete="one-time-code" data-enter-click="#admin-del-go">
         <p id="admin-del-msg" class="refund-msg"></p>
         <div class="refund-actions">
           <button class="cancel" data-action="admin-del-cancel">取消</button>

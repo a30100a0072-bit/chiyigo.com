@@ -14,7 +14,7 @@
  * 設計原則：
  *   - keydown 階段判斷，攔 Enter (key === 'Enter')
  *   - 排除 IME 組字中 (isComposing / keyCode 229)
- *   - 排除 textarea / contentEditable（避免吃掉換行）
+ *   - 只處理 <input> 元素（textarea / contentEditable 天然排除）
  *   - 已 disabled 的 button 不觸發
  *   - 全站只掛一次 document-level delegation
  */
@@ -30,7 +30,6 @@
 
     const el = ev.target;
     if (!el || el.tagName !== 'INPUT') return;
-    if (el.type === 'textarea' || el.isContentEditable) return;
 
     const sel = el.getAttribute('data-enter-click');
     if (!sel) return;
