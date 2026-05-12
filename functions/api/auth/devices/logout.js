@@ -38,11 +38,11 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400, cors) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400, cors) }
 
   const dev = body?.device_uuid
   if (dev !== null && typeof dev !== 'string') {
-    return res({ error: 'device_uuid must be string or null' }, 400, cors)
+    return res({ error: 'device_uuid must be string or null', code: 'INVALID_DEVICE_UUID' }, 400, cors)
   }
 
   // 先確認該 user 在此 device 真的有 row（無論已撤未撤）— 否則 404，避免 attacker
@@ -57,7 +57,7 @@ export async function onRequestPost({ request, env }) {
         .prepare(`SELECT 1 FROM refresh_tokens
                    WHERE user_id = ? AND device_uuid = ? LIMIT 1`)
         .bind(userId, dev).first()
-  if (!exists) return res({ error: 'Device not found' }, 404, cors)
+  if (!exists) return res({ error: 'Device not found', code: 'DEVICE_NOT_FOUND' }, 404, cors)
 
   const upd = dev === null
     ? await env.chiyigo_db

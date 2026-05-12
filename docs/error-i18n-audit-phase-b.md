@@ -3,9 +3,9 @@
 > Phase A 已建 `public/js/api.js#API_ERROR_I18N` 前端字典。本 doc 列出 `functions/` 下所有 `res({ error: '...' })` 缺 `code:` 欄位的處，作為 Phase B 漸進補碼依據。**本 PR 只盤點，不改 code**。
 
 ## 摘要
-- 總計：**123 處**缺 `code`
-- 涉及檔案：**34 個**
-- 推薦新增 / 既有 i18n key：**62 個**（去重後）
+- 總計：**112 處**缺 `code`
+- 涉及檔案：**31 個**
+- 推薦新增 / 既有 i18n key：**58 個**（去重後）
 - 仍標 `NEEDS_REVIEW` 待人工命名：**2 處**（佔 3%）
 - 變數型 `error: <expr>` 警告：**7 處**（列在文末警告區）
 - 已有 code 但前端 dict 缺翻譯：**0 個 code**（列在「漏譯」區）
@@ -20,12 +20,11 @@
 
 | code | 出現處數 | 建議 zh-TW | 建議 en |
 |---|---:|---|---|
-| `INTENT_NOT_FOUND` | 10 | 找不到付款單 | not_found |
-| `INVALID_JSON` | 9 | 請求格式錯誤 | Invalid JSON |
 | `REQUISITION_NOT_FOUND` | 8 | 找不到該需求單 | not_found |
+| `INVALID_JSON` | 7 | 請求格式錯誤 | Invalid JSON |
+| `INTENT_NOT_FOUND` | 6 | 找不到付款單 | not_found |
 | `CLIENT_NOT_FOUND` | 4 | 找不到應用程式 | Client not found |
 | `REFUND_REQUEST_NOT_FOUND` | 4 | 找不到退款申請 | not_found |
-| `USER_NOT_FOUND` | 4 | 找不到使用者 | User not found |
 | `FROM_DATE_INVALID` | 3 | 起始日期格式錯誤（需為 ISO 8601） | from must be ISO 8601 date/datetime |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:clients:write scope required |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:payments scope required |
@@ -33,6 +32,7 @@
 | `TO_DATE_INVALID` | 3 | 結束日期格式錯誤（需為 ISO 8601） | to must be ISO 8601 date/datetime |
 | `UNAUTHORIZED` | 3 | 未登入或登入已過期 | Unauthorized |
 | `USER_ID_INVALID` | 3 | user_id 需為數字 | user_id must be a number |
+| `USER_NOT_FOUND` | 3 | 找不到使用者 | User not found |
 | `AUDIT_NOT_FOUND` | 2 | 找不到稽核紀錄 | not_found |
 | `CRON_SECRET_NOT_CONFIGURED` | 2 | 排程密鑰未設定 | CRON_SECRET not configured |
 | `ECPAY_REFUND_FAILED` | 2 | 綠界退款失敗 | ECPay refund failed |
@@ -55,21 +55,17 @@
 | `CANNOT_TARGET_SELF` | 1 | 無法對自己執行此操作 | Cannot ban yourself |
 | `CAPTCHA_FAILED` | 1 | 人機驗證失敗 | captcha_failed |
 | `CLIENT_ALREADY_DISABLED` | 1 | 應用程式已被停用 | Client already disabled |
-| `DEVICE_NOT_FOUND` | 1 | 找不到裝置 | Device not found |
 | `DEVICE_UUID_REQUIRED` | 1 | 請提供 device_uuid | device_uuid is required for mode=device |
 | `INTENT_ID_REQUIRED` | 1 | 請提供 intent_id | intent_id required |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | AUDIT_ARCHIVE_BUCKET binding missing |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | Server error |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | requireStepUp must check an elevated:* scope |
-| `INVALID_DEVICE_UUID` | 1 | device_uuid 格式錯誤 | device_uuid must be string or null |
 | `INVALID_MODE` | 1 | mode 參數無效 | mode must be one of: ${[...VALID_MODES].join(', ')} |
 | `INVALID_SEVERITY` | 1 | severity 必須為 info / warn / critical | severity must be info \| warn \| critical |
-| `INVALID_TOKEN_SUBJECT` | 1 | Token subject 無效 | Invalid token subject |
 | `JTI_REQUIRED` | 1 | 請提供 jti | jti is required for mode=jti |
 | `LINKED_INTENT_NOT_FOUND` | 1 | 找不到關聯的付款單 | linked intent not found |
 | `NEEDS_REVIEW` ⚠️ | 1 | （待補） | invalid JSON body |
 | `NEEDS_REVIEW` ⚠️ | 1 | （待補） | action must be one of ${[...VALID_ACTIONS].join(', ')} |
-| `NEW_PASSWORD_REQUIRED` | 1 | 請提供新密碼 | new_password is required |
 | `NO_UPDATABLE_FIELDS` | 1 | 沒有可更新的欄位 | No updatable fields provided |
 | `PRE_AUTH_TOKEN_FORBIDDEN` | 1 | Token 權限不足，請先完成兩步驟驗證 | Forbidden: pre_auth token cannot access this resource |
 | `PROMPT_REQUIRED` | 1 | 請提供 prompt | prompt is required |
@@ -248,23 +244,6 @@
 - L102 `'prompt is required'` → `PROMPT_REQUIRED`
 - L154 `'今日 AI 助手呼叫次數已達上限，請稍後再試或直接填寫表單'` → `AI_DAILY_LIMIT`
 
-### functions/api/auth/account/change-password.js（4 處）
-- L50 `'Invalid JSON'` → `INVALID_JSON`
-- L53 `'new_password is required'` → `NEW_PASSWORD_REQUIRED`
-- L59 `'Invalid token subject'` → `INVALID_TOKEN_SUBJECT`
-- L67 `'User not found'` → `USER_NOT_FOUND`
-
-### functions/api/auth/devices/logout.js（3 處）
-- L41 `'Invalid JSON'` → `INVALID_JSON`
-- L45 `'device_uuid must be string or null'` → `INVALID_DEVICE_UUID`
-- L60 `'Device not found'` → `DEVICE_NOT_FOUND`
-
-### functions/api/auth/payments/intents/[id].js（4 處）
-- L34 `'not_found'` → `INTENT_NOT_FOUND`
-- L38 `'not_found'` → `INTENT_NOT_FOUND`
-- L49 `'not_found'` → `INTENT_NOT_FOUND`
-- L53 `'not_found'` → `INTENT_NOT_FOUND`
-
 ### functions/api/payments/intents/[id]/refund-request.js（3 處）
 - L25 `'not_found'` → `INTENT_NOT_FOUND`
 - L29 `'Invalid JSON'` → `INVALID_JSON`
@@ -320,12 +299,6 @@
 > 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
 
 ## 後續 PR 切分建議
-
-### PR B-2 (會員 Dashboard)
-- 檔案：3 個，處數：**11**
-  - functions/api/auth/account/change-password.js
-  - functions/api/auth/devices/logout.js
-  - functions/api/auth/payments/intents/[id].js
 
 ### PR B-3 (公開頁 / Requisition / AI)
 - 檔案：4 個，處數：**15**

@@ -47,16 +47,16 @@ export async function onRequestPost({ request, env }) {
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { new_password } = body ?? {}
-  if (!new_password) return res({ error: 'new_password is required' }, 400)
+  if (!new_password) return res({ error: 'new_password is required', code: 'NEW_PASSWORD_REQUIRED' }, 400)
 
   const pwCheck = validatePassword(new_password)
   if (!pwCheck.ok) return res({ error: pwCheck.error }, 400)
 
   const userId = Number(user.sub)
-  if (!Number.isFinite(userId)) return res({ error: 'Invalid token subject' }, 401)
+  if (!Number.isFinite(userId)) return res({ error: 'Invalid token subject', code: 'INVALID_TOKEN_SUBJECT' }, 401)
 
   const db = env.chiyigo_db
 
@@ -64,7 +64,7 @@ export async function onRequestPost({ request, env }) {
   const userRow = await db
     .prepare(`SELECT status FROM users WHERE id = ? AND deleted_at IS NULL`)
     .bind(userId).first()
-  if (!userRow) return res({ error: 'User not found' }, 404)
+  if (!userRow) return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 404)
   if (userRow.status === 'banned') return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403)
 
   // 換密碼（UPSERT 支援 OAuth-only 帳號首次設定密碼）

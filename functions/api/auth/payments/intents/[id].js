@@ -31,11 +31,11 @@ export async function onRequestGet({ request, env, params }) {
   if (error) return error
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404, cors)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404, cors)
 
   const row = await getPaymentIntent(env, { id })
   if (!row || row.user_id !== Number(user.sub)) {
-    return res({ error: 'not_found' }, 404, cors)
+    return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404, cors)
   }
   return res(row, 200, cors)
 }
@@ -46,11 +46,11 @@ export async function onRequestDelete({ request, env, params }) {
   if (error) return error
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404, cors)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404, cors)
   const userId = Number(user.sub)
 
   const row = await getPaymentIntent(env, { id })
-  if (!row || row.user_id !== userId) return res({ error: 'not_found' }, 404, cors)
+  if (!row || row.user_id !== userId) return res({ error: 'not_found', code: 'INTENT_NOT_FOUND' }, 404, cors)
 
   if (!USER_DELETABLE.has(row.status)) {
     return res({ error: 'status_locked', code: 'STATUS_LOCKED', status: row.status }, 403, cors)
