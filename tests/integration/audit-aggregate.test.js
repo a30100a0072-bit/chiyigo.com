@@ -89,13 +89,15 @@ beforeEach(async () => {
 })
 
 describe('audit-aggregate cron — happy path', () => {
-  it('Step 1：種 4 row（2 hour buckets）→ 2 buckets 各 2 count', async () => {
-    // 同 hour，不同 user_id → 仍 2 bucket（user_id 也是 bucket key 一部分）
-    // 換思路：同 user_id null，但兩個不同 hour 各 2 row
-    await seed({ created_at: "datetime('now','-29 days','-3 hours')" })
-    await seed({ created_at: "datetime('now','-29 days','-3 hours','+15 minutes')" })
-    await seed({ created_at: "datetime('now','-29 days','-2 hours')" })
-    await seed({ created_at: "datetime('now','-29 days','-2 hours','+30 minutes')" })
+  it('Step 1：種 4 row（2 event_types）→ 2 buckets 各 2 count', async () => {
+    // bucket 用 event_type 分（不靠 wall-clock 分鐘數做 hour-bucket split，避免依
+    // 跑測試當下分鐘 >=30 時 -2h vs -2h+30m 跨小時邊界產生 flaky）。
+    // 全部 row 同時間（-29d -1h） → hour_bucket 統一；event_type 兩種 → 2 bucket。
+    const t = "datetime('now','-29 days','-1 hours')"
+    await seed({ event_type: 'auth.login.rate_limited', created_at: t })
+    await seed({ event_type: 'auth.login.rate_limited', created_at: t })
+    await seed({ event_type: 'auth.refresh.rate_limited', created_at: t })
+    await seed({ event_type: 'auth.refresh.rate_limited', created_at: t })
 
     const { status, body } = await runCron()
     expect(status).toBe(200)
@@ -107,9 +109,10 @@ describe('audit-aggregate cron — happy path', () => {
 
     const rows = await listBuckets()
     expect(rows).toHaveLength(2)
+    const byEvent = new Map(rows.map(r => [r.event_type, r]))
+    expect(byEvent.get('auth.login.rate_limited').count).toBe(2)
+    expect(byEvent.get('auth.refresh.rate_limited').count).toBe(2)
     for (const r of rows) {
-      expect(r.count).toBe(2)
-      expect(r.event_type).toBe('auth.login.rate_limited')
       expect(r.severity).toBe('info')
       expect(r.user_id).toBeNull()
       expect(r.ip_hash_top).toBe('h1')
@@ -147,6 +150,26 @@ describe('audit-aggregate cron — happy path', () => {
     const { body } = await runCron()
     expect(body.rows_scanned).toBe(1)
     expect(body.buckets_upserted).toBe(1)
+  })
+
+  it('Step 3b：boundary regression — cutoff 同日 +1h（hot 內）row 必排除', async () => {
+    // 防 ISO 'T' vs SQLite space lex-compare bug：
+    // JS-computed cutoff '2026-04-13T20:00:00.000Z' vs SQLite stored
+    // '2026-04-13 21:00:00'（cutoff 後 1 小時）會因 position 10 space < T 被誤判為
+    // < cutoff，把 hot 內的 row 偷渡進 aggregate。
+    // hotDays=30 / leadHours=24 → cutoff = now - 29d。
+    // 種 now - 29d + 1h（cutoff 後 1h，仍在 hot 內）→ 必排除
+    await seed({ created_at: "datetime('now','-29 days','+1 hours')" })
+    // 對照：now - 29d - 1h（cutoff 前 1h）→ 必納入
+    await seed({ created_at: "datetime('now','-29 days','-1 hours')" })
+
+    const { body } = await runCron()
+    expect(body.ok).toBe(true)
+    expect(body.rows_scanned).toBe(1)
+    expect(body.buckets_upserted).toBe(1)
+    const buckets = await listBuckets()
+    expect(buckets).toHaveLength(1)
+    expect(buckets[0].count).toBe(1)
   })
 
   it('Step 4：archived_at IS NOT NULL → 不撈', async () => {

@@ -97,6 +97,15 @@ export async function onRequestPost({ request, env }) {
   // ── Step 2：撈 candidates ────────────────────────────────
   // 不用 GROUP BY 直接 reduce，因為 ip_hash_top 需要 mode reduce（D1 缺 window function）
   // 加 LIMIT (maxRows+1) 偵測「超過上限」場景 → skip 而不部分處理避免 count 不對
+  //
+  // 🔴 cutoff 比較刻意用 SQLite 原生 datetime('now', '-N hours')（與 archive worker 同模式），
+  // 不用 JS 算 ISO + bind 比對。原因：SQLite `datetime('now')` 預設儲存格式
+  // `'YYYY-MM-DD HH:MM:SS'`（空白分隔、無 'T'/'Z'），與 JS Date.toISOString()
+  // `'YYYY-MM-DDTHH:MM:SS.sssZ'` 在 lexicographic 比較時，position 10 是 space(0x20)
+  // vs 'T'(0x54) — 同日期但 SQL row 時間 > cutoff 時間的 row 會被誤判 < cutoff。
+  // 最壞 1 天 23 小時的 row 被偷渡進 aggregate（破壞 24h archive buffer 設計）。
+  // 直接用 datetime modifier 讓 SQLite 自己算 → 格式一致、bug 不存在。
+  const totalHours = Math.max(0, Math.round(hotDays * 24 - leadHours))
   let candidates
   try {
     const rs = await db.prepare(
@@ -104,10 +113,10 @@ export async function onRequestPost({ request, env }) {
          FROM audit_log
         WHERE cold_class = ?
           AND archived_at IS NULL
-          AND created_at < ?
+          AND created_at < datetime('now', '-${totalHours} hours')
         ORDER BY id ASC
         LIMIT ?`
-    ).bind(PR30_SUPPORTED_COLD_CLASS, cutoffISO, maxRows + 1).all()
+    ).bind(PR30_SUPPORTED_COLD_CLASS, maxRows + 1).all()
     candidates = rs.results ?? []
   } catch (e) {
     return fail(env, report, 'd1_select_failed', { error: String(e?.message ?? e) })
