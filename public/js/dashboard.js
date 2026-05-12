@@ -1483,6 +1483,7 @@ function renderPasskeys(creds) {
         <div id="pk-rename-${c.id}" class="hidden mt-3 space-y-2">
           <input id="pk-name-${c.id}" type="text" maxlength="64" value="${esc(nickname)}"
             placeholder="${T('passkey_rename_ph')}"
+            data-enter-click='[data-action="passkey-rename-save"][data-passkey-id="${c.id}"]'
             class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-[var(--text)] text-sm placeholder:text-[var(--text-dim)] focus:outline-none focus:border-violet-500/40" />
           <p id="pk-rename-msg-${c.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">
@@ -1500,6 +1501,7 @@ function renderPasskeys(creds) {
           <p class="text-xs text-amber-300">${T('passkey_remove_hint')}</p>
           <input id="pk-otp-${c.id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
             placeholder="${T('passkey_remove_otp_ph')}"
+            data-enter-click='[data-action="passkey-remove-confirm"][data-passkey-id="${c.id}"]'
             class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-[var(--text)] text-sm placeholder:text-[var(--text-dim)] focus:outline-none focus:border-red-500/40" />
           <p id="pk-msg-${c.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">
@@ -1728,6 +1730,7 @@ function renderWallets(wallets) {
           <p class="text-xs text-amber-300">${T('wallet_remove_hint')}</p>
           <input id="wl-otp-${w.id}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
             placeholder="${T('wallet_remove_otp_ph')}"
+            data-enter-click='[data-action="wallet-remove-confirm"][data-wallet-id="${w.id}"]'
             class="w-full px-3 py-2 rounded-lg bg-[var(--bg)] border border-[var(--border-bright)] text-[var(--text)] text-sm placeholder:text-[var(--text-dim)] focus:outline-none focus:border-red-500/40" />
           <p id="wl-msg-${w.id}" class="hidden text-xs"></p>
           <div class="flex gap-2">

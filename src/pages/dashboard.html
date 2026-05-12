@@ -164,7 +164,7 @@
               </div>
             </form>
             <div class="flex gap-2">
-              <input id="tfa-otp-input" type="text" inputmode="numeric" maxlength="6" aria-label="2FA 驗證碼（啟用）" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph"
+              <input id="tfa-otp-input" type="text" inputmode="numeric" maxlength="6" aria-label="2FA 驗證碼（啟用）" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph" autocomplete="one-time-code" data-enter-click='[data-action="confirm-enable-2fa"]'
                 class="flex-1 bg-[var(--bg)] border border-[var(--border-bright)] rounded-lg px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-brand-500/50 tracking-widest text-center" />
               <button data-action="confirm-enable-2fa"
                 class="px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-[var(--text)] text-xs font-semibold transition-all">
@@ -178,7 +178,7 @@
           <div id="tfa-disable-panel" class="hidden border-t border-[var(--border-bright)] px-5 py-5 space-y-3">
             <p class="text-xs text-amber-400" data-i18n="tfa_disable_warn">停用後需重新設定才能再次啟用。請輸入 Authenticator App 的驗證碼確認。</p>
             <div class="flex gap-2">
-              <input id="tfa-disable-input" type="text" inputmode="numeric" maxlength="6" aria-label="2FA 驗證碼（停用）" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph"
+              <input id="tfa-disable-input" type="text" inputmode="numeric" maxlength="6" aria-label="2FA 驗證碼（停用）" placeholder="輸入 6 位數驗證碼" data-i18n-ph="tfa_otp_ph" autocomplete="one-time-code" data-enter-click='[data-action="confirm-disable-2fa"]'
                 class="flex-1 bg-[var(--bg)] border border-[var(--border-bright)] rounded-lg px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus:border-red-500/50 tracking-widest text-center" />
               <button data-action="confirm-disable-2fa"
                 class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-[var(--text)] text-xs font-semibold transition-all">
@@ -245,7 +245,7 @@
               </div>
               <input id="changepw-otp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code"
                 class="w-full px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-bright)] text-[var(--text)] text-sm placeholder:text-[var(--text-dim)] focus:outline-none focus:border-violet-500/40"
-                placeholder="2FA 6 位數驗證碼" data-i18n-ph="changepw_otp_ph" />
+                placeholder="2FA 6 位數驗證碼" data-i18n-ph="changepw_otp_ph" data-enter-click="#changepw-submit" />
               <button type="button" id="changepw-submit" data-action="submit-change-password"
                 class="w-full py-2.5 rounded-xl border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                 <span data-i18n="changepw_submit">確認修改</span>
@@ -432,7 +432,7 @@
                   </button>
                 </div>
               </form>
-              <input id="del-otp" type="text" inputmode="numeric" maxlength="6"
+              <input id="del-otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" data-enter-click="#del-submit-btn"
                 aria-label="2FA 驗證碼" placeholder="2FA 6 位數驗證碼" data-i18n-ph="del_otp_ph"
                 class="w-full px-4 py-2.5 rounded-xl bg-[var(--bg-elevated)] border border-red-500/20 focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 text-sm text-[var(--text)] placeholder:text-[var(--text-dim)] transition-all outline-none tracking-widest text-center"/>
               <p id="del-otp-hint" class="hidden text-xs text-amber-400" data-i18n="del_otp_required">刪除帳號需先啟用 2FA。請至上方「兩步驟驗證」啟用後再操作。</p>
@@ -523,6 +523,7 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
   <script src="/js/api.js?v=3"></script>
   <script src="/js/auth-ui.js?v=9"></script>
+  <script src="/js/form-enter.js?v=1" defer></script>
 
   <!-- ── Sidebar layout bridge ────────────────────────────────── -->
 

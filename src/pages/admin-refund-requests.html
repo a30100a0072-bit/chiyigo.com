@@ -61,7 +61,7 @@
         <p id="rd-note-label" class="msg-label">審核備註（選填）</p>
         <input id="rd-note" type="text" maxlength="200" placeholder="備註會記錄到 audit log" class="rd-note-input">
         <p class="msg-label">2FA OTP（執行金流動作必填）</p>
-        <input id="rd-otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000">
+        <input id="rd-otp" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" data-enter-click="#rd-confirm-btn">
         <p id="rd-msg" class="refund-msg"></p>
         <div class="refund-actions">
           <button class="cancel" data-modal-close="modal-refund-decide">取消</button>
@@ -78,6 +78,7 @@
 
   <script src="/js/sidebar-auth.js" defer></script>
   <script src="/js/api.js"></script>
+  <script src="/js/form-enter.js?v=1" defer></script>
   <script src="/js/admin-refund-requests.js" defer></script>
 </body>
 </html>

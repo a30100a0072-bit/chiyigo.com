@@ -119,8 +119,8 @@
       <div class="modal-body refund-modal-body">
         <p id="refund-summary" class="msg-block"></p>
         <p data-i18n="refund_otp_label" class="msg-label">請輸入 6 位 2FA 驗證碼以執行退款（會記錄至 audit_log）</p>
-        <input id="refund-otp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" />
-        <input id="refund-reason" type="text" maxlength="200" placeholder="退款原因（選填）" data-i18n-ph="refund_reason_ph" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem" />
+        <input id="refund-otp" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="000000" data-enter-click="#refund-confirm-btn" />
+        <input id="refund-reason" type="text" maxlength="200" placeholder="退款原因（選填）" data-i18n-ph="refund_reason_ph" data-enter-click="#refund-confirm-btn" style="text-align:left;letter-spacing:0;font-family:var(--font-sans);font-size:.85rem" />
         <p id="refund-msg" class="refund-msg"></p>
         <div class="refund-actions">
           <button class="cancel" data-modal-close="modal-refund" data-i18n="refund_cancel">取消</button>
@@ -137,6 +137,7 @@
 
   <script src="/js/sidebar-auth.js" defer></script>
   <script src="/js/api.js"></script>
+  <script src="/js/form-enter.js?v=1" defer></script>
   <script src="/js/admin-payments.js" defer></script>
 
 </body>
