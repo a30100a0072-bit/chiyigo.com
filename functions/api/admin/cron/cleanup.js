@@ -79,8 +79,8 @@ export async function onRequestPost({ request, env }) {
   // ── Auth：bearer CRON_SECRET ──────────────────────────────
   const auth = request.headers.get('Authorization') ?? ''
   const expected = env.CRON_SECRET
-  if (!expected) return res({ error: 'CRON_SECRET not configured' }, 500)
-  if (auth !== `Bearer ${expected}`) return res({ error: 'unauthorized' }, 401)
+  if (!expected) return res({ error: 'CRON_SECRET not configured', code: 'CRON_SECRET_NOT_CONFIGURED' }, 500)
+  if (auth !== `Bearer ${expected}`) return res({ error: 'unauthorized', code: 'UNAUTHORIZED' }, 401)
 
   const db = env.chiyigo_db
   const results = []

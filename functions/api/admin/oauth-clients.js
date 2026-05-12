@@ -134,12 +134,12 @@ export async function onRequestPost({ request, env }) {
 
   // P1-17：fine-grain admin:clients:write 守門。admin role coarse → fine 透過 hierarchy 通過
   if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_CLIENTS_WRITE)) {
-    return res({ error: 'admin:clients:write scope required' }, 403)
+    return res({ error: 'admin:clients:write scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:clients:write' }, 403)
   }
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const v = validateCreateBody(body)
   if (!v.ok) return res({ error: v.error }, 400)

@@ -95,14 +95,14 @@ export async function onRequestPost({ request, env }) {
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
   if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_AUDIT_WRITE)) {
-    return res({ error: 'admin:audit:write scope required' }, 403)
+    return res({ error: 'admin:audit:write scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:audit:write' }, 403)
   }
 
   const db = env.chiyigo_db
-  if (!db) return res({ error: 'chiyigo_db binding missing' }, 500)
+  if (!db) return res({ error: 'chiyigo_db binding missing', code: 'INTERNAL_ERROR' }, 500)
 
   let body
-  try { body = await request.json() } catch { return res({ error: 'invalid JSON body' }, 400) }
+  try { body = await request.json() } catch { return res({ error: 'invalid JSON body', code: 'INVALID_JSON' }, 400) }
 
   const action = body?.action
   const target = body?.target
@@ -111,7 +111,7 @@ export async function onRequestPost({ request, env }) {
 
   if (!VALID_ACTIONS.has(action)) {
     await emitRejected(env, request, ctxBase, 'invalid_action')
-    return res({ error: `action must be one of ${[...VALID_ACTIONS].join(', ')}` }, 400)
+    return res({ error: `action must be one of ${[...VALID_ACTIONS].join(', ')}`, code: 'INVALID_ACTION' }, 400)
   }
   const tgtErr = validateTarget(target)
   if (tgtErr) {

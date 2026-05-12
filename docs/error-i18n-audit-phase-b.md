@@ -3,10 +3,10 @@
 > Phase A 已建 `public/js/api.js#API_ERROR_I18N` 前端字典。本 doc 列出 `functions/` 下所有 `res({ error: '...' })` 缺 `code:` 欄位的處，作為 Phase B 漸進補碼依據。**本 PR 只盤點，不改 code**。
 
 ## 摘要
-- 總計：**97 處**缺 `code`
-- 涉及檔案：**27 個**
-- 推薦新增 / 既有 i18n key：**51 個**（去重後）
-- 仍標 `NEEDS_REVIEW` 待人工命名：**2 處**（佔 4%）
+- 總計：**66 處**缺 `code`
+- 涉及檔案：**19 個**
+- 推薦新增 / 既有 i18n key：**38 個**（去重後）
+- 仍標 `NEEDS_REVIEW` 待人工命名：**0 處**（佔 0%）
 - 變數型 `error: <expr>` 警告：**7 處**（列在文末警告區）
 - 已有 code 但前端 dict 缺翻譯：**0 個 code**（列在「漏譯」區）
 
@@ -21,30 +21,20 @@
 | code | 出現處數 | 建議 zh-TW | 建議 en |
 |---|---:|---|---|
 | `INTENT_NOT_FOUND` | 6 | 找不到付款單 | not_found |
-| `CLIENT_NOT_FOUND` | 4 | 找不到應用程式 | Client not found |
-| `INVALID_JSON` | 4 | 請求格式錯誤 | Invalid JSON |
 | `REFUND_REQUEST_NOT_FOUND` | 4 | 找不到退款申請 | not_found |
 | `REQUISITION_NOT_FOUND` | 4 | 找不到該需求單 | not_found |
-| `FROM_DATE_INVALID` | 3 | 起始日期格式錯誤（需為 ISO 8601） | from must be ISO 8601 date/datetime |
-| `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:clients:write scope required |
 | `INSUFFICIENT_SCOPE` | 3 | 權限不足（缺 `{required}` scope） | admin:payments scope required |
 | `INVALID_STATUS` | 3 | 狀態值無效 | invalid status |
-| `TO_DATE_INVALID` | 3 | 結束日期格式錯誤（需為 ISO 8601） | to must be ISO 8601 date/datetime |
 | `UNAUTHORIZED` | 3 | 未登入或登入已過期 | Unauthorized |
-| `USER_ID_INVALID` | 3 | user_id 需為數字 | user_id must be a number |
 | `USER_NOT_FOUND` | 3 | 找不到使用者 | User not found |
-| `AUDIT_NOT_FOUND` | 2 | 找不到稽核紀錄 | not_found |
-| `CRON_SECRET_NOT_CONFIGURED` | 2 | 排程密鑰未設定 | CRON_SECRET not configured |
 | `ECPAY_REFUND_FAILED` | 2 | 綠界退款失敗 | ECPay refund failed |
-| `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:audit:write scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:refund scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:* scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:users:write scope required |
-| `INTERNAL_ERROR` | 2 | 系統錯誤，請稍後再試 | chiyigo_db binding missing |
+| `INVALID_JSON` | 2 | 請求格式錯誤 | Invalid JSON |
 | `INVALID_USER_ID` | 2 | 使用者 ID 格式錯誤 | Invalid user id |
 | `REFUND_NOT_IMPLEMENTED` | 2 | 此金流供應商尚未支援退款 | refund not implemented for vendor: ${intent.vendor} |
 | `TRADE_NO_NOT_FOUND` | 2 | 找不到交易序號 | TradeNo not found; cannot call refund API |
-| `UNAUTHORIZED` | 2 | 未登入或登入已過期 | unauthorized |
 | `WEBHOOK_VALIDATION_FAILED` | 2 | Webhook 驗證失敗 | Webhook validation failed |
 | `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot revoke a user with equal or higher role |
 | `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE` | 1 | 無法對同等或更高權限的使用者執行此操作 | Cannot ban a user with equal or higher role |
@@ -52,22 +42,19 @@
 | `CANNOT_TARGET_SELF` | 1 | 無法對自己執行此操作 | Cannot revoke your own tokens via admin API |
 | `CANNOT_TARGET_SELF` | 1 | 無法對自己執行此操作 | Cannot ban yourself |
 | `CAPTCHA_FAILED` | 1 | 人機驗證失敗 | captcha_failed |
-| `CLIENT_ALREADY_DISABLED` | 1 | 應用程式已被停用 | Client already disabled |
 | `DEVICE_UUID_REQUIRED` | 1 | 請提供 device_uuid | device_uuid is required for mode=device |
+| `FROM_DATE_INVALID` | 1 | 起始日期格式錯誤（需為 ISO 8601） | from must be ISO 8601 date/datetime |
 | `INTENT_ID_REQUIRED` | 1 | 請提供 intent_id | intent_id required |
-| `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | AUDIT_ARCHIVE_BUCKET binding missing |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | requireStepUp must check an elevated:* scope |
 | `INVALID_MODE` | 1 | mode 參數無效 | mode must be one of: ${[...VALID_MODES].join(', ')} |
-| `INVALID_SEVERITY` | 1 | severity 必須為 info / warn / critical | severity must be info \| warn \| critical |
 | `JTI_REQUIRED` | 1 | 請提供 jti | jti is required for mode=jti |
 | `LINKED_INTENT_NOT_FOUND` | 1 | 找不到關聯的付款單 | linked intent not found |
-| `NEEDS_REVIEW` ⚠️ | 1 | （待補） | invalid JSON body |
-| `NEEDS_REVIEW` ⚠️ | 1 | （待補） | action must be one of ${[...VALID_ACTIONS].join(', ')} |
-| `NO_UPDATABLE_FIELDS` | 1 | 沒有可更新的欄位 | No updatable fields provided |
 | `PRE_AUTH_TOKEN_FORBIDDEN` | 1 | Token 權限不足，請先完成兩步驟驗證 | Forbidden: pre_auth token cannot access this resource |
+| `TO_DATE_INVALID` | 1 | 結束日期格式錯誤（需為 ISO 8601） | to must be ISO 8601 date/datetime |
 | `UNKNOWN_KYC_VENDOR` | 1 | 未知的 KYC 廠商 | Unknown KYC vendor: ${vendor} |
 | `UNKNOWN_PAYMENT_VENDOR` | 1 | 未知的金流廠商 | Unknown payment vendor: ${vendor} |
 | `USER_ALREADY_BANNED` | 1 | 使用者已被停用 | User is already banned |
+| `USER_ID_INVALID` | 1 | user_id 需為數字 | user_id must be a number |
 | `USER_ID_INVALID` | 1 | user_id 需為數字 | user_id must be a positive integer |
 | `USER_NOT_BANNED` | 1 | 使用者並未被停用 | User is not banned |
 | `WRONG_TOKEN_SCOPE` | 1 | Token 權限範圍錯誤 | Forbidden: wrong token scope |
@@ -78,16 +65,6 @@
 ### 命名衝突 / 故意合併（同 code 對應多字串）
 
 > 多數為**故意合併**（大小寫不同、措辭微異但語意一致），實作 PR 補 code 時挑一個對應的英文字串即可；真要拆碼會在這次 review 標註。
-- `UNAUTHORIZED`：
-  - "Unauthorized"
-  - "unauthorized"
-- `USER_ID_INVALID`：
-  - "user_id must be a number"
-  - "user_id must be a positive integer"
-- `INTERNAL_ERROR`：
-  - "chiyigo_db binding missing"
-  - "AUDIT_ARCHIVE_BUCKET binding missing"
-  - "requireStepUp must check an elevated:* scope"
 - `CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE`：
   - "Cannot revoke a user with equal or higher role"
   - "Cannot ban a user with equal or higher role"
@@ -95,58 +72,11 @@
 - `CANNOT_TARGET_SELF`：
   - "Cannot revoke your own tokens via admin API"
   - "Cannot ban yourself"
-- `NEEDS_REVIEW`：
-  - "invalid JSON body"
-  - "action must be one of ${[...VALID_ACTIONS].join(', ')}"
+- `USER_ID_INVALID`：
+  - "user_id must be a number"
+  - "user_id must be a positive integer"
 
 ## 逐檔清單
-
-### functions/api/admin/audit-archive/retry.js（4 處）
-- L98 `'admin:audit:write scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:audit:write`）
-- L102 `'chiyigo_db binding missing'` → `INTERNAL_ERROR`
-- L105 `'invalid JSON body'` → `NEEDS_REVIEW` ⚠️
-- L114 `'action must be one of ${[...VALID_ACTIONS].join(', ')}'` → `NEEDS_REVIEW` ⚠️
-
-### functions/api/admin/audit.js（4 處）
-- L86 `'user_id must be a number'` → `USER_ID_INVALID`
-- L98 `'severity must be info | warn | critical'` → `INVALID_SEVERITY`
-- L106 `'from must be ISO 8601 date/datetime'` → `FROM_DATE_INVALID`
-- L111 `'to must be ISO 8601 date/datetime'` → `TO_DATE_INVALID`
-
-### functions/api/admin/audit/[id].js（3 處）
-- L27 `'admin:audit:write scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:audit:write`）
-- L31 `'not_found'` → `AUDIT_NOT_FOUND`
-- L36 `'not_found'` → `AUDIT_NOT_FOUND`
-
-### functions/api/admin/cron/audit-archive.js（4 處）
-- L181 `'CRON_SECRET not configured'` → `CRON_SECRET_NOT_CONFIGURED`
-- L182 `'unauthorized'` → `UNAUTHORIZED`
-- L186 `'AUDIT_ARCHIVE_BUCKET binding missing'` → `INTERNAL_ERROR`
-- L188 `'chiyigo_db binding missing'` → `INTERNAL_ERROR`
-
-### functions/api/admin/cron/cleanup.js（2 處）
-- L82 `'CRON_SECRET not configured'` → `CRON_SECRET_NOT_CONFIGURED`
-- L83 `'unauthorized'` → `UNAUTHORIZED`
-
-### functions/api/admin/deals.js（3 處）
-- L62 `'user_id must be a number'` → `USER_ID_INVALID`
-- L69 `'from must be ISO 8601 date/datetime'` → `FROM_DATE_INVALID`
-- L74 `'to must be ISO 8601 date/datetime'` → `TO_DATE_INVALID`
-
-### functions/api/admin/oauth-clients.js（2 處）
-- L137 `'admin:clients:write scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:clients:write`）
-- L142 `'Invalid JSON'` → `INVALID_JSON`
-
-### functions/api/admin/oauth-clients/[client_id].js（9 處）
-- L56 `'Client not found'` → `CLIENT_NOT_FOUND`
-- L141 `'admin:clients:write scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:clients:write`）
-- L146 `'Invalid JSON'` → `INVALID_JSON`
-- L150 `'No updatable fields provided'` → `NO_UPDATABLE_FIELDS`
-- L156 `'Client not found'` → `CLIENT_NOT_FOUND`
-- L178 `'Client not found'` → `CLIENT_NOT_FOUND`
-- L200 `'admin:clients:write scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:clients:write`）
-- L207 `'Client not found'` → `CLIENT_NOT_FOUND`
-- L208 `'Client already disabled'` → `CLIENT_ALREADY_DISABLED`
 
 ### functions/api/admin/payments/aggregate.js（1 處）
 - L45 `'invalid status'` → `INVALID_STATUS`
@@ -267,15 +197,7 @@
 ## 後續 PR 切分建議
 
 ### PR B-4 (Admin 後台)
-- 檔案：22 個，處數：**83**
-  - functions/api/admin/audit-archive/retry.js
-  - functions/api/admin/audit.js
-  - functions/api/admin/audit/[id].js
-  - functions/api/admin/cron/audit-archive.js
-  - functions/api/admin/cron/cleanup.js
-  - functions/api/admin/deals.js
-  - functions/api/admin/oauth-clients.js
-  - functions/api/admin/oauth-clients/[client_id].js
+- 檔案：14 個，處數：**52**
   - functions/api/admin/payments/aggregate.js
   - functions/api/admin/payments/intents.js
   - functions/api/admin/payments/intents/[id]/delete.js

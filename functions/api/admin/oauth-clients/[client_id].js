@@ -53,7 +53,7 @@ export async function onRequestGet({ request, env, params }) {
     `)
     .bind(params.client_id).first()
 
-  if (!row) return res({ error: 'Client not found' }, 404)
+  if (!row) return res({ error: 'Client not found', code: 'CLIENT_NOT_FOUND' }, 404)
   return res(row)
 }
 
@@ -138,22 +138,22 @@ export async function onRequestPatch({ request, env, params }) {
   const user = stepCheck.user
   // P1-17：fine-grain admin:clients:write 守門（取代 hard-coded role==='admin'）
   if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_CLIENTS_WRITE)) {
-    return res({ error: 'admin:clients:write scope required' }, 403)
+    return res({ error: 'admin:clients:write scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:clients:write' }, 403)
   }
 
   let body
   try { body = await request.json() }
-  catch { return res({ error: 'Invalid JSON' }, 400) }
+  catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
 
   const { sets, binds, errors } = buildPatchSet(body)
   if (errors.length) return res({ error: errors.join('; ') }, 400)
-  if (!sets.length) return res({ error: 'No updatable fields provided' }, 400)
+  if (!sets.length) return res({ error: 'No updatable fields provided', code: 'NO_UPDATABLE_FIELDS' }, 400)
 
   // P1-15：先確認目標存在，再寫 hash-chain；失敗拒改（避免靜默改 RP 後無證據）
   const exists = await env.chiyigo_db
     .prepare(`SELECT 1 FROM oauth_clients WHERE client_id = ? LIMIT 1`)
     .bind(params.client_id).first()
-  if (!exists) return res({ error: 'Client not found' }, 404)
+  if (!exists) return res({ error: 'Client not found', code: 'CLIENT_NOT_FOUND' }, 404)
 
   try {
     await appendAuditLog(env.chiyigo_db, {
@@ -175,7 +175,7 @@ export async function onRequestPatch({ request, env, params }) {
     .run()
 
   if ((result.meta?.changes ?? 0) === 0)
-    return res({ error: 'Client not found' }, 404)
+    return res({ error: 'Client not found', code: 'CLIENT_NOT_FOUND' }, 404)
 
   await invalidateClientsCache(env)
 
@@ -197,15 +197,15 @@ export async function onRequestDelete({ request, env, params }) {
   const user = stepCheck.user
   // P1-17：fine-grain admin:clients:write 守門（軟下架仍是 destructive）
   if (!effectiveScopesFromJwt(user).has(SCOPES.ADMIN_CLIENTS_WRITE)) {
-    return res({ error: 'admin:clients:write scope required' }, 403)
+    return res({ error: 'admin:clients:write scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:clients:write' }, 403)
   }
 
   // P1-15：先確認狀態，再 hash-chain，再執行 UPDATE
   const existing = await env.chiyigo_db
     .prepare(`SELECT is_active FROM oauth_clients WHERE client_id = ?`)
     .bind(params.client_id).first()
-  if (!existing) return res({ error: 'Client not found' }, 404)
-  if (!existing.is_active) return res({ error: 'Client already disabled' }, 409)
+  if (!existing) return res({ error: 'Client not found', code: 'CLIENT_NOT_FOUND' }, 404)
+  if (!existing.is_active) return res({ error: 'Client already disabled', code: 'CLIENT_ALREADY_DISABLED' }, 409)
 
   try {
     await appendAuditLog(env.chiyigo_db, {

@@ -178,14 +178,14 @@ export async function onRequestPost({ request, env }) {
   // ── Auth ─────────────────────────────────────────────────
   const auth = request.headers.get('Authorization') ?? ''
   const expected = env.CRON_SECRET
-  if (!expected) return res({ error: 'CRON_SECRET not configured' }, 500)
-  if (auth !== `Bearer ${expected}`) return res({ error: 'unauthorized' }, 401)
+  if (!expected) return res({ error: 'CRON_SECRET not configured', code: 'CRON_SECRET_NOT_CONFIGURED' }, 500)
+  if (auth !== `Bearer ${expected}`) return res({ error: 'unauthorized', code: 'UNAUTHORIZED' }, 401)
 
   // ── Binding 檢查 ─────────────────────────────────────────
   const bucket = env.AUDIT_ARCHIVE_BUCKET
-  if (!bucket) return res({ error: 'AUDIT_ARCHIVE_BUCKET binding missing' }, 500)
+  if (!bucket) return res({ error: 'AUDIT_ARCHIVE_BUCKET binding missing', code: 'INTERNAL_ERROR' }, 500)
   const db = env.chiyigo_db
-  if (!db)     return res({ error: 'chiyigo_db binding missing' }, 500)
+  if (!db)     return res({ error: 'chiyigo_db binding missing', code: 'INTERNAL_ERROR' }, 500)
 
   const dryRun            = isDryRun(env)
   const envName           = archiveEnv(env)

@@ -24,16 +24,16 @@ export async function onRequestDelete({ request, env, params }) {
   // P1-17：fine-grain admin:audit:write（DELETE 是 destructive，不能讓 read-only token 動）
   const effective = effectiveScopesFromJwt(stepCheck.user)
   if (!effective.has(SCOPES.ADMIN_AUDIT_WRITE)) {
-    return res({ error: 'admin:audit:write scope required' }, 403)
+    return res({ error: 'admin:audit:write scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:audit:write' }, 403)
   }
 
   const id = Number(params?.id)
-  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found' }, 404)
+  if (!Number.isFinite(id) || id < 1) return res({ error: 'not_found', code: 'AUDIT_NOT_FOUND' }, 404)
 
   const row = await env.chiyigo_db
     .prepare('SELECT id, event_type FROM audit_log WHERE id = ?')
     .bind(id).first()
-  if (!row) return res({ error: 'not_found' }, 404)
+  if (!row) return res({ error: 'not_found', code: 'AUDIT_NOT_FOUND' }, 404)
 
   if (!DELETABLE_EVENTS.has(row.event_type)) {
     return res({
