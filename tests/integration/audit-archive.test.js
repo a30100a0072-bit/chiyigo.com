@@ -24,6 +24,7 @@ import { onRequestPost as cronArchive } from '../../functions/api/admin/cron/aud
 import {
   rowsToJsonl,
   sha256Hex,
+  gzipDecompress,
   buildChunkKeys,
 } from '../../functions/utils/audit-archive.js'
 
@@ -102,10 +103,13 @@ describe('audit-archive cron — happy path 狀態機', () => {
     expect(chunks[0].state).toBe('uploaded')
     expect(chunks[0].row_count).toBe(3)
 
-    // R2 應有 data + manifest
-    const dataKey = `audit-log/${ARCHIVE_ENV}/audit_log/telemetry/`
+    // R2 應有 data + manifest（PR 2.1b：data 副檔名 .jsonl.gz）
+    const dataPrefix = `audit-log/${ARCHIVE_ENV}/audit_log/telemetry/`
     const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
-    expect(list.objects?.some(o => o.key.startsWith(dataKey) && o.key.endsWith('.jsonl'))).toBe(true)
+    expect(list.objects?.some(o => o.key.startsWith(dataPrefix) && o.key.endsWith('.jsonl.gz'))).toBe(true)
+
+    // PR 2.1b：DB chunks 帶 compression='gzip'
+    expect(chunks[0].compression).toBe('gzip')
   })
 
   it('Step 2：uploaded blocker → R2 GET + sha 對齊 → verified', async () => {
@@ -158,6 +162,61 @@ describe('audit-archive cron — happy path 狀態機', () => {
   })
 })
 
+describe('audit-archive cron — PR 2.1b gzip 壓縮', () => {
+  it('fresh chunk 寫 .jsonl.gz；R2 obj contentEncoding=gzip；解壓 sha 對齊', async () => {
+    await seedTelemetry(4)
+    await runCron()
+
+    const [chunk] = await getChunk()
+    expect(chunk.compression).toBe('gzip')
+
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
+    const gzKey = list.objects?.find(o => o.key.endsWith('.jsonl.gz'))?.key
+    expect(gzKey).toBeTruthy()
+
+    const obj = await env.AUDIT_ARCHIVE_BUCKET.get(gzKey)
+    expect(obj.httpMetadata?.contentEncoding).toBe('gzip')
+
+    const gzBytes  = new Uint8Array(await obj.arrayBuffer())
+    const jsonlOut = new TextDecoder().decode(await gzipDecompress(gzBytes))
+    expect(await sha256Hex(jsonlOut)).toBe(chunk.chunk_sha256)
+    expect(jsonlOut.split('\n').filter(Boolean)).toHaveLength(4)
+  })
+
+  it('manifest.compression=gzip + sha256_gz 對齊 gz bytes sha256', async () => {
+    await seedTelemetry(2)
+    await runCron()
+
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })
+    const manifestKey = list.objects?.find(o => o.key.endsWith('.json'))?.key
+    expect(manifestKey).toBeTruthy()
+    const manifestObj = await env.AUDIT_ARCHIVE_BUCKET.get(manifestKey)
+    const manifest = JSON.parse(await manifestObj.text())
+    expect(manifest.compression).toBe('gzip')
+    expect(manifest.sha256_gz).toMatch(/^[0-9a-f]{64}$/)
+    expect(manifest.sha256_jsonl).toMatch(/^[0-9a-f]{64}$/)
+    expect(manifest.sha256_gz).not.toBe(manifest.sha256_jsonl)
+
+    // sha256_gz 應等於 R2 gz object bytes 的 sha256
+    const gzList = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
+    const gzKey = gzList.objects?.find(o => o.key.endsWith('.jsonl.gz'))?.key
+    const gzObj = await env.AUDIT_ARCHIVE_BUCKET.get(gzKey)
+    const gzBytes = new Uint8Array(await gzObj.arrayBuffer())
+    expect(await sha256Hex(gzBytes)).toBe(manifest.sha256_gz)
+  })
+
+  it('uploaded → verified 路徑能正確 decompress + 對齊 chunk_sha256', async () => {
+    await seedTelemetry(3)
+    await runCron()                       // → uploaded
+    const report = await runCron()        // uploaded blocker → verified（含 decompress）
+    expect(report.ok).toBe(true)
+    expect(report.chunks_verified).toBe(1)
+    const [chunk] = await getChunk()
+    expect(chunk.state).toBe('verified')
+    expect(chunk.compression).toBe('gzip')
+  })
+})
+
 describe('audit-archive cron — recovery 與失敗', () => {
   it('Step 5：planned blocker（D1 row 對齊既存 sha）→ recovery 升 uploaded', async () => {
     // 種 row 進 audit_log
@@ -205,10 +264,12 @@ describe('audit-archive cron — recovery 與失敗', () => {
   it('Step 6：uploaded blocker 但 R2 物件缺失 → verification_failed + state=failed', async () => {
     await seedTelemetry(2)
     await runCron()  // uploaded
-    // 把 R2 data object 刪掉 模擬 cold storage 異常
+    // 把 R2 data object 刪掉 模擬 cold storage 異常（PR 2.1b 後副檔名 .jsonl.gz）
     const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
     for (const o of list.objects ?? []) {
-      if (o.key.endsWith('.jsonl')) await env.AUDIT_ARCHIVE_BUCKET.delete(o.key)
+      if (o.key.endsWith('.jsonl.gz') || o.key.endsWith('.jsonl')) {
+        await env.AUDIT_ARCHIVE_BUCKET.delete(o.key)
+      }
     }
 
     // 失敗刻意回 500（GH Actions workflow 才會抓到），這裡直接拿 handler response
@@ -282,9 +343,11 @@ describe('audit-archive cron — PR 2.1c provenance & drift', () => {
     const chunks = await getChunk()
     expect(chunks).toHaveLength(0)
 
-    // R2 不應有 archive object
+    // R2 不應有 archive object（PR 2.1b 後 .jsonl.gz；舊 .jsonl 也一併防呆檢）
     const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
-    expect((list.objects ?? []).filter(o => o.key.endsWith('.jsonl'))).toHaveLength(0)
+    expect((list.objects ?? []).filter(o =>
+      o.key.endsWith('.jsonl.gz') || o.key.endsWith('.jsonl')
+    )).toHaveLength(0)
   })
 
   it('M-1：drift 與正常 row 混合 → 同樣 fail-fast（不可只 archive 對的那批）', async () => {

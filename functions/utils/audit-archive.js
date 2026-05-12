@@ -1,11 +1,23 @@
 /**
- * F-3 Phase 2 PR 2.0 — Audit cold-archive helpers（dry-run scope）
+ * F-3 Phase 2 — Audit cold-archive helpers
  *
- * 範圍（PR 2.0）：
- *   - 僅 audit_log / cold_class='telemetry'
- *   - 僅 planned → uploaded 兩態（verified / marked_archived 留 PR 2.1）
+ * PR 2.1b（2026-05-12）：compression='gzip' 預設啟用。
+ *   - 改用 Workers 原生 CompressionStream（gzip）— 0 deps / 0 WASM；platform API
+ *     不公開 level（black box），manifest 標 'gzip' 不標 level。
+ *   - R2 key 副檔名 .jsonl.gz；R2 PUT 帶 httpMetadata.contentEncoding='gzip'。
+ *   - chunks 表加 compression 欄（migration 0041）；deriveKeysFromChunk 讀 row.compression
+ *     決定副檔名 → PR 2.0 既有 dry-run uploaded chunk（compression='none'）續走原
+ *     .jsonl 路徑直到 verified。
+ *   - chunk_sha256 仍是「decompressed jsonl」的 sha256（data identity，R2 key 也用，
+ *     必須 deterministic；gzip 含 mtime 非 byte-identical）；manifest.sha256_gz 是
+ *     forensic-only 補充欄。
+ *   - 為何不 zstd：spike 後選型決定 — 量級不撐 WASM 維護成本，gzip 是 platform 原生
+ *     fast path + 跨工具友善；詳 docs/AUDIT_RETENTION_PLAN.md PR 2.1b 段。
+ *
+ * 範圍歷史（PR 2.0）：
+ *   - 僅 audit_log / cold_class='telemetry'（PR 2.2a expand 到 6 class round-robin）
+ *   - 僅 planned → uploaded 兩態（PR 2.1 起含 verified / marked_archived）
  *   - Stop-on-non-terminal cursor 從 PR 2.0 就強制（design doc 「Cursor 定義」段）
- *   - 不壓縮（jsonl，非 jsonl.zst）；zstd 留 PR 2.1
  *   - DRY_RUN 時 key prefix 走 audit-log-dryrun/，不寫進正式 cold_class prefix
  *
  * 🔴 no-delete discipline（design doc v11 §「PR 2 archive worker 必須加的 code discipline」）
@@ -19,7 +31,7 @@ import { classifyForCold } from './audit-policy.js'
 
 export const ARCHIVE_SCHEMA_VERSION = '2.0'
 export const ARCHIVE_WRITER         = 'cron-archive-worker'
-export const ARCHIVE_WRITER_VERSION = '2.0.0-pr2.0-dryrun'
+export const ARCHIVE_WRITER_VERSION = '2.1.0-pr2.1b-gzip'
 
 // PR 2.0 範圍：只跑 telemetry；PR 2.2a 起 expand 到 6 cold_class round-robin
 // PR20_SUPPORTED_TABLE 仍是 'audit_log'（admin_audit_log 留 PR 3 月度 copy 路徑）
@@ -152,16 +164,48 @@ export function rowsToJsonl(rows) {
 }
 
 /**
- * SHA-256 hex of a string (UTF-8).
+ * SHA-256 hex of a string (UTF-8) or raw Uint8Array.
  * Web Crypto SubtleCrypto — Workers / Pages runtime 原生支援。
+ *
+ * PR 2.1b：接受 Uint8Array → 給 manifest.sha256_gz 用（壓縮後 bytes 算 sha）。
  */
-export async function sha256Hex(s) {
-  const buf = new TextEncoder().encode(s)
+export async function sha256Hex(input) {
+  const buf = typeof input === 'string' ? new TextEncoder().encode(input) : input
   const digest = await crypto.subtle.digest('SHA-256', buf)
   const arr = new Uint8Array(digest)
   let hex = ''
   for (let i = 0; i < arr.length; i++) hex += arr[i].toString(16).padStart(2, '0')
   return hex
+}
+
+/**
+ * gzip 壓縮（Workers 原生 CompressionStream）。
+ *
+ * 接受 string（UTF-8 encode）或 Uint8Array → 回 Uint8Array of gzip bytes。
+ * 注意：CompressionStream API 不暴露 compression level；platform 內部選擇
+ * （Cloudflare runtime 估約 level 6）；manifest 因此標 'gzip' 不標 level。
+ */
+export async function gzipCompress(input) {
+  const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : input
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+/**
+ * gzip 解壓（Workers 原生 DecompressionStream）。
+ * 接受 Uint8Array（gz bytes）→ 回 Uint8Array of decompressed bytes。
+ */
+export async function gzipDecompress(input) {
+  const stream = new Blob([input]).stream().pipeThrough(new DecompressionStream('gzip'))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+/**
+ * 依 chunk 寫入時的 compression 決定 R2 key 副檔名。
+ * PR 2.0 既有 chunk → 'none' → '.jsonl'；PR 2.1b 起新 chunk → 'gzip' → '.jsonl.gz'。
+ */
+export function archiveExtension(compression) {
+  return compression === 'gzip' ? '.jsonl.gz' : '.jsonl'
 }
 
 /**
@@ -182,20 +226,24 @@ export function archivePrefixes(dryRun) {
  * 算 chunk key + manifest key（design doc §「Key 命名」）。
  *
  * 格式：
- *   {data-prefix}/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}.jsonl
+ *   {data-prefix}/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}{ext}
  *   {manifest-prefix}/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}.json
  *
- * PR 2.0 不上 zstd → 副檔名 .jsonl（PR 2.1 加 zstd 時改 .jsonl.zst）。
+ * PR 2.1b：副檔名依 compression 分支 — 'gzip' → '.jsonl.gz'、'none' → '.jsonl'。
+ * compression 預設 'gzip'（PR 2.1b 起新 chunk 預設值）；recovery 路徑由
+ * deriveKeysFromChunk 從 row.compression 反推，確保 PR 2.0 既有 .jsonl chunk
+ * 仍走原路徑。chunk_sha256 仍是 decompressed jsonl 的 sha（data identity）。
  *
  * @param {object} opts
  * @returns {{ dataKey: string, manifestKey: string, archiveDate: string }}
  */
-export function buildChunkKeys({ env, tableName, coldClass, minId, maxId, sha256, archiveDate, dryRun }) {
+export function buildChunkKeys({ env, tableName, coldClass, minId, maxId, sha256, archiveDate, dryRun, compression = 'gzip' }) {
   const [yyyy, mm, dd] = archiveDate.split('-')
   const tail = `${minId}-${maxId}-${sha256}`
   const { data, manifest } = archivePrefixes(dryRun)
+  const ext = archiveExtension(compression)
   return {
-    dataKey:     `${data}/${env}/${tableName}/${coldClass}/${yyyy}/${mm}/${dd}/${tail}.jsonl`,
+    dataKey:     `${data}/${env}/${tableName}/${coldClass}/${yyyy}/${mm}/${dd}/${tail}${ext}`,
     manifestKey: `${manifest}/${env}/${tableName}/${coldClass}/${yyyy}/${mm}/${dd}/${tail}.json`,
     archiveDate,
   }
@@ -208,8 +256,11 @@ export function buildChunkKeys({ env, tableName, coldClass, minId, maxId, sha256
  * 這是 provenance 防呆 — chunk 在 PR 4 flip flag 後，state 升 marked_archived
  * 用的 key 仍對齊當初 PUT data 的 prefix（dryrun / live）。
  *
+ * PR 2.1b：compression 同邏輯由 row 自己帶（migration 0041 DEFAULT 'none'）→
+ * PR 2.0 既有 .jsonl chunk 與 PR 2.1b 後 .jsonl.gz chunk 都能對到正確 key。
+ *
  * row 必須含：env, table_name, cold_class, archive_date, min_id, max_id,
- * chunk_sha256, dry_run（migration 0039 後 schema）。
+ * chunk_sha256, dry_run（0039）、compression（0041）。
  */
 export function deriveKeysFromChunk(row) {
   return buildChunkKeys({
@@ -221,6 +272,7 @@ export function deriveKeysFromChunk(row) {
     sha256:      row.chunk_sha256,
     archiveDate: row.archive_date,
     dryRun:      row.dry_run === 1 || row.dry_run === true,
+    compression: row.compression ?? 'none',
   })
 }
 
@@ -241,11 +293,15 @@ export function appendStateHistory(manifest, state, at) {
  *
  * PR 2.1d（codex F-2）：severities 改吃外部 reduce 結果（{severity: count}）；
  * 未提供時 fallback 空物件，保留向下相容。
+ *
+ * PR 2.1b：compression 由 caller 顯式傳（'gzip' / 'none'）；sha256_gz 在 gzip
+ * 路徑帶入壓縮後 bytes 的 sha256，none 路徑為 null。chunk_sha256（= sha256_jsonl）
+ * 仍是 R2 key 與 idempotency 的 canonical identity。
  */
 export function buildManifest({
   env, tableName, coldClass, coldClassVersion, runId, state, stateHistory,
   rowCount, minId, maxId, minTs, maxTs, sha256Jsonl,
-  dryRun, dataKey, severities,
+  dryRun, dataKey, severities, compression, sha256Gz,
 }) {
   return {
     schema_version:     ARCHIVE_SCHEMA_VERSION,
@@ -263,8 +319,8 @@ export function buildManifest({
     min_ts:             minTs,
     max_ts:             maxTs,
     sha256_jsonl:       sha256Jsonl,
-    sha256_zst:         null,            // PR 2.1b 加 zstd 時填
-    compression:        'none',          // PR 2.1b 改 'zstd-19'
+    sha256_gz:          sha256Gz ?? null,
+    compression:        compression ?? 'gzip',
     severities:         severities ?? {},
     writer:             ARCHIVE_WRITER,
     writer_version:     ARCHIVE_WRITER_VERSION,

@@ -2,8 +2,16 @@
  * POST /api/admin/cron/audit-archive
  * Header: Authorization: Bearer <CRON_SECRET>
  *
- * F-3 Phase 2 PR 2.2a — Archive worker dry-run + round-robin 6 cold_class
- * （design doc：docs/AUDIT_RETENTION_PLAN.md v11）
+ * F-3 Phase 2 PR 2.2a / 2.1b — Archive worker dry-run + round-robin 6 cold_class
+ * （design doc：docs/AUDIT_RETENTION_PLAN.md PR 2.1b 段）
+ *
+ * PR 2.1b 範圍（2026-05-12）：
+ *   - 新 chunk 預設 compression='gzip' — Workers 原生 CompressionStream，0 deps
+ *   - chunks 表 + manifest 同步加 compression 欄與 sha256_gz（migration 0041）
+ *   - 副檔名 .jsonl → .jsonl.gz；R2 PUT 加 httpMetadata.contentEncoding='gzip'
+ *   - verify 路徑依 blocker.compression 分支：gzip → decompress 後 sha；none → 直 sha
+ *   - 向下相容：PR 2.0 既有 dry-run uploaded chunk（compression='none'）仍走 .jsonl
+ *     原路徑 → verified → 終態（dry-run 不 mark_archived）
  *
  * PR 2.2a 範圍（2026-05-12）：
  *   - 從 PR 2.1d 的「只跑 telemetry」expand 到 6 cold_class round-robin
@@ -45,6 +53,8 @@ import {
   computeCursorAndBlocker,
   rowsToJsonl,
   sha256Hex,
+  gzipCompress,
+  gzipDecompress,
   buildChunkKeys,
   buildManifest,
   deriveKeysFromChunk,
@@ -300,7 +310,7 @@ async function processColdClass(args) {
   // ── Step 1：算 cursor + blocker（PR 2.1c：chunks 帶 dry_run 欄）────────
   const chunksRows = await db.prepare(
     `SELECT env, table_name, cold_class, archive_date,
-            min_id, max_id, state, chunk_sha256, row_count, retry_count, dry_run
+            min_id, max_id, state, chunk_sha256, row_count, retry_count, dry_run, compression
        FROM audit_archive_chunks
       WHERE env = ? AND table_name = ? AND cold_class = ?
       ORDER BY min_id ASC`
@@ -380,14 +390,25 @@ async function handlePlannedBlocker(ctx) {
 
   const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
   const chunkInfo = { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id }
+  const blockerCompression = blocker.compression ?? 'none'
 
   // PR 2.2a codex r1：標記 quota 消耗點 — 即使下面 PUT throw 也已記錄一次嘗試。
   report.attempted_write = true
 
   // 1) PUT data（R2 PUT idempotent — 同 key 同 body 覆寫無副作用）
-  await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
-    httpMetadata: { contentType: 'application/x-ndjson' },
-  })
+  // PR 2.1b：依 chunk 自己當初寫入的 compression 決定 body / contentEncoding。
+  //   - 'gzip'：重新 gzip jsonl（chunk_sha256 仍對齊 decompressed jsonl，不影響 idempotency）
+  //   - 'none'：直送 jsonl（PR 2.0 既有 planned chunk recovery 場景）
+  if (blockerCompression === 'gzip') {
+    const gzBody = await gzipCompress(jsonl)
+    await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+      httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
+    })
+  } else {
+    await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
+      httpMetadata: { contentType: 'application/x-ndjson' },
+    })
+  }
 
   // 2) Manifest 升 uploaded — 讀回現有 planned manifest append state_history
   const uploadedManifest = await loadAndAppend(bucket, manifestKey, 'uploaded')
@@ -425,6 +446,7 @@ async function handleUploadedBlocker(ctx) {
 
   // PR 2.1c：用 chunk 自身 dry_run 算 key（H-1 provenance fix）
   const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
+  const blockerCompression = blocker.compression ?? 'none'
   const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
   const obj = await bucket.get(dataKey)
   if (!obj) {
@@ -434,7 +456,16 @@ async function handleUploadedBlocker(ctx) {
       stage: 'uploaded_verify',
     })
   }
-  const text = await obj.text()
+  // PR 2.1b：依 chunk 自身 compression 還原 jsonl bytes，再算 sha256 對齊
+  // chunk_sha256（永遠是 decompressed jsonl 的 sha，design doc § Manifest 結構）。
+  let text
+  if (blockerCompression === 'gzip') {
+    const gzBytes = new Uint8Array(await obj.arrayBuffer())
+    const jsonlBytes = await gzipDecompress(gzBytes)
+    text = new TextDecoder().decode(jsonlBytes)
+  } else {
+    text = await obj.text()
+  }
   const sha  = await sha256Hex(text)
   // jsonl trailing newline → 行數 = newline 數
   const rowCount = text.length === 0 ? 0 : (text.match(/\n/g) ?? []).length
@@ -485,6 +516,7 @@ async function handleUploadedBlocker(ctx) {
       min_id:        blocker.min_id,
       max_id:        blocker.max_id,
       sha256_jsonl:  blocker.chunk_sha256,
+      compression:   blockerCompression,
       verified_at:   new Date().toISOString(),
     },
   })
@@ -671,9 +703,15 @@ async function runFreshChunkPipeline(ctx) {
   const maxTs = rows[rows.length - 1].created_at
   const archiveDate = utcDate()
 
+  // PR 2.1b：新 chunk 預設 gzip 壓縮；先算壓縮 bytes 與 sha256_gz（forensic）。
+  // chunk_sha256 / dataKey 仍對齊 decompressed jsonl 的 sha — data identity 不變。
+  const compression = 'gzip'
+  const gzBody      = await gzipCompress(jsonl)
+  const sha256Gz    = await sha256Hex(gzBody)
+
   const { dataKey, manifestKey } = buildChunkKeys({
     env: envName, tableName, coldClass,
-    minId, maxId, sha256: sha, archiveDate, dryRun,
+    minId, maxId, sha256: sha, archiveDate, dryRun, compression,
   })
 
   // PR 2.1d（codex F-2）：manifest 帶 severities reduce 統計
@@ -686,6 +724,7 @@ async function runFreshChunkPipeline(ctx) {
     stateHistory: [{ state: 'planned', at: plannedAt }],
     rowCount: rows.length, minId, maxId, minTs, maxTs,
     sha256Jsonl: sha, dryRun, dataKey, severities,
+    compression, sha256Gz,
   })
 
   const chunkInfo = { dryRun, minId, maxId }
@@ -700,16 +739,16 @@ async function runFreshChunkPipeline(ctx) {
   await db.prepare(
     `INSERT OR IGNORE INTO audit_archive_chunks
       (env, table_name, cold_class, cold_class_version, archive_date,
-       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?, ?)`
+       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run, compression)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?, ?, ?)`
   ).bind(envName, tableName, coldClass, COLD_CLASS_VERSION, archiveDate,
-         minId, maxId, sha, rows.length, runId, dryRun ? 1 : 0).run()
+         minId, maxId, sha, rows.length, runId, dryRun ? 1 : 0, compression).run()
 
   report.chunks_planned = 1
 
-  // PUT data → 升 uploaded
-  await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
-    httpMetadata: { contentType: 'application/x-ndjson' },
+  // PUT data → 升 uploaded（gzip body + contentEncoding=gzip）
+  await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+    httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
   })
 
   const uploadedManifest = appendStateHistory(plannedManifest, 'uploaded', new Date().toISOString())

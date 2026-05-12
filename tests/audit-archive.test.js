@@ -14,6 +14,9 @@ import { describe, it, expect } from 'vitest'
 import {
   rowsToJsonl,
   sha256Hex,
+  gzipCompress,
+  gzipDecompress,
+  archiveExtension,
   buildChunkKeys,
   computeCursorAndBlocker,
   rowMatchesColdClass,
@@ -85,15 +88,20 @@ describe('buildChunkKeys', () => {
     archiveDate: '2026-05-11',
   }
 
-  it('live 模式 → audit-log/ + manifest/', () => {
+  it('PR 2.1b：預設 compression=gzip → 副檔名 .jsonl.gz', () => {
     const k = buildChunkKeys({ ...base, dryRun: false })
-    expect(k.dataKey).toBe('audit-log/prod/audit_log/telemetry/2026/05/11/100-200-deadbeef.jsonl')
+    expect(k.dataKey).toBe('audit-log/prod/audit_log/telemetry/2026/05/11/100-200-deadbeef.jsonl.gz')
     expect(k.manifestKey).toBe('manifest/prod/audit_log/telemetry/2026/05/11/100-200-deadbeef.json')
   })
 
-  it('dry-run 模式 → audit-log-dryrun/ + manifest-dryrun/', () => {
+  it('compression=none（PR 2.0 向下相容）→ 副檔名 .jsonl', () => {
+    const k = buildChunkKeys({ ...base, dryRun: false, compression: 'none' })
+    expect(k.dataKey).toBe('audit-log/prod/audit_log/telemetry/2026/05/11/100-200-deadbeef.jsonl')
+  })
+
+  it('dry-run 模式 → audit-log-dryrun/ + manifest-dryrun/（gzip 副檔名）', () => {
     const k = buildChunkKeys({ ...base, dryRun: true })
-    expect(k.dataKey).toBe('audit-log-dryrun/prod/audit_log/telemetry/2026/05/11/100-200-deadbeef.jsonl')
+    expect(k.dataKey).toBe('audit-log-dryrun/prod/audit_log/telemetry/2026/05/11/100-200-deadbeef.jsonl.gz')
     expect(k.manifestKey).toBe('manifest-dryrun/prod/audit_log/telemetry/2026/05/11/100-200-deadbeef.json')
   })
 
@@ -102,6 +110,47 @@ describe('buildChunkKeys', () => {
     const dry  = archivePrefixes(true)
     expect(live.data).not.toBe(dry.data)
     expect(live.manifest).not.toBe(dry.manifest)
+  })
+})
+
+describe('archiveExtension (PR 2.1b)', () => {
+  it('gzip → .jsonl.gz', () => {
+    expect(archiveExtension('gzip')).toBe('.jsonl.gz')
+  })
+  it('none → .jsonl', () => {
+    expect(archiveExtension('none')).toBe('.jsonl')
+  })
+  it('unknown / undefined → .jsonl（保守 fallback）', () => {
+    expect(archiveExtension(undefined)).toBe('.jsonl')
+    expect(archiveExtension('zstd')).toBe('.jsonl')
+  })
+})
+
+describe('gzipCompress / gzipDecompress (PR 2.1b)', () => {
+  it('string round-trip 還原無損', async () => {
+    const input = 'hello world\n{"id":1,"x":"中文"}'
+    const gz = await gzipCompress(input)
+    expect(gz).toBeInstanceOf(Uint8Array)
+    expect(gz.length).toBeGreaterThan(0)
+    const back = await gzipDecompress(gz)
+    expect(new TextDecoder().decode(back)).toBe(input)
+  })
+
+  it('Uint8Array round-trip 還原無損', async () => {
+    const input = new TextEncoder().encode('{"a":1}\n{"b":2}\n')
+    const gz = await gzipCompress(input)
+    const back = await gzipDecompress(gz)
+    expect(back).toEqual(input)
+  })
+
+  it('壓縮後 sha256 與 jsonl sha256 不同（forensic 區分用）', async () => {
+    const jsonl = '{"id":1}\n'
+    const gz = await gzipCompress(jsonl)
+    const shaJsonl = await sha256Hex(jsonl)
+    const shaGz    = await sha256Hex(gz)
+    expect(shaGz).not.toBe(shaJsonl)
+    expect(shaJsonl).toMatch(/^[0-9a-f]{64}$/)
+    expect(shaGz).toMatch(/^[0-9a-f]{64}$/)
   })
 })
 
@@ -188,28 +237,40 @@ describe('rowMatchesColdClass', () => {
   })
 })
 
-describe('deriveKeysFromChunk (PR 2.1a + 2.1c provenance)', () => {
-  it('row.dry_run=1（INTEGER）→ dryrun prefix', () => {
+describe('deriveKeysFromChunk (PR 2.1a + 2.1c + 2.1b provenance)', () => {
+  it('PR 2.0 既有 chunk：row.dry_run=1 + compression 缺/none → .jsonl + dryrun prefix', () => {
     const row = {
       env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
       archive_date: '2026-05-11',
       min_id: 8, max_id: 922, chunk_sha256: 'abc',
       dry_run: 1,
+      // 沒 compression 欄（migration 0041 backfill 前狀態）
     }
     const k = deriveKeysFromChunk(row)
     expect(k.dataKey).toBe('audit-log-dryrun/prod/audit_log/telemetry/2026/05/11/8-922-abc.jsonl')
     expect(k.manifestKey).toBe('manifest-dryrun/prod/audit_log/telemetry/2026/05/11/8-922-abc.json')
   })
 
-  it('row.dry_run=0 → live prefix', () => {
+  it('PR 2.1b 新 chunk：row.compression=gzip → .jsonl.gz', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-11',
+      min_id: 1, max_id: 100, chunk_sha256: 'feed',
+      dry_run: 0, compression: 'gzip',
+    }
+    const k = deriveKeysFromChunk(row)
+    expect(k.dataKey).toBe('audit-log/prod/audit_log/telemetry/2026/05/11/1-100-feed.jsonl.gz')
+  })
+
+  it('row.dry_run=0 + compression=none → live prefix + .jsonl', () => {
     const row = {
       env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
       archive_date: '2026-05-11',
       min_id: 1, max_id: 2, chunk_sha256: 'dead',
-      dry_run: 0,
+      dry_run: 0, compression: 'none',
     }
     const k = deriveKeysFromChunk(row)
-    expect(k.dataKey.startsWith('audit-log/')).toBe(true)
+    expect(k.dataKey).toBe('audit-log/prod/audit_log/telemetry/2026/05/11/1-2-dead.jsonl')
     expect(k.manifestKey.startsWith('manifest/')).toBe(true)
   })
 
@@ -218,10 +279,11 @@ describe('deriveKeysFromChunk (PR 2.1a + 2.1c provenance)', () => {
       env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
       archive_date: '2026-05-11',
       min_id: 1, max_id: 2, chunk_sha256: 'dead',
-      dry_run: true,
+      dry_run: true, compression: 'gzip',
     }
     const k = deriveKeysFromChunk(row)
     expect(k.dataKey.startsWith('audit-log-dryrun/')).toBe(true)
+    expect(k.dataKey.endsWith('.jsonl.gz')).toBe(true)
   })
 
   it('row.dry_run 缺欄（極端 fallback）→ live prefix', () => {
@@ -232,6 +294,7 @@ describe('deriveKeysFromChunk (PR 2.1a + 2.1c provenance)', () => {
     }
     const k = deriveKeysFromChunk(row)
     expect(k.dataKey.startsWith('audit-log/')).toBe(true)
+    expect(k.dataKey.endsWith('.jsonl')).toBe(true) // compression 缺 → 'none' fallback
   })
 })
 
@@ -254,7 +317,7 @@ describe('appendStateHistory (PR 2.1a)', () => {
 })
 
 describe('buildManifest', () => {
-  it('必要欄位齊全 + dry_run flag 反映輸入', () => {
+  it('PR 2.1b 預設：compression=gzip + sha256_gz=null（不傳時）', () => {
     const m = buildManifest({
       env: 'prod', tableName: 'audit_log', coldClass: 'telemetry',
       coldClassVersion: 1, runId: 'run-x', state: 'planned',
@@ -266,12 +329,39 @@ describe('buildManifest', () => {
     expect(m.schema_version).toBe('2.0')
     expect(m.cold_class).toBe('telemetry')
     expect(m.cold_class_version).toBe(1)
-    expect(m.compression).toBe('none')   // PR 2.0 不壓
-    expect(m.sha256_zst).toBeNull()
+    expect(m.compression).toBe('gzip')
+    expect(m.sha256_gz).toBeNull()
     expect(m.dry_run).toBe(true)
     expect(m.state).toBe('planned')
     expect(m.state_history).toHaveLength(1)
     expect(m.row_count).toBe(3)
+  })
+
+  it('PR 2.1b：caller 傳 compression + sha256Gz → 反映到 manifest', () => {
+    const m = buildManifest({
+      env: 'prod', tableName: 'audit_log', coldClass: 'telemetry',
+      coldClassVersion: 1, runId: 'r', state: 'planned',
+      stateHistory: [], rowCount: 5, minId: 1, maxId: 5,
+      minTs: 't', maxTs: 't', sha256Jsonl: 'h',
+      dryRun: false, dataKey: 'k',
+      compression: 'gzip', sha256Gz: 'feedface',
+    })
+    expect(m.compression).toBe('gzip')
+    expect(m.sha256_gz).toBe('feedface')
+    expect(m.sha256_jsonl).toBe('h')
+  })
+
+  it('PR 2.0 向下相容：caller 傳 compression=none → manifest 反映 none', () => {
+    const m = buildManifest({
+      env: 'prod', tableName: 'audit_log', coldClass: 'telemetry',
+      coldClassVersion: 1, runId: 'r', state: 'planned',
+      stateHistory: [], rowCount: 1, minId: 1, maxId: 1,
+      minTs: 't', maxTs: 't', sha256Jsonl: 'h',
+      dryRun: false, dataKey: 'k',
+      compression: 'none',
+    })
+    expect(m.compression).toBe('none')
+    expect(m.sha256_gz).toBeNull()
   })
 
   it('PR 2.1d F-2：severities 參數帶入 → manifest 反映；不帶 → 空物件', () => {
