@@ -229,6 +229,9 @@
       INVALID_OR_USED_BACKUP_CODE: '備用救援碼無效或已使用',
       INVALID_OTP_OR_BACKUP_CODE: '驗證碼或備用救援碼錯誤',
       BACKUP_CODE_FAIL_TOKEN_CONSUMED: '備用碼錯誤，連結已失效，請重新發起密碼重設',
+      PASSWORD_REQUIRED:         '請輸入密碼',
+      PASSWORD_NOT_SET:          '此帳號尚未設定登入密碼，請先設定密碼',
+      BAD_OTP:                   '驗證碼錯誤',
     },
     en: {
       INVALID_OTP:               'Invalid code, please try again',
@@ -269,6 +272,9 @@
       INVALID_OR_USED_BACKUP_CODE: 'Invalid or already used backup code',
       INVALID_OTP_OR_BACKUP_CODE: 'Invalid verification code or backup code',
       BACKUP_CODE_FAIL_TOKEN_CONSUMED: 'Invalid backup code; reset link has been consumed, please request a new password reset',
+      PASSWORD_REQUIRED:         'Password is required',
+      PASSWORD_NOT_SET:          'No login password set on this account, please set a password first',
+      BAD_OTP:                   'Invalid verification code',
     },
     ja: {
       INVALID_OTP:               '認証コードが正しくありません',
@@ -309,6 +315,9 @@
       INVALID_OR_USED_BACKUP_CODE: 'バックアップコードが無効か、使用済みです',
       INVALID_OTP_OR_BACKUP_CODE: '認証コードまたはバックアップコードが正しくありません',
       BACKUP_CODE_FAIL_TOKEN_CONSUMED: 'バックアップコードが無効です。リンクの有効期限が切れたため、パスワードの再設定をやり直してください',
+      PASSWORD_REQUIRED:         'パスワードを入力してください',
+      PASSWORD_NOT_SET:          'このアカウントにはログインパスワードが未設定です。先にパスワードを設定してください',
+      BAD_OTP:                   '認証コードが正しくありません',
     },
     ko: {
       INVALID_OTP:               '인증 코드가 올바르지 않습니다',
@@ -349,6 +358,9 @@
       INVALID_OR_USED_BACKUP_CODE: '백업 코드가 유효하지 않거나 이미 사용되었습니다',
       INVALID_OTP_OR_BACKUP_CODE: '인증 코드 또는 백업 코드가 올바르지 않습니다',
       BACKUP_CODE_FAIL_TOKEN_CONSUMED: '백업 코드가 잘못되어 링크가 만료되었습니다. 비밀번호 재설정을 다시 요청해주세요',
+      PASSWORD_REQUIRED:         '비밀번호를 입력해주세요',
+      PASSWORD_NOT_SET:          '이 계정에 로그인 비밀번호가 설정되지 않았습니다. 먼저 비밀번호를 설정해주세요',
+      BAD_OTP:                   '인증 코드가 올바르지 않습니다',
     },
   }
 

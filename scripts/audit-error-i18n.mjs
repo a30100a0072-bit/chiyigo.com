@@ -17,6 +17,7 @@ walk(ROOT);
 
 const results = [];
 const warnings = [];
+const withCode = [];  // 已有 code 的清單（給 render 跟 dict 對照，找漏譯）
 
 for (const file of files) {
   const src = readFileSync(file, 'utf8');
@@ -76,13 +77,16 @@ for (const file of files) {
 
     // Check for `code:` field at top-level of object literal
     // Simple: regex code: '...' or code: VAR ; consider only string for "has code"
-    const hasCodeString = /\bcode\s*:\s*['"`]/.test(objText);
+    const codeStrMatch = /\bcode\s*:\s*(['"`])([A-Z][A-Z0-9_]*)\1/.exec(objText);
 
     // Compute line number of res(
     const lineNum = src.slice(0, m.index).split('\n').length;
     const rel = relative('.', file).replace(/\\/g, '/');
 
-    if (hasCodeString) continue; // OK, has code
+    if (codeStrMatch) {
+      withCode.push({ file: rel, line: lineNum, code: codeStrMatch[2] });
+      continue;
+    }
 
     for (const e of errMatches) {
       results.push({
@@ -101,4 +105,4 @@ for (const file of files) {
   }
 }
 
-console.log(JSON.stringify({ results, warnings }, null, 2));
+console.log(JSON.stringify({ results, warnings, withCode }, null, 2));

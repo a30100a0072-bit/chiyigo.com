@@ -3,11 +3,12 @@
 > Phase A 已建 `public/js/api.js#API_ERROR_I18N` 前端字典。本 doc 列出 `functions/` 下所有 `res({ error: '...' })` 缺 `code:` 欄位的處，作為 Phase B 漸進補碼依據。**本 PR 只盤點，不改 code**。
 
 ## 摘要
-- 總計：**223 處**缺 `code`
-- 涉及檔案：**54 個**
-- 推薦新增 / 既有 i18n key：**131 個**（去重後）
-- 仍標 `NEEDS_REVIEW` 待人工命名：**0 處**（佔 0%）
-- 變數型 `error: <expr>` 警告：**6 處**（列在文末警告區）
+- 總計：**227 處**缺 `code`
+- 涉及檔案：**55 個**
+- 推薦新增 / 既有 i18n key：**133 個**（去重後）
+- 仍標 `NEEDS_REVIEW` 待人工命名：**2 處**（佔 2%）
+- 變數型 `error: <expr>` 警告：**7 處**（列在文末警告區）
+- 已有 code 但前端 dict 缺翻譯：**42 個 code**（列在「漏譯」區）
 
 ### 判定規則
 - 掃描 `res({ ... })` 物件 literal 字面值；同一物件 literal 內若有 `code: '...'` 字串欄位則跳過（已 OK）
@@ -38,9 +39,11 @@
 | `CREDENTIAL_NOT_FOUND` | 2 | 找不到憑證 | Credential not found |
 | `CRON_SECRET_NOT_CONFIGURED` | 2 | 排程密鑰未設定 | CRON_SECRET not configured |
 | `ECPAY_REFUND_FAILED` | 2 | 綠界退款失敗 | ECPay refund failed |
+| `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:audit:write scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:refund scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:payments:* scope required |
 | `INSUFFICIENT_SCOPE` | 2 | 權限不足（缺 `{required}` scope） | admin:users:write scope required |
+| `INTERNAL_ERROR` | 2 | 系統錯誤，請稍後再試 | chiyigo_db binding missing |
 | `INTERNAL_ERROR` | 2 | 系統錯誤，請稍後再試 | Internal error |
 | `INVALID_CLIENT_DATA` | 2 | clientDataJSON 格式錯誤 | Invalid clientDataJSON |
 | `INVALID_TOKEN_SUBJECT` | 2 | Token subject 無效 | Invalid token subject |
@@ -79,10 +82,8 @@
 | `EMAIL_SEND_FAILED` | 1 | 寄送 Email 失敗，請稍後再試 | Failed to send email, please try again later |
 | `EMAIL_USED_BIND_AFTER_LOGIN` | 1 | 此信箱已被既有帳號使用，請改用既有方式登入後綁定 | 此信箱已被既有帳號使用。請改用既有方式登入，登入後可在帳號設定中綁定 ${provider} 帳號。 |
 | `INCORRECT_PASSWORD` | 1 | 密碼錯誤 | Incorrect password |
-| `INSUFFICIENT_SCOPE` | 1 | 權限不足（缺 `{required}` scope） | admin:audit:write scope required |
 | `INTENT_ID_REQUIRED` | 1 | 請提供 intent_id | intent_id required |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | AUDIT_ARCHIVE_BUCKET binding missing |
-| `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | chiyigo_db binding missing |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | Server error |
 | `INTERNAL_ERROR` | 1 | 系統錯誤，請稍後再試 | requireStepUp must check an elevated:* scope |
 | `INVALID_AUTHORIZATION_CODE` | 1 | 授權碼無效或已過期 | Invalid or expired authorization code |
@@ -107,6 +108,8 @@
 | `LINK_TYPE_INVALID` | 1 | 連結類型錯誤 | 連結類型錯誤 |
 | `LINKED_INTENT_NOT_FOUND` | 1 | 找不到關聯的付款單 | linked intent not found |
 | `MISSING_REQUIRED_FIELD` | 1 | 缺少必要欄位 | 缺少必要欄位 |
+| `NEEDS_REVIEW` ⚠️ | 1 | （待補） | invalid JSON body |
+| `NEEDS_REVIEW` ⚠️ | 1 | （待補） | action must be one of ${[...VALID_ACTIONS].join(', ')} |
 | `NEW_PASSWORD_REQUIRED` | 1 | 請提供新密碼 | new_password is required |
 | `NO_UPDATABLE_FIELDS` | 1 | 沒有可更新的欄位 | No updatable fields provided |
 | `NONCE_INVALID_OR_EXPIRED` | 1 | Nonce 無效或已過期 | Nonce invalid or expired |
@@ -167,9 +170,9 @@
   - "user_id must be a number"
   - "user_id must be a positive integer"
 - `INTERNAL_ERROR`：
+  - "chiyigo_db binding missing"
   - "Internal error"
   - "AUDIT_ARCHIVE_BUCKET binding missing"
-  - "chiyigo_db binding missing"
   - "Server error"
   - "requireStepUp must check an elevated:* scope"
 - `ACCOUNT_NOT_FOUND`：
@@ -188,6 +191,9 @@
 - `INVALID_PLATFORM`：
   - "Invalid platform. Must be web, pc, or mobile."
   - "platform 必須為 web、pc 或 mobile"
+- `NEEDS_REVIEW`：
+  - "invalid JSON body"
+  - "action must be one of ${[...VALID_ACTIONS].join(', ')}"
 - `TOKEN_REQUIRED`：
   - "token is required"
   - "Token is required"
@@ -197,6 +203,12 @@
   - "不支援的登入方式：${provider}"
 
 ## 逐檔清單
+
+### functions/api/admin/audit-archive/retry.js（4 處）
+- L85 `'admin:audit:write scope required'` → `INSUFFICIENT_SCOPE`（scope=`admin:audit:write`）
+- L89 `'chiyigo_db binding missing'` → `INTERNAL_ERROR`
+- L92 `'invalid JSON body'` → `NEEDS_REVIEW` ⚠️
+- L101 `'action must be one of ${[...VALID_ACTIONS].join(', ')}'` → `NEEDS_REVIEW` ⚠️
 
 ### functions/api/admin/audit.js（4 處）
 - L86 `'user_id must be a number'` → `USER_ID_INVALID`
@@ -531,6 +543,7 @@
 
 ## 警告區（error 是變數 / 表達式，無從翻譯）
 
+- functions/api/admin/audit-archive/retry.js:L106 — `error: tgtErr`
 - functions/api/admin/oauth-clients.js:L145 — `error: v.error`
 - functions/api/auth/account/change-password.js:L56 — `error: pwCheck.error`
 - functions/api/auth/local/register.js:L42 — `error: pwCheck.error`
@@ -539,6 +552,55 @@
 - functions/api/requisition.js:L79 — `error: err`
 
 > 處理建議：上游 catch 處改用 `res({ code: 'INTERNAL_ERROR', error: e.message }, 500)`，前端優先讀 code、保留 error 供 debug。
+
+## 漏譯區（已有 code 但 public/js/api.js#API_ERROR_I18N dict 缺鍵）
+
+> 後端已附 code，但前端字典任一語言缺對應 key → `tApiError` fallback 回英文 `error` 字串。補上即多 1 個 code 走 i18n 路徑。
+
+| code | 缺 lang | 出現處數 | 範例 site |
+|---|---|---:|---|
+| `AUDIT_CHAIN_FAILED` | zh-TW/en/ja/ko | 10 | functions/api/admin/audit/[id].js:L59 …+5 |
+| `INVALID_STATUS` | zh-TW/en/ja/ko | 5 | functions/api/admin/payments/intents/[id]/refund.js:L71 |
+| `REFUND_ALREADY_PENDING` | zh-TW/en/ja/ko | 3 | functions/api/payments/intents/[id]/refund-request.js:L64 |
+| `UNKNOWN_TARGET_ROLE` | zh-TW/en/ja/ko | 3 | functions/api/admin/revoke.js:L104 |
+| `ALREADY_BOUND` | zh-TW/en/ja/ko | 2 | functions/api/auth/wallet/nonce.js:L52 |
+| `INSUFFICIENT_SCOPE` | zh-TW/en/ja/ko | 2 | functions/utils/auth.js:L148 |
+| `INTENT_RACE_CONFLICT` | zh-TW/en/ja/ko | 2 | functions/api/admin/payments/intents/[id]/refund.js:L112 |
+| `KYC_LEVEL_INSUFFICIENT` | zh-TW/en/ja/ko | 2 | functions/utils/kyc.js:L157 |
+| `KYC_REQUIRED` | zh-TW/en/ja/ko | 2 | functions/utils/kyc.js:L145 |
+| `REASON_REQUIRED` | zh-TW/en/ja/ko | 2 | functions/api/payments/intents/[id]/refund-request.js:L31 |
+| `REFUND_PENDING_RECONCILIATION` | zh-TW/en/ja/ko | 2 | functions/api/admin/payments/intents/[id]/refund.js:L141 |
+| `STATUS_LOCKED` | zh-TW/en/ja/ko | 2 | functions/api/admin/payments/intents/[id]/delete.js:L58 |
+| `AI_ERROR` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L174 |
+| `AMOUNT_OVERFLOW` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/save.js:L109 |
+| `BLOCKED` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L117 |
+| `CHUNK_NOT_FOUND` | zh-TW/en/ja/ko | 1 | functions/api/admin/audit-archive/retry.js:L198 |
+| `CHUNK_STATE_MISMATCH` | zh-TW/en/ja/ko | 1 | functions/api/admin/audit-archive/retry.js:L201 |
+| `CLIENT_ID_TAKEN` | zh-TW/en/ja/ko | 1 | functions/api/admin/oauth-clients.js:L152 |
+| `DEAL_INSERT_FAILED` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/save.js:L163 |
+| `EVENT_NOT_DELETABLE` | zh-TW/en/ja/ko | 1 | functions/api/admin/audit/[id].js:L39 |
+| `HAS_UNREFUNDED_PAYMENT` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/delete.js:L59 |
+| `INSUFFICIENT_ROLE` | zh-TW/en/ja/ko | 1 | functions/utils/requireRole.js:L86 |
+| `INTENT_INVALID_STATUS` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisition-refund/[id]/approve.js:L74 |
+| `INVALID_AMOUNT` | zh-TW/en/ja/ko | 1 | functions/api/auth/payments/checkout/ecpay.js:L65 |
+| `INVALID_OUTPUT` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L183 |
+| `IP_BLOCKED` | zh-TW/en/ja/ko | 1 | functions/api/auth/local/login.js:L64 |
+| `MIXED_CURRENCY` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/save.js:L91 |
+| `MUST_REVOKE_FIRST` | zh-TW/en/ja/ko | 1 | functions/api/requisition/[id].js:L59 |
+| `NOT_IMPLEMENTED` | zh-TW/en/ja/ko | 1 | functions/api/admin/audit-archive/retry.js:L145 |
+| `PAYMENT_VENDOR_MISCONFIGURED` | zh-TW/en/ja/ko | 1 | functions/api/auth/payments/checkout/ecpay.js:L85 |
+| `SAVE_RACE_CONFLICT` | zh-TW/en/ja/ko | 1 | functions/api/admin/requisitions/[id]/save.js:L123 |
+| `SIGNATURE_INVALID` | zh-TW/en/ja/ko | 1 | functions/api/auth/wallet/verify.js:L65 |
+| `STEP_UP_ACTION_MISMATCH` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L233 |
+| `STEP_UP_REQUIRED` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L221 |
+| `STEP_UP_REQUIRES_2FA` | zh-TW/en/ja/ko | 1 | functions/api/auth/step-up.js:L111 |
+| `STEP_UP_REVOKED` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L260 |
+| `STEP_UP_ROLE_DRIFT` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L263 |
+| `STEP_UP_USER_GONE` | zh-TW/en/ja/ko | 1 | functions/utils/auth.js:L252 |
+| `TOO_LONG` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L108 |
+| `TURNSTILE_FAILED` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L129 |
+| `TURNSTILE_REQUIRED` | zh-TW/en/ja/ko | 1 | functions/api/ai/assist.js:L124 |
+| `UNKNOWN_ACTOR_ROLE` | zh-TW/en/ja/ko | 1 | functions/utils/requireRole.js:L76 |
 
 ## 後續 PR 切分建議
 
@@ -583,7 +645,8 @@
   - functions/api/requisition/revoke.js
 
 ### PR B-4 (Admin 後台)
-- 檔案：21 個，處數：**79**
+- 檔案：22 個，處數：**83**
+  - functions/api/admin/audit-archive/retry.js
   - functions/api/admin/audit.js
   - functions/api/admin/audit/[id].js
   - functions/api/admin/cron/audit-archive.js
