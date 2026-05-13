@@ -52,7 +52,8 @@ export async function onRequestGet({ request, env }) {
     ? `strftime('%Y-%m', created_at, '+8 hours')`
     : `date(created_at, '+8 hours')`
 
-  const conds = ['status = ?']
+  // Codex r5 P2：aggregate 預設過濾 soft-deleted（對帳基準應反映「真實有效」row）
+  const conds = ['status = ?', 'deleted_at IS NULL']
   const binds = [status]
   if (from) { conds.push('created_at >= ?'); binds.push(from) }
   if (to)   { conds.push('created_at < ?');  binds.push(to) }
@@ -73,7 +74,7 @@ export async function onRequestGet({ request, env }) {
     .bind(...binds).all()
 
   // 退款 bucket（refunded 狀態）— 同期間計算「成立後又退掉」的量
-  const refundConds = ['status = ?']
+  const refundConds = ['status = ?', 'deleted_at IS NULL']
   const refundBinds = ['refunded']
   if (from) { refundConds.push('created_at >= ?'); refundBinds.push(from) }
   if (to)   { refundConds.push('created_at < ?');  refundBinds.push(to) }

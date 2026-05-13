@@ -77,6 +77,11 @@ export async function onRequestGet({ request, env }) {
   const conds = []
   const binds = []
 
+  // Codex r5 P2：預設過濾 soft-deleted（與 user 列表一致；
+  // forensic / 對帳救援用 ?include_deleted=1 顯式開）
+  const includeDeleted = url.searchParams.get('include_deleted') === '1'
+  if (!includeDeleted) conds.push('pi.deleted_at IS NULL')
+
   const userId = url.searchParams.get('user_id')
   if (userId) {
     const n = Number(userId)

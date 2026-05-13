@@ -72,6 +72,28 @@ describe('GET /api/admin/payments/intents', () => {
     expect(resp.status).toBe(403)
   })
 
+  it('[Codex r5 P2] 預設過濾 soft-deleted；?include_deleted=1 才看得到', async () => {
+    const a = await seedUser({ email: 'admin-sd@x', role: 'admin' })
+    const u = await seedUser({ email: 'u-sd@x' })
+    const liveId = await createPaymentIntent(env, { user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'live', currency: 'TWD', amount_subunit: 100, status: PAYMENT_STATUS.SUCCEEDED })
+    const delId  = await createPaymentIntent(env, { user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'del',  currency: 'TWD', amount_subunit: 200, status: PAYMENT_STATUS.SUCCEEDED })
+    await env.chiyigo_db
+      .prepare(`UPDATE payment_intents SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+      .bind(delId).run()
+    const tok = await adminToken(a.id)
+
+    const r1 = await listHandler({ request: bearer('GET', 'http://x/', tok), env })
+    const b1 = await r1.json()
+    expect(b1.total).toBe(1)
+    expect(b1.totals.sum_subunit_succeeded).toBe(100)
+    expect(b1.rows.map(r => r.id)).toEqual([liveId])
+
+    const r2 = await listHandler({ request: bearer('GET', 'http://x/?include_deleted=1', tok), env })
+    const b2 = await r2.json()
+    expect(b2.total).toBe(2)
+    expect(b2.totals.sum_subunit_succeeded).toBe(300)
+  })
+
   it('admin → 200 + 列出全部 intent', async () => {
     const a = await seedUser({ email: 'a@x', role: 'admin' })
     const u1 = await seedUser({ email: 'u1@x' })
