@@ -259,6 +259,45 @@ describe('POST /api/auth/payments/checkout/ecpay', () => {
     expect(intent.amount_subunit).toBe(1000)
   })
 
+  it('[Codex r1 P1-5] metadata.requisition_id 屬於別人 → 403 REQUISITION_OWNER_MISMATCH', async () => {
+    const owner   = await seedUser({ email: 'rq-owner@x' })
+    const attacker = await seedUser({ email: 'rq-attk@x' })
+    await setUserKycStatus(env, attacker.id, { status: KYC_STATUS.VERIFIED, vendor: 'mock' })
+    const reqInsert = await env.chiyigo_db
+      .prepare(`INSERT INTO requisition (user_id, name, message, status) VALUES (?, 'owner', 'msg', 'pending') RETURNING id`)
+      .bind(owner.id).first()
+    const tok = await userToken(attacker.id)
+    const resp = await checkoutHandler({
+      request: bearerJson('POST', 'https://chiyigo.com/api/auth/payments/checkout/ecpay', tok,
+        { amount: 500, metadata: { requisition_id: reqInsert.id } }), env,
+    })
+    expect(resp.status).toBe(403)
+    const j = await resp.json()
+    expect(j.code).toBe('REQUISITION_OWNER_MISMATCH')
+    // 沒建出 intent
+    const intentCount = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS c FROM payment_intents WHERE user_id = ?`)
+      .bind(attacker.id).first()
+    expect(intentCount.c).toBe(0)
+  })
+
+  it('[Codex r1 P1-5] metadata.requisition_id 屬於自己 → 200，requisition_id 落 FK 欄位', async () => {
+    const u = await seedUser({ email: 'rq-self@x' })
+    await setUserKycStatus(env, u.id, { status: KYC_STATUS.VERIFIED, vendor: 'mock' })
+    const reqInsert = await env.chiyigo_db
+      .prepare(`INSERT INTO requisition (user_id, name, message, status) VALUES (?, 'me', 'msg', 'pending') RETURNING id`)
+      .bind(u.id).first()
+    const tok = await userToken(u.id)
+    const resp = await checkoutHandler({
+      request: bearerJson('POST', 'https://chiyigo.com/api/auth/payments/checkout/ecpay', tok,
+        { amount: 500, metadata: { requisition_id: reqInsert.id } }), env,
+    })
+    expect(resp.status).toBe(200)
+    const body = await resp.json()
+    const intent = await getPaymentIntent(env, { id: body.intent_id })
+    expect(intent.requisition_id).toBe(reqInsert.id)
+  })
+
   it('choose_payment=ATM → ECPay fields ChoosePayment=ATM', async () => {
     const u = await seedUser({ email: 'c4@x' })
     await setUserKycStatus(env, u.id, { status: KYC_STATUS.VERIFIED, vendor: 'mock' })

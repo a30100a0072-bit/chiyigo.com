@@ -3,10 +3,15 @@
  *
  * P0-1（金流憑證完整性，2026-05-06）：分流 hard delete vs anonymize。
  *
- *   pending / failed / canceled  → hard DELETE（從未進帳或從未成功，可清）
+ *   pending / failed / canceled  → soft DELETE（寫 deleted_at；保留 row 給 webhook
+ *                                  orphan 偵測，避免 PSP race 把錢吞掉漏帳）
  *   succeeded / processing / refunded → anonymize（保留 amount/vendor/date/user_id，
  *                                       清 metadata + failure_reason，metadata 寫
  *                                       anonymized_at + anonymized_by）
+ *
+ * Codex r1 P0-1（2026-05-13）：hard delete → soft delete。原本「未進帳可清」的假設
+ * 在 ECPay 等不帶 user_id 的 webhook 下不成立——user/admin 刪了之後 PSP 仍可能
+ * 補送 succeeded 通知；hard delete 後 webhook 找不到 row → 悄悄回 1|OK 把錢吞了。
  *
  * 為什麼不允許 succeeded/refunded hard delete：
  *   - 金流憑證（vendor_intent_id + amount + 時間）是法遵與對帳依據，一旦刪掉
@@ -22,7 +27,7 @@ import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes.js'
 import { getPaymentIntent, PAYMENT_STATUS } from '../../../../../utils/payments.js'
 import { safeUserAudit } from '../../../../../utils/user-audit.js'
 
-const HARD_DELETABLE = new Set([
+const SOFT_DELETABLE = new Set([
   PAYMENT_STATUS.PENDING, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED,
 ])
 
@@ -65,21 +70,30 @@ export async function onRequestPost({ request, env, params }) {
   const adminId = Number(stepCheck.user.sub)
   let mode
 
-  if (HARD_DELETABLE.has(intent.status)) {
+  if (SOFT_DELETABLE.has(intent.status)) {
+    // Codex r1 P0-1：soft delete 保留 row 給 webhook orphan 偵測（見檔頭說明）
     await env.chiyigo_db
-      .prepare('DELETE FROM payment_intents WHERE id = ?')
+      .prepare(`UPDATE payment_intents
+                   SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                 WHERE id = ? AND deleted_at IS NULL`)
       .bind(id).run()
-    mode = 'hard_delete'
+    mode = 'soft_delete'
   } else {
     // Anonymize：保留金流憑證骨幹，清除可能含敏感資訊的 metadata 與 failure_reason
     // T12: 先 archive 原始 metadata + failure_reason 到 cold storage，合規/dispute 用
+    // Codex r10 P2-8：getPaymentIntent 已把 intent.metadata JSON.parse 成 object，
+    // 直接 bind object 進 TEXT 欄位會被 D1 silently coerce（[object Object] 或行為
+    // 視 driver 版本而定）→ archive 變死資料。明確 stringify 確保來源端 TEXT。
+    const archivedMetadata = intent.metadata == null
+      ? null
+      : (typeof intent.metadata === 'string' ? intent.metadata : JSON.stringify(intent.metadata))
     await env.chiyigo_db
       .prepare(
         `INSERT INTO payment_metadata_archive
            (intent_id, original_status, original_metadata, original_failure_reason, archived_by, reason)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, intent.status, intent.metadata ?? null, intent.failure_reason ?? null,
+      .bind(id, intent.status, archivedMetadata, intent.failure_reason ?? null,
             adminId, 'admin_anonymize')
       .run()
 
@@ -101,7 +115,7 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   await safeUserAudit(env, {
-    event_type: mode === 'hard_delete'
+    event_type: mode === 'soft_delete'
       ? 'payment.intent.deleted'
       : 'payment.intent.anonymized',
     severity: 'critical',

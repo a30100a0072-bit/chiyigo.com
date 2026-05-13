@@ -77,6 +77,11 @@ export async function onRequestGet({ request, env }) {
   const conds = []
   const binds = []
 
+  // Codex r5 P2：預設過濾 soft-deleted（與 user 列表一致；
+  // forensic / 對帳救援用 ?include_deleted=1 顯式開）
+  const includeDeleted = url.searchParams.get('include_deleted') === '1'
+  if (!includeDeleted) conds.push('pi.deleted_at IS NULL')
+
   const userId = url.searchParams.get('user_id')
   if (userId) {
     const n = Number(userId)
@@ -138,7 +143,9 @@ export async function onRequestGet({ request, env }) {
     severity: format === 'csv' ? 'critical' : 'info',
     user_id: Number(user.sub), request,
     data: {
-      filters: { status, vendor, user_id: userId, from, to, format },
+      // Codex r7 P2：include_deleted=1 走 forensic 視圖時記入 audit，
+      // 才能在事後查「誰看了 soft-deleted row」
+      filters: { status, vendor, user_id: userId, from, to, format, include_deleted: includeDeleted },
       result_count: rowsResult.results?.length ?? 0,
     },
   })

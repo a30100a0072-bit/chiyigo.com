@@ -165,8 +165,11 @@ describe('registry coverage', () => {
     //   （force_purge_succeeded / _failed / _disabled）→ 124。
     // PR 3.0 加 3 個 aggregate worker events
     //   （audit.aggregate.run_completed / _skipped / _failed）→ 127。
+    // Codex 金流 r1 chain 加 6 個 events:
+    //   in_flight_conflict / orphan_intent / illegal_transition /
+    //   requisition_owner_mismatch / final_cas_lost / status_cas_lost → 133。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(127)
+    expect(_registrySize).toBe(133)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

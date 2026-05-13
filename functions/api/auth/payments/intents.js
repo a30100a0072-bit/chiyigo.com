@@ -36,7 +36,8 @@ export async function onRequestGet({ request, env }) {
   if (!Number.isFinite(limit) || limit < 1) limit = 20
   if (limit > 100) limit = 100
 
-  const where = ['user_id = ?']
+  // Codex r1 P0-1：列表過濾 soft-deleted（user delete 後不再顯示）
+  const where = ['user_id = ?', 'deleted_at IS NULL']
   const binds = [Number(user.sub)]
   if (status && Object.values(PAYMENT_STATUS).includes(status)) {
     where.push('status = ?'); binds.push(status)

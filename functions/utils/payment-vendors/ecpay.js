@@ -369,10 +369,14 @@ export async function ecpayRefund(env, { merchantTradeNo, tradeNo, totalAmount, 
   // P1-10：對回應做防偽校驗（防中間人/偽造 ECPay response）
   //   1. 必校：MerchantID / MerchantTradeNo / TradeNo 必須與我方送出值一致
   //   2. 若回應含 CheckMacValue（部分 endpoint 才回）→ 重算驗章；不一致即視為失敗
-  //   注意：DoAction 官方 spec 不一定回 CheckMacValue；缺欄位時不視為失敗，但欄位不符
-  //   一律視為失敗，避免攻擊者偽造「RtnCode=1」假退款成功。
+  //   3. Codex r10 P2-7：success（RtnCode=1）必須帶完整身分欄位，否則攻擊者
+  //      只回「RtnCode=1&RtnMsg=OK」就能假冒退款成功。缺任一身分欄位 → VERIFY_FAIL。
+  //      ECPay DoAction spec 成功回應一定帶 MerchantID/MerchantTradeNo/TradeNo；
+  //      缺就是異常（中間人/偽造），不可放行。
   let verifyError = null
-  if (rtn.MerchantID && String(rtn.MerchantID) !== String(merchantId)) {
+  if (rtnCode === '1' && (!rtn.MerchantID || !rtn.MerchantTradeNo || !rtn.TradeNo)) {
+    verifyError = `success_missing_identity_fields: MerchantID=${!!rtn.MerchantID} MerchantTradeNo=${!!rtn.MerchantTradeNo} TradeNo=${!!rtn.TradeNo}`
+  } else if (rtn.MerchantID && String(rtn.MerchantID) !== String(merchantId)) {
     verifyError = `merchant_id_mismatch: got ${rtn.MerchantID}`
   } else if (rtn.MerchantTradeNo && String(rtn.MerchantTradeNo) !== String(merchantTradeNo)) {
     verifyError = `merchant_trade_no_mismatch: got ${rtn.MerchantTradeNo}`

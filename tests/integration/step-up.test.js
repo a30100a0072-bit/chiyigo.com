@@ -215,6 +215,24 @@ describe('requireStepUp helper', () => {
     expect(r2.error.status).toBe(401)
   })
 
+  it('[Codex r1 P0-3] 同 step-up token 兩個並發請求只能有一個通過', async () => {
+    const { id } = await seedUser({ email: 'race@x' })
+    const tok = await getStepUpToken(id, SCOPES.ELEVATED_PAYMENT)
+
+    // 不 await 先發兩個並發，最終 Promise.all 一起收
+    const [a, b] = await Promise.all([
+      requireStepUp(reqWith(tok), env, SCOPES.ELEVATED_PAYMENT),
+      requireStepUp(reqWith(tok), env, SCOPES.ELEVATED_PAYMENT),
+    ])
+    const winners = [a, b].filter(r => r.error === null)
+    const losers  = [a, b].filter(r => r.error !== null)
+    expect(winners.length).toBe(1)
+    expect(losers.length).toBe(1)
+    expect(losers[0].error.status).toBe(401)
+    const body = await losers[0].error.json()
+    expect(body.code).toBe('STEP_UP_TOKEN_CONSUMED')
+  })
+
   it('caller 給非 elevated:* scope → 500（程式錯誤）', async () => {
     const { id } = await seedUser({ email: 'badcaller@x' })
     const tok = await getStepUpToken(id, SCOPES.ELEVATED_ACCOUNT)

@@ -105,10 +105,37 @@ export async function onRequestPost({ request, env, params }) {
     return res({ error: 'TradeNo not found; cannot call refund API', code: 'TRADE_NO_NOT_FOUND' }, 400, cors)
   }
 
+  // Codex r1 P1-6：rr atomic claim — pending → processing。
+  // 原本 SELECT 過 pending 後一路跑到最後 UPDATE，中間 race window 大；尤其
+  // approve+reject 同 rr_id 雙擊會互踩（reject 會悄悄把已 approved 蓋回 rejected）。
+  // 改成先 atomic CAS 把 rr 鎖到 transient 'processing'：成功才接著走 intent lock /
+  // ECPay；任何失敗都把 rr 還原回 pending（網路 throw 例外，留 processing 等對帳）。
+  const claim = await db.prepare(`
+    UPDATE requisition_refund_request
+       SET status = 'processing', admin_user_id = ?, decided_at = datetime('now')
+     WHERE id = ? AND status = 'pending'
+   RETURNING id
+  `).bind(Number(stepCheck.user.sub), id).first()
+  if (!claim) {
+    return res({
+      error: 'refund request already decided or claimed by another admin',
+      code:  'REFUND_REQUEST_CLAIM_LOST',
+    }, 409, cors)
+  }
+  // 失敗時把 rr 還原回 pending（admin_user_id / decided_at 同步清空）；caller 仍可重試。
+  const releaseRrClaim = async () => {
+    await db.prepare(`
+      UPDATE requisition_refund_request
+         SET status = 'pending', admin_user_id = NULL, decided_at = NULL
+       WHERE id = ? AND status = 'processing'
+    `).bind(id).run()
+  }
+
   // P0-7 atomic lock：與 admin/payments/intents/:id/refund 共用 helper，
   // 雙路徑（approve / 直接退款）競態下只有一個能拿到鎖，第二個 409。
   const lock = await lockIntentForRefund(env, intent.id)
   if (!lock.ok) {
+    await releaseRrClaim()
     return res({
       error: 'intent is being processed or no longer succeeded',
       code:  'INTENT_RACE_CONFLICT',
@@ -148,6 +175,7 @@ export async function onRequestPost({ request, env, params }) {
 
   if (!refundResult.ok) {
     await unlockIntentToSucceeded(env, intent.id)
+    await releaseRrClaim()
     await safeUserAudit(env, {
       event_type: 'requisition.refund.fail', severity: 'warn',
       user_id: rr.user_id, request,
@@ -185,11 +213,49 @@ export async function onRequestPost({ request, env, params }) {
     `).bind(rr.requisition_id).run()
   }
 
-  await db.prepare(`
+  // Codex r1 P1-6：final transition 也 CAS 守 — 只能從 'processing'（自己剛 claim 的）
+  // 推進到 approved；若被其他流程動過則保留現狀。
+  // Codex r6 P1：check changes === 1。ECPay 已成功、intent + requisition 都更新了，
+  // 但 final CAS 落空表示 rr 已被別人動過（不該發生）→ critical audit 留證，
+  // 讓對帳 cron / admin 透過 reconciliation 報表接手。
+  const finalCas = await db.prepare(`
     UPDATE requisition_refund_request
-       SET status = 'approved', admin_user_id = ?, admin_note = ?, decided_at = datetime('now')
-     WHERE id = ?
-  `).bind(Number(stepCheck.user.sub), adminNote, id).run()
+       SET status = 'approved', admin_note = ?
+     WHERE id = ? AND status = 'processing' AND admin_user_id = ?
+  `).bind(adminNote, id, Number(stepCheck.user.sub)).run()
+  const finalChanges = finalCas?.meta?.changes ?? 0
+
+  if (finalChanges !== 1) {
+    // Codex r8 P2：final CAS 落空 — ECPay 退款 + intent + requisition 都已成功
+    // 改動，但 rr row 仍卡在 'processing'（或被其他流程意外推進）。不可寫
+    // requisition.refund.approved 否則 UI / audit 兩邊不一致；改回 reconciliation
+    // 專屬 response + critical audit，讓對帳 cron / admin 接手。
+    await safeUserAudit(env, {
+      event_type: 'requisition.refund.final_cas_lost',
+      severity:   'critical',
+      user_id:    rr.user_id, request,
+      data: {
+        refund_request_id: id,
+        intent_id:         intent.id,
+        vendor_intent_id:  intent.vendor_intent_id,
+        amount_subunit:    intent.amount_subunit,
+        currency:          intent.currency,
+        admin_user_id:     Number(stepCheck.user.sub),
+        note:              'ECPay refund succeeded + intent refunded but rr final CAS missed; manual reconciliation required',
+      },
+    })
+    // 仍 TG sync — requisition.status 已是 revoked，UI 不能顯示 pending 退款
+    if (rr.requisition_id) await syncRequisitionTgMessage(env, rr.requisition_id)
+    return res({
+      ok: false,
+      code:               'REFUND_RECONCILIATION_REQUIRED',
+      refund_request_id:  id,
+      requisition_id:     rr.requisition_id,
+      intent_status:      PAYMENT_STATUS.REFUNDED,
+      requisition_status: rr.requisition_id ? 'revoked' : null,
+      note: 'ECPay refund executed; refund_request row needs manual reconciliation',
+    }, 202, cors)
+  }
 
   await safeUserAudit(env, {
     event_type: 'requisition.refund.approved', severity: 'critical',
