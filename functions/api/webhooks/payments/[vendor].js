@@ -214,18 +214,25 @@ export async function onRequestPost({ request, env, params }) {
         status:           parsed.status,
       },
     })
-    await dlqInsert(env, {
-      vendor,
-      event_id: parsed.event_id,
-      vendor_intent_id: parsed.vendor_intent_id,
-      raw_body: rawBody,
-      payload_hash: payloadHash,
-      error_stage: reason === 'intent_not_found' ? 'orphan_intent_not_found' : 'orphan_intent_deleted',
-      error_message: reason === 'intent_not_found'
-        ? 'no matching intent and no user_id to create one'
-        : `intent ${liveIntent?.id} soft-deleted at ${liveIntent?.deleted_at}; PSP still sent ${parsed.status}`,
-      http_status_returned: 200,
-    })
+    // Codex r5 P1：DLQ 是 orphan 唯一憑證 → strict 寫入。寫不進去就 markFailed +
+    // throw 讓 PSP retry，不可悄悄 markApplied 把證據丟掉。
+    try {
+      await dlqInsert(env, {
+        vendor,
+        event_id: parsed.event_id,
+        vendor_intent_id: parsed.vendor_intent_id,
+        raw_body: rawBody,
+        payload_hash: payloadHash,
+        error_stage: reason === 'intent_not_found' ? 'orphan_intent_not_found' : 'orphan_intent_deleted',
+        error_message: reason === 'intent_not_found'
+          ? 'no matching intent and no user_id to create one'
+          : `intent ${liveIntent?.id} soft-deleted at ${liveIntent?.deleted_at}; PSP still sent ${parsed.status}`,
+        http_status_returned: 200,
+      }, { strict: true })
+    } catch (e) {
+      await markWebhookEventFailed(env, vendor, parsed.event_id)
+      throw e
+    }
     try {
       await markWebhookEventApplied(env, vendor, parsed.event_id)
     } catch (e) {
@@ -458,15 +465,17 @@ async function sha256Hex(s) {
   return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('')
 }
 
-// T17 DLQ: 把處理失敗的 webhook 落到 payment_webhook_dlq；任何 throw 都吞掉
-// （DLQ 自己壞掉也不能擋住 PSP 回應）
-async function dlqInsert(env, row) {
-  if (!env?.chiyigo_db) return
+// T17 DLQ: 把處理失敗的 webhook 落到 payment_webhook_dlq。
+//   Codex r5 P1：strict=true（orphan/憑證路徑）寫失敗 → throw，caller 走
+//   markFailed 讓 PSP retry；strict=false（既有 best-effort 路徑）保留吞錯
+//   行為（DLQ 自己壞不可擋 PSP response）。
+async function dlqInsert(env, row, { strict = false } = {}) {
+  if (!env?.chiyigo_db) return false
+  let payloadHash = row.payload_hash ?? null
+  if (!payloadHash && row.raw_body) {
+    try { payloadHash = await sha256Hex(row.raw_body) } catch { /* ignore */ }
+  }
   try {
-    let payloadHash = row.payload_hash ?? null
-    if (!payloadHash && row.raw_body) {
-      try { payloadHash = await sha256Hex(row.raw_body) } catch { /* ignore */ }
-    }
     await env.chiyigo_db
       .prepare(
         `INSERT INTO payment_webhook_dlq
@@ -485,5 +494,9 @@ async function dlqInsert(env, row) {
         row.http_status_returned ?? null,
       )
       .run()
-  } catch { /* swallow — DLQ 失敗不能擋 PSP response */ }
+    return true
+  } catch (e) {
+    if (strict) throw e
+    return false
+  }
 }

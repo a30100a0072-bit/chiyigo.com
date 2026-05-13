@@ -505,6 +505,38 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     expect(dlq?.error_stage).toBe('orphan_intent_deleted')
   })
 
+  it('[Codex r5 P1] orphan DLQ 寫入失敗 → markFailed + throw（不可悄悄 markApplied 把證據丟掉）', async () => {
+    const u = await seedUser({ email: 'orphan-strict@x' })
+    const body = JSON.stringify({
+      event_id: 'evt_strict_dlq', vendor_intent_id: 'pi_strict', status: 'succeeded',
+      // 不帶 user_id → 走 orphan_intent_not_found 分支
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+
+    // 強制 DLQ INSERT 失敗：drop 整張 table
+    await env.chiyigo_db.prepare(`DROP TABLE payment_webhook_dlq`).run()
+
+    await expect(webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })).rejects.toThrow()
+
+    // dedupe row 標 failed（不是 applied）→ 之後 PSP retry 才會被當 in-flight 重跑
+    const dedupeRow = await env.chiyigo_db
+      .prepare(`SELECT apply_status FROM payment_webhook_events WHERE event_id = ?`)
+      .bind('evt_strict_dlq').first()
+    expect(dedupeRow?.apply_status).toBe('failed')
+
+    // 重建 DLQ table，給後續測試用（_setup 已 sandbox 化但保險）
+    await env.chiyigo_db.prepare(`CREATE TABLE IF NOT EXISTS payment_webhook_dlq (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, vendor TEXT, event_id TEXT,
+      vendor_intent_id TEXT, raw_body TEXT, payload_hash TEXT,
+      error_stage TEXT, error_message TEXT, http_status_returned INTEGER,
+      created_at TEXT DEFAULT (datetime('now')), replayed_at TEXT
+    )`).run()
+    // 防止其他測試吃到 u 未使用警告
+    expect(u.id).toBeGreaterThan(0)
+  })
+
   it('[Codex r1 P0-1] orphan webhook：ECPay-style 無 user_id + intent 不存在 → critical DLQ，不悄悄回 success 吞錢', async () => {
     // 沒 createPaymentIntent；webhook 不帶 user_id（模擬 ECPay）
     const body = JSON.stringify({
