@@ -12,7 +12,7 @@
  */
 
 import { verifyJwt } from './jwt.js'
-import { isJtiRevoked, revokeJti, consumeJtiOnce } from './revocation.js'
+import { isJtiRevoked, consumeJtiOnce } from './revocation.js'
 import { safeUserAudit } from './user-audit.js'
 import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedScope } from './scopes.js'
 
