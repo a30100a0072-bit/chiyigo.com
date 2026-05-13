@@ -178,6 +178,7 @@ const DEBUG_FAILURE = [
   'payment.refund.network_error',
   'payment.vendor.misconfigured',
   'payment.webhook.fail',
+  'payment.webhook.in_flight_conflict',
   'requisition.refund.fail',
   'requisition.refund.network_error',
   'requisition.save_as_deal.fail',

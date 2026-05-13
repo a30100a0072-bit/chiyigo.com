@@ -118,31 +118,53 @@ export async function onRequestPost({ request, env, params }) {
     }
   }
 
-  // dedupe — Codex r1 P0-2：用 apply_status 三態避免「event 已 dedupe 但狀態未套用」漂移。
-  // 'applied' 才算真正 dedup hit；'processing'/'failed' 表示上次沒完工，PSP retry 必須重跑。
-  // ON CONFLICT 原子更新：已 applied 不動；否則 reset 為 processing。
+  // dedupe + single-applier claim —
+  //   Codex r1 P0-2：apply_status 三態避免「event dedupe 但狀態未套用」漂移
+  //   Codex r2 P1：撞到別人正 'processing' 不能跟著雙跑 → 回 PSP failure 讓 retry
+  // 規則：
+  //   - fresh INSERT changes===1  → 我是 owner，繼續處理
+  //   - 既有 'applied'             → 真 dedup hit，直接 success
+  //   - 既有 'failed'              → CAS UPDATE 'failed'→'processing' 才算 claim 到 retry
+  //   - 既有 'processing'（in-flight）/ CAS 落敗 → 回 failure，PSP 之後 retry（不雙跑）
   const payloadHash = parsed.raw_body
     ? await sha256Hex(parsed.raw_body).catch(() => null)
     : null
-  let dedupeRow
+  let claimed = false
   try {
-    dedupeRow = await env.chiyigo_db
+    const insertRes = await env.chiyigo_db
       .prepare(
-        `INSERT INTO payment_webhook_events
+        `INSERT OR IGNORE INTO payment_webhook_events
            (vendor, event_id, intent_id, user_id, status_to, payload_hash, apply_status)
-         VALUES (?, ?, ?, ?, ?, ?, 'processing')
-         ON CONFLICT(vendor, event_id) DO UPDATE SET
-           apply_status = CASE WHEN payment_webhook_events.apply_status = 'applied'
-             THEN 'applied' ELSE 'processing' END,
-           processed_at = CASE WHEN payment_webhook_events.apply_status = 'applied'
-             THEN payment_webhook_events.processed_at ELSE datetime('now') END
-         RETURNING apply_status`,
+         VALUES (?, ?, ?, ?, ?, ?, 'processing')`,
       )
       .bind(vendor, parsed.event_id,
             intent?.id ?? null,
             parsed.user_id ?? intent?.user_id ?? null,
             parsed.status, payloadHash)
-      .first()
+      .run()
+
+    if ((insertRes?.meta?.changes ?? 0) === 1) {
+      claimed = true
+    } else {
+      const existing = await env.chiyigo_db
+        .prepare(`SELECT apply_status FROM payment_webhook_events WHERE vendor = ? AND event_id = ?`)
+        .bind(vendor, parsed.event_id).first()
+
+      if (existing?.apply_status === 'applied') {
+        return successFn({ deduplicated: true })
+      }
+      if (existing?.apply_status === 'failed') {
+        const cas = await env.chiyigo_db
+          .prepare(
+            `UPDATE payment_webhook_events
+               SET apply_status='processing', processed_at=datetime('now')
+             WHERE vendor=? AND event_id=? AND apply_status='failed'`,
+          )
+          .bind(vendor, parsed.event_id).run()
+        if ((cas?.meta?.changes ?? 0) === 1) claimed = true
+        // CAS 落敗（被別人搶先）→ fall through 到 in-flight 處理
+      }
+    }
   } catch (e) {
     await dlqInsert(env, {
       vendor,
@@ -150,14 +172,25 @@ export async function onRequestPost({ request, env, params }) {
       vendor_intent_id: parsed.vendor_intent_id,
       raw_body: rawBody,
       payload_hash: payloadHash,
-      error_stage: 'dedupe_insert',
+      error_stage: 'dedupe_claim',
       error_message: String(e?.message || e).slice(0, 1000),
       http_status_returned: 500,
     })
     throw e
   }
-  if (dedupeRow?.apply_status === 'applied') {
-    return successFn({ deduplicated: true })
+
+  if (!claimed) {
+    // in-flight conflict：另一個 instance 正在跑同 event_id，回 failure 讓 PSP retry
+    await safeUserAudit(env, {
+      event_type: 'payment.webhook.in_flight_conflict',
+      severity:   'warn',
+      request,
+      data: { vendor, event_id: parsed.event_id, vendor_intent_id: parsed.vendor_intent_id },
+    })
+    if (typeof adapter.failureResponse === 'function') {
+      return adapter.failureResponse('in-flight processing; retry later')
+    }
+    return res({ error: 'Event in-flight; retry later', code: 'WEBHOOK_IN_FLIGHT' }, 409)
   }
 
   // P0-9：原本「沒既存 intent + webhook 帶 user_id」會自動 createPaymentIntent，

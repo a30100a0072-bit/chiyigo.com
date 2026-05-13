@@ -377,6 +377,40 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     expect(j3.deduplicated).toBe(true)
   })
 
+  it('[Codex r2 P1] 撞到 in-flight processing row → 回 PSP failure 不雙跑', async () => {
+    const u = await seedUser({ email: 'inflight@x' })
+    await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_inflight',
+      status: 'pending', currency: 'TWD',
+    })
+    // 模擬：別的 instance 正在跑 → row 已存在 apply_status='processing'
+    await env.chiyigo_db
+      .prepare(`INSERT INTO payment_webhook_events (vendor, event_id, status_to, apply_status) VALUES (?, ?, ?, 'processing')`)
+      .bind('mock', 'evt_inflight', 'succeeded').run()
+
+    const body = JSON.stringify({
+      event_id: 'evt_inflight', vendor_intent_id: 'pi_inflight', user_id: u.id, status: 'succeeded',
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+    const resp = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    // mock adapter 沒 failureResponse → fallback 409
+    expect(resp.status).toBe(409)
+    const j = await resp.json()
+    expect(j.code).toBe('WEBHOOK_IN_FLIGHT')
+
+    // 重要：intent 沒被雙跑改動（原 pending 沒變 succeeded）
+    const intent = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_inflight' })
+    expect(intent.status).toBe('pending')
+
+    // dedupe row 仍維持 processing（不被誤 reset 為新一輪）
+    const dedupeRow = await env.chiyigo_db
+      .prepare(`SELECT apply_status FROM payment_webhook_events WHERE vendor = ? AND event_id = ?`)
+      .bind('mock', 'evt_inflight').first()
+    expect(dedupeRow.apply_status).toBe('processing')
+  })
+
   it('failed payload + failure_reason → 套用', async () => {
     const u = await seedUser({ email: 'w4@x' })
     await createPaymentIntent(env, {
