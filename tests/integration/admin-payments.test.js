@@ -92,6 +92,13 @@ describe('GET /api/admin/payments/intents', () => {
     const b2 = await r2.json()
     expect(b2.total).toBe(2)
     expect(b2.totals.sum_subunit_succeeded).toBe(300)
+
+    // Codex r7 P2：include_deleted=1 必須記進 audit filters
+    const audit = await env.chiyigo_db
+      .prepare(`SELECT event_data FROM audit_log WHERE event_type = 'admin.payments.intents.read' ORDER BY id DESC LIMIT 1`)
+      .first()
+    const data = JSON.parse(audit.event_data)
+    expect(data.filters.include_deleted).toBe(true)
   })
 
   it('admin → 200 + 列出全部 intent', async () => {

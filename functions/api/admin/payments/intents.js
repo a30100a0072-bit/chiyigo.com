@@ -143,7 +143,9 @@ export async function onRequestGet({ request, env }) {
     severity: format === 'csv' ? 'critical' : 'info',
     user_id: Number(user.sub), request,
     data: {
-      filters: { status, vendor, user_id: userId, from, to, format },
+      // Codex r7 P2：include_deleted=1 走 forensic 視圖時記入 audit，
+      // 才能在事後查「誰看了 soft-deleted row」
+      filters: { status, vendor, user_id: userId, from, to, format, include_deleted: includeDeleted },
       result_count: rowsResult.results?.length ?? 0,
     },
   })
