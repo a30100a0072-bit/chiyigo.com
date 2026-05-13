@@ -14,7 +14,8 @@
 | `id_token` | 15 min | OIDC 身分證明 | memory |
 | `refresh_token` | 14 days（rolling）| 換 access_token | HttpOnly Cookie，子網域共享 |
 
-> ⚠ `step_up_token` 規格保留概念但目前**不實作**（沒有金流場景）。等真要做時依本文件擴充。
+> ⚠ `step_up_token` 已實作（金流 admin 動作必走，含 `for_action` 綁定 + atomic jti consume）。
+> 詳見 `functions/utils/auth.js#requireStepUp` + Codex 金流 r1 chain（main `b5e4aaf` 後上線）。
 
 ---
 
