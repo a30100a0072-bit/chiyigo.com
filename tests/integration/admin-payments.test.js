@@ -15,6 +15,7 @@ import {
 } from '../../functions/utils/payments.js'
 import { onRequestGet  as listHandler   } from '../../functions/api/admin/payments/intents.js'
 import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund.js'
+import { onRequestPost as rejectHandler } from '../../functions/api/admin/requisition-refund/[id]/reject.js'
 
 // 對齊 functions/utils/payment-vendors/ecpay.js 的新 SANDBOX_CREDS
 // 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
@@ -283,5 +284,67 @@ describe('POST /api/admin/payments/intents/:id/refund', () => {
       `SELECT 1 FROM audit_log WHERE event_type = 'payment.refund.fail'`,
     ).first()
     expect(audit).not.toBeNull()
+  })
+})
+
+describe('[Codex r1 P1-6] POST /api/admin/requisition-refund/:id/reject atomic CAS', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  async function setupRefundRequest(uid, intentId, status = 'pending') {
+    const row = await env.chiyigo_db
+      .prepare(`INSERT INTO requisition_refund_request
+                  (user_id, intent_id, requisition_id, reason, status, created_at)
+                VALUES (?, ?, NULL, 'test', ?, datetime('now'))
+                RETURNING id`)
+      .bind(uid, intentId, status).first()
+    return row.id
+  }
+
+  it('reject 已 rejected 的 rr → 409 INVALID_STATUS（atomic CAS 不會悄悄改寫）', async () => {
+    const a = await seedUser({ email: 'reject-a@x', role: 'admin' })
+    const u = await seedUser({ email: 'reject-u@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_R1', currency: 'TWD',
+      amount_subunit: 100, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    const rrId = await setupRefundRequest(u.id, intentId, 'rejected')
+    const tok = await adminStepUpToken(a.id, 'reject_requisition_refund')
+    const resp = await rejectHandler({
+      request: bearer('POST', 'http://x/', tok, { admin_note: 'no' }),
+      env, params: { id: String(rrId) },
+    })
+    expect(resp.status).toBe(409)
+    const j = await resp.json()
+    expect(j.code).toBe('INVALID_STATUS')
+    expect(j.actual_status).toBe('rejected')
+  })
+
+  it('reject 雙擊：第一次 200 / 第二次 409（CAS 守住，不會二次 audit）', async () => {
+    const a = await seedUser({ email: 'reject-a2@x', role: 'admin' })
+    const u = await seedUser({ email: 'reject-u2@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_R2', currency: 'TWD',
+      amount_subunit: 100, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    const rrId = await setupRefundRequest(u.id, intentId, 'pending')
+    const tok1 = await adminStepUpToken(a.id, 'reject_requisition_refund')
+    const r1 = await rejectHandler({
+      request: bearer('POST', 'http://x/', tok1, { admin_note: 'first' }),
+      env, params: { id: String(rrId) },
+    })
+    expect(r1.status).toBe(200)
+    // step-up token 已 atomic consume → 第二次拿新 token（模擬 admin 重新 step-up）
+    const tok2 = await adminStepUpToken(a.id, 'reject_requisition_refund')
+    const r2 = await rejectHandler({
+      request: bearer('POST', 'http://x/', tok2, { admin_note: 'second' }),
+      env, params: { id: String(rrId) },
+    })
+    expect(r2.status).toBe(409)
+    // admin_note 維持 first（第二次 CAS 落敗未覆寫）
+    const rr = await env.chiyigo_db
+      .prepare(`SELECT admin_note FROM requisition_refund_request WHERE id = ?`)
+      .bind(rrId).first()
+    expect(rr.admin_note).toBe('first')
   })
 })

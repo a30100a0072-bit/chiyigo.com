@@ -43,27 +43,31 @@ export async function onRequestPost({ request, env, params }) {
 
   const db = env.chiyigo_db
 
-  const rr = await db
-    .prepare(`SELECT id, requisition_id, user_id, intent_id, status FROM requisition_refund_request WHERE id = ?`)
-    .bind(id).first()
-  if (!rr) return res({ error: 'not_found', code: 'REFUND_REQUEST_NOT_FOUND' }, 404, cors)
-  if (rr.status !== 'pending') {
-    return res({
-      error: 'only pending refund requests can be rejected',
-      code:  'INVALID_STATUS',
-      actual_status: rr.status,
-    }, 409, cors)
-  }
-
   let body = {}
   try { body = await request.json() } catch { /* keep empty */ }
   const adminNote = String(body?.admin_note ?? '').slice(0, 500) || null
 
-  await db.prepare(`
+  // Codex r1 P1-6：atomic CAS。原本 SELECT 後再 UPDATE 中間有 race window
+  // （同 rr_id 雙擊 approve+reject 互踩；單純 SELECT 不會擋住第二人的 UPDATE）。
+  const rr = await db.prepare(`
     UPDATE requisition_refund_request
        SET status = 'rejected', admin_user_id = ?, admin_note = ?, decided_at = datetime('now')
-     WHERE id = ?
-  `).bind(Number(stepCheck.user.sub), adminNote, id).run()
+     WHERE id = ? AND status = 'pending'
+   RETURNING id, requisition_id, user_id, intent_id
+  `).bind(Number(stepCheck.user.sub), adminNote, id).first()
+
+  if (!rr) {
+    // 區分 not_found vs already_decided（404 vs 409）
+    const exists = await db
+      .prepare(`SELECT status FROM requisition_refund_request WHERE id = ?`)
+      .bind(id).first()
+    if (!exists) return res({ error: 'not_found', code: 'REFUND_REQUEST_NOT_FOUND' }, 404, cors)
+    return res({
+      error: 'only pending refund requests can be rejected',
+      code:  'INVALID_STATUS',
+      actual_status: exists.status,
+    }, 409, cors)
+  }
 
   await safeUserAudit(env, {
     event_type: 'requisition.refund.rejected', severity: 'critical',
