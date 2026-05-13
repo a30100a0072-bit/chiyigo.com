@@ -337,6 +337,46 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     expect(j2.deduplicated).toBe(true)
   })
 
+  it('[Codex r1 P0-2] dedupe row 未 applied → PSP retry 必須重套狀態，不可吞成 dedup', async () => {
+    const u = await seedUser({ email: 'orphan@x' })
+    await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_orphan',
+      status: 'pending', currency: 'TWD',
+    })
+    // 模擬上一輪：dedupe row 已插入但 apply_status='failed'（status update throw 後落 DLQ）
+    await env.chiyigo_db
+      .prepare(`INSERT INTO payment_webhook_events (vendor, event_id, status_to, apply_status) VALUES (?, ?, ?, 'failed')`)
+      .bind('mock', 'evt_orphan', 'succeeded').run()
+
+    const body = JSON.stringify({
+      event_id: 'evt_orphan', vendor_intent_id: 'pi_orphan', user_id: u.id, status: 'succeeded',
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+    const resp = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    expect(resp.status).toBe(200)
+    const j = await resp.json()
+    expect(j.deduplicated).toBeFalsy()  // 不可吞成 dedup hit
+
+    // 驗：retry 真的重跑了 status update
+    const intent = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_orphan' })
+    expect(intent.status).toBe('succeeded')
+
+    // 驗：dedupe row 現在是 applied
+    const dedupeRow = await env.chiyigo_db
+      .prepare(`SELECT apply_status FROM payment_webhook_events WHERE vendor = ? AND event_id = ?`)
+      .bind('mock', 'evt_orphan').first()
+    expect(dedupeRow.apply_status).toBe('applied')
+
+    // 第三次 retry → 真 dedup 了
+    const resp3 = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    const j3 = await resp3.json()
+    expect(j3.deduplicated).toBe(true)
+  })
+
   it('failed payload + failure_reason → 套用', async () => {
     const u = await seedUser({ email: 'w4@x' })
     await createPaymentIntent(env, {

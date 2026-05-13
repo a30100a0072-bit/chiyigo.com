@@ -358,9 +358,11 @@ CREATE TABLE IF NOT EXISTS payment_webhook_events (
   user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
   status_to     TEXT,
   payload_hash  TEXT,
+  apply_status  TEXT    NOT NULL DEFAULT 'applied',  -- 0042: processing|applied|failed
   processed_at  TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE(vendor, event_id)
 );
+CREATE INDEX IF NOT EXISTS idx_payment_webhook_events_apply_status ON payment_webhook_events(apply_status);
 
 -- migration 0026 + 0027 + 0031 合併最終 shape（amount_subunit 由 0031 ALTER 加入；
 -- requisition_id 在 0027 改成 nullable 但 _setup.sql 沒有舊資料壓力，直接建 NULLABLE）

@@ -118,25 +118,32 @@ export async function onRequestPost({ request, env, params }) {
     }
   }
 
-  // dedupe — 寫 payment_webhook_events 撞 UNIQUE 即代表重送
+  // dedupe — Codex r1 P0-2：用 apply_status 三態避免「event 已 dedupe 但狀態未套用」漂移。
+  // 'applied' 才算真正 dedup hit；'processing'/'failed' 表示上次沒完工，PSP retry 必須重跑。
+  // ON CONFLICT 原子更新：已 applied 不動；否則 reset 為 processing。
   const payloadHash = parsed.raw_body
     ? await sha256Hex(parsed.raw_body).catch(() => null)
     : null
+  let dedupeRow
   try {
-    await env.chiyigo_db
+    dedupeRow = await env.chiyigo_db
       .prepare(
-        `INSERT INTO payment_webhook_events (vendor, event_id, intent_id, user_id, status_to, payload_hash)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO payment_webhook_events
+           (vendor, event_id, intent_id, user_id, status_to, payload_hash, apply_status)
+         VALUES (?, ?, ?, ?, ?, ?, 'processing')
+         ON CONFLICT(vendor, event_id) DO UPDATE SET
+           apply_status = CASE WHEN payment_webhook_events.apply_status = 'applied'
+             THEN 'applied' ELSE 'processing' END,
+           processed_at = CASE WHEN payment_webhook_events.apply_status = 'applied'
+             THEN payment_webhook_events.processed_at ELSE datetime('now') END
+         RETURNING apply_status`,
       )
       .bind(vendor, parsed.event_id,
             intent?.id ?? null,
             parsed.user_id ?? intent?.user_id ?? null,
             parsed.status, payloadHash)
-      .run()
+      .first()
   } catch (e) {
-    if (String(e?.message ?? e).includes('UNIQUE')) {
-      return successFn({ deduplicated: true })
-    }
     await dlqInsert(env, {
       vendor,
       event_id: parsed.event_id,
@@ -148,6 +155,9 @@ export async function onRequestPost({ request, env, params }) {
       http_status_returned: 500,
     })
     throw e
+  }
+  if (dedupeRow?.apply_status === 'applied') {
+    return successFn({ deduplicated: true })
   }
 
   // P0-9：原本「沒既存 intent + webhook 帶 user_id」會自動 createPaymentIntent，
@@ -183,6 +193,8 @@ export async function onRequestPost({ request, env, params }) {
         error_message: 'PSP-direct intent creation disabled (set PSP_DIRECT_INTENT_ENABLED=1 to enable)',
         http_status_returned: 200,
       })
+      // P0-2：本 event 已決定不處理（policy 拒絕），標 applied → 之後同 event_id 直接 dedup
+      await markWebhookEventApplied(env, vendor, parsed.event_id)
       return successFn()
     }
     if (!intent && parsed.user_id) {
@@ -212,6 +224,8 @@ export async function onRequestPost({ request, env, params }) {
       })
     }
   } catch (e) {
+    // P0-2：dedupe row 標 failed，下次同 event_id retry 才會被當 'processing' 重跑（不會被誤判 dedup hit）
+    await markWebhookEventFailed(env, vendor, parsed.event_id)
     await dlqInsert(env, {
       vendor,
       event_id: parsed.event_id,
@@ -253,7 +267,28 @@ export async function onRequestPost({ request, env, params }) {
     },
   })
 
+  // P0-2：完工後標 applied，之後同 event_id 撞進來才視為真 dedup hit
+  await markWebhookEventApplied(env, vendor, parsed.event_id)
+
   return successFn()
+}
+
+async function markWebhookEventApplied(env, vendor, eventId) {
+  if (!env?.chiyigo_db || !eventId) return
+  try {
+    await env.chiyigo_db
+      .prepare(`UPDATE payment_webhook_events SET apply_status = 'applied' WHERE vendor = ? AND event_id = ?`)
+      .bind(vendor, eventId).run()
+  } catch { /* 標記失敗不影響本次回應；PSP 不會 retry 因為已回 success */ }
+}
+
+async function markWebhookEventFailed(env, vendor, eventId) {
+  if (!env?.chiyigo_db || !eventId) return
+  try {
+    await env.chiyigo_db
+      .prepare(`UPDATE payment_webhook_events SET apply_status = 'failed' WHERE vendor = ? AND event_id = ? AND apply_status != 'applied'`)
+      .bind(vendor, eventId).run()
+  } catch { /* DLQ 已落，標記失敗也不擋 */ }
 }
 
 async function mergeMetadata(env, intentId, patch) {
