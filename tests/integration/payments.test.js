@@ -9,15 +9,40 @@
  *  - POST /api/webhooks/payments/[vendor]（mock adapter HMAC + dedupe + UPSERT）
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt.js'
-import {
+
+// Codex r7 P2：TOCTOU 補救分支（updatePaymentStatus no_row → re-read includeDeleted
+// → handleOrphan）在純 SQL 測試裡撞不到 —— lookup includeDeleted=true 看到的就是
+// 真實 row，soft-deleted row 會先被 upfront orphan 截走。改用 mock 強制
+// getPaymentIntent 第一次回 deleted_at=null（模擬 lookup 先到、user delete 後到、
+// update 撈不到的真實 race），第二次（re-read）才回真實 deleted 狀態。
+const mockState = vi.hoisted(() => ({ tocTouMode: false, callCount: 0 }))
+
+vi.mock('../../functions/utils/payments.js', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    getPaymentIntent: vi.fn(async (env, opts) => {
+      if (mockState.tocTouMode) {
+        mockState.callCount++
+        if (mockState.callCount === 1) {
+          const real = await actual.getPaymentIntent(env, opts)
+          return real ? { ...real, deleted_at: null } : null
+        }
+      }
+      return actual.getPaymentIntent(env, opts)
+    }),
+  }
+})
+
+const {
   createPaymentIntent, getPaymentIntent, updatePaymentStatus,
   requirePaymentAccess,
   PAYMENT_STATUS, PAYMENT_KIND,
-} from '../../functions/utils/payments.js'
+} = await import('../../functions/utils/payments.js')
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc.js'
 import { onRequestGet  as listHandler    } from '../../functions/api/auth/payments/intents.js'
 import { onRequestGet  as detailHandler  } from '../../functions/api/auth/payments/intents/[id].js'
@@ -230,7 +255,11 @@ describe('GET /api/auth/payments/intents/:id', () => {
 
 describe('POST /api/webhooks/payments/:vendor', () => {
   beforeAll(async () => { await ensureJwtKeys() })
-  beforeEach(async () => { await resetDb() })
+  beforeEach(async () => {
+    await resetDb()
+    mockState.tocTouMode = false
+    mockState.callCount = 0
+  })
 
   it('未知 vendor → 400', async () => {
     const resp = await webhookHandler({
@@ -470,6 +499,49 @@ describe('POST /api/webhooks/payments/:vendor', () => {
       .prepare(`SELECT COUNT(*) AS c FROM payment_webhook_dlq WHERE event_id = ?`)
       .bind('evt_orphan_del').first()
     expect(dlqCount.c).toBe(1)
+  })
+
+  it('[Codex r7 P2] TOCTOU re-read 補救分支真的執行（不靠 upfront orphan）', async () => {
+    // 純 SQL 測試撞不到 r5 P0 的 re-read 路徑（upfront 會先用 includeDeleted=true
+    // 看到 deleted_at 並截斷）。用 mock 強迫 lookup 第一次回 deleted_at=null，模擬
+    // 「lookup 跑完之後 user 才 soft-delete」的真實 race window。
+    const u = await seedUser({ email: 'toctou-real@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_toctou_real',
+      status: 'pending', currency: 'TWD',
+    })
+    // race 結果：lookup 之後、updatePaymentStatus 之前才 soft-delete。
+    // 但測試裡兩段是同步的；改用 mock 偽造 lookup 回非 deleted（callCount===1），
+    // 然後在 race 真的發生的 SQL 層面：updatePaymentStatus 的 deleted_at IS NULL
+    // 撈不到此 row。
+    await env.chiyigo_db
+      .prepare(`UPDATE payment_intents SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+      .bind(intentId).run()
+    mockState.tocTouMode = true
+
+    const body = JSON.stringify({
+      event_id: 'evt_toctou_real', vendor_intent_id: 'pi_toctou_real', user_id: u.id, status: 'succeeded',
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+    const resp = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    expect(resp.status).toBe(200)
+    // mock 至少被叫到第二次（upfront 沒擋住 → updatePaymentStatus no_row → re-read）
+    expect(mockState.callCount).toBeGreaterThanOrEqual(2)
+
+    mockState.tocTouMode = false  // 後續 query 用真實狀態
+
+    // intent 仍 pending（沒被 race 改成 succeeded）
+    const reread = await getPaymentIntent(env, { id: intentId, includeDeleted: true })
+    expect(reread.status).toBe('pending')
+    expect(reread.deleted_at).toBeTruthy()
+
+    // DLQ 留 orphan_intent_deleted（從 re-read 分支進的 handleOrphan）
+    const dlq = await env.chiyigo_db
+      .prepare(`SELECT error_stage FROM payment_webhook_dlq WHERE event_id = ?`)
+      .bind('evt_toctou_real').first()
+    expect(dlq?.error_stage).toBe('orphan_intent_deleted')
   })
 
   it('[Codex r5 P0] TOCTOU：updatePaymentStatus 撞到 soft-delete race → 補走 orphan，不悄悄 mark applied', async () => {
