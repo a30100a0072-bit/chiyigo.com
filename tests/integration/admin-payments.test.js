@@ -196,10 +196,23 @@ describe('POST /api/admin/payments/intents/:id/refund', () => {
     return id
   }
 
-  function mockEcpayRefund({ rtnCode = '1', rtnMsg = '退款成功' } = {}) {
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
+  // Codex r10 P2-7：ECPay DoAction 成功回應必帶 MerchantID/MerchantTradeNo/TradeNo
+  // 三個身分欄位，否則 ecpayRefund() 視為 VERIFY_FAIL。mock 從 request body 抽出
+  // 我方送出的 trade no 並回 echo（mirrors real ECPay behavior）。
+  function mockEcpayRefund({ rtnCode = '1', rtnMsg = '退款成功', stripIdentity = false } = {}) {
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
       if (String(url).includes('/CreditDetail/DoAction')) {
-        return new Response(`RtnCode=${rtnCode}&RtnMsg=${encodeURIComponent(rtnMsg)}`, {
+        const reqParams = Object.fromEntries(new URLSearchParams(init?.body ?? ''))
+        const fields = stripIdentity
+          ? { RtnCode: rtnCode, RtnMsg: rtnMsg }
+          : {
+              RtnCode:         rtnCode,
+              RtnMsg:          rtnMsg,
+              MerchantID:      reqParams.MerchantID,
+              MerchantTradeNo: reqParams.MerchantTradeNo,
+              TradeNo:         reqParams.TradeNo,
+            }
+        return new Response(new URLSearchParams(fields).toString(), {
           status: 200, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         })
       }
@@ -296,6 +309,26 @@ describe('POST /api/admin/payments/intents/:id/refund', () => {
     expect(audit?.severity).toBe('critical')
   })
 
+  it('[Codex r10 P2-7] ECPay 回裸 RtnCode=1 沒身分欄位 → VERIFY_FAIL，不放行假退款', async () => {
+    mockEcpayRefund({ rtnCode: '1', rtnMsg: 'OK', stripIdentity: true })
+    const a = await seedUser({ email: 'verify-a@x', role: 'admin' })
+    const u = await seedUser({ email: 'verify-u@x' })
+    const id = await setupSucceededIntent(u.id, 'TN_VERIFY', 600)
+    const tok = await adminStepUpToken(a.id)
+    const resp = await refundHandler({
+      request: bearer('POST', 'http://x/', tok, {}),
+      env, params: { id: String(id) },
+    })
+    expect(resp.status).toBe(400)
+    const j = await resp.json()
+    expect(j.code).toBe('ECPAY_REFUND_FAILED')
+    // rtn_code 保留 PSP 原值（debug 用）；驗證失敗訊號在 rtn_msg
+    expect(j.rtn_msg).toMatch(/verification failed.*success_missing_identity_fields/)
+    // status 不能變 refunded（守住）
+    const intent = await getPaymentIntent(env, { id })
+    expect(intent.status).toBe(PAYMENT_STATUS.SUCCEEDED)
+  })
+
   it('ECPay 退款失敗 → 400 + audit warn + status 不變', async () => {
     mockEcpayRefund({ rtnCode: '10100248', rtnMsg: '已超過可退款期限' })
     const a = await seedUser({ email: 'a@x', role: 'admin' })
@@ -369,12 +402,20 @@ describe('[Codex r1 P1-6] POST /api/admin/requisition-refund/:id/reject atomic C
     const rrId = await setupRefundRequest(u.id, intentId, 'pending')
 
     // ECPay 回成功，但在回應前 race-tamper rr 讓 final CAS 落空
-    vi.stubGlobal('fetch', vi.fn(async (url) => {
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
       if (String(url).includes('/CreditDetail/DoAction')) {
         await env.chiyigo_db
           .prepare(`UPDATE requisition_refund_request SET status='approved' WHERE id = ?`)
           .bind(rrId).run()
-        return new Response('RtnCode=1&RtnMsg=OK', {
+        // Codex r10 P2-7：成功回應要回身分欄位給 ecpayRefund() verify 通過
+        const reqParams = Object.fromEntries(new URLSearchParams(init?.body ?? ''))
+        const fields = {
+          RtnCode: '1', RtnMsg: 'OK',
+          MerchantID: reqParams.MerchantID,
+          MerchantTradeNo: reqParams.MerchantTradeNo,
+          TradeNo: reqParams.TradeNo,
+        }
+        return new Response(new URLSearchParams(fields).toString(), {
           status: 200, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         })
       }
