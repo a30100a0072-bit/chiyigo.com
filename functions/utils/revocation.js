@@ -74,3 +74,47 @@ export async function revokeJti(env, jti, expSec) {
     } catch { /* KV 寫入失敗不影響 D1 紀錄；下次 hot path 仍會打 D1 確認 */ }
   }
 }
+
+/**
+ * 原子核銷一次性 token：INSERT OR IGNORE 後檢查 changes，只有真正插入這次的 caller 拿到 ok:true。
+ *
+ * 為什麼需要：
+ *   step-up / 高權限一次性 token 用 SELECT(已 revoke?) → 通過後再 revoke 的兩步驟流程，
+ *   兩個並發請求可同時通過 SELECT，造成「一 token 多用」（Codex r1 P0-3）。
+ *   原子 acquire 的關鍵：把「revoke」當作「acquire lock」，DB unique 約束就是仲裁者。
+ *
+ * 行為：
+ *   - 成功插入（first to claim）→ { ok: true }
+ *   - INSERT OR IGNORE 但 changes === 0（已被別人吃掉）→ { ok: false, reason: 'already_consumed' }
+ *   - DB error 拋出 → 由 caller catch；revocation 失敗禁 fail-open
+ *
+ * @param {object} env
+ * @param {string} jti
+ * @param {number} expSec  JWT 的 exp（epoch 秒）
+ * @returns {Promise<{ok: boolean, reason?: string}>}
+ */
+export async function consumeJtiOnce(env, jti, expSec) {
+  if (!jti || typeof jti !== 'string') return { ok: false, reason: 'no_jti' }
+  if (!env.chiyigo_db) return { ok: false, reason: 'no_db' }
+
+  const nowSec = Math.floor(Date.now() / 1000)
+  const ttlSec = Math.max(60, (Number.isFinite(expSec) ? expSec : nowSec + 3600) - nowSec)
+  const expiresAt = new Date((nowSec + ttlSec) * 1000)
+    .toISOString().replace('T', ' ').slice(0, 19)
+
+  const result = await env.chiyigo_db
+    .prepare(`INSERT OR IGNORE INTO revoked_jti (jti, expires_at) VALUES (?, ?)`)
+    .bind(jti, expiresAt)
+    .run()
+
+  const inserted = (result?.meta?.changes ?? 0) > 0
+  if (!inserted) return { ok: false, reason: 'already_consumed' }
+
+  if (env.CHIYIGO_KV) {
+    try {
+      await env.CHIYIGO_KV.put(KV_PREFIX + jti, '1', { expirationTtl: ttlSec })
+    } catch { /* KV 寫入失敗不影響 acquire 結果 */ }
+  }
+
+  return { ok: true }
+}

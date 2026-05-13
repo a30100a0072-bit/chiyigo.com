@@ -12,7 +12,7 @@
  */
 
 import { verifyJwt } from './jwt.js'
-import { isJtiRevoked, revokeJti } from './revocation.js'
+import { isJtiRevoked, revokeJti, consumeJtiOnce } from './revocation.js'
 import { safeUserAudit } from './user-audit.js'
 import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedScope } from './scopes.js'
 
@@ -267,10 +267,24 @@ export async function requireStepUp(request, env, requiredScope, requiredAction 
     }
   }
 
-  // 一次性消耗：成功命中後立刻 revoke jti，同 token 不能再用
-  if (user.jti && env?.chiyigo_db) {
-    try { await revokeJti(env, user.jti, user.exp) }
-    catch { /* revoke 失敗不擋本次請求；下次仍會 401 因為 jti 進黑名單 */ }
+  // 一次性 atomic 核銷：把 revoke 當 acquire lock，第一個成功 INSERT 的 caller 才放行。
+  // Codex r1 P0-3：原本 requireAuth 查 revoked 是 read，revokeJti 是 write 且不檢查 changes，
+  // 並發兩個請求可同時通過 read 後各自 revoke；改為「能插入 = acquire 成功」單一仲裁點。
+  // revoke 失敗或 DB error 一律拒絕，禁止 fail-open。
+  if (!user.jti) {
+    return { user: null, error: res({ error: 'Step-up token missing jti', code: 'STEP_UP_MISSING_JTI' }, 401) }
+  }
+  if (!env?.chiyigo_db) {
+    return { user: null, error: res({ error: 'Step-up consume backend unavailable', code: 'STEP_UP_CONSUME_UNAVAILABLE' }, 503) }
+  }
+  let claim
+  try {
+    claim = await consumeJtiOnce(env, user.jti, user.exp)
+  } catch {
+    return { user: null, error: res({ error: 'Step-up token consume failed', code: 'STEP_UP_CONSUME_FAILED' }, 401) }
+  }
+  if (!claim.ok) {
+    return { user: null, error: res({ error: 'Step-up token already used', code: 'STEP_UP_TOKEN_CONSUMED' }, 401) }
   }
 
   return { user, error: null }
