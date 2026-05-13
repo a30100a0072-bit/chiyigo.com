@@ -320,6 +320,10 @@ describe('POST /api/admin/payments/intents/:id/refund', () => {
 describe('[Codex r1 P1-6] POST /api/admin/requisition-refund/:id/reject atomic CAS', () => {
   beforeAll(async () => { await ensureJwtKeys() })
   beforeEach(async () => { await resetDb() })
+  // Codex r9 P2：r8 P2-2 approve final_cas_lost 測試用 vi.stubGlobal('fetch') 模擬
+  // ECPay refund 回應；single-runtime workers config 共用 global fetch，必須 reset
+  // 避免後續測試吃到 stub。
+  afterEach(() => { vi.unstubAllGlobals() })
 
   async function setupRefundRequest(uid, intentId, status = 'pending') {
     const row = await env.chiyigo_db
