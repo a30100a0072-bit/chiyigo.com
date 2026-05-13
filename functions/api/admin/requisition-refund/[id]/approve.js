@@ -215,11 +215,29 @@ export async function onRequestPost({ request, env, params }) {
 
   // Codex r1 P1-6：final transition 也 CAS 守 — 只能從 'processing'（自己剛 claim 的）
   // 推進到 approved；若被其他流程動過則保留現狀。
-  await db.prepare(`
+  // Codex r6 P1：check changes === 1。ECPay 已成功、intent + requisition 都更新了，
+  // 但 final CAS 落空表示 rr 已被別人動過（不該發生）→ critical audit 留證，
+  // 讓對帳 cron / admin 透過 reconciliation 報表接手。
+  const finalCas = await db.prepare(`
     UPDATE requisition_refund_request
        SET status = 'approved', admin_note = ?
      WHERE id = ? AND status = 'processing' AND admin_user_id = ?
   `).bind(adminNote, id, Number(stepCheck.user.sub)).run()
+  const finalChanges = finalCas?.meta?.changes ?? 0
+  if (finalChanges !== 1) {
+    await safeUserAudit(env, {
+      event_type: 'requisition.refund.final_cas_lost',
+      severity:   'critical',
+      user_id:    rr.user_id, request,
+      data: {
+        refund_request_id: id,
+        intent_id:         intent.id,
+        vendor_intent_id:  intent.vendor_intent_id,
+        admin_user_id:     Number(stepCheck.user.sub),
+        note:              'ECPay refund succeeded + intent refunded but rr final CAS missed; manual reconciliation required',
+      },
+    })
+  }
 
   await safeUserAudit(env, {
     event_type: 'requisition.refund.approved', severity: 'critical',
