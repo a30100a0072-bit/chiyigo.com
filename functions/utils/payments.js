@@ -117,16 +117,18 @@ export async function createPaymentIntent(env, payload = {}) {
   return result?.id ?? null
 }
 
-export async function getPaymentIntent(env, { id, vendor, vendor_intent_id } = {}) {
+export async function getPaymentIntent(env, { id, vendor, vendor_intent_id, includeDeleted = false } = {}) {
   if (!env?.chiyigo_db) return null
+  // Codex r1 P0-1：預設過濾 soft-deleted；只有 webhook orphan 偵測會 includeDeleted=true
+  const deletedFilter = includeDeleted ? '' : 'AND deleted_at IS NULL'
   let row = null
   if (id) {
     row = await env.chiyigo_db
-      .prepare(`SELECT * FROM payment_intents WHERE id = ?`)
+      .prepare(`SELECT * FROM payment_intents WHERE id = ? ${deletedFilter}`)
       .bind(id).first()
   } else if (vendor && vendor_intent_id) {
     row = await env.chiyigo_db
-      .prepare(`SELECT * FROM payment_intents WHERE vendor = ? AND vendor_intent_id = ?`)
+      .prepare(`SELECT * FROM payment_intents WHERE vendor = ? AND vendor_intent_id = ? ${deletedFilter}`)
       .bind(vendor, String(vendor_intent_id)).first()
   }
   if (!row) return null
@@ -149,9 +151,11 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
   if (!VALID_STATUSES.has(status)) throw new Error(`Invalid payment status: ${status}`)
 
   // 先讀舊 row（若 status 從 succeeded 變動 → 後面要發告警）
+  // Codex r1 P0-1：soft-deleted intent 不可被 webhook 更新（caller 應先走 orphan 分支；
+  // 這裡的 deleted_at IS NULL 是 defense-in-depth）
   const before = await env.chiyigo_db
     .prepare(`SELECT id, user_id, status, amount_subunit, currency
-                FROM payment_intents WHERE vendor = ? AND vendor_intent_id = ?`)
+                FROM payment_intents WHERE vendor = ? AND vendor_intent_id = ? AND deleted_at IS NULL`)
     .bind(vendor, String(vendor_intent_id)).first()
 
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
@@ -159,7 +163,7 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
     .prepare(
       `UPDATE payment_intents
           SET status = ?, failure_reason = ?, updated_at = ?
-        WHERE vendor = ? AND vendor_intent_id = ?`,
+        WHERE vendor = ? AND vendor_intent_id = ? AND deleted_at IS NULL`,
     )
     .bind(status, failure_reason, now, vendor, String(vendor_intent_id))
     .run()

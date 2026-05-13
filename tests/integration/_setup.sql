@@ -347,8 +347,10 @@ CREATE TABLE IF NOT EXISTS payment_intents (
   requisition_id      INTEGER REFERENCES requisition(id) ON DELETE SET NULL,
   created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+  deleted_at          TEXT,                                -- 0043 soft delete (Codex r1 P0-1)
   UNIQUE(vendor, vendor_intent_id)
 );
+CREATE INDEX IF NOT EXISTS idx_payment_intents_deleted_at ON payment_intents(deleted_at);
 
 CREATE TABLE IF NOT EXISTS payment_webhook_events (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

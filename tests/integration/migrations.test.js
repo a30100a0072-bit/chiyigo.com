@@ -76,6 +76,7 @@ import up0039 from '../../migrations/0039_audit_archive_chunks_dry_run.sql?raw'
 import up0040 from '../../migrations/0040_requisition_index_align.sql?raw'
 import up0041 from '../../migrations/0041_audit_archive_chunks_compression.sql?raw'
 import up0042 from '../../migrations/0042_payment_webhook_apply_status.sql?raw'
+import up0043 from '../../migrations/0043_payment_intents_soft_delete.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -86,7 +87,7 @@ const ALL_UPS = [
   up0017, up0018, up0019, up0020, up0021, up0022, up0023, up0024,
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
-  up0041, up0042,
+  up0041, up0042, up0043,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -486,6 +487,7 @@ describe('full forward chain 0001..0040 vs prod snapshot', () => {
     expect(indexes).toContain('uq_rrr_intent_pending')              // 0034
     expect(indexes).toContain('uniq_agg_tele_bucket')               // 0038
     expect(indexes).toContain('idx_payment_webhook_events_apply_status')  // 0042 (Codex r1 P0-2)
+    expect(indexes).toContain('idx_payment_intents_deleted_at')           // 0043 (Codex r1 P0-1)
   })
 
   // codex round-12 medium：補 FK + index DDL semantic 驗證。

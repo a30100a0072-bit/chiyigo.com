@@ -61,9 +61,10 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   // 找對應的 intent — 從這裡之後任何 throw 都進 DLQ
+  // Codex r1 P0-1：includeDeleted=true 才看得到 soft-deleted row → orphan 偵測（見下方）
   let intent
   try {
-    intent = await getPaymentIntent(env, { vendor, vendor_intent_id: parsed.vendor_intent_id })
+    intent = await getPaymentIntent(env, { vendor, vendor_intent_id: parsed.vendor_intent_id, includeDeleted: true })
   } catch (e) {
     await dlqInsert(env, {
       vendor,
@@ -81,7 +82,8 @@ export async function onRequestPost({ request, env, params }) {
   // Why：簽章 + 金額雙閘門。簽章密鑰若外洩，至少擋住「拿低額 intent 偽造高額成功」這條鏈。
   // 注意：PSP-direct 流程（intent 還不存在）暫無從比對，跳過；建出來的 intent 直接以
   // webhook 金額為準（沒有原值可對拍）。
-  if (intent && parsed.amount_subunit != null && intent.amount_subunit != null) {
+  // Codex r1 P0-1：soft-deleted intent 走下方 orphan 分支（不在此驗金額）
+  if (intent && !intent.deleted_at && parsed.amount_subunit != null && intent.amount_subunit != null) {
     const amountOk   = Number(parsed.amount_subunit) === Number(intent.amount_subunit)
     const currencyOk = !parsed.currency || !intent.currency
                        || String(parsed.currency).toUpperCase() === String(intent.currency).toUpperCase()
@@ -191,6 +193,65 @@ export async function onRequestPost({ request, env, params }) {
       return adapter.failureResponse('in-flight processing; retry later')
     }
     return res({ error: 'Event in-flight; retry later', code: 'WEBHOOK_IN_FLIGHT' }, 409)
+  }
+
+  // Codex r1 P0-1：orphan intent — webhook 對應的 intent 不存在或已 soft-deleted。
+  // 兩種觸發情境：
+  //   (a) intent && intent.deleted_at  → user/admin 刪 intent 後 PSP 補送（race）
+  //   (b) !intent && !parsed.user_id   → ECPay 等不帶 user_id 的 vendor，找不到 row
+  //                                      且無從建（PSP-direct 不適用）
+  // 行為：critical audit + DLQ；markApplied 阻止 PSP retry spam（DLQ 已留證，
+  //       人工處理走 admin webhook-dlq replay/refund 路徑）。
+  // 注意：放在 dedupe claim 之後，避免每次 PSP retry 都灌一筆 DLQ。
+  const intentDeleted = !!(intent && intent.deleted_at)
+  const isOrphan = intentDeleted || (!intent && !parsed.user_id)
+  if (isOrphan) {
+    await safeUserAudit(env, {
+      event_type: 'payment.webhook.orphan_intent',
+      severity:   'critical',
+      user_id:    intent?.user_id ?? null,
+      request,
+      data: {
+        vendor,
+        event_id:         parsed.event_id,
+        vendor_intent_id: parsed.vendor_intent_id,
+        reason:           intentDeleted ? 'intent_soft_deleted' : 'intent_not_found',
+        intent_id:        intent?.id ?? null,
+        deleted_at:       intent?.deleted_at ?? null,
+        got_amount:       parsed.amount_subunit,
+        got_currency:     parsed.currency,
+        status:           parsed.status,
+      },
+    })
+    await dlqInsert(env, {
+      vendor,
+      event_id: parsed.event_id,
+      vendor_intent_id: parsed.vendor_intent_id,
+      raw_body: rawBody,
+      payload_hash: payloadHash,
+      error_stage: intentDeleted ? 'orphan_intent_deleted' : 'orphan_intent_not_found',
+      error_message: intentDeleted
+        ? `intent ${intent.id} soft-deleted at ${intent.deleted_at}; PSP still sent ${parsed.status}`
+        : 'no matching intent and no user_id to create one',
+      http_status_returned: 200,
+    })
+    try {
+      await markWebhookEventApplied(env, vendor, parsed.event_id)
+    } catch (e) {
+      await markWebhookEventFailed(env, vendor, parsed.event_id)
+      await dlqInsert(env, {
+        vendor,
+        event_id: parsed.event_id,
+        vendor_intent_id: parsed.vendor_intent_id,
+        raw_body: rawBody,
+        payload_hash: payloadHash,
+        error_stage: 'mark_applied_orphan',
+        error_message: String(e?.message || e).slice(0, 1000),
+        http_status_returned: 500,
+      })
+      throw e
+    }
+    return successFn()
   }
 
   // P0-9：原本「沒既存 intent + webhook 帶 user_id」會自動 createPaymentIntent，

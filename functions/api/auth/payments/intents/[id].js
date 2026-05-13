@@ -56,9 +56,13 @@ export async function onRequestDelete({ request, env, params }) {
     return res({ error: 'status_locked', code: 'STATUS_LOCKED', status: row.status }, 403, cors)
   }
 
-  // 硬刪：amount/vendor/status 都已記在 audit，row 本身可清
+  // Codex r1 P0-1：改 soft delete。PSP（特別是 ECPay）流程中 user 一鍵刪除 intent，
+  // 之後仍可能收到 succeeded webhook；hard delete 後 webhook handler 找不到 row → orphan
+  // 入帳漏洞。soft delete 保留 row 給 webhook 偵測 + audit 對帳。
   await env.chiyigo_db
-    .prepare('DELETE FROM payment_intents WHERE id = ? AND user_id = ?')
+    .prepare(`UPDATE payment_intents
+                 SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               WHERE id = ? AND user_id = ? AND deleted_at IS NULL`)
     .bind(id, userId).run()
 
   await safeUserAudit(env, {

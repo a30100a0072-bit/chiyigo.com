@@ -22,6 +22,7 @@ import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc.js'
 import { onRequestGet  as listHandler    } from '../../functions/api/auth/payments/intents.js'
 import { onRequestGet  as detailHandler  } from '../../functions/api/auth/payments/intents/[id].js'
 import { onRequestPost as webhookHandler } from '../../functions/api/webhooks/payments/[vendor].js'
+import { onRequestDelete as userDeleteHandler } from '../../functions/api/auth/payments/intents/[id].js'
 
 env.PAYMENT_MOCK_SECRET = 'test-payment-secret'
 
@@ -409,6 +410,89 @@ describe('POST /api/webhooks/payments/:vendor', () => {
       .prepare(`SELECT apply_status FROM payment_webhook_events WHERE vendor = ? AND event_id = ?`)
       .bind('mock', 'evt_inflight').first()
     expect(dedupeRow.apply_status).toBe('processing')
+  })
+
+  it('[Codex r1 P0-1] user DELETE intent → soft delete (deleted_at set，list 看不到，getPaymentIntent 預設 404)', async () => {
+    const u = await seedUser({ email: 'soft@x' })
+    await setUserKycStatus(env, u.id, KYC_STATUS.VERIFIED)
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_soft', status: 'pending', currency: 'TWD',
+    })
+    const token = await userToken(u.id, 'soft@x')
+    const resp = await userDeleteHandler({
+      request: bearer('DELETE', `http://x/api/auth/payments/intents/${intentId}`, token),
+      env, params: { id: String(intentId) },
+    })
+    expect(resp.status).toBe(200)
+    // 預設過濾 → 找不到
+    expect(await getPaymentIntent(env, { id: intentId })).toBeNull()
+    // includeDeleted=true → 看得到，且 deleted_at 已 set
+    const raw = await getPaymentIntent(env, { id: intentId, includeDeleted: true })
+    expect(raw).toBeTruthy()
+    expect(raw.deleted_at).toBeTruthy()
+  })
+
+  it('[Codex r1 P0-1] orphan webhook：intent soft-deleted 後 PSP 補送 succeeded → critical DLQ + intent.status 不變', async () => {
+    const u = await seedUser({ email: 'orphan1@x' })
+    await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_orphan_del', status: 'pending', currency: 'TWD',
+    })
+    // 直接 SQL soft-delete（不走 user delete handler 避免 KYC 設定干擾）
+    await env.chiyigo_db
+      .prepare(`UPDATE payment_intents SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE vendor = ? AND vendor_intent_id = ?`)
+      .bind('mock', 'pi_orphan_del').run()
+
+    const body = JSON.stringify({
+      event_id: 'evt_orphan_del', vendor_intent_id: 'pi_orphan_del', user_id: u.id, status: 'succeeded',
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+    const resp = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    expect(resp.status).toBe(200)  // 不讓 PSP retry spam；DLQ + critical 留證
+
+    // intent.status 仍維持 pending（不可被 orphan webhook 改成 succeeded）
+    const raw = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_orphan_del', includeDeleted: true })
+    expect(raw.status).toBe('pending')
+
+    // DLQ 該有一筆 orphan_intent_deleted
+    const dlq = await env.chiyigo_db
+      .prepare(`SELECT error_stage FROM payment_webhook_dlq WHERE event_id = ?`)
+      .bind('evt_orphan_del').first()
+    expect(dlq?.error_stage).toBe('orphan_intent_deleted')
+
+    // dedupe row markApplied → 第二次 PSP retry 直接 dedup hit，不再灌 DLQ
+    const resp2 = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    expect(resp2.status).toBe(200)
+    const dlqCount = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS c FROM payment_webhook_dlq WHERE event_id = ?`)
+      .bind('evt_orphan_del').first()
+    expect(dlqCount.c).toBe(1)
+  })
+
+  it('[Codex r1 P0-1] orphan webhook：ECPay-style 無 user_id + intent 不存在 → critical DLQ，不悄悄回 success 吞錢', async () => {
+    // 沒 createPaymentIntent；webhook 不帶 user_id（模擬 ECPay）
+    const body = JSON.stringify({
+      event_id: 'evt_orphan_nf', vendor_intent_id: 'pi_nonexistent', status: 'succeeded',
+      // 注意：故意不帶 user_id
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+    const resp = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    expect(resp.status).toBe(200)
+
+    // 沒任何 intent 被建出來
+    const raw = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_nonexistent', includeDeleted: true })
+    expect(raw).toBeNull()
+
+    // DLQ 留 orphan_intent_not_found
+    const dlq = await env.chiyigo_db
+      .prepare(`SELECT error_stage FROM payment_webhook_dlq WHERE event_id = ?`)
+      .bind('evt_orphan_nf').first()
+    expect(dlq?.error_stage).toBe('orphan_intent_not_found')
   })
 
   it('failed payload + failure_reason → 套用', async () => {

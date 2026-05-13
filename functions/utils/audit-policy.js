@@ -143,6 +143,7 @@ const SECURITY_SIGNAL = [
   'oauth.callback.fail',
   'oauth.code.exchange.fail',
   'payment.gate.fail',
+  'payment.webhook.orphan_intent',
   'payment.webhook.psp_direct_blocked',
   'register.guest_id_invalid_format',
   'wallet.bind.fail',
