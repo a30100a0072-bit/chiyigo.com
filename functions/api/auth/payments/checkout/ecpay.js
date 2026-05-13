@@ -72,6 +72,29 @@ export async function onRequestPost({ request, env }) {
   const merchantTradeNo = generateMerchantTradeNo()
   const userId = Number(user.sub)
 
+  // Codex r1 P1-5：body.metadata.requisition_id 必驗 owner。
+  // 原本 createPaymentIntent 把 metadata.requisition_id 直接落 FK 欄位（payments.js
+  // P0-3）→ A 可塞 B 的 req id 污染對帳（admin / TG summary join 用此欄位）。
+  const reqIdRaw = body?.metadata?.requisition_id
+  if (reqIdRaw != null && reqIdRaw !== '') {
+    const reqId = Number(reqIdRaw)
+    if (!Number.isFinite(reqId) || reqId < 1) {
+      return res({ error: 'invalid_requisition_id', code: 'INVALID_REQUISITION_ID' }, 400, cors)
+    }
+    const reqRow = await env.chiyigo_db
+      .prepare(`SELECT user_id FROM requisition WHERE id = ? AND deleted_at IS NULL`)
+      .bind(reqId).first()
+    if (!reqRow || reqRow.user_id !== userId) {
+      await safeUserAudit(env, {
+        event_type: 'payment.checkout.requisition_owner_mismatch',
+        severity:   'critical',
+        user_id:    userId, request,
+        data: { requisition_id: reqId, owner_user_id: reqRow?.user_id ?? null },
+      })
+      return res({ error: 'requisition not owned by user', code: 'REQUISITION_OWNER_MISMATCH' }, 403, cors)
+    }
+  }
+
   // Creds 檢查必須在建 intent 之前（mode=prod 缺金鑰會 throw）；
   // 否則每次失敗都殘留一張 pending intent 在 DB。
   try {

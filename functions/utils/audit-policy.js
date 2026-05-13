@@ -142,6 +142,7 @@ const SECURITY_SIGNAL = [
   'oauth.bind_email.collision_blocked',
   'oauth.callback.fail',
   'oauth.code.exchange.fail',
+  'payment.checkout.requisition_owner_mismatch',
   'payment.gate.fail',
   'payment.status.illegal_transition',
   'payment.webhook.orphan_intent',
