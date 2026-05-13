@@ -227,7 +227,23 @@ export async function onRequestPost({ request, env, params }) {
         http_status_returned: 200,
       })
       // P0-2：本 event 已決定不處理（policy 拒絕），標 applied → 之後同 event_id 直接 dedup
-      await markWebhookEventApplied(env, vendor, parsed.event_id)
+      try {
+        await markWebhookEventApplied(env, vendor, parsed.event_id)
+      } catch (e) {
+        // marker 失敗 → 該 row 仍是 processing；PSP retry 會落到同 psp_direct path 重跑（idempotent）
+        await markWebhookEventFailed(env, vendor, parsed.event_id)
+        await dlqInsert(env, {
+          vendor,
+          event_id: parsed.event_id,
+          vendor_intent_id: parsed.vendor_intent_id,
+          raw_body: rawBody,
+          payload_hash: payloadHash,
+          error_stage: 'mark_applied_psp_direct',
+          error_message: String(e?.message || e).slice(0, 1000),
+          http_status_returned: 500,
+        })
+        throw e
+      }
       return successFn()
     }
     if (!intent && parsed.user_id) {
@@ -300,19 +316,36 @@ export async function onRequestPost({ request, env, params }) {
     },
   })
 
-  // P0-2：完工後標 applied，之後同 event_id 撞進來才視為真 dedup hit
-  await markWebhookEventApplied(env, vendor, parsed.event_id)
+  // P0-2：完工後標 applied。Codex r2 P1：marker 失敗不能 fail-open
+  // （否則 intent 已更新但 row 留 processing，未來 retry 不會跑且沒 DLQ）。
+  // 標記失敗 → DLQ + 同 row 標 failed + throw 讓 PSP retry；
+  // 因 updatePaymentStatus 是 idempotent SET，重跑安全。
+  try {
+    await markWebhookEventApplied(env, vendor, parsed.event_id)
+  } catch (e) {
+    await markWebhookEventFailed(env, vendor, parsed.event_id)
+    await dlqInsert(env, {
+      vendor,
+      event_id: parsed.event_id,
+      vendor_intent_id: parsed.vendor_intent_id,
+      raw_body: rawBody,
+      payload_hash: payloadHash,
+      error_stage: 'mark_applied',
+      error_message: String(e?.message || e).slice(0, 1000),
+      http_status_returned: 500,
+    })
+    throw e
+  }
 
   return successFn()
 }
 
 async function markWebhookEventApplied(env, vendor, eventId) {
   if (!env?.chiyigo_db || !eventId) return
-  try {
-    await env.chiyigo_db
-      .prepare(`UPDATE payment_webhook_events SET apply_status = 'applied' WHERE vendor = ? AND event_id = ?`)
-      .bind(vendor, eventId).run()
-  } catch { /* 標記失敗不影響本次回應；PSP 不會 retry 因為已回 success */ }
+  // Codex r2 P1：不可吞錯；caller 負責 DLQ + markFailed + throw
+  await env.chiyigo_db
+    .prepare(`UPDATE payment_webhook_events SET apply_status = 'applied' WHERE vendor = ? AND event_id = ?`)
+    .bind(vendor, eventId).run()
 }
 
 async function markWebhookEventFailed(env, vendor, eventId) {
