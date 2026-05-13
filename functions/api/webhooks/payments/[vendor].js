@@ -200,52 +200,57 @@ export async function onRequestPost({ request, env, params }) {
   //   是讓未來真接「PSP-direct only」vendor 時可顯式開）。
   // 不開時：丟 DLQ + critical audit + 仍回 success（避免 PSP retry 灌爆）。
   const pspDirectAllowed = String(env?.PSP_DIRECT_INTENT_ENABLED ?? '') === '1'
-  try {
-    if (!intent && parsed.user_id && !pspDirectAllowed) {
-      await safeUserAudit(env, {
-        event_type: 'payment.webhook.psp_direct_blocked',
-        severity:   'critical',
-        user_id:    parsed.user_id,
-        request,
-        data: {
-          vendor,
-          event_id:         parsed.event_id,
-          vendor_intent_id: parsed.vendor_intent_id,
-          got_amount:       parsed.amount_subunit,
-          got_currency:     parsed.currency,
-          status:           parsed.status,
-        },
-      })
+
+  // Codex r3 P2：psp_direct policy reject 分支不走 createPaymentIntent / updatePaymentStatus，
+  // 不該被 outer try 包進去（否則 marker fail 會在 inner catch + outer catch 各 DLQ 一次，
+  // 第二筆 stage 還被誤標成 'create_intent'）。整段 hoist 到 outer try 之前。
+  if (!intent && parsed.user_id && !pspDirectAllowed) {
+    await safeUserAudit(env, {
+      event_type: 'payment.webhook.psp_direct_blocked',
+      severity:   'critical',
+      user_id:    parsed.user_id,
+      request,
+      data: {
+        vendor,
+        event_id:         parsed.event_id,
+        vendor_intent_id: parsed.vendor_intent_id,
+        got_amount:       parsed.amount_subunit,
+        got_currency:     parsed.currency,
+        status:           parsed.status,
+      },
+    })
+    await dlqInsert(env, {
+      vendor,
+      event_id: parsed.event_id,
+      vendor_intent_id: parsed.vendor_intent_id,
+      raw_body: rawBody,
+      payload_hash: payloadHash,
+      error_stage: 'psp_direct_disabled',
+      error_message: 'PSP-direct intent creation disabled (set PSP_DIRECT_INTENT_ENABLED=1 to enable)',
+      http_status_returned: 200,
+    })
+    // P0-2：本 event 已決定不處理（policy 拒絕），標 applied → 之後同 event_id 直接 dedup
+    try {
+      await markWebhookEventApplied(env, vendor, parsed.event_id)
+    } catch (e) {
+      // marker 失敗 → 該 row 仍是 processing；PSP retry 會落到同 psp_direct path 重跑（idempotent）
+      await markWebhookEventFailed(env, vendor, parsed.event_id)
       await dlqInsert(env, {
         vendor,
         event_id: parsed.event_id,
         vendor_intent_id: parsed.vendor_intent_id,
         raw_body: rawBody,
         payload_hash: payloadHash,
-        error_stage: 'psp_direct_disabled',
-        error_message: 'PSP-direct intent creation disabled (set PSP_DIRECT_INTENT_ENABLED=1 to enable)',
-        http_status_returned: 200,
+        error_stage: 'mark_applied_psp_direct',
+        error_message: String(e?.message || e).slice(0, 1000),
+        http_status_returned: 500,
       })
-      // P0-2：本 event 已決定不處理（policy 拒絕），標 applied → 之後同 event_id 直接 dedup
-      try {
-        await markWebhookEventApplied(env, vendor, parsed.event_id)
-      } catch (e) {
-        // marker 失敗 → 該 row 仍是 processing；PSP retry 會落到同 psp_direct path 重跑（idempotent）
-        await markWebhookEventFailed(env, vendor, parsed.event_id)
-        await dlqInsert(env, {
-          vendor,
-          event_id: parsed.event_id,
-          vendor_intent_id: parsed.vendor_intent_id,
-          raw_body: rawBody,
-          payload_hash: payloadHash,
-          error_stage: 'mark_applied_psp_direct',
-          error_message: String(e?.message || e).slice(0, 1000),
-          http_status_returned: 500,
-        })
-        throw e
-      }
-      return successFn()
+      throw e
     }
+    return successFn()
+  }
+
+  try {
     if (!intent && parsed.user_id) {
       try {
         const id = await createPaymentIntent(env, {
