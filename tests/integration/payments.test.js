@@ -19,7 +19,10 @@ import { signJwt } from '../../functions/utils/jwt.js'
 // 真實 row，soft-deleted row 會先被 upfront orphan 截走。改用 mock 強制
 // getPaymentIntent 第一次回 deleted_at=null（模擬 lookup 先到、user delete 後到、
 // update 撈不到的真實 race），第二次（re-read）才回真實 deleted 狀態。
-const mockState = vi.hoisted(() => ({ tocTouMode: false, callCount: 0 }))
+const mockState = vi.hoisted(() => ({
+  tocTouMode: false, callCount: 0,
+  casLostMode: false,  // Codex r8 P2：強迫 updatePaymentStatus 回 no_row 模擬 CAS lost race
+}))
 
 vi.mock('../../functions/utils/payments.js', async (importOriginal) => {
   const actual = await importOriginal()
@@ -34,6 +37,10 @@ vi.mock('../../functions/utils/payments.js', async (importOriginal) => {
         }
       }
       return actual.getPaymentIntent(env, opts)
+    }),
+    updatePaymentStatus: vi.fn(async (env, opts) => {
+      if (mockState.casLostMode) return { outcome: 'no_row' }
+      return actual.updatePaymentStatus(env, opts)
     }),
   }
 })
@@ -259,6 +266,7 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     await resetDb()
     mockState.tocTouMode = false
     mockState.callCount = 0
+    mockState.casLostMode = false
   })
 
   it('未知 vendor → 400', async () => {
@@ -679,6 +687,45 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     expect(ok.outcome).toBe('illegal_transition')
     const intent = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_sm3' })
     expect(intent.status).toBe('failed')
+  })
+
+  it('[Codex r8 P2] webhook no_row CAS lost（intent 仍 live）→ critical status_cas_lost audit，不悄悄消失', async () => {
+    const u = await seedUser({ email: 'caslost@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_caslost',
+      status: 'pending', currency: 'TWD',
+    })
+    mockState.casLostMode = true  // 強迫 updatePaymentStatus → no_row（live 但 race）
+
+    const body = JSON.stringify({
+      event_id: 'evt_caslost', vendor_intent_id: 'pi_caslost', user_id: u.id, status: 'succeeded',
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+    const resp = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    expect(resp.status).toBe(200)
+
+    mockState.casLostMode = false
+
+    // intent 沒被改（mock 沒寫 DB；CAS lost 的意義就是現實寫不進）
+    const reread = await getPaymentIntent(env, { id: intentId })
+    expect(reread.status).toBe('pending')
+
+    // critical audit 留證
+    const audit = await env.chiyigo_db
+      .prepare(`SELECT event_data FROM audit_log WHERE event_type = 'payment.webhook.status_cas_lost' ORDER BY id DESC LIMIT 1`)
+      .first()
+    expect(audit).not.toBeNull()
+    const data = JSON.parse(audit.event_data)
+    expect(data.attempted_status).toBe('succeeded')
+    expect(data.current_status).toBe('pending')
+
+    // 沒寫 payment.status.change（不假裝成功）
+    const change = await env.chiyigo_db
+      .prepare(`SELECT id FROM audit_log WHERE event_type = 'payment.status.change' AND event_data LIKE '%pi_caslost%'`)
+      .first()
+    expect(change).toBeNull()
   })
 
   it('[Codex r6 P1-4] webhook 撞 illegal_transition：DB=failed 收到 succeeded → 不寫 trade_no，不發 payment.status.change，但 dedupe applied', async () => {

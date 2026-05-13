@@ -360,7 +360,25 @@ export async function onRequestPost({ request, env, params }) {
         if (reread?.deleted_at) {
           return handleOrphan({ liveIntent: reread, reason: 'intent_soft_deleted' })
         }
-        // 非 soft-delete 的 no_row（CAS lost 後 row 仍 live 但 race） → 跳過成功收尾
+        // Codex r8 P2：非 soft-delete 的 no_row 表示 CAS 撞到 status 已被別處改
+        // （e.g. 兩條 webhook 同時撞 pending→succeeded vs pending→failed，第二條
+        //  CAS 落空）。原本只 skipSuccessTail 然後悄悄 markApplied，PSP 不 retry、
+        // 沒 DLQ、沒 audit → 事件等於消失。改寫 critical audit 留證；intent 不會
+        // 被當前事件改動（這正是預期），但我們知道發生過 race。
+        await safeUserAudit(env, {
+          event_type: 'payment.webhook.status_cas_lost',
+          severity:   'critical',
+          user_id:    reread?.user_id ?? intent.user_id ?? null,
+          request,
+          data: {
+            vendor,
+            event_id:         parsed.event_id,
+            vendor_intent_id: parsed.vendor_intent_id,
+            intent_id:        intent.id,
+            attempted_status: parsed.status,
+            current_status:   reread?.status ?? null,
+          },
+        })
         skipSuccessTail = true
       } else if (result.outcome === 'illegal_transition') {
         // 內部已寫 payment.status.illegal_transition critical audit；caller 不可

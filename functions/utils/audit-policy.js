@@ -146,6 +146,7 @@ const SECURITY_SIGNAL = [
   'payment.gate.fail',
   'payment.status.illegal_transition',
   'payment.webhook.orphan_intent',
+  'payment.webhook.status_cas_lost',
   'payment.webhook.psp_direct_blocked',
   'register.guest_id_invalid_format',
   'wallet.bind.fail',
