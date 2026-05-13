@@ -96,7 +96,7 @@ describe('utils/payments — helpers', () => {
       vendor: 'mock', vendor_intent_id: 'pi_2',
       status: PAYMENT_STATUS.FAILED, failure_reason: 'card_declined',
     })
-    expect(ok).toBe(true)
+    expect(ok.outcome).toBe('applied')
     const row = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_2' })
     expect(row.status).toBe(PAYMENT_STATUS.FAILED)
     expect(row.failure_reason).toBe('card_declined')
@@ -568,7 +568,9 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     const ok = await updatePaymentStatus(env, {
       vendor: 'mock', vendor_intent_id: 'pi_sm1', status: PAYMENT_STATUS.PENDING,
     })
-    expect(ok).toBe(false)
+    expect(ok.outcome).toBe('illegal_transition')
+    expect(ok.from).toBe('succeeded')
+    expect(ok.to).toBe('pending')
     const intent = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_sm1' })
     expect(intent.status).toBe('succeeded')
 
@@ -587,7 +589,7 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     const ok = await updatePaymentStatus(env, {
       vendor: 'mock', vendor_intent_id: 'pi_sm2', status: PAYMENT_STATUS.SUCCEEDED,
     })
-    expect(ok).toBe(false)
+    expect(ok.outcome).toBe('same_status')
     const audit = await env.chiyigo_db
       .prepare(`SELECT id FROM audit_log WHERE event_type = 'payment.status.illegal_transition'`)
       .first()
@@ -602,9 +604,47 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     const ok = await updatePaymentStatus(env, {
       vendor: 'mock', vendor_intent_id: 'pi_sm3', status: PAYMENT_STATUS.SUCCEEDED,
     })
-    expect(ok).toBe(false)
+    expect(ok.outcome).toBe('illegal_transition')
     const intent = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_sm3' })
     expect(intent.status).toBe('failed')
+  })
+
+  it('[Codex r6 P1-4] webhook 撞 illegal_transition：DB=failed 收到 succeeded → 不寫 trade_no，不發 payment.status.change，但 dedupe applied', async () => {
+    const u = await seedUser({ email: 'r6illegal@x' })
+    await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_r6illegal', currency: 'TWD', status: 'failed',
+    })
+    const body = JSON.stringify({
+      event_id: 'evt_r6illegal', vendor_intent_id: 'pi_r6illegal', user_id: u.id,
+      status: 'succeeded', trade_no: 'TN_FAKE_SUCCESS',
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+    const resp = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    expect(resp.status).toBe(200)
+
+    // intent 仍 failed（state machine 守住）
+    const intent = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_r6illegal' })
+    expect(intent.status).toBe('failed')
+    // metadata.trade_no 不可被寫入（否則對帳/退款查找會誤認）
+    expect(intent.metadata?.trade_no).toBeUndefined()
+
+    // 寫了 illegal_transition critical audit，但沒寫成功收尾的 payment.status.change
+    const illegal = await env.chiyigo_db
+      .prepare(`SELECT id FROM audit_log WHERE event_type = 'payment.status.illegal_transition' ORDER BY id DESC LIMIT 1`)
+      .first()
+    expect(illegal).not.toBeNull()
+    const change = await env.chiyigo_db
+      .prepare(`SELECT id FROM audit_log WHERE event_type = 'payment.status.change' AND event_data LIKE '%pi_r6illegal%'`)
+      .first()
+    expect(change).toBeNull()
+
+    // dedupe row markApplied → PSP retry 走 dedup hit，不會再重複過 illegal_transition
+    const dedupe = await env.chiyigo_db
+      .prepare(`SELECT apply_status FROM payment_webhook_events WHERE event_id = ?`)
+      .bind('evt_r6illegal').first()
+    expect(dedupe?.apply_status).toBe('applied')
   })
 
   it('failed payload + failure_reason → 套用', async () => {

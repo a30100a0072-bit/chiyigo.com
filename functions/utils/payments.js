@@ -158,15 +158,22 @@ const ALLOWED_TRANSITIONS = {
  * 更新 status / failure_reason。webhook 收到 PSP 通知時呼叫。
  * 用 (vendor, vendor_intent_id) 定位避免 race；caller 已 dedupe webhook event。
  *
- * P3-2（2026-05-06）：succeeded → 任何狀態 觸發 critical audit + Discord 告警。
- *   合法路徑：succeeded → refunded（admin 退款），仍會觸發但這是預期。
+ * Codex r6 P1-4 follow-up（2026-05-14）：改回 structured outcome，讓 caller
+ * 區分四種情境決定是否走「成功收尾」(metadata merge / payment.status.change audit)：
+ *   { outcome: 'applied' }              UPDATE 真的改了 1 row → 走成功收尾
+ *   { outcome: 'same_status' }          before.status === status → idempotent
+ *                                       replay；caller 可繼續（metadata 補寫安全）
+ *   { outcome: 'no_row' }               intent 不存在或軟刪 → caller 走 orphan recheck
+ *   { outcome: 'illegal_transition',    內部已 critical audit；caller 必須略過
+ *     from, to }                        metadata/audit/payment.status.change（不可
+ *                                       讓非法轉移看起來像成功付款）
  *
- * Codex r1 P1-4（2026-05-13）：加狀態機守衛。illegal transition（含舊 webhook
- * replay 想把 succeeded 改回 pending）→ critical audit + 0 row changed，
- * 不再無條件 UPDATE。
+ * 設計考量：illegal transition（例 DB=failed、webhook=succeeded）原 P1-4 只回
+ * false，但 caller 仍會 merge trade_no、寫 payment.status.change audit、回 PSP
+ * success → 帳面看起來像成功收款。改 structured 後 caller 能明確跳過。
  */
 export async function updatePaymentStatus(env, { vendor, vendor_intent_id, status, failure_reason = null }) {
-  if (!env?.chiyigo_db) return false
+  if (!env?.chiyigo_db) return { outcome: 'no_row' }
   if (!VALID_STATUSES.has(status)) throw new Error(`Invalid payment status: ${status}`)
 
   // 先讀舊 row（若 status 從 succeeded 變動 → 後面要發告警）
@@ -177,10 +184,10 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
                 FROM payment_intents WHERE vendor = ? AND vendor_intent_id = ? AND deleted_at IS NULL`)
     .bind(vendor, String(vendor_intent_id)).first()
 
-  if (!before) return false  // intent 不存在或軟刪 → caller 應已走 orphan path
+  if (!before) return { outcome: 'no_row' }  // 不存在或軟刪 → caller 走 orphan
 
-  // Codex r1 P1-4：同狀態 replay = no-op（PSP 重送、retry 都會撞，不算 illegal）
-  if (before.status === status) return false
+  // 同狀態 replay = no-op（PSP 重送都會撞，不算 illegal）
+  if (before.status === status) return { outcome: 'same_status' }
 
   // illegal transition：webhook 想把終態改回去 / 從 failed 變 succeeded 等
   const allowed = ALLOWED_TRANSITIONS[before.status]
@@ -202,7 +209,7 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
         },
       })
     } catch { /* alert 不擋主流程 */ }
-    return false
+    return { outcome: 'illegal_transition', from: before.status, to: status }
   }
 
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
@@ -215,9 +222,13 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
     .bind(status, failure_reason, now, vendor, String(vendor_intent_id), before.status)
     .run()
   const changed = (r?.meta?.changes ?? 0) > 0
+  if (!changed) {
+    // CAS 落敗（lookup 之後 race） → 視同 no_row 讓 caller 重檢
+    return { outcome: 'no_row' }
+  }
 
-  if (changed && before?.status === PAYMENT_STATUS.SUCCEEDED && status !== PAYMENT_STATUS.SUCCEEDED) {
-    // 動到 succeeded row → critical audit；safeUserAudit 內部已串 Discord webhook（DISCORD_AUDIT_WEBHOOK）
+  if (before?.status === PAYMENT_STATUS.SUCCEEDED && status !== PAYMENT_STATUS.SUCCEEDED) {
+    // 動到 succeeded row → critical audit（succeeded → refunded 合法但仍告警留痕）
     try {
       await safeUserAudit(env, {
         event_type: 'payment.intent.succeeded_status_changed',
@@ -237,7 +248,7 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
     } catch { /* swallow — alert 不擋主流程 */ }
   }
 
-  return changed
+  return { outcome: 'applied' }
 }
 
 /**

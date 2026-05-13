@@ -263,6 +263,11 @@ export async function onRequestPost({ request, env, params }) {
     return handleOrphan({ liveIntent: null, reason: 'intent_not_found' })
   }
 
+  // Codex r6 P1-4 follow-up：illegal_transition / race-CAS-lost 時跳過 metadata
+  // merge + payment.status.change audit，避免非法轉移看起來像成功付款；markApplied
+  // 仍照常（已 critical audit；阻 PSP retry spam）。
+  let skipSuccessTail = false
+
   // P0-9：原本「沒既存 intent + webhook 帶 user_id」會自動 createPaymentIntent，
   // 但 amount_subunit 直接抄 webhook body → 攻擊者偽造 webhook 即可塞任意金額成功 row。
   // 改成：預設關閉，除非顯式 env flag PSP_DIRECT_INTENT_ENABLED='1' 才允許
@@ -340,26 +345,30 @@ export async function onRequestPost({ request, env, params }) {
         intent = await getPaymentIntent(env, { vendor, vendor_intent_id: parsed.vendor_intent_id })
       }
     } else if (intent) {
-      const updated = await updatePaymentStatus(env, {
+      const result = await updatePaymentStatus(env, {
         vendor,
         vendor_intent_id: parsed.vendor_intent_id,
         status:           parsed.status,
         failure_reason:   parsed.failure_reason,
       })
-      // Codex r5 P0：updatePaymentStatus 回 false 有三種原因：
-      //   (a) row 被軟刪 race（TOCTOU：lookup includeDeleted=true 找到，UPDATE 時
-      //       deleted_at IS NULL filter 撈不到）
-      //   (b) same-status replay no-op
-      //   (c) illegal_transition（內部已 critical audit）
-      // (a) 必須走 orphan 補救；(b)/(c) 已正確處理，繼續往下 mark applied。
-      if (!updated) {
+      // Codex r6 P1-4 follow-up：structured outcome 區分行為
+      if (result.outcome === 'no_row') {
+        // r5 P0 TOCTOU：row 被軟刪 race → orphan 補救
         const reread = await getPaymentIntent(env, {
           vendor, vendor_intent_id: parsed.vendor_intent_id, includeDeleted: true,
         })
         if (reread?.deleted_at) {
           return handleOrphan({ liveIntent: reread, reason: 'intent_soft_deleted' })
         }
+        // 非 soft-delete 的 no_row（CAS lost 後 row 仍 live 但 race） → 跳過成功收尾
+        skipSuccessTail = true
+      } else if (result.outcome === 'illegal_transition') {
+        // 內部已寫 payment.status.illegal_transition critical audit；caller 不可
+        // merge metadata.trade_no 或寫 payment.status.change（會讓 failed→succeeded
+        // 之類非法轉移看起來像成功付款）。markApplied 阻 PSP retry spam。
+        skipSuccessTail = true
       }
+      // 'applied' / 'same_status' → 繼續走 metadata + audit + markApplied
     }
   } catch (e) {
     // P0-2：dedupe row 標 failed，下次同 event_id retry 才會被當 'processing' 重跑（不會被誤判 dedup hit）
@@ -377,6 +386,8 @@ export async function onRequestPost({ request, env, params }) {
     throw e
   }
 
+  // Codex r6 P1-4 follow-up：illegal_transition / no_row CAS-lost 一律跳過此段
+  if (!skipSuccessTail) {
   // 若 adapter 回了 payment_info（ATM V 帳號 / CVS 代碼 / 條碼）→ merge 到 metadata.payment_info
   if (parsed.payment_info && intent?.id) {
     await mergeMetadata(env, intent.id, { payment_info: parsed.payment_info })
@@ -404,6 +415,7 @@ export async function onRequestPost({ request, env, params }) {
       failure_reason:   parsed.failure_reason ?? null,
     },
   })
+  } // end !skipSuccessTail
 
   // P0-2：完工後標 applied。Codex r2 P1：marker 失敗不能 fail-open
   // （否則 intent 已更新但 row 留 processing，未來 retry 不會跑且沒 DLQ）。
