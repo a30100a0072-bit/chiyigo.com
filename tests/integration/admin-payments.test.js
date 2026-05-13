@@ -15,7 +15,8 @@ import {
 } from '../../functions/utils/payments.js'
 import { onRequestGet  as listHandler   } from '../../functions/api/admin/payments/intents.js'
 import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund.js'
-import { onRequestPost as rejectHandler } from '../../functions/api/admin/requisition-refund/[id]/reject.js'
+import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject.js'
+import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve.js'
 
 // 對齊 functions/utils/payment-vendors/ecpay.js 的新 SANDBOX_CREDS
 // 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
@@ -347,6 +348,54 @@ describe('[Codex r1 P1-6] POST /api/admin/requisition-refund/:id/reject atomic C
     const j = await resp.json()
     expect(j.code).toBe('INVALID_STATUS')
     expect(j.actual_status).toBe('rejected')
+  })
+
+  it('[Codex r8 P2] approve final CAS lost → 202 RECONCILIATION + final_cas_lost audit，不寫 approved audit', async () => {
+    const a = await seedUser({ email: 'approve-rec@x', role: 'admin' })
+    const u = await seedUser({ email: 'approve-recu@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_REC', currency: 'TWD',
+      amount_subunit: 500, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    // 提供 trade_no（approve.js 需要拿 TradeNo 打 ECPay）
+    await env.chiyigo_db.prepare(
+      `INSERT INTO payment_webhook_events (vendor, event_id, intent_id, user_id, status_to)
+       VALUES ('ecpay', 'TRADE_REC', ?, ?, 'succeeded')`,
+    ).bind(intentId, u.id).run()
+    const rrId = await setupRefundRequest(u.id, intentId, 'pending')
+
+    // ECPay 回成功，但在回應前 race-tamper rr 讓 final CAS 落空
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (String(url).includes('/CreditDetail/DoAction')) {
+        await env.chiyigo_db
+          .prepare(`UPDATE requisition_refund_request SET status='approved' WHERE id = ?`)
+          .bind(rrId).run()
+        return new Response('RtnCode=1&RtnMsg=OK', {
+          status: 200, headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        })
+      }
+      return new Response('', { status: 404 })
+    }))
+
+    const tok = await adminStepUpToken(a.id, 'approve_requisition_refund')
+    const resp = await approveHandler({
+      request: bearer('POST', 'http://x/', tok, {}),
+      env, params: { id: String(rrId) },
+    })
+    expect(resp.status).toBe(202)
+    const body = await resp.json()
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe('REFUND_RECONCILIATION_REQUIRED')
+
+    // final_cas_lost critical audit 寫了；approved audit 沒寫
+    const lost = await env.chiyigo_db
+      .prepare(`SELECT 1 FROM audit_log WHERE event_type = 'requisition.refund.final_cas_lost'`)
+      .first()
+    expect(lost).not.toBeNull()
+    const approved = await env.chiyigo_db
+      .prepare(`SELECT 1 FROM audit_log WHERE event_type = 'requisition.refund.approved'`)
+      .first()
+    expect(approved).toBeNull()
   })
 
   it('reject 雙擊：第一次 200 / 第二次 409（CAS 守住，不會二次 audit）', async () => {

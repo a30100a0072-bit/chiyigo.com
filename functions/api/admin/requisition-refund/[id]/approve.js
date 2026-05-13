@@ -224,7 +224,12 @@ export async function onRequestPost({ request, env, params }) {
      WHERE id = ? AND status = 'processing' AND admin_user_id = ?
   `).bind(adminNote, id, Number(stepCheck.user.sub)).run()
   const finalChanges = finalCas?.meta?.changes ?? 0
+
   if (finalChanges !== 1) {
+    // Codex r8 P2：final CAS 落空 — ECPay 退款 + intent + requisition 都已成功
+    // 改動，但 rr row 仍卡在 'processing'（或被其他流程意外推進）。不可寫
+    // requisition.refund.approved 否則 UI / audit 兩邊不一致；改回 reconciliation
+    // 專屬 response + critical audit，讓對帳 cron / admin 接手。
     await safeUserAudit(env, {
       event_type: 'requisition.refund.final_cas_lost',
       severity:   'critical',
@@ -233,10 +238,23 @@ export async function onRequestPost({ request, env, params }) {
         refund_request_id: id,
         intent_id:         intent.id,
         vendor_intent_id:  intent.vendor_intent_id,
+        amount_subunit:    intent.amount_subunit,
+        currency:          intent.currency,
         admin_user_id:     Number(stepCheck.user.sub),
         note:              'ECPay refund succeeded + intent refunded but rr final CAS missed; manual reconciliation required',
       },
     })
+    // 仍 TG sync — requisition.status 已是 revoked，UI 不能顯示 pending 退款
+    if (rr.requisition_id) await syncRequisitionTgMessage(env, rr.requisition_id)
+    return res({
+      ok: false,
+      code:               'REFUND_RECONCILIATION_REQUIRED',
+      refund_request_id:  id,
+      requisition_id:     rr.requisition_id,
+      intent_status:      PAYMENT_STATUS.REFUNDED,
+      requisition_status: rr.requisition_id ? 'revoked' : null,
+      note: 'ECPay refund executed; refund_request row needs manual reconciliation',
+    }, 202, cors)
   }
 
   await safeUserAudit(env, {
