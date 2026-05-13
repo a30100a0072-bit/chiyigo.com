@@ -195,29 +195,20 @@ export async function onRequestPost({ request, env, params }) {
     return res({ error: 'Event in-flight; retry later', code: 'WEBHOOK_IN_FLIGHT' }, 409)
   }
 
-  // Codex r1 P0-1：orphan intent — webhook 對應的 intent 不存在或已 soft-deleted。
-  // 兩種觸發情境：
-  //   (a) intent && intent.deleted_at  → user/admin 刪 intent 後 PSP 補送（race）
-  //   (b) !intent && !parsed.user_id   → ECPay 等不帶 user_id 的 vendor，找不到 row
-  //                                      且無從建（PSP-direct 不適用）
-  // 行為：critical audit + DLQ；markApplied 阻止 PSP retry spam（DLQ 已留證，
-  //       人工處理走 admin webhook-dlq replay/refund 路徑）。
-  // 注意：放在 dedupe claim 之後，避免每次 PSP retry 都灌一筆 DLQ。
-  const intentDeleted = !!(intent && intent.deleted_at)
-  const isOrphan = intentDeleted || (!intent && !parsed.user_id)
-  if (isOrphan) {
+  // Codex r5 P0：orphan 處理共用 helper（dedupe claim 後 upfront + 下方 TOCTOU 補救都用）。
+  async function handleOrphan({ liveIntent, reason }) {
     await safeUserAudit(env, {
       event_type: 'payment.webhook.orphan_intent',
       severity:   'critical',
-      user_id:    intent?.user_id ?? null,
+      user_id:    liveIntent?.user_id ?? null,
       request,
       data: {
         vendor,
         event_id:         parsed.event_id,
         vendor_intent_id: parsed.vendor_intent_id,
-        reason:           intentDeleted ? 'intent_soft_deleted' : 'intent_not_found',
-        intent_id:        intent?.id ?? null,
-        deleted_at:       intent?.deleted_at ?? null,
+        reason,
+        intent_id:        liveIntent?.id ?? null,
+        deleted_at:       liveIntent?.deleted_at ?? null,
         got_amount:       parsed.amount_subunit,
         got_currency:     parsed.currency,
         status:           parsed.status,
@@ -229,10 +220,10 @@ export async function onRequestPost({ request, env, params }) {
       vendor_intent_id: parsed.vendor_intent_id,
       raw_body: rawBody,
       payload_hash: payloadHash,
-      error_stage: intentDeleted ? 'orphan_intent_deleted' : 'orphan_intent_not_found',
-      error_message: intentDeleted
-        ? `intent ${intent.id} soft-deleted at ${intent.deleted_at}; PSP still sent ${parsed.status}`
-        : 'no matching intent and no user_id to create one',
+      error_stage: reason === 'intent_not_found' ? 'orphan_intent_not_found' : 'orphan_intent_deleted',
+      error_message: reason === 'intent_not_found'
+        ? 'no matching intent and no user_id to create one'
+        : `intent ${liveIntent?.id} soft-deleted at ${liveIntent?.deleted_at}; PSP still sent ${parsed.status}`,
       http_status_returned: 200,
     })
     try {
@@ -252,6 +243,17 @@ export async function onRequestPost({ request, env, params }) {
       throw e
     }
     return successFn()
+  }
+
+  // Codex r1 P0-1：orphan intent — webhook 對應的 intent 不存在或已 soft-deleted。
+  //   (a) intent && intent.deleted_at  → user/admin 刪 intent 後 PSP 補送（race）
+  //   (b) !intent && !parsed.user_id   → ECPay 等不帶 user_id，找不到 row 且無從建
+  // 注意：放在 dedupe claim 之後，避免每次 PSP retry 都灌一筆 DLQ。
+  if (intent && intent.deleted_at) {
+    return handleOrphan({ liveIntent: intent, reason: 'intent_soft_deleted' })
+  }
+  if (!intent && !parsed.user_id) {
+    return handleOrphan({ liveIntent: null, reason: 'intent_not_found' })
   }
 
   // P0-9：原本「沒既存 intent + webhook 帶 user_id」會自動 createPaymentIntent，
@@ -331,12 +333,26 @@ export async function onRequestPost({ request, env, params }) {
         intent = await getPaymentIntent(env, { vendor, vendor_intent_id: parsed.vendor_intent_id })
       }
     } else if (intent) {
-      await updatePaymentStatus(env, {
+      const updated = await updatePaymentStatus(env, {
         vendor,
         vendor_intent_id: parsed.vendor_intent_id,
         status:           parsed.status,
         failure_reason:   parsed.failure_reason,
       })
+      // Codex r5 P0：updatePaymentStatus 回 false 有三種原因：
+      //   (a) row 被軟刪 race（TOCTOU：lookup includeDeleted=true 找到，UPDATE 時
+      //       deleted_at IS NULL filter 撈不到）
+      //   (b) same-status replay no-op
+      //   (c) illegal_transition（內部已 critical audit）
+      // (a) 必須走 orphan 補救；(b)/(c) 已正確處理，繼續往下 mark applied。
+      if (!updated) {
+        const reread = await getPaymentIntent(env, {
+          vendor, vendor_intent_id: parsed.vendor_intent_id, includeDeleted: true,
+        })
+        if (reread?.deleted_at) {
+          return handleOrphan({ liveIntent: reread, reason: 'intent_soft_deleted' })
+        }
+      }
     }
   } catch (e) {
     // P0-2：dedupe row 標 failed，下次同 event_id retry 才會被當 'processing' 重跑（不會被誤判 dedup hit）

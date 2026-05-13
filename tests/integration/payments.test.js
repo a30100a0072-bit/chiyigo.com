@@ -472,6 +472,39 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     expect(dlqCount.c).toBe(1)
   })
 
+  it('[Codex r5 P0] TOCTOU：updatePaymentStatus 撞到 soft-delete race → 補走 orphan，不悄悄 mark applied', async () => {
+    const u = await seedUser({ email: 'toctou@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_toctou', status: 'pending', currency: 'TWD',
+    })
+    // 模擬 race：webhook lookup 看到 live intent，但 updatePaymentStatus 跑之前 user
+    // delete handler 把 intent 軟刪掉。直接在送 webhook 前 soft-delete 來重現結果
+    // （lookup includeDeleted=true 仍會看到 row，update 撈不到 → 走 TOCTOU 補救）。
+    await env.chiyigo_db
+      .prepare(`UPDATE payment_intents SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+      .bind(intentId).run()
+
+    const body = JSON.stringify({
+      event_id: 'evt_toctou', vendor_intent_id: 'pi_toctou', user_id: u.id, status: 'succeeded',
+    })
+    const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+    const resp = await webhookHandler({
+      request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+    })
+    expect(resp.status).toBe(200)
+
+    // intent 仍是 pending（沒被 race 改成 succeeded）
+    const reread = await getPaymentIntent(env, { id: intentId, includeDeleted: true })
+    expect(reread.status).toBe('pending')
+    expect(reread.deleted_at).toBeTruthy()
+
+    // DLQ 留 orphan_intent_deleted（不是 noop 過去）
+    const dlq = await env.chiyigo_db
+      .prepare(`SELECT error_stage FROM payment_webhook_dlq WHERE event_id = ?`)
+      .bind('evt_toctou').first()
+    expect(dlq?.error_stage).toBe('orphan_intent_deleted')
+  })
+
   it('[Codex r1 P0-1] orphan webhook：ECPay-style 無 user_id + intent 不存在 → critical DLQ，不悄悄回 success 吞錢', async () => {
     // 沒 createPaymentIntent；webhook 不帶 user_id（模擬 ECPay）
     const body = JSON.stringify({
