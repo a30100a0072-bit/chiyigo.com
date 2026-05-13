@@ -17,6 +17,7 @@ import { onRequestGet  as listHandler   } from '../../functions/api/admin/paymen
 import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund.js'
 import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject.js'
 import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve.js'
+import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete.js'
 
 // 對齊 functions/utils/payment-vendors/ecpay.js 的新 SANDBOX_CREDS
 // 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
@@ -347,6 +348,40 @@ describe('POST /api/admin/payments/intents/:id/refund', () => {
       `SELECT 1 FROM audit_log WHERE event_type = 'payment.refund.fail'`,
     ).first()
     expect(audit).not.toBeNull()
+  })
+})
+
+describe('[Codex r1 P2-8] admin anonymize archives metadata as parseable JSON', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('archive original_metadata 是可 parse 的 JSON，不是 [object Object]', async () => {
+    const a = await seedUser({ email: 'archive-a@x', role: 'admin' })
+    const u = await seedUser({ email: 'archive-u@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_ARCHIVE',
+      currency: 'TWD', amount_subunit: 800, status: PAYMENT_STATUS.SUCCEEDED,
+      metadata: { trade_no: 'TN_ARCHIVE_REAL', payment_info: { method: 'atm', v_account: '99988' } },
+    })
+    const tok = await adminStepUpToken(a.id, 'delete_payment')
+    const resp = await deleteHandler({
+      request: bearer('POST', 'http://x/', tok, {}),
+      env, params: { id: String(intentId) },
+    })
+    expect(resp.status).toBe(200)
+    const body = await resp.json()
+    expect(body.mode).toBe('anonymize')
+
+    const archive = await env.chiyigo_db
+      .prepare(`SELECT original_metadata FROM payment_metadata_archive WHERE intent_id = ?`)
+      .bind(intentId).first()
+    expect(archive).not.toBeNull()
+    expect(archive.original_metadata).toBeTypeOf('string')
+    expect(archive.original_metadata).not.toBe('[object Object]')
+    // 必須能 round-trip parse 回原物件
+    const parsed = JSON.parse(archive.original_metadata)
+    expect(parsed.trade_no).toBe('TN_ARCHIVE_REAL')
+    expect(parsed.payment_info.v_account).toBe('99988')
   })
 })
 

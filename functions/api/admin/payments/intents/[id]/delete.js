@@ -81,13 +81,19 @@ export async function onRequestPost({ request, env, params }) {
   } else {
     // Anonymize：保留金流憑證骨幹，清除可能含敏感資訊的 metadata 與 failure_reason
     // T12: 先 archive 原始 metadata + failure_reason 到 cold storage，合規/dispute 用
+    // Codex r10 P2-8：getPaymentIntent 已把 intent.metadata JSON.parse 成 object，
+    // 直接 bind object 進 TEXT 欄位會被 D1 silently coerce（[object Object] 或行為
+    // 視 driver 版本而定）→ archive 變死資料。明確 stringify 確保來源端 TEXT。
+    const archivedMetadata = intent.metadata == null
+      ? null
+      : (typeof intent.metadata === 'string' ? intent.metadata : JSON.stringify(intent.metadata))
     await env.chiyigo_db
       .prepare(
         `INSERT INTO payment_metadata_archive
            (intent_id, original_status, original_metadata, original_failure_reason, archived_by, reason)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, intent.status, intent.metadata ?? null, intent.failure_reason ?? null,
+      .bind(id, intent.status, archivedMetadata, intent.failure_reason ?? null,
             adminId, 'admin_anonymize')
       .run()
 
