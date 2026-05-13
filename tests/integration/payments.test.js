@@ -495,6 +495,53 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     expect(dlq?.error_stage).toBe('orphan_intent_not_found')
   })
 
+  it('[Codex r1 P1-4] terminal succeeded 不可被 webhook replay 改回 pending → critical audit + 不改 DB', async () => {
+    const u = await seedUser({ email: 'sm1@x' })
+    await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_sm1', currency: 'TWD', status: 'succeeded',
+    })
+    const ok = await updatePaymentStatus(env, {
+      vendor: 'mock', vendor_intent_id: 'pi_sm1', status: PAYMENT_STATUS.PENDING,
+    })
+    expect(ok).toBe(false)
+    const intent = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_sm1' })
+    expect(intent.status).toBe('succeeded')
+
+    const audit = await env.chiyigo_db
+      .prepare(`SELECT event_type FROM audit_log WHERE event_type = ? ORDER BY id DESC LIMIT 1`)
+      .bind('payment.status.illegal_transition').first()
+    expect(audit?.event_type).toBe('payment.status.illegal_transition')
+  })
+
+  it('[Codex r1 P1-4] succeeded → succeeded same-status replay = no-op，不算 illegal（無 audit）', async () => {
+    const u = await seedUser({ email: 'sm2@x' })
+    await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_sm2', currency: 'TWD', status: 'succeeded',
+    })
+    await env.chiyigo_db.prepare(`DELETE FROM audit_log WHERE event_type = 'payment.status.illegal_transition'`).run()
+    const ok = await updatePaymentStatus(env, {
+      vendor: 'mock', vendor_intent_id: 'pi_sm2', status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    expect(ok).toBe(false)
+    const audit = await env.chiyigo_db
+      .prepare(`SELECT id FROM audit_log WHERE event_type = 'payment.status.illegal_transition'`)
+      .first()
+    expect(audit).toBeNull()
+  })
+
+  it('[Codex r1 P1-4] failed → succeeded（webhook 串錯）→ illegal_transition，不會悄悄入帳', async () => {
+    const u = await seedUser({ email: 'sm3@x' })
+    await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_sm3', currency: 'TWD', status: 'failed',
+    })
+    const ok = await updatePaymentStatus(env, {
+      vendor: 'mock', vendor_intent_id: 'pi_sm3', status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    expect(ok).toBe(false)
+    const intent = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_sm3' })
+    expect(intent.status).toBe('failed')
+  })
+
   it('failed payload + failure_reason → 套用', async () => {
     const u = await seedUser({ email: 'w4@x' })
     await createPaymentIntent(env, {

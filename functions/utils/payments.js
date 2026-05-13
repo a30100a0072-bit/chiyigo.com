@@ -138,13 +138,32 @@ export async function getPaymentIntent(env, { id, vendor, vendor_intent_id, incl
   return row
 }
 
+// Codex r1 P1-4：payment_intents 狀態機 — webhook replay 不可改寫終態。
+// 合法 transition：
+//   pending     → processing | succeeded | failed | canceled
+//   processing  → succeeded | failed | canceled | refunded（refund 流程過這裡）
+//   succeeded   → refunded（admin 退款）
+//   failed / canceled / refunded → terminal，無 outgoing
+// 注意：lockIntentForRefund 用直接 SQL CAS 做 succeeded→processing，不過此守衛。
+const ALLOWED_TRANSITIONS = {
+  [PAYMENT_STATUS.PENDING]:    new Set([PAYMENT_STATUS.PROCESSING, PAYMENT_STATUS.SUCCEEDED, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED]),
+  [PAYMENT_STATUS.PROCESSING]: new Set([PAYMENT_STATUS.SUCCEEDED, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED, PAYMENT_STATUS.REFUNDED]),
+  [PAYMENT_STATUS.SUCCEEDED]:  new Set([PAYMENT_STATUS.REFUNDED]),
+  [PAYMENT_STATUS.FAILED]:     new Set(),
+  [PAYMENT_STATUS.CANCELED]:   new Set(),
+  [PAYMENT_STATUS.REFUNDED]:   new Set(),
+}
+
 /**
  * 更新 status / failure_reason。webhook 收到 PSP 通知時呼叫。
  * 用 (vendor, vendor_intent_id) 定位避免 race；caller 已 dedupe webhook event。
  *
  * P3-2（2026-05-06）：succeeded → 任何狀態 觸發 critical audit + Discord 告警。
  *   合法路徑：succeeded → refunded（admin 退款），仍會觸發但這是預期。
- *   非法路徑：succeeded → succeeded/pending/failed/canceled 任何代碼異常都會被告警。
+ *
+ * Codex r1 P1-4（2026-05-13）：加狀態機守衛。illegal transition（含舊 webhook
+ * replay 想把 succeeded 改回 pending）→ critical audit + 0 row changed，
+ * 不再無條件 UPDATE。
  */
 export async function updatePaymentStatus(env, { vendor, vendor_intent_id, status, failure_reason = null }) {
   if (!env?.chiyigo_db) return false
@@ -158,14 +177,42 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
                 FROM payment_intents WHERE vendor = ? AND vendor_intent_id = ? AND deleted_at IS NULL`)
     .bind(vendor, String(vendor_intent_id)).first()
 
+  if (!before) return false  // intent 不存在或軟刪 → caller 應已走 orphan path
+
+  // Codex r1 P1-4：同狀態 replay = no-op（PSP 重送、retry 都會撞，不算 illegal）
+  if (before.status === status) return false
+
+  // illegal transition：webhook 想把終態改回去 / 從 failed 變 succeeded 等
+  const allowed = ALLOWED_TRANSITIONS[before.status]
+  if (!allowed || !allowed.has(status)) {
+    try {
+      await safeUserAudit(env, {
+        event_type: 'payment.status.illegal_transition',
+        severity:   'critical',
+        user_id:    before.user_id ?? null,
+        data: {
+          intent_id:        before.id,
+          vendor,
+          vendor_intent_id: String(vendor_intent_id),
+          status_from:      before.status,
+          status_to:        status,
+          amount_subunit:   before.amount_subunit,
+          currency:         before.currency,
+          failure_reason,
+        },
+      })
+    } catch { /* alert 不擋主流程 */ }
+    return false
+  }
+
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
   const r = await env.chiyigo_db
     .prepare(
       `UPDATE payment_intents
           SET status = ?, failure_reason = ?, updated_at = ?
-        WHERE vendor = ? AND vendor_intent_id = ? AND deleted_at IS NULL`,
+        WHERE vendor = ? AND vendor_intent_id = ? AND deleted_at IS NULL AND status = ?`,
     )
-    .bind(status, failure_reason, now, vendor, String(vendor_intent_id))
+    .bind(status, failure_reason, now, vendor, String(vendor_intent_id), before.status)
     .run()
   const changed = (r?.meta?.changes ?? 0) > 0
 

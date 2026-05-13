@@ -59,8 +59,12 @@ const TASKS = [
   // kyc_webhook_events: 留 90 天（dedupe 視窗 — vendor 重送窗口都不會這麼長）
   { name: 'kyc_webhook_events',  sql: `DELETE FROM kyc_webhook_events  WHERE processed_at < datetime('now', '-90 days')` },
 
-  // payment_webhook_events: 留 90 天（dedupe + 對帳追溯；同 KYC pattern）
-  { name: 'payment_webhook_events', sql: `DELETE FROM payment_webhook_events WHERE processed_at < datetime('now', '-90 days')` },
+  // payment_webhook_events: Codex r1 P1-4（2026-05-13）—— 不再 90 天清掉。
+  // 原因：dedupe key 是金流 idempotency 的單一來源；舊事件被清後 PSP retry / replay 會
+  // 變成 fresh 事件重跑 updatePaymentStatus，配合 P1-4 transition table 雖能擋 succeeded
+  // 改回去，但 pending→succeeded 重跑會誤增 audit / 重打 metadata merge。
+  // 狀態機只是第二道牆；dedupe 是第一道，不能挖洞。
+  // 量很小（每筆 ~200 bytes），日後若膨脹再走 R2 cold archive，同 audit_log 模式。
 
   // payment_intents stale pending：cashier 開了沒付的 intent（user 關掉視窗 / 改主意）
   // 超過 24hr 還停在 pending → 標 canceled，避免 dashboard / admin 列表無限累積。
