@@ -227,6 +227,7 @@ CREATE TABLE IF NOT EXISTS audit_archive_chunks (
 );
 
 -- F-3 Phase 2 migration 0038 part 4：telemetry aggregate（PR 3.0 worker 目標表）
+-- 0044 補欄：archived_at + cold_class（PR 3.2 月度 aggregate→R2 用）
 CREATE TABLE IF NOT EXISTS audit_log_aggregate_telemetry (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   event_type    TEXT NOT NULL,
@@ -235,16 +236,21 @@ CREATE TABLE IF NOT EXISTS audit_log_aggregate_telemetry (
   hour_bucket   TEXT NOT NULL,
   count         INTEGER NOT NULL,
   ip_hash_top   TEXT,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  archived_at   TEXT,
+  cold_class    TEXT NOT NULL DEFAULT 'aggregate_telemetry'
 );
 CREATE INDEX IF NOT EXISTS idx_agg_tele_event ON audit_log_aggregate_telemetry(event_type, hour_bucket);
 CREATE INDEX IF NOT EXISTS idx_agg_tele_user  ON audit_log_aggregate_telemetry(user_id, hour_bucket)
   WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_agg_tele_archived_at ON audit_log_aggregate_telemetry(archived_at)
+  WHERE archived_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_agg_tele_bucket ON audit_log_aggregate_telemetry(
   event_type, COALESCE(user_id, -1), severity, hour_bucket
 );
 
 -- F-3 Phase 2 migration 0038 part 4：debug aggregate（PR 3.1 worker 目標表）
+-- 0044 補欄：archived_at + cold_class
 CREATE TABLE IF NOT EXISTS audit_log_aggregate_debug (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   event_type      TEXT NOT NULL,
@@ -254,9 +260,13 @@ CREATE TABLE IF NOT EXISTS audit_log_aggregate_debug (
   sample_count    INTEGER NOT NULL,
   samples_json    TEXT NOT NULL,
   sampled         INTEGER NOT NULL DEFAULT 0,
-  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  archived_at     TEXT,
+  cold_class      TEXT NOT NULL DEFAULT 'aggregate_debug'
 );
 CREATE INDEX IF NOT EXISTS idx_agg_debug_event ON audit_log_aggregate_debug(event_type, hour_bucket);
+CREATE INDEX IF NOT EXISTS idx_agg_debug_archived_at ON audit_log_aggregate_debug(archived_at)
+  WHERE archived_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_agg_debug_bucket ON audit_log_aggregate_debug(
   event_type, COALESCE(reason_code, ''), hour_bucket
 );

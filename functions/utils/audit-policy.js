@@ -59,6 +59,17 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate.debug.run_completed',        // info — 整輪成功 + summary（含 samples_total）
   'audit.aggregate.debug.run_skipped',          // info — hot_days_disabled / no_rows_eligible / cutoff_hours_collapsed
   'audit.aggregate.debug.run_failed',           // critical — drift / partial upsert / D1 select 失敗
+  // PR 3.2 aggregate→R2 monthly archive worker（telemetry + debug 各一支 cron）
+  //   POST /api/admin/cron/audit-aggregate-archive-telemetry
+  //   POST /api/admin/cron/audit-aggregate-archive-debug
+  // 與 PR 2.x audit_log archive 共用 audit_archive_chunks 表，靠 cold_class 區分
+  // （'aggregate_telemetry' / 'aggregate_debug'，與 audit_log 既有 6 class 不撞）
+  'audit.aggregate_archive.telemetry.run_completed',  // info — 整輪成功 + summary（chunks_uploaded / rows_archived）
+  'audit.aggregate_archive.telemetry.run_skipped',    // info — no_rows_eligible / disabled
+  'audit.aggregate_archive.telemetry.run_failed',     // critical — R2 PUT 失敗 / drift / D1 失敗
+  'audit.aggregate_archive.debug.run_completed',      // info
+  'audit.aggregate_archive.debug.run_skipped',        // info
+  'audit.aggregate_archive.debug.run_failed',         // critical
 ]
 
 // F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。
