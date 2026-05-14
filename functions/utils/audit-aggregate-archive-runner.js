@@ -684,12 +684,6 @@ function failChunk(ctx, report, eventCode, data) {
  * （此函式只負責清狀態，不再 fail一次；real failure 由 caller 的 failChunk 處理）。
  */
 /**
- * Cloudflare D1 bound parameters per query 上限 — 100（官方 limits 頁）。
- * aggregate chunk 上限 CHUNK_MAX_ROWS = 10_000，遠超此值，IN(?, ?, ...) 必須分批。
- */
-const D1_MAX_BOUND_PARAMS = 100
-
-/**
  * 從 chunk JSONL（newline-delimited JSON）拉出所有 row id。
  *
  * Resume 路徑用 — 取代 BETWEEN min..max + cutoff 範圍 UPDATE（跨月時 ctx.cutoff
@@ -725,23 +719,26 @@ function extractIdsFromJsonl(text) {
 }
 
 /**
- * 分批跑 archived_at UPDATE — 防 D1 bound parameter 上限（100）爆 chunk
- * （CHUNK_MAX_ROWS = 10_000）的 IN(?, ?, ...) prepare/bind。
+ * 用 SQLite json_each(?) 一次 UPDATE 全部 ids — 單一 query、單一 bound param。
  *
- * 每 batch 之間獨立 UPDATE；中途失敗會留 partial 標記，但下輪 cron resume 仍會走
- * 同一條 path、AND archived_at IS NULL guard 跳過已標的、把剩下標完（idempotent）。
+ * 為何不用 IN(?, ?, ...) 分批：
+ *   - Cloudflare D1 bound parameters per query 上限 100、queries per Worker
+ *     invocation 上限 50 (Free) / 1000 (Paid)。CHUNK_MAX_ROWS=10_000 → 分批 100
+ *     需 100 queries，Free posture（repo 目前狀態）一輪就會撞牆，partial-mark
+ *     livelock（下輪又從第一批 ids 重跑、已 archived 的 batch 仍消耗 query 次數）。
+ *   - json_each 是 SQLite core table-valued function、D1 啟用；bind 一個 JSON
+ *     array TEXT，整段 UPDATE 算單個 query，徹底擺脫所有 D1 query budget。
+ *
+ * idempotent：AND archived_at IS NULL guard 跳過已標的 row。
  */
-async function batchUpdateArchivedAt(db, tableName, ids) {
-  for (let i = 0; i < ids.length; i += D1_MAX_BOUND_PARAMS) {
-    const slice = ids.slice(i, i + D1_MAX_BOUND_PARAMS)
-    const placeholders = slice.map(() => '?').join(',')
-    await db.prepare(
-      `UPDATE ${tableName}
-          SET archived_at = datetime('now')
-        WHERE id IN (${placeholders})
-          AND archived_at IS NULL`
-    ).bind(...slice).run()
-  }
+async function updateArchivedAtByIds(db, tableName, ids) {
+  if (ids.length === 0) return
+  await db.prepare(
+    `UPDATE ${tableName}
+        SET archived_at = datetime('now')
+      WHERE id IN (SELECT value FROM json_each(?))
+        AND archived_at IS NULL`
+  ).bind(JSON.stringify(ids)).run()
 }
 
 async function transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, lastFailure) {
@@ -934,10 +931,15 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
   // Codex H-1 cross-month fix：用 chunk JSONL 內 exact row ids 做 UPDATE，
   // 避開 BETWEEN(min,max) + ctx.cutoff 跨月把當初被 cutoff 排除的 HOT row 也標掉。
   //
-  // ids 由 caller 傳入（resumeUploadedBlocker chain 已 parse 過 JSONL）；
+  // ids 由 caller 傳入（resumeUploadedBlocker chain 已 parse 過 JSONL + sha 驗過）；
   // 若 caller 沒給（直接從 Step 0 抓到 state='verified' 的 chunk，未先 GET data），
-  // 此處 GET R2 data + decompress + parse ids；sha 不再驗（已是 verified 狀態，
-  // 上一輪 cron 已驗過；resume 只負責升 marked_archived，IO 多一次但成本可接受）。
+  // 此處 GET R2 data + decompress + **重驗 sha + row_count** + parse ids。
+  //
+  // Codex r? H-1：原版「verified 已是 sha 驗過狀態、resume 只升 mark」不夠 — R2
+  // object 可能被替換成「gzip 可解、JSONL 合法、id 都 integer、行數相同」但
+  // sha256 不同的內容，strict parser 過了會把 archived_at 標到錯 row。
+  // 必須 mirror uploaded path：sha256Hex(text) === blocker.chunk_sha256
+  // && row_count 一致；不符就 throw 留 chunk 在 'verified'、不污染狀態機。
   let chunkIds = Array.isArray(ids) ? ids : null
   if (!chunkIds) {
     const { dataKey: verifiedDataKey } = deriveAggregateKeysFromChunk({
@@ -964,6 +966,19 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
       e.code = 'VERIFY_RESUME_DECOMPRESS'
       throw e
     }
+    // Codex r? H-1：重驗 sha + row_count（R2 可能被替換成「valid-but-wrong」）
+    const reSha = await sha256Hex(text)
+    const reRowCount = text.length === 0 ? 0 : (text.match(/\n/g) ?? []).length
+    if (reSha !== blocker.chunk_sha256) {
+      const e = new Error(`verified_blocker_resume_failed: sha_mismatch (expected ${blocker.chunk_sha256}, got ${reSha})`)
+      e.code = 'VERIFY_RESUME_SHA_MISMATCH'
+      throw e
+    }
+    if (reRowCount !== blocker.row_count) {
+      const e = new Error(`verified_blocker_resume_failed: row_count_mismatch (expected ${blocker.row_count}, got ${reRowCount})`)
+      e.code = 'VERIFY_RESUME_ROW_COUNT_MISMATCH'
+      throw e
+    }
     // Codex r? M-1：parse 失敗或 id 缺失要 throw 讓 outer catch fail run，
     // 不可 silently 升 marked_archived 卻沒標完 source rows。
     try {
@@ -981,10 +996,8 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
   }
 
   // 1) UPDATE aggregate row archived_at（idempotent；crashed-after 場景 changes=0）
-  // Codex r? H-1：CHUNK_MAX_ROWS=10_000 > D1 bound param 上限 100 → 必須分批 UPDATE。
-  if (chunkIds.length > 0) {
-    await batchUpdateArchivedAt(db, tableName, chunkIds)
-  }
+  // Codex r? M-1：json_each(?) 單 query 單 bound param，跳過 D1 query budget。
+  await updateArchivedAtByIds(db, tableName, chunkIds)
 
   // 2) PUT manifest marked_archived（codex r2 M-1：先 R2 後 D1。
   //    manifest PUT 失敗 → chunks state 仍 verified，下輪 Step 0 重跑接續；

@@ -593,6 +593,93 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(newChunk.state).toBe('marked_archived')
   })
 
+  it('Codex r? H-1 regression：verified resume 必重驗 sha — R2 被替換成「valid-but-wrong」chunk 必 throw、chunk 留 verified', async () => {
+    // 場景：上輪 chunk 卡 state='verified'（mark_archived 前 crash），R2 data 物件
+    // 被替換成另一個合法 chunk（gzip 可解、JSONL 合法、id integer、row_count 相同）
+    // 但 sha256 不同。舊版 verified resume 只比 row_count → 會誤標 archived_at；
+    // 修後 resume 重算 sha256Hex(text) 比對 blocker.chunk_sha256，不符就 throw。
+    await seedTelemetryRow()
+    await seedTelemetryRow()
+    await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    const ch1 = await listChunks()
+    expect(ch1[0].state).toBe('marked_archived')
+
+    // 把 chunk 拉回 'verified'、aggregate row archived_at 清 NULL（模擬 mark_archived 前 crash）
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks SET state = 'verified' WHERE state = 'marked_archived'`
+    ).run()
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_log_aggregate_telemetry SET archived_at = NULL`
+    ).run()
+
+    // 把 R2 data object 內容替換 — 用同 row count 但完全不同 JSONL 內容
+    // （另起 gzip：合法 JSONL、id 都 integer、行數同 → strict parser 過、sha 不同）
+    const { gzipCompress } = await import('../../functions/utils/audit-archive.js')
+    const fakeJsonl =
+      JSON.stringify({ id: 999999, event_type: 'fake', user_id: null, severity: 'info',
+                       hour_bucket: '2099-01-01T00:00', count: 1, ip_hash_top: null,
+                       cold_class: 'aggregate_telemetry', created_at: '2099-01-01T00:00:00' }) + '\n' +
+      JSON.stringify({ id: 999998, event_type: 'fake', user_id: null, severity: 'info',
+                       hour_bucket: '2099-01-01T01:00', count: 1, ip_hash_top: null,
+                       cold_class: 'aggregate_telemetry', created_at: '2099-01-01T01:00:00' }) + '\n'
+    const fakeGz = await gzipCompress(fakeJsonl)
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log-aggregate-telemetry/' })
+    const dataKey = list.objects.find(o => o.key.endsWith('.jsonl.gz')).key
+    await env.AUDIT_ARCHIVE_BUCKET.put(dataKey, fakeGz)
+
+    // 跑 cron → Step 0 verified resume → sha mismatch → throw → run_failed
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(status).toBe(500)
+    expect(body.ok).toBe(false)
+    expect(body.errors.some(e => e.event === 'blocker_resume_failed')).toBe(true)
+    const err = body.errors.find(e => e.event === 'blocker_resume_failed')
+    expect(err.error).toMatch(/sha_mismatch/)
+
+    // chunk 必須留 'verified'（未升 marked_archived），aggregate row 仍 NULL
+    const ch2 = await listChunks()
+    expect(ch2[0].state).toBe('verified')
+    const rows = await env.chiyigo_db.prepare(
+      `SELECT archived_at FROM audit_log_aggregate_telemetry`
+    ).all()
+    for (const r of rows.results) expect(r.archived_at).toBeNull()
+  })
+
+  it('Codex r? M-1 regression：>100 ids 的 chunk resume 走 json_each 單 query（不分批撞 D1 query budget）', async () => {
+    // 模擬大 chunk 場景：seed 150 row（超過 D1 bound param 上限 100）。
+    // miniflare D1 沒 enforce limits，但驗證 json_each(?) SQL syntax 正確跑、
+    // 一個 UPDATE 處理所有 ids（從 archived_at 全標完可間接斷言）。
+    // UNIQUE(event_type, COALESCE(user_id,-1), severity, hour_bucket) — 用 day+hour 攤開避撞
+    for (let i = 0; i < 150; i++) {
+      const dd = String(Math.floor(i / 24) + 1).padStart(2, '0')
+      const hh = String(i % 24).padStart(2, '0')
+      await seedTelemetryRow({ hour_bucket: `2025-03-${dd}T${hh}:00` })
+    }
+    await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    const ch1 = await listChunks()
+    expect(ch1[0].state).toBe('marked_archived')
+    expect(ch1[0].row_count).toBe(150)
+
+    // 拉回 uploaded，清 archived_at → 走 resumeUploadedBlocker chain resumeVerifiedBlocker
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks SET state = 'uploaded' WHERE state = 'marked_archived'`
+    ).run()
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_log_aggregate_telemetry SET archived_at = NULL`
+    ).run()
+
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.chunks_resumed_uploaded ?? 0).toBe(1)
+    expect(body.chunks_marked_archived ?? 0).toBe(1)
+
+    // 150 row 全部 archived_at NOT NULL（json_each 一次標完）
+    const rows = await env.chiyigo_db.prepare(
+      `SELECT COUNT(*) AS c FROM audit_log_aggregate_telemetry WHERE archived_at IS NULL`
+    ).first()
+    expect(rows.c).toBe(0)
+  })
+
   // 共用 helper：seed 1 aggregate row + 1 terminal-blocker chunk（覆蓋該 row id）
   async function seedTerminalBlockerScenario(blockerState, sha) {
     await seedTelemetryRow()
