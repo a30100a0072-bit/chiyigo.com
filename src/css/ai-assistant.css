@@ -99,8 +99,8 @@ body{min-height:100vh;overflow:hidden}
 .ai-field-summary .ai-field-value{min-height:80px;line-height:1.65;white-space:pre-wrap}
 .ai-disclaimer{font-family:var(--font-mono);font-size:.66rem;color:var(--text-dim);letter-spacing:.04em;margin-top:.4rem}
 
-.turnstile-wrap{margin:1rem 0 0}
-.turnstile-wrap:empty{display:none}
+/* turnstile widget 用 .ts-wrap（_components.css）；ai-assistant 容器無 hint 時 :empty 隱藏 */
+#turnstile-wrap:empty{display:none}
 
 /* Phase D — 抽出原 inline styles */
 .dot-success { background: #22a865; }

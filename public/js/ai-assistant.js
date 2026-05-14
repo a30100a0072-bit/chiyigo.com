@@ -109,6 +109,7 @@ function renderTurnstile() {
   if (!TURNSTILE_SITEKEY || !window.turnstile) return;
   window.turnstile.render('#turnstile-wrap', {
     sitekey: TURNSTILE_SITEKEY,
+    size: 'flexible',
     callback: tok => { _turnstileToken = tok; },
     'error-callback': () => { _turnstileToken = ''; },
     'expired-callback': () => { _turnstileToken = ''; },

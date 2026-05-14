@@ -9,6 +9,16 @@
 /* utility：取代被砍掉的 tailwind .hidden（多頁 JS classList.add/remove('hidden') 仰賴這個） */
 .hidden { display: none !important; }
 
+/* ── Turnstile widget wrapper（全站共用，data-size="flexible" → widget 自動 fit 父容器寬） ── */
+.ts-wrap { min-height: 65px; margin: .5rem 0; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.ts-hint { font-size: .72rem; color: var(--text-dim); line-height: 1.4; margin: 0 0 .4rem; text-align: center; transition: opacity .2s ease; }
+.ts-wrap.is-ready .ts-hint { display: none; }
+/* flexible 模式有 300px CF 硬下限；極窄手機（≤340px，iPhone SE 直立）保留 scale 兜底 */
+@media (max-width: 340px) {
+  .ts-wrap > div { transform: scale(.88); transform-origin: center top; }
+  .ts-wrap { min-height: 58px; }
+}
+
 /* ── Auth pages 共用的 success/error 面板（forgot-password / reset-password / verify-email / bind-email / confirm-delete） ── */
 .success-state,
 .error-state { text-align: center; padding: .25rem 0; }
