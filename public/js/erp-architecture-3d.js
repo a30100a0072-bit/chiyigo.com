@@ -63,16 +63,16 @@ const NODE_COLOR = Object.fromEntries(
   ['iam','crm','sales','finance','workflow','event','data','mdm','notify','file','integration','bi','ai','metadata','knowledge','sre']
     .map(id => [id, PALETTE.accent])
 );
-// 8 層由上到下漸變，凸顯抽象度遞減
+// 8 層紫→藍漸層軸（用戶選定）：上桃 → 紫系下行 → 中段青→藍 → 底部暖色收尾
 const LAYER_COLOR = {
-  1: PALETTE.pink,        // L1 平台 — 最頂層
-  2: PALETTE.accentLight, // L2 領域邊界
-  3: PALETTE.accent,      // L3 子模組
-  4: PALETTE.accent,      // L4 細項
-  5: PALETTE.cyan,        // L5 服務
-  6: PALETTE.cyan,        // L6 能力
-  7: PALETTE.amber,       // L7 執行
-  8: PALETTE.green,       // L8 部署 — 最底層
+  1: 0xe57eb6, // pink — 平台抽象頂層
+  2: 0xc79cfc, // lavender — 領域邊界
+  3: 0x8b8cef, // periwinkle — 子模組
+  4: 0x6c6ee5, // brand purple — 細項
+  5: 0x4cd6cc, // cyan — 服務
+  6: 0x5fb3e8, // sky blue — 能力 / 儲存
+  7: 0xf0b85a, // amber — 執行 Runtime
+  8: 0x5edb89, // green — 部署基礎設施
 };
 
 // 顏色工具
@@ -179,18 +179,24 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
     })();
     ctx.fillStyle = rgba(accent, 0.6);
     ctx.fill();
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#f5f1ff';  // 米白偏紫，跟主體 #f5f1ff 文字色一致
     ctx.font = 'bold 14px ui-monospace, monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(tag, tagX + tagW/2, tagY + tagH/2);
   }
-  // name
-  ctx.fillStyle = '#ffffff';
+  // name — 米白偏紫 #f5f1ff + 深底陰影增加可讀性（淺色背景時不會死掉）
+  ctx.save();
+  ctx.shadowColor = 'rgba(26,29,43,0.55)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 1;
+  ctx.fillStyle = '#f5f1ff';
   ctx.font = '600 22px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(name, tag ? 86 : 24, height/2);
+  ctx.restore();
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
