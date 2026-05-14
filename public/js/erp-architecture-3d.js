@@ -377,36 +377,53 @@ function clearChain(){
   }
 }
 
+// 共用 dash pattern texture（dash 段不透明、gap 段全透明，texture.repeat.y 控制單位長度 dash 數）
+let _dashTexBase = null;
+function getDashTextureBase(){
+  if (_dashTexBase) return _dashTexBase;
+  const w = 16, h = 32; // tile: dash 18 + gap 14
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#a5a8ff';
+  ctx.fillRect(0, 0, w, 18); // dash 區
+  // gap 區 (18..32) 保持透明
+  _dashTexBase = c;
+  return c;
+}
+
 function buildChainSegment(pa, pb){
   if (!chainGroup) return;
   const UP = new THREE.Vector3(0, 1, 0);
   const dir = new THREE.Vector3().subVectors(pb, pa);
   const total = dir.length();
   const arrowH = 16, arrowR = 5;
-  // 留 arrowH 給箭頭，剩餘長度切 dash + gap
   const usable = total - arrowH;
-  const dashLen = 14;
-  const gapLen = 10;
-  const segPitch = dashLen + gapLen;
-  const dashCount = Math.max(1, Math.floor(usable / segPitch));
   const dirNorm = dir.clone().normalize();
+  const TILE_WORLD = 32; // 一個 dash+gap 在世界座標下佔 32 單位
 
-  // 多個 dash 圓柱段
-  for (let i = 0; i < dashCount; i++) {
-    const t0 = (i * segPitch) / total;
-    const t1 = Math.min((i * segPitch + dashLen) / total, usable / total);
-    if (t1 <= t0) break;
-    const a = pa.clone().lerp(pb, t0);
-    const b = pa.clone().lerp(pb, t1);
-    const segMid = a.clone().lerp(b, 0.5);
-    const segLen = a.distanceTo(b);
-    const geom = new THREE.CylinderGeometry(1.6, 1.6, segLen, 8);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xa5a8ff, transparent: true, opacity: 0.95, depthWrite: false });
-    const tube = new THREE.Mesh(geom, mat);
-    tube.position.copy(segMid);
-    tube.quaternion.setFromUnitVectors(UP, dirNorm);
-    chainGroup.add(tube);
-  }
+  // 單一 tube 鋪整段（dash 效果由 texture 提供，offset.y 動畫產生「行進感」）
+  const tubeGeom = new THREE.CylinderGeometry(2, 2, usable, 12, 1, true); // open=true 兩端不封蓋
+  const tex = new THREE.CanvasTexture(getDashTextureBase());
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.repeat.set(1, usable / TILE_WORLD);
+  tex.needsUpdate = true;
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    opacity: 1.0
+  });
+  const tube = new THREE.Mesh(tubeGeom, mat);
+  tube.position.copy(pa).add(dirNorm.clone().multiplyScalar(usable / 2));
+  tube.quaternion.setFromUnitVectors(UP, dirNorm);
+  tube.userData = { isDashFlow: true, tex };
+  chainGroup.add(tube);
 
   // 終點箭頭 cone（指向 pb）
   const arrowGeom = new THREE.ConeGeometry(arrowR, arrowH, 12);
@@ -415,6 +432,17 @@ function buildChainSegment(pa, pb){
   arrow.position.copy(pb).sub(dirNorm.clone().multiplyScalar(arrowH / 2));
   arrow.quaternion.setFromUnitVectors(UP, dirNorm);
   chainGroup.add(arrow);
+}
+
+// 每幀推進 chain dash 紋理的 offset.y，產生 pa → pb 行進感
+function updateChainFlow(dt){
+  if (!activeChain || !chainGroup) return;
+  const speed = 0.6; // texture y unit / second
+  for (const obj of chainGroup.children) {
+    if (obj.userData?.isDashFlow && obj.userData?.tex) {
+      obj.userData.tex.offset.y -= dt * speed; // 負方向 = pa → pb 流動
+    }
+  }
 }
 
 function buildChain(name){
@@ -508,6 +536,7 @@ function tick(t){
   if (autoRotate && !dragging) {
     cam.theta -= dt * 0.18;
   }
+  updateChainFlow(dt);
   updateCamera();
   billboardAll();
   renderer.render(scene, camera);
