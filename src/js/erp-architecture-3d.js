@@ -235,10 +235,17 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
     ctx.shadowOffsetY = 1;
     ctx.fillStyle = '#f5f1ff';
   }
-  ctx.font = '600 22px system-ui, sans-serif';
+  // 衛星模式 (subtle) 用更粗字重 + 細描邊增加可讀度；layer 維持 600
+  ctx.font = subtle ? '800 22px system-ui, sans-serif' : '600 22px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(name, tag ? 86 : 24, height/2);
+  if (subtle) {
+    // 描邊 1px 同色，讓字看起來更厚實
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = useDarkText ? '#1a1d2b' : '#f5f1ff';
+    ctx.strokeText(name, tag ? 86 : 24, height/2);
+  }
   ctx.restore();
 
   const tex = new THREE.CanvasTexture(c);
