@@ -611,6 +611,50 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(warn).toBeTruthy()
   })
 
+  it('PR 3.3 r6 codex P3 regression：mixed 場景（Step 0 resume 成功 + terminal blocker）走 run_completed，event_data 必帶 chunks_blocked_terminal 計數', async () => {
+    // 場景：同輪有 (a) 已 verified 的 live chunk 等 Step 0 resume mark_archived
+    //     + (b) 跨日 blacklisted blocker 覆蓋另一段 id range。
+    // r6 之前 run_completed.event_data 不帶 chunks_blocked_terminal，監控只看 completed
+    // 訊號會以為「沒事」，實際還有 chunk 卡住等 admin。
+    // 步驟：
+    //   1) 先 seed 一個 aggregate row + 跑 live cron 到 marked_archived
+    //   2) 手動把該 chunk 拉回 'verified'（讓 Step 0 resume 把它升回 marked_archived）
+    //   3) seed 第二個 aggregate row + 昨天 blacklisted chunk 覆蓋該 row id（terminal blocker）
+    //   4) 跑 cron → 預期 run_completed + chunks_blocked_terminal=1 + chunks_marked_archived>=1
+    await seedTelemetryRow()
+    await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+
+    // (1)→(2)：拉第一個 chunk 回 verified（aggregate row archived_at 同步清掉）
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks SET state = 'verified' WHERE state = 'marked_archived'`
+    ).run()
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_log_aggregate_telemetry SET archived_at = NULL`
+    ).run()
+
+    // (3)：seed 第二個 aggregate row + 昨天 blacklisted chunk 覆蓋
+    const id2 = await seedTerminalBlockerScenario('blacklisted', 'd'.repeat(64))
+    expect(id2).toBeGreaterThan(1)
+
+    // (4)：跑 cron。Step 0：第一個 chunk verified→marked_archived；第二個 blocker emit
+    // chunk_skipped warn + chunks_blocked_terminal++。Step 1 SELECT NOT EXISTS 排除
+    // 第二個 row（被 blocker 覆蓋）→ 只剩第一個 row（已被 Step 0 標 archived_at）→
+    // 也不會撈到 → candidates=0 → 但 chunks_marked_archived>0 → fall through run_completed
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.chunks_marked_archived ?? 0).toBeGreaterThanOrEqual(1)  // Step 0 resume
+    expect(body.chunks_blocked_terminal ?? 0).toBe(1)                   // r4 計數
+
+    // run_completed event_data 必帶 chunks_blocked_terminal（r6 fix）
+    const completed = await listAuditEvents('audit.aggregate_archive.telemetry.run_completed')
+    expect(completed.length).toBeGreaterThanOrEqual(1)
+    const last = completed[completed.length - 1]
+    const data = JSON.parse(last.event_data)
+    expect(data.chunks_blocked_terminal).toBe(1)
+    expect(data.chunks_marked_archived).toBeGreaterThanOrEqual(1)
+  })
+
   it('PR 3.3 r3 codex P2 regression：uploaded resume 時 R2 物件遺失 → chunk atomic 轉回 failed（admin 可 re_verify）', async () => {
     // Step 1：跑一次得 chunk + R2 物件
     await seedTelemetryRow()

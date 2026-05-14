@@ -381,6 +381,12 @@ export async function runAggregateArchive(args) {
       chunks_verified:        report.chunks_verified,
       chunks_marked_archived: report.chunks_marked_archived,
       rows_marked_archived:   report.rows_marked_archived,
+      // PR 3.3 r6 codex P3：mixed scenario（有 resume 成功 + 有 terminal blocker）
+      // 仍走 run_completed；把 chunks_blocked_terminal 與 resume 計數帶出來，
+      // monitoring 才能在 completed 訊號裡看到「還有 chunk 等 admin 處理」。
+      chunks_blocked_terminal:  report.chunks_blocked_terminal ?? 0,
+      chunks_resumed_uploaded:  report.chunks_resumed_uploaded ?? 0,
+      chunks_skipped:           report.chunks_skipped ?? 0,
       writer_version:         AGGREGATE_WRITER_VERSION,
     },
   })
