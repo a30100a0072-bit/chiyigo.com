@@ -155,6 +155,11 @@ export default [
     files: [
       'functions/api/admin/cron/audit-archive*.js',
       'functions/utils/audit-archive*.js',
+      // PR 3.2 codex r2 P3：aggregate→R2 worker 也要進 ESLint archive-discipline
+      // scope；build guard scripts/lint-archive-no-delete.js 已透過共用 FILE_PATTERN
+      // 掃到，IDE early warning / npm run lint 同步擴齊。
+      'functions/api/admin/cron/audit-aggregate-archive*.js',
+      'functions/utils/audit-aggregate-archive*.js',
     ],
     plugins: { 'archive-discipline': archiveDisciplinePlugin },
     rules: { 'archive-discipline/no-forbidden-r2-or-sql': 'error' },
