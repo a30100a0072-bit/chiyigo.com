@@ -183,8 +183,11 @@ function setActive(id){
   });
   if (id) renderPanel(id);
   else clearPanel();
-  if (id && isMobile()) {
-    setTimeout(() => PANEL?.scrollIntoView({behavior:'smooth', block:'start'}), 60);
+  // 手機板：只在 panel 還不在視窗內時才滾動，避免每次切 L2 都被往下拉
+  if (id && isMobile() && PANEL) {
+    const r = PANEL.getBoundingClientRect();
+    const inView = r.top < window.innerHeight && r.bottom > 0;
+    if (!inView) setTimeout(() => PANEL.scrollIntoView({behavior:'smooth', block:'start'}), 60);
   }
 }
 

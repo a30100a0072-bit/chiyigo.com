@@ -158,8 +158,11 @@ function setActive(id){
   });
   if (id) renderPanel(id);
   else clearPanel();
-  if (id && isMobile()) {
-    setTimeout(() => PANEL?.scrollIntoView({behavior:'smooth', block:'start'}), 60);
+  // 手機板：只在 panel 還不在視窗內時才滾動，避免每次切節點都被往下拉
+  if (id && isMobile() && PANEL) {
+    const r = PANEL.getBoundingClientRect();
+    const inView = r.top < window.innerHeight && r.bottom > 0;
+    if (!inView) setTimeout(() => PANEL.scrollIntoView({behavior:'smooth', block:'start'}), 60);
   }
 }
 
@@ -180,7 +183,7 @@ if (STAGE) {
   });
 }
 
-// ── 共用：套用語言到 widget（節點 label + 面板） ──
+// ── 共用：套用語言到 widget（節點 label + 面板 + embed [data-i18n]） ──
 function applyArchLang(lang){
   if (!LANGS_I18N[lang]) return;
   curLang = lang;
@@ -194,19 +197,18 @@ function applyArchLang(lang){
     }
   });
   if (activeId) renderPanel(activeId);
+  // embed 模式：init + 切換都走這條，避免首訪非 zh-TW 卡 HTML 預設
+  if (isEmbed) {
+    const t = LANGS_I18N[lang];
+    document.querySelectorAll('#cp-arch-embed [data-i18n]').forEach(el => {
+      const k = el.dataset.i18n;
+      if (t[k] !== undefined) el.textContent = t[k];
+    });
+  }
 }
 
 // embed 模式：暴露給 host (index.js) 在 applyLangI 結尾呼叫
-window.cpArchSetLang = function(lang){
-  if (!LANGS_I18N[lang]) return;
-  applyArchLang(lang);
-  // 鏡像刷一次 #cp-arch-embed 內的 data-i18n（host 也會處理，雙保險）
-  const t = LANGS_I18N[lang];
-  document.querySelectorAll('#cp-arch-embed [data-i18n]').forEach(el => {
-    const k = el.dataset.i18n;
-    if (t[k] !== undefined) el.textContent = t[k];
-  });
-};
+window.cpArchSetLang = function(lang){ applyArchLang(lang); };
 
 // ── Init widget ──
 if (STAGE) {
