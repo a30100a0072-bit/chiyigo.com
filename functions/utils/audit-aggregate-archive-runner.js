@@ -199,19 +199,31 @@ export async function runAggregateArchive(args) {
   // 解法：每輪先掃 audit_archive_chunks 非終態，state='verified' 的 chunk 完成 mark_archived
   // 升態。state IN ('planned','uploaded') 則 fall through 給 Step 1 SELECT 自癒
   // （rows 仍 archived_at IS NULL，INSERT OR IGNORE skip + manifest 覆寫繼續推）。
+  // PR 3.3 r3 codex P1：Step 0 同時掃 'uploaded' 與 'verified'（跨所有 archive_date）。
+  //   - 'verified'  → resumeVerifiedBlocker（既有；live 'verified→marked_archived' 升態，
+  //                    dry-run verified 是終態，函式內早退）
+  //   - 'uploaded'  → resumeUploadedBlocker（**re_verify 接續路徑**）。r2 把這個邏輯
+  //                    放在 processChunk 內，但只解 same-day rerun — admin 隔天才
+  //                    re_verify 時舊 chunk 的 archive_date 與本輪 utcDate() 不同，
+  //                    INSERT OR IGNORE 反而插新 row、舊 row 永遠卡 uploaded。
+  //                    Step 0 用 row 自帶 archive_date + chunk_sha256 直接接續，跨日 OK。
   try {
     const blockerRows = await db.prepare(
       `SELECT min_id, max_id, chunk_sha256, archive_date, state, row_count, dry_run
          FROM audit_archive_chunks
         WHERE env = ? AND table_name = ? AND cold_class = ?
-          AND state = 'verified'
+          AND state IN ('verified', 'uploaded')
         ORDER BY min_id ASC`
     ).bind(envName, tableName, coldClass).all()
     for (const b of (blockerRows.results ?? [])) {
       try {
-        await resumeVerifiedBlocker({ ctx, blocker: b, report })
+        if (b.state === 'uploaded') {
+          await resumeUploadedBlocker({ ctx, blocker: b, report })
+        } else {
+          await resumeVerifiedBlocker({ ctx, blocker: b, report })
+        }
       } catch (e) {
-        console.error(`[aggregate-archive] ${coldClass} verified blocker crash:`, e)
+        console.error(`[aggregate-archive] ${coldClass} blocker crash:`, e)
         report.ok = false
         report.errors.push({ event: 'blocker_resume_failed',
           min_id: b.min_id, max_id: b.max_id, error: String(e?.message ?? e) })
@@ -396,18 +408,17 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
       remediation: 'manual_cleanup_required (force_purge dry-run chunk before live rerun)',
     })
   }
-  // PR 3.3 r2 codex P1：state-aware dispatch（r1 早退邏輯收窄到真正不該再跑 pipeline 的狀態）
-  //   - 'planned'           → fresh pipeline（b/c/d/e/f/g）
-  //   - 'uploaded'          → resume verify（**re_verify endpoint 的接續路徑**；
-  //                            前次 partial crash 也走這條）；跳 b/c/d，從 e 接續
-  //   - 'verified' && dryRun  → idempotent skip info（dry-run 終態）
-  //   - 'marked_archived'   → idempotent skip info（live 終態；正常 SELECT 過濾掉，
-  //                            但 admin parallel 場景下防禦）
-  //   - 'failed'/'blacklisted' → skip warn（admin-terminal；operator 走 retry endpoint）
-  //   - 'verified' && !dryRun → defensive skip warn（Step 0 應已處理）
-  // r1 把所有 non-planned 都 skip 導致 re_verify 推到 uploaded 後永遠卡死 — r2 修正。
+  // PR 3.3 r3 codex P1：existing state dispatch（r2 inline resume 移到 Step 0；
+  // 此處 processChunk 只看 'planned'（fresh pipeline）或 skip 狀態）。
+  //   - 'planned'              → fresh pipeline（b/c/d/e/f/g）
+  //   - 'uploaded'             → Step 0 應已處理；到這裡代表 race（極罕見）→ skip warn
+  //   - 'verified' && dryRun    → idempotent skip info（dry-run 終態）
+  //   - 'verified' && !dryRun   → Step 0 已 marked_archived；不該在 Step 1 SELECT 出現
+  //                              （archived_at NOT NULL filter）→ defensive skip warn
+  //   - 'marked_archived'      → idempotent skip info（live 終態防禦）
+  //   - 'failed'/'blacklisted' → admin-terminal skip warn；走 retry/force_purge endpoint
   const existingState = existing?.state ?? 'planned'
-  if (existingState !== 'planned' && existingState !== 'uploaded') {
+  if (existingState !== 'planned') {
     const isTerminalForMode =
       (dryRun && existingState === 'verified') ||
       (!dryRun && existingState === 'marked_archived')
@@ -435,73 +446,56 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
     report.chunks_skipped = (report.chunks_skipped ?? 0) + 1
     return
   }
+  report.chunks_planned++
 
-  if (existingState === 'uploaded') {
-    // resume from 'uploaded'：跳 b/c/d，從 e 接續 verify。
-    // R2 data 已存在（state='uploaded' 由前次 step d 寫入）；若不存在，step e 會回
-    // verification_failed reason='r2_object_not_found'，這也是 admin re_verify 後 R2
-    // 物件被誤刪的合法錯誤路徑。
-    // manifest 從 R2 撈回，狀態歷史接續（前次已寫 planned + uploaded）；撈失敗用
-    // 本地 fresh manifest 加 uploaded entry 當 fallback（避免無 manifest 場景 crash）。
-    const mObj = await bucket.get(manifestKey)
-    if (mObj) {
-      try {
-        manifest = JSON.parse(await mObj.text())
-      } catch {
-        manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
-      }
-    } else {
-      manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
-    }
-    report.chunks_resumed_uploaded = (report.chunks_resumed_uploaded ?? 0) + 1
-  } else {
-    // 'planned' → fresh pipeline
-    report.chunks_planned++
+  // ── b. PUT manifest planned ───────────────────────────
+  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
+    JSON.stringify(manifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } })
 
-    // ── b. PUT manifest planned ───────────────────────────
-    await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-      JSON.stringify(manifest, null, 2),
-      { httpMetadata: { contentType: 'application/json' } })
+  // ── c. PUT data (gzip) ────────────────────────────────
+  await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+    httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
+  })
 
-    // ── c. PUT data (gzip) ────────────────────────────────
-    await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
-      httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
+  // ── d. PUT manifest uploaded → UPDATE chunks state=uploaded ────
+  // codex r2 M-1：先 R2 後 D1。若 manifest PUT fail，chunks 留前態，下輪重跑可接續。
+  manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
+  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
+    JSON.stringify(manifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } })
+
+  // PR 3.3：state='planned' guard + changes()===1。admin retry / force_purge
+  // 可在 cron 跑同時改 chunk state（mark_resolved→blacklisted 等）；無 guard
+  // 會把 admin 升態後的 row 又拉回 'uploaded'，破壞 state machine。
+  const updPlannedToUploaded = await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'uploaded', updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND dry_run = ?
+        AND state = 'planned'`
+  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
+  if ((updPlannedToUploaded?.meta?.changes ?? 0) !== 1) {
+    return failChunk(ctx, report, 'race_with_admin', {
+      expected_state: 'planned', transition: 'planned_to_uploaded',
+      min_id: minId, max_id: maxId, chunk_sha256: sha,
+      remediation: 'admin retry/force_purge altered chunk state mid-run; next cron will re-evaluate from current state',
     })
-
-    // ── d. PUT manifest uploaded → UPDATE chunks state=uploaded ────
-    // codex r2 M-1：先 R2 後 D1。若 manifest PUT fail，chunks 留前態，下輪重跑可接續。
-    manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
-    await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-      JSON.stringify(manifest, null, 2),
-      { httpMetadata: { contentType: 'application/json' } })
-
-    // PR 3.3：state='planned' guard + changes()===1。admin retry / force_purge
-    // 可在 cron 跑同時改 chunk state（mark_resolved→blacklisted 等）；無 guard
-    // 會把 admin 升態後的 row 又拉回 'uploaded'，破壞 state machine。
-    const updPlannedToUploaded = await db.prepare(
-      `UPDATE audit_archive_chunks
-          SET state = 'uploaded', updated_at = datetime('now')
-        WHERE env = ? AND table_name = ? AND cold_class = ?
-          AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
-          AND dry_run = ?
-          AND state = 'planned'`
-    ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
-    if ((updPlannedToUploaded?.meta?.changes ?? 0) !== 1) {
-      return failChunk(ctx, report, 'race_with_admin', {
-        expected_state: 'planned', transition: 'planned_to_uploaded',
-        min_id: minId, max_id: maxId, chunk_sha256: sha,
-        remediation: 'admin retry/force_purge altered chunk state mid-run; next cron will re-evaluate from current state',
-      })
-    }
-    report.chunks_uploaded++
   }
+  report.chunks_uploaded++
 
   // ── e. GET 回讀 + decompress + sha verify ────────────
+  // PR 3.3 r3 codex P2：verification 任一步失敗 → atomic UPDATE state='uploaded'→'failed'
+  // + retry_count++ + last_failure，**讓 admin 後續可走 re_verify**（admin retry endpoint
+  // 只接受 state='failed'；不轉回 failed 會卡 'uploaded' 任何 admin 路徑都拒）。
   const obj = await bucket.get(dataKey)
   if (!obj) {
+    await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'r2_object_not_found')
     return failChunk(ctx, report, 'verification_failed', {
       reason: 'r2_object_not_found',
       data_key: dataKey, min_id: minId, max_id: maxId, chunk_sha256: sha,
+      state_transitioned: 'uploaded_to_failed',
     })
   }
   let text
@@ -510,19 +504,23 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
     const jsonlBytes = await gzipDecompress(gzBytes)
     text = new TextDecoder().decode(jsonlBytes)
   } catch (e) {
+    await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'gzip_decompress_failed')
     return failChunk(ctx, report, 'verification_failed', {
       reason: 'gzip_decompress_failed',
       data_key: dataKey, min_id: minId, max_id: maxId, chunk_sha256: sha,
       error: String(e?.message ?? e),
+      state_transitioned: 'uploaded_to_failed',
     })
   }
   const reSha = await sha256Hex(text)
   const reRowCount = text.length === 0 ? 0 : (text.match(/\n/g) ?? []).length
   if (reSha !== sha || reRowCount !== rowCount) {
+    await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'sha_or_row_count_mismatch')
     return failChunk(ctx, report, 'verification_failed', {
       expected_sha256: sha, actual_sha256: reSha,
       expected_row_count: rowCount, actual_row_count: reRowCount,
       min_id: minId, max_id: maxId, chunk_sha256: sha,
+      state_transitioned: 'uploaded_to_failed',
     })
   }
 
@@ -621,6 +619,161 @@ function failChunk(ctx, report, eventCode, data) {
   // emit critical 由外層 fail() 統一處理 — 此處只標 report
   // codex r1 M-1：外圈 for-loop 在 processChunk 之後檢 `if (!report.ok) break`，
   // 一個 chunk fail 即中止後續（與 PR 2.x 慣例對齊）。
+}
+
+/**
+ * PR 3.3 r3 codex P2 — atomic state='uploaded' → 'failed' 轉換。
+ *
+ * verification 任一步失敗（R2 missing / decompress fail / sha mismatch）必呼叫此函式
+ * 把 chunk row 轉到 'failed' 狀態 + retry_count++ + last_failure 記錄。
+ * 不轉的話 chunk 永遠卡在 'uploaded'，admin retry endpoint 任何 action 都拒
+ * （re_verify 要 'failed'、mark_resolved 要 'failed' 或 dry-run verified、force_purge
+ *  要 'blacklisted'）→ 操作面沒乾淨出口。
+ *
+ * Guard: AND state='uploaded'；race（admin 同時動作）changes=0 silently skip
+ * （此函式只負責清狀態，不再 fail一次；real failure 由 caller 的 failChunk 處理）。
+ */
+async function transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, lastFailure) {
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'failed',
+            retry_count = retry_count + 1,
+            last_failure = ?,
+            last_failure_at = datetime('now'),
+            updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND dry_run = ? AND state = 'uploaded'`
+  ).bind(
+    lastFailure,
+    envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt,
+  ).run()
+}
+
+/**
+ * PR 3.3 r3 codex P1 — uploaded blocker resume（**re_verify endpoint 的接續路徑**）。
+ *
+ * 場景：
+ *   - admin 對 state='failed' chunk 呼叫 re_verify → chunk 推到 state='uploaded'
+ *   - 下一輪 cron Step 0 必須掃到並接續 GET+verify。**跨日場景**（admin 隔天才動，
+ *     chunk archive_date != utcDate()）也必須能接 — 這是 r2 inline 版漏掉的點。
+ *   - 前次 partial crash 留下 'uploaded' 也走這條（idempotent recovery）。
+ *
+ * 流程（mirror processChunk 後半 e/f/g 段）：
+ *   1. deriveAggregateKeysFromChunk(blocker) 算 R2 key（用 row 自帶 archive_date /
+ *      dry_run / compression，**不**吃當前 utcDate()）
+ *   2. R2 GET → decompress → sha+rowCount verify
+ *      失敗 → transitionUploadedToFailed（atomic state→'failed'）+ throw to outer catch
+ *   3. PUT manifest 'verified'（fetch 既有 manifest 接續 state_history；失敗 fallback）
+ *   4. atomic UPDATE state='uploaded'→'verified'（race guard：changes()===1）
+ *   5. emit chunk_uploaded info
+ *   6. 若 !dry_run，繼續走 live 'verified'→'marked_archived' 路徑（chain 到
+ *      resumeVerifiedBlocker 的邏輯：UPDATE aggregate archived_at + PUT manifest
+ *      marked_archived + UPDATE chunks→marked_archived）
+ */
+async function resumeUploadedBlocker({ ctx, blocker, report }) {
+  const { envName, tableName, coldClass, db, bucket, runId } = ctx
+  const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
+  const dryRunInt = chunkDryRun ? 1 : 0
+  const minId = blocker.min_id
+  const maxId = blocker.max_id
+  const sha   = blocker.chunk_sha256
+  const archiveDate = blocker.archive_date  // 用 row 自帶值（**跨日 key**），不用 utcDate()
+  const rowCount = blocker.row_count
+
+  // 1) 算 R2 key
+  const { dataKey, manifestKey } = deriveAggregateKeysFromChunk({
+    env: envName, table_name: tableName, cold_class: coldClass,
+    min_id: minId, max_id: maxId,
+    chunk_sha256: sha,
+    archive_date: archiveDate,
+    dry_run: blocker.dry_run, compression: 'gzip',
+  })
+
+  // 2) GET + verify
+  const obj = await bucket.get(dataKey)
+  if (!obj) {
+    await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'r2_object_not_found')
+    const e = new Error('uploaded_blocker_verify_failed: r2_object_not_found')
+    e.code = 'VERIFY_FAILED_R2_MISSING'
+    e.data_key = dataKey
+    throw e
+  }
+  let text
+  try {
+    const gzBytes = new Uint8Array(await obj.arrayBuffer())
+    const jsonlBytes = await gzipDecompress(gzBytes)
+    text = new TextDecoder().decode(jsonlBytes)
+  } catch (err) {
+    await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'gzip_decompress_failed')
+    const e = new Error(`uploaded_blocker_verify_failed: gzip_decompress_failed (${err?.message ?? err})`)
+    e.code = 'VERIFY_FAILED_DECOMPRESS'
+    throw e
+  }
+  const reSha = await sha256Hex(text)
+  const reRowCount = text.length === 0 ? 0 : (text.match(/\n/g) ?? []).length
+  if (reSha !== sha || reRowCount !== rowCount) {
+    await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'sha_or_row_count_mismatch')
+    const e = new Error(`uploaded_blocker_verify_failed: sha_or_row_count_mismatch (sha ${reSha}/${sha}; rows ${reRowCount}/${rowCount})`)
+    e.code = 'VERIFY_FAILED_SHA_MISMATCH'
+    throw e
+  }
+
+  // 3) PUT manifest 'verified'
+  const mObj = await bucket.get(manifestKey)
+  let manifest
+  if (mObj) {
+    try { manifest = JSON.parse(await mObj.text()) }
+    catch { manifest = { state: 'uploaded', state_history: [{ state: 'uploaded', at: new Date().toISOString() }] } }
+  } else {
+    manifest = { state: 'uploaded', state_history: [{ state: 'uploaded', at: new Date().toISOString() }] }
+  }
+  manifest = appendStateHistory(manifest, 'verified', new Date().toISOString())
+  await archivePut(ctx, 'manifest', { dryRun: chunkDryRun, minId, maxId }, manifestKey,
+    JSON.stringify(manifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } })
+
+  // 4) atomic UPDATE state='uploaded'→'verified'
+  const updUploadedToVerified = await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'verified', updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND dry_run = ? AND state = 'uploaded'`
+  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
+  if ((updUploadedToVerified?.meta?.changes ?? 0) !== 1) {
+    // race（極罕見；admin 在 Step 0 內動作）→ throw 給 outer catch
+    const e = new Error('uploaded_blocker_race_with_admin: state changed during resume')
+    e.code = 'RACE_WITH_ADMIN'
+    throw e
+  }
+  report.chunks_resumed_uploaded = (report.chunks_resumed_uploaded ?? 0) + 1
+  report.chunks_verified = (report.chunks_verified ?? 0) + 1
+
+  await safeUserAudit(ctx.env, {
+    event_type: `${ctx.eventPrefix}.chunk_uploaded`,
+    severity:   'info',
+    data: {
+      run_id:       runId,
+      dry_run:      chunkDryRun,
+      env:          envName,
+      table:        tableName,
+      cold_class:   coldClass,
+      chunk_key:    dataKey,
+      manifest_key: manifestKey,
+      row_count:    rowCount,
+      min_id:       minId,
+      max_id:       maxId,
+      sha256_jsonl: sha,
+      verified_at:  new Date().toISOString(),
+      resumed:      'uploaded_to_verified',
+    },
+  })
+
+  // 5) dry-run 終態，停；live 繼續走 marked_archived
+  if (chunkDryRun) return
+  // chain：把目前 'verified' 的 blocker 餵給 resumeVerifiedBlocker 跑 live mark 路徑
+  await resumeVerifiedBlocker({ ctx, blocker: { ...blocker, state: 'verified' }, report })
 }
 
 /**

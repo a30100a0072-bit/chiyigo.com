@@ -405,18 +405,20 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
       `UPDATE audit_archive_chunks SET state = 'uploaded' WHERE state = 'verified'`
     ).run()
 
-    // Step 3：下輪 cron 必須走 resume-from-uploaded 路徑接續到 verified（而非 chunk_skipped）
+    // Step 3：下輪 cron 必須走 resume-from-uploaded 路徑接續到 verified（而非 r1 早退 skip）
+    // r3 後流程：Step 0 掃 uploaded → resumeUploadedBlocker → verified
+    //   → Step 3 SELECT 仍撈到 aggregate row（dry-run archived_at NULL）
+    //   → processChunk 看 existing state='verified' AND dryRun → idempotent info skip
     const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
     expect(status).toBe(200)
     expect(body.ok).toBe(true)
-    expect(body.chunks_resumed_uploaded ?? 0).toBe(1)   // r2 新增：resume 計數
-    expect(body.chunks_verified ?? 0).toBe(1)           // 接著 verify 成功
-    expect(body.chunks_skipped ?? 0).toBe(0)            // 不該被 r1 早退攔到
+    expect(body.chunks_resumed_uploaded ?? 0).toBe(1)   // r2 計數（r3 由 Step 0 寫）
+    expect(body.chunks_verified ?? 0).toBe(1)           // Step 0 verify 成功
 
     const after2 = await listChunks()
     expect(after2[0].state).toBe('verified')            // dry-run 終態
 
-    // 確認沒有誤觸 chunk_skipped warn（admin-terminal 路徑）
+    // 確認 Step 3 idempotent skip 走 info（不是 warn）— admin-terminal 才會 warn
     const skipped = await listAuditEvents('audit.aggregate_archive.telemetry.chunk_skipped')
     const warnSkip = skipped.find(e => e.severity === 'warn')
     expect(warnSkip).toBeUndefined()
@@ -452,6 +454,99 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
 
     const after2 = await listChunks()
     expect(after2[0].state).toBe('marked_archived')
+  })
+
+  it('PR 3.3 r3 codex P1 regression：跨日 uploaded chunk（archive_date=yesterday）必須被 Step 0 resume，不被新一輪 SELECT 漏接（live 模式：resume 後 archived_at 標完不重新建 chunk）', async () => {
+    // 用 live 模式 — Step 0 chain 到 marked_archived 把 archived_at 標完，
+    // Step 3 SELECT 就不會再撈到 aggregate row、不會建第二個 chunks row。
+    // dry-run 模式下因為 archived_at 永遠 NULL，跨日 resume 後 Step 3 仍會建新 chunk
+    // （重複處理但不影響資料正確性；PR 3.3 範圍不另外去重）。
+    await seedTelemetryRow()
+    await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    const before = await listChunks()
+    expect(before[0].state).toBe('marked_archived')
+
+    // 搬 R2 物件 + manifest 到昨天 prefix（archive_date 決定 R2 key path）
+    const yyyy = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+    const [yy, mm, dd] = yyyy.split('-')
+    async function moveR2Date(prefix) {
+      const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix })
+      for (const o of list.objects ?? []) {
+        const obj = await env.AUDIT_ARCHIVE_BUCKET.get(o.key)
+        if (!obj) continue
+        const data = await obj.arrayBuffer()
+        const newKey = o.key.replace(/\/\d{4}\/\d{2}\/\d{2}\//, `/${yy}/${mm}/${dd}/`)
+        await env.AUDIT_ARCHIVE_BUCKET.put(newKey, data, { httpMetadata: obj.httpMetadata })
+        await env.AUDIT_ARCHIVE_BUCKET.delete(o.key)
+      }
+    }
+    await moveR2Date('audit-log-aggregate-telemetry/')
+    await moveR2Date('manifest/')
+
+    // 把 chunk 拉回 uploaded + archive_date=yesterday + aggregate row archived_at 也清掉
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks
+          SET state = 'uploaded',
+              archive_date = date('now', '-1 day')
+        WHERE state = 'marked_archived'`
+    ).run()
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_log_aggregate_telemetry SET archived_at = NULL`
+    ).run()
+
+    // Step 0 必須掃到跨日 uploaded blocker → resume verify + chain 到 marked_archived
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.chunks_resumed_uploaded ?? 0).toBe(1)
+    expect(body.chunks_verified ?? 0).toBe(1)
+    expect(body.chunks_marked_archived ?? 0).toBe(1)
+    expect(body.chunks_planned ?? 0).toBe(0)   // Step 3 沒新建 chunk
+
+    const after = await listChunks()
+    expect(after.length).toBe(1)               // 沒有重複 row
+    expect(after[0].state).toBe('marked_archived')
+    expect(after[0].archive_date).not.toBe(new Date().toISOString().slice(0, 10))  // 仍是昨天
+
+    // chunk_uploaded resume emit 帶 resumed='uploaded_to_verified'
+    const ev = await listAuditEvents('audit.aggregate_archive.telemetry.chunk_uploaded')
+    const resumed = ev.find(e => {
+      try { return JSON.parse(e.event_data).resumed === 'uploaded_to_verified' }
+      catch { return false }
+    })
+    expect(resumed).toBeTruthy()
+  })
+
+  it('PR 3.3 r3 codex P2 regression：uploaded resume 時 R2 物件遺失 → chunk atomic 轉回 failed（admin 可 re_verify）', async () => {
+    // Step 1：跑一次得 chunk + R2 物件
+    await seedTelemetryRow()
+    await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    const before = await listChunks()
+    expect(before[0].state).toBe('verified')
+
+    // Step 2：模擬 admin re_verify → state='uploaded' + 把 R2 物件刪掉（模擬遺失）
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks SET state = 'uploaded' WHERE state = 'verified'`
+    ).run()
+    const r2List = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log-aggregate-telemetry-dryrun/' })
+    for (const o of r2List.objects ?? []) {
+      await env.AUDIT_ARCHIVE_BUCKET.delete(o.key)
+    }
+
+    // Step 3：cron 跑 → Step 0 resumeUploadedBlocker → R2 GET 找不到 →
+    //   transitionUploadedToFailed atomic state→'failed' + retry_count++ + last_failure
+    //   throw 進外 catch → run_failed critical
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    expect(status).toBe(500)  // run_failed（resume crash）
+    expect(body.ok).toBe(false)
+    expect(body.errors?.[0]?.event).toBe('blocker_resume_failed')
+
+    // chunk row 必須 atomic 轉到 'failed'（admin 後續可走 re_verify）
+    const after = await listChunks()
+    expect(after[0].state).toBe('failed')
+    expect(after[0].retry_count).toBeGreaterThanOrEqual(1)
+    expect(after[0].last_failure).toBe('r2_object_not_found')
+    expect(after[0].last_failure_at).toBeTruthy()
   })
 })
 
