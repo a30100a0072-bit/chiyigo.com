@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ERP 平台架構 | CHIYIGO 系統設計案例</title>
+  <meta name="description" content="從會員系統到企業級 ERP 平台：16 個 L2 領域、4 條 Event Chain、L1~L8 八層架構的互動式架構展示。" />
+  {{> seo-public path="/erp-architecture.html" ogTitle="ERP 平台架構 | CHIYIGO 系統設計案例" ogDescription="16 個 L2 領域 × 4 條 Event Chain × L1~L8 八層架構的互動式架構展示。" image="/images/portfolio/og-case-platform.jpg"}}
+  {{> head-top}}
+  <link rel="stylesheet" href="/css/portfolio.css" />
+  {{> head-foot}}
+  <link rel="stylesheet" href="/css/erp-architecture.css" />
+  <link rel="stylesheet" href="/css/sidebar-auth.css" />
+</head>
+<body>
+
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+
+  <div class="dash-wrap" id="dash-wrap">
+
+    {{> sidebar-public-other active="portfolio"}}
+
+    <div class="dash-main">
+      <main class="dash-content" id="os-content">
+
+        <section class="erp-section">
+
+          <!-- Hero -->
+          <div class="erp-hero" data-reveal>
+            <p class="eyebrow" data-i18n="eyebrow">// 平台架構</p>
+            <h1 class="erp-title">
+              <span class="pt-dim" data-i18n="title1">從一個會員系統</span>
+              <span class="pt-grad" data-i18n="title2">到企業級 ERP 平台</span>
+            </h1>
+            <p class="erp-sub" data-i18n="subtitle">16 個獨立領域、4 條 Event Chain、L1~L8 八層架構。每一塊都能單獨擴展，也能透過事件編織成完整的企業營運。</p>
+
+            <div class="erp-stats">
+              <div class="erp-stat"><span class="erp-stat-n">16</span><span class="erp-stat-l" data-i18n="stat_domains">L2 領域</span></div>
+              <div class="erp-stat"><span class="erp-stat-n">4</span><span class="erp-stat-l" data-i18n="stat_events">Event Chains</span></div>
+              <div class="erp-stat"><span class="erp-stat-n">8</span><span class="erp-stat-l" data-i18n="stat_layers">架構層級</span></div>
+              <div class="erp-stat"><span class="erp-stat-n">60+</span><span class="erp-stat-l" data-i18n="stat_modules">L3+ 子模組</span></div>
+            </div>
+          </div>
+
+          <!-- Architecture: chain bar + nodes + lines + side panel -->
+          <div class="erp-arch" data-reveal data-reveal-delay="1">
+            <div class="erp-arch-head">
+              <h2 class="erp-arch-title" data-i18n="arch_title">// L2 領域互動圖</h2>
+              <p class="erp-arch-hint" data-i18n="arch_hint">點任一領域查看 L3 子模組與 Event 流向；切換上方 Chain 看跨領域事件動畫 →</p>
+            </div>
+
+            <div class="erp-chain-wrap">
+              <div class="erp-chain-bar" id="erp-chain-bar" role="tablist">
+                <span class="erp-chain-label" data-i18n="chain_label">Event Chain：</span>
+                <button class="erp-chain-btn active" type="button" data-chain="none" data-i18n="chain_none">靜態檢視</button>
+                <button class="erp-chain-btn" type="button" data-chain="order" data-i18n="chain_order">建立訂單</button>
+                <button class="erp-chain-btn" type="button" data-chain="payment" data-i18n="chain_payment">付款成功</button>
+                <button class="erp-chain-btn" type="button" data-chain="tenant" data-i18n="chain_tenant">新租戶開通</button>
+                <button class="erp-chain-btn" type="button" data-chain="ai" data-i18n="chain_ai">AI 自動決策</button>
+              </div>
+              <p class="erp-chain-note" id="erp-chain-note" hidden></p>
+            </div>
+
+            <div class="erp-arch-grid">
+              <!-- Stage: nodes + svg lines -->
+              <div class="erp-stage" id="erp-stage" role="group" aria-label="ERP 平台架構圖">
+                <svg class="erp-lines" id="erp-lines" aria-hidden="true" preserveAspectRatio="none"></svg>
+                <!-- Nodes injected by JS -->
+              </div>
+
+              <!-- Detail panel -->
+              <aside class="erp-panel" id="erp-panel" aria-live="polite">
+                <div class="erp-panel-empty" id="erp-panel-empty">
+                  <div class="erp-panel-icon" aria-hidden="true">◆</div>
+                  <p class="erp-panel-empty-text" data-i18n="panel_hint">選擇任一領域，這裡會列出領域職責、L3 子模組、L4 細項、相關 Event 流向與技術選型。</p>
+                </div>
+                <div class="erp-panel-body" id="erp-panel-body" hidden>
+                  <div class="erp-panel-head">
+                    <span class="erp-panel-tag" id="erp-panel-tag"></span>
+                    <h3 class="erp-panel-title" id="erp-panel-title"></h3>
+                    <button class="erp-panel-close" id="erp-panel-close" aria-label="關閉" type="button">×</button>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_purpose">領域職責</h4>
+                    <p class="erp-panel-p" id="erp-panel-purpose"></p>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_l3">L3 子模組</h4>
+                    <ul class="erp-panel-list" id="erp-panel-l3"></ul>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_l4">L4 / L5 細項</h4>
+                    <div class="erp-panel-tags" id="erp-panel-l4"></div>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_events">Event 流向</h4>
+                    <ul class="erp-panel-list" id="erp-panel-events"></ul>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_tech">技術選型</h4>
+                    <div class="erp-panel-tags" id="erp-panel-tech"></div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+
+          <!-- 8-Layer summary band -->
+          <div class="erp-stack" data-reveal data-reveal-delay="2">
+            <h2 class="erp-stack-title" data-i18n="stack_title">// 八層架構速覽</h2>
+            <div class="erp-stack-grid">
+              <div class="erp-stack-col">
+                <div class="erp-stack-h" data-i18n="layer_l1">L1 平台層</div>
+                <div class="erp-stack-l" data-i18n="layer_l1_desc">企業平台根節點，所有領域共用治理、合規、Feature Flag 與多租戶 Runtime</div>
+              </div>
+              <div class="erp-stack-col">
+                <div class="erp-stack-h" data-i18n="layer_l24">L2~L4 領域層</div>
+                <div class="erp-stack-l" data-i18n="layer_l24_desc">16 個獨立 L2 領域、各自 L3 子模組與 L4 細項；領域間以 Event 通訊，不共用 DB</div>
+              </div>
+              <div class="erp-stack-col">
+                <div class="erp-stack-h" data-i18n="layer_l57">L5~L7 能力層</div>
+                <div class="erp-stack-l" data-i18n="layer_l57_desc">Service / Storage / Runtime 三層具體實作：PostgreSQL、Redis、Kafka、Elasticsearch、Vector DB</div>
+              </div>
+              <div class="erp-stack-col">
+                <div class="erp-stack-h" data-i18n="layer_l8">L8 部署層</div>
+                <div class="erp-stack-l" data-i18n="layer_l8_desc">Kubernetes、Multi-region Failover、Disaster Recovery、Cloudflare CDN、WAF</div>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <footer class="footer">
+          <div class="footer-inner">
+            <div>
+              <img src="/images/logo-light.png" alt="CHIYIGO" class="logo logo-light">
+              <img src="/images/logo-dark.png"  alt="CHIYIGO" class="logo logo-dark">
+              <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+            </div>
+            {{> footer-contact}}
+            <nav class="footer-links">
+              <a href="index.html" data-i18n="nav_home">首頁</a>
+              <a href="portfolio.html" data-i18n="nav_portfolio">chiyigo作品</a>
+              <a href="about.html" data-i18n="nav_about">關於我們</a>
+              <a href="requisition.html" data-i18n="nav_contact">需求諮詢</a>
+            </nav>
+            <p class="copy">© 2026 CHIYIGO</p>
+          </div>
+        </footer>
+
+      </main>
+    </div>
+  </div>
+
+  {{> topbar-mobile pathPrefix="/" brandHref="/index.html" loginHref="/login.html" loginLabel="會員登入"}}
+
+  <!-- Mobile bottom-sheet menu -->
+  {{> m-overlay-public-other pathPrefix="/" active="portfolio"}}
+
+  <script src="/js/sidebar-auth.js" defer></script>
+  <script src="/js/erp-architecture.js" defer></script>
+
+</body>
+</html>

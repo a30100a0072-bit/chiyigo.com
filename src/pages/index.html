@@ -9,6 +9,7 @@
   {{> head-top}}
   <link rel="stylesheet" href="/css/index.css" />
   <link rel="stylesheet" href="/css/case-platform.css" />
+  <link rel="stylesheet" href="/css/erp-architecture.css" />
   {{> head-foot}}
   <link rel="stylesheet" href="/css/sidebar-auth.css" />
 </head>
@@ -167,6 +168,68 @@
           </div>
         </section>
 
+        <!-- ERP Architecture (embedded from erp-architecture) -->
+        <section id="erp-arch-embed" class="erp-section">
+          <div class="erp-arch" data-reveal>
+            <div class="erp-arch-head">
+              <h2 class="erp-arch-title" data-i18n="arch_title">// L2 領域互動圖</h2>
+              <p class="erp-arch-hint" data-i18n="arch_hint">點任一領域查看 L3 / Event；切換 Chain 看跨領域動畫 →</p>
+            </div>
+
+            <div class="erp-chain-wrap">
+              <div class="erp-chain-bar" id="erp-chain-bar" role="tablist">
+                <span class="erp-chain-label" data-i18n="chain_label">Event Chain：</span>
+                <button class="erp-chain-btn active" type="button" data-chain="none" data-i18n="chain_none">靜態檢視</button>
+                <button class="erp-chain-btn" type="button" data-chain="order" data-i18n="chain_order">建立訂單</button>
+                <button class="erp-chain-btn" type="button" data-chain="payment" data-i18n="chain_payment">付款成功</button>
+                <button class="erp-chain-btn" type="button" data-chain="tenant" data-i18n="chain_tenant">新租戶開通</button>
+                <button class="erp-chain-btn" type="button" data-chain="ai" data-i18n="chain_ai">AI 自動決策</button>
+              </div>
+              <p class="erp-chain-note" id="erp-chain-note" hidden></p>
+            </div>
+
+            <div class="erp-arch-grid">
+              <div class="erp-stage" id="erp-stage" role="group" aria-label="ERP 平台 L2 領域">
+                <svg class="erp-lines" id="erp-lines" aria-hidden="true" preserveAspectRatio="none"></svg>
+              </div>
+              <aside class="erp-panel" id="erp-panel" aria-live="polite">
+                <div class="erp-panel-empty" id="erp-panel-empty">
+                  <div class="erp-panel-icon" aria-hidden="true">◆</div>
+                  <p class="erp-panel-empty-text" data-i18n="panel_hint">選擇任一領域，這裡會列出領域職責、L3 子模組、L4 細項、相關 Event 流向與技術選型。</p>
+                  <a class="btn-primary erp-view-full" href="/erp-architecture.html" data-i18n="view_full">查看完整架構 →</a>
+                </div>
+                <div class="erp-panel-body" id="erp-panel-body" hidden>
+                  <div class="erp-panel-head">
+                    <span class="erp-panel-tag" id="erp-panel-tag"></span>
+                    <h3 class="erp-panel-title" id="erp-panel-title"></h3>
+                    <button class="erp-panel-close" id="erp-panel-close" aria-label="關閉" type="button">×</button>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_purpose">領域職責</h4>
+                    <p class="erp-panel-p" id="erp-panel-purpose"></p>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_l3">L3 子模組</h4>
+                    <ul class="erp-panel-list" id="erp-panel-l3"></ul>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_l4">L4 / L5 細項</h4>
+                    <div class="erp-panel-tags" id="erp-panel-l4"></div>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_events">Event 流向</h4>
+                    <ul class="erp-panel-list" id="erp-panel-events"></ul>
+                  </div>
+                  <div class="erp-panel-block">
+                    <h4 class="erp-panel-h" data-i18n="lab_tech">技術選型</h4>
+                    <div class="erp-panel-tags" id="erp-panel-tech"></div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
         <!-- Services -->
         <section id="services" class="services">
           <div class="svc-inner">
@@ -306,5 +369,6 @@
   <script src="/js/sidebar-auth.js" defer></script>
   <script src="/js/index.js" defer></script>
   <script src="/js/case-platform.js" defer></script>
+  <script src="/js/erp-architecture.js" defer></script>
 </body>
 </html>
