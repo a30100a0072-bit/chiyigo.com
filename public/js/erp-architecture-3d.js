@@ -444,7 +444,7 @@ function buildChainSegment(pa, pb){
 // 每幀推進 chain dash 紋理的 offset.y，產生 pa → pb 行進感
 function updateChainFlow(dt){
   if (!activeChain || !chainGroup) return;
-  const speed = 0.6; // texture y unit / second
+  const speed = 1.8; // texture y unit / second（流動速度，越大越快）
   for (const obj of chainGroup.children) {
     if (obj.userData?.isDashFlow && obj.userData?.tex) {
       obj.userData.tex.offset.y -= dt * speed; // 負方向 = pa → pb 流動
