@@ -58,24 +58,11 @@ const PALETTE = {
   green:       0x5edb89,  // 綠 — 分析 BI
   coral:       0xff7a85,  // 珊瑚紅 — 身份 / 資安
 };
-const NODE_COLOR = {
-  iam: PALETTE.coral,            // 安全身份
-  crm: PALETTE.accent,           // 業務
-  sales: PALETTE.accent,         // 業務
-  finance: PALETTE.accent,       // 業務
-  workflow: PALETTE.accent,      // 業務
-  event: PALETTE.cyan,           // 資料/事件
-  data: PALETTE.cyan,
-  mdm: PALETTE.cyan,
-  ai: PALETTE.pink,              // AI/智能
-  knowledge: PALETTE.pink,
-  metadata: PALETTE.pink,
-  notify: PALETTE.amber,         // I/O
-  file: PALETTE.amber,
-  integration: PALETTE.amber,
-  bi: PALETTE.green,             // 分析
-  sre: PALETTE.coral,            // 平台/資安
-};
+// 衛星統一品牌紫（外圍簡潔，視覺重心留給內部 8 層）
+const NODE_COLOR = Object.fromEntries(
+  ['iam','crm','sales','finance','workflow','event','data','mdm','notify','file','integration','bi','ai','metadata','knowledge','sre']
+    .map(id => [id, PALETTE.accent])
+);
 // 8 層由上到下漸變，凸顯抽象度遞減
 const LAYER_COLOR = {
   1: PALETTE.pink,        // L1 平台 — 最頂層
@@ -296,35 +283,42 @@ function initScene(){
     satMeshes.push({ mesh, node: n, baseTex, hiTex });
   }
 
-  // EDGES 功能線：18 條跨領域連線
+  // EDGES 功能線：用 CylinderGeometry 當粗 tube 而不是 Line（多數平台 LineBasicMaterial.linewidth 只 1px，
+  // 改用 tube 才能在任何視角呈現可見的粗度）
+  const UP = new THREE.Vector3(0, 1, 0);
   for (const [a, b] of EDGES) {
     const na = NODES.find(n => n.id === a);
     const nb = NODES.find(n => n.id === b);
     if (!na || !nb) continue;
     const aRad = (na.ang * Math.PI) / 180;
     const bRad = (nb.ang * Math.PI) / 180;
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.Float32BufferAttribute([
-      Math.sin(aRad) * na.r, na.ty, Math.cos(aRad) * na.r,
-      Math.sin(bRad) * nb.r, nb.ty, Math.cos(bRad) * nb.r
-    ], 3));
-    const mat = new THREE.LineBasicMaterial({ color: 0x6c6ee5, transparent: true, opacity: 0.28, depthWrite: false });
-    const line = new THREE.Line(geom, mat);
-    scene.add(line);
-    edgeLines.push({ line, a, b, mat });
+    const pa = new THREE.Vector3(Math.sin(aRad) * na.r, na.ty, Math.cos(aRad) * na.r);
+    const pb = new THREE.Vector3(Math.sin(bRad) * nb.r, nb.ty, Math.cos(bRad) * nb.r);
+    const dir = new THREE.Vector3().subVectors(pb, pa);
+    const len = dir.length();
+    const geom = new THREE.CylinderGeometry(1.6, 1.6, len, 8, 1);
+    const mat = new THREE.MeshBasicMaterial({ color: PALETTE.accentLight, transparent: true, opacity: 0.6, depthWrite: false });
+    const tube = new THREE.Mesh(geom, mat);
+    tube.position.copy(pa).add(dir.clone().multiplyScalar(0.5));
+    tube.quaternion.setFromUnitVectors(UP, dir.clone().normalize());
+    scene.add(tube);
+    edgeLines.push({ line: tube, a, b, mat });
   }
 }
 
-// ── EDGES 高亮更新：點 node 時相鄰 edge 採該節點分類色，其他 dim ──
+// ── EDGES 高亮更新：點 node 時相鄰 edge 變粗變亮、其他 dim ──
 function refreshEdges(){
-  for (const { a, b, mat } of edgeLines) {
+  for (const { line, a, b, mat } of edgeLines) {
     if (activeKind === 'node') {
       const isHit = activeId === a || activeId === b;
-      mat.opacity = isHit ? 0.95 : 0.04;
-      mat.color.setHex(isHit ? (NODE_COLOR[activeId] || PALETTE.accentLight) : PALETTE.accent);
+      mat.opacity = isHit ? 0.98 : 0.05;
+      mat.color.setHex(isHit ? PALETTE.accentLight : PALETTE.accent);
+      // 變粗：scale X/Z（cylinder 的徑向），Y 保持長度
+      line.scale.x = line.scale.z = isHit ? 2.4 : 1;
     } else {
-      mat.opacity = 0.3;
-      mat.color.setHex(PALETTE.accent);
+      mat.opacity = 0.6;
+      mat.color.setHex(PALETTE.accentLight);
+      line.scale.x = line.scale.z = 1;
     }
   }
 }
