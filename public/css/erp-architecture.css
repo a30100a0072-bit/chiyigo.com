@@ -41,6 +41,8 @@
 .erp-stage{position:relative;width:100%;aspect-ratio:1.05/1;min-height:520px;border-radius:14px;background:radial-gradient(circle at 50% 50%,rgba(108,110,229,.08),transparent 65%)}
 .erp-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;color:var(--accent)}
 .erp-lines line{stroke:var(--accent);stroke-width:1.1;stroke-opacity:.16;transition:stroke-opacity .2s,stroke-width .2s}
+.erp-lines line.active{stroke-opacity:.85;stroke-width:1.8}
+.erp-lines line.dim{stroke-opacity:.05}
 .erp-lines line.chain-line{stroke-width:2;stroke-opacity:.9;stroke-dasharray:5 4;animation:erp-dash 1.6s linear infinite,erp-fadein .4s ease both}
 @keyframes erp-dash{to{stroke-dashoffset:-36}}
 @keyframes erp-fadein{from{stroke-opacity:0}to{stroke-opacity:.9}}

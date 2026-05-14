@@ -32,7 +32,29 @@ const NODES = [
 
 const CORE = { x:50, y:50 };
 
-// 靜態（無 Chain 選中時）：core ↔ 16 領域全連，方便看「L1 統御 L2」
+// 靜態（無 Chain 選中時）：core ↔ 16 領域全連 + 下方 EDGES 跨領域連線
+// 點任一節點時，只有 EDGES 上的相鄰節點維持高亮、其餘 dim（同 case-platform pattern）
+const EDGES = [
+  ['iam','mdm'],          // 身份 → 組織主檔
+  ['iam','workflow'],     // 身份 → 簽核權限
+  ['crm','sales'],        // CRM → 銷售
+  ['sales','finance'],    // 銷售 → 財務
+  ['sales','mdm'],        // 銷售 → 商品主檔
+  ['sales','file'],       // 銷售 → 合約檔案
+  ['finance','integration'], // 財務 → 銀行連接器
+  ['finance','file'],     // 財務 → 發票歸檔
+  ['workflow','event'],   // 工作流 → 事件
+  ['event','data'],       // 事件 → 資料層
+  ['event','notify'],     // 事件 → 通知
+  ['ai','data'],          // AI → 資料
+  ['ai','knowledge'],     // AI → 知識
+  ['ai','event'],         // AI → 事件
+  ['bi','data'],          // BI → 資料倉儲
+  ['mdm','data'],         // MDM → 資料
+  ['metadata','workflow'],// Metadata → 動態 workflow
+  ['metadata','iam'],     // Metadata → 動態權限
+];
+
 // Chain 啟動時改顯示 chain 內部連線
 const CHAINS = {
   order:   ['crm', 'sales', 'mdm', 'finance', 'workflow', 'notify', 'bi', 'file'],
@@ -133,15 +155,31 @@ function buildLines(){
       SVG.appendChild(line);
     }
   } else {
-    // 靜態：core ↔ 16 領域全連
+    // 靜態：core ↔ 16 領域 spoke
     for (const n of NODES) {
       const line = document.createElementNS('http://www.w3.org/2000/svg','line');
       line.setAttribute('x1', cx); line.setAttribute('y1', cy);
       line.setAttribute('x2', n.x/100 * w); line.setAttribute('y2', n.y/100 * h);
-      line.dataset.to = n.id;
+      line.dataset.from = 'core'; line.dataset.to = n.id;
+      SVG.appendChild(line);
+    }
+    // EDGES：跨領域虛線
+    for (const [a, b] of EDGES) {
+      const na = NODES.find(x => x.id === a), nb = NODES.find(x => x.id === b);
+      if (!na || !nb) continue;
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1', na.x/100 * w); line.setAttribute('y1', na.y/100 * h);
+      line.setAttribute('x2', nb.x/100 * w); line.setAttribute('y2', nb.y/100 * h);
+      line.dataset.from = a; line.dataset.to = b;
+      line.setAttribute('stroke-dasharray', '3 4');
       SVG.appendChild(line);
     }
   }
+}
+
+function isConnected(a, b){
+  if (a === b) return true;
+  return EDGES.some(e => (e[0]===a && e[1]===b) || (e[1]===a && e[0]===b));
 }
 
 function renderPanel(id){
@@ -214,9 +252,17 @@ function setActive(id){
       el.classList.toggle('chain-on', inChain && eid !== 'core');
       el.classList.toggle('dim', !inChain && eid !== 'core' && eid !== id);
     } else {
+      // 靜態：套 case-platform 的 EDGES 相鄰高亮邏輯——點 X 時，X 自己 + 與 X 有 edge 的鄰居維持亮，其餘 dim
       el.classList.toggle('chain-on', false);
-      el.classList.toggle('dim', !!id && eid !== id && eid !== 'core');
+      el.classList.toggle('dim', !!id && eid !== id && eid !== 'core' && !isConnected(id, eid));
     }
+  });
+  // SVG 連線：靜態模式下，點 X 時跟 X 相連的線亮起，其他 dim（chain-line 在 chain 模式下另控）
+  SVG?.querySelectorAll('line').forEach(l => {
+    if (l.classList.contains('chain-line')) return;
+    const isHit = id && (l.dataset.from === id || l.dataset.to === id);
+    l.classList.toggle('active', !!isHit);
+    l.classList.toggle('dim', !!id && !isHit);
   });
   if (id) renderPanel(id);
   else clearPanel();
