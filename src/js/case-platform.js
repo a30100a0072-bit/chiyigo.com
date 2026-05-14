@@ -1,8 +1,19 @@
 // ── case-platform.js — CHIYIGO 會員系統 互動式架構 ──
+// 同一支同時服務兩個入口：
+//   - /case-platform.html（standalone）：完整跑全部（widget + hamburger + theme + neural canvas + lang dropdown）
+//   - /index.html 嵌入區（embed）：只跑 widget；host 頁 index.js 處理 theme/lang/hamburger/canvas
+// 用 DOM 偵測模式：`#cp-arch-embed` 存在 = embed。
+//
+// 整支必須包 IIFE：index.js 也宣告了 top-level `const NODES`（neural canvas），
+// 同 global scope 會 SyntaxError「Identifier 'NODES' has already been declared」。
+// 教訓：feedback_embed_js_iife_wrap.md
+
+(function(){
+const isEmbed = !!document.getElementById('cp-arch-embed');
 
 const NODES = [
-  // x/y as percentage of stage; positions form an ellipse around the core.
-  // 左右兩側保留 ≥17% margin 給長標籤（Token / Session / Revoke、Email 驗證/重設密碼）。
+  // x/y 為 stage 百分比；環繞核心成橢圓。
+  // 左右 ≥17% margin 給長標籤（Token / Session / Revoke、Email 驗證/重設密碼）。
   { id:'login',   x:22, y:12, tag:'AUTH' },
   { id:'oauth',   x:50, y:6,  tag:'AUTH' },
   { id:'email',   x:78, y:12, tag:'AUTH' },
@@ -17,7 +28,6 @@ const NODES = [
 
 const CORE = { x:50, y:50 };
 
-// dependency edges (in addition to core→node lines)
 const EDGES = [
   ['login','token'], ['oauth','token'],
   ['login','mfa'], ['mfa','token'],
@@ -27,9 +37,7 @@ const EDGES = [
   ['wallet','login'], ['wallet','payment'], ['wallet','audit'],
 ];
 
-// DETAILS / node labels live in case-platform.json per locale.
-// Lookup at runtime in nodeLabel() / renderPanel(); locales without
-// `.details` (ja/ko) fall back to the en dict.
+const LANGS_I18N = /*@i18n:case-platform@*/{};
 
 const STAGE = document.getElementById('cp-stage');
 const SVG = document.getElementById('cp-lines');
@@ -48,24 +56,22 @@ const PANEL_CLOSE = document.getElementById('cp-panel-close');
 let activeId = null;
 let curLang = localStorage.getItem('lang') || 'zh-TW';
 
-function isMobile(){ return window.matchMedia('(max-width: 960px)').matches; }
-
-function tDict(){ return LANGS_I18N[curLang] || LANGS_I18N['en'] || {}; }
-function tFallback(){ return LANGS_I18N['en'] || LANGS_I18N['zh-TW'] || {}; }
-function nodeLabel(n){
+const isMobile = () => window.matchMedia('(max-width: 960px)').matches;
+const tDict = () => LANGS_I18N[curLang] || LANGS_I18N['en'] || {};
+const tFallback = () => LANGS_I18N['en'] || LANGS_I18N['zh-TW'] || {};
+const nodeLabel = n => {
   const t = tDict(), fb = tFallback();
   return t['node_'+n.id] || fb['node_'+n.id] || n.id;
-}
-function getDetails(id){
+};
+const getDetails = id => {
   const t = tDict(), fb = tFallback();
   return (t.details && t.details[id]) || (fb.details && fb.details[id]) || null;
-}
+};
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 function buildNodes(){
-  // remove existing nodes (keep svg)
+  if (!STAGE) return;
   STAGE.querySelectorAll('.cp-node').forEach(el => el.remove());
-
-  // core
   const core = document.createElement('button');
   core.type = 'button';
   core.className = 'cp-node cp-node-core';
@@ -74,7 +80,6 @@ function buildNodes(){
   core.style.top = CORE.y + '%';
   core.innerHTML = `<span class="cp-node-dot"></span><span>CHIYIGO 會員系統<span class="cp-node-core-sub">// IAM Platform</span></span>`;
   STAGE.appendChild(core);
-
   for (const n of NODES) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -88,13 +93,12 @@ function buildNodes(){
 }
 
 function buildLines(){
+  if (!STAGE || !SVG) return;
   if (isMobile()) { SVG.innerHTML = ''; return; }
   const w = STAGE.clientWidth, h = STAGE.clientHeight;
   SVG.setAttribute('viewBox', `0 0 ${w} ${h}`);
   SVG.innerHTML = '';
   const cx = CORE.x/100 * w, cy = CORE.y/100 * h;
-
-  // core → each node
   for (const n of NODES) {
     const line = document.createElementNS('http://www.w3.org/2000/svg','line');
     line.setAttribute('x1', cx); line.setAttribute('y1', cy);
@@ -102,7 +106,6 @@ function buildLines(){
     line.dataset.from = 'core'; line.dataset.to = n.id;
     SVG.appendChild(line);
   }
-  // dependency edges
   for (const [a,b] of EDGES) {
     const na = NODES.find(x=>x.id===a), nb = NODES.find(x=>x.id===b);
     if (!na || !nb) continue;
@@ -135,64 +138,94 @@ function clearPanel(){
   PANEL_EMPTY.hidden = false;
 }
 
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function setActive(id){
-  if (id === 'core') id = null;
-  activeId = id;
-
-  // node states
-  STAGE.querySelectorAll('.cp-node').forEach(el => {
-    const eid = el.dataset.id;
-    el.classList.toggle('active', eid === id);
-    el.classList.toggle('dim', !!id && eid !== id && eid !== 'core' && !isConnected(id, eid));
-  });
-
-  // line states
-  SVG.querySelectorAll('line').forEach(l => {
-    const isHit = id && (l.dataset.from === id || l.dataset.to === id);
-    l.classList.toggle('active', !!isHit);
-    l.classList.toggle('dim', !!id && !isHit);
-  });
-
-  if (id) renderPanel(id);
-  else clearPanel();
-
-  // mobile: scroll panel into view
-  if (id && isMobile()) {
-    setTimeout(() => PANEL.scrollIntoView({behavior:'smooth', block:'start'}), 60);
-  }
-}
-
 function isConnected(a, b){
   if (a === b) return true;
   return EDGES.some(e => (e[0]===a && e[1]===b) || (e[1]===a && e[0]===b));
 }
 
-STAGE.addEventListener('click', e => {
-  const btn = e.target.closest('.cp-node');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  if (id === 'core') { setActive(null); return; }
-  if (id === activeId) setActive(null);
-  else setActive(id);
-});
+function setActive(id){
+  if (id === 'core') id = null;
+  activeId = id;
+  STAGE.querySelectorAll('.cp-node').forEach(el => {
+    const eid = el.dataset.id;
+    el.classList.toggle('active', eid === id);
+    el.classList.toggle('dim', !!id && eid !== id && eid !== 'core' && !isConnected(id, eid));
+  });
+  SVG?.querySelectorAll('line').forEach(l => {
+    const isHit = id && (l.dataset.from === id || l.dataset.to === id);
+    l.classList.toggle('active', !!isHit);
+    l.classList.toggle('dim', !!id && !isHit);
+  });
+  if (id) renderPanel(id);
+  else clearPanel();
+  if (id && isMobile()) {
+    setTimeout(() => PANEL?.scrollIntoView({behavior:'smooth', block:'start'}), 60);
+  }
+}
 
-PANEL_CLOSE?.addEventListener('click', () => setActive(null));
+if (STAGE) {
+  STAGE.addEventListener('click', e => {
+    const btn = e.target.closest('.cp-node');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (id === 'core') { setActive(null); return; }
+    if (id === activeId) setActive(null);
+    else setActive(id);
+  });
+  PANEL_CLOSE?.addEventListener('click', () => setActive(null));
+  let resizeT;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => buildLines(), 120);
+  });
+}
 
-// resize → rebuild lines
-let resizeT;
-window.addEventListener('resize', () => {
-  clearTimeout(resizeT);
-  resizeT = setTimeout(() => buildLines(), 120);
-});
-
-// ── i18n ──
-const LANGS_I18N = /*@i18n@*/{};
-
-function applyLang(lang){
+// ── 共用：套用語言到 widget（節點 label + 面板） ──
+function applyArchLang(lang){
   if (!LANGS_I18N[lang]) return;
   curLang = lang;
+  STAGE?.querySelectorAll('.cp-node').forEach(el => {
+    const id = el.dataset.id;
+    if (id === 'core') return;
+    const n = NODES.find(x => x.id === id);
+    if (n) {
+      const lbl = el.querySelector('.cp-node-label');
+      if (lbl) lbl.textContent = nodeLabel(n);
+    }
+  });
+  if (activeId) renderPanel(activeId);
+}
+
+// embed 模式：暴露給 host (index.js) 在 applyLangI 結尾呼叫
+window.cpArchSetLang = function(lang){
+  if (!LANGS_I18N[lang]) return;
+  applyArchLang(lang);
+  // 鏡像刷一次 #cp-arch-embed 內的 data-i18n（host 也會處理，雙保險）
+  const t = LANGS_I18N[lang];
+  document.querySelectorAll('#cp-arch-embed [data-i18n]').forEach(el => {
+    const k = el.dataset.i18n;
+    if (t[k] !== undefined) el.textContent = t[k];
+  });
+};
+
+// ── Init widget ──
+if (STAGE) {
+  buildNodes();
+  buildLines();
+  applyArchLang(curLang);
+  // standalone 預設選 login；embed 預設空 panel 讓 hint 誘導
+  if (!isEmbed && !isMobile()) setActive('login');
+}
+
+// ──────────────────────────────────────────────────────────────
+// 以下為 standalone (case-platform.html) 專屬：
+// embed 模式下 index.js 已處理同樣行為，跳過避免重複綁。
+// ──────────────────────────────────────────────────────────────
+if (isEmbed) { return; }
+
+// ── i18n（standalone full applyLang） ──
+function applyLang(lang){
+  if (!LANGS_I18N[lang]) return;
   const t = LANGS_I18N[lang];
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const k = el.dataset.i18n;
@@ -207,18 +240,7 @@ function applyLang(lang){
   document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
-
-  // re-render nodes (labels) + active panel
-  STAGE.querySelectorAll('.cp-node').forEach(el => {
-    const id = el.dataset.id;
-    if (id === 'core') return;
-    const n = NODES.find(x => x.id === id);
-    if (n) {
-      const lbl = el.querySelector('.cp-node-label');
-      if (lbl) lbl.textContent = nodeLabel(n);
-    }
-  });
-  if (activeId) renderPanel(activeId);
+  applyArchLang(lang);
 }
 
 const langToggleBtn = document.getElementById('lang-toggle-btn');
@@ -245,13 +267,7 @@ document.getElementById('m-top-lang-drop')?.addEventListener('click', e => {
 });
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
 
-// ── Init ──
-buildNodes();
-buildLines();
 applyLang(curLang);
-
-// 桌面版預設選中 login，行動版維持空 panel（避免進頁就 scroll）
-if (!isMobile()) setActive('login');
 
 // ── Mobile overlay / drag-close ──（與 portfolio.js 同款）
 const hamBtn  = document.getElementById('m-ham-btn');
@@ -344,4 +360,6 @@ document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
     for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
     requestAnimationFrame(draw)}
   resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
+})();
+
 })();
