@@ -52,6 +52,8 @@ const PANEL_API = document.getElementById('cp-panel-api');
 const PANEL_SECURITY = document.getElementById('cp-panel-security');
 const PANEL_TECH = document.getElementById('cp-panel-tech');
 const PANEL_CLOSE = document.getElementById('cp-panel-close');
+const PICKER = document.getElementById('cp-domain-select');
+const PICKER_LABEL = document.querySelector(isEmbed ? '#cp-arch-embed .cp-panel-picker-label' : '.cp-panel-picker-label');
 
 let activeId = null;
 let curLang = localStorage.getItem('lang') || 'zh-TW';
@@ -138,6 +140,27 @@ function clearPanel(){
   PANEL_EMPTY.hidden = false;
 }
 
+function buildPicker(){
+  if (!PICKER) return;
+  const t = tDict(), fb = tFallback();
+  PICKER.innerHTML = '';
+  const ph = document.createElement('option');
+  ph.value = '';
+  ph.textContent = t.picker_placeholder || fb.picker_placeholder || '— —';
+  PICKER.appendChild(ph);
+  for (const n of NODES) {
+    const opt = document.createElement('option');
+    opt.value = n.id;
+    opt.textContent = nodeLabel(n);
+    PICKER.appendChild(opt);
+  }
+  PICKER.value = activeId || '';
+  if (PICKER_LABEL) {
+    const lbl = t.picker_label || fb.picker_label || '';
+    if (lbl) { PICKER_LABEL.textContent = lbl; PICKER.setAttribute('aria-label', lbl); }
+  }
+}
+
 function isConnected(a, b){
   if (a === b) return true;
   return EDGES.some(e => (e[0]===a && e[1]===b) || (e[1]===a && e[0]===b));
@@ -158,6 +181,7 @@ function setActive(id){
   });
   if (id) renderPanel(id);
   else clearPanel();
+  if (PICKER) PICKER.value = id || '';
   // 手機板：只在 panel 還不在視窗內時才滾動，避免每次切節點都被往下拉
   if (id && isMobile() && PANEL) {
     const r = PANEL.getBoundingClientRect();
@@ -176,6 +200,7 @@ if (STAGE) {
     else setActive(id);
   });
   PANEL_CLOSE?.addEventListener('click', () => setActive(null));
+  PICKER?.addEventListener('change', e => setActive(e.target.value || null));
   let resizeT;
   window.addEventListener('resize', () => {
     clearTimeout(resizeT);
@@ -197,6 +222,7 @@ function applyArchLang(lang){
     }
   });
   if (activeId) renderPanel(activeId);
+  buildPicker();
   // embed 模式：init + 切換都走這條，避免首訪非 zh-TW 卡 HTML 預設
   if (isEmbed) {
     const t = LANGS_I18N[lang];

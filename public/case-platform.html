@@ -16,13 +16,13 @@
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=654bf82a" />
-  <link rel="stylesheet" href="/css/_components.css?v=654bf82a" />
-  <link rel="stylesheet" href="/css/portfolio.css?v=654bf82a" />
-  <script defer src="/js/notify.js?v=654bf82a"></script>
-  <script defer src="/js/confirm-dialog.js?v=654bf82a"></script>
-  <link rel="stylesheet" href="/css/case-platform.css?v=654bf82a" />
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=654bf82a" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=f1f69fae" />
+  <link rel="stylesheet" href="/css/_components.css?v=f1f69fae" />
+  <link rel="stylesheet" href="/css/portfolio.css?v=f1f69fae" />
+  <script defer src="/js/notify.js?v=f1f69fae"></script>
+  <script defer src="/js/confirm-dialog.js?v=f1f69fae"></script>
+  <link rel="stylesheet" href="/css/case-platform.css?v=f1f69fae" />
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=f1f69fae" />
 </head>
 <body>
 
@@ -134,6 +134,10 @@
 
               <!-- Detail panel (desktop) / list (mobile) -->
               <aside class="cp-panel" id="cp-panel" aria-live="polite">
+                <div class="cp-panel-picker">
+                  <label for="cp-domain-select" class="cp-panel-picker-label" data-i18n="picker_label">快速選擇模組</label>
+                  <select id="cp-domain-select" class="cp-panel-select" aria-label="快速選擇模組"></select>
+                </div>
                 <div class="cp-panel-empty" id="cp-panel-empty">
                   <div class="cp-panel-icon" aria-hidden="true">◆</div>
                   <p class="cp-panel-empty-text" data-i18n="panel_hint">選擇左側任一節點，這裡會顯示功能用途、使用者流程、後端 API、安全設計與技術亮點。</p>
@@ -316,8 +320,8 @@
     </div>
   </div>
 
-  <script src="/js/sidebar-auth.js?v=654bf82a" defer></script>
-  <script src="/js/case-platform.js?v=654bf82a" defer></script>
+  <script src="/js/sidebar-auth.js?v=f1f69fae" defer></script>
+  <script src="/js/case-platform.js?v=f1f69fae" defer></script>
 
 </body>
 </html>

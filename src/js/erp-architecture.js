@@ -58,6 +58,8 @@ const PANEL_TECH = document.getElementById('erp-panel-tech');
 const PANEL_CLOSE = document.getElementById('erp-panel-close');
 const CHAIN_BAR = document.getElementById('erp-chain-bar');
 const CHAIN_NOTE = document.getElementById('erp-chain-note');
+const PICKER = document.getElementById('erp-domain-select');
+const PICKER_LABEL = document.querySelector(isEmbed ? '#erp-arch-embed .erp-panel-picker-label' : '.erp-panel-picker-label');
 
 let activeId = null;
 let activeChain = null; // null | 'order' | 'payment' | 'tenant' | 'ai'
@@ -165,6 +167,41 @@ function clearPanel(){
   PANEL_EMPTY.hidden = false;
 }
 
+function buildPicker(){
+  if (!PICKER) return;
+  const t = tDict(), fb = tFallback();
+  PICKER.innerHTML = '';
+  const ph = document.createElement('option');
+  ph.value = '';
+  ph.textContent = t.picker_placeholder || fb.picker_placeholder || '— —';
+  PICKER.appendChild(ph);
+  // 多層：每個 L2 為 optgroup，內含「領域總覽 + 各 L3」全部 value 指回 L2 id
+  for (const n of NODES) {
+    const og = document.createElement('optgroup');
+    const tagSuffix = (n.tag ? ' — ' + n.tag : '');
+    og.label = nodeLabel(n) + tagSuffix;
+    const overview = document.createElement('option');
+    overview.value = n.id;
+    overview.textContent = t.picker_overview || fb.picker_overview || '▸ 領域總覽';
+    og.appendChild(overview);
+    const d = getDetails(n.id);
+    if (d && Array.isArray(d.l3)) {
+      for (const l3 of d.l3) {
+        const opt = document.createElement('option');
+        opt.value = n.id;
+        opt.textContent = '  · ' + l3;
+        og.appendChild(opt);
+      }
+    }
+    PICKER.appendChild(og);
+  }
+  PICKER.value = activeId || '';
+  if (PICKER_LABEL) {
+    const lbl = t.picker_label || fb.picker_label || '';
+    if (lbl) { PICKER_LABEL.textContent = lbl; PICKER.setAttribute('aria-label', lbl); }
+  }
+}
+
 function setActive(id){
   if (id === 'core') id = null;
   activeId = id;
@@ -183,6 +220,7 @@ function setActive(id){
   });
   if (id) renderPanel(id);
   else clearPanel();
+  if (PICKER) PICKER.value = id || '';
   // 手機板：只在 panel 還不在視窗內時才滾動，避免每次切 L2 都被往下拉
   if (id && isMobile() && PANEL) {
     const r = PANEL.getBoundingClientRect();
@@ -221,6 +259,7 @@ if (STAGE) {
     else setActive(id);
   });
   PANEL_CLOSE?.addEventListener('click', () => setActive(null));
+  PICKER?.addEventListener('change', e => setActive(e.target.value || null));
   CHAIN_BAR?.addEventListener('click', e => {
     const btn = e.target.closest('.erp-chain-btn');
     if (!btn) return;
@@ -252,6 +291,7 @@ function applyArchLang(lang){
     }
   });
   if (activeId) renderPanel(activeId);
+  buildPicker();
   if (activeChain) {
     const t = tDict(), fb = tFallback();
     if (CHAIN_NOTE) CHAIN_NOTE.textContent = t['chain_note_'+activeChain] || fb['chain_note_'+activeChain] || '';
