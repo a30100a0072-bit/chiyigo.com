@@ -85,6 +85,10 @@ function lighten(hex, amt=0.4){
   const lb = Math.min(255, Math.round(b + (255-b)*amt));
   return (lr<<16)|(lg<<8)|lb;
 }
+function darken(hex, amt=0.3){
+  const { r,g,b } = hexRGB(hex);
+  return (Math.max(0, Math.round(r*(1-amt)))<<16) | (Math.max(0, Math.round(g*(1-amt)))<<8) | Math.max(0, Math.round(b*(1-amt)));
+}
 function hexStr(hex){ return '#' + hex.toString(16).padStart(6, '0'); }
 
 // ── DOM refs ──
@@ -135,13 +139,14 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 
 // ── Canvas-texture helper ──
 // 用 2D canvas 畫文字 → 包成 THREE.CanvasTexture
-function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.accent, highlight=false }){
+function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.accent, highlight=false, subtle=false }){
   const dpr = 2;
   const c = document.createElement('canvas');
   c.width = width * dpr; c.height = height * dpr;
   const ctx = c.getContext('2d');
   ctx.scale(dpr, dpr);
   const accentLight = lighten(accent, 0.35);
+  const accentDeep = darken(accent, 0.35);
   // 圓角背景
   const r = 16;
   ctx.beginPath();
@@ -151,18 +156,35 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
   ctx.lineTo(r, height); ctx.quadraticCurveTo(0, height, 0, height - r);
   ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
   ctx.closePath();
-  // 漸層底（accent → accentLight，highlight 時更飽和）
+  // 漸層底（subtle=true 用於外圍衛星：整體更透；highlight + subtle 用「深色低透」表現點選）
   const grad = ctx.createLinearGradient(0, 0, width, height);
   if (highlight) {
-    grad.addColorStop(0, rgba(accent, 0.92));
-    grad.addColorStop(1, rgba(accentLight, 0.65));
+    if (subtle) {
+      // 點選後：降低透明度 + 色調調深（用 darken 過的 accent，看起來像「沉下去」而非「跳出來」）
+      grad.addColorStop(0, rgba(accentDeep, 0.70));
+      grad.addColorStop(1, rgba(accent, 0.40));
+    } else {
+      grad.addColorStop(0, rgba(accent, 0.92));
+      grad.addColorStop(1, rgba(accentLight, 0.65));
+    }
   } else {
-    grad.addColorStop(0, rgba(accent, 0.55));
-    grad.addColorStop(1, rgba(accentLight, 0.22));
+    if (subtle) {
+      // 外圍預設：更透，降低存在感
+      grad.addColorStop(0, rgba(accent, 0.30));
+      grad.addColorStop(1, rgba(accentLight, 0.08));
+    } else {
+      grad.addColorStop(0, rgba(accent, 0.55));
+      grad.addColorStop(1, rgba(accentLight, 0.22));
+    }
   }
   ctx.fillStyle = grad;
   ctx.fill();
-  ctx.strokeStyle = hexStr(highlight ? lighten(accent, 0.55) : accent);
+  // border：subtle 時降低 alpha；highlight 採用 deep 色調而非 lighter
+  if (subtle) {
+    ctx.strokeStyle = highlight ? rgba(accentDeep, 0.85) : rgba(accent, 0.45);
+  } else {
+    ctx.strokeStyle = hexStr(highlight ? lighten(accent, 0.55) : accent);
+  }
   ctx.lineWidth = highlight ? 3 : 2;
   ctx.stroke();
   // tag chip
@@ -277,8 +299,8 @@ function initScene(){
   scene.add(satGroup);
   for (const n of NODES) {
     const accent = NODE_COLOR[n.id] || PALETTE.accent;
-    const { tex: baseTex } = makeTextTexture({ tag: n.tag, name: nodeLabel(n), width: 320, height: 72, accent });
-    const { tex: hiTex } = makeTextTexture({ tag: n.tag, name: nodeLabel(n), width: 320, height: 72, accent, highlight: true });
+    const { tex: baseTex } = makeTextTexture({ tag: n.tag, name: nodeLabel(n), width: 320, height: 72, accent, subtle: true });
+    const { tex: hiTex } = makeTextTexture({ tag: n.tag, name: nodeLabel(n), width: 320, height: 72, accent, highlight: true, subtle: true });
     const geom = new THREE.PlaneGeometry(180, 40);
     const mat = new THREE.MeshBasicMaterial({ map: baseTex, transparent: true, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geom, mat);
@@ -550,8 +572,8 @@ function rebuildLabelTextures(){
     const accent = NODE_COLOR[item.node.id] || PALETTE.accent;
     item.baseTex.dispose();
     item.hiTex.dispose();
-    const { tex: baseTex } = makeTextTexture({ tag: item.node.tag, name: nodeLabel(item.node), width: 320, height: 72, accent });
-    const { tex: hiTex } = makeTextTexture({ tag: item.node.tag, name: nodeLabel(item.node), width: 320, height: 72, accent, highlight: true });
+    const { tex: baseTex } = makeTextTexture({ tag: item.node.tag, name: nodeLabel(item.node), width: 320, height: 72, accent, subtle: true });
+    const { tex: hiTex } = makeTextTexture({ tag: item.node.tag, name: nodeLabel(item.node), width: 320, height: 72, accent, highlight: true, subtle: true });
     item.baseTex = baseTex; item.hiTex = hiTex;
   }
   refreshActiveTextures();
