@@ -76,6 +76,24 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate_archive.telemetry.upload_failed',  // warn / critical
   'audit.aggregate_archive.debug.chunk_uploaded',     // info
   'audit.aggregate_archive.debug.upload_failed',      // warn / critical
+  // PR 3.3 admin retry / force_purge endpoint（POST /api/admin/audit-aggregate-archive/retry）
+  //   mirror PR 2.2b/2.3 raw retry.js 三段事件 × 兩 cold_class（telemetry / debug）
+  //   force_purge_disabled / retry_rejected = warn；其餘 retry_* info；force_purge_*
+  //   critical（destructive R2 + chunks row delete）
+  'audit.aggregate_archive.telemetry.retry_requested',          // info
+  'audit.aggregate_archive.telemetry.retry_succeeded',          // info
+  'audit.aggregate_archive.telemetry.retry_rejected',           // warn — 含 integrity_breach critical 也走此 type
+  'audit.aggregate_archive.telemetry.force_purge_requested',    // critical
+  'audit.aggregate_archive.telemetry.force_purge_succeeded',    // critical
+  'audit.aggregate_archive.telemetry.force_purge_failed',       // critical
+  'audit.aggregate_archive.telemetry.force_purge_disabled',     // warn
+  'audit.aggregate_archive.debug.retry_requested',              // info
+  'audit.aggregate_archive.debug.retry_succeeded',              // info
+  'audit.aggregate_archive.debug.retry_rejected',               // warn
+  'audit.aggregate_archive.debug.force_purge_requested',        // critical
+  'audit.aggregate_archive.debug.force_purge_succeeded',        // critical
+  'audit.aggregate_archive.debug.force_purge_failed',           // critical
+  'audit.aggregate_archive.debug.force_purge_disabled',         // warn
 ]
 
 // F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。

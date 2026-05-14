@@ -174,8 +174,12 @@ describe('registry coverage', () => {
     //   （audit.aggregate_archive.{telemetry,debug}.{run_completed,run_skipped,run_failed}）→ 142。
     // PR 3.2 part 2 再加 4 個 chunk-level events
     //   （audit.aggregate_archive.{telemetry,debug}.{chunk_uploaded,upload_failed}）→ 146。
+    // PR 3.3 加 14 個 admin retry / force_purge endpoint events × 兩 cold_class
+    //   （aggregate_archive.{telemetry,debug}.{retry_requested,retry_succeeded,
+    //    retry_rejected,force_purge_requested,force_purge_succeeded,
+    //    force_purge_failed,force_purge_disabled}）→ 160。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(146)
+    expect(_registrySize).toBe(160)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
