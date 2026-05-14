@@ -1,0 +1,48 @@
+name: Cron — Audit Aggregate Debug (F-3 Phase 2 PR 3.1 debug_failure)
+
+# 每日 17:15 UTC（= 01:15 隔日 Asia/Taipei）跑一次。
+#
+# 時序設計（user 2026-05-14 拍板）：
+#   17:00 UTC — telemetry aggregate（PR 3.0）
+#   17:15 UTC — debug aggregate  （本檔，錯開 15 分鐘）
+#   18:00 UTC — archive worker     （PR 2.x）
+#
+# 為何錯開 15 分鐘而非與 telemetry 同時跑：
+#   - 兩 aggregate worker 都對 audit_log 大量 SELECT + 另寫 aggregate 表，同時跑會
+#     互搶 D1 連線 / replica routing；錯開可降低 contention
+#   - 兩者都會 emit audit event（run_completed/skipped/failed），同時 emit 容易讓
+#     observability dashboard 把問題歸錯類；錯開觀察哪個 worker 出錯較直觀
+#   - 不用 `sleep 900` 在同一個 job 等：浪費 GitHub Actions runner 時間（占用免費
+#     額度）；直接排第二個 cron 表達式即可
+#
+# 為何 daily 不是 weekly：同 PR 3.0 — aggregate cutoff = `now - (hotDays - 1) days`，
+# 每天會「新跨進」aggregate 範圍 24h 份；若隔天 archive 就把該 24h row 標
+# archived_at，下次 aggregate（archived_at IS NULL 過濾）就再也撈不到。
+# 詳見 .github/workflows/cron-audit-aggregate.yml 同段註解 + AUDIT_RETENTION_PLAN.md。
+on:
+  schedule:
+    - cron: '15 17 * * *'
+  workflow_dispatch:        # 手動觸發（驗收 / 例外 backlog 用）
+
+jobs:
+  aggregate-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call audit-aggregate-debug endpoint
+        run: |
+          set -euo pipefail
+          response=$(curl -sS -w "\n%{http_code}" \
+            -X POST https://chiyigo.com/api/admin/cron/audit-aggregate-debug \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+
+          echo "Status: $status"
+          echo "Body:   $body"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::audit-aggregate-debug endpoint returned $status"
+            exit 1
+          fi

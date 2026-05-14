@@ -244,6 +244,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_agg_tele_bucket ON audit_log_aggregate_te
   event_type, COALESCE(user_id, -1), severity, hour_bucket
 );
 
+-- F-3 Phase 2 migration 0038 part 4：debug aggregate（PR 3.1 worker 目標表）
+CREATE TABLE IF NOT EXISTS audit_log_aggregate_debug (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type      TEXT NOT NULL,
+  reason_code     TEXT,
+  hour_bucket     TEXT NOT NULL,
+  total_count     INTEGER NOT NULL,
+  sample_count    INTEGER NOT NULL,
+  samples_json    TEXT NOT NULL,
+  sampled         INTEGER NOT NULL DEFAULT 0,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_agg_debug_event ON audit_log_aggregate_debug(event_type, hour_bucket);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_agg_debug_bucket ON audit_log_aggregate_debug(
+  event_type, COALESCE(reason_code, ''), hour_bucket
+);
+
 CREATE TABLE IF NOT EXISTS revoked_jti (
   jti        TEXT    PRIMARY KEY,
   expires_at TEXT    NOT NULL,

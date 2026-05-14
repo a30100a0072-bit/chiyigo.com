@@ -168,8 +168,10 @@ describe('registry coverage', () => {
     // Codex 金流 r1 chain 加 6 個 events:
     //   in_flight_conflict / orphan_intent / illegal_transition /
     //   requisition_owner_mismatch / final_cas_lost / status_cas_lost → 133。
+    // PR 3.1 加 3 個 debug aggregate events
+    //   （audit.aggregate.debug.run_completed / _skipped / _failed）→ 136。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(133)
+    expect(_registrySize).toBe(136)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

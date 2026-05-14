@@ -55,6 +55,10 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate.run_completed',              // info — 整輪成功 + summary（rows_scanned / buckets_upserted）
   'audit.aggregate.run_skipped',                // info — hot_days_disabled / no_rows_eligible 等正常 skip
   'audit.aggregate.run_failed',                 // critical — drift / partial upsert / D1 select 失敗
+  // PR 3.1 aggregate worker debug（POST /api/admin/cron/audit-aggregate-debug, debug_failure）
+  'audit.aggregate.debug.run_completed',        // info — 整輪成功 + summary（含 samples_total）
+  'audit.aggregate.debug.run_skipped',          // info — hot_days_disabled / no_rows_eligible / cutoff_hours_collapsed
+  'audit.aggregate.debug.run_failed',           // critical — drift / partial upsert / D1 select 失敗
 ]
 
 // F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。
