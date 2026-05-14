@@ -250,6 +250,88 @@ describe('audit-aggregate-archive — filter / boundary', () => {
     const c = cutoffMonthStartUTC()
     expect(c).toMatch(/^\d{4}-\d{2}-01 00:00:00$/)
   })
+
+  // codex r1 H-1 regression：OLD/HOT/OLD 邊界
+  it('codex H-1：BETWEEN min..max 內夾 HOT row 必不被誤標 archived_at', async () => {
+    await seedTelemetryRow({ created_at: OLD })   // id=1
+    await seedTelemetryRow({ created_at: HOT })   // id=2（夾在中間，未進 SELECT）
+    await seedTelemetryRow({ created_at: OLD })   // id=3
+
+    const { body } = await runTelemetry()
+    expect(body.ok).toBe(true)
+    expect(body.rows_scanned).toBe(2)
+    expect(body.chunks_marked_archived).toBe(1)
+    expect(body.rows_marked_archived).toBe(2)
+
+    // HOT row（id=2）archived_at 必仍 NULL — UPDATE 加 cutoff guard 後守住
+    const rows = await env.chiyigo_db.prepare(
+      `SELECT id, archived_at FROM audit_log_aggregate_telemetry ORDER BY id ASC`
+    ).all()
+    expect(rows.results).toHaveLength(3)
+    expect(rows.results[0].archived_at).not.toBeNull()  // id=1 OLD
+    expect(rows.results[1].archived_at).toBeNull()      // id=2 HOT — 必須 NULL
+    expect(rows.results[2].archived_at).not.toBeNull()  // id=3 OLD
+  })
+})
+
+// codex r1 H-2 + M-2：verified blocker resume 升 marked_archived + purge_after = +7d
+describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)', () => {
+  it('verified chunk + rows 已 archived_at NOT NULL → 下輪 resume 升 marked_archived', async () => {
+    // 模擬「上輪 worker UPDATE aggregate row archived_at 完成、UPDATE chunks→marked_archived
+    // 前 crash」狀態：rows archived_at NOT NULL，chunks state='verified'
+    await seedTelemetryRow()
+    await seedTelemetryRow()
+    const { body: first } = await runTelemetry()
+    expect(first.chunks_marked_archived).toBe(1)
+
+    // 手動把 chunks 從 marked_archived 退回 verified + 清 marked_archived_at + purge_after
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks
+          SET state='verified', marked_archived_at=NULL, purge_after=NULL`
+    ).run()
+
+    const { body: second } = await runTelemetry()
+    expect(second.ok).toBe(true)
+    expect(second.chunks_marked_archived).toBe(1)
+    expect(second.rows_marked_archived).toBe(2)
+    expect(second.skipped_reason).toBeNull()  // resume 做了事不算 skip
+
+    const chunks = await listChunks()
+    expect(chunks).toHaveLength(1)
+    expect(chunks[0].state).toBe('marked_archived')
+    expect(chunks[0].marked_archived_at).not.toBeNull()
+    expect(chunks[0].purge_after).not.toBeNull()    // M-2 fix
+  })
+
+  it('M-2：fresh happy path 也必設 purge_after = +7d', async () => {
+    await seedTelemetryRow()
+    await runTelemetry()
+    const chunks = await listChunks()
+    expect(chunks[0].state).toBe('marked_archived')
+    expect(chunks[0].purge_after).not.toBeNull()
+    // SQLite 文字格式 datetime；確認解析後落在 6-8 天後（避時鐘飄移誤判）
+    const purgeMs = new Date(chunks[0].purge_after.replace(' ', 'T') + 'Z').getTime()
+    const now     = Date.now()
+    const diffDays = (purgeMs - now) / 86400_000
+    expect(diffDays).toBeGreaterThan(6)
+    expect(diffDays).toBeLessThan(8)
+  })
+
+  it('dry-run verified 不被 resume 動到（PR 3.2 part 2 dry-run 終態）', async () => {
+    await seedTelemetryRow()
+    await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    const before = await listChunks()
+    expect(before[0].state).toBe('verified')
+    expect(before[0].dry_run).toBe(1)
+
+    // 再跑一次（仍 dry-run）— verified dry-run chunk 不被 resume 升 marked_archived，
+    // 也不被 fresh pipeline 再處理（SELECT 仍撈得到 row 但 INSERT OR IGNORE skip）
+    const { body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    expect(body.chunks_marked_archived).toBe(0)
+    const after = await listChunks()
+    expect(after[0].state).toBe('verified')
+    expect(after[0].dry_run).toBe(1)
+  })
 })
 
 describe('audit-aggregate-archive — DRY_RUN', () => {

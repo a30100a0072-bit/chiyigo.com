@@ -57,6 +57,7 @@ import {
   cutoffMonthStartUTC,
   buildAggregateChunkKeys,
   buildAggregateManifest,
+  deriveAggregateKeysFromChunk,
   splitIntoChunks,
 } from './audit-aggregate-archive.js'
 
@@ -184,6 +185,50 @@ export async function runAggregateArchive(args) {
     errors: [],
   }
 
+  const ctx = {
+    env, envName, tableName, coldClass, runId, db, bucket,
+    eventPrefix, putRetryBackoffMs, cutoff,
+  }
+
+  // ── Step 0（codex r1 H-2 修正）：先處理 verified blocker ─────────
+  // 場景：上輪 worker UPDATE aggregate row archived_at 完成，但 UPDATE chunks→marked_archived
+  // 前 crash → 同 chunk 卡在 state='verified' + rows 已 archived_at NOT NULL。
+  // 下一輪 SELECT 因 archived_at IS NULL filter 撈不到 row，會走 no_rows_eligible，
+  // chunks 永遠卡 verified → PR 4 purge 也撿不到（只看 marked_archived）。
+  //
+  // 解法：每輪先掃 audit_archive_chunks 非終態，state='verified' 的 chunk 完成 mark_archived
+  // 升態。state IN ('planned','uploaded') 則 fall through 給 Step 1 SELECT 自癒
+  // （rows 仍 archived_at IS NULL，INSERT OR IGNORE skip + manifest 覆寫繼續推）。
+  try {
+    const blockerRows = await db.prepare(
+      `SELECT min_id, max_id, chunk_sha256, archive_date, state, row_count, dry_run
+         FROM audit_archive_chunks
+        WHERE env = ? AND table_name = ? AND cold_class = ?
+          AND state = 'verified'
+        ORDER BY min_id ASC`
+    ).bind(envName, tableName, coldClass).all()
+    for (const b of (blockerRows.results ?? [])) {
+      try {
+        await resumeVerifiedBlocker({ ctx, blocker: b, report })
+      } catch (e) {
+        console.error(`[aggregate-archive] ${coldClass} verified blocker crash:`, e)
+        report.ok = false
+        report.errors.push({ event: 'blocker_resume_failed',
+          min_id: b.min_id, max_id: b.max_id, error: String(e?.message ?? e) })
+        break
+      }
+    }
+  } catch (e) {
+    return fail(env, report, eventPrefix, 'd1_select_failed', { error: String(e?.message ?? e) })
+  }
+
+  if (!report.ok) {
+    return fail(env, report, eventPrefix, 'chunk_processing_failed', {
+      chunks_planned: report.chunks_planned,
+      chunks_uploaded: report.chunks_uploaded,
+    })
+  }
+
   // ── Step 1：撈 cutoff 之前未 archive 的 aggregate row ─────
   let candidates
   try {
@@ -203,10 +248,14 @@ export async function runAggregateArchive(args) {
   report.rows_scanned = candidates.length
 
   if (candidates.length === 0) {
-    report.skipped_reason = 'no_rows_eligible'
-    await emitSkipped(env, report, eventPrefix, { reason: report.skipped_reason })
-    report.finished_at = new Date().toISOString()
-    return res(report, 200)
+    if (report.chunks_marked_archived > 0) {
+      // Step 0 resume 已做事，視為一輪成功 — fall through 到 run_completed
+    } else {
+      report.skipped_reason = 'no_rows_eligible'
+      await emitSkipped(env, report, eventPrefix, { reason: report.skipped_reason })
+      report.finished_at = new Date().toISOString()
+      return res(report, 200)
+    }
   }
 
   if (candidates.length > maxRows) {
@@ -218,14 +267,12 @@ export async function runAggregateArchive(args) {
   }
 
   // ── Step 2：切 chunks ───────────────────────────────────
-  const { chunks } = splitIntoChunks(candidates, rowsToJsonl)
+  const { chunks } = candidates.length > 0
+    ? splitIntoChunks(candidates, rowsToJsonl)
+    : { chunks: [] }
   const archiveDate = utcDate()
 
   // ── Step 3：逐 chunk 推進 ───────────────────────────────
-  const ctx = {
-    env, envName, tableName, coldClass, runId, db, bucket,
-    eventPrefix, putRetryBackoffMs,
-  }
   for (const c of chunks) {
     try {
       await processChunk({ ctx, chunk: c, archiveDate, dryRun, rowKind, report })
@@ -240,6 +287,8 @@ export async function runAggregateArchive(args) {
       })
       break  // 同 PR 2.x：一個 chunk 出包就停，避免後面 chunk 連環坑
     }
+    // codex r1 M-1：failChunk 只標 report.ok=false 不 throw；外圈靠這條 break 收尾
+    if (!report.ok) break
   }
 
   if (!report.ok) {
@@ -408,17 +457,23 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
   // ── g. live mode：UPDATE aggregate row archived_at + mark_archived ────
   if (dryRun) return
 
+  // codex r1 H-1：BETWEEN min..max 範圍內可能夾雜「HOT row（created_at >= cutoff）」
+  // —— SELECT 已用 cutoff 過濾它，未進 JSONL / R2。若這裡 UPDATE 不再加 cutoff guard，
+  // 那些 HOT row 會被誤標 archived_at，PR 4 purge 時刪掉從未備份的資料。
+  // 加 created_at < cutoff 確保 UPDATE 只命中 SELECT 已備份進 R2 的 row。
   await db.prepare(
     `UPDATE ${tableName}
         SET archived_at = datetime('now')
       WHERE id BETWEEN ? AND ?
-        AND archived_at IS NULL`
-  ).bind(minId, maxId).run()
+        AND archived_at IS NULL
+        AND created_at < ?`
+  ).bind(minId, maxId, ctx.cutoff).run()
 
   await db.prepare(
     `UPDATE audit_archive_chunks
         SET state = 'marked_archived',
             marked_archived_at = datetime('now'),
+            purge_after = datetime('now', '+7 days'),
             updated_at = datetime('now')
       WHERE env = ? AND table_name = ? AND cold_class = ?
         AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
@@ -437,6 +492,94 @@ function failChunk(ctx, report, eventCode, data) {
   report.ok = false
   report.errors.push({ event: eventCode, ...data })
   // emit critical 由外層 fail() 統一處理 — 此處只標 report
+  // codex r1 M-1：外圈 for-loop 在 processChunk 之後檢 `if (!report.ok) break`，
+  // 一個 chunk fail 即中止後續（與 PR 2.x 慣例對齊）。
+}
+
+/**
+ * codex r1 H-2 — verified blocker 升 marked_archived 復原路徑。
+ *
+ * 場景：上輪 worker UPDATE aggregate row archived_at 完成、UPDATE chunks→marked_archived
+ * 前 crash → 同 chunk 卡 state='verified'。下輪 SELECT archived_at IS NULL 撈不到
+ * 已標的 row → 沒這層 resume 就永遠卡住、PR 4 purge 也撿不到。
+ *
+ * dry-run 寫的 chunk 在 PR 3.2 part 2 設計裡 verified 即終態（part 1 文件對齊）；
+ * 這裡只動 live chunk。dry-run verified 留給 PR 4 翻 flag 前的人工清理 / PR 0.2c
+ * lock 上線後的 lifecycle 流轉。
+ *
+ * UPDATE 對 aggregate row 加 cutoff guard（與 processChunk H-1 修正同邏輯）；
+ * archived_at NOT NULL 預期已有，UPDATE changes=0 也視為正常（已標完）。
+ */
+async function resumeVerifiedBlocker({ ctx, blocker, report }) {
+  const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
+  if (chunkDryRun) {
+    // dry-run verified 是 PR 3.2 part 2 終態，跳過。
+    return
+  }
+  const { envName, tableName, coldClass, db, bucket, runId } = ctx
+
+  // 1) UPDATE aggregate row archived_at（idempotent；crashed-after 場景 changes=0）
+  await db.prepare(
+    `UPDATE ${tableName}
+        SET archived_at = datetime('now')
+      WHERE id BETWEEN ? AND ?
+        AND archived_at IS NULL
+        AND created_at < ?`
+  ).bind(blocker.min_id, blocker.max_id, ctx.cutoff).run()
+
+  // 2) UPDATE chunks → marked_archived + purge_after = +7d
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'marked_archived',
+            marked_archived_at = datetime('now'),
+            purge_after = datetime('now', '+7 days'),
+            updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND state = 'verified'`
+  ).bind(envName, tableName, coldClass, blocker.archive_date,
+         blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
+
+  report.chunks_marked_archived++
+  report.rows_marked_archived += blocker.row_count
+
+  // 3) PUT manifest marked_archived（best-effort，讀回 existing manifest append history）
+  const { manifestKey } = deriveAggregateKeysFromChunk({
+    env: envName, table_name: tableName, cold_class: coldClass,
+    min_id: blocker.min_id, max_id: blocker.max_id,
+    chunk_sha256: blocker.chunk_sha256,
+    archive_date: blocker.archive_date,
+    dry_run: blocker.dry_run, compression: 'gzip',
+  })
+  const obj = await bucket.get(manifestKey)
+  let manifest
+  if (obj) {
+    try { manifest = JSON.parse(await obj.text()) }
+    catch { manifest = { state_history: [] } }
+  } else {
+    manifest = { state: 'verified', state_history: [{ state: 'verified', at: new Date().toISOString() }] }
+  }
+  manifest = appendStateHistory(manifest, 'marked_archived', new Date().toISOString())
+  await archivePut(ctx, 'manifest', { dryRun: false, minId: blocker.min_id, maxId: blocker.max_id },
+    manifestKey, JSON.stringify(manifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } })
+
+  await safeUserAudit(ctx.env, {
+    event_type: `${ctx.eventPrefix}.chunk_uploaded`,  // marked_archived 走同 emit（資訊重複；補強 chain）
+    severity:   'info',
+    data: {
+      run_id:     runId,
+      dry_run:    false,
+      env:        envName,
+      table:      tableName,
+      cold_class: coldClass,
+      manifest_key: manifestKey,
+      min_id:     blocker.min_id,
+      max_id:     blocker.max_id,
+      sha256_jsonl: blocker.chunk_sha256,
+      resumed:    'verified_to_marked_archived',
+    },
+  })
 }
 
 async function emitSkipped(env, report, eventPrefix, data) {
