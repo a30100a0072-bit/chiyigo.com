@@ -683,6 +683,28 @@ function failChunk(ctx, report, eventCode, data) {
  * Guard: AND state='uploaded'；race（admin 同時動作）changes=0 silently skip
  * （此函式只負責清狀態，不再 fail一次；real failure 由 caller 的 failChunk 處理）。
  */
+/**
+ * 從 chunk JSONL（newline-delimited JSON）拉出所有 row id。
+ *
+ * Resume 路徑用 — 取代 BETWEEN min..max + cutoff 範圍 UPDATE（跨月時 ctx.cutoff
+ * 已不是 chunk 原始 cutoff，會誤把當初被 cutoff 排除的 HOT row 標 archived_at）。
+ * 用 chunk 內 exact ids 做 IN(...) UPDATE → 跨月也對、不需 schema migration。
+ *
+ * 兩 aggregate worker 的 rowsToJsonl 都把 `id` 放第一個欄位，且行內為合法 JSON。
+ * parse 失敗的行被忽略（不該發生；發生即代表 chunk 已壞，後續 sha 比對也會擋下）。
+ */
+function extractIdsFromJsonl(text) {
+  const ids = []
+  for (const line of text.split('\n')) {
+    if (!line) continue
+    try {
+      const obj = JSON.parse(line)
+      if (typeof obj?.id === 'number') ids.push(obj.id)
+    } catch { /* swallow; sha-mismatch path 會接到 */ }
+  }
+  return ids
+}
+
 async function transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, lastFailure) {
   await db.prepare(
     `UPDATE audit_archive_chunks
@@ -769,6 +791,10 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
     throw e
   }
 
+  // Codex H-1 cross-month fix：parse exact row ids 給 chain 到 resumeVerifiedBlocker
+  // 用 IN(...) 做 archived_at UPDATE，避開 BETWEEN + ctx.cutoff 跨月誤標 HOT row。
+  const chunkIds = extractIdsFromJsonl(text)
+
   // 3) PUT manifest 'verified'
   const mObj = await bucket.get(manifestKey)
   let manifest
@@ -822,8 +848,9 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
 
   // 5) dry-run 終態，停；live 繼續走 marked_archived
   if (chunkDryRun) return
-  // chain：把目前 'verified' 的 blocker 餵給 resumeVerifiedBlocker 跑 live mark 路徑
-  await resumeVerifiedBlocker({ ctx, blocker: { ...blocker, state: 'verified' }, report })
+  // chain：把目前 'verified' 的 blocker + exact ids 餵給 resumeVerifiedBlocker
+  // 跑 live mark 路徑（用 IN(ids) 而非 BETWEEN + ctx.cutoff）
+  await resumeVerifiedBlocker({ ctx, blocker: { ...blocker, state: 'verified' }, report, ids: chunkIds })
 }
 
 /**
@@ -837,10 +864,12 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
  * 這裡只動 live chunk。dry-run verified 留給 PR 4 翻 flag 前的人工清理 / PR 0.2c
  * lock 上線後的 lifecycle 流轉。
  *
- * UPDATE 對 aggregate row 加 cutoff guard（與 processChunk H-1 修正同邏輯）；
+ * UPDATE 對 aggregate row 用 IN(chunkIds)（codex H-1 跨月修正）— 不再用 BETWEEN +
+ * ctx.cutoff，避開跨月 ctx.cutoff 已不是 chunk 原始 cutoff、把當初被排除的 HOT row
+ * 誤標 archived_at 的問題；ids 由 chain caller 傳，或本函式自行 GET R2 data parse。
  * archived_at NOT NULL 預期已有，UPDATE changes=0 也視為正常（已標完）。
  */
-async function resumeVerifiedBlocker({ ctx, blocker, report }) {
+async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
   const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
   if (chunkDryRun) {
     // dry-run verified 是 PR 3.2 part 2 終態，跳過。
@@ -848,14 +877,51 @@ async function resumeVerifiedBlocker({ ctx, blocker, report }) {
   }
   const { envName, tableName, coldClass, db, bucket, runId } = ctx
 
+  // Codex H-1 cross-month fix：用 chunk JSONL 內 exact row ids 做 UPDATE，
+  // 避開 BETWEEN(min,max) + ctx.cutoff 跨月把當初被 cutoff 排除的 HOT row 也標掉。
+  //
+  // ids 由 caller 傳入（resumeUploadedBlocker chain 已 parse 過 JSONL）；
+  // 若 caller 沒給（直接從 Step 0 抓到 state='verified' 的 chunk，未先 GET data），
+  // 此處 GET R2 data + decompress + parse ids；sha 不再驗（已是 verified 狀態，
+  // 上一輪 cron 已驗過；resume 只負責升 marked_archived，IO 多一次但成本可接受）。
+  let chunkIds = Array.isArray(ids) ? ids : null
+  if (!chunkIds) {
+    const { dataKey: verifiedDataKey } = deriveAggregateKeysFromChunk({
+      env: envName, table_name: tableName, cold_class: coldClass,
+      min_id: blocker.min_id, max_id: blocker.max_id,
+      chunk_sha256: blocker.chunk_sha256,
+      archive_date: blocker.archive_date,
+      dry_run: blocker.dry_run, compression: 'gzip',
+    })
+    const dataObj = await bucket.get(verifiedDataKey)
+    if (!dataObj) {
+      const e = new Error('verified_blocker_resume_failed: r2_data_missing')
+      e.code = 'VERIFY_RESUME_R2_MISSING'
+      e.data_key = verifiedDataKey
+      throw e
+    }
+    try {
+      const gzBytes = new Uint8Array(await dataObj.arrayBuffer())
+      const jsonlBytes = await gzipDecompress(gzBytes)
+      const text = new TextDecoder().decode(jsonlBytes)
+      chunkIds = extractIdsFromJsonl(text)
+    } catch (err) {
+      const e = new Error(`verified_blocker_resume_failed: gzip_decompress_failed (${err?.message ?? err})`)
+      e.code = 'VERIFY_RESUME_DECOMPRESS'
+      throw e
+    }
+  }
+
   // 1) UPDATE aggregate row archived_at（idempotent；crashed-after 場景 changes=0）
-  await db.prepare(
-    `UPDATE ${tableName}
-        SET archived_at = datetime('now')
-      WHERE id BETWEEN ? AND ?
-        AND archived_at IS NULL
-        AND created_at < ?`
-  ).bind(blocker.min_id, blocker.max_id, ctx.cutoff).run()
+  if (chunkIds.length > 0) {
+    const placeholders = chunkIds.map(() => '?').join(',')
+    await db.prepare(
+      `UPDATE ${tableName}
+          SET archived_at = datetime('now')
+        WHERE id IN (${placeholders})
+          AND archived_at IS NULL`
+    ).bind(...chunkIds).run()
+  }
 
   // 2) PUT manifest marked_archived（codex r2 M-1：先 R2 後 D1。
   //    manifest PUT 失敗 → chunks state 仍 verified，下輪 Step 0 重跑接續；

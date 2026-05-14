@@ -517,6 +517,82 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(resumed).toBeTruthy()
   })
 
+  it('Codex H-1 regression：跨月 uploaded resume 不該把當初被 cutoff 排除的 row 標 archived_at（用 chunk JSONL exact ids 而非 BETWEEN range）', async () => {
+    // Bug 場景（原 BETWEEN + ctx.cutoff range UPDATE）：
+    //   chunk 在 M 月建立，JSONL 含 row A, C（id=1, 3）；row B（id=2）當時是 HOT
+    //   被 cutoff_M 排除、未進 JSONL。M+1 月 admin re_verify → resumeUploadedBlocker
+    //   chain resumeVerifiedBlocker：原舊邏輯 UPDATE WHERE id BETWEEN 1 AND 3 AND
+    //   created_at < ctx.cutoff(M+1)。Row B 在 M+1 月 cutoff 內 → 被誤標 archived_at，
+    //   但從未在 R2 → PR 4 真刪會誤刪未備份資料。
+    //
+    // 此測用「row B 在 SELECT 時被排除」模擬同效果（不必真等跨月）：
+    //   1) Seed A/B/C 三 row（archived_at NULL, created_at OLD），B 暫時 archived_at NOT NULL
+    //      → SELECT 排除 B，產生 JSONL 只含 A/C 的 chunk。
+    //   2) 跑 cron 到 marked_archived。然後把 A/C 的 archived_at 也清回 NULL、chunk 拉回
+    //      'uploaded' state，模擬「admin re_verify 完、aggregate row 等下輪 cron 收尾」。
+    //   3) 再跑 cron → Step 0 resumeUploadedBlocker → 用 IN(JSONL_ids) UPDATE。
+    //   4) Assert：row B archived_at 仍 NULL（修前會被 BETWEEN 誤標）。
+    await seedTelemetryRow()   // A
+    await seedTelemetryRow()   // B
+    await seedTelemetryRow()   // C
+    const rowsBefore = await env.chiyigo_db.prepare(
+      `SELECT id FROM audit_log_aggregate_telemetry ORDER BY id ASC`
+    ).all()
+    const [idA, idB, idC] = rowsBefore.results.map(r => r.id)
+
+    // 暫時把 B 標 archived_at 讓 SELECT 排除它
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_log_aggregate_telemetry SET archived_at = datetime('now') WHERE id = ?`
+    ).bind(idB).run()
+
+    // 跑 cron → chunk JSONL 只含 A, C；chunk min=A.id, max=C.id（BETWEEN 會涵蓋 B）
+    const first = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(first.status).toBe(200)
+    expect(first.body.ok).toBe(true)
+    const ch = await listChunks()
+    expect(ch).toHaveLength(1)
+    expect(ch[0].min_id).toBe(idA)
+    expect(ch[0].max_id).toBe(idC)
+    expect(ch[0].state).toBe('marked_archived')
+    expect(ch[0].row_count).toBe(2)   // JSONL 只 A/C
+
+    // 把 A/B/C 三 row 的 archived_at 都清回 NULL，並把 chunk 拉回 'uploaded'
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_log_aggregate_telemetry SET archived_at = NULL`
+    ).run()
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks SET state = 'uploaded' WHERE state = 'marked_archived'`
+    ).run()
+
+    // 再跑 cron → Step 0 resumeUploadedBlocker → 用 chunk JSONL exact ids
+    const second = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(second.status).toBe(200)
+    expect(second.body.ok).toBe(true)
+    expect(second.body.chunks_resumed_uploaded ?? 0).toBe(1)
+
+    // 關鍵 assert（discriminator）：resume 不該動 row B，Step 1 必須把 B 當成
+    // 「還沒 archive 的 cold row」撈出來建新 chunk → chunks_planned=1。
+    //   修前 BETWEEN 邏輯：resume 直接把 B 標 archived_at NOT NULL → Step 1 SELECT
+    //   被 archived_at IS NULL 過濾掉 → chunks_planned=0、chunks_marked_archived=1。
+    //   修後 IN(ids) 邏輯：resume 只動 A/C → Step 1 撈 B → 新 chunk →
+    //   chunks_planned=1、chunks_marked_archived=2。
+    expect(second.body.chunks_planned ?? 0).toBe(1)
+    expect(second.body.chunks_marked_archived ?? 0).toBe(2)
+
+    // 終態：三 row 全 archived，且 chunks table 有 2 row（resume + fresh）
+    const after = await env.chiyigo_db.prepare(
+      `SELECT id, archived_at FROM audit_log_aggregate_telemetry ORDER BY id ASC`
+    ).all()
+    for (const r of after.results) expect(r.archived_at).not.toBeNull()
+    const chunksAfter = await listChunks()
+    expect(chunksAfter).toHaveLength(2)
+    // 原 chunk（min=A, max=C, row_count=2）+ 新 chunk（min=max=B, row_count=1）
+    const newChunk = chunksAfter.find(c => c.min_id === idB && c.max_id === idB)
+    expect(newChunk).toBeTruthy()
+    expect(newChunk.row_count).toBe(1)
+    expect(newChunk.state).toBe('marked_archived')
+  })
+
   // 共用 helper：seed 1 aggregate row + 1 terminal-blocker chunk（覆蓋該 row id）
   async function seedTerminalBlockerScenario(blockerState, sha) {
     await seedTelemetryRow()
