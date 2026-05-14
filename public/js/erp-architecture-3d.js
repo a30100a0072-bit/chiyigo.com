@@ -156,22 +156,22 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
   ctx.lineTo(r, height); ctx.quadraticCurveTo(0, height, 0, height - r);
   ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
   ctx.closePath();
-  // 漸層底（subtle=true 用於外圍衛星：整體更透；highlight + subtle 用「深色低透」表現點選）
+  // 漸層底（subtle=true 用於外圍衛星：比 8 層 tower 更實；highlight + subtle 點選態接近完全不透 + 色調調深）
   const grad = ctx.createLinearGradient(0, 0, width, height);
   if (highlight) {
     if (subtle) {
-      // 點選後：降低透明度 + 色調調深（用 darken 過的 accent，看起來像「沉下去」而非「跳出來」）
-      grad.addColorStop(0, rgba(accentDeep, 0.70));
-      grad.addColorStop(1, rgba(accent, 0.40));
+      // 點選：幾乎完全不透 + 深色
+      grad.addColorStop(0, rgba(accentDeep, 1.00));
+      grad.addColorStop(1, rgba(accent, 0.88));
     } else {
       grad.addColorStop(0, rgba(accent, 0.92));
       grad.addColorStop(1, rgba(accentLight, 0.65));
     }
   } else {
     if (subtle) {
-      // 外圍預設：更透，降低存在感
-      grad.addColorStop(0, rgba(accent, 0.30));
-      grad.addColorStop(1, rgba(accentLight, 0.08));
+      // 預設：比 tower 更實，外圍清楚浮現
+      grad.addColorStop(0, rgba(accent, 0.80));
+      grad.addColorStop(1, rgba(accentLight, 0.45));
     } else {
       grad.addColorStop(0, rgba(accent, 0.55));
       grad.addColorStop(1, rgba(accentLight, 0.22));
@@ -179,9 +179,9 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
   }
   ctx.fillStyle = grad;
   ctx.fill();
-  // border：subtle 時降低 alpha；highlight 採用 deep 色調而非 lighter
+  // border：subtle 時 highlight 用 deep 色，預設用 accent solid
   if (subtle) {
-    ctx.strokeStyle = highlight ? rgba(accentDeep, 0.85) : rgba(accent, 0.45);
+    ctx.strokeStyle = hexStr(highlight ? accentDeep : accent);
   } else {
     ctx.strokeStyle = hexStr(highlight ? lighten(accent, 0.55) : accent);
   }
