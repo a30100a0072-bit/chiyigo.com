@@ -200,8 +200,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE TABLE IF NOT EXISTS audit_archive_chunks (
   env                TEXT    NOT NULL,
   table_name         TEXT    NOT NULL,
-  cold_class         TEXT    NOT NULL
-                     CHECK(cold_class IN ('immutable','security_critical','security_warn','read_audit','telemetry','debug_failure')),
+  cold_class         TEXT    NOT NULL,  -- 0044：CHECK 移除（aggregate_telemetry / aggregate_debug 加入後 app 層保證合法值）
   cold_class_version INTEGER NOT NULL DEFAULT 1,
   archive_date       TEXT    NOT NULL,
   min_id             INTEGER NOT NULL,

@@ -77,6 +77,7 @@ import up0040 from '../../migrations/0040_requisition_index_align.sql?raw'
 import up0041 from '../../migrations/0041_audit_archive_chunks_compression.sql?raw'
 import up0042 from '../../migrations/0042_payment_webhook_apply_status.sql?raw'
 import up0043 from '../../migrations/0043_payment_intents_soft_delete.sql?raw'
+import up0044 from '../../migrations/0044_audit_aggregate_archive_cols.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -87,7 +88,7 @@ const ALL_UPS = [
   up0017, up0018, up0019, up0020, up0021, up0022, up0023, up0024,
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
-  up0041, up0042, up0043,
+  up0041, up0042, up0043, up0044,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -549,6 +550,100 @@ describe('full forward chain 0001..0040 vs prod snapshot', () => {
 // codex round-11 M-2 修正：補 0038 targeted smoke。
 // 驗 SQL syntax / 5 段 backfill / 新表 / 新索引；down 拆新表 + 新索引；
 // audit_log 兩欄 SQLite 不支援 DROP COLUMN，down 後留著（已在 down.sql 註明）。
+// PR 3.2（migration 0044）— codex P1 / P2a 驗證：CHECK widening + 新欄齊備
+// 順序要注意：本 describe **必須** 放在「0038 targeted」之前，否則本 describe 的
+// beforeAll 透過 ALL_UPS 留下 FK-version audit_log（from migration 0017，REFERENCES users），
+// 後續 user-audit.test.js / payments-ecpay.test.js / register.test.js 共用 D1 binding
+// 時 CREATE IF NOT EXISTS 不會覆蓋，seedAudit 用未存在 user_id INSERT audit_log 會撞 FK。
+// 「0038 targeted」beforeAll 之後 audit_log 是手動 CREATE 的無 FK 版本，這才是 user-audit
+// 等 test file 所仰賴的「test fixture-friendly」狀態。
+describe('migrations smoke 0044 targeted (aggregate→R2 schema)', () => {
+  beforeAll(async () => {
+    await dropAllTables()
+    await execAll(baseSql)
+    for (const sql of ALL_UPS) await execAll(sql)
+  })
+
+  it('audit_log_aggregate_telemetry 加 archived_at + cold_class + partial index', async () => {
+    expect(await columnExists('audit_log_aggregate_telemetry', 'archived_at')).toBe(true)
+    expect(await columnExists('audit_log_aggregate_telemetry', 'cold_class')).toBe(true)
+    expect(await indexExists('idx_agg_tele_archived_at')).toBe(true)
+  })
+
+  it('audit_log_aggregate_debug 加 archived_at + cold_class + partial index', async () => {
+    expect(await columnExists('audit_log_aggregate_debug', 'archived_at')).toBe(true)
+    expect(await columnExists('audit_log_aggregate_debug', 'cold_class')).toBe(true)
+    expect(await indexExists('idx_agg_debug_archived_at')).toBe(true)
+  })
+
+  it('cold_class DEFAULT：兩表 INSERT 不帶 cold_class → 拿到對應字面值', async () => {
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_log_aggregate_telemetry (event_type, severity, hour_bucket, count)
+       VALUES ('x', 'info', '2026-06-01T00:00:00Z', 1)`,
+    ).run()
+    const tRow = await env.chiyigo_db.prepare(
+      `SELECT cold_class FROM audit_log_aggregate_telemetry WHERE event_type='x'`,
+    ).first()
+    expect(tRow.cold_class).toBe('aggregate_telemetry')
+
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_log_aggregate_debug (event_type, hour_bucket, total_count, sample_count, samples_json)
+       VALUES ('y', '2026-06-01T00:00:00Z', 1, 0, '[]')`,
+    ).run()
+    const dRow = await env.chiyigo_db.prepare(
+      `SELECT cold_class FROM audit_log_aggregate_debug WHERE event_type='y'`,
+    ).first()
+    expect(dRow.cold_class).toBe('aggregate_debug')
+  })
+
+  it('audit_archive_chunks CHECK 放寬：INSERT aggregate_telemetry / aggregate_debug 不被擋', async () => {
+    // 0038 原 CHECK 鎖 6 class；0044 Part 3 rebuild 後放寬，兩個 aggregate_* 應通過
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+         (env, table_name, cold_class, archive_date, min_id, max_id,
+          chunk_sha256, state, row_count, run_id)
+       VALUES ('test', 'audit_log_aggregate_telemetry', 'aggregate_telemetry',
+               '2026-06-01', 1, 10, 'sha-t', 'planned', 10, 'run-t')`,
+    ).run()
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+         (env, table_name, cold_class, archive_date, min_id, max_id,
+          chunk_sha256, state, row_count, run_id)
+       VALUES ('test', 'audit_log_aggregate_debug', 'aggregate_debug',
+               '2026-06-01', 1, 10, 'sha-d', 'planned', 10, 'run-d')`,
+    ).run()
+    const rows = await env.chiyigo_db.prepare(
+      `SELECT cold_class FROM audit_archive_chunks WHERE env='test' ORDER BY cold_class`,
+    ).all()
+    expect(rows.results.map(r => r.cold_class)).toEqual(['aggregate_debug', 'aggregate_telemetry'])
+  })
+
+  it('rebuild 後 audit_archive_chunks 三索引 + PK 仍存在', async () => {
+    expect(await indexExists('idx_archive_chunks_state')).toBe(true)
+    expect(await indexExists('idx_archive_chunks_purge')).toBe(true)
+    expect(await indexExists('idx_archive_chunks_blacklist')).toBe(true)
+    // PK 透過 sqlite_master 不一定看得到，靠重複 INSERT 撞 PK 反證
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+         (env, table_name, cold_class, archive_date, min_id, max_id,
+          chunk_sha256, state, row_count, run_id)
+       VALUES ('test2', 'audit_log_aggregate_telemetry', 'aggregate_telemetry',
+               '2026-06-01', 1, 10, 'sha-pk', 'planned', 10, 'run-pk')`,
+    ).run()
+    let threw = false
+    try {
+      await env.chiyigo_db.prepare(
+        `INSERT INTO audit_archive_chunks
+           (env, table_name, cold_class, archive_date, min_id, max_id,
+            chunk_sha256, state, row_count, run_id)
+         VALUES ('test2', 'audit_log_aggregate_telemetry', 'aggregate_telemetry',
+                 '2026-06-01', 1, 10, 'sha-pk', 'planned', 10, 'run-pk')`,
+      ).run()
+    } catch { threw = true }
+    expect(threw).toBe(true)
+  })
+})
+
 describe('migrations smoke 0038 targeted (audit_log Phase 2)', () => {
   beforeAll(async () => {
     await dropAllTables()
@@ -705,3 +800,4 @@ describe('migrations smoke 0038 targeted (audit_log Phase 2)', () => {
     expect(await columnExists('audit_log', 'cold_class')).toBe(true)
   })
 })
+

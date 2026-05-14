@@ -93,7 +93,10 @@ export const SCAN_GLOBS = [
   'functions/api/admin/cron',
   'functions/utils',
 ]
-export const FILE_PATTERN = /^audit-archive.*\.js$/
+// 0044 (codex P2b)：擴 aggregate-archive — audit-aggregate-archive*.js（PR 3.2 helpers + 兩 handler）
+// 既有 'audit-archive*'   涵蓋 audit_log archive worker（PR 2.x）；
+// 新增  'audit-aggregate-archive*' 涵蓋 aggregate→R2 worker（PR 3.2+）。
+export const FILE_PATTERN = /^audit-(aggregate-)?archive.*\.js$/
 
 // Helper: 給定 line + pattern，判斷是否被同行 ALLOW_TAG 豁免（per-kind）。
 //   line-scope pattern 用此 helper；source-scope pattern 由 caller 自行決定
