@@ -37,6 +37,17 @@ const NODES = [
   { id:'sre',         ang:337.5, r:300, ty:-100, tag:'PLATFORM'    },
 ];
 
+// ── 18 條 EDGES（跨領域功能依賴，與 2D 版同步） ──
+const EDGES = [
+  ['iam','mdm'], ['iam','workflow'], ['iam','metadata'],
+  ['crm','sales'], ['sales','finance'], ['sales','mdm'], ['sales','file'],
+  ['finance','integration'], ['finance','file'],
+  ['workflow','event'], ['workflow','metadata'],
+  ['event','data'], ['event','notify'], ['event','ai'],
+  ['ai','data'], ['ai','knowledge'],
+  ['bi','data'], ['mdm','data'],
+];
+
 // ── DOM refs ──
 const SCENE_EL = document.getElementById('erp3-scene');
 const CANVAS = document.getElementById('erp3-canvas');
@@ -153,7 +164,7 @@ let renderer, scene, camera, raycaster, mouse;
 let towerGroup, satGroup, spine, spineGlow;
 const layerMeshes = []; // [{ mesh, lvl, baseTex, hiTex, info }]
 const satMeshes = [];   // [{ mesh, node, baseTex, hiTex, info }]
-const disposables = []; // { dispose() } 列表
+const edgeLines = [];   // [{ line, a, b, mat }]
 
 const cam = { theta: 0.6, phi: 0.18, radius: 850 };
 let dragging = false, didDrag = false;
@@ -179,13 +190,11 @@ function initScene(){
   const spineMat = new THREE.MeshBasicMaterial({ color: 0x8c91ff, transparent: true, opacity: 0.85 });
   spine = new THREE.Mesh(spineGeom, spineMat);
   scene.add(spine);
-  disposables.push(spineGeom, spineMat);
 
   const glowGeom = new THREE.CylinderGeometry(14, 14, 600, 24);
   const glowMat = new THREE.MeshBasicMaterial({ color: 0x6c6ee5, transparent: true, opacity: 0.22, depthWrite: false });
   spineGlow = new THREE.Mesh(glowGeom, glowMat);
   scene.add(spineGlow);
-  disposables.push(glowGeom, glowMat);
 
   // 8 層 tower
   towerGroup = new THREE.Group();
@@ -202,7 +211,6 @@ function initScene(){
     mesh.userData = { kind: 'layer', id: lvl };
     towerGroup.add(mesh);
     layerMeshes.push({ mesh, lvl, baseTex, hiTex });
-    disposables.push(geom, mat, baseTex, hiTex);
   }
 
   // 16 衛星
@@ -219,7 +227,38 @@ function initScene(){
     mesh.userData = { kind: 'node', id: n.id };
     satGroup.add(mesh);
     satMeshes.push({ mesh, node: n, baseTex, hiTex });
-    disposables.push(geom, mat, baseTex, hiTex);
+  }
+
+  // EDGES 功能線：18 條跨領域連線
+  for (const [a, b] of EDGES) {
+    const na = NODES.find(n => n.id === a);
+    const nb = NODES.find(n => n.id === b);
+    if (!na || !nb) continue;
+    const aRad = (na.ang * Math.PI) / 180;
+    const bRad = (nb.ang * Math.PI) / 180;
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute([
+      Math.sin(aRad) * na.r, na.ty, Math.cos(aRad) * na.r,
+      Math.sin(bRad) * nb.r, nb.ty, Math.cos(bRad) * nb.r
+    ], 3));
+    const mat = new THREE.LineBasicMaterial({ color: 0x6c6ee5, transparent: true, opacity: 0.28, depthWrite: false });
+    const line = new THREE.Line(geom, mat);
+    scene.add(line);
+    edgeLines.push({ line, a, b, mat });
+  }
+}
+
+// ── EDGES 高亮更新：點 node 時相鄰 edge 亮、其他 dim；點 layer 或 idle 時恢復預設 ──
+function refreshEdges(){
+  for (const { a, b, mat } of edgeLines) {
+    if (activeKind === 'node') {
+      const isHit = activeId === a || activeId === b;
+      mat.opacity = isHit ? 0.95 : 0.05;
+      mat.color.setHex(isHit ? 0x8c91ff : 0x6c6ee5);
+    } else {
+      mat.opacity = 0.28;
+      mat.color.setHex(0x6c6ee5);
+    }
   }
 }
 
@@ -352,6 +391,7 @@ function setActive(kind, id){
   activeKind = kind;
   activeId = id;
   refreshActiveTextures();
+  refreshEdges();
   if (kind === 'layer') renderLayerPanel(id);
   else if (kind === 'node') renderNodePanel(id);
   else clearPanel();
@@ -448,14 +488,21 @@ function rebuildLabelTextures(){
   refreshActiveTextures();
 }
 
+// 純 DOM [data-i18n] 套用（不碰 Three.js textures）— init 失敗也能跑
+function applyDomI18n(lang){
+  const dict = LANGS_I18N[lang] || LANGS_I18N['en'] || LANGS_I18N['zh-TW'];
+  if (!dict) return;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n;
+    if (dict[k] !== undefined) el.textContent = dict[k];
+  });
+}
+
 function applyLang(lang){
   if (!LANGS_I18N[lang]) return;
   curLang = lang;
   const t = LANGS_I18N[lang];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const k = el.dataset.i18n;
-    if (t[k] !== undefined) el.textContent = t[k];
-  });
+  applyDomI18n(lang);
   const tBtn = document.getElementById('theme-toggle-btn');
   const mTBtn = document.getElementById('m-theme-btn');
   const lBtn = document.getElementById('lang-toggle-btn');
@@ -549,13 +596,25 @@ document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
   resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
 })();
 
-// Dispose on page unload
+// Dispose on page unload — 透過 scene.traverse 抓所有現存資源，含 lang 切換後 rebuild 的新 textures
 window.addEventListener('beforeunload', () => {
-  for (const d of disposables) d.dispose?.();
+  if (scene) {
+    scene.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose?.();
+      const mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : [];
+      for (const m of mats) {
+        if (m.map) m.map.dispose?.();
+        m.dispose?.();
+      }
+    });
+  }
   renderer?.dispose?.();
 });
 
 // ── Init ──
+// DOM i18n 先跑：即使 WebGL 初始化失敗、fallback 訊息也用使用者語言
+applyDomI18n(curLang);
+
 if (CANVAS && SCENE_EL) {
   try {
     initScene();
