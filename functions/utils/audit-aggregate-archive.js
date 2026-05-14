@@ -17,9 +17,11 @@
  *   archiveExtension / putWithRetry / newRunId / utcDate / appendStateHistory /
  *   ARCHIVE_SCHEMA_VERSION / aggregateSeverities（不適用）
  *
- * 🔴 no-delete discipline：本檔與對應 cron handler **禁止** 出現
- *    env.AUDIT_ARCHIVE_BUCKET.delete( ；R2 lock 已將 prefix 設 365d retention，
- *    刪除走 admin force_purge 路徑（PR 2.3 同套；PR 3.2 暫未開）。
+ * 🔴 no-delete discipline：本檔與對應 cron handler 預設禁止 R2 .delete()；唯一豁免
+ *    是 PR 3.3 `purgeAggregateChunk`（admin force_purge codepath），使用 per-line
+ *    `// archive-delete-allow:` waiver tag 通過 lint。其餘任何 R2 .delete() 一律拒。
+ *    R2 lock（PR 0.2c）將 prefix 設 365d retention 後，force_purge 會被 retention
+ *    lock 擋住 → endpoint catch 後落 502 / 423；force_purge 本身的 lint 豁免不變。
  */
 
 import { ARCHIVE_SCHEMA_VERSION } from './audit-archive.js'
@@ -282,4 +284,114 @@ export function splitIntoChunks(rows, toJsonl, opts = {}) {
   }
   flush()
   return { chunks }
+}
+
+/**
+ * PR 3.3 — Aggregate chunk force-purge helper（與 PR 2.3 `purgeChunk` 平行對等）。
+ *
+ * 設計差異（**為何不直接共用 raw purgeChunk**）：
+ *   - raw purgeChunk 走 `deriveKeysFromChunk`，prefix 是 `audit-log/...`
+ *   - aggregate chunk prefix 是 `audit-log-aggregate-{telemetry|debug}[-dryrun]/...`
+ *     + manifest `manifest[-dryrun]/...`，必須走 `deriveAggregateKeysFromChunk`
+ *   - 直接套 raw 會刪錯 prefix → R2 silent leak（dashboard 看 bucket 還有物件，
+ *     D1 已沒對應 chunks row，admin 也不知道）
+ *
+ * 護欄（user 2026-05-14 拍板，呼應 codex aggregate retry chain）：
+ *   1. target 必須含 dry_run flag — SELECT / DELETE 都 `AND dry_run = ?` 比對；
+ *      operator 以為在刪 dry-run、實際 row 是 live → 404 reject，永遠不會「借殼」
+ *      刪到 live row。
+ *   2. state 必須 'blacklisted'（force_purge invariant；mark_resolved 路徑收尾）。
+ *   3. R2 順序：data → manifest → D1（R2-before-D1，呼應 codex r2 M-1；R2 失敗
+ *      下輪 retry 不破壞 D1 state）。
+ *   4. R2 missing-key 視為 idempotent 繼續（與 raw purgeChunk 一致）；其他 SDK
+ *      exception propagate 上層轉 502。
+ *   5. D1 DELETE 帶 state='blacklisted' AND dry_run=? — race 防禦：上面 SELECT 後
+ *      若有 worker 升態（理論上 blacklisted 是 terminal 不應升，但雙保險），
+ *      changes=0 就 abort，不污染 cursor 狀態。
+ *
+ * @param {object} args
+ * @param {object} args.env                 Workers env（需 AUDIT_ARCHIVE_BUCKET）
+ * @param {object} args.db                  D1 binding
+ * @param {object} args.target              {env, table_name, cold_class, archive_date,
+ *                                           min_id, max_id, chunk_sha256, dry_run}
+ * @returns {Promise<{
+ *   chunks_row_deleted: boolean,
+ *   source_rows_deleted: false,
+ *   data_key: string,
+ *   manifest_key: string,
+ * }>}
+ * @throws Error                            CHUNK_NOT_FOUND / CHUNK_STATE_MISMATCH /
+ *                                          DRY_RUN_MISMATCH / R2 / D1 exception
+ */
+export async function purgeAggregateChunk({ env, db, target }) {
+  const bucket = env?.AUDIT_ARCHIVE_BUCKET
+  if (!bucket) throw new Error('AUDIT_ARCHIVE_BUCKET binding missing')
+
+  const expectedDryRunInt = target.dry_run ? 1 : 0
+
+  // 1) SELECT chunk row by composite key — 撈 dry_run / compression 反推 R2 key
+  //    （與 raw purgeChunk 不同：這裡 SELECT 不過濾 dry_run，先撈出來驗 expected，
+  //    錯了 throw DRY_RUN_MISMATCH，給 operator 清楚 reason）
+  const row = await db.prepare(
+    `SELECT env, table_name, cold_class, archive_date,
+            min_id, max_id, chunk_sha256, state, dry_run, compression
+       FROM audit_archive_chunks
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(
+    target.env, target.table_name, target.cold_class,
+    target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
+  ).first()
+
+  if (!row) {
+    const e = new Error('chunk_not_found')
+    e.code = 'CHUNK_NOT_FOUND'
+    throw e
+  }
+  const actualDryRunInt = row.dry_run === 1 || row.dry_run === true ? 1 : 0
+  if (actualDryRunInt !== expectedDryRunInt) {
+    const e = new Error(`dry_run_mismatch; expected ${expectedDryRunInt}, got ${actualDryRunInt}`)
+    e.code = 'DRY_RUN_MISMATCH'
+    e.expectedDryRun = expectedDryRunInt
+    e.actualDryRun   = actualDryRunInt
+    throw e
+  }
+  if (row.state !== 'blacklisted') {
+    const e = new Error(`chunk_state_must_be_blacklisted; got '${row.state}'`)
+    e.code = 'CHUNK_STATE_MISMATCH'
+    e.actualState = row.state
+    throw e
+  }
+
+  // PR 3.3：必須走 deriveAggregateKeysFromChunk（不是 raw deriveKeysFromChunk），
+  //   prefix = audit-log-aggregate-{telemetry|debug}[-dryrun]/...
+  //          + manifest[-dryrun]/{env}/{table_name}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}.json
+  const { dataKey, manifestKey } = deriveAggregateKeysFromChunk(row)
+
+  // 2) R2 chunk DELETE（missing-key 為 no-op，propagate 其他 SDK exception）
+  //    waiver tag 必須同行（lint per-line scan，scripts/_archive-lint-patterns.js#isWaived）
+  await bucket.delete(dataKey) // archive-delete-allow: PR 3.3 force_purge aggregate chunk object
+  // 3) R2 manifest DELETE
+  await bucket.delete(manifestKey) // archive-delete-allow: PR 3.3 force_purge aggregate manifest object
+
+  // 4) D1 chunks row DELETE — 嚴格 state='blacklisted' AND dry_run=? 再驗一次
+  //    SQL waiver tag 必須在 match span 內（與下方 SQL 同一行；archive-sql-allow）
+  const del = await db.prepare(
+    `DELETE FROM audit_archive_chunks /* archive-sql-allow: PR 3.3 aggregate force_purge */
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND state = 'blacklisted' AND dry_run = ?`
+  ).bind(
+    target.env, target.table_name, target.cold_class,
+    target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
+    expectedDryRunInt,
+  ).run()
+
+  const changes = del?.meta?.changes ?? 0
+  return {
+    chunks_row_deleted:  changes === 1,
+    source_rows_deleted: false,
+    data_key:            dataKey,
+    manifest_key:        manifestKey,
+  }
 }
