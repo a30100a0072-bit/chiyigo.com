@@ -1018,7 +1018,52 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
     - DRY_RUN 沿用 `AUDIT_ARCHIVE_DRY_RUN`：dry-run 寫 `audit-log-aggregate-{telemetry,debug}-dryrun/` prefix、停在 `verified`、aggregate row 不標 archived_at；PR 4 翻 flag 開 live + 真刪 aggregate row（marked_archived → purge 走 PR 4）
     - 整合測試 `tests/integration/audit-aggregate-archive.test.js`（11 case）：happy ×2 表 / archived_at filter / month boundary / DRY_RUN prefix split / idempotent / chunks PK 共存 / no_rows_eligible / auth 401 / CRON_SECRET 缺 500
     - audit-policy +4 chunk-level events `audit.aggregate_archive.{telemetry,debug}.{chunk_uploaded,upload_failed}`（mirror PR 2.x archive worker；registry 142→146）
-- PR 3.3 admin retry endpoint（aggregate-archive 失敗 chunk 補跑，mirror PR 2.2b/2.3）後續
+- **PR 3.3 admin retry / force_purge endpoint**（mirror PR 2.2b/2.3 raw retry.js；
+  single file，三 action：re_verify / mark_resolved / force_purge）
+  - `functions/api/admin/audit-aggregate-archive/retry.js`：白名單只認 aggregate 兩
+    `(table_name, cold_class)` 對；不允許 raw audit_log 從此 endpoint 進來（cross-system
+    防護）。`target` 必含 `dry_run` boolean — 全程 `AND dry_run = ?` expected guard
+    防 operator 以為刪 dry-run 實際刪 live。reason_code（白名單 grep）+ operator_reason
+    （10..500 char）兩欄必填。
+  - **mark_resolved 兩條路徑**：
+    - `state='failed' → 'blacklisted'`（raw mirror；任意 dry_run）
+    - `state='verified' AND dry_run=1 → 'blacklisted'`（**PR 3.3 special**；解 codex r2
+      H-1 場景：dry-run chunk 卡住、live 無法 rerun，admin 把 dry-run chunk mark_resolved
+      後 force_purge，同日切 live）
+    - **`state='verified' AND dry_run=0 → 409 LIVE_VERIFIED_NOT_BLACKLISTABLE`**
+      （deletion invariant 不可繞過；live verified 該走 cron resume / marked_archived）
+    - Path B 額外 invariant：aggregate row `archived_at IS NULL`；違反代表 r2 H-1
+      invariant 已破 → 409 INTEGRITY_BREACH critical reject，**不自動修**，operator
+      走獨立 repair flow
+  - **force_purge**：`state='blacklisted'` only；`AUDIT_AGGREGATE_PURGE_ENABLED='1'`
+    env gate（與 raw `AUDIT_ARCHIVE_PURGE_ENABLED` 分開，避免互相牽動）；呼叫
+    `purgeAggregateChunk`（**不共用** raw `purgeChunk`：prefix derive 不同；用
+    `deriveAggregateKeysFromChunk` 走 `audit-log-aggregate-{telemetry|debug}[-dryrun]/`
+    + `manifest[-dryrun]/`）。順序：R2 data → R2 manifest → D1 chunks row DELETE
+    （R2-before-D1，呼應 codex r2 M-1）。R2 missing-key idempotent 繼續。
+  - **Auth**：reuse 既有 `admin:audit_archive:{retry,resolve,purge}` fine scope；
+    step-up `for_action` 改 aggregate 專屬 anti-replay 域
+    （`audit_aggregate_archive_mark_resolved` / `audit_aggregate_archive_force_purge`）
+  - **Cron race guard**（同 PR 第一個 commit）：aggregate-archive runner 三個
+    state UPDATE 補 expected-state guard + `changes()===1` check；race（admin 升態）
+    → `failChunk('race_with_admin')`，r3 invariant 把 reason 透到 `run_failed.reason`
+    可 grep；resume path UPDATE 已含 guard，補 changes check skip-on-race（無 emit /
+    不污染統計）。
+  - **audit-policy +14 events**：
+    `audit.aggregate_archive.{telemetry,debug}.{retry_requested,retry_succeeded,retry_rejected,force_purge_requested,force_purge_succeeded,force_purge_failed,force_purge_disabled}`
+    （registry 146→160）
+  - 整合測試 `tests/integration/audit-aggregate-archive-retry.test.js`（23 case）：
+    auth/role/scope/step-up + schema (raw audit_log reject / aggregate pair / dry_run /
+    reason_code / operator_reason) + re_verify happy + mark_resolved 6 case (含
+    INTEGRITY_BREACH + LIVE_VERIFIED_NOT_BLACKLISTABLE + DRY_RUN_MISMATCH) +
+    force_purge 7 case (含 dryrun prefix 驗 / R2 + D1 全刪)
+  - **🔴 0044 prod migration 仍未 apply**（從 PR 3.2 part 1 起繼承狀態）；PR 3.3
+    上線前必跑：
+    ```
+    wrangler d1 migrations apply chiyigo_db --remote
+    ```
+    （reference_pages_deploy_with_d1_migration）。PR 3.3 endpoint 不依賴 0044
+    新增 schema，但兩 worker / aggregate row archived_at 守 invariant 都要 0044 落地。
 
 ### PR 4 — 啟動真刪除
 - 移除 DRY_RUN flag
