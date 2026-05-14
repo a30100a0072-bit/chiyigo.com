@@ -1019,7 +1019,8 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
     - 整合測試 `tests/integration/audit-aggregate-archive.test.js`（11 case）：happy ×2 表 / archived_at filter / month boundary / DRY_RUN prefix split / idempotent / chunks PK 共存 / no_rows_eligible / auth 401 / CRON_SECRET 缺 500
     - audit-policy +4 chunk-level events `audit.aggregate_archive.{telemetry,debug}.{chunk_uploaded,upload_failed}`（mirror PR 2.x archive worker；registry 142→146）
 - **PR 3.3 admin retry / force_purge endpoint**（mirror PR 2.2b/2.3 raw retry.js；
-  single file，三 action：re_verify / mark_resolved / force_purge）
+  single file，三 action：re_verify / mark_resolved / force_purge）—
+  ✅ **2026-05-14 完工 + codex 6 輪 review LGTM**（HEAD `0c77257`）
   - `functions/api/admin/audit-aggregate-archive/retry.js`：白名單只認 aggregate 兩
     `(table_name, cold_class)` 對；不允許 raw audit_log 從此 endpoint 進來（cross-system
     防護）。`target` 必含 `dry_run` boolean — 全程 `AND dry_run = ?` expected guard
@@ -1049,21 +1050,48 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
     → `failChunk('race_with_admin')`，r3 invariant 把 reason 透到 `run_failed.reason`
     可 grep；resume path UPDATE 已含 guard，補 changes check skip-on-race（無 emit /
     不污染統計）。
-  - **audit-policy +14 events**：
+  - **Cron race guard + state-aware Step 0 dispatch + Step 1 NOT EXISTS guard**（r2~r6 演進）：
+    - Step 0 SELECT `state IN ('verified','uploaded','failed','blacklisted')`，按 state 分流：
+      `verified`→`resumeVerifiedBlocker`；`uploaded`→`resumeUploadedBlocker`（用 row 自帶
+      `archive_date` 算 R2 key，**跨日 OK**）；`failed`/`blacklisted`→emit `chunk_skipped warn`
+      + `chunks_blocked_terminal++`（不 resume）
+    - Step 1 SELECT 加 `NOT EXISTS` subquery 排除被 terminal-blocker 覆蓋 id range 的 row
+      → fresh pipeline 跨日不會繞過 invariant
+    - `transitionUploadedToFailed` helper：verify 任一步失敗 atomic 轉 `state='failed'` +
+      `retry_count++` + `last_failure`，讓 admin re_verify 有路徑
+    - processChunk state-aware skip：non-planned existing → `chunk_skipped` info/warn +
+      `chunks_skipped++`（不走 fresh pipeline 二次 PUT）
+  - **Observability**（r5 P2 / r6 P3）：
+    - `run_skipped` 帶 `skipped_reason='blocked_by_terminal_chunk'`（vs 誤導性 `no_rows_eligible`）
+      + `chunks_blocked_terminal` 計數
+    - `run_completed.event_data` 帶 `chunks_blocked_terminal` / `chunks_resumed_uploaded` /
+      `chunks_skipped`（mixed scenario alerting 可看完整 chunk-level 分布）
+  - **audit-policy +16 events**：
     `audit.aggregate_archive.{telemetry,debug}.{retry_requested,retry_succeeded,retry_rejected,force_purge_requested,force_purge_succeeded,force_purge_failed,force_purge_disabled}`
-    （registry 146→160）
-  - 整合測試 `tests/integration/audit-aggregate-archive-retry.test.js`（23 case）：
-    auth/role/scope/step-up + schema (raw audit_log reject / aggregate pair / dry_run /
-    reason_code / operator_reason) + re_verify happy + mark_resolved 6 case (含
-    INTEGRITY_BREACH + LIVE_VERIFIED_NOT_BLACKLISTABLE + DRY_RUN_MISMATCH) +
-    force_purge 7 case (含 dryrun prefix 驗 / R2 + D1 全刪)
-  - **🔴 0044 prod migration 仍未 apply**（從 PR 3.2 part 1 起繼承狀態）；PR 3.3
-    上線前必跑：
-    ```
-    wrangler d1 migrations apply chiyigo_db --remote
-    ```
-    （reference_pages_deploy_with_d1_migration）。PR 3.3 endpoint 不依賴 0044
-    新增 schema，但兩 worker / aggregate row archived_at 守 invariant 都要 0044 落地。
+    （14 retry/force_purge）+ `audit.aggregate_archive.{telemetry,debug}.chunk_skipped`（2，info/warn）
+    （registry 146→162）
+  - **整合測試**（兩檔合計 49 case，加上 raw retry regression 73 case）：
+    - `tests/integration/audit-aggregate-archive-retry.test.js`（26 case）：auth/role/scope/step-up
+      + schema validation + re_verify happy + mark_resolved 6 case（含 INTEGRITY_BREACH /
+      LIVE_VERIFIED_NOT_BLACKLISTABLE / DRY_RUN_MISMATCH）+ force_purge 7 case + r1 補測
+      （invalid reason_code / wrong step-up for_action / P2-2 regression）
+    - `tests/integration/audit-aggregate-archive.test.js`（23 case；r2~r6 補的 regression）：
+      r2 P1 same-day resume / r3 P1 cross-day uploaded resume / r3 P2 R2-missing→failed /
+      r4 P1 跨日 blacklisted+failed blocker / r5 P2 blocked_by_terminal_chunk skipped_reason /
+      r6 P3 mixed scenario run_completed counters
+  - **🔴 0044 prod migration**：✅ **已 apply 2026-05-14**
+    （`wrangler d1 migrations apply chiyigo_db --remote`；reference_pages_deploy_with_d1_migration）
+  - **Codex review chain 收的設計教訓**（PR 4 / future workers 必看）：
+    1. **chunks PK 含 archive_date 的跨日陷阱**：跨日重跑會插新 row 繞過 invariant。
+       Step 0 必須掃 ALL relevant states（不只 verified）+ Step 1 用 NOT EXISTS 排除
+       被 terminal-blocker 覆蓋的 row range。
+    2. **失敗必伴隨 atomic state 轉態**：失敗只 emit log 不轉 state → chunk 卡死、
+       admin endpoint 無路徑。每個 `failChunk` 都要配套對應的 D1 state UPDATE。
+    3. **invariant check 順序**：admin endpoint 的 invariant assertion 必在 probe
+       確認 row 狀態後跑，否則 fake target + 巧合 id range 會誤報 critical。
+    4. **observability event 要帶因果**：`run_skipped` 不能只說 'no_rows_eligible'；
+       `run_completed` mixed scenario 要帶 blocker / resume counters。**監控訊號
+       必須能單獨從一個 event 看出系統當下要不要 admin 介入**。
 
 ### PR 4 — 啟動真刪除
 - 移除 DRY_RUN flag
