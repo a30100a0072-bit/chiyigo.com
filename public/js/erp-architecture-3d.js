@@ -105,6 +105,7 @@ function applyTransform(){
   STAGE.style.setProperty('--rx', rotX + 'deg');
   STAGE.style.setProperty('--ry', rotY + 'deg');
   STAGE.style.setProperty('--zoom', zoom);
+  // 子元素 (.erp3-layer / .erp3-node) 透過 var(--ry) 讀取作 counter-rotation，billboard 面對相機
 }
 
 // ── Auto rotate loop ──

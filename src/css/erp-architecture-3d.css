@@ -69,18 +69,18 @@
 .erp3-tower{position:absolute;left:0;top:0;transform-style:preserve-3d}
 .erp3-layer{
   position:absolute;left:0;top:0;width:380px;
-  /* lvl 1~8 → y -245…+245 (70px gap) */
-  transform:translate(-50%,-50%) translateY(calc((var(--lvl) - 4.5) * 70px));
+  /* lvl 1~8 → y -245…+245 (70px gap)；counter-rotate -ry 讓 layer 永遠面對相機（billboard） */
+  transform:translate(-50%,-50%) translateY(calc((var(--lvl) - 4.5) * 70px)) rotateY(calc(-1 * var(--ry, 0deg)));
   border:1px solid rgba(108,110,229,.4);
   border-radius:12px;
-  background:linear-gradient(135deg,rgba(108,110,229,.18),rgba(140,145,255,.04));
+  background:linear-gradient(135deg,rgba(108,110,229,.22),rgba(140,145,255,.08));
   backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
   padding:14px 22px;
   display:flex;align-items:center;gap:14px;
   color:var(--text,#e7eaf3);
   font-family:inherit;
   cursor:pointer;
-  transition:transform .25s,box-shadow .25s,border-color .25s,background .25s;
+  transition:box-shadow .25s,border-color .25s,background .25s;
   box-shadow:0 6px 22px rgba(108,110,229,.18),0 0 0 1px rgba(255,255,255,.04) inset;
 }
 .erp3-layer:hover{
@@ -104,21 +104,21 @@
 .erp3-orbit{position:absolute;left:0;top:0;transform-style:preserve-3d}
 .erp3-node{
   position:absolute;left:0;top:0;
-  /* --ang, --r, --ty injected by JS; counter-rotate -ang to face stage 'north' */
-  transform:rotateY(var(--ang)) translateZ(var(--r)) translateY(var(--ty)) rotateY(calc(-1 * var(--ang))) translate(-50%,-50%);
-  background:var(--bg,#0e1018);
+  /* --ang, --r, --ty 由 JS 注入；counter-rotate -(ang + ry) 讓節點永遠面對相機（billboard）
+     orbit 位置仍由 rotateY(ang) translateZ(r) 計算，跟著 stage 一起公轉 */
+  transform:rotateY(var(--ang)) translateZ(var(--r)) translateY(var(--ty)) rotateY(calc(-1 * (var(--ang) + var(--ry, 0deg)))) translate(-50%,-50%);
+  background:#0e1018;
   border:1px solid rgba(108,110,229,.45);
   border-radius:999px;
   padding:7px 14px;
   font-size:12px;font-weight:500;
-  color:var(--text,#e7eaf3);
+  color:#e7eaf3;
   font-family:inherit;
   cursor:pointer;
   display:flex;align-items:center;gap:6px;
   white-space:nowrap;
   box-shadow:0 0 18px rgba(108,110,229,.25),0 0 0 4px rgba(108,110,229,.06);
   transition:box-shadow .2s,border-color .2s,background .2s;
-  backface-visibility:hidden;
 }
 .erp3-node:hover{
   border-color:var(--accent);
