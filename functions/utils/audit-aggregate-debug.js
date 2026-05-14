@@ -3,7 +3,9 @@
  *
  * 角色：把 hot 過期前 24h 的 `audit_log` debug_failure row 合併成
  * `audit_log_aggregate_debug` bucket（per `(event_type, reason_code, hour_bucket)`），
- * 同時保留 deterministic reservoir 採樣（N=10）讓 forensic 仍可看 raw event_data。
+ * 同時保留 deterministic reservoir 採樣（N=10）讓 forensic 仍可看代表性 row 索引。
+ * codex r1 M-2：samples 採 allowlist shape（id / severity / reason_code / error_code /
+ * retry_count 等），**不存** raw event_data；需要原始字串走 id 回查 D1（hot）/ R2（cold）。
  *
  * 與 PR 3.0 telemetry aggregate 的差異：
  *   1. bucket key：用 `reason_code`（從 event_data JSON 抽出）取代 telemetry 的
@@ -166,8 +168,14 @@ export const DEBUG_REASON_CODES = Object.freeze({
   UNHANDLED_EXCEPTION:   'unhandled_exception',    // 路由級 try/catch 兜底（auth.delete.exception）
 })
 
-/** Allow set — extractReasonCode 用以驗證 emitter 寫入值（codex r2 M）。 */
-export const DEBUG_REASON_CODE_VALUES = new Set(Object.values(DEBUG_REASON_CODES))
+// codex r3 L：allow set 改 module-private — 公開 mutable Set 會弱化 dictionary 邊界，
+// 改 export `isDebugReasonCode(s)` predicate 作唯一外部 contract。
+const _DEBUG_REASON_CODE_VALUES = new Set(Object.values(DEBUG_REASON_CODES))
+
+/** 是否屬於 debug_failure dictionary 收錄值（codex r2 M + r3 L）。 */
+export function isDebugReasonCode(s) {
+  return typeof s === 'string' && _DEBUG_REASON_CODE_VALUES.has(s)
+}
 
 /**
  * 從 event_data（TEXT JSON）抽 reason_code。
@@ -188,9 +196,9 @@ export function extractReasonCode(eventDataRaw) {
   if (obj == null) return null
   const v = obj.reason_code
   if (typeof v !== 'string' || v.length === 0) return null
-  // codex r2 M：dictionary 強制 — 不在 allow set 的字串視同未設（落 NULL bucket）。
+  // codex r2 M + r3 L：dictionary 強制 — 不在 allow set 的字串視同未設（落 NULL bucket）。
   // 避免 emitter typo / 未來新增 emitter 沒讀 spec 偷渡 unbounded bucket key。
-  if (!DEBUG_REASON_CODE_VALUES.has(v)) return null
+  if (!isDebugReasonCode(v)) return null
   return v
 }
 

@@ -5,9 +5,12 @@
  *  - hourBucket / debugCutoffISO / totalCutoffHours 行為與 PR 3.0 一致
  *  - parseMaxRowsPerRun / parseLeadHours 邊界（吃 DEBUG_ 變體 env key）
  *  - fnv1a32 同輸入回相同 32-bit 整數
- *  - extractReasonCode 三 key 優先序 + JSON 壞 → null
+ *  - extractReasonCode dictionary 強制（codex r2 M + r3 L）：只認 DEBUG_REASON_CODES，
+ *    typo / 外部 unbounded 字串 → null（無 fallback 到 code/reason）
+ *  - isDebugReasonCode predicate（codex r3 L：取代公開 Set）
+ *  - extractErrorCode / extractRetryCount sample allowlist 欄位
  *  - reduceDebugBuckets：bucket key / total_count / deterministic reservoir N=10 /
- *    sampled flag / reason_code NULL → '' sentinel
+ *    sampled flag / allowlist sample shape（不含 raw event_data）/ reason_code NULL
  *  - rowIsDebugFailure 與 classifyForCold 一致
  */
 
@@ -19,7 +22,7 @@ import {
   SAMPLE_SIZE,
   MAX_TOTAL_HOURS,
   DEBUG_REASON_CODES,
-  DEBUG_REASON_CODE_VALUES,
+  isDebugReasonCode,
   parseMaxRowsPerRun,
   parseLeadHours,
   hourBucket,
@@ -173,12 +176,19 @@ describe('extractReasonCode（codex M-1 + r2 M：dictionary 強制）', () => {
   })
 })
 
-describe('DEBUG_REASON_CODE_VALUES allow set', () => {
-  it('包含 dictionary 全部 8 個值', () => {
-    expect(DEBUG_REASON_CODE_VALUES.size).toBe(8)
+describe('isDebugReasonCode predicate（codex r3 L：取代公開 Set）', () => {
+  it('dictionary 內 → true', () => {
     for (const v of Object.values(DEBUG_REASON_CODES)) {
-      expect(DEBUG_REASON_CODE_VALUES.has(v)).toBe(true)
+      expect(isDebugReasonCode(v)).toBe(true)
     }
+  })
+  it('dictionary 外 / typo / 非字串 → false', () => {
+    expect(isDebugReasonCode('TIMEOUT')).toBe(false)
+    expect(isDebugReasonCode('webhok_prse_failed')).toBe(false)
+    expect(isDebugReasonCode('')).toBe(false)
+    expect(isDebugReasonCode(null)).toBe(false)
+    expect(isDebugReasonCode(undefined)).toBe(false)
+    expect(isDebugReasonCode(123)).toBe(false)
   })
 })
 
