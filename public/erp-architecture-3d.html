@@ -16,13 +16,13 @@
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=7c6bc700" />
-  <link rel="stylesheet" href="/css/_components.css?v=7c6bc700" />
-  <link rel="stylesheet" href="/css/portfolio.css?v=7c6bc700" />
-  <script defer src="/js/notify.js?v=7c6bc700"></script>
-  <script defer src="/js/confirm-dialog.js?v=7c6bc700"></script>
-  <link rel="stylesheet" href="/css/erp-architecture-3d.css?v=7c6bc700" />
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=7c6bc700" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=31d9d90e" />
+  <link rel="stylesheet" href="/css/_components.css?v=31d9d90e" />
+  <link rel="stylesheet" href="/css/portfolio.css?v=31d9d90e" />
+  <script defer src="/js/notify.js?v=31d9d90e"></script>
+  <script defer src="/js/confirm-dialog.js?v=31d9d90e"></script>
+  <link rel="stylesheet" href="/css/erp-architecture-3d.css?v=31d9d90e" />
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=31d9d90e" />
 </head>
 <body>
 
@@ -128,50 +128,13 @@
             <div class="erp3-grid">
 
               <div class="erp3-scene" id="erp3-scene" role="group" aria-label="ERP 3D 架構">
-                <div class="erp3-stage" id="erp3-stage">
-
-                  <!-- Central spine glow -->
-                  <div class="erp3-spine" aria-hidden="true"></div>
-
-                  <!-- Tower: 8 layers stacked vertically -->
-                  <div class="erp3-tower">
-                    <button type="button" class="erp3-layer" data-layer="1" style="--lvl:1">
-                      <span class="erp3-layer-tag">L1</span>
-                      <span class="erp3-layer-name" data-i18n="layer_1_name">L1 企業平台</span>
-                    </button>
-                    <button type="button" class="erp3-layer" data-layer="2" style="--lvl:2">
-                      <span class="erp3-layer-tag">L2</span>
-                      <span class="erp3-layer-name" data-i18n="layer_2_name">L2 領域邊界</span>
-                    </button>
-                    <button type="button" class="erp3-layer" data-layer="3" style="--lvl:3">
-                      <span class="erp3-layer-tag">L3</span>
-                      <span class="erp3-layer-name" data-i18n="layer_3_name">L3 子模組</span>
-                    </button>
-                    <button type="button" class="erp3-layer" data-layer="4" style="--lvl:4">
-                      <span class="erp3-layer-tag">L4</span>
-                      <span class="erp3-layer-name" data-i18n="layer_4_name">L4 細項能力</span>
-                    </button>
-                    <button type="button" class="erp3-layer" data-layer="5" style="--lvl:5">
-                      <span class="erp3-layer-tag">L5</span>
-                      <span class="erp3-layer-name" data-i18n="layer_5_name">L5 服務層</span>
-                    </button>
-                    <button type="button" class="erp3-layer" data-layer="6" style="--lvl:6">
-                      <span class="erp3-layer-tag">L6</span>
-                      <span class="erp3-layer-name" data-i18n="layer_6_name">L6 能力層</span>
-                    </button>
-                    <button type="button" class="erp3-layer" data-layer="7" style="--lvl:7">
-                      <span class="erp3-layer-tag">L7</span>
-                      <span class="erp3-layer-name" data-i18n="layer_7_name">L7 執行層</span>
-                    </button>
-                    <button type="button" class="erp3-layer" data-layer="8" style="--lvl:8">
-                      <span class="erp3-layer-tag">L8</span>
-                      <span class="erp3-layer-name" data-i18n="layer_8_name">L8 部署層</span>
-                    </button>
-                  </div>
-
-                  <!-- Orbit: 16 L2 satellite nodes (positions injected by JS) -->
-                  <div class="erp3-orbit" id="erp3-orbit" aria-label="L2 衛星節點"></div>
-
+                <canvas id="erp3-canvas" class="erp3-canvas" aria-hidden="true"></canvas>
+                <!-- a11y fallback: 隱藏按鈕清單，鍵盤 / SR 使用者可 tab 進來操作 -->
+                <div class="erp3-a11y" id="erp3-a11y" role="list" aria-label="ERP 8 層架構列表"></div>
+                <!-- WebGL 不支援 / context lost fallback -->
+                <div class="erp3-fallback" id="erp3-fallback" hidden>
+                  <p data-i18n="l3d_webgl_fail">您的瀏覽器不支援 WebGL 或顯示卡資源不足；請使用支援 WebGL 的瀏覽器查看 3D 架構，或前往 2D 版本。</p>
+                  <a class="btn-primary" href="/erp-architecture.html" data-i18n="view_2d">查看 2D 版本 →</a>
                 </div>
               </div>
 
@@ -328,8 +291,8 @@
     </div>
   </div>
 
-  <script src="/js/sidebar-auth.js?v=7c6bc700" defer></script>
-  <script src="/js/erp-architecture-3d.js?v=7c6bc700" defer></script>
+  <script src="/js/sidebar-auth.js?v=31d9d90e" defer></script>
+  <script src="/js/erp-architecture-3d.js?v=31d9d90e" type="module"></script>
 
 </body>
 </html>

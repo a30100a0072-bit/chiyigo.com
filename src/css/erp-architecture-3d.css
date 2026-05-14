@@ -28,10 +28,9 @@
 
 .erp3-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:24px;align-items:start}
 
-/* ── 3D scene ── */
+/* ── 3D scene (Three.js canvas 容器) ── */
 .erp3-scene{
   position:relative;width:100%;height:720px;
-  perspective:1500px;perspective-origin:50% 38%;
   background:
     radial-gradient(ellipse at 50% 60%,rgba(108,110,229,.10),transparent 65%),
     radial-gradient(ellipse at 50% 85%,rgba(108,110,229,.06),transparent 50%);
@@ -42,97 +41,31 @@
   overflow:hidden;
 }
 .erp3-scene:active{cursor:grabbing}
-.erp3-scene::before{
-  content:'';position:absolute;left:50%;bottom:6%;width:60%;height:30px;transform:translateX(-50%);
-  background:radial-gradient(ellipse,rgba(108,110,229,.18),transparent 70%);filter:blur(8px);
-  pointer-events:none;
-}
+.erp3-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 
-.erp3-stage{
-  position:absolute;left:50%;top:50%;width:0;height:0;
-  transform-style:preserve-3d;
-  transform:translate(-50%,-50%) scale(var(--zoom,1)) rotateX(var(--rx,-12deg)) rotateY(var(--ry,28deg));
-  will-change:transform;
+/* a11y fallback：視覺隱藏，鍵盤聚焦時顯示 */
+.erp3-a11y{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
+.erp3-a11y:focus-within{
+  left:12px;top:12px;width:auto;max-width:280px;height:auto;
+  background:var(--bg,#0e1018);border:1px solid var(--accent);border-radius:10px;
+  padding:14px;z-index:10;box-shadow:0 8px 28px rgba(0,0,0,.4)
 }
+.erp3-a11y button{
+  display:block;width:100%;text-align:left;padding:6px 10px;margin:2px 0;
+  background:transparent;border:1px solid transparent;border-radius:6px;
+  color:var(--text,#e7eaf3);font:inherit;font-size:13px;cursor:pointer
+}
+.erp3-a11y button:hover,.erp3-a11y button:focus-visible{border-color:var(--accent);background:rgba(108,110,229,.12);outline:none}
+.erp3-a11y button[aria-pressed="true"]{background:var(--accent);color:#fff}
 
-/* Central glow spine */
-.erp3-spine{
-  position:absolute;left:0;top:0;width:6px;height:600px;
-  transform:translate(-50%,-50%);
-  background:linear-gradient(to bottom,transparent,rgba(108,110,229,.35),rgba(140,145,255,.6),rgba(108,110,229,.35),transparent);
-  border-radius:3px;filter:blur(1px);
-  box-shadow:0 0 30px rgba(108,110,229,.5);
-  pointer-events:none;
+/* WebGL fallback：context loss 或不支援 */
+.erp3-fallback{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  text-align:center;max-width:380px;padding:24px;
+  background:var(--bg,#0e1018);border:1px solid var(--bd,rgba(255,255,255,.1));border-radius:14px
 }
-
-/* ── 8 Tower layers ── */
-.erp3-tower{position:absolute;left:0;top:0;transform-style:preserve-3d}
-.erp3-layer{
-  position:absolute;left:0;top:0;width:380px;
-  /* lvl 1~8 → y -245…+245 (70px gap)；counter-rotate -ry 讓 layer 永遠面對相機（billboard） */
-  transform:translate(-50%,-50%) translateY(calc((var(--lvl) - 4.5) * 70px)) rotateY(calc(-1 * var(--ry, 0deg)));
-  border:1px solid rgba(108,110,229,.4);
-  border-radius:12px;
-  background:linear-gradient(135deg,rgba(108,110,229,.22),rgba(140,145,255,.08));
-  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
-  padding:14px 22px;
-  display:flex;align-items:center;gap:14px;
-  color:var(--text,#e7eaf3);
-  font-family:inherit;
-  cursor:pointer;
-  transition:box-shadow .25s,border-color .25s,background .25s;
-  box-shadow:0 6px 22px rgba(108,110,229,.18),0 0 0 1px rgba(255,255,255,.04) inset;
-}
-.erp3-layer:hover{
-  border-color:var(--accent);
-  box-shadow:0 10px 36px rgba(108,110,229,.4),0 0 0 1px rgba(255,255,255,.05) inset;
-  background:linear-gradient(135deg,rgba(108,110,229,.28),rgba(140,145,255,.08));
-}
-.erp3-layer.active{
-  border-color:var(--accent);
-  background:linear-gradient(135deg,rgba(108,110,229,.45),rgba(140,145,255,.18));
-  box-shadow:0 14px 44px rgba(108,110,229,.55),0 0 0 2px var(--accent) inset,0 0 30px rgba(140,145,255,.35);
-}
-.erp3-layer-tag{
-  font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--accent);
-  padding:3px 9px;background:rgba(108,110,229,.18);border-radius:6px;
-  letter-spacing:.04em;flex:0 0 auto;
-}
-.erp3-layer-name{font-size:14px;font-weight:500;letter-spacing:.01em}
-
-/* ── 16 L2 satellite nodes orbit ── */
-.erp3-orbit{position:absolute;left:0;top:0;transform-style:preserve-3d}
-.erp3-node{
-  position:absolute;left:0;top:0;
-  /* --ang, --r, --ty 由 JS 注入；counter-rotate -(ang + ry) 讓節點永遠面對相機（billboard）
-     orbit 位置仍由 rotateY(ang) translateZ(r) 計算，跟著 stage 一起公轉 */
-  transform:rotateY(var(--ang)) translateZ(var(--r)) translateY(var(--ty)) rotateY(calc(-1 * (var(--ang) + var(--ry, 0deg)))) translate(-50%,-50%);
-  background:#0e1018;
-  border:1px solid rgba(108,110,229,.45);
-  border-radius:999px;
-  padding:7px 14px;
-  font-size:12px;font-weight:500;
-  color:#e7eaf3;
-  font-family:inherit;
-  cursor:pointer;
-  display:flex;align-items:center;gap:6px;
-  white-space:nowrap;
-  box-shadow:0 0 18px rgba(108,110,229,.25),0 0 0 4px rgba(108,110,229,.06);
-  transition:box-shadow .2s,border-color .2s,background .2s;
-}
-.erp3-node:hover{
-  border-color:var(--accent);
-  background:rgba(108,110,229,.18);
-  box-shadow:0 0 28px rgba(108,110,229,.55),0 0 0 5px rgba(108,110,229,.12);
-}
-.erp3-node.active{
-  background:var(--accent);
-  color:#fff;
-  border-color:var(--accent);
-  box-shadow:0 0 36px var(--accent),0 0 0 6px rgba(108,110,229,.25);
-}
-.erp3-node-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);flex:0 0 auto}
-.erp3-node.active .erp3-node-dot{background:#fff;box-shadow:0 0 8px #fff}
+.erp3-fallback[hidden]{display:none}
+.erp3-fallback p{font-size:14px;color:var(--text-2,#9aa1b3);margin:0 0 14px;line-height:1.65}
 
 /* ── Side panel ── */
 .erp3-panel{position:sticky;top:24px;border:1px solid var(--bd,rgba(255,255,255,.08));border-radius:14px;background:var(--bg,#0e1018);padding:24px;min-height:520px;max-height:82vh;overflow-y:auto}
@@ -159,11 +92,6 @@
 /* ── Light mode overrides ── */
 :root.theme-light .erp3-frame{background:#fff;border-color:rgba(15,17,30,.08)}
 :root.theme-light .erp3-scene{background:radial-gradient(ellipse at 50% 60%,rgba(108,110,229,.08),transparent 65%),radial-gradient(ellipse at 50% 85%,rgba(108,110,229,.04),transparent 50%)}
-:root.theme-light .erp3-layer{background:linear-gradient(135deg,rgba(108,110,229,.12),#fff);border-color:rgba(108,110,229,.3);color:#1a1d2b;box-shadow:0 6px 22px rgba(108,110,229,.15)}
-:root.theme-light .erp3-layer:hover{background:linear-gradient(135deg,rgba(108,110,229,.22),#fff)}
-:root.theme-light .erp3-layer.active{background:linear-gradient(135deg,rgba(108,110,229,.4),rgba(140,145,255,.18));color:#1a1d2b}
-:root.theme-light .erp3-node{background:#fff;color:#1a1d2b;border-color:rgba(108,110,229,.45)}
-:root.theme-light .erp3-node:hover{background:rgba(108,110,229,.1)}
 :root.theme-light .erp3-panel{background:#fff;border-color:rgba(15,17,30,.08)}
 :root.theme-light .erp3-panel-head{border-bottom-color:rgba(15,17,30,.1)}
 :root.theme-light .erp3-btn{border-color:rgba(15,17,30,.12);color:#3a3f55}
@@ -172,23 +100,17 @@
 @media (max-width:960px){
   .erp3-grid{grid-template-columns:1fr;gap:16px}
   .erp3-panel{position:static;max-height:none;min-height:0}
-  .erp3-scene{height:520px;perspective:1100px}
-  .erp3-layer{width:300px;padding:11px 16px}
-  .erp3-layer-name{font-size:13px}
+  .erp3-scene{height:520px}
   .erp3-hero{padding:32px 20px 16px}
   .erp3-frame{padding:16px;margin-top:16px}
   .erp3-title{font-size:32px}
 }
 @media (max-width:520px){
-  .erp3-scene{height:440px;perspective:900px}
-  .erp3-layer{width:260px;padding:9px 14px}
-  .erp3-layer-name{font-size:12px}
+  .erp3-scene{height:440px}
 }
 
-/* ── Reduced motion: 關掉自動旋轉動畫感 (auto-rotate JS 仍會跑，這裡只是平滑) ── */
+/* ── Reduced motion ── */
 @media (prefers-reduced-motion:reduce){
   #neural-canvas{display:none}
-  .erp3-stage{transition:none}
-  .erp3-layer,.erp3-node{transition:none;animation:none !important}
   [data-reveal]{opacity:1;transform:none}
 }

@@ -515,7 +515,9 @@
     "layer_7_name": "L7 執行層",
     "layer_7_desc": "容器化 Runtime：Pod / Worker / Scheduler / Queue / Cron；負責真正跑 code 的物理位置。",
     "layer_8_name": "L8 部署層",
-    "layer_8_desc": "多區域 Failover / Disaster Recovery / Cloudflare CDN / WAF / Kubernetes Cluster；物理基礎設施。"
+    "layer_8_desc": "多區域 Failover / Disaster Recovery / Cloudflare CDN / WAF / Kubernetes Cluster；物理基礎設施。",
+    "l3d_webgl_fail": "您的瀏覽器不支援 WebGL 或顯示卡資源不足；請使用支援 WebGL 的瀏覽器查看 3D 架構，或前往 2D 版本。",
+    "view_2d": "查看 2D 版本 →"
   },
   "en": {
     "nav_home": "Home",
@@ -1033,7 +1035,9 @@
     "layer_7_name": "L7 Runtime",
     "layer_7_desc": "Containerized runtime: Pod / Worker / Scheduler / Queue / Cron — where code actually executes.",
     "layer_8_name": "L8 Deployment",
-    "layer_8_desc": "Multi-region failover / DR / Cloudflare CDN / WAF / Kubernetes — physical infrastructure."
+    "layer_8_desc": "Multi-region failover / DR / Cloudflare CDN / WAF / Kubernetes — physical infrastructure.",
+    "l3d_webgl_fail": "Your browser does not support WebGL or GPU resources are unavailable. Try a WebGL-capable browser, or view the 2D version.",
+    "view_2d": "View 2D version →"
   },
   "ja": {
     "nav_home": "ホーム",
@@ -1551,7 +1555,9 @@
     "layer_7_name": "L7 ランタイム",
     "layer_7_desc": "コンテナ Runtime：Pod / Worker / Scheduler / Queue / Cron。コードが実行される場所。",
     "layer_8_name": "L8 デプロイ",
-    "layer_8_desc": "マルチリージョン Failover / DR / Cloudflare CDN / WAF / Kubernetes。物理基盤。"
+    "layer_8_desc": "マルチリージョン Failover / DR / Cloudflare CDN / WAF / Kubernetes。物理基盤。",
+    "l3d_webgl_fail": "ブラウザが WebGL をサポートしていないか、GPU リソースが不足しています。WebGL 対応ブラウザで開くか、2D 版をご覧ください。",
+    "view_2d": "2D 版を見る →"
   },
   "ko": {
     "nav_home": "홈",
@@ -2069,6 +2075,8 @@
     "layer_7_name": "L7 런타임",
     "layer_7_desc": "컨테이너 런타임: Pod / Worker / Scheduler / Queue / Cron. 코드가 실행되는 곳.",
     "layer_8_name": "L8 배포",
-    "layer_8_desc": "멀티리전 Failover / DR / Cloudflare CDN / WAF / Kubernetes. 물리 인프라."
+    "layer_8_desc": "멀티리전 Failover / DR / Cloudflare CDN / WAF / Kubernetes. 물리 인프라.",
+    "l3d_webgl_fail": "브라우저가 WebGL 을 지원하지 않거나 GPU 자원이 부족합니다. WebGL 지원 브라우저로 열거나 2D 버전을 보세요.",
+    "view_2d": "2D 버전 보기 →"
   }
 }
