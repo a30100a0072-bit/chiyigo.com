@@ -218,13 +218,23 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
     ctx.textBaseline = 'middle';
     ctx.fillText(tag, tagX + tagW/2, tagY + tagH/2);
   }
-  // name — 米白偏紫 #f5f1ff + 深底陰影增加可讀性（淺色背景時不會死掉）
+  // name — 衛星預設用深色字（subtle 模式底色實），active 衛星與所有 layer 用米白
+  // 對應陰影也對調：深字→白色光暈、淺字→深底陰影
+  const useDarkText = subtle && !highlight;
   ctx.save();
-  ctx.shadowColor = 'rgba(26,29,43,0.55)';
-  ctx.shadowBlur = 4;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 1;
-  ctx.fillStyle = '#f5f1ff';
+  if (useDarkText) {
+    ctx.shadowColor = 'rgba(255,255,255,0.35)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = '#1a1d2b';
+  } else {
+    ctx.shadowColor = 'rgba(26,29,43,0.55)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = '#f5f1ff';
+  }
   ctx.font = '600 22px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
