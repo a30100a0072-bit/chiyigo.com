@@ -335,15 +335,16 @@ function initScene(){
   }
 }
 
-// ── EDGES 高亮更新：點 node 時相鄰 edge 變粗變亮、其他 dim ──
+// ── EDGES 高亮更新：點 node 時相鄰 edge 變「細而亮」、其他 dim ──
+const EDGE_HIT_COLOR = lighten(PALETTE.accent, 0.7); // 比 accentLight 更亮，近乎光暈感
 function refreshEdges(){
   for (const { line, a, b, mat } of edgeLines) {
     if (activeKind === 'node') {
       const isHit = activeId === a || activeId === b;
-      mat.opacity = isHit ? 0.98 : 0.05;
-      mat.color.setHex(isHit ? PALETTE.accentLight : PALETTE.accent);
-      // 變粗：scale X/Z（cylinder 的徑向），Y 保持長度
-      line.scale.x = line.scale.z = isHit ? 2.4 : 1;
+      mat.opacity = isHit ? 1.0 : 0.05;
+      mat.color.setHex(isHit ? EDGE_HIT_COLOR : PALETTE.accent);
+      // 點選相鄰 edge 比預設略細（1.2），讓「亮」感取代「粗」感
+      line.scale.x = line.scale.z = isHit ? 1.2 : 1;
     } else {
       mat.opacity = 0.6;
       mat.color.setHex(PALETTE.accentLight);
