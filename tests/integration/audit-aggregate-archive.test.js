@@ -317,6 +317,44 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(diffDays).toBeLessThan(8)
   })
 
+  // codex r2 H-1：dry-run 跑完同日 live rerun 必 fail-fast，禁「借殼」改 chunks row
+  it('codex r2 H-1：dry-run 後同日 live rerun → dry_run_collision fail-fast', async () => {
+    await seedTelemetryRow()
+    await seedTelemetryRow()
+
+    // 1) dry-run：寫 dry_run=1 chunks row + verified
+    const { body: dr } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    expect(dr.chunks_verified).toBe(1)
+    const drChunks = await listChunks()
+    expect(drChunks[0].dry_run).toBe(1)
+    expect(drChunks[0].state).toBe('verified')
+
+    // 2) 同日 live rerun（同 rows、同 sha、同 archive_date）→ 必 fail-fast
+    const { status, body } = await runTelemetry()  // makeEnv 預設 AUDIT_ARCHIVE_DRY_RUN='false'
+    expect(status).toBe(500)
+    expect(body.ok).toBe(false)
+    const err = body.errors.find(e => e.event === 'dry_run_collision')
+    expect(err).toBeDefined()
+    expect(err.expected_dry_run).toBe(0)
+    expect(err.actual_dry_run).toBe(1)
+    expect(err.chunks_state).toBe('verified')
+
+    // chunks row 必須仍是 dry_run=1（沒被「借殼」改）
+    const after = await listChunks()
+    expect(after[0].dry_run).toBe(1)
+    expect(after[0].state).toBe('verified')
+
+    // aggregate row archived_at 必須仍 NULL（live UPDATE 沒跑到）
+    const rows = await env.chiyigo_db.prepare(
+      `SELECT archived_at FROM audit_log_aggregate_telemetry`
+    ).all()
+    for (const r of rows.results) expect(r.archived_at).toBeNull()
+
+    // run_failed event 已 emit
+    const events = await listAuditEvents('audit.aggregate_archive.telemetry.run_failed')
+    expect(events.length).toBeGreaterThanOrEqual(1)
+  })
+
   it('dry-run verified 不被 resume 動到（PR 3.2 part 2 dry-run 終態）', async () => {
     await seedTelemetryRow()
     await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })

@@ -355,6 +355,7 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
   if (!manifest.schema_version) manifest.schema_version = ARCHIVE_SCHEMA_VERSION
 
   const chunkInfo = { dryRun, minId, maxId }
+  const dryRunInt = dryRun ? 1 : 0
 
   // ── a. INSERT OR IGNORE chunks row ────────────────────
   await db.prepare(
@@ -363,7 +364,28 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
        min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run, compression)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?, ?, ?)`
   ).bind(envName, tableName, coldClass, COLD_CLASS_VERSION, archiveDate,
-         minId, maxId, sha, rowCount, runId, dryRun ? 1 : 0, compression).run()
+         minId, maxId, sha, rowCount, runId, dryRunInt, compression).run()
+
+  // codex r2 H-1：dry_run 不在 PK 內。若同 (env, table, cold_class, date, min, max, sha)
+  // 已存在 dry_run mismatch row（典型情境：dry-run 跑完後同日換 live rerun），INSERT OR
+  // IGNORE 會 silently skip，後續 UPDATE 沒 dry_run guard 會「借殼」改該 row，最後
+  // chunks.dry_run=1 但 aggregate row 已 archived → PR 4 derive key 跑回 dryrun prefix，
+  // provenance 全錯。Fail-fast 防止：fetch back，驗 dry_run 對齊，否則 emit critical 中止。
+  const existing = await db.prepare(
+    `SELECT dry_run, state, run_id FROM audit_archive_chunks
+       WHERE env = ? AND table_name = ? AND cold_class = ?
+         AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha).first()
+  if (existing && existing.dry_run !== dryRunInt) {
+    return failChunk(ctx, report, 'dry_run_collision', {
+      expected_dry_run: dryRunInt,
+      actual_dry_run:   existing.dry_run,
+      chunks_state:     existing.state,
+      previous_run_id:  existing.run_id,
+      min_id: minId, max_id: maxId, chunk_sha256: sha,
+      remediation: 'manual_cleanup_required (force_purge dry-run chunk before live rerun)',
+    })
+  }
   report.chunks_planned++
 
   // ── b. PUT manifest planned ───────────────────────────
@@ -376,19 +398,21 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
     httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
   })
 
-  // ── d. UPDATE chunks state=uploaded + PUT manifest uploaded ────
-  await db.prepare(
-    `UPDATE audit_archive_chunks
-        SET state = 'uploaded', updated_at = datetime('now')
-      WHERE env = ? AND table_name = ? AND cold_class = ?
-        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
-  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha).run()
-  report.chunks_uploaded++
-
+  // ── d. PUT manifest uploaded → UPDATE chunks state=uploaded ────
+  // codex r2 M-1：先 R2 後 D1。若 manifest PUT fail，chunks 留前態，下輪重跑可接續。
   manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
   await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
     JSON.stringify(manifest, null, 2),
     { httpMetadata: { contentType: 'application/json' } })
+
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'uploaded', updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND dry_run = ?`
+  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
+  report.chunks_uploaded++
 
   // ── e. GET 回讀 + decompress + sha verify ────────────
   const obj = await bucket.get(dataKey)
@@ -420,19 +444,21 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
     })
   }
 
-  // ── f. UPDATE chunks state=verified + PUT manifest verified ────
-  await db.prepare(
-    `UPDATE audit_archive_chunks
-        SET state = 'verified', updated_at = datetime('now')
-      WHERE env = ? AND table_name = ? AND cold_class = ?
-        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
-  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha).run()
-  report.chunks_verified++
-
+  // ── f. PUT manifest verified → UPDATE chunks state=verified ────
+  // codex r2 M-1：先 R2 後 D1。
   manifest = appendStateHistory(manifest, 'verified', new Date().toISOString())
   await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
     JSON.stringify(manifest, null, 2),
     { httpMetadata: { contentType: 'application/json' } })
+
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'verified', updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND dry_run = ?`
+  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
+  report.chunks_verified++
 
   await safeUserAudit(ctx.env, {
     event_type: `${ctx.eventPrefix}.chunk_uploaded`,
@@ -458,9 +484,8 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
   if (dryRun) return
 
   // codex r1 H-1：BETWEEN min..max 範圍內可能夾雜「HOT row（created_at >= cutoff）」
-  // —— SELECT 已用 cutoff 過濾它，未進 JSONL / R2。若這裡 UPDATE 不再加 cutoff guard，
-  // 那些 HOT row 會被誤標 archived_at，PR 4 purge 時刪掉從未備份的資料。
-  // 加 created_at < cutoff 確保 UPDATE 只命中 SELECT 已備份進 R2 的 row。
+  // SELECT 已用 cutoff 過濾它、未進 JSONL/R2；UPDATE 不加 cutoff guard → 那些 HOT
+  // row 會被誤標 archived_at，PR 4 purge 刪到從未備份的資料。
   await db.prepare(
     `UPDATE ${tableName}
         SET archived_at = datetime('now')
@@ -469,6 +494,12 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
         AND created_at < ?`
   ).bind(minId, maxId, ctx.cutoff).run()
 
+  // codex r2 M-1：先 R2 manifest 後 D1 chunks UPDATE。
+  manifest = appendStateHistory(manifest, 'marked_archived', new Date().toISOString())
+  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
+    JSON.stringify(manifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } })
+
   await db.prepare(
     `UPDATE audit_archive_chunks
         SET state = 'marked_archived',
@@ -476,16 +507,12 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
             purge_after = datetime('now', '+7 days'),
             updated_at = datetime('now')
       WHERE env = ? AND table_name = ? AND cold_class = ?
-        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
-  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha).run()
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND dry_run = ?`
+  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
 
   report.chunks_marked_archived++
   report.rows_marked_archived += rowCount
-
-  manifest = appendStateHistory(manifest, 'marked_archived', new Date().toISOString())
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-    JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
 }
 
 function failChunk(ctx, report, eventCode, data) {
@@ -527,23 +554,9 @@ async function resumeVerifiedBlocker({ ctx, blocker, report }) {
         AND created_at < ?`
   ).bind(blocker.min_id, blocker.max_id, ctx.cutoff).run()
 
-  // 2) UPDATE chunks → marked_archived + purge_after = +7d
-  await db.prepare(
-    `UPDATE audit_archive_chunks
-        SET state = 'marked_archived',
-            marked_archived_at = datetime('now'),
-            purge_after = datetime('now', '+7 days'),
-            updated_at = datetime('now')
-      WHERE env = ? AND table_name = ? AND cold_class = ?
-        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
-        AND state = 'verified'`
-  ).bind(envName, tableName, coldClass, blocker.archive_date,
-         blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
-
-  report.chunks_marked_archived++
-  report.rows_marked_archived += blocker.row_count
-
-  // 3) PUT manifest marked_archived（best-effort，讀回 existing manifest append history）
+  // 2) PUT manifest marked_archived（codex r2 M-1：先 R2 後 D1。
+  //    manifest PUT 失敗 → chunks state 仍 verified，下輪 Step 0 重跑接續；
+  //    aggregate row archived_at 已標但這是 idempotent；不會雙寫）
   const { manifestKey } = deriveAggregateKeysFromChunk({
     env: envName, table_name: tableName, cold_class: coldClass,
     min_id: blocker.min_id, max_id: blocker.max_id,
@@ -563,6 +576,22 @@ async function resumeVerifiedBlocker({ ctx, blocker, report }) {
   await archivePut(ctx, 'manifest', { dryRun: false, minId: blocker.min_id, maxId: blocker.max_id },
     manifestKey, JSON.stringify(manifest, null, 2),
     { httpMetadata: { contentType: 'application/json' } })
+
+  // 3) UPDATE chunks → marked_archived + purge_after = +7d（R2 manifest 成功後才升 D1）
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET state = 'marked_archived',
+            marked_archived_at = datetime('now'),
+            purge_after = datetime('now', '+7 days'),
+            updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+        AND state = 'verified'`
+  ).bind(envName, tableName, coldClass, blocker.archive_date,
+         blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
+
+  report.chunks_marked_archived++
+  report.rows_marked_archived += blocker.row_count
 
   await safeUserAudit(ctx.env, {
     event_type: `${ctx.eventPrefix}.chunk_uploaded`,  // marked_archived 走同 emit（資訊重複；補強 chain）
