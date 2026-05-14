@@ -147,6 +147,7 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
   ctx.scale(dpr, dpr);
   const accentLight = lighten(accent, 0.35);
   const accentDeep = darken(accent, 0.35);
+  const accentDeeper = darken(accent, 0.6);
   // 圓角背景
   const r = 16;
   ctx.beginPath();
@@ -160,9 +161,9 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
   const grad = ctx.createLinearGradient(0, 0, width, height);
   if (highlight) {
     if (subtle) {
-      // 點選：幾乎完全不透 + 深色
-      grad.addColorStop(0, rgba(accentDeep, 1.00));
-      grad.addColorStop(1, rgba(accent, 0.88));
+      // 點選：色調更深 + 完全不透
+      grad.addColorStop(0, rgba(accentDeeper, 1.00));
+      grad.addColorStop(1, rgba(accentDeep, 1.00));
     } else {
       grad.addColorStop(0, rgba(accent, 0.92));
       grad.addColorStop(1, rgba(accentLight, 0.65));
@@ -179,9 +180,9 @@ function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.acce
   }
   ctx.fillStyle = grad;
   ctx.fill();
-  // border：subtle 時 highlight 用 deep 色，預設用 accent solid
+  // border：subtle 時 highlight 用更深色（accentDeeper），預設用 accent solid
   if (subtle) {
-    ctx.strokeStyle = hexStr(highlight ? accentDeep : accent);
+    ctx.strokeStyle = hexStr(highlight ? accentDeeper : accent);
   } else {
     ctx.strokeStyle = hexStr(highlight ? lighten(accent, 0.55) : accent);
   }
