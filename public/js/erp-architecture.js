@@ -231,7 +231,7 @@ if (STAGE) {
   });
 }
 
-// ── 共用：套用語言到 widget（節點 label + 面板 + chain 註腳） ──
+// ── 共用：套用語言到 widget（節點 label + 面板 + chain 註腳 + embed [data-i18n]） ──
 function applyArchLang(lang){
   if (!LANGS_I18N[lang]) return;
   curLang = lang;
@@ -253,18 +253,18 @@ function applyArchLang(lang){
     const t = tDict(), fb = tFallback();
     if (CHAIN_NOTE) CHAIN_NOTE.textContent = t['chain_note_'+activeChain] || fb['chain_note_'+activeChain] || '';
   }
+  // embed 模式：同步 #erp-arch-embed 內所有 [data-i18n]（init + 語言切換都會走這條）
+  if (isEmbed) {
+    const t = LANGS_I18N[lang];
+    document.querySelectorAll('#erp-arch-embed [data-i18n]').forEach(el => {
+      const k = el.dataset.i18n;
+      if (t[k] !== undefined) el.textContent = t[k];
+    });
+  }
 }
 
 // embed 模式：暴露給 host (index.js) 在 applyLangI 結尾呼叫
-window.erpArchSetLang = function(lang){
-  if (!LANGS_I18N[lang]) return;
-  applyArchLang(lang);
-  const t = LANGS_I18N[lang];
-  document.querySelectorAll('#erp-arch-embed [data-i18n]').forEach(el => {
-    const k = el.dataset.i18n;
-    if (t[k] !== undefined) el.textContent = t[k];
-  });
-};
+window.erpArchSetLang = function(lang){ applyArchLang(lang); };
 
 // ── Init widget ──
 if (STAGE) {

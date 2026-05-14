@@ -67,6 +67,7 @@
 .erp-panel-empty[hidden],.erp-panel-body[hidden]{display:none !important}
 .erp-panel-icon{font-size:36px;color:var(--accent);opacity:.5;margin-bottom:14px}
 .erp-panel-empty-text{font-size:14px;line-height:1.6;max-width:280px;margin:0}
+.erp-view-full{margin-top:18px}
 
 .erp-panel-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px dashed var(--bd,rgba(255,255,255,.1))}
 .erp-panel-tag{display:inline-block;padding:3px 10px;background:rgba(108,110,229,.15);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.04em;border-radius:6px;margin-top:4px;flex:0 0 auto}
