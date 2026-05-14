@@ -390,6 +390,69 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(skipped[0].severity).toBe('info')
     expect(JSON.parse(skipped[0].event_data).reason).toMatch(/terminal_state_for_mode_already_present/)
   })
+
+  it('PR 3.3 r2 codex P1 regression：admin re_verify 後 chunk 在 uploaded → 下輪 cron 必須 resume verify 推進到終態（不是 chunk_skipped）', async () => {
+    // Step 1：dry-run 跑一次得到 state='verified' chunk + R2 物件
+    await seedTelemetryRow()
+    await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    const after1 = await listChunks()
+    expect(after1[0].state).toBe('verified')
+
+    // Step 2：模擬 admin re_verify 後狀態 — UPDATE state='uploaded'
+    //   （等同於：state='failed' chunk 被 retry.js re_verify 推到 'uploaded'）
+    //   R2 物件本就存在（前次 dry-run PUT），符合 re_verify 後的真實狀態
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks SET state = 'uploaded' WHERE state = 'verified'`
+    ).run()
+
+    // Step 3：下輪 cron 必須走 resume-from-uploaded 路徑接續到 verified（而非 chunk_skipped）
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.chunks_resumed_uploaded ?? 0).toBe(1)   // r2 新增：resume 計數
+    expect(body.chunks_verified ?? 0).toBe(1)           // 接著 verify 成功
+    expect(body.chunks_skipped ?? 0).toBe(0)            // 不該被 r1 早退攔到
+
+    const after2 = await listChunks()
+    expect(after2[0].state).toBe('verified')            // dry-run 終態
+
+    // 確認沒有誤觸 chunk_skipped warn（admin-terminal 路徑）
+    const skipped = await listAuditEvents('audit.aggregate_archive.telemetry.chunk_skipped')
+    const warnSkip = skipped.find(e => e.severity === 'warn')
+    expect(warnSkip).toBeUndefined()
+
+    // chunk_uploaded emit 仍會 fire（資料 verify ok）
+    const uploaded = await listAuditEvents('audit.aggregate_archive.telemetry.chunk_uploaded')
+    expect(uploaded.length).toBeGreaterThanOrEqual(2)   // step 1 + step 3 各一次
+  })
+
+  it('PR 3.3 r2 P1 同場景 live 模式：uploaded resume → marked_archived 全推完', async () => {
+    await seedTelemetryRow()
+    // live 第一輪跑到 marked_archived（aggregate row archived_at 已標）
+    await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    const after1 = await listChunks()
+    expect(after1[0].state).toBe('marked_archived')
+
+    // 模擬：chunk 被 admin re_verify 推回 'uploaded'，aggregate row archived_at 也清掉
+    // （re_verify 不會自己清 aggregate row；這裡同步清是為了讓 SELECT 重撈）
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks SET state = 'uploaded' WHERE state = 'marked_archived'`
+    ).run()
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_log_aggregate_telemetry SET archived_at = NULL`
+    ).run()
+
+    // 下輪 cron：resume verify → live archived_at + marked_archived
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(status).toBe(200)
+    expect(body.chunks_resumed_uploaded ?? 0).toBe(1)
+    expect(body.chunks_verified ?? 0).toBe(1)
+    expect(body.chunks_marked_archived ?? 0).toBe(1)
+    expect(body.chunks_skipped ?? 0).toBe(0)
+
+    const after2 = await listChunks()
+    expect(after2[0].state).toBe('marked_archived')
+  })
 })
 
 describe('audit-aggregate-archive — DRY_RUN', () => {

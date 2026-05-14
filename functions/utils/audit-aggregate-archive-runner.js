@@ -396,17 +396,21 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
       remediation: 'manual_cleanup_required (force_purge dry-run chunk before live rerun)',
     })
   }
-  // PR 3.3 r1 codex P2-1：existing row 非 'planned' 表示前次 run 已推進（典型場景：
-  //   - same-day dry-run rerun，前次跑完留 state='verified'（dry-run 終態）
-  //   - 前次 partial crash 後留 'uploaded' / 'verified'）
-  // 不能走 fresh pipeline 再 PUT — PR 3.3 cron race guard 會把 state mismatch 打成
-  // race_with_admin critical，但此處不是 admin 競爭、是合法 idempotent rerun。
-  // 提早 skip + emit chunk_skipped；live verified 由 Step 0 resumeVerifiedBlocker
-  // 處理（且 Step 1 SELECT archived_at IS NULL 已過濾完跑的 live row 不會進來）。
-  if (existing && existing.state !== 'planned') {
+  // PR 3.3 r2 codex P1：state-aware dispatch（r1 早退邏輯收窄到真正不該再跑 pipeline 的狀態）
+  //   - 'planned'           → fresh pipeline（b/c/d/e/f/g）
+  //   - 'uploaded'          → resume verify（**re_verify endpoint 的接續路徑**；
+  //                            前次 partial crash 也走這條）；跳 b/c/d，從 e 接續
+  //   - 'verified' && dryRun  → idempotent skip info（dry-run 終態）
+  //   - 'marked_archived'   → idempotent skip info（live 終態；正常 SELECT 過濾掉，
+  //                            但 admin parallel 場景下防禦）
+  //   - 'failed'/'blacklisted' → skip warn（admin-terminal；operator 走 retry endpoint）
+  //   - 'verified' && !dryRun → defensive skip warn（Step 0 應已處理）
+  // r1 把所有 non-planned 都 skip 導致 re_verify 推到 uploaded 後永遠卡死 — r2 修正。
+  const existingState = existing?.state ?? 'planned'
+  if (existingState !== 'planned' && existingState !== 'uploaded') {
     const isTerminalForMode =
-      (dryRun && existing.state === 'verified') ||
-      (!dryRun && existing.state === 'marked_archived')
+      (dryRun && existingState === 'verified') ||
+      (!dryRun && existingState === 'marked_archived')
     await safeUserAudit(ctx.env, {
       event_type: `${ctx.eventPrefix}.chunk_skipped`,
       severity:   isTerminalForMode ? 'info' : 'warn',
@@ -419,54 +423,78 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
         max_id:           maxId,
         chunk_sha256:     sha,
         dry_run:          dryRun,
-        existing_state:   existing.state,
-        existing_run_id:  existing.run_id,
+        existing_state:   existingState,
+        existing_run_id:  existing?.run_id ?? null,
         reason: isTerminalForMode
           ? 'terminal_state_for_mode_already_present (idempotent rerun)'
-          : 'non_planned_partial_state (operator should inspect via admin retry endpoint)',
+          : existingState === 'failed' || existingState === 'blacklisted'
+            ? 'admin_terminal_state (operator should inspect via admin retry/force_purge endpoint)'
+            : 'unexpected_state_step_0_should_handle (defensive)',
       },
     })
     report.chunks_skipped = (report.chunks_skipped ?? 0) + 1
     return
   }
-  report.chunks_planned++
 
-  // ── b. PUT manifest planned ───────────────────────────
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-    JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
+  if (existingState === 'uploaded') {
+    // resume from 'uploaded'：跳 b/c/d，從 e 接續 verify。
+    // R2 data 已存在（state='uploaded' 由前次 step d 寫入）；若不存在，step e 會回
+    // verification_failed reason='r2_object_not_found'，這也是 admin re_verify 後 R2
+    // 物件被誤刪的合法錯誤路徑。
+    // manifest 從 R2 撈回，狀態歷史接續（前次已寫 planned + uploaded）；撈失敗用
+    // 本地 fresh manifest 加 uploaded entry 當 fallback（避免無 manifest 場景 crash）。
+    const mObj = await bucket.get(manifestKey)
+    if (mObj) {
+      try {
+        manifest = JSON.parse(await mObj.text())
+      } catch {
+        manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
+      }
+    } else {
+      manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
+    }
+    report.chunks_resumed_uploaded = (report.chunks_resumed_uploaded ?? 0) + 1
+  } else {
+    // 'planned' → fresh pipeline
+    report.chunks_planned++
 
-  // ── c. PUT data (gzip) ────────────────────────────────
-  await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
-    httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
-  })
+    // ── b. PUT manifest planned ───────────────────────────
+    await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
+      JSON.stringify(manifest, null, 2),
+      { httpMetadata: { contentType: 'application/json' } })
 
-  // ── d. PUT manifest uploaded → UPDATE chunks state=uploaded ────
-  // codex r2 M-1：先 R2 後 D1。若 manifest PUT fail，chunks 留前態，下輪重跑可接續。
-  manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-    JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
-
-  // PR 3.3：state='planned' guard + changes()===1。admin retry / force_purge
-  // 可在 cron 跑同時改 chunk state（mark_resolved→blacklisted 等）；無 guard
-  // 會把 admin 升態後的 row 又拉回 'uploaded'，破壞 state machine。
-  const updPlannedToUploaded = await db.prepare(
-    `UPDATE audit_archive_chunks
-        SET state = 'uploaded', updated_at = datetime('now')
-      WHERE env = ? AND table_name = ? AND cold_class = ?
-        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
-        AND dry_run = ?
-        AND state = 'planned'`
-  ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
-  if ((updPlannedToUploaded?.meta?.changes ?? 0) !== 1) {
-    return failChunk(ctx, report, 'race_with_admin', {
-      expected_state: 'planned', transition: 'planned_to_uploaded',
-      min_id: minId, max_id: maxId, chunk_sha256: sha,
-      remediation: 'admin retry/force_purge altered chunk state mid-run; next cron will re-evaluate from current state',
+    // ── c. PUT data (gzip) ────────────────────────────────
+    await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+      httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
     })
+
+    // ── d. PUT manifest uploaded → UPDATE chunks state=uploaded ────
+    // codex r2 M-1：先 R2 後 D1。若 manifest PUT fail，chunks 留前態，下輪重跑可接續。
+    manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
+    await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
+      JSON.stringify(manifest, null, 2),
+      { httpMetadata: { contentType: 'application/json' } })
+
+    // PR 3.3：state='planned' guard + changes()===1。admin retry / force_purge
+    // 可在 cron 跑同時改 chunk state（mark_resolved→blacklisted 等）；無 guard
+    // 會把 admin 升態後的 row 又拉回 'uploaded'，破壞 state machine。
+    const updPlannedToUploaded = await db.prepare(
+      `UPDATE audit_archive_chunks
+          SET state = 'uploaded', updated_at = datetime('now')
+        WHERE env = ? AND table_name = ? AND cold_class = ?
+          AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+          AND dry_run = ?
+          AND state = 'planned'`
+    ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
+    if ((updPlannedToUploaded?.meta?.changes ?? 0) !== 1) {
+      return failChunk(ctx, report, 'race_with_admin', {
+        expected_state: 'planned', transition: 'planned_to_uploaded',
+        min_id: minId, max_id: maxId, chunk_sha256: sha,
+        remediation: 'admin retry/force_purge altered chunk state mid-run; next cron will re-evaluate from current state',
+      })
+    }
+    report.chunks_uploaded++
   }
-  report.chunks_uploaded++
 
   // ── e. GET 回讀 + decompress + sha verify ────────────
   const obj = await bucket.get(dataKey)
