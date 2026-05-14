@@ -517,6 +517,88 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(resumed).toBeTruthy()
   })
 
+  // 共用 helper：seed 1 aggregate row + 1 terminal-blocker chunk（覆蓋該 row id）
+  async function seedTerminalBlockerScenario(blockerState, sha) {
+    await seedTelemetryRow()
+    const row = await env.chiyigo_db.prepare(
+      `SELECT id FROM audit_log_aggregate_telemetry ORDER BY id DESC LIMIT 1`
+    ).first()
+    const id = row.id
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+        (env, table_name, cold_class, cold_class_version, archive_date,
+         min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run, compression,
+         last_failure, last_failure_at)
+       VALUES ('test', 'audit_log_aggregate_telemetry', 'aggregate_telemetry', 1, date('now','-1 day'),
+               ?, ?, ?, ?, 1, 1, 'run-seed', 0, 'gzip',
+               'admin_mark_resolved', datetime('now'))`
+    ).bind(id, id, sha, blockerState).run()
+    if (blockerState === 'blacklisted') {
+      await env.chiyigo_db.prepare(
+        `UPDATE audit_archive_chunks SET blacklisted_at = datetime('now') WHERE chunk_sha256 = ?`
+      ).bind(sha).run()
+    }
+    return id
+  }
+
+  it('PR 3.3 r4 codex P1 regression：跨日 blacklisted chunk 必須擋住今天 fresh pipeline，不該繞過 force_purge invariant', async () => {
+    // 場景：admin 昨天 mark_resolved 把 failed chunk → blacklisted（等 force_purge）。
+    // source aggregate row 仍 archived_at=NULL。今天 cron 跑：
+    //   - Step 0 必須掃到 blacklisted blocker → emit chunk_skipped warn
+    //   - Step 1 SELECT 必須 NOT EXISTS 排除被 blocker 覆蓋 id range 的 row
+    //   - Step 3 不該新建任何 chunk（不該繞過 invariant 把資料 archive 掉）
+    const id = await seedTerminalBlockerScenario('blacklisted', 'b'.repeat(64))
+
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.chunks_blocked_terminal ?? 0).toBe(1)
+    expect(body.chunks_planned ?? 0).toBe(0)
+    expect(body.chunks_uploaded ?? 0).toBe(0)
+    expect(body.chunks_verified ?? 0).toBe(0)
+    expect(body.chunks_marked_archived ?? 0).toBe(0)
+
+    const r = await env.chiyigo_db.prepare(
+      `SELECT archived_at FROM audit_log_aggregate_telemetry WHERE id = ?`
+    ).bind(id).first()
+    expect(r.archived_at).toBeNull()
+
+    const allChunks = await listChunks()
+    expect(allChunks.length).toBe(1)
+    expect(allChunks[0].state).toBe('blacklisted')
+
+    const skipped = await listAuditEvents('audit.aggregate_archive.telemetry.chunk_skipped')
+    const warn = skipped.find(e => {
+      try { return JSON.parse(e.event_data).reason?.includes('cross_day_blacklisted_blocker') }
+      catch { return false }
+    })
+    expect(warn).toBeTruthy()
+    expect(warn.severity).toBe('warn')
+  })
+
+  it('PR 3.3 r4 codex P1 regression：跨日 failed chunk 同樣擋住今天 fresh pipeline（admin 必須 re_verify 或 mark_resolved 後續）', async () => {
+    const id = await seedTerminalBlockerScenario('failed', 'c'.repeat(64))
+
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'false' })
+    expect(status).toBe(200)
+    expect(body.chunks_blocked_terminal ?? 0).toBe(1)
+    expect(body.chunks_planned ?? 0).toBe(0)
+    const r = await env.chiyigo_db.prepare(
+      `SELECT archived_at FROM audit_log_aggregate_telemetry WHERE id = ?`
+    ).bind(id).first()
+    expect(r.archived_at).toBeNull()
+    const allChunks = await listChunks()
+    expect(allChunks.length).toBe(1)
+    expect(allChunks[0].state).toBe('failed')
+
+    const skipped = await listAuditEvents('audit.aggregate_archive.telemetry.chunk_skipped')
+    const warn = skipped.find(e => {
+      try { return JSON.parse(e.event_data).reason?.includes('cross_day_failed_blocker') }
+      catch { return false }
+    })
+    expect(warn).toBeTruthy()
+  })
+
   it('PR 3.3 r3 codex P2 regression：uploaded resume 時 R2 物件遺失 → chunk atomic 轉回 failed（admin 可 re_verify）', async () => {
     // Step 1：跑一次得 chunk + R2 物件
     await seedTelemetryRow()

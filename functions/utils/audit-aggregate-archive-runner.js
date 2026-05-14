@@ -199,28 +199,54 @@ export async function runAggregateArchive(args) {
   // 解法：每輪先掃 audit_archive_chunks 非終態，state='verified' 的 chunk 完成 mark_archived
   // 升態。state IN ('planned','uploaded') 則 fall through 給 Step 1 SELECT 自癒
   // （rows 仍 archived_at IS NULL，INSERT OR IGNORE skip + manifest 覆寫繼續推）。
-  // PR 3.3 r3 codex P1：Step 0 同時掃 'uploaded' 與 'verified'（跨所有 archive_date）。
-  //   - 'verified'  → resumeVerifiedBlocker（既有；live 'verified→marked_archived' 升態，
-  //                    dry-run verified 是終態，函式內早退）
-  //   - 'uploaded'  → resumeUploadedBlocker（**re_verify 接續路徑**）。r2 把這個邏輯
-  //                    放在 processChunk 內，但只解 same-day rerun — admin 隔天才
-  //                    re_verify 時舊 chunk 的 archive_date 與本輪 utcDate() 不同，
-  //                    INSERT OR IGNORE 反而插新 row、舊 row 永遠卡 uploaded。
-  //                    Step 0 用 row 自帶 archive_date + chunk_sha256 直接接續，跨日 OK。
+  // PR 3.3 r3/r4 codex：Step 0 同時掃 'uploaded' / 'verified' / 'failed' / 'blacklisted'。
+  //   - 'verified'              → resumeVerifiedBlocker（既有；live 'verified→marked_archived'）
+  //   - 'uploaded'              → resumeUploadedBlocker（**re_verify 接續路徑**；跨日 OK）
+  //   - 'failed' / 'blacklisted' → r4 codex P1：emit chunk_skipped warn 通報，**不 resume**；
+  //                                terminal-blocker 不該被 fresh pipeline 繞過。
+  //                                Step 1 SELECT 另用 NOT EXISTS 排除這些 chunk 的 id range，
+  //                                保證跨日不會新建覆蓋同 row 範圍的 chunks row。
+  // r4 場景：admin 昨天 mark_resolved → blacklisted（等 force_purge），source aggregate row
+  // 仍 archived_at NULL。今天 cron Step 0 若不掃 blacklisted、Step 3 用今天 utcDate() 算
+  // 新 archive_date PK → INSERT OR IGNORE 反而插新 row 繞過 invariant 把資料 archive 掉。
   try {
     const blockerRows = await db.prepare(
       `SELECT min_id, max_id, chunk_sha256, archive_date, state, row_count, dry_run
          FROM audit_archive_chunks
         WHERE env = ? AND table_name = ? AND cold_class = ?
-          AND state IN ('verified', 'uploaded')
+          AND state IN ('verified', 'uploaded', 'failed', 'blacklisted')
         ORDER BY min_id ASC`
     ).bind(envName, tableName, coldClass).all()
     for (const b of (blockerRows.results ?? [])) {
       try {
         if (b.state === 'uploaded') {
           await resumeUploadedBlocker({ ctx, blocker: b, report })
-        } else {
+        } else if (b.state === 'verified') {
           await resumeVerifiedBlocker({ ctx, blocker: b, report })
+        } else {
+          // 'failed' / 'blacklisted'：emit chunk_skipped warn；不動 state、不動 R2；
+          // 計 chunks_blocked_terminal 給 forensic / alerting。Step 1 SELECT NOT EXISTS
+          // 會自然排除此 chunk 的 id range，aggregate row 不會進 Step 3 fresh pipeline。
+          await safeUserAudit(ctx.env, {
+            event_type: `${ctx.eventPrefix}.chunk_skipped`,
+            severity:   'warn',
+            data: {
+              run_id:           runId,
+              env:              envName,
+              table:            tableName,
+              cold_class:       coldClass,
+              min_id:           b.min_id,
+              max_id:           b.max_id,
+              chunk_sha256:     b.chunk_sha256,
+              dry_run:          b.dry_run === 1 || b.dry_run === true,
+              existing_state:   b.state,
+              archive_date:     b.archive_date,
+              reason: b.state === 'blacklisted'
+                ? 'cross_day_blacklisted_blocker (force_purge required; fresh pipeline blocked for this id range)'
+                : 'cross_day_failed_blocker (admin re_verify or mark_resolved required; fresh pipeline blocked for this id range)',
+            },
+          })
+          report.chunks_blocked_terminal = (report.chunks_blocked_terminal ?? 0) + 1
         }
       } catch (e) {
         console.error(`[aggregate-archive] ${coldClass} blocker crash:`, e)
@@ -247,16 +273,25 @@ export async function runAggregateArchive(args) {
   }
 
   // ── Step 1：撈 cutoff 之前未 archive 的 aggregate row ─────
+  // PR 3.3 r4 codex P1：NOT EXISTS subquery 排除被 terminal-blocker chunk
+  // ('failed' / 'blacklisted') 覆蓋的 id range — 防 fresh pipeline 跨日繞過 invariant。
+  // Step 0 已對 blocker chunk emit chunk_skipped warn；此處 SELECT 直接過濾不再處理。
   let candidates
   try {
     const rs = await db.prepare(
       `SELECT ${selectColumns}
-         FROM ${tableName}
-        WHERE archived_at IS NULL
-          AND created_at < ?
-        ORDER BY id ASC
+         FROM ${tableName} t
+        WHERE t.archived_at IS NULL
+          AND t.created_at < ?
+          AND NOT EXISTS (
+            SELECT 1 FROM audit_archive_chunks c
+             WHERE c.env = ? AND c.table_name = ? AND c.cold_class = ?
+               AND c.state IN ('failed', 'blacklisted')
+               AND t.id BETWEEN c.min_id AND c.max_id
+          )
+        ORDER BY t.id ASC
         LIMIT ?`
-    ).bind(cutoff, maxRows + 1).all()
+    ).bind(cutoff, envName, tableName, coldClass, maxRows + 1).all()
     candidates = rs.results ?? []
   } catch (e) {
     return fail(env, report, eventPrefix, 'd1_select_failed', { error: String(e?.message ?? e) })
