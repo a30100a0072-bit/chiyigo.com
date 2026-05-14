@@ -26,6 +26,19 @@
 .erp3-btn[aria-pressed="true"] .erp3-btn-dot{background:var(--accent);box-shadow:0 0 8px var(--accent),0 0 0 2px rgba(108,110,229,.18);animation:erp3-pulse 1.8s ease-in-out infinite}
 @keyframes erp3-pulse{0%,100%{box-shadow:0 0 8px var(--accent),0 0 0 2px rgba(108,110,229,.18)}50%{box-shadow:0 0 14px var(--accent),0 0 0 5px rgba(108,110,229,.06)}}
 
+/* Event Chain selector */
+.erp3-chain-wrap{margin:0 0 18px;display:flex;flex-direction:column;gap:10px}
+.erp3-chain-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.erp3-chain-label{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-2,#9aa1b3);letter-spacing:.05em;margin-right:6px}
+.erp3-chain-btn{font-family:inherit;font-size:12.5px;padding:6px 12px;border-radius:999px;border:1px solid var(--bd,rgba(255,255,255,.12));background:transparent;color:var(--text-2,#9aa1b3);cursor:pointer;transition:.15s}
+.erp3-chain-btn:hover{border-color:var(--accent);color:var(--text,#e7eaf3)}
+.erp3-chain-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(108,110,229,.32)}
+.erp3-chain-note{font-size:12.5px;line-height:1.65;color:var(--text-2,#9aa1b3);background:rgba(108,110,229,.06);border:1px dashed rgba(108,110,229,.28);border-radius:10px;padding:10px 14px;margin:0}
+.erp3-chain-note[hidden]{display:none !important}
+:root.theme-light .erp3-chain-btn{border-color:rgba(15,17,30,.12);color:#3a3f55}
+:root.theme-light .erp3-chain-btn:hover{color:#1a1d2b}
+:root.theme-light .erp3-chain-note{background:rgba(108,110,229,.05);color:#3a3f55}
+
 .erp3-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:24px;align-items:start}
 
 /* ── 3D scene (Three.js canvas 容器) ── */

@@ -37,6 +37,14 @@ const NODES = [
   { id:'sre',         ang:337.5, r:300, ty:-100, tag:'PLATFORM'    },
 ];
 
+// ── 4 條 Event Chain（與 2D 版同步） ──
+const CHAINS = {
+  order:   ['crm', 'sales', 'mdm', 'finance', 'workflow', 'notify', 'bi', 'file'],
+  payment: ['sales', 'finance', 'notify', 'bi', 'integration'],
+  tenant:  ['iam', 'mdm', 'metadata', 'workflow', 'notify', 'bi'],
+  ai:      ['event', 'data', 'ai', 'knowledge', 'notify', 'bi'],
+};
+
 // ── 18 條 EDGES（跨領域功能依賴，與 2D 版同步） ──
 const EDGES = [
   ['iam','mdm'], ['iam','workflow'], ['iam','metadata'],
@@ -98,6 +106,8 @@ const A11Y_LIST = document.getElementById('erp3-a11y');
 const FALLBACK = document.getElementById('erp3-fallback');
 const AUTO_BTN = document.getElementById('erp3-auto-toggle');
 const RESET_BTN = document.getElementById('erp3-reset');
+const CHAIN_BAR = document.getElementById('erp3-chain-bar');
+const CHAIN_NOTE = document.getElementById('erp3-chain-note');
 const PANEL_EMPTY = document.getElementById('erp3-panel-empty');
 const PANEL_BODY = document.getElementById('erp3-panel-body');
 const PANEL_TAG = document.getElementById('erp3-panel-tag');
@@ -234,6 +244,8 @@ let towerGroup, satGroup, spine, spineGlow;
 const layerMeshes = []; // [{ mesh, lvl, baseTex, hiTex, info }]
 const satMeshes = [];   // [{ mesh, node, baseTex, hiTex, info }]
 const edgeLines = [];   // [{ line, a, b, mat }]
+let chainGroup = null;  // chain dashed segments + arrowheads
+let activeChain = null; // null | 'order' | 'payment' | 'tenant' | 'ai'
 
 const cam = { theta: 0.6, phi: 0.18, radius: 850 };
 let dragging = false, didDrag = false;
@@ -312,6 +324,10 @@ function initScene(){
     satMeshes.push({ mesh, node: n, baseTex, hiTex });
   }
 
+  // chain segments group（先建空 group，動態 add/remove dashed segment + arrow）
+  chainGroup = new THREE.Group();
+  scene.add(chainGroup);
+
   // EDGES 功能線：用 CylinderGeometry 當粗 tube 而不是 Line（多數平台 LineBasicMaterial.linewidth 只 1px，
   // 改用 tube 才能在任何視角呈現可見的粗度）
   const UP = new THREE.Vector3(0, 1, 0);
@@ -333,6 +349,99 @@ function initScene(){
     scene.add(tube);
     edgeLines.push({ line: tube, a, b, mat });
   }
+}
+
+// ── Event Chain：dashed tube + 箭頭 cone（仿 2D dashed-array 效果，有方向感） ──
+function pointOf(n){
+  const rad = (n.ang * Math.PI) / 180;
+  return new THREE.Vector3(Math.sin(rad) * n.r, n.ty, Math.cos(rad) * n.r);
+}
+
+function clearChain(){
+  if (!chainGroup) return;
+  while (chainGroup.children.length) {
+    const obj = chainGroup.children[0];
+    chainGroup.remove(obj);
+    obj.geometry?.dispose?.();
+    obj.material?.dispose?.();
+  }
+}
+
+function buildChainSegment(pa, pb){
+  if (!chainGroup) return;
+  const UP = new THREE.Vector3(0, 1, 0);
+  const dir = new THREE.Vector3().subVectors(pb, pa);
+  const total = dir.length();
+  const arrowH = 16, arrowR = 5;
+  // 留 arrowH 給箭頭，剩餘長度切 dash + gap
+  const usable = total - arrowH;
+  const dashLen = 14;
+  const gapLen = 10;
+  const segPitch = dashLen + gapLen;
+  const dashCount = Math.max(1, Math.floor(usable / segPitch));
+  const dirNorm = dir.clone().normalize();
+
+  // 多個 dash 圓柱段
+  for (let i = 0; i < dashCount; i++) {
+    const t0 = (i * segPitch) / total;
+    const t1 = Math.min((i * segPitch + dashLen) / total, usable / total);
+    if (t1 <= t0) break;
+    const a = pa.clone().lerp(pb, t0);
+    const b = pa.clone().lerp(pb, t1);
+    const segMid = a.clone().lerp(b, 0.5);
+    const segLen = a.distanceTo(b);
+    const geom = new THREE.CylinderGeometry(1.6, 1.6, segLen, 8);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xa5a8ff, transparent: true, opacity: 0.95, depthWrite: false });
+    const tube = new THREE.Mesh(geom, mat);
+    tube.position.copy(segMid);
+    tube.quaternion.setFromUnitVectors(UP, dirNorm);
+    chainGroup.add(tube);
+  }
+
+  // 終點箭頭 cone（指向 pb）
+  const arrowGeom = new THREE.ConeGeometry(arrowR, arrowH, 12);
+  const arrowMat = new THREE.MeshBasicMaterial({ color: 0xa5a8ff, transparent: true, opacity: 1.0, depthWrite: false });
+  const arrow = new THREE.Mesh(arrowGeom, arrowMat);
+  arrow.position.copy(pb).sub(dirNorm.clone().multiplyScalar(arrowH / 2));
+  arrow.quaternion.setFromUnitVectors(UP, dirNorm);
+  chainGroup.add(arrow);
+}
+
+function buildChain(name){
+  clearChain();
+  const chain = CHAINS[name];
+  if (!chain) return;
+  for (let i = 0; i < chain.length - 1; i++) {
+    const na = NODES.find(n => n.id === chain[i]);
+    const nb = NODES.find(n => n.id === chain[i+1]);
+    if (!na || !nb) continue;
+    buildChainSegment(pointOf(na), pointOf(nb));
+  }
+}
+
+function setChain(name){
+  activeChain = (name && CHAINS[name]) ? name : null;
+  CHAIN_BAR?.querySelectorAll('.erp3-chain-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.chain === (activeChain || 'none'));
+  });
+  // chain note 文字
+  if (CHAIN_NOTE) {
+    if (activeChain) {
+      const t = tDict(), fb = tFallback();
+      CHAIN_NOTE.textContent = t['chain_note_'+activeChain] || fb['chain_note_'+activeChain] || '';
+      CHAIN_NOTE.hidden = false;
+    } else {
+      CHAIN_NOTE.textContent = '';
+      CHAIN_NOTE.hidden = true;
+    }
+  }
+  // chain 啟動時隱藏 EDGES，讓畫面只有 chain 線條
+  for (const { line } of edgeLines) line.visible = !activeChain;
+  // 重建 chain segments
+  if (activeChain) buildChain(activeChain);
+  else clearChain();
+  // panel：chain 啟動時不主動清 active node
+  refreshEdges();
 }
 
 // ── EDGES 高亮更新：點 node 時相鄰 edge 變「細而亮」、其他 dim ──
@@ -547,6 +656,12 @@ AUTO_BTN?.addEventListener('click', () => {
 RESET_BTN?.addEventListener('click', () => {
   cam.theta = 0.6; cam.phi = 0.18; cam.radius = 850;
 });
+CHAIN_BAR?.addEventListener('click', e => {
+  const btn = e.target.closest('.erp3-chain-btn');
+  if (!btn) return;
+  const c = btn.dataset.chain;
+  setChain(c === 'none' ? null : c);
+});
 PANEL_CLOSE?.addEventListener('click', () => setActive(null, null));
 
 SCENE_EL?.addEventListener('pointerdown', onPointerDown);
@@ -612,6 +727,10 @@ function applyLang(lang){
   if (AUTO_BTN) {
     const txt = AUTO_BTN.querySelector('[data-i18n]');
     if (txt) txt.textContent = autoRotate ? (t.l3d_autorotate || 'Auto') : (t.l3d_paused || 'Paused');
+  }
+  // chain note 翻譯
+  if (activeChain && CHAIN_NOTE) {
+    CHAIN_NOTE.textContent = t['chain_note_'+activeChain] || '';
   }
 }
 
