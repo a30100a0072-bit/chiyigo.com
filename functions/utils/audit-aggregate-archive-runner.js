@@ -684,25 +684,64 @@ function failChunk(ctx, report, eventCode, data) {
  * （此函式只負責清狀態，不再 fail一次；real failure 由 caller 的 failChunk 處理）。
  */
 /**
+ * Cloudflare D1 bound parameters per query 上限 — 100（官方 limits 頁）。
+ * aggregate chunk 上限 CHUNK_MAX_ROWS = 10_000，遠超此值，IN(?, ?, ...) 必須分批。
+ */
+const D1_MAX_BOUND_PARAMS = 100
+
+/**
  * 從 chunk JSONL（newline-delimited JSON）拉出所有 row id。
  *
  * Resume 路徑用 — 取代 BETWEEN min..max + cutoff 範圍 UPDATE（跨月時 ctx.cutoff
  * 已不是 chunk 原始 cutoff，會誤把當初被 cutoff 排除的 HOT row 標 archived_at）。
  * 用 chunk 內 exact ids 做 IN(...) UPDATE → 跨月也對、不需 schema migration。
  *
- * 兩 aggregate worker 的 rowsToJsonl 都把 `id` 放第一個欄位，且行內為合法 JSON。
- * parse 失敗的行被忽略（不該發生；發生即代表 chunk 已壞，後續 sha 比對也會擋下）。
+ * Codex r? M-1：parse error / non-integer id 必 throw（不再 silently swallow）。
+ * 舊版 swallow 在 verified resume path（沒重驗 sha/row_count）下可能把 R2 壞 chunk
+ * 升 marked_archived 但 source row 沒全標。caller 需用 try/catch 走 fail 路徑。
  */
 function extractIdsFromJsonl(text) {
   const ids = []
+  let lineNo = 0
   for (const line of text.split('\n')) {
+    lineNo++
     if (!line) continue
+    let obj
     try {
-      const obj = JSON.parse(line)
-      if (typeof obj?.id === 'number') ids.push(obj.id)
-    } catch { /* swallow; sha-mismatch path 會接到 */ }
+      obj = JSON.parse(line)
+    } catch (err) {
+      const e = new Error(`extractIdsFromJsonl: malformed json at line ${lineNo}: ${err?.message ?? err}`)
+      e.code = 'JSONL_MALFORMED'
+      throw e
+    }
+    if (typeof obj?.id !== 'number' || !Number.isInteger(obj.id)) {
+      const e = new Error(`extractIdsFromJsonl: non-integer id at line ${lineNo}`)
+      e.code = 'JSONL_BAD_ID'
+      throw e
+    }
+    ids.push(obj.id)
   }
   return ids
+}
+
+/**
+ * 分批跑 archived_at UPDATE — 防 D1 bound parameter 上限（100）爆 chunk
+ * （CHUNK_MAX_ROWS = 10_000）的 IN(?, ?, ...) prepare/bind。
+ *
+ * 每 batch 之間獨立 UPDATE；中途失敗會留 partial 標記，但下輪 cron resume 仍會走
+ * 同一條 path、AND archived_at IS NULL guard 跳過已標的、把剩下標完（idempotent）。
+ */
+async function batchUpdateArchivedAt(db, tableName, ids) {
+  for (let i = 0; i < ids.length; i += D1_MAX_BOUND_PARAMS) {
+    const slice = ids.slice(i, i + D1_MAX_BOUND_PARAMS)
+    const placeholders = slice.map(() => '?').join(',')
+    await db.prepare(
+      `UPDATE ${tableName}
+          SET archived_at = datetime('now')
+        WHERE id IN (${placeholders})
+          AND archived_at IS NULL`
+    ).bind(...slice).run()
+  }
 }
 
 async function transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, lastFailure) {
@@ -793,7 +832,22 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
 
   // Codex H-1 cross-month fix：parse exact row ids 給 chain 到 resumeVerifiedBlocker
   // 用 IN(...) 做 archived_at UPDATE，避開 BETWEEN + ctx.cutoff 跨月誤標 HOT row。
-  const chunkIds = extractIdsFromJsonl(text)
+  // Codex r? M-1：parse error / row_count mismatch 都當 verify 失敗 → atomic 轉回 failed。
+  let chunkIds
+  try {
+    chunkIds = extractIdsFromJsonl(text)
+  } catch (err) {
+    await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'jsonl_parse_failed')
+    const e = new Error(`uploaded_blocker_verify_failed: jsonl_parse_failed (${err?.message ?? err})`)
+    e.code = 'VERIFY_FAILED_JSONL_PARSE'
+    throw e
+  }
+  if (chunkIds.length !== rowCount) {
+    await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'jsonl_id_count_mismatch')
+    const e = new Error(`uploaded_blocker_verify_failed: jsonl_id_count_mismatch (ids ${chunkIds.length} vs row_count ${rowCount})`)
+    e.code = 'VERIFY_FAILED_JSONL_ID_COUNT'
+    throw e
+  }
 
   // 3) PUT manifest 'verified'
   const mObj = await bucket.get(manifestKey)
@@ -900,27 +954,36 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
       e.data_key = verifiedDataKey
       throw e
     }
+    let text
     try {
       const gzBytes = new Uint8Array(await dataObj.arrayBuffer())
       const jsonlBytes = await gzipDecompress(gzBytes)
-      const text = new TextDecoder().decode(jsonlBytes)
-      chunkIds = extractIdsFromJsonl(text)
+      text = new TextDecoder().decode(jsonlBytes)
     } catch (err) {
       const e = new Error(`verified_blocker_resume_failed: gzip_decompress_failed (${err?.message ?? err})`)
       e.code = 'VERIFY_RESUME_DECOMPRESS'
       throw e
     }
+    // Codex r? M-1：parse 失敗或 id 缺失要 throw 讓 outer catch fail run，
+    // 不可 silently 升 marked_archived 卻沒標完 source rows。
+    try {
+      chunkIds = extractIdsFromJsonl(text)
+    } catch (err) {
+      const e = new Error(`verified_blocker_resume_failed: jsonl_parse_failed (${err?.message ?? err})`)
+      e.code = 'VERIFY_RESUME_JSONL_PARSE'
+      throw e
+    }
+    if (chunkIds.length !== blocker.row_count) {
+      const e = new Error(`verified_blocker_resume_failed: jsonl_id_count_mismatch (ids ${chunkIds.length} vs row_count ${blocker.row_count})`)
+      e.code = 'VERIFY_RESUME_JSONL_ID_COUNT'
+      throw e
+    }
   }
 
   // 1) UPDATE aggregate row archived_at（idempotent；crashed-after 場景 changes=0）
+  // Codex r? H-1：CHUNK_MAX_ROWS=10_000 > D1 bound param 上限 100 → 必須分批 UPDATE。
   if (chunkIds.length > 0) {
-    const placeholders = chunkIds.map(() => '?').join(',')
-    await db.prepare(
-      `UPDATE ${tableName}
-          SET archived_at = datetime('now')
-        WHERE id IN (${placeholders})
-          AND archived_at IS NULL`
-    ).bind(...chunkIds).run()
+    await batchUpdateArchivedAt(db, tableName, chunkIds)
   }
 
   // 2) PUT manifest marked_archived（codex r2 M-1：先 R2 後 D1。
