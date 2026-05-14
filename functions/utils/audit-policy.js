@@ -76,6 +76,11 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate_archive.telemetry.upload_failed',  // warn / critical
   'audit.aggregate_archive.debug.chunk_uploaded',     // info
   'audit.aggregate_archive.debug.upload_failed',      // warn / critical
+  // PR 3.3 r1 codex P2-1：existing chunk row 非 'planned' 時 fresh pipeline 早退
+  //   - dry-run 'verified' / live 'marked_archived' = idempotent rerun，info severity
+  //   - 其他 ('uploaded' / 'failed' / 'blacklisted') = partial / admin-intervened，warn severity
+  'audit.aggregate_archive.telemetry.chunk_skipped',  // info / warn
+  'audit.aggregate_archive.debug.chunk_skipped',      // info / warn
   // PR 3.3 admin retry / force_purge endpoint（POST /api/admin/audit-aggregate-archive/retry）
   //   mirror PR 2.2b/2.3 raw retry.js 三段事件 × 兩 cold_class（telemetry / debug）
   //   force_purge_disabled / retry_rejected = warn；其餘 retry_* info；force_purge_*

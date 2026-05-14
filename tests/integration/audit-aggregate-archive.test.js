@@ -369,12 +369,26 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(before[0].dry_run).toBe(1)
 
     // 再跑一次（仍 dry-run）— verified dry-run chunk 不被 resume 升 marked_archived，
-    // 也不被 fresh pipeline 再處理（SELECT 仍撈得到 row 但 INSERT OR IGNORE skip）
-    const { body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    // 也不被 fresh pipeline 再處理（INSERT OR IGNORE skip → processChunk 看到 existing
+    // state='verified' → emit chunk_skipped info + report.chunks_skipped++ → 早退）
+    // PR 3.3 r1 codex P2-1：必驗 status 200 / ok=true，避 race_with_admin 500 偽通過
+    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })
+    expect(status).toBe(200)
+    expect(body.ok).toBe(true)
     expect(body.chunks_marked_archived).toBe(0)
+    expect(body.chunks_uploaded ?? 0).toBe(0)         // 不該重 PUT
+    expect(body.chunks_verified ?? 0).toBe(0)         // 不該重 verify
+    expect(body.chunks_skipped ?? 0).toBe(1)          // PR 3.3 r1 新增：idempotent skip 計數
+
     const after = await listChunks()
     expect(after[0].state).toBe('verified')
     expect(after[0].dry_run).toBe(1)
+
+    // emit chunk_skipped info（terminal_state_for_mode_already_present）
+    const skipped = await listAuditEvents('audit.aggregate_archive.telemetry.chunk_skipped')
+    expect(skipped.length).toBe(1)
+    expect(skipped[0].severity).toBe('info')
+    expect(JSON.parse(skipped[0].event_data).reason).toMatch(/terminal_state_for_mode_already_present/)
   })
 })
 

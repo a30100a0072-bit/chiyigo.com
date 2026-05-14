@@ -216,6 +216,16 @@ describe('PR 3.3 retry — schema validation', () => {
     expect(r.status).toBe(400)
     expect(r.body.error).toMatch(/length/)
   })
+
+  it('PR 3.3 r1 codex test gap：invalid reason_code（白名單外）→ 400', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminToken(id)
+    const t = targetOf(await seedAggregateChunk())
+    const r = await callRetry({ token: tok, body: { action: 're_verify', target: t, reason_code: 'fake_reason_not_in_whitelist', operator_reason: 'valid 10 char reason here' } })
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('INVALID_REASON')
+    expect(r.body.error).toMatch(/reason_code/)
+  })
 })
 
 describe('PR 3.3 retry — re_verify happy path', () => {
@@ -361,6 +371,42 @@ describe('PR 3.3 retry — mark_resolved（step-up）', () => {
     const chunk = await seedAggregateChunk()
     const r = await callRetry({ token: tok, body: { action: 'mark_resolved', target: targetOf(chunk), ...VALID_REASON } })
     expect(r.status).toBe(403)
+  })
+
+  it('PR 3.3 r1 codex test gap：wrong step-up for_action（raw 的 token 想刪 aggregate）→ 403', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    // 拿錯 anti-replay 域：raw audit_archive 的 for_action 不能用在 aggregate endpoint
+    const tok = await adminStepUpToken(id, 'audit_archive_mark_resolved')
+    const chunk = await seedAggregateChunk()
+    const r = await callRetry({ token: tok, body: { action: 'mark_resolved', target: targetOf(chunk), ...VALID_REASON } })
+    expect(r.status).toBe(403)
+  })
+
+  it('PR 3.3 r1 codex P2-2 regression：不存在的 dry-run target + id range 夾雜 archived aggregate row → 404 CHUNK_NOT_FOUND（不是 INTEGRITY_BREACH）', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_aggregate_archive_mark_resolved')
+    // 種一個 archived aggregate row 在 id 50（不種 chunk）
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_log_aggregate_telemetry
+        (id, event_type, user_id, severity, hour_bucket, count, archived_at)
+       VALUES (50, 'auth.login.rate_limited', NULL, 'info', '2025-01-15T01:00', 5, datetime('now'))`
+    ).run()
+    // fake target — chunk 完全不存在
+    const t = {
+      env: 'test',
+      table_name: 'audit_log_aggregate_telemetry',
+      cold_class: 'aggregate_telemetry',
+      archive_date: '2026-05-01',
+      min_id: 1, max_id: 100, chunk_sha256: 'f'.repeat(64),
+      dry_run: true,
+    }
+    const r = await callRetry({ token: tok, body: { action: 'mark_resolved', target: t, reason_code: 'dry_run_collision_cleanup', operator_reason: 'should be 404 not integrity breach' } })
+    expect(r.status).toBe(404)
+    expect(r.body.code).toBe('CHUNK_NOT_FOUND')
+    // 不該出現 INTEGRITY_BREACH critical emit
+    const evs = await selectAudit('audit.aggregate_archive.telemetry.retry_rejected')
+    const critical = evs.find(e => e.severity === 'critical')
+    expect(critical).toBeUndefined()
   })
 })
 

@@ -396,6 +396,39 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
       remediation: 'manual_cleanup_required (force_purge dry-run chunk before live rerun)',
     })
   }
+  // PR 3.3 r1 codex P2-1：existing row 非 'planned' 表示前次 run 已推進（典型場景：
+  //   - same-day dry-run rerun，前次跑完留 state='verified'（dry-run 終態）
+  //   - 前次 partial crash 後留 'uploaded' / 'verified'）
+  // 不能走 fresh pipeline 再 PUT — PR 3.3 cron race guard 會把 state mismatch 打成
+  // race_with_admin critical，但此處不是 admin 競爭、是合法 idempotent rerun。
+  // 提早 skip + emit chunk_skipped；live verified 由 Step 0 resumeVerifiedBlocker
+  // 處理（且 Step 1 SELECT archived_at IS NULL 已過濾完跑的 live row 不會進來）。
+  if (existing && existing.state !== 'planned') {
+    const isTerminalForMode =
+      (dryRun && existing.state === 'verified') ||
+      (!dryRun && existing.state === 'marked_archived')
+    await safeUserAudit(ctx.env, {
+      event_type: `${ctx.eventPrefix}.chunk_skipped`,
+      severity:   isTerminalForMode ? 'info' : 'warn',
+      data: {
+        run_id:           runId,
+        env:              envName,
+        table:            tableName,
+        cold_class:       coldClass,
+        min_id:           minId,
+        max_id:           maxId,
+        chunk_sha256:     sha,
+        dry_run:          dryRun,
+        existing_state:   existing.state,
+        existing_run_id:  existing.run_id,
+        reason: isTerminalForMode
+          ? 'terminal_state_for_mode_already_present (idempotent rerun)'
+          : 'non_planned_partial_state (operator should inspect via admin retry endpoint)',
+      },
+    })
+    report.chunks_skipped = (report.chunks_skipped ?? 0) + 1
+    return
+  }
   report.chunks_planned++
 
   // ── b. PUT manifest planned ───────────────────────────

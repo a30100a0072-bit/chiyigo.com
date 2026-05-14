@@ -384,11 +384,11 @@ export async function onRequestPost({ request, env }) {
     return handleNonForcePurgeResult(env, db, request, ctxBase, action, target, cls, chunkId, upd, 'failed', 'uploaded', expectedDryRunInt)
   }
 
-  // mark_resolved：兩條路徑
-  //   A) state='failed' → 'blacklisted'（raw mirror）
-  //   B) state='verified' AND dry_run=1 → 'blacklisted'（PR 3.3 special；需驗 aggregate row archived_at IS NULL）
-  // 共用 atomic + changes()===1 — 兩條路徑分開 UPDATE 嘗試，最多兩條 SQL；
-  // 若 dry_run=0 + state='verified' 兩條都不會 hit → 走最後的 probe path 區分原因
+  // mark_resolved（PR 3.3 r1 codex P2-2 後重排）：
+  //   Path A → probe → dry_run / state 驗 → archived_at invariant（只對 dry-run verified）→ Path B
+  // 重排原因：原版先跑 archived_at invariant 才 probe，導致 chunk 不存在 / dry_run mismatch /
+  // state 不對的場景下，若 id range 剛好夾雜 archived aggregate row，會誤報 INTEGRITY_BREACH
+  // critical（應該回 404 / 409）。新版確認 chunk 真實狀態後才做 invariant check。
 
   // Path A：failed → blacklisted（任意 dry_run；mirror raw mark_resolved 語意）
   const updA = await db.prepare(
@@ -410,59 +410,7 @@ export async function onRequestPost({ request, env }) {
     return await emitSucceededAndRespond(env, request, ctxBase, action, target, cls, chunkId, 'failed', 'blacklisted', 'failed_to_blacklisted')
   }
 
-  // Path B：dry-run verified → blacklisted（PR 3.3 special）
-  // 額外 invariant：對應的 aggregate row 必須 archived_at IS NULL。
-  // 違反代表 codex r2 H-1 invariant 已破（dry-run chunk 不應已把 aggregate row 標 archived）—
-  // critical fail-fast，不自動修，operator 走獨立 repair flow。
-  if (target.dry_run) {
-    // 先驗 aggregate row invariant（純 SELECT，不改 state；違反 → critical reject）
-    const archivedConflict = await db.prepare(
-      `SELECT COUNT(*) AS n FROM ${target.table_name}
-        WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL`
-    ).bind(target.min_id, target.max_id).first()
-    if ((archivedConflict?.n ?? 0) > 0) {
-      await safeUserAudit(env, {
-        event_type: `audit.aggregate_archive.${cls}.retry_rejected`,
-        severity:   'critical',
-        user_id:    ctxBase.admin_id,
-        request,
-        data: {
-          admin_id: ctxBase.admin_id, action, target, chunk_id: chunkId,
-          reason_code, operator_reason,
-          reason: 'integrity_breach_dry_run_chunk_with_archived_aggregate_rows',
-          archived_row_count: archivedConflict.n,
-          remediation: 'manual_repair_required (dry-run chunk references aggregate rows already marked archived; codex r2 H-1 invariant broken — investigate before retry)',
-        },
-      })
-      return res({
-        error: 'integrity_breach: dry-run chunk references aggregate rows with archived_at NOT NULL (codex r2 H-1 invariant)',
-        code:  'INTEGRITY_BREACH',
-        chunk_id: chunkId,
-        archived_row_count: archivedConflict.n,
-        remediation: 'manual repair required; do NOT auto-clear archived_at',
-      }, 409)
-    }
-
-    const updB = await db.prepare(
-      `UPDATE audit_archive_chunks
-          SET state = 'blacklisted',
-              blacklisted_at = datetime('now'),
-              last_failure = 'admin_mark_resolved_dry_run_collision',
-              last_failure_at = datetime('now'),
-              updated_at = datetime('now')
-        WHERE env = ? AND table_name = ? AND cold_class = ?
-          AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
-          AND dry_run = 1 AND state = 'verified'`
-    ).bind(
-      target.env, target.table_name, target.cold_class,
-      target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
-    ).run()
-    if ((updB?.meta?.changes ?? 0) === 1) {
-      return await emitSucceededAndRespond(env, request, ctxBase, action, target, cls, chunkId, 'verified', 'blacklisted', 'dry_run_verified_to_blacklisted')
-    }
-  }
-
-  // 兩條都 0 changes → probe 區分原因
+  // Path A 0 changes → probe 區分後續路徑（404 / dry_run mismatch / state mismatch / Path B 候選）
   const probe = await db.prepare(
     `SELECT state, dry_run FROM audit_archive_chunks
       WHERE env = ? AND table_name = ? AND cold_class = ?
@@ -498,6 +446,65 @@ export async function onRequestPost({ request, env }) {
       actual_dry_run: actualDryRunInt,
     }, 409)
   }
+
+  // Path B：dry-run verified → blacklisted（PR 3.3 special；解 codex r2 H-1 場景）
+  // 額外 invariant：對應的 aggregate row 必須 archived_at IS NULL；違反 → critical reject。
+  // PR 3.3 r1 codex P2-2：此 invariant check 必須在 probe 確認 dry_run=1+verified 後才跑，
+  // 否則 chunk 不存在 / dry_run mismatch / state 不對的場景下，id range 夾雜 archived
+  // aggregate row 會誤報 INTEGRITY_BREACH critical（應該回 404 / 409）。
+  if (probe.state === 'verified' && actualDryRunInt === 1) {
+    const archivedConflict = await db.prepare(
+      `SELECT COUNT(*) AS n FROM ${target.table_name}
+        WHERE id BETWEEN ? AND ? AND archived_at IS NOT NULL`
+    ).bind(target.min_id, target.max_id).first()
+    if ((archivedConflict?.n ?? 0) > 0) {
+      await safeUserAudit(env, {
+        event_type: `audit.aggregate_archive.${cls}.retry_rejected`,
+        severity:   'critical',
+        user_id:    ctxBase.admin_id,
+        request,
+        data: {
+          admin_id: ctxBase.admin_id, action, target, chunk_id: chunkId,
+          reason_code, operator_reason,
+          reason: 'integrity_breach_dry_run_chunk_with_archived_aggregate_rows',
+          archived_row_count: archivedConflict.n,
+          remediation: 'manual_repair_required (dry-run chunk references aggregate rows already marked archived; codex r2 H-1 invariant broken — investigate before retry)',
+        },
+      })
+      return res({
+        error: 'integrity_breach: dry-run chunk references aggregate rows with archived_at NOT NULL (codex r2 H-1 invariant)',
+        code:  'INTEGRITY_BREACH',
+        chunk_id: chunkId,
+        archived_row_count: archivedConflict.n,
+        remediation: 'manual repair required; do NOT auto-clear archived_at',
+      }, 409)
+    }
+    const updB = await db.prepare(
+      `UPDATE audit_archive_chunks
+          SET state = 'blacklisted',
+              blacklisted_at = datetime('now'),
+              last_failure = 'admin_mark_resolved_dry_run_collision',
+              last_failure_at = datetime('now'),
+              updated_at = datetime('now')
+        WHERE env = ? AND table_name = ? AND cold_class = ?
+          AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
+          AND dry_run = 1 AND state = 'verified'`
+    ).bind(
+      target.env, target.table_name, target.cold_class,
+      target.archive_date, target.min_id, target.max_id, target.chunk_sha256,
+    ).run()
+    if ((updB?.meta?.changes ?? 0) === 1) {
+      return await emitSucceededAndRespond(env, request, ctxBase, action, target, cls, chunkId, 'verified', 'blacklisted', 'dry_run_verified_to_blacklisted')
+    }
+    // changes===0 = probe 後 state 競爭被改（極罕見；admin parallel call）→ 409 conflict
+    await emitRejected(env, request, ctxBase, 'state_changed_after_probe')
+    return res({
+      error: 'chunk state changed between probe and UPDATE (concurrent admin call?)',
+      code:  'CHUNK_STATE_CHANGED',
+      chunk_id: chunkId,
+    }, 409)
+  }
+
   await emitRejected(env, request, ctxBase, `state_not_eligible:${probe.state}`)
   return res({
     error: `chunk state '${probe.state}' is not eligible for ${action}; mark_resolved requires state='failed' or (dry_run=1 AND state='verified')`,
