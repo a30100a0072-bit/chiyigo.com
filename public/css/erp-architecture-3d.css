@@ -1,0 +1,194 @@
+/* ─────────────────────────────────────────────────────────
+   erp-architecture-3d.css — ERP 8 層立體架構頁
+   純 CSS 3D（perspective + transform-style preserve-3d）
+   依賴 portfolio.css 提供 dash-wrap / sidebar / footer base
+   ───────────────────────────────────────────────────────── */
+
+.erp3-section{padding:32px 0 80px;max-width:1280px;margin:0 auto}
+
+/* ── Hero ── */
+.erp3-hero{padding:48px 32px 24px}
+.erp3-hero .eyebrow{font-family:'DM Mono',monospace;color:var(--accent);font-size:13px;letter-spacing:.04em;margin:0 0 14px}
+.erp3-title{font-size:clamp(34px,5vw,56px);line-height:1.12;font-weight:700;margin:0 0 18px;letter-spacing:-.01em}
+.erp3-title .pt-dim{color:var(--text-2,#9aa1b3);display:block}
+.erp3-title .pt-grad{display:block;background:linear-gradient(90deg,var(--accent),#8c91ff 60%,var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
+.erp3-sub{max-width:760px;color:var(--text-2,#9aa1b3);font-size:16px;line-height:1.65;margin:0 0 12px}
+
+/* ── Frame & toolbar ── */
+.erp3-frame{margin-top:24px;padding:24px;border:1px solid var(--bd,rgba(255,255,255,.08));border-radius:20px;background:var(--bg-2,rgba(255,255,255,.02));overflow:hidden}
+.erp3-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;flex-wrap:wrap}
+.erp3-drag-hint{font-family:'DM Mono',monospace;font-size:12px;color:var(--text-2,#9aa1b3);letter-spacing:.04em}
+.erp3-toolbar-actions{display:flex;gap:8px}
+.erp3-btn{font-family:inherit;font-size:12.5px;padding:7px 12px;border-radius:999px;border:1px solid var(--bd,rgba(255,255,255,.12));background:transparent;color:var(--text-2,#9aa1b3);cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.erp3-btn:hover{border-color:var(--accent);color:var(--text,#e7eaf3)}
+.erp3-btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.erp3-btn-dot{width:7px;height:7px;border-radius:50%;background:#444;transition:.2s}
+.erp3-btn[aria-pressed="true"] .erp3-btn-dot{background:var(--accent);box-shadow:0 0 8px var(--accent),0 0 0 2px rgba(108,110,229,.18);animation:erp3-pulse 1.8s ease-in-out infinite}
+@keyframes erp3-pulse{0%,100%{box-shadow:0 0 8px var(--accent),0 0 0 2px rgba(108,110,229,.18)}50%{box-shadow:0 0 14px var(--accent),0 0 0 5px rgba(108,110,229,.06)}}
+
+.erp3-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:24px;align-items:start}
+
+/* ── 3D scene ── */
+.erp3-scene{
+  position:relative;width:100%;height:720px;
+  perspective:1500px;perspective-origin:50% 38%;
+  background:
+    radial-gradient(ellipse at 50% 60%,rgba(108,110,229,.10),transparent 65%),
+    radial-gradient(ellipse at 50% 85%,rgba(108,110,229,.06),transparent 50%);
+  border-radius:16px;
+  cursor:grab;
+  user-select:none;-webkit-user-select:none;
+  touch-action:none;
+  overflow:hidden;
+}
+.erp3-scene:active{cursor:grabbing}
+.erp3-scene::before{
+  content:'';position:absolute;left:50%;bottom:6%;width:60%;height:30px;transform:translateX(-50%);
+  background:radial-gradient(ellipse,rgba(108,110,229,.18),transparent 70%);filter:blur(8px);
+  pointer-events:none;
+}
+
+.erp3-stage{
+  position:absolute;left:50%;top:50%;width:0;height:0;
+  transform-style:preserve-3d;
+  transform:translate(-50%,-50%) scale(var(--zoom,1)) rotateX(var(--rx,-12deg)) rotateY(var(--ry,28deg));
+  will-change:transform;
+}
+
+/* Central glow spine */
+.erp3-spine{
+  position:absolute;left:0;top:0;width:6px;height:600px;
+  transform:translate(-50%,-50%);
+  background:linear-gradient(to bottom,transparent,rgba(108,110,229,.35),rgba(140,145,255,.6),rgba(108,110,229,.35),transparent);
+  border-radius:3px;filter:blur(1px);
+  box-shadow:0 0 30px rgba(108,110,229,.5);
+  pointer-events:none;
+}
+
+/* ── 8 Tower layers ── */
+.erp3-tower{position:absolute;left:0;top:0;transform-style:preserve-3d}
+.erp3-layer{
+  position:absolute;left:0;top:0;width:380px;
+  /* lvl 1~8 → y -245…+245 (70px gap) */
+  transform:translate(-50%,-50%) translateY(calc((var(--lvl) - 4.5) * 70px));
+  border:1px solid rgba(108,110,229,.4);
+  border-radius:12px;
+  background:linear-gradient(135deg,rgba(108,110,229,.18),rgba(140,145,255,.04));
+  backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+  padding:14px 22px;
+  display:flex;align-items:center;gap:14px;
+  color:var(--text,#e7eaf3);
+  font-family:inherit;
+  cursor:pointer;
+  transition:transform .25s,box-shadow .25s,border-color .25s,background .25s;
+  box-shadow:0 6px 22px rgba(108,110,229,.18),0 0 0 1px rgba(255,255,255,.04) inset;
+}
+.erp3-layer:hover{
+  border-color:var(--accent);
+  box-shadow:0 10px 36px rgba(108,110,229,.4),0 0 0 1px rgba(255,255,255,.05) inset;
+  background:linear-gradient(135deg,rgba(108,110,229,.28),rgba(140,145,255,.08));
+}
+.erp3-layer.active{
+  border-color:var(--accent);
+  background:linear-gradient(135deg,rgba(108,110,229,.45),rgba(140,145,255,.18));
+  box-shadow:0 14px 44px rgba(108,110,229,.55),0 0 0 2px var(--accent) inset,0 0 30px rgba(140,145,255,.35);
+}
+.erp3-layer-tag{
+  font-family:'DM Mono',monospace;font-size:12px;font-weight:600;color:var(--accent);
+  padding:3px 9px;background:rgba(108,110,229,.18);border-radius:6px;
+  letter-spacing:.04em;flex:0 0 auto;
+}
+.erp3-layer-name{font-size:14px;font-weight:500;letter-spacing:.01em}
+
+/* ── 16 L2 satellite nodes orbit ── */
+.erp3-orbit{position:absolute;left:0;top:0;transform-style:preserve-3d}
+.erp3-node{
+  position:absolute;left:0;top:0;
+  /* --ang, --r, --ty injected by JS; counter-rotate -ang to face stage 'north' */
+  transform:rotateY(var(--ang)) translateZ(var(--r)) translateY(var(--ty)) rotateY(calc(-1 * var(--ang))) translate(-50%,-50%);
+  background:var(--bg,#0e1018);
+  border:1px solid rgba(108,110,229,.45);
+  border-radius:999px;
+  padding:7px 14px;
+  font-size:12px;font-weight:500;
+  color:var(--text,#e7eaf3);
+  font-family:inherit;
+  cursor:pointer;
+  display:flex;align-items:center;gap:6px;
+  white-space:nowrap;
+  box-shadow:0 0 18px rgba(108,110,229,.25),0 0 0 4px rgba(108,110,229,.06);
+  transition:box-shadow .2s,border-color .2s,background .2s;
+  backface-visibility:hidden;
+}
+.erp3-node:hover{
+  border-color:var(--accent);
+  background:rgba(108,110,229,.18);
+  box-shadow:0 0 28px rgba(108,110,229,.55),0 0 0 5px rgba(108,110,229,.12);
+}
+.erp3-node.active{
+  background:var(--accent);
+  color:#fff;
+  border-color:var(--accent);
+  box-shadow:0 0 36px var(--accent),0 0 0 6px rgba(108,110,229,.25);
+}
+.erp3-node-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);flex:0 0 auto}
+.erp3-node.active .erp3-node-dot{background:#fff;box-shadow:0 0 8px #fff}
+
+/* ── Side panel ── */
+.erp3-panel{position:sticky;top:24px;border:1px solid var(--bd,rgba(255,255,255,.08));border-radius:14px;background:var(--bg,#0e1018);padding:24px;min-height:520px;max-height:82vh;overflow-y:auto}
+.erp3-panel-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:48px 16px;color:var(--text-2,#9aa1b3);min-height:420px}
+.erp3-panel-empty[hidden],.erp3-panel-body[hidden],.erp3-panel-block[hidden]{display:none !important}
+.erp3-panel-icon{font-size:36px;color:var(--accent);opacity:.5;margin-bottom:14px}
+.erp3-panel-empty-text{font-size:14px;line-height:1.6;max-width:280px;margin:0}
+
+.erp3-panel-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px dashed var(--bd,rgba(255,255,255,.1))}
+.erp3-panel-tag{display:inline-block;padding:3px 10px;background:rgba(108,110,229,.15);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.04em;border-radius:6px;margin-top:4px;flex:0 0 auto}
+.erp3-panel-title{font-size:20px;font-weight:600;margin:0;line-height:1.3;flex:1;color:var(--text,#e7eaf3)}
+.erp3-panel-close{flex:0 0 auto;width:28px;height:28px;border-radius:6px;border:1px solid var(--bd,rgba(255,255,255,.1));background:transparent;color:var(--text-2,#9aa1b3);font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.erp3-panel-close:hover{background:var(--bg-2,rgba(255,255,255,.04));color:var(--text,#e7eaf3)}
+
+.erp3-panel-desc{font-size:14px;line-height:1.65;color:var(--text,#e7eaf3);margin:0 0 18px}
+.erp3-panel-block{margin-bottom:18px}
+.erp3-panel-block:last-child{margin-bottom:0}
+.erp3-panel-h{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:.06em;text-transform:uppercase;margin:0 0 8px;font-weight:500}
+.erp3-panel-list{margin:0;padding-left:18px;font-size:13.5px;line-height:1.7;color:var(--text,#e7eaf3)}
+.erp3-panel-list li{margin-bottom:4px}
+.erp3-panel-tags{display:flex;flex-wrap:wrap;gap:6px}
+.erp3-panel-tags span{padding:4px 10px;background:rgba(108,110,229,.1);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;border-radius:6px;border:1px solid rgba(108,110,229,.2)}
+
+/* ── Light mode overrides ── */
+:root.theme-light .erp3-frame{background:#fff;border-color:rgba(15,17,30,.08)}
+:root.theme-light .erp3-scene{background:radial-gradient(ellipse at 50% 60%,rgba(108,110,229,.08),transparent 65%),radial-gradient(ellipse at 50% 85%,rgba(108,110,229,.04),transparent 50%)}
+:root.theme-light .erp3-layer{background:linear-gradient(135deg,rgba(108,110,229,.12),#fff);border-color:rgba(108,110,229,.3);color:#1a1d2b;box-shadow:0 6px 22px rgba(108,110,229,.15)}
+:root.theme-light .erp3-layer:hover{background:linear-gradient(135deg,rgba(108,110,229,.22),#fff)}
+:root.theme-light .erp3-layer.active{background:linear-gradient(135deg,rgba(108,110,229,.4),rgba(140,145,255,.18));color:#1a1d2b}
+:root.theme-light .erp3-node{background:#fff;color:#1a1d2b;border-color:rgba(108,110,229,.45)}
+:root.theme-light .erp3-node:hover{background:rgba(108,110,229,.1)}
+:root.theme-light .erp3-panel{background:#fff;border-color:rgba(15,17,30,.08)}
+:root.theme-light .erp3-panel-head{border-bottom-color:rgba(15,17,30,.1)}
+:root.theme-light .erp3-btn{border-color:rgba(15,17,30,.12);color:#3a3f55}
+
+/* ── Mobile / narrow ── */
+@media (max-width:960px){
+  .erp3-grid{grid-template-columns:1fr;gap:16px}
+  .erp3-panel{position:static;max-height:none;min-height:0}
+  .erp3-scene{height:520px;perspective:1100px}
+  .erp3-layer{width:300px;padding:11px 16px}
+  .erp3-layer-name{font-size:13px}
+  .erp3-hero{padding:32px 20px 16px}
+  .erp3-frame{padding:16px;margin-top:16px}
+  .erp3-title{font-size:32px}
+}
+@media (max-width:520px){
+  .erp3-scene{height:440px;perspective:900px}
+  .erp3-layer{width:260px;padding:9px 14px}
+  .erp3-layer-name{font-size:12px}
+}
+
+/* ── Reduced motion: 關掉自動旋轉動畫感 (auto-rotate JS 仍會跑，這裡只是平滑) ── */
+@media (prefers-reduced-motion:reduce){
+  #neural-canvas{display:none}
+  .erp3-stage{transition:none}
+  .erp3-layer,.erp3-node{transition:none;animation:none !important}
+  [data-reveal]{opacity:1;transform:none}
+}

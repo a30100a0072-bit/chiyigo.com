@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ERP 8 層立體架構 | CHIYIGO</title>
+  <meta name="description" content="L1~L8 八層架構 3D 立體呈現：8 層平台堆疊 + 16 個 L2 衛星節點環繞中央塔。互動式拖曳旋轉。" />
+  {{> seo-public path="/erp-architecture-3d.html" ogTitle="ERP 8 層立體架構 | CHIYIGO" ogDescription="L1~L8 八層架構 3D 立體呈現：8 層平台堆疊 + 16 個 L2 衛星節點環繞中央塔。" image="/images/portfolio/og-case-platform.jpg"}}
+  {{> head-top}}
+  <link rel="stylesheet" href="/css/portfolio.css" />
+  {{> head-foot}}
+  <link rel="stylesheet" href="/css/erp-architecture-3d.css" />
+  <link rel="stylesheet" href="/css/sidebar-auth.css" />
+</head>
+<body>
+
+  <canvas id="neural-canvas" aria-hidden="true"></canvas>
+
+  <div class="dash-wrap" id="dash-wrap">
+
+    {{> sidebar-public-other active="portfolio"}}
+
+    <div class="dash-main">
+      <main class="dash-content" id="os-content">
+
+        <section class="erp3-section">
+
+          <!-- Hero -->
+          <div class="erp3-hero" data-reveal>
+            <p class="eyebrow" data-i18n="eyebrow">// 平台架構</p>
+            <h1 class="erp3-title">
+              <span class="pt-dim" data-i18n="title1">從一個會員系統</span>
+              <span class="pt-grad" data-i18n="l3d_title">8 層立體架構</span>
+            </h1>
+            <p class="erp3-sub" data-i18n="l3d_subtitle">L1~L8 八層直接視覺化堆疊；16 個 L2 領域作為衛星節點環繞中央塔。拖曳旋轉、點任一層或節點查看細節。</p>
+          </div>
+
+          <!-- 3D scene -->
+          <div class="erp3-frame" data-reveal data-reveal-delay="1">
+
+            <div class="erp3-toolbar">
+              <span class="erp3-drag-hint" data-i18n="l3d_drag_hint">拖曳旋轉 · 滾輪縮放</span>
+              <div class="erp3-toolbar-actions">
+                <button type="button" class="erp3-btn" id="erp3-auto-toggle" aria-pressed="true">
+                  <span class="erp3-btn-dot"></span>
+                  <span data-i18n="l3d_autorotate">自動旋轉</span>
+                </button>
+                <button type="button" class="erp3-btn" id="erp3-reset">↺</button>
+              </div>
+            </div>
+
+            <div class="erp3-grid">
+
+              <div class="erp3-scene" id="erp3-scene" role="group" aria-label="ERP 3D 架構">
+                <div class="erp3-stage" id="erp3-stage">
+
+                  <!-- Central spine glow -->
+                  <div class="erp3-spine" aria-hidden="true"></div>
+
+                  <!-- Tower: 8 layers stacked vertically -->
+                  <div class="erp3-tower">
+                    <button type="button" class="erp3-layer" data-layer="1" style="--lvl:1">
+                      <span class="erp3-layer-tag">L1</span>
+                      <span class="erp3-layer-name" data-i18n="layer_1_name">L1 企業平台</span>
+                    </button>
+                    <button type="button" class="erp3-layer" data-layer="2" style="--lvl:2">
+                      <span class="erp3-layer-tag">L2</span>
+                      <span class="erp3-layer-name" data-i18n="layer_2_name">L2 領域邊界</span>
+                    </button>
+                    <button type="button" class="erp3-layer" data-layer="3" style="--lvl:3">
+                      <span class="erp3-layer-tag">L3</span>
+                      <span class="erp3-layer-name" data-i18n="layer_3_name">L3 子模組</span>
+                    </button>
+                    <button type="button" class="erp3-layer" data-layer="4" style="--lvl:4">
+                      <span class="erp3-layer-tag">L4</span>
+                      <span class="erp3-layer-name" data-i18n="layer_4_name">L4 細項能力</span>
+                    </button>
+                    <button type="button" class="erp3-layer" data-layer="5" style="--lvl:5">
+                      <span class="erp3-layer-tag">L5</span>
+                      <span class="erp3-layer-name" data-i18n="layer_5_name">L5 服務層</span>
+                    </button>
+                    <button type="button" class="erp3-layer" data-layer="6" style="--lvl:6">
+                      <span class="erp3-layer-tag">L6</span>
+                      <span class="erp3-layer-name" data-i18n="layer_6_name">L6 能力層</span>
+                    </button>
+                    <button type="button" class="erp3-layer" data-layer="7" style="--lvl:7">
+                      <span class="erp3-layer-tag">L7</span>
+                      <span class="erp3-layer-name" data-i18n="layer_7_name">L7 執行層</span>
+                    </button>
+                    <button type="button" class="erp3-layer" data-layer="8" style="--lvl:8">
+                      <span class="erp3-layer-tag">L8</span>
+                      <span class="erp3-layer-name" data-i18n="layer_8_name">L8 部署層</span>
+                    </button>
+                  </div>
+
+                  <!-- Orbit: 16 L2 satellite nodes (positions injected by JS) -->
+                  <div class="erp3-orbit" id="erp3-orbit" aria-label="L2 衛星節點"></div>
+
+                </div>
+              </div>
+
+              <!-- Side panel -->
+              <aside class="erp3-panel" id="erp3-panel" aria-live="polite">
+                <div class="erp3-panel-empty" id="erp3-panel-empty">
+                  <div class="erp3-panel-icon" aria-hidden="true">◆</div>
+                  <p class="erp3-panel-empty-text" data-i18n="panel_hint">選擇任一層或衛星節點，這裡會列出細節。</p>
+                </div>
+                <div class="erp3-panel-body" id="erp3-panel-body" hidden>
+                  <div class="erp3-panel-head">
+                    <span class="erp3-panel-tag" id="erp3-panel-tag"></span>
+                    <h3 class="erp3-panel-title" id="erp3-panel-title"></h3>
+                    <button class="erp3-panel-close" id="erp3-panel-close" aria-label="關閉" type="button">×</button>
+                  </div>
+                  <p class="erp3-panel-desc" id="erp3-panel-desc"></p>
+                  <div class="erp3-panel-block" id="erp3-panel-l3-block" hidden>
+                    <h4 class="erp3-panel-h" data-i18n="lab_l3">L3 子模組</h4>
+                    <ul class="erp3-panel-list" id="erp3-panel-l3"></ul>
+                  </div>
+                  <div class="erp3-panel-block" id="erp3-panel-l4-block" hidden>
+                    <h4 class="erp3-panel-h" data-i18n="lab_l4">L4 / L5 細項</h4>
+                    <div class="erp3-panel-tags" id="erp3-panel-l4"></div>
+                  </div>
+                  <div class="erp3-panel-block" id="erp3-panel-tech-block" hidden>
+                    <h4 class="erp3-panel-h" data-i18n="lab_tech">技術選型</h4>
+                    <div class="erp3-panel-tags" id="erp3-panel-tech"></div>
+                  </div>
+                </div>
+              </aside>
+
+            </div>
+          </div>
+
+        </section>
+
+        <footer class="footer">
+          <div class="footer-inner">
+            <div>
+              <img src="/images/logo-light.png" alt="CHIYIGO" class="logo logo-light">
+              <img src="/images/logo-dark.png"  alt="CHIYIGO" class="logo logo-dark">
+              <p class="tagline" data-i18n="footer_tagline">不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。</p>
+            </div>
+            {{> footer-contact}}
+            <nav class="footer-links">
+              <a href="index.html" data-i18n="nav_home">首頁</a>
+              <a href="portfolio.html" data-i18n="nav_portfolio">chiyigo作品</a>
+              <a href="about.html" data-i18n="nav_about">關於我們</a>
+              <a href="requisition.html" data-i18n="nav_contact">需求諮詢</a>
+            </nav>
+            <p class="copy">© 2026 CHIYIGO</p>
+          </div>
+        </footer>
+
+      </main>
+    </div>
+  </div>
+
+  {{> topbar-mobile pathPrefix="/" brandHref="/index.html" loginHref="/login.html" loginLabel="會員登入"}}
+  {{> m-overlay-public-other pathPrefix="/" active="portfolio"}}
+
+  <script src="/js/sidebar-auth.js" defer></script>
+  <script src="/js/erp-architecture-3d.js" defer></script>
+
+</body>
+</html>
