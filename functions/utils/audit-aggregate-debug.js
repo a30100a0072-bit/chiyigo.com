@@ -145,31 +145,79 @@ export function samplePriority(bucketKey, rowId, createdAt) {
   return fnv1a32(`${bucketKey}|${rowId}|${createdAt}`)
 }
 
+/** debug_failure 穩定 reason_code dictionary（codex M-1 fix；emitter 必對應其一）。 */
+export const DEBUG_REASON_CODES = Object.freeze({
+  WEBHOOK_PARSE_FAILED:  'webhook_parse_failed',   // payment/kyc webhook signature/payload 解析失敗
+  IN_FLIGHT_CONFLICT:    'in_flight_conflict',     // payment webhook event_id 已有 in-flight processor
+  VENDOR_CREDS_MISSING:  'vendor_creds_missing',   // checkout 端 vendor credentials 缺
+  VENDOR_CALL_THREW:     'vendor_call_threw',      // refund 呼叫 vendor 拋 exception（network/timeout）
+  VENDOR_REJECTED:       'vendor_rejected',        // refund vendor 回應失敗（rtn_code != ok）
+  FINAL_CAS_MISSED:      'final_cas_missed',       // refund 最後 CAS 落空 — 對帳介入
+  DEAL_INSERT_FAILED:    'deal_insert_failed',     // requisition save_as_deal INSERT 失敗
+  UNHANDLED_EXCEPTION:   'unhandled_exception',    // 路由級 try/catch 兜底（auth.delete.exception）
+})
+
 /**
  * 從 event_data（TEXT JSON）抽 reason_code。
  *
- * debug_failure 11 個事件名沒有統一 schema；但常見 emission pattern 會帶
- * `reason_code` / `code` / `reason` 任一。優先序固定如下，找到第一個非空字串即用。
- * 找不到 → null（schema 允許 NULL，UNIQUE 索引用 COALESCE('') sentinel 去重）。
+ * 🔴 codex M-1 fix（PR 3.1d）：只認 emitter 明確設的 `reason_code` 欄；**不再** fallback
+ * 到 `code` / `reason`，因為那兩個欄會吃到 raw vendor error string（rtn_code / parser
+ * error message）等 unbounded value，當 bucket key 會讓同 reason 被切成上百個 bucket、
+ * 稀有 pattern 無法分離。bucket dictionary 由 emitter 經 DEBUG_REASON_CODES 強制。
  *
- * 解析失敗（JSON 壞 / 非物件）→ null，**不 throw**：debug aggregate 的目的是
- * 摘要 + 採樣，個別壞 row 不該阻擋整輪。raw row 本身的不完整透過 sampled flag
- * + samples_json 仍可被 forensic 追回。
+ * 解析失敗 / 不是物件 / 缺 reason_code → null。NULL bucket 在 UNIQUE 索引用
+ * COALESCE('') sentinel 去重；勘 forensic 時 NULL bucket 代表「該 emitter 沒補 PR 3.1d
+ * 規範的 reason_code」，是訊號不是 bug。
+ *
+ * 不 throw：debug aggregate 目的是摘要 + 採樣，個別壞 row 不阻擋整輪。
  */
 export function extractReasonCode(eventDataRaw) {
-  if (eventDataRaw == null) return null
+  const obj = parseEventData(eventDataRaw)
+  if (obj == null) return null
+  const v = obj.reason_code
+  return (typeof v === 'string' && v.length > 0) ? v : null
+}
+
+/**
+ * 從 event_data 抽 vendor-level error code（PR 3.1d M-2 sample allowlist 欄位之一）。
+ * 不參與 bucket 分群，只作 sample 輔助欄位。
+ *
+ * 接受 string 或 number（ECPay rtn_code 是 numeric）；其他型別 / 不存在 → null。
+ * 優先序 `error_code` → `rtn_code` → `code`。
+ */
+export function extractErrorCode(eventDataRaw) {
+  const obj = parseEventData(eventDataRaw)
+  if (obj == null) return null
+  for (const k of ['error_code', 'rtn_code', 'code']) {
+    const v = obj[k]
+    if (typeof v === 'string' && v.length > 0) return v
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v)
+  }
+  return null
+}
+
+/**
+ * 從 event_data 抽 retry_count（PR 3.1d M-2 sample allowlist 欄位之一）。
+ * 不存在 / 非有限數字 → null。
+ */
+export function extractRetryCount(eventDataRaw) {
+  const obj = parseEventData(eventDataRaw)
+  if (obj == null) return null
+  const v = obj.retry_count
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  return null
+}
+
+function parseEventData(raw) {
+  if (raw == null) return null
   let obj
   try {
-    obj = typeof eventDataRaw === 'string' ? JSON.parse(eventDataRaw) : eventDataRaw
+    obj = typeof raw === 'string' ? JSON.parse(raw) : raw
   } catch {
     return null
   }
   if (obj == null || typeof obj !== 'object') return null
-  for (const k of ['reason_code', 'code', 'reason']) {
-    const v = obj[k]
-    if (typeof v === 'string' && v.length > 0) return v
-  }
-  return null
+  return obj
 }
 
 /**
@@ -181,10 +229,14 @@ export function extractReasonCode(eventDataRaw) {
  *
  * 採樣：deterministic FNV-1a reservoir top-N=10 by lowest priority。
  *   - 同一批 raw row 重跑 reduce → 相同 priority → 相同 samples（idempotent UPSERT）
- *   - 採樣只記 { id, created_at, severity, user_id, event_data }（含 raw event_data，
- *     forensic 用；caller 需確保 event_data 已通過 PII 過濾 — debug_failure 分類
- *     的 audit-policy 條目本身就有「嚴格避免 raw PII」要求）
  *   - total_count > SAMPLE_SIZE → sampled = 1
+ *
+ * 🔴 codex M-2 fix（PR 3.1d）：sample 採 **allowlist shape**，不存 raw event_data。
+ * aggregate row 不應變成第二份敏感字串落點（exception / provider rtn_msg / PII 都會被
+ * 拷一份）。改只保 forensic 索引欄：
+ *   { id, created_at, severity, user_id, reason_code, error_code, retry_count }
+ * 需要 raw 時靠 `id` 回查 D1（hot）或 R2（archived）。aggregate 表是「索引/摘要」而非
+ * 「raw mirror」。
  *
  * @param {{ id, event_type, severity, user_id, ip_hash, event_data, created_at }[]} rows
  * @returns {Map<string, {
@@ -214,12 +266,15 @@ export function reduceDebugBuckets(rows) {
     }
     b.total_count++
 
+    // allowlist sample shape（codex M-2）：只保 forensic 索引欄
     const sample = {
-      id:         r.id,
-      created_at: r.created_at,
-      severity:   r.severity,
-      user_id:    r.user_id ?? null,
-      event_data: r.event_data ?? null,
+      id:          r.id,
+      created_at:  r.created_at,
+      severity:    r.severity,
+      user_id:     r.user_id ?? null,
+      reason_code: reasonCode,
+      error_code:  extractErrorCode(r.event_data),
+      retry_count: extractRetryCount(r.event_data),
     }
     const priority = samplePriority(key, r.id, r.created_at)
 

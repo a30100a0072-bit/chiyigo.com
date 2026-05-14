@@ -227,11 +227,24 @@ R2 retention lock 不可逆 — 一旦 `--retention-days 2555` 設下去，該 p
 - **不留樣本**：rate_limit / dispatch 類用計數已足夠
 - 寫進 `audit_log_aggregate_telemetry`
 
-### Debug_failure aggregate（含 sample）
-- **Bucket key**：`(event_type, reason_code, hour_bucket)`
-- **保留欄位**：`total_count` + `sample_count` + `samples_json`（前 100 筆 raw event_data）
-- **`sampled=true`** if `total_count > 100`
-- **`critical` severity 不採樣**：金融級下不冒險，每筆保留（升 immutable 處理）
+### Debug_failure aggregate（含 sample）— PR 3.1d 後 spec
+- **Bucket key**：`(event_type, reason_code, hour_bucket)`，`reason_code` 由 emitter 經
+  `DEBUG_REASON_CODES` dictionary 強制（webhook_parse_failed / in_flight_conflict /
+  vendor_creds_missing / vendor_call_threw / vendor_rejected / final_cas_missed /
+  deal_insert_failed / unhandled_exception）；缺則 bucket 落 NULL（COALESCE('') sentinel）
+- **保留欄位**：`total_count` + `sample_count` + `samples_json` + `sampled` flag
+- **採樣**：deterministic **FNV-1a32 reservoir top-N=10** by lowest priority；priority =
+  `fnv1a32(\`${bucketKey}|${row.id}|${row.created_at}\`)`。**不用** Math.random，確保
+  worker 重跑 / crash recovery 產生相同 samples → UPSERT idempotent
+- **`sampled=1`** if `total_count > 10`（即 N=SAMPLE_SIZE）
+- **samples_json allowlist shape**（codex M-2 fix）：每筆 sample 只存
+  `{ id, created_at, severity, user_id, reason_code, error_code, retry_count }`，
+  **不存** raw `event_data`；aggregate row 是「索引/摘要」非「raw mirror」，避免
+  vendor rtn_msg / exception 字串 / 半結構化 payload 在 aggregate 多落一份。
+  需要 raw 時靠 `id` 回查 D1（hot）或 R2（archived）
+- 所有 severity 皆採樣（含 critical）：critical 仍歸 `debug_failure` cold_class，
+  bucket + sample 提供整體錯誤觀察；個別 critical 真要永久保留要在 audit-policy 重歸
+  `immutable` 而非靠 aggregate 流程繞道
 - 寫進 `audit_log_aggregate_debug`
 
 ### Aggregate 觸發點
@@ -688,7 +701,8 @@ Phase 3 加：
 |---|---|---|
 | `cron-archive-worker` | 每日 18:00 UTC（= 02:00 Asia/Taipei 凌晨低峰）| 找 hot retention 過期的 row → 走完 planned→...→marked_archived 五狀態 |
 | `cron-purge-worker` | 每日 19:00 UTC | `WHERE state='marked_archived' AND purge_after <= NOW()` 走 idx_archive_chunks_purge 索引；對命中 chunk 執行物理 DELETE，升 `purged` |
-| `cron-aggregate-worker` | 每日 17:00 UTC（= 01:00 隔日 Asia/Taipei，archive 前 1h）| telemetry / debug_failure aggregate（先合併再讓 archive worker 接手）。**v12 codex r1 H-1 改 daily**：weekly 會漏 archive 每天標 archived_at 的 24h row（PR 4 翻 dry_run 後資料永久流失）|
+| `cron-aggregate-worker` (telemetry, PR 3.0) | 每日 **17:00** UTC（archive 前 1h）| telemetry aggregate（純計數 bucket）。**v12 codex r1 H-1 改 daily**：weekly 會漏 archive 每天標 archived_at 的 24h row（PR 4 翻 dry_run 後資料永久流失）|
+| `cron-aggregate-debug-worker` (PR 3.1) | 每日 **17:15** UTC（telemetry 後 15 min、archive 前 45 min）| debug_failure aggregate（含 allowlist sample）。錯開 15 min 降低 D1 contention + audit emission race（user 2026-05-14 拍板）|
 | `cron-month-finalize-worker` | 每月 1 號 20:00 UTC（= 04:00 Asia/Taipei）| 上月 chunk 全部進 terminal（audit_log→purged / admin_audit_log→cold_copied）後寫月份 manifest |
 | `admin-job: audit-archive-retry` | 手動 / API | 補跑失敗的 chunk（`SELECT FROM audit_archive_chunks WHERE state IN ('failed','blacklisted')`）|
 | `admin-job: audit-archive-export` | 手動 / API | 讀 R2，組合月份檔回 admin |

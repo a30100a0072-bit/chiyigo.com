@@ -18,6 +18,7 @@ import {
   PR31_SUPPORTED_COLD_CLASS,
   SAMPLE_SIZE,
   MAX_TOTAL_HOURS,
+  DEBUG_REASON_CODES,
   parseMaxRowsPerRun,
   parseLeadHours,
   hourBucket,
@@ -26,6 +27,8 @@ import {
   fnv1a32,
   samplePriority,
   extractReasonCode,
+  extractErrorCode,
+  extractRetryCount,
   reduceDebugBuckets,
   rowIsDebugFailure,
 } from '../functions/utils/audit-aggregate-debug.js'
@@ -135,21 +138,21 @@ describe('fnv1a32 / samplePriority', () => {
   })
 })
 
-describe('extractReasonCode 優先序', () => {
-  it('reason_code 優先', () => {
-    expect(extractReasonCode(JSON.stringify({ reason_code: 'A', code: 'B', reason: 'C' }))).toBe('A')
+describe('extractReasonCode（codex M-1：只認 reason_code，drop code/reason fallback）', () => {
+  it('reason_code 命中', () => {
+    expect(extractReasonCode(JSON.stringify({ reason_code: 'webhook_parse_failed' }))).toBe('webhook_parse_failed')
   })
-  it('reason_code 缺 → code', () => {
-    expect(extractReasonCode(JSON.stringify({ code: 'B', reason: 'C' }))).toBe('B')
+  it('只有 code → null（drop fallback，避 unbounded vendor error 進 bucket key）', () => {
+    expect(extractReasonCode(JSON.stringify({ code: 'B' }))).toBeNull()
   })
-  it('reason_code/code 都缺 → reason', () => {
-    expect(extractReasonCode(JSON.stringify({ reason: 'C' }))).toBe('C')
+  it('只有 reason → null', () => {
+    expect(extractReasonCode(JSON.stringify({ reason: 'parser-err' }))).toBeNull()
   })
   it('全缺 → null', () => {
     expect(extractReasonCode('{}')).toBeNull()
   })
-  it('空字串 reason_code → 跳過往下找', () => {
-    expect(extractReasonCode(JSON.stringify({ reason_code: '', code: 'B' }))).toBe('B')
+  it('空字串 reason_code → null', () => {
+    expect(extractReasonCode(JSON.stringify({ reason_code: '' }))).toBeNull()
   })
   it('JSON 壞 → null（不 throw）', () => {
     expect(extractReasonCode('not-json')).toBeNull()
@@ -163,6 +166,55 @@ describe('extractReasonCode 優先序', () => {
   })
 })
 
+describe('extractErrorCode（codex M-2：sample 輔助欄，不參與分群）', () => {
+  it('error_code 優先', () => {
+    expect(extractErrorCode(JSON.stringify({ error_code: 'A', rtn_code: 'B', code: 'C' }))).toBe('A')
+  })
+  it('rtn_code 次（vendor numeric → string）', () => {
+    expect(extractErrorCode(JSON.stringify({ rtn_code: 10100073 }))).toBe('10100073')
+  })
+  it('code 末', () => {
+    expect(extractErrorCode(JSON.stringify({ code: 'C' }))).toBe('C')
+  })
+  it('全缺 → null', () => {
+    expect(extractErrorCode('{}')).toBeNull()
+  })
+  it('非數字非字串 → null', () => {
+    expect(extractErrorCode(JSON.stringify({ error_code: { nested: 1 } }))).toBeNull()
+  })
+})
+
+describe('extractRetryCount', () => {
+  it('有效數字', () => {
+    expect(extractRetryCount(JSON.stringify({ retry_count: 3 }))).toBe(3)
+  })
+  it('零 ok', () => {
+    expect(extractRetryCount(JSON.stringify({ retry_count: 0 }))).toBe(0)
+  })
+  it('缺 → null', () => {
+    expect(extractRetryCount('{}')).toBeNull()
+  })
+  it('非數字 → null', () => {
+    expect(extractRetryCount(JSON.stringify({ retry_count: '3' }))).toBeNull()
+  })
+})
+
+describe('DEBUG_REASON_CODES dictionary', () => {
+  it('八個 emitter 必對應其一', () => {
+    expect(DEBUG_REASON_CODES.WEBHOOK_PARSE_FAILED).toBe('webhook_parse_failed')
+    expect(DEBUG_REASON_CODES.IN_FLIGHT_CONFLICT).toBe('in_flight_conflict')
+    expect(DEBUG_REASON_CODES.VENDOR_CREDS_MISSING).toBe('vendor_creds_missing')
+    expect(DEBUG_REASON_CODES.VENDOR_CALL_THREW).toBe('vendor_call_threw')
+    expect(DEBUG_REASON_CODES.VENDOR_REJECTED).toBe('vendor_rejected')
+    expect(DEBUG_REASON_CODES.FINAL_CAS_MISSED).toBe('final_cas_missed')
+    expect(DEBUG_REASON_CODES.DEAL_INSERT_FAILED).toBe('deal_insert_failed')
+    expect(DEBUG_REASON_CODES.UNHANDLED_EXCEPTION).toBe('unhandled_exception')
+  })
+  it('frozen 防意外覆寫', () => {
+    expect(Object.isFrozen(DEBUG_REASON_CODES)).toBe(true)
+  })
+})
+
 describe('reduceDebugBuckets', () => {
   function mkRow(id, over = {}) {
     return {
@@ -171,7 +223,7 @@ describe('reduceDebugBuckets', () => {
       severity:   'critical',
       user_id:    null,
       ip_hash:    null,
-      event_data: JSON.stringify({ reason_code: 'TIMEOUT' }),
+      event_data: JSON.stringify({ reason_code: 'webhook_parse_failed' }),
       created_at: '2026-05-12 03:15:00',
       ...over,
     }
@@ -182,7 +234,7 @@ describe('reduceDebugBuckets', () => {
     expect(buckets.size).toBe(1)
     const b = [...buckets.values()][0]
     expect(b.event_type).toBe('payment.webhook.fail')
-    expect(b.reason_code).toBe('TIMEOUT')
+    expect(b.reason_code).toBe('webhook_parse_failed')
     expect(b.hour_bucket).toBe('2026-05-12T03:00:00Z')
     expect(b.total_count).toBe(3)
     expect(b.sample_count).toBe(3)
@@ -191,8 +243,8 @@ describe('reduceDebugBuckets', () => {
 
   it('reason_code 不同 → 分 bucket', () => {
     const buckets = reduceDebugBuckets([
-      mkRow(1, { event_data: JSON.stringify({ reason_code: 'TIMEOUT' }) }),
-      mkRow(2, { event_data: JSON.stringify({ reason_code: 'CONFLICT' }) }),
+      mkRow(1, { event_data: JSON.stringify({ reason_code: 'webhook_parse_failed' }) }),
+      mkRow(2, { event_data: JSON.stringify({ reason_code: 'in_flight_conflict' }) }),
     ])
     expect(buckets.size).toBe(2)
   })
@@ -245,15 +297,31 @@ describe('reduceDebugBuckets', () => {
     expect(b1.samples_json).toBe(b2.samples_json)
   })
 
-  it('sample 內容含 id / created_at / severity / user_id / event_data', () => {
-    const buckets = reduceDebugBuckets([mkRow(1, { user_id: 99 })])
+  it('sample allowlist shape（codex M-2：無 event_data；有 reason_code/error_code/retry_count）', () => {
+    const buckets = reduceDebugBuckets([mkRow(1, {
+      user_id: 99,
+      event_data: JSON.stringify({
+        reason_code: 'vendor_rejected',
+        error_code:  '10100073',
+        retry_count: 2,
+        rtn_msg:     'should not leak into sample',  // 證明 raw 不會混進來
+      }),
+    })])
     const b = [...buckets.values()][0]
     const s = JSON.parse(b.samples_json)[0]
     expect(s.id).toBe(1)
     expect(s.severity).toBe('critical')
     expect(s.user_id).toBe(99)
-    expect(s.event_data).toContain('TIMEOUT')
     expect(s.created_at).toBe('2026-05-12 03:15:00')
+    expect(s.reason_code).toBe('vendor_rejected')
+    expect(s.error_code).toBe('10100073')
+    expect(s.retry_count).toBe(2)
+    // 防退化：sample 不該帶 raw event_data / rtn_msg
+    expect(s.event_data).toBeUndefined()
+    expect(s.rtn_msg).toBeUndefined()
+    expect(Object.keys(s).sort()).toEqual(
+      ['created_at', 'error_code', 'id', 'reason_code', 'retry_count', 'severity', 'user_id']
+    )
   })
 
   it('整批 < SAMPLE_SIZE → sampled=0 + sample_count=total_count', () => {

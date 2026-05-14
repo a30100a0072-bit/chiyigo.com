@@ -158,6 +158,7 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'requisition.refund.network_error', severity: 'critical',
       user_id: rr.user_id, request,
       data: {
+        reason_code:       'vendor_call_threw',
         refund_request_id: id,
         requisition_id:    rr.requisition_id,
         intent_id:         intent.id,
@@ -180,6 +181,8 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'requisition.refund.fail', severity: 'warn',
       user_id: rr.user_id, request,
       data: {
+        reason_code:       'vendor_rejected',
+        error_code:        refundResult.rtn_code,
         refund_request_id: id,
         requisition_id:    rr.requisition_id,
         intent_id:         intent.id,
@@ -235,6 +238,7 @@ export async function onRequestPost({ request, env, params }) {
       severity:   'critical',
       user_id:    rr.user_id, request,
       data: {
+        reason_code:       'final_cas_missed',
         refund_request_id: id,
         intent_id:         intent.id,
         vendor_intent_id:  intent.vendor_intent_id,

@@ -53,7 +53,7 @@ async function seed(over = {}) {
     severity:   'critical',
     user_id:    null,
     ip_hash:    null,
-    event_data: JSON.stringify({ reason_code: 'TIMEOUT' }),
+    event_data: JSON.stringify({ reason_code: 'webhook_parse_failed' }),
     cold_class: 'debug_failure',
     archived_at: null,
     created_at: "datetime('now','-89 days','-1 hours')",
@@ -93,10 +93,10 @@ beforeEach(async () => {
 describe('audit-aggregate-debug cron — happy path', () => {
   it('Step 1：4 row 2 reason_code → 2 bucket 各 2 count', async () => {
     const t = "datetime('now','-89 days','-1 hours')"
-    await seed({ event_data: JSON.stringify({ reason_code: 'TIMEOUT' }),  created_at: t })
-    await seed({ event_data: JSON.stringify({ reason_code: 'TIMEOUT' }),  created_at: t })
-    await seed({ event_data: JSON.stringify({ reason_code: 'CONFLICT' }), created_at: t })
-    await seed({ event_data: JSON.stringify({ reason_code: 'CONFLICT' }), created_at: t })
+    await seed({ event_data: JSON.stringify({ reason_code: 'webhook_parse_failed' }),  created_at: t })
+    await seed({ event_data: JSON.stringify({ reason_code: 'webhook_parse_failed' }),  created_at: t })
+    await seed({ event_data: JSON.stringify({ reason_code: 'in_flight_conflict' }), created_at: t })
+    await seed({ event_data: JSON.stringify({ reason_code: 'in_flight_conflict' }), created_at: t })
 
     const { status, body } = await runCron()
     expect(status).toBe(200)
@@ -110,10 +110,10 @@ describe('audit-aggregate-debug cron — happy path', () => {
     const rows = await listBuckets()
     expect(rows).toHaveLength(2)
     const byReason = new Map(rows.map(r => [r.reason_code, r]))
-    expect(byReason.get('TIMEOUT').total_count).toBe(2)
-    expect(byReason.get('TIMEOUT').sample_count).toBe(2)
-    expect(byReason.get('TIMEOUT').sampled).toBe(0)
-    expect(byReason.get('CONFLICT').total_count).toBe(2)
+    expect(byReason.get('webhook_parse_failed').total_count).toBe(2)
+    expect(byReason.get('webhook_parse_failed').sample_count).toBe(2)
+    expect(byReason.get('webhook_parse_failed').sampled).toBe(0)
+    expect(byReason.get('in_flight_conflict').total_count).toBe(2)
 
     const events = await listAuditEvents()
     expect(events).toHaveLength(1)

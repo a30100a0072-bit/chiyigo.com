@@ -103,7 +103,7 @@ export async function onRequestPost({ request, env }) {
     await safeUserAudit(env, {
       event_type: 'payment.vendor.misconfigured', severity: 'critical',
       user_id: userId, request,
-      data: { vendor: 'ecpay', reason: String(e?.message || e).slice(0, 500) },
+      data: { vendor: 'ecpay', reason_code: 'vendor_creds_missing', reason: String(e?.message || e).slice(0, 500) },
     })
     return res({ error: 'payment_vendor_misconfigured', code: 'PAYMENT_VENDOR_MISCONFIGURED' }, 500, cors)
   }

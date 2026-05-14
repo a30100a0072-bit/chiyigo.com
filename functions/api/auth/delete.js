@@ -21,7 +21,7 @@ export async function onRequestPost(ctx) {
     await safeUserAudit(ctx.env, {
       event_type: 'auth.delete.exception', severity: 'critical',
       request: ctx.request,
-      data: { message: String(e?.message ?? e).slice(0, 1000) },
+      data: { reason_code: 'unhandled_exception', message: String(e?.message ?? e).slice(0, 1000) },
     })
     return res({ error: 'Internal error', code: 'INTERNAL_ERROR' }, 500)
   }

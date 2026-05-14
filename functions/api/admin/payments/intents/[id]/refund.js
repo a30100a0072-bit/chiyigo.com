@@ -131,6 +131,7 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'payment.refund.network_error', severity: 'critical',
       user_id: intent.user_id, request,
       data: {
+        reason_code:      'vendor_call_threw',
         intent_id:        id,
         vendor_intent_id: intent.vendor_intent_id,
         trade_no:         tradeNo,
@@ -151,6 +152,8 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'payment.refund.fail', severity: 'warn',
       user_id: intent.user_id, request,
       data: {
+        reason_code:      'vendor_rejected',
+        error_code:       refundResult.rtn_code,     // PR 3.1d M-2 sample allowlist 用
         intent_id:        id,
         vendor_intent_id: intent.vendor_intent_id,
         rtn_code:         refundResult.rtn_code,

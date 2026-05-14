@@ -45,7 +45,8 @@ export async function onRequestPost({ request, env, params }) {
   if (!parsed.ok) {
     await safeUserAudit(env, {
       event_type: 'payment.webhook.fail', severity: 'warn', request,
-      data: { vendor, reason: parsed.error },
+      // reason_code = PR 3.1d 穩定 bucket key（codex M-1）；raw parser error 留 reason 欄不參與分群
+      data: { vendor, reason_code: 'webhook_parse_failed', reason: parsed.error },
     })
     await dlqInsert(env, {
       vendor,
@@ -187,7 +188,7 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'payment.webhook.in_flight_conflict',
       severity:   'warn',
       request,
-      data: { vendor, event_id: parsed.event_id, vendor_intent_id: parsed.vendor_intent_id },
+      data: { vendor, reason_code: 'in_flight_conflict', event_id: parsed.event_id, vendor_intent_id: parsed.vendor_intent_id },
     })
     if (typeof adapter.failureResponse === 'function') {
       return adapter.failureResponse('in-flight processing; retry later')
