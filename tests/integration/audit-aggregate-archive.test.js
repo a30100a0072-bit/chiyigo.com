@@ -350,9 +350,15 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     ).all()
     for (const r of rows.results) expect(r.archived_at).toBeNull()
 
-    // run_failed event 已 emit
+    // run_failed event 已 emit，reason 必須是 dry_run_collision（codex r3：把主因
+    // 從 errors[] 推到 event_data.reason，alerting 可直接 grep 取）
     const events = await listAuditEvents('audit.aggregate_archive.telemetry.run_failed')
     expect(events.length).toBeGreaterThanOrEqual(1)
+    const failedData = JSON.parse(events[0].event_data)
+    expect(failedData.reason).toBe('dry_run_collision')
+    expect(failedData.errors?.[0]?.event).toBe('dry_run_collision')
+    expect(failedData.errors?.[0]?.actual_dry_run).toBe(1)
+    expect(failedData.errors?.[0]?.expected_dry_run).toBe(0)
   })
 
   it('dry-run verified 不被 resume 動到（PR 3.2 part 2 dry-run 終態）', async () => {

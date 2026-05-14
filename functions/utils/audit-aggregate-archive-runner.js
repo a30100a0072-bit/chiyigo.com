@@ -223,7 +223,12 @@ export async function runAggregateArchive(args) {
   }
 
   if (!report.ok) {
-    return fail(env, report, eventPrefix, 'chunk_processing_failed', {
+    // codex r3：把 chunk-level 第一個失敗事件碼當成 run_failed 的 reason
+    // （'dry_run_collision' / 'verification_failed' / 'chunk_crash' / 'blocker_resume_failed'），
+    // alerting / forensic 可直接從 audit_log.event_data.reason grep 取主因，
+    // 不必再爬 errors[] 陣列。原 'chunk_processing_failed' 字串保留作 fallback。
+    const primary = report.errors[0]?.event ?? 'chunk_processing_failed'
+    return fail(env, report, eventPrefix, primary, {
       chunks_planned: report.chunks_planned,
       chunks_uploaded: report.chunks_uploaded,
     })
@@ -292,7 +297,12 @@ export async function runAggregateArchive(args) {
   }
 
   if (!report.ok) {
-    return fail(env, report, eventPrefix, 'chunk_processing_failed', {
+    // codex r3：把 chunk-level 第一個失敗事件碼當成 run_failed 的 reason
+    // （'dry_run_collision' / 'verification_failed' / 'chunk_crash' / 'blocker_resume_failed'），
+    // alerting / forensic 可直接從 audit_log.event_data.reason grep 取主因，
+    // 不必再爬 errors[] 陣列。原 'chunk_processing_failed' 字串保留作 fallback。
+    const primary = report.errors[0]?.event ?? 'chunk_processing_failed'
+    return fail(env, report, eventPrefix, primary, {
       chunks_planned: report.chunks_planned,
       chunks_uploaded: report.chunks_uploaded,
     })
