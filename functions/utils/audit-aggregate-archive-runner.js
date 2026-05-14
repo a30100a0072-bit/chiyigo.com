@@ -303,8 +303,17 @@ export async function runAggregateArchive(args) {
     if (report.chunks_marked_archived > 0) {
       // Step 0 resume 已做事，視為一輪成功 — fall through 到 run_completed
     } else {
-      report.skipped_reason = 'no_rows_eligible'
-      await emitSkipped(env, report, eventPrefix, { reason: report.skipped_reason })
+      // PR 3.3 r5 codex P2：candidates=0 不一定是 no_rows_eligible — 也可能是 r4
+      // Step 1 NOT EXISTS 把所有 row 都因 failed/blacklisted blocker 擋掉。誤報
+      // 'no_rows_eligible' 會讓監控以為「沒事」，實際是「有東西卡住等 admin 處理」。
+      const blockedCount = report.chunks_blocked_terminal ?? 0
+      report.skipped_reason = blockedCount > 0
+        ? 'blocked_by_terminal_chunk'
+        : 'no_rows_eligible'
+      await emitSkipped(env, report, eventPrefix, {
+        reason: report.skipped_reason,
+        chunks_blocked_terminal: blockedCount,
+      })
       report.finished_at = new Date().toISOString()
       return res(report, 200)
     }

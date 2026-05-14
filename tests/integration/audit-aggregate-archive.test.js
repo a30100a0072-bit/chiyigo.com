@@ -557,6 +557,8 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(body.chunks_uploaded ?? 0).toBe(0)
     expect(body.chunks_verified ?? 0).toBe(0)
     expect(body.chunks_marked_archived ?? 0).toBe(0)
+    // r5 codex P2：skipped_reason 必須是 blocked_by_terminal_chunk 不是 no_rows_eligible
+    expect(body.skipped_reason).toBe('blocked_by_terminal_chunk')
 
     const r = await env.chiyigo_db.prepare(
       `SELECT archived_at FROM audit_log_aggregate_telemetry WHERE id = ?`
@@ -574,6 +576,13 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     })
     expect(warn).toBeTruthy()
     expect(warn.severity).toBe('warn')
+
+    // r5 codex P2：run_skipped event_data 必帶 chunks_blocked_terminal 計數，方便 alerting
+    const runSkipped = await listAuditEvents('audit.aggregate_archive.telemetry.run_skipped')
+    expect(runSkipped.length).toBe(1)
+    const rsData = JSON.parse(runSkipped[0].event_data)
+    expect(rsData.reason).toBe('blocked_by_terminal_chunk')
+    expect(rsData.chunks_blocked_terminal).toBe(1)
   })
 
   it('PR 3.3 r4 codex P1 regression：跨日 failed chunk 同樣擋住今天 fresh pipeline（admin 必須 re_verify 或 mark_resolved 後續）', async () => {
@@ -583,6 +592,9 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(status).toBe(200)
     expect(body.chunks_blocked_terminal ?? 0).toBe(1)
     expect(body.chunks_planned ?? 0).toBe(0)
+    // r5 codex P2
+    expect(body.skipped_reason).toBe('blocked_by_terminal_chunk')
+
     const r = await env.chiyigo_db.prepare(
       `SELECT archived_at FROM audit_log_aggregate_telemetry WHERE id = ?`
     ).bind(id).first()
