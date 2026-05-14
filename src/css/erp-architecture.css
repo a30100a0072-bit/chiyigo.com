@@ -70,8 +70,8 @@
 .erp-panel-select{width:100%;padding:10px 36px 10px 12px;border-radius:10px;border:1px solid var(--bd,rgba(255,255,255,.12));background-color:var(--bg-2,rgba(255,255,255,.04));color:var(--text,#e7eaf3);font-family:inherit;font-size:14px;line-height:1.3;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none'><path d='M1 1l5 5 5-5' stroke='%236C6EE5' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");background-repeat:no-repeat;background-position:right 14px center;background-size:11px 8px;transition:.15s}
 .erp-panel-select:hover{border-color:var(--accent)}
 .erp-panel-select:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-color:var(--accent)}
-.erp-panel-select optgroup{font-weight:600;color:var(--accent);background:var(--bg,#0e1018)}
-.erp-panel-select option{font-weight:400;color:var(--text,#e7eaf3);background:var(--bg,#0e1018);padding:4px 8px}
+.erp-panel-select optgroup{font-weight:600;color:#8c91ff;background:#0e1018;padding:4px 0}
+.erp-panel-select option{font-weight:400;color:#e7eaf3;background:#0e1018;padding:4px 8px}
 .erp-panel-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:48px 16px;color:var(--text-2,#9aa1b3);min-height:420px}
 .erp-panel-empty[hidden],.erp-panel-body[hidden]{display:none !important}
 .erp-panel-icon{font-size:36px;color:var(--accent);opacity:.5;margin-bottom:14px}
