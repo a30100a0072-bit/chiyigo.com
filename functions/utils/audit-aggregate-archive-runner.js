@@ -415,13 +415,24 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
     JSON.stringify(manifest, null, 2),
     { httpMetadata: { contentType: 'application/json' } })
 
-  await db.prepare(
+  // PR 3.3：state='planned' guard + changes()===1。admin retry / force_purge
+  // 可在 cron 跑同時改 chunk state（mark_resolved→blacklisted 等）；無 guard
+  // 會把 admin 升態後的 row 又拉回 'uploaded'，破壞 state machine。
+  const updPlannedToUploaded = await db.prepare(
     `UPDATE audit_archive_chunks
         SET state = 'uploaded', updated_at = datetime('now')
       WHERE env = ? AND table_name = ? AND cold_class = ?
         AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
-        AND dry_run = ?`
+        AND dry_run = ?
+        AND state = 'planned'`
   ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
+  if ((updPlannedToUploaded?.meta?.changes ?? 0) !== 1) {
+    return failChunk(ctx, report, 'race_with_admin', {
+      expected_state: 'planned', transition: 'planned_to_uploaded',
+      min_id: minId, max_id: maxId, chunk_sha256: sha,
+      remediation: 'admin retry/force_purge altered chunk state mid-run; next cron will re-evaluate from current state',
+    })
+  }
   report.chunks_uploaded++
 
   // ── e. GET 回讀 + decompress + sha verify ────────────
@@ -461,13 +472,22 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
     JSON.stringify(manifest, null, 2),
     { httpMetadata: { contentType: 'application/json' } })
 
-  await db.prepare(
+  // PR 3.3：state='uploaded' guard + changes()===1（同 planned→uploaded 段註解）
+  const updUploadedToVerified = await db.prepare(
     `UPDATE audit_archive_chunks
         SET state = 'verified', updated_at = datetime('now')
       WHERE env = ? AND table_name = ? AND cold_class = ?
         AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
-        AND dry_run = ?`
+        AND dry_run = ?
+        AND state = 'uploaded'`
   ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
+  if ((updUploadedToVerified?.meta?.changes ?? 0) !== 1) {
+    return failChunk(ctx, report, 'race_with_admin', {
+      expected_state: 'uploaded', transition: 'uploaded_to_verified',
+      min_id: minId, max_id: maxId, chunk_sha256: sha,
+      remediation: 'admin retry/force_purge altered chunk state mid-run; next cron will re-evaluate from current state',
+    })
+  }
   report.chunks_verified++
 
   await safeUserAudit(ctx.env, {
@@ -510,7 +530,8 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
     JSON.stringify(manifest, null, 2),
     { httpMetadata: { contentType: 'application/json' } })
 
-  await db.prepare(
+  // PR 3.3：state='verified' guard + changes()===1（同 planned→uploaded 段註解）
+  const updVerifiedToMarked = await db.prepare(
     `UPDATE audit_archive_chunks
         SET state = 'marked_archived',
             marked_archived_at = datetime('now'),
@@ -518,8 +539,16 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
             updated_at = datetime('now')
       WHERE env = ? AND table_name = ? AND cold_class = ?
         AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?
-        AND dry_run = ?`
+        AND dry_run = ?
+        AND state = 'verified'`
   ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
+  if ((updVerifiedToMarked?.meta?.changes ?? 0) !== 1) {
+    return failChunk(ctx, report, 'race_with_admin', {
+      expected_state: 'verified', transition: 'verified_to_marked_archived',
+      min_id: minId, max_id: maxId, chunk_sha256: sha,
+      remediation: 'admin retry/force_purge altered chunk state mid-run; next cron will re-evaluate from current state',
+    })
+  }
 
   report.chunks_marked_archived++
   report.rows_marked_archived += rowCount
@@ -588,7 +617,11 @@ async function resumeVerifiedBlocker({ ctx, blocker, report }) {
     { httpMetadata: { contentType: 'application/json' } })
 
   // 3) UPDATE chunks → marked_archived + purge_after = +7d（R2 manifest 成功後才升 D1）
-  await db.prepare(
+  // PR 3.3：state='verified' guard 已存在（atomic）+ changes()===1 check。
+  // changes=0 = admin retry/force_purge 已在 resume 跑前升態（典型：mark_resolved→
+  // blacklisted）；resume 是 idempotent recovery，benign skip 不 fail run，下輪 cron
+  // 用 admin 升完後的 state 重新評估。
+  const updResume = await db.prepare(
     `UPDATE audit_archive_chunks
         SET state = 'marked_archived',
             marked_archived_at = datetime('now'),
@@ -599,6 +632,12 @@ async function resumeVerifiedBlocker({ ctx, blocker, report }) {
         AND state = 'verified'`
   ).bind(envName, tableName, coldClass, blocker.archive_date,
          blocker.min_id, blocker.max_id, blocker.chunk_sha256).run()
+
+  if ((updResume?.meta?.changes ?? 0) !== 1) {
+    // race during resume — admin moved chunk past 'verified'; skip silently（無 emit），
+    // 不污染 report.chunks_marked_archived 統計。admin action 自己會 emit 該 transition。
+    return
+  }
 
   report.chunks_marked_archived++
   report.rows_marked_archived += blocker.row_count
