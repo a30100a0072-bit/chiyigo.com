@@ -31,6 +31,7 @@ import {
 } from '../../../../utils/payments.js'
 import { ecpayRefund } from '../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug.js'
 import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition.js'
 
 export async function onRequestOptions({ request, env }) {
@@ -158,7 +159,7 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'requisition.refund.network_error', severity: 'critical',
       user_id: rr.user_id, request,
       data: {
-        reason_code:       'vendor_call_threw',
+        reason_code:       DEBUG_REASON_CODES.VENDOR_CALL_THREW,
         refund_request_id: id,
         requisition_id:    rr.requisition_id,
         intent_id:         intent.id,
@@ -181,7 +182,7 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'requisition.refund.fail', severity: 'warn',
       user_id: rr.user_id, request,
       data: {
-        reason_code:       'vendor_rejected',
+        reason_code:       DEBUG_REASON_CODES.VENDOR_REJECTED,
         error_code:        refundResult.rtn_code,
         refund_request_id: id,
         requisition_id:    rr.requisition_id,
@@ -238,7 +239,7 @@ export async function onRequestPost({ request, env, params }) {
       severity:   'critical',
       user_id:    rr.user_id, request,
       data: {
-        reason_code:       'final_cas_missed',
+        reason_code:       DEBUG_REASON_CODES.FINAL_CAS_MISSED,
         refund_request_id: id,
         intent_id:         intent.id,
         vendor_intent_id:  intent.vendor_intent_id,

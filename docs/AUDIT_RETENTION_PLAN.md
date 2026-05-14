@@ -591,21 +591,35 @@ CREATE INDEX idx_agg_tele_user  ON audit_log_aggregate_telemetry(user_id, hour_b
   WHERE user_id IS NOT NULL;
 ```
 
-**audit_log_aggregate_debug（M-5 修正：含 first 100 raw samples）**
+**audit_log_aggregate_debug（PR 3.1d 修正：deterministic reservoir N=10 + allowlist sample shape）**
 ```sql
 CREATE TABLE audit_log_aggregate_debug (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   event_type      TEXT NOT NULL,
-  reason_code     TEXT,                        -- nullable
+  reason_code     TEXT,                        -- nullable；emitter 經 DEBUG_REASON_CODES dictionary 強制
   hour_bucket     TEXT NOT NULL,
   total_count     INTEGER NOT NULL,
-  sample_count    INTEGER NOT NULL,            -- 實際保留的 sample 筆數（≤100）
-  samples_json    TEXT NOT NULL,               -- JSON array of first 100 raw event_data
-  sampled         INTEGER NOT NULL DEFAULT 0,  -- 1 = 超過 100 被截，0 = 完整保留
+  sample_count    INTEGER NOT NULL,            -- 實際保留的 sample 筆數（≤ SAMPLE_SIZE = 10）
+  samples_json    TEXT NOT NULL,               -- JSON array of allowlist sample objects（見下方）
+  sampled         INTEGER NOT NULL DEFAULT 0,  -- 1 = 超過 10 被採樣，0 = 完整保留
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX idx_agg_debug_event ON audit_log_aggregate_debug(event_type, hour_bucket);
+-- bucket UNIQUE — codex M-2 idempotent UPSERT；reason_code NULL 用空字串 sentinel
+CREATE UNIQUE INDEX uniq_agg_debug_bucket ON audit_log_aggregate_debug(
+  event_type, COALESCE(reason_code, ''), hour_bucket
+);
 ```
+
+**samples_json allowlist shape**（每筆 sample 一個 object，PR 3.1d codex r1 M-2）：
+```json
+{ "id": 1234, "created_at": "2026-05-12 03:15:00", "severity": "critical",
+  "user_id": 99, "reason_code": "vendor_rejected", "error_code": "10100073", "retry_count": null }
+```
+- **不存** raw `event_data` — 避免 aggregate row 變成第二份敏感字串落點
+- forensic 要 raw 時靠 `id` 回查 D1（hot）/ R2（archived）
+- 採樣：**deterministic FNV-1a32 reservoir top-N=10** by lowest
+  `fnv1a32(\`${bucketKey}|${id}|${created_at}\`)`，rerun 結果 idempotent
 
 **舊 audit_archive_state（v2）**：作廢，不建。
 
@@ -985,6 +999,10 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 ### PR 3 — Aggregate worker
 - 對 telemetry / debug_failure 跑 bucket 合併
 - 仍 dry-run（產 aggregate 表但不刪 raw）
+- **PR 3.0 telemetry**（17:00 UTC daily）— 純計數 bucket
+- **PR 3.1 debug_failure**（17:15 UTC daily）— deterministic FNV-1a32 reservoir N=10 +
+  allowlist sample shape；reason_code 經 `DEBUG_REASON_CODES` dictionary 強制
+- PR 3.2 aggregate→R2 / PR 3.3 admin retry 後續
 
 ### PR 4 — 啟動真刪除
 - 移除 DRY_RUN flag
@@ -1000,8 +1018,8 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 | 3 | admin_audit_log 跨 chunk hash chain | manifest 記 `first_row_hash` / `last_row_hash` / `prev_hash_of_first_row`；驗證離線可做（`chunk[N].prev_hash_of_first_row === chunk[N-1].last_row_hash`），不依賴 D1。 |
 | 4 | R2 binding 命名 | `AUDIT_ARCHIVE_BUCKET`（保留命名空間）；prod/preview 分 bucket；env 入 R2 key 前綴防汙染。 |
 | 5 | Failed chunk 告警 | 第 1-2 次 warn；**第 3 次升 critical**（Discord/PagerDuty）；之後每 24h 一次 reminder（避免風暴）。Webhook 重用 `DISCORD_AUDIT_WEBHOOK`。 |
-| 6 | Archive timing | **18:00 UTC = 02:00 Asia/Taipei 凌晨**（避日間流量；archive 18:00 daily / **aggregate 17:00 daily**（v12 codex r1 H-1）/ month-finalize 20:00 月 1 號）。 |
-| 7 | Sampling 規則 | bucket key = `(event_type, reason_code, hour)`，每組保留 first 100 raw samples + count；`critical` debug_failure 不採樣；`telemetry` 類只 aggregate 計數不留樣本。 |
+| 6 | Archive timing | **18:00 UTC = 02:00 Asia/Taipei 凌晨**（避日間流量；archive 18:00 daily / **aggregate-telemetry 17:00 daily** / **aggregate-debug 17:15 daily**（PR 3.1d 拆兩 cron）/ month-finalize 20:00 月 1 號）。 |
+| 7 | Sampling 規則 | bucket key = `(event_type, reason_code, hour)`。**Telemetry**：純計數 bucket + `ip_hash_top`，不採樣。**Debug_failure**（PR 3.1d）：deterministic FNV-1a32 reservoir N=10 + allowlist sample shape `{id, created_at, severity, user_id, reason_code, error_code, retry_count}`；所有 severity 皆採樣（含 critical）；reason_code 經 `DEBUG_REASON_CODES` dictionary 強制（codex r2 M extractor 用 allow-set 驗證）。 |
 
 ## Codex review 重點（v8.2 焦點）
 

@@ -7,6 +7,7 @@ import { requireStepUp, res } from '../../utils/auth.js'
 import { SCOPES } from '../../utils/scopes.js'
 import { sendDeleteConfirmationEmail } from '../../utils/email.js'
 import { safeUserAudit } from '../../utils/user-audit.js'
+import { DEBUG_REASON_CODES } from '../../utils/audit-aggregate-debug.js'
 
 const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_MINUTES = 15
@@ -21,7 +22,7 @@ export async function onRequestPost(ctx) {
     await safeUserAudit(ctx.env, {
       event_type: 'auth.delete.exception', severity: 'critical',
       request: ctx.request,
-      data: { reason_code: 'unhandled_exception', message: String(e?.message ?? e).slice(0, 1000) },
+      data: { reason_code: DEBUG_REASON_CODES.UNHANDLED_EXCEPTION, message: String(e?.message ?? e).slice(0, 1000) },
     })
     return res({ error: 'Internal error', code: 'INTERNAL_ERROR' }, 500)
   }

@@ -20,6 +20,7 @@
 import { res } from '../../../utils/auth.js'
 import { resolveKycAdapter, setUserKycStatus } from '../../../utils/kyc.js'
 import { safeUserAudit } from '../../../utils/user-audit.js'
+import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug.js'
 
 export async function onRequestPost({ request, env, params }) {
   const vendor = String(params?.vendor ?? '').toLowerCase()
@@ -33,7 +34,7 @@ export async function onRequestPost({ request, env, params }) {
     // 簽章 / payload 錯都歸 401（不洩漏細節給 attacker；audit 留 reason 給我們追）
     await safeUserAudit(env, {
       event_type: 'kyc.webhook.fail', severity: 'warn', request,
-      data: { vendor, reason_code: 'webhook_parse_failed', reason: parsed.error },
+      data: { vendor, reason_code: DEBUG_REASON_CODES.WEBHOOK_PARSE_FAILED, reason: parsed.error },
     })
     return res({ error: 'Webhook validation failed', code: 'WEBHOOK_VALIDATION_FAILED' }, 401)
   }

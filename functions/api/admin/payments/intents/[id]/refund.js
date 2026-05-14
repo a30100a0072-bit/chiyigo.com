@@ -34,6 +34,7 @@ import {
 } from '../../../../../utils/payments.js'
 import { ecpayRefund } from '../../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../../utils/user-audit.js'
+import { DEBUG_REASON_CODES } from '../../../../../utils/audit-aggregate-debug.js'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
@@ -131,7 +132,7 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'payment.refund.network_error', severity: 'critical',
       user_id: intent.user_id, request,
       data: {
-        reason_code:      'vendor_call_threw',
+        reason_code:      DEBUG_REASON_CODES.VENDOR_CALL_THREW,
         intent_id:        id,
         vendor_intent_id: intent.vendor_intent_id,
         trade_no:         tradeNo,
@@ -152,7 +153,7 @@ export async function onRequestPost({ request, env, params }) {
       event_type: 'payment.refund.fail', severity: 'warn',
       user_id: intent.user_id, request,
       data: {
-        reason_code:      'vendor_rejected',
+        reason_code:      DEBUG_REASON_CODES.VENDOR_REJECTED,
         error_code:       refundResult.rtn_code,     // PR 3.1d M-2 sample allowlist 用
         intent_id:        id,
         vendor_intent_id: intent.vendor_intent_id,

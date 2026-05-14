@@ -145,7 +145,16 @@ export function samplePriority(bucketKey, rowId, createdAt) {
   return fnv1a32(`${bucketKey}|${rowId}|${createdAt}`)
 }
 
-/** debug_failure 穩定 reason_code dictionary（codex M-1 fix；emitter 必對應其一）。 */
+/**
+ * debug_failure 穩定 reason_code dictionary（codex M-1 fix）。
+ *
+ * 🔴 codex r2 M：emitter 必 import 此常數使用（不可寫 bare string），extractor 也以
+ * `DEBUG_REASON_CODE_VALUES` set 驗證；未知字串 / typo → bucket 落 NULL（可觀察），
+ * 不會偷渡進 dictionary 變成新 bucket key。雙閘設計：
+ *   1. emitter side — import constant 確保 IDE rename / grep / lint friendly
+ *   2. extractor side — set 驗證擋下不在 dictionary 的字串（防舊 emitter 漏改 / 外部
+ *      系統 import audit-policy 後自行 emit 卻沒讀 spec）
+ */
 export const DEBUG_REASON_CODES = Object.freeze({
   WEBHOOK_PARSE_FAILED:  'webhook_parse_failed',   // payment/kyc webhook signature/payload 解析失敗
   IN_FLIGHT_CONFLICT:    'in_flight_conflict',     // payment webhook event_id 已有 in-flight processor
@@ -156,6 +165,9 @@ export const DEBUG_REASON_CODES = Object.freeze({
   DEAL_INSERT_FAILED:    'deal_insert_failed',     // requisition save_as_deal INSERT 失敗
   UNHANDLED_EXCEPTION:   'unhandled_exception',    // 路由級 try/catch 兜底（auth.delete.exception）
 })
+
+/** Allow set — extractReasonCode 用以驗證 emitter 寫入值（codex r2 M）。 */
+export const DEBUG_REASON_CODE_VALUES = new Set(Object.values(DEBUG_REASON_CODES))
 
 /**
  * 從 event_data（TEXT JSON）抽 reason_code。
@@ -175,7 +187,11 @@ export function extractReasonCode(eventDataRaw) {
   const obj = parseEventData(eventDataRaw)
   if (obj == null) return null
   const v = obj.reason_code
-  return (typeof v === 'string' && v.length > 0) ? v : null
+  if (typeof v !== 'string' || v.length === 0) return null
+  // codex r2 M：dictionary 強制 — 不在 allow set 的字串視同未設（落 NULL bucket）。
+  // 避免 emitter typo / 未來新增 emitter 沒讀 spec 偷渡 unbounded bucket key。
+  if (!DEBUG_REASON_CODE_VALUES.has(v)) return null
+  return v
 }
 
 /**

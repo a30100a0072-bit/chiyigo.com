@@ -27,6 +27,7 @@ import { res } from '../../../../utils/auth.js'
 import { requireRole } from '../../../../utils/requireRole.js'
 import { getCorsHeaders } from '../../../../utils/cors.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug.js'
 import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition.js'
 
 export async function onRequestOptions({ request, env }) {
@@ -158,7 +159,7 @@ export async function onRequestPost({ request, env, params }) {
     await safeUserAudit(env, {
       event_type: 'requisition.save_as_deal.fail', severity: 'critical',
       user_id: row.user_id, request,
-      data: { requisition_id: id, reason_code: 'deal_insert_failed', error: String(e?.message || e) },
+      data: { requisition_id: id, reason_code: DEBUG_REASON_CODES.DEAL_INSERT_FAILED, error: String(e?.message || e) },
     })
     return res({ error: 'Failed to create deal record', code: 'DEAL_INSERT_FAILED' }, 500, cors)
   }

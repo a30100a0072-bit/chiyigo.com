@@ -19,6 +19,7 @@ import {
   SAMPLE_SIZE,
   MAX_TOTAL_HOURS,
   DEBUG_REASON_CODES,
+  DEBUG_REASON_CODE_VALUES,
   parseMaxRowsPerRun,
   parseLeadHours,
   hourBucket,
@@ -138,9 +139,15 @@ describe('fnv1a32 / samplePriority', () => {
   })
 })
 
-describe('extractReasonCode（codex M-1：只認 reason_code，drop code/reason fallback）', () => {
-  it('reason_code 命中', () => {
+describe('extractReasonCode（codex M-1 + r2 M：dictionary 強制）', () => {
+  it('dictionary 內值命中', () => {
     expect(extractReasonCode(JSON.stringify({ reason_code: 'webhook_parse_failed' }))).toBe('webhook_parse_failed')
+    expect(extractReasonCode(JSON.stringify({ reason_code: 'vendor_rejected' }))).toBe('vendor_rejected')
+  })
+  it('codex r2 M：dictionary 外值 → null（防 typo / 外部誤用偷渡 bucket key）', () => {
+    expect(extractReasonCode(JSON.stringify({ reason_code: 'TIMEOUT' }))).toBeNull()
+    expect(extractReasonCode(JSON.stringify({ reason_code: 'webhok_prse_failed' }))).toBeNull()  // typo
+    expect(extractReasonCode(JSON.stringify({ reason_code: 'arbitrary string from external' }))).toBeNull()
   })
   it('只有 code → null（drop fallback，避 unbounded vendor error 進 bucket key）', () => {
     expect(extractReasonCode(JSON.stringify({ code: 'B' }))).toBeNull()
@@ -162,7 +169,16 @@ describe('extractReasonCode（codex M-1：只認 reason_code，drop code/reason 
     expect(extractReasonCode('"string"')).toBeNull()
   })
   it('物件直通（避雙重 JSON.parse）', () => {
-    expect(extractReasonCode({ reason_code: 'X' })).toBe('X')
+    expect(extractReasonCode({ reason_code: 'vendor_rejected' })).toBe('vendor_rejected')
+  })
+})
+
+describe('DEBUG_REASON_CODE_VALUES allow set', () => {
+  it('包含 dictionary 全部 8 個值', () => {
+    expect(DEBUG_REASON_CODE_VALUES.size).toBe(8)
+    for (const v of Object.values(DEBUG_REASON_CODES)) {
+      expect(DEBUG_REASON_CODE_VALUES.has(v)).toBe(true)
+    }
   })
 })
 

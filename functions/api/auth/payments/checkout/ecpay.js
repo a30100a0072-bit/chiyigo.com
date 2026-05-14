@@ -44,6 +44,7 @@ import {
   buildEcpayCheckoutFields, generateMerchantTradeNo, getEcpayCheckoutUrl,
 } from '../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug.js'
 
 const MIN_AMOUNT = 1
 const MAX_AMOUNT = 200000  // 單筆綠界限額；金融操作上限再調
@@ -103,7 +104,7 @@ export async function onRequestPost({ request, env }) {
     await safeUserAudit(env, {
       event_type: 'payment.vendor.misconfigured', severity: 'critical',
       user_id: userId, request,
-      data: { vendor: 'ecpay', reason_code: 'vendor_creds_missing', reason: String(e?.message || e).slice(0, 500) },
+      data: { vendor: 'ecpay', reason_code: DEBUG_REASON_CODES.VENDOR_CREDS_MISSING, reason: String(e?.message || e).slice(0, 500) },
     })
     return res({ error: 'payment_vendor_misconfigured', code: 'PAYMENT_VENDOR_MISCONFIGURED' }, 500, cors)
   }
