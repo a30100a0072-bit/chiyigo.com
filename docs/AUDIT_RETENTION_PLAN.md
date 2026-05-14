@@ -1020,7 +1020,7 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
     - audit-policy +4 chunk-level events `audit.aggregate_archive.{telemetry,debug}.{chunk_uploaded,upload_failed}`（mirror PR 2.x archive worker；registry 142→146）
 - **PR 3.3 admin retry / force_purge endpoint**（mirror PR 2.2b/2.3 raw retry.js；
   single file，三 action：re_verify / mark_resolved / force_purge）—
-  ✅ **2026-05-14 完工 + codex 6 輪 review LGTM**（HEAD `0c77257`）
+  ✅ **2026-05-14 完工 + codex 9 輪 review LGTM**（HEAD `a8977f7`；r1-r6 part 1/2 → `0c77257`，part 3 H-1 chain → `a8977f7`）
   - `functions/api/admin/audit-aggregate-archive/retry.js`：白名單只認 aggregate 兩
     `(table_name, cold_class)` 對；不允許 raw audit_log 從此 endpoint 進來（cross-system
     防護）。`target` 必含 `dry_run` boolean — 全程 `AND dry_run = ?` expected guard
@@ -1092,6 +1092,37 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
     4. **observability event 要帶因果**：`run_skipped` 不能只說 'no_rows_eligible'；
        `run_completed` mixed scenario 要帶 blocker / resume counters。**監控訊號
        必須能單獨從一個 event 看出系統當下要不要 admin 介入**。
+    5. **BETWEEN range UPDATE 是 chunk-style cold archive 的反 pattern**（part 3 H-1）：
+       任何「id range 內可能夾雜未進 chunk 的 row」場景 — 跨月 resume、HOT row 過濾、
+       chunk 切分演進都會炸。用 chunk 內 exact ids 配 `WHERE id IN (SELECT value FROM json_each(?))`
+       才是正確答案。
+    6. **D1 IN(?, ?, ...) 必走 `json_each(?)`**（part 3 M-1）：bound params/query=100
+       + queries/invocation=50 Free / 1000 Paid 雙限制 → 分批方案在 Free posture 對大
+       chunk 必 livelock；json_each 單 query 單 bound param 徹底解。Cloudflare 官方
+       pattern：https://developers.cloudflare.com/d1/sql-api/query-json/
+    7. **verified state 不代表「資料永遠正確」**（part 3 H-1）：R2 object 可能被替換成
+       「gzip 可解、JSONL 合法、id integer、row_count 相同」但 sha 不同的 valid-but-wrong
+       內容。resume 升 marked_archived 前必重驗 `sha256Hex(text) == blocker.chunk_sha256`
+       + `reRowCount == blocker.row_count`；mirror uploaded path 的雙重驗證，不能因
+       「state=verified 表示已驗過」就跳過。
+
+  - **PR 3.3 part 3（cross-month resume hardening，2026-05-14）**：
+    codex 外部 review 抓到 `resumeVerifiedBlocker` / `resumeUploadedBlocker` chain 跨月
+    誤標 archived_at — chunk 在 M 月建立、JSONL 排除當時 HOT row；admin 在 M+1 月
+    re_verify → resume 用 `ctx.cutoff = cutoff_{M+1}` 做 `BETWEEN min_id AND max_id`
+    UPDATE，當初的 HOT row 被誤標但從未上傳 R2 → PR 4 真刪會誤刪未備份資料。
+    - **commit chain**（3 codex 輪迭代，6 commits 含 cache-bust）：
+      - `bb20ff7`：extractIdsFromJsonl + `WHERE id IN (?, ?, ...)` 取代 BETWEEN+ctx.cutoff
+      - `427634e`：parser strict throw（malformed JSON / non-integer id）+ 兩 path 分流
+        （uploaded→`transitionUploadedToFailed` / verified→fail run）；引入 batch 100
+      - `6fd8ca9`：verified resume 重驗 sha + row_count（valid-but-wrong R2 防禦）；
+        batch 路線改 `json_each(?)` 單 query 單 bound param（徹底擺脫 D1 query budget）
+    - **codex r? false positive 記錄**：workflow `on:` 在 telemetry yml line 15 / debug
+      yml line 10 為 top-level key（前面為 `#` 註解），codex 第一輪誤報後撤回。
+    - **新 regression test**（archive int 23→26）：
+      - 跨月 BETWEEN range vs IN(ids) discriminator（chunks_planned 計數區分新舊行為）
+      - valid-but-wrong sha：R2 物件替換成同 row_count 異內容 → 必 throw、chunk 留 verified
+      - >100 ids（150 row）：seed 跨 day hour_bucket 避 UNIQUE，json_each 路徑通
 
 ### PR 4 — 啟動真刪除
 - 移除 DRY_RUN flag
