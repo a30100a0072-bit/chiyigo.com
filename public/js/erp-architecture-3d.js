@@ -48,6 +48,58 @@ const EDGES = [
   ['bi','data'], ['mdm','data'],
 ];
 
+// ── 配色：分 5 個語意群（業務 / 資料 / AI / I/O / 平台），避免單一色相視覺扁平 ──
+const PALETTE = {
+  accent:      0x6c6ee5,  // 品牌紫 — 業務核心
+  accentLight: 0x8c91ff,  // 淺紫 — highlight
+  cyan:        0x4cd6cc,  // 青 — 資料 / 事件 / 主檔
+  pink:        0xe57eb6,  // 桃 — AI / 知識 / metadata
+  amber:       0xf0b85a,  // 琥珀 — I/O / 通知 / 整合
+  green:       0x5edb89,  // 綠 — 分析 BI
+  coral:       0xff7a85,  // 珊瑚紅 — 身份 / 資安
+};
+const NODE_COLOR = {
+  iam: PALETTE.coral,            // 安全身份
+  crm: PALETTE.accent,           // 業務
+  sales: PALETTE.accent,         // 業務
+  finance: PALETTE.accent,       // 業務
+  workflow: PALETTE.accent,      // 業務
+  event: PALETTE.cyan,           // 資料/事件
+  data: PALETTE.cyan,
+  mdm: PALETTE.cyan,
+  ai: PALETTE.pink,              // AI/智能
+  knowledge: PALETTE.pink,
+  metadata: PALETTE.pink,
+  notify: PALETTE.amber,         // I/O
+  file: PALETTE.amber,
+  integration: PALETTE.amber,
+  bi: PALETTE.green,             // 分析
+  sre: PALETTE.coral,            // 平台/資安
+};
+// 8 層由上到下漸變，凸顯抽象度遞減
+const LAYER_COLOR = {
+  1: PALETTE.pink,        // L1 平台 — 最頂層
+  2: PALETTE.accentLight, // L2 領域邊界
+  3: PALETTE.accent,      // L3 子模組
+  4: PALETTE.accent,      // L4 細項
+  5: PALETTE.cyan,        // L5 服務
+  6: PALETTE.cyan,        // L6 能力
+  7: PALETTE.amber,       // L7 執行
+  8: PALETTE.green,       // L8 部署 — 最底層
+};
+
+// 顏色工具
+function hexRGB(hex){ return { r:(hex>>16)&255, g:(hex>>8)&255, b:hex&255 }; }
+function rgba(hex, a){ const { r,g,b } = hexRGB(hex); return `rgba(${r},${g},${b},${a})`; }
+function lighten(hex, amt=0.4){
+  const { r,g,b } = hexRGB(hex);
+  const lr = Math.min(255, Math.round(r + (255-r)*amt));
+  const lg = Math.min(255, Math.round(g + (255-g)*amt));
+  const lb = Math.min(255, Math.round(b + (255-b)*amt));
+  return (lr<<16)|(lg<<8)|lb;
+}
+function hexStr(hex){ return '#' + hex.toString(16).padStart(6, '0'); }
+
 // ── DOM refs ──
 const SCENE_EL = document.getElementById('erp3-scene');
 const CANVAS = document.getElementById('erp3-canvas');
@@ -96,12 +148,13 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 
 // ── Canvas-texture helper ──
 // 用 2D canvas 畫文字 → 包成 THREE.CanvasTexture
-function makeTextTexture({ tag, name, width=512, height=128, accent='#8c91ff', highlight=false }){
+function makeTextTexture({ tag, name, width=512, height=128, accent=PALETTE.accent, highlight=false }){
   const dpr = 2;
   const c = document.createElement('canvas');
   c.width = width * dpr; c.height = height * dpr;
   const ctx = c.getContext('2d');
   ctx.scale(dpr, dpr);
+  const accentLight = lighten(accent, 0.35);
   // 圓角背景
   const r = 16;
   ctx.beginPath();
@@ -111,18 +164,18 @@ function makeTextTexture({ tag, name, width=512, height=128, accent='#8c91ff', h
   ctx.lineTo(r, height); ctx.quadraticCurveTo(0, height, 0, height - r);
   ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0);
   ctx.closePath();
-  // 漸層底
+  // 漸層底（accent → accentLight，highlight 時更飽和）
   const grad = ctx.createLinearGradient(0, 0, width, height);
   if (highlight) {
-    grad.addColorStop(0, 'rgba(108,110,229,0.85)');
-    grad.addColorStop(1, 'rgba(140,145,255,0.55)');
+    grad.addColorStop(0, rgba(accent, 0.92));
+    grad.addColorStop(1, rgba(accentLight, 0.65));
   } else {
-    grad.addColorStop(0, 'rgba(108,110,229,0.45)');
-    grad.addColorStop(1, 'rgba(140,145,255,0.18)');
+    grad.addColorStop(0, rgba(accent, 0.55));
+    grad.addColorStop(1, rgba(accentLight, 0.22));
   }
   ctx.fillStyle = grad;
   ctx.fill();
-  ctx.strokeStyle = highlight ? '#a5a8ff' : '#6C6EE5';
+  ctx.strokeStyle = hexStr(highlight ? lighten(accent, 0.55) : accent);
   ctx.lineWidth = highlight ? 3 : 2;
   ctx.stroke();
   // tag chip
@@ -137,7 +190,7 @@ function makeTextTexture({ tag, name, width=512, height=128, accent='#8c91ff', h
       ctx.lineTo(tagX + 6, tagY + tagH); ctx.quadraticCurveTo(tagX, tagY + tagH, tagX, tagY + tagH - 6);
       ctx.lineTo(tagX, tagY + 6); ctx.quadraticCurveTo(tagX, tagY, tagX + 6, tagY);
     })();
-    ctx.fillStyle = 'rgba(108,110,229,0.5)';
+    ctx.fillStyle = rgba(accent, 0.6);
     ctx.fill();
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 14px ui-monospace, monospace';
@@ -185,14 +238,26 @@ function initScene(){
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2();
 
-  // 中央 spine
-  const spineGeom = new THREE.CylinderGeometry(3, 3, 600, 24);
-  const spineMat = new THREE.MeshBasicMaterial({ color: 0x8c91ff, transparent: true, opacity: 0.85 });
+  // 中央 spine —— 用 vertexColors 做上下顏色漸層（上桃 → 下綠，呼應 L1~L8 顏色軸）
+  const spineGeom = new THREE.CylinderGeometry(3, 3, 600, 24, 1);
+  const posCount = spineGeom.attributes.position.count;
+  const cAttr = new Float32Array(posCount * 3);
+  const topColor = new THREE.Color(PALETTE.pink);
+  const botColor = new THREE.Color(PALETTE.green);
+  for (let i = 0; i < posCount; i++) {
+    const y = spineGeom.attributes.position.getY(i);   // -300..+300
+    const t = (y + 300) / 600;                         // 0..1，下 0、上 1
+    const col = botColor.clone().lerp(topColor, t);
+    cAttr[i*3] = col.r; cAttr[i*3+1] = col.g; cAttr[i*3+2] = col.b;
+  }
+  spineGeom.setAttribute('color', new THREE.BufferAttribute(cAttr, 3));
+  const spineMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 });
   spine = new THREE.Mesh(spineGeom, spineMat);
   scene.add(spine);
 
+  // 外圈光暈（柔和紫色 halo）
   const glowGeom = new THREE.CylinderGeometry(14, 14, 600, 24);
-  const glowMat = new THREE.MeshBasicMaterial({ color: 0x6c6ee5, transparent: true, opacity: 0.22, depthWrite: false });
+  const glowMat = new THREE.MeshBasicMaterial({ color: PALETTE.accent, transparent: true, opacity: 0.22, depthWrite: false });
   spineGlow = new THREE.Mesh(glowGeom, glowMat);
   scene.add(spineGlow);
 
@@ -202,8 +267,9 @@ function initScene(){
   for (let lvl = 1; lvl <= 8; lvl++) {
     const tag = 'L' + lvl;
     const name = layerName(lvl);
-    const { tex: baseTex } = makeTextTexture({ tag, name, width: 380, height: 64 });
-    const { tex: hiTex } = makeTextTexture({ tag, name, width: 380, height: 64, highlight: true });
+    const accent = LAYER_COLOR[lvl] || PALETTE.accent;
+    const { tex: baseTex } = makeTextTexture({ tag, name, width: 380, height: 64, accent });
+    const { tex: hiTex } = makeTextTexture({ tag, name, width: 380, height: 64, accent, highlight: true });
     const geom = new THREE.PlaneGeometry(380, 64);
     const mat = new THREE.MeshBasicMaterial({ map: baseTex, transparent: true, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geom, mat);
@@ -217,8 +283,9 @@ function initScene(){
   satGroup = new THREE.Group();
   scene.add(satGroup);
   for (const n of NODES) {
-    const { tex: baseTex } = makeTextTexture({ tag: n.tag, name: nodeLabel(n), width: 320, height: 72 });
-    const { tex: hiTex } = makeTextTexture({ tag: n.tag, name: nodeLabel(n), width: 320, height: 72, highlight: true });
+    const accent = NODE_COLOR[n.id] || PALETTE.accent;
+    const { tex: baseTex } = makeTextTexture({ tag: n.tag, name: nodeLabel(n), width: 320, height: 72, accent });
+    const { tex: hiTex } = makeTextTexture({ tag: n.tag, name: nodeLabel(n), width: 320, height: 72, accent, highlight: true });
     const geom = new THREE.PlaneGeometry(180, 40);
     const mat = new THREE.MeshBasicMaterial({ map: baseTex, transparent: true, side: THREE.DoubleSide });
     const mesh = new THREE.Mesh(geom, mat);
@@ -248,16 +315,16 @@ function initScene(){
   }
 }
 
-// ── EDGES 高亮更新：點 node 時相鄰 edge 亮、其他 dim；點 layer 或 idle 時恢復預設 ──
+// ── EDGES 高亮更新：點 node 時相鄰 edge 採該節點分類色，其他 dim ──
 function refreshEdges(){
   for (const { a, b, mat } of edgeLines) {
     if (activeKind === 'node') {
       const isHit = activeId === a || activeId === b;
-      mat.opacity = isHit ? 0.95 : 0.05;
-      mat.color.setHex(isHit ? 0x8c91ff : 0x6c6ee5);
+      mat.opacity = isHit ? 0.95 : 0.04;
+      mat.color.setHex(isHit ? (NODE_COLOR[activeId] || PALETTE.accentLight) : PALETTE.accent);
     } else {
-      mat.opacity = 0.28;
-      mat.color.setHex(0x6c6ee5);
+      mat.opacity = 0.3;
+      mat.color.setHex(PALETTE.accent);
     }
   }
 }
@@ -469,20 +536,22 @@ window.addEventListener('resize', onResize);
 
 // ── i18n apply（standalone）──
 function rebuildLabelTextures(){
-  // 重 build canvas-texture for new language
+  // 重 build canvas-texture for new language；accent 沿用分類色（不變）
   for (const item of layerMeshes) {
     const tag = 'L' + item.lvl;
+    const accent = LAYER_COLOR[item.lvl] || PALETTE.accent;
     item.baseTex.dispose();
     item.hiTex.dispose();
-    const { tex: baseTex } = makeTextTexture({ tag, name: layerName(item.lvl), width: 380, height: 64 });
-    const { tex: hiTex } = makeTextTexture({ tag, name: layerName(item.lvl), width: 380, height: 64, highlight: true });
+    const { tex: baseTex } = makeTextTexture({ tag, name: layerName(item.lvl), width: 380, height: 64, accent });
+    const { tex: hiTex } = makeTextTexture({ tag, name: layerName(item.lvl), width: 380, height: 64, accent, highlight: true });
     item.baseTex = baseTex; item.hiTex = hiTex;
   }
   for (const item of satMeshes) {
+    const accent = NODE_COLOR[item.node.id] || PALETTE.accent;
     item.baseTex.dispose();
     item.hiTex.dispose();
-    const { tex: baseTex } = makeTextTexture({ tag: item.node.tag, name: nodeLabel(item.node), width: 320, height: 72 });
-    const { tex: hiTex } = makeTextTexture({ tag: item.node.tag, name: nodeLabel(item.node), width: 320, height: 72, highlight: true });
+    const { tex: baseTex } = makeTextTexture({ tag: item.node.tag, name: nodeLabel(item.node), width: 320, height: 72, accent });
+    const { tex: hiTex } = makeTextTexture({ tag: item.node.tag, name: nodeLabel(item.node), width: 320, height: 72, accent, highlight: true });
     item.baseTex = baseTex; item.hiTex = hiTex;
   }
   refreshActiveTextures();
