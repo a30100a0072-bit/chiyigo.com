@@ -717,6 +717,8 @@ Phase 3 加：
 | `cron-purge-worker` | 每日 19:00 UTC | `WHERE state='marked_archived' AND purge_after <= NOW()` 走 idx_archive_chunks_purge 索引；對命中 chunk 執行物理 DELETE，升 `purged` |
 | `cron-aggregate-worker` (telemetry, PR 3.0) | 每日 **17:00** UTC（archive 前 1h）| telemetry aggregate（純計數 bucket）。**v12 codex r1 H-1 改 daily**：weekly 會漏 archive 每天標 archived_at 的 24h row（PR 4 翻 dry_run 後資料永久流失）|
 | `cron-aggregate-debug-worker` (PR 3.1) | 每日 **17:15** UTC（telemetry 後 15 min、archive 前 45 min）| debug_failure aggregate（含 allowlist sample）。錯開 15 min 降低 D1 contention + audit emission race（user 2026-05-14 拍板）|
+| `cron-aggregate-archive-telemetry-worker` (PR 3.2) | 每月 1 號 **19:00** UTC（archive 後 1h、当天最後一輪 cron）| telemetry aggregate 表 → R2 月度冷存（prefix `audit-log-aggregate-telemetry/{env}/...`，1y lock）|
+| `cron-aggregate-archive-debug-worker` (PR 3.2) | 每月 1 號 **19:00** UTC（同分；獨立 R2 prefix + cold_class，互不撞）| debug aggregate 表 → R2 月度冷存（prefix `audit-log-aggregate-debug/{env}/...`，1y lock）|
 | `cron-month-finalize-worker` | 每月 1 號 20:00 UTC（= 04:00 Asia/Taipei）| 上月 chunk 全部進 terminal（audit_log→purged / admin_audit_log→cold_copied）後寫月份 manifest |
 | `admin-job: audit-archive-retry` | 手動 / API | 補跑失敗的 chunk（`SELECT FROM audit_archive_chunks WHERE state IN ('failed','blacklisted')`）|
 | `admin-job: audit-archive-export` | 手動 / API | 讀 R2，組合月份檔回 admin |
@@ -1002,7 +1004,21 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 - **PR 3.0 telemetry**（17:00 UTC daily）— 純計數 bucket
 - **PR 3.1 debug_failure**（17:15 UTC daily）— deterministic FNV-1a32 reservoir N=10 +
   allowlist sample shape；reason_code 經 `DEBUG_REASON_CODES` dictionary 強制
-- PR 3.2 aggregate→R2 / PR 3.3 admin retry 後續
+- **PR 3.2 aggregate→R2 月度冷存** — telemetry + debug 兩 aggregate 表上 R2，retention 1y
+  - **part 1**（migration 0044 + audit-policy + helpers + unit）
+    - migration 0044：兩 aggregate 表 ALTER 加 `archived_at` + `cold_class`；audit_archive_chunks rebuild 移除 cold_class CHECK（容納 `aggregate_telemetry` / `aggregate_debug` 兩新 class）
+    - helpers `functions/utils/audit-aggregate-archive.js`：`cutoffMonthStartUTC`（月度文字格式避 ISO 比較陷阱）/ `telemetryRowsToJsonl` / `debugRowsToJsonl` / `aggregatePrefixes` / `buildAggregateChunkKeys` / `deriveAggregateKeysFromChunk` / `buildAggregateManifest`（多 `row_kind` 欄）/ `splitIntoChunks`
+    - audit-policy +6 events `audit.aggregate_archive.{telemetry,debug}.{run_completed,run_skipped,run_failed}`
+    - ESLint archive-discipline + build lint glob 擴 `audit-(aggregate-)?archive*.js`
+  - **part 2**（cron handler ×2 + workflow ×2 + int test + 本段 docs）
+    - 共用 runner `functions/utils/audit-aggregate-archive-runner.js` `runAggregateArchive(args)` — 兩 worker 注入 5 axis（tableName / coldClass / rowKind / selectColumns / rowsToJsonl / eventPrefix）
+    - 流程：`cutoff = cutoffMonthStartUTC()` → SELECT aggregate row WHERE `archived_at IS NULL AND created_at < cutoff` → splitIntoChunks → per chunk：INSERT OR IGNORE chunks (state=`planned`) → PUT manifest planned → PUT data (gzip + putWithRetry) → UPDATE chunks=`uploaded` + PUT manifest uploaded → GET 回讀 + decompress + sha+rowCount verify → UPDATE chunks=`verified` + PUT manifest verified + emit `chunk_uploaded` → live mode 才 UPDATE aggregate row `archived_at` + UPDATE chunks=`marked_archived` + PUT manifest marked_archived
+    - 兩 cron handler：`functions/api/admin/cron/audit-aggregate-archive-{telemetry,debug}.js`（thin axis-injection wrapper）
+    - 兩 workflow：`.github/workflows/cron-audit-aggregate-archive-{telemetry,debug}.yml` — 月度 `0 19 1 * *`（每月 1 號 19:00 UTC = 03:00 隔日 Asia/Taipei；避開 17:00/17:15/18:00 三班 cron 的 D1/R2 contention）
+    - DRY_RUN 沿用 `AUDIT_ARCHIVE_DRY_RUN`：dry-run 寫 `audit-log-aggregate-{telemetry,debug}-dryrun/` prefix、停在 `verified`、aggregate row 不標 archived_at；PR 4 翻 flag 開 live + 真刪 aggregate row（marked_archived → purge 走 PR 4）
+    - 整合測試 `tests/integration/audit-aggregate-archive.test.js`（11 case）：happy ×2 表 / archived_at filter / month boundary / DRY_RUN prefix split / idempotent / chunks PK 共存 / no_rows_eligible / auth 401 / CRON_SECRET 缺 500
+    - audit-policy +4 chunk-level events `audit.aggregate_archive.{telemetry,debug}.{chunk_uploaded,upload_failed}`（mirror PR 2.x archive worker；registry 142→146）
+- PR 3.3 admin retry endpoint（aggregate-archive 失敗 chunk 補跑，mirror PR 2.2b/2.3）後續
 
 ### PR 4 — 啟動真刪除
 - 移除 DRY_RUN flag

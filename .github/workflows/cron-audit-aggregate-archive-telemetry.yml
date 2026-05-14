@@ -1,0 +1,41 @@
+name: Cron — Audit Aggregate Archive Telemetry (F-3 Phase 2 PR 3.2)
+
+# 每月 1 號 19:00 UTC（= 03:00 隔日 Asia/Taipei）跑一次。
+#
+# 時序設計（user 2026-05-14 拍板）：
+#   月度 19:00 UTC — aggregate→R2 archive telemetry（本檔）
+#   月度 19:00 UTC — aggregate→R2 archive debug   （同分；獨立 worker / R2 prefix）
+#
+# 為何月度而非日度：aggregate 表本身已是 hour_bucket 累計（PR 3.0/3.1），月度寫入
+# R2 自然 partition、forensic 還原時月份 prefix 一抓即可；archive cutoff 也走整月
+# 邊界（cutoffMonthStartUTC，design doc §「Aggregate→R2 月度 archive」）。
+#
+# 為何 19:00 UTC：避開 17:00/17:15（aggregate worker）+ 18:00（archive worker）
+# 三班 cron 的 D1 / R2 contention；19:00 是當天最後一輪 cron。
+on:
+  schedule:
+    - cron: '0 19 1 * *'
+  workflow_dispatch:        # 手動觸發（驗收 / backlog 補跑）
+
+jobs:
+  aggregate-archive-telemetry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call audit-aggregate-archive-telemetry endpoint
+        run: |
+          set -euo pipefail
+          response=$(curl -sS -w "\n%{http_code}" \
+            -X POST https://chiyigo.com/api/admin/cron/audit-aggregate-archive-telemetry \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+
+          echo "Status: $status"
+          echo "Body:   $body"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::audit-aggregate-archive-telemetry endpoint returned $status"
+            exit 1
+          fi

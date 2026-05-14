@@ -170,10 +170,12 @@ describe('registry coverage', () => {
     //   requisition_owner_mismatch / final_cas_lost / status_cas_lost → 133。
     // PR 3.1 加 3 個 debug aggregate events
     //   （audit.aggregate.debug.run_completed / _skipped / _failed）→ 136。
-    // PR 3.2 加 6 個 aggregate→R2 monthly archive events
+    // PR 3.2 part 1 加 6 個 aggregate→R2 monthly archive events
     //   （audit.aggregate_archive.{telemetry,debug}.{run_completed,run_skipped,run_failed}）→ 142。
+    // PR 3.2 part 2 再加 4 個 chunk-level events
+    //   （audit.aggregate_archive.{telemetry,debug}.{chunk_uploaded,upload_failed}）→ 146。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(142)
+    expect(_registrySize).toBe(146)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

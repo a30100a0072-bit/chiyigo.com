@@ -1,0 +1,36 @@
+name: Cron — Audit Aggregate Archive Debug (F-3 Phase 2 PR 3.2)
+
+# 每月 1 號 19:00 UTC（= 03:00 隔日 Asia/Taipei）跑一次。
+#
+# 同分 cron 與 telemetry 並行：兩 worker 寫獨立 R2 prefix
+# （audit-log-aggregate-debug/ vs audit-log-aggregate-telemetry/）、
+# 獨立 cold_class、獨立 chunks row PK，互不撞。
+#
+# 詳見 .github/workflows/cron-audit-aggregate-archive-telemetry.yml 同段時序註解。
+on:
+  schedule:
+    - cron: '0 19 1 * *'
+  workflow_dispatch:        # 手動觸發（驗收 / backlog 補跑）
+
+jobs:
+  aggregate-archive-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call audit-aggregate-archive-debug endpoint
+        run: |
+          set -euo pipefail
+          response=$(curl -sS -w "\n%{http_code}" \
+            -X POST https://chiyigo.com/api/admin/cron/audit-aggregate-archive-debug \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+
+          echo "Status: $status"
+          echo "Body:   $body"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::audit-aggregate-archive-debug endpoint returned $status"
+            exit 1
+          fi

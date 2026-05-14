@@ -70,6 +70,12 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate_archive.debug.run_completed',      // info
   'audit.aggregate_archive.debug.run_skipped',        // info
   'audit.aggregate_archive.debug.run_failed',         // critical
+  // PR 3.2 part 2：chunk-level emit（mirror PR 2.x audit_log archive）
+  //   chunk_uploaded → verify ok 後 emit；upload_failed → putWithRetry callback emit
+  'audit.aggregate_archive.telemetry.chunk_uploaded', // info
+  'audit.aggregate_archive.telemetry.upload_failed',  // warn / critical
+  'audit.aggregate_archive.debug.chunk_uploaded',     // info
+  'audit.aggregate_archive.debug.upload_failed',      // warn / critical
 ]
 
 // F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。
