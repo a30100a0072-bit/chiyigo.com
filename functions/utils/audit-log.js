@@ -45,24 +45,22 @@ async function computeRowHash(prevHash, row) {
 // ── 公開 API ────────────────────────────────────────────────────
 
 /**
- * 寫入一筆 admin_audit_log，自動串接 hash chain。
+ * 準備一筆 admin_audit_log INSERT，回傳 D1PreparedStatement 但不執行。
  *
- * @param {D1Database} db
- * @param {object} entry  { admin_id, admin_email, action, target_id, target_email, ip_address }
+ * 用於要把 audit-log INSERT 與其他寫入綁進同一個 db.batch() 的場景
+ * （admin/audit/[id] DELETE atomicity）。SELECT prev_hash 仍在 batch 外發生 —
+ * D1 沒有 SELECT-in-batch，且 admin QPS 低，這個窗口 race 既有設計已接受。
  */
-export async function appendAuditLog(db, entry) {
-  // 1. 取最後一筆的 row_hash 作為 prev_hash
+export async function prepareAppendAuditLog(db, entry) {
   const lastRow = await db
     .prepare('SELECT row_hash FROM admin_audit_log ORDER BY id DESC LIMIT 1')
     .first()
   const prevHash = lastRow?.row_hash ?? GENESIS_HASH
 
-  // 2. 用「現在時間」當 created_at（與 INSERT 時的 datetime('now') 對齊）
-  // 為了 hash 可重現，必須先把這個時間鎖定，再用同一字串寫入 DB
   const createdAt = new Date()
     .toISOString()
     .replace('T', ' ')
-    .slice(0, 19) // 'YYYY-MM-DD HH:MM:SS' 與 SQLite datetime('now') 同格式
+    .slice(0, 19)
 
   const row = {
     admin_id:     entry.admin_id,
@@ -75,8 +73,7 @@ export async function appendAuditLog(db, entry) {
   }
   const rowHash = await computeRowHash(prevHash, row)
 
-  // 3. INSERT — created_at 顯式寫入（取代欄位 default），確保與 hash 計算用的值一致
-  await db
+  const statement = db
     .prepare(`
       INSERT INTO admin_audit_log
         (admin_id, admin_email, action, target_id, target_email, ip_address, created_at, prev_hash, row_hash)
@@ -87,9 +84,20 @@ export async function appendAuditLog(db, entry) {
       row.target_id, row.target_email, row.ip_address,
       row.created_at, prevHash, rowHash,
     )
-    .run()
 
-  return { prevHash, rowHash, createdAt }
+  return { statement, prevHash, rowHash, createdAt }
+}
+
+/**
+ * 寫入一筆 admin_audit_log，自動串接 hash chain。
+ *
+ * @param {D1Database} db
+ * @param {object} entry  { admin_id, admin_email, action, target_id, target_email, ip_address }
+ */
+export async function appendAuditLog(db, entry) {
+  const prepared = await prepareAppendAuditLog(db, entry)
+  await prepared.statement.run()
+  return { prevHash: prepared.prevHash, rowHash: prepared.rowHash, createdAt: prepared.createdAt }
 }
 
 /**

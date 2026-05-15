@@ -12,7 +12,7 @@
 
 import { res, requireStepUp } from '../../../utils/auth.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
-import { appendAuditLog } from '../../../utils/audit-log.js'
+import { prepareAppendAuditLog } from '../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../utils/user-audit'
 
 const DELETABLE_EVENTS = new Set(['requisition.deleted'])
@@ -44,10 +44,13 @@ export async function onRequestDelete({ request, env, params }) {
     }, 403)
   }
 
-  // P0-4：刪前先寫 hash-chain admin_audit_log（防 admin 默默清痕跡）。
-  // 任何寫失敗都當 5xx，不繼續刪 row。
+  // P0-4 + codex F3：admin_audit_log INSERT 與 audit_log DELETE 綁在同一 D1 batch（atomic）。
+  // DELETE 帶 event_type guard：若 row 在 SELECT 與 batch 之間被改/刪 → changes=0 → 409，
+  // audit_log row 不刪；hash-chain 寫入的是「delete attempt」紀錄（同 batch 一起 commit），
+  // 語意正確且 chain 仍 verifiable —— 不是「沒刪到卻寫了 hash-chain」的污染。
+  let prepared
   try {
-    await appendAuditLog(env.chiyigo_db, {
+    prepared = await prepareAppendAuditLog(env.chiyigo_db, {
       admin_id:     Number(stepCheck.user.sub),
       admin_email:  stepCheck.user.email,
       action:       'audit_log.delete',
@@ -59,7 +62,23 @@ export async function onRequestDelete({ request, env, params }) {
     return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
   }
 
-  await env.chiyigo_db.prepare('DELETE FROM audit_log WHERE id = ?').bind(id).run()
+  const deleteStmt = env.chiyigo_db
+    .prepare('DELETE FROM audit_log WHERE id = ? AND event_type = ?')
+    .bind(id, row.event_type)
+
+  let batchResults
+  try {
+    batchResults = await env.chiyigo_db.batch([prepared.statement, deleteStmt])
+  } catch (e) {
+    return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
+  }
+
+  const deleteChanges = batchResults?.[1]?.meta?.changes ?? 0
+  if (deleteChanges !== 1) {
+    // race: SELECT 看到的 row 在 batch commit 前被別人刪/改了。
+    // hash-chain 仍記下「admin 嘗試刪」的證據 — 這是正確行為。
+    return res({ error: 'audit_row_changed_during_delete', code: 'AUDIT_RACE' }, 409)
+  }
 
   // critical user_audit（觸發 Discord webhook），方便即時看到 admin 在清痕跡
   await safeUserAudit(env, {
