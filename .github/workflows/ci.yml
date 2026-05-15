@@ -40,6 +40,11 @@ jobs:
       - name: Run integration tests (workerd + D1, includes migration smoke)
         run: npm run test:int
 
+      - name: Pages Functions bundle gate (deploy-equivalent)
+        # tsc/Vitest 綠 ≠ wrangler bundle 綠；codex 2026-05-16 review Finding 4。
+        # 防 JS→TS 遷移期 extensionless import / .ts 路由載入造成 bundle-only regression。
+        run: npm run build:functions
+
       - name: npm audit (production deps, high+)
         run: npm audit --omit=dev --audit-level=high
         continue-on-error: false

@@ -17,3 +17,4 @@ scripts/audit-error-i18n.out.json
 
 # TypeScript 增量編譯快取（typecheck 是 noEmit 通常不會產，保險用）
 *.tsbuildinfo
+.tmp-pages-functions-build/
