@@ -23,9 +23,13 @@
   },
   "include": [
     "functions/**/*.js",
+    "functions/**/*.ts",
     "src/js/**/*.js",
+    "src/js/**/*.ts",
     "scripts/**/*.js",
+    "scripts/**/*.ts",
     "tests/**/*.js",
+    "tests/**/*.ts",
     "types/**/*.d.ts"
   ],
   "exclude": [

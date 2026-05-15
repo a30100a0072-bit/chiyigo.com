@@ -23,7 +23,7 @@ import { decodeProtectedHeader, jwtVerify, importJWK } from 'jose'
 import { hashToken } from '../../../utils/crypto.js'
 import { getPublicJwks } from '../../../utils/jwt.js'
 import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies.js'
-import { dispatchBackchannelLogout } from '../../../utils/backchannel.js'
+import { dispatchBackchannelLogout } from '../../../utils/backchannel'
 import { safeUserAudit } from '../../../utils/user-audit.js'
 import {
   getAllowedPostLogoutUris,
