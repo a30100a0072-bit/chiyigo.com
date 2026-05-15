@@ -16,7 +16,8 @@
     "test:security:auth": "vitest run --config vitest.workers.config.js --testNamePattern=\"\\[J-\"",
     "lint": "eslint functions tests",
     "lint:handlers": "node scripts/lint-handlers.js",
-    "lint:archive-no-delete": "node scripts/lint-archive-no-delete.js"
+    "lint:archive-no-delete": "node scripts/lint-archive-no-delete.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",
@@ -33,6 +34,7 @@
     "globals": "^15.15.0",
     "handlebars": "^4.7.9",
     "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.3",
     "vitest": "^2.1.9",
     "wrangler": "^4.87.0"
   }
