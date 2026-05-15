@@ -17,7 +17,10 @@
     "lint": "eslint functions tests",
     "lint:handlers": "node scripts/lint-handlers.js",
     "lint:archive-no-delete": "node scripts/lint-archive-no-delete.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
+    "typecheck:ratchet:report": "node scripts/typecheck-ratchet.mjs --report",
+    "typecheck:baseline:update": "node scripts/typecheck-ratchet.mjs --update"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",

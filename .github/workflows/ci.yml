@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # typecheck-ratchet 需要 git diff base...HEAD，fetch-depth=0 取整個歷史
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -22,6 +25,14 @@ jobs:
 
       - name: Lint (ESLint)
         run: npm run lint
+
+      - name: Typecheck ratchet (JS→TS day-1 gate)
+        run: npm run typecheck:ratchet
+        env:
+          # PR: pull_request.base.sha 是 merge base；push: github.event.before 是 push 前的 tip
+          # 兩者都不在時，script fallback HEAD~1（防 origin/main == HEAD 的 push case）
+          RATCHET_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
 
       - name: Run unit tests with coverage (functions/utils ≥ 80%)
         run: npm run test:cov
