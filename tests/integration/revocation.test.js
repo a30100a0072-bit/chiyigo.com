@@ -14,7 +14,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt.js'
 import { requireAuth } from '../../functions/utils/auth.js'
-import { revokeJti, isJtiRevoked } from '../../functions/utils/revocation.js'
+import { revokeJti, isJtiRevoked } from '../../functions/utils/revocation'
 
 function reqWithToken(tok) {
   return new Request('http://x/', { headers: { Authorization: `Bearer ${tok}` } })

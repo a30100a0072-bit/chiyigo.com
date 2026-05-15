@@ -9,12 +9,12 @@
  *  - DB 只存 token 的 SHA-256 hash，原始 token 只出現在 email link
  */
 
-import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { sendPasswordResetEmail } from '../../../utils/email.js'
-import { verifyTurnstile } from '../../../utils/turnstile.js'
+import { verifyTurnstile } from '../../../utils/turnstile'
 import { res } from '../../../utils/auth.js'
 import { verifyJwt } from '../../../utils/jwt.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 
 const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_HOURS   = 1

@@ -5,8 +5,8 @@ import {
   generateSecureToken,
   hashPassword,
   hashToken,
-} from '../../functions/utils/crypto.js'
-import { _resetCacheForTests, invalidateClientsCache } from '../../functions/utils/oauth-clients.js'
+} from '../../functions/utils/crypto'
+import { _resetCacheForTests, invalidateClientsCache } from '../../functions/utils/oauth-clients'
 
 /** Apply schema (idempotent via IF NOT EXISTS) and truncate tables. */
 export async function resetDb() {

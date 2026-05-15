@@ -2,11 +2,11 @@
 // Step 1 of 2: verify password, send deletion-confirmation email.
 // Step 2 is POST /api/auth/delete/confirm with the emailed token.
 
-import { verifyPassword, generateSecureToken, hashToken } from '../../utils/crypto.js'
+import { verifyPassword, generateSecureToken, hashToken } from '../../utils/crypto'
 import { requireStepUp, res } from '../../utils/auth.js'
 import { SCOPES } from '../../utils/scopes.js'
 import { sendDeleteConfirmationEmail } from '../../utils/email.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
+import { safeUserAudit } from '../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../utils/audit-aggregate-debug.js'
 
 const COOLDOWN_SECONDS  = 60

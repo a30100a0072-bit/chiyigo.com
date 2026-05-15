@@ -13,7 +13,7 @@ import {
   getUserCooldownSeconds,
   isIpBlacklisted,
   detectAndBlacklistCrossUserScan,
-} from '../../functions/utils/brute-force.js'
+} from '../../functions/utils/brute-force'
 import { onRequestPost as loginPost } from '../../functions/api/auth/local/login.js'
 
 async function seedFailRow(email, ip, agoSeconds = 0) {

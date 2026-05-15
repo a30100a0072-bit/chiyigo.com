@@ -18,7 +18,7 @@
  *    login.success audit 帶 country（4 個入口的 audit data 加 country）
  */
 
-import { safeUserAudit, hashIdentifierForAudit } from './user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from './user-audit'
 import { sendNewDeviceAlertEmail } from './email.js'
 
 /**

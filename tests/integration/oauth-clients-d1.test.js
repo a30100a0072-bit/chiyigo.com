@@ -22,7 +22,7 @@ import {
   getAudByOrigin,
   invalidateClientsCache,
   _resetCacheForTests,
-} from '../../functions/utils/oauth-clients.js'
+} from '../../functions/utils/oauth-clients'
 
 async function seedRP({ client_id, aud, redirect_uris = [], origins = [], post_logout = [], frontchannel = [], backchannel = null }) {
   await env.chiyigo_db

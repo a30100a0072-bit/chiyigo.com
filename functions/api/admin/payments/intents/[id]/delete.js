@@ -25,7 +25,7 @@ import { res, requireStepUp } from '../../../../../utils/auth.js'
 import { getCorsHeaders } from '../../../../../utils/cors.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes.js'
 import { getPaymentIntent, PAYMENT_STATUS } from '../../../../../utils/payments.js'
-import { safeUserAudit } from '../../../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../../../utils/user-audit'
 
 const SOFT_DELETABLE = new Set([
   PAYMENT_STATUS.PENDING, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED,

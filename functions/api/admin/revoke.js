@@ -33,9 +33,9 @@
 
 import { res } from '../../utils/auth.js'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../utils/requireRole.js'
-import { revokeJti } from '../../utils/revocation.js'
+import { revokeJti } from '../../utils/revocation'
 import { appendAuditLog } from '../../utils/audit-log.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
+import { safeUserAudit } from '../../utils/user-audit'
 
 const VALID_MODES = new Set(['jti', 'user', 'device'])
 

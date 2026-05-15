@@ -2,9 +2,9 @@
 // Step 2 of 2: consume the emailed token and permanently delete the account.
 // No JWT required — the token itself proves authorization.
 
-import { hashToken } from '../../../utils/crypto.js'
+import { hashToken } from '../../../utils/crypto'
 import { res } from '../../../utils/auth.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 
 export async function onRequestPost({ request, env }) {
   // ── 1. 解析 Body ─────────────────────────────────────────────

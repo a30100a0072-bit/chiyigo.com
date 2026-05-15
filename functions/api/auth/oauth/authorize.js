@@ -36,16 +36,16 @@
  *  400 → 參數缺失 / 不合法
  */
 
-import { generateSecureToken } from '../../../utils/crypto.js'
+import { generateSecureToken } from '../../../utils/crypto'
 import { res } from '../../../utils/auth.js'
-import { getAllowedRedirectUris } from '../../../utils/oauth-clients.js'
+import { getAllowedRedirectUris } from '../../../utils/oauth-clients'
 import {
   readRefreshCookie,
   findActiveUserByRefreshCookie,
   issueAuthCodeAndBuildRedirect,
   buildLoginRequiredRedirect,
   isWithinMaxAge,
-} from '../../../utils/oauth-session.js'
+} from '../../../utils/oauth-session'
 
 const SESSION_TTL_MS = 10 * 60 * 1000 // 10 分鐘完成登入
 

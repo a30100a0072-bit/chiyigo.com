@@ -12,9 +12,9 @@
 
 import { res, requireStepUp, requireAnyScope } from '../../../utils/auth.js'
 import { requireRole } from '../../../utils/requireRole.js'
-import { invalidateClientsCache } from '../../../utils/oauth-clients.js'
+import { invalidateClientsCache } from '../../../utils/oauth-clients'
 import { appendAuditLog } from '../../../utils/audit-log.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
 
 const VALID_APP_TYPES = new Set(['web', 'native', 'mobile'])

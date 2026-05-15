@@ -14,10 +14,10 @@
  *  400 → refresh_token 缺失
  */
 
-import { hashToken } from '../../utils/crypto.js'
+import { hashToken } from '../../utils/crypto'
 import { getCorsHeaders } from '../../utils/cors.js'
 import { CLEAR_REFRESH_COOKIE } from '../../utils/cookies.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
+import { safeUserAudit } from '../../utils/user-audit'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })

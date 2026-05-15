@@ -11,16 +11,16 @@
  *  6. DELETE 所有 refresh_tokens（登出所有裝置）
  */
 
-import { verifyTotpReplaySafe } from '../../../utils/totp.js'
+import { verifyTotpReplaySafe } from '../../../utils/totp'
 import {
   hashToken,
   generateSalt,
   hashPassword,
   verifyBackupCode,
-} from '../../../utils/crypto.js'
-import { validatePassword } from '../../../utils/password.js'
+} from '../../../utils/crypto'
+import { validatePassword } from '../../../utils/password'
 import { bumpTokenVersion, res } from '../../../utils/auth.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 
 export async function onRequestPost({ request, env }) {
   let body

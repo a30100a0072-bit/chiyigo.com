@@ -19,7 +19,7 @@
 import { res, requireStepUp } from '../../../../utils/auth.js'
 import { getCorsHeaders } from '../../../../utils/cors.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../../utils/user-audit'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })

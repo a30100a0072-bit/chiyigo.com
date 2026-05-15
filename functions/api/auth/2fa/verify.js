@@ -15,17 +15,17 @@
  *  401 → { error: 'Invalid OTP or backup code' }
  */
 
-import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils/crypto.js'
-import { verifyTotpReplaySafe } from '../../../utils/totp.js'
+import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils/crypto'
+import { verifyTotpReplaySafe } from '../../../utils/totp'
 import { requireAuth, res } from '../../../utils/auth.js'
 import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
 import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes.js'
-import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
-import { computeRiskScore, hashUa } from '../../../utils/risk-score.js'
+import { safeAlertAnomalies } from '../../../utils/device-alerts'
+import { computeRiskScore, hashUa } from '../../../utils/risk-score'
 
 const TOTP_RL_WINDOW_SEC = 5 * 60
 const TOTP_RL_MAX        = 5

@@ -8,7 +8,7 @@ import {
   pkceVerify,
   generateBackupCodes,
   verifyBackupCode,
-} from '../functions/utils/crypto.js'
+} from '../functions/utils/crypto'
 
 describe('generateSalt / generateSecureToken', () => {
   it('returns 64-char hex (32 bytes)', () => {

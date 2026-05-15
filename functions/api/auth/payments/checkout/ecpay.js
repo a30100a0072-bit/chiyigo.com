@@ -43,7 +43,7 @@ import {
 import {
   buildEcpayCheckoutFields, generateMerchantTradeNo, getEcpayCheckoutUrl,
 } from '../../../../utils/payment-vendors/ecpay.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug.js'
 
 const MIN_AMOUNT = 1

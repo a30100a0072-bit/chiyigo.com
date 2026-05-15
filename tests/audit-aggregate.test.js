@@ -23,7 +23,7 @@ import {
   totalCutoffHours,
   reduceTelemetryBuckets,
   rowIsTelemetry,
-} from '../functions/utils/audit-aggregate.js'
+} from '../functions/utils/audit-aggregate'
 
 describe('constants', () => {
   it('cold_class = telemetry / writer version 帶 pr3.0', () => {

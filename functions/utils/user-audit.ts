@@ -19,7 +19,7 @@
  *   trace_id, reason_code, provider, mode, jti（截斷）, device_uuid（截斷）...
  */
 
-import { classifyAuditEvent, classifyForCold } from './audit-policy.js'
+import { classifyAuditEvent, classifyForCold } from './audit-policy'
 
 const KNOWN_SEVERITY = new Set(['info', 'warn', 'critical'])
 

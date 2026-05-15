@@ -14,12 +14,12 @@
  */
 
 import { verifyJwt, signJwt } from '../../../utils/jwt.js'
-import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
-import { getProvider } from '../../../utils/oauth-providers.js'
+import { generateSecureToken, hashToken } from '../../../utils/crypto'
+import { getProvider } from '../../../utils/oauth-providers'
 import { resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes.js'
 
 const ACCESS_TOKEN_TTL   = '15m'

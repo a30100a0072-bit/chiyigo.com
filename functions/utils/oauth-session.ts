@@ -5,7 +5,7 @@
  * 不消耗 refresh_token（不 rotate），silent SSO 不能變相延長 session 壽命。
  */
 
-import { generateSecureToken, hashToken } from './crypto.js'
+import { generateSecureToken, hashToken } from './crypto'
 
 const CODE_TTL_MS = 5 * 60 * 1000
 

@@ -6,9 +6,9 @@
  * 既有舊 link（GET）仍可運作：自動跳轉至 /verify-email.html，由前端按鈕 POST。
  */
 
-import { hashToken } from '../../../utils/crypto.js'
+import { hashToken } from '../../../utils/crypto'
 import { res } from '../../../utils/auth.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 
 export async function onRequestGet({ request }) {
   const url   = new URL(request.url)

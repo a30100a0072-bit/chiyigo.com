@@ -32,16 +32,16 @@
  */
 
 import { verifyAuthenticationResponse } from '@simplewebauthn/server'
-import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
-import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes.js'
-import { getRpConfig, consumeChallenge } from '../../../utils/webauthn.js'
-import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
-import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score.js'
+import { getRpConfig, consumeChallenge } from '../../../utils/webauthn'
+import { safeAlertAnomalies } from '../../../utils/device-alerts'
+import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score'
 import { sendRiskBlockedAlertEmail } from '../../../utils/email.js'
 
 const ACCESS_TOKEN_TTL   = '15m'

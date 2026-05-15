@@ -16,7 +16,7 @@ import {
   classifyForCold,
   listEventsByCategory,
   _registrySize,
-} from '../functions/utils/audit-policy.js'
+} from '../functions/utils/audit-policy'
 
 describe('audit-policy AUDIT_CATEGORY', () => {
   it('5 個分類常數齊全', () => {

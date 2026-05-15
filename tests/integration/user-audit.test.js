@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser, jsonPost } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt.js'
-import { safeUserAudit } from '../../functions/utils/user-audit.js'
+import { safeUserAudit } from '../../functions/utils/user-audit'
 import { onRequestPost as loginHandler } from '../../functions/api/auth/local/login.js'
 import { onRequestGet as auditHandler } from '../../functions/api/admin/audit.js'
 

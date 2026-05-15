@@ -8,8 +8,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { generateSecureToken, hashToken } from '../../functions/utils/crypto.js'
-import { safeAlertAnomalies } from '../../functions/utils/device-alerts.js'
+import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
+import { safeAlertAnomalies } from '../../functions/utils/device-alerts'
 
 // 攔截 fetch 到 Resend API 的呼叫（vitest-pool-workers singleWorker 模式下 vi.mock 跨檔
 // 不穩定；改 hook 全域 fetch 觀察 Resend 端點即可，且更貼近 production 行為）

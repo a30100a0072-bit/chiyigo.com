@@ -23,7 +23,7 @@ import {
   resolvePaymentAdapter, getPaymentIntent, createPaymentIntent, updatePaymentStatus,
   PAYMENT_KIND,
 } from '../../../utils/payments.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug.js'
 
 export async function onRequestPost({ request, env, params }) {

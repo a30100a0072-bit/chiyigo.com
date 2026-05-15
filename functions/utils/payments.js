@@ -19,7 +19,7 @@
  */
 
 import { res, requireAuth } from './auth.js'
-import { safeUserAudit } from './user-audit.js'
+import { safeUserAudit } from './user-audit'
 import { getUserKycStatus, KYC_STATUS } from './kyc.js'
 
 export const PAYMENT_STATUS = Object.freeze({
@@ -374,7 +374,7 @@ export async function requirePaymentAccess(request, env, opts = {}) {
 //
 // 目前只 ship `mock` adapter 給 tests + scaffold smoke test。
 
-import { mockPaymentAdapter } from './payment-vendors/mock.js'
+import { mockPaymentAdapter } from './payment-vendors/mock'
 import { ecpayPaymentAdapter } from './payment-vendors/ecpay.js'
 
 const ADAPTERS = {

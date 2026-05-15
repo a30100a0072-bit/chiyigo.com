@@ -19,7 +19,7 @@
 import { requireStepUp, res } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
 import { SCOPES } from '../../../utils/scopes.js'
-import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 
 const ELEVATED_ACTION_UNBIND = 'unbind_wallet'
 

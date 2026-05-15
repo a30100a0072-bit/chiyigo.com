@@ -12,22 +12,22 @@
  * 僅供 /api/auth/2fa/verify 端點使用。
  */
 
-import { verifyPassword, generateSecureToken, hashToken } from '../../../utils/crypto.js'
+import { verifyPassword, generateSecureToken, hashToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt.js'
 import { resolveAud } from '../../../utils/cors.js'
-import { verifyTurnstile } from '../../../utils/turnstile.js'
+import { verifyTurnstile } from '../../../utils/turnstile'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes.js'
-import { safeAlertAnomalies } from '../../../utils/device-alerts.js'
+import { safeAlertAnomalies } from '../../../utils/device-alerts'
 import { checkRateLimit } from '../../../utils/rate-limit.js'
 import {
   isIpBlacklisted,
   getUserCooldownSeconds,
   detectAndBlacklistCrossUserScan,
-} from '../../../utils/brute-force.js'
-import { computeRiskScore, hashUa, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score.js'
+} from '../../../utils/brute-force'
+import { computeRiskScore, hashUa, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score'
 import { sendRiskBlockedAlertEmail } from '../../../utils/email.js'
 
 const ACCESS_TOKEN_TTL    = '15m'

@@ -7,7 +7,7 @@ import {
   VALID_ROLES,
   isValidRole,
   canRoleSeeAuditEvent,
-} from '../functions/utils/roles.js'
+} from '../functions/utils/roles'
 
 describe('VALID_ROLES + isValidRole', () => {
   it('包含全部 8 個 role（4 legacy + 4 latent）', () => {

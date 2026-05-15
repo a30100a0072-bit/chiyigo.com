@@ -19,7 +19,7 @@
 
 import { res } from '../../../utils/auth.js'
 import { resolveKycAdapter, setUserKycStatus } from '../../../utils/kyc.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug.js'
 
 export async function onRequestPost({ request, env, params }) {

@@ -17,7 +17,7 @@
  */
 
 import { requireAuth, res } from './auth.js'
-import { safeUserAudit } from './user-audit.js'
+import { safeUserAudit } from './user-audit'
 
 const ROLE_LEVEL = {
   player: 0, user: 0, finance: 0, support: 0,

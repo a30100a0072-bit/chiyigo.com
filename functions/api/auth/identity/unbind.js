@@ -11,7 +11,7 @@
  */
 
 import { requireAuth, res } from '../../../utils/auth.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 
 const ALLOWED_PROVIDERS = new Set(['google', 'discord', 'line', 'facebook'])
 

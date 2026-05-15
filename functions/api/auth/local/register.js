@@ -9,16 +9,16 @@
  *  6. 簽發 JWT Access Token
  */
 
-import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../../../utils/crypto.js'
+import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt.js'
 import { sendVerificationEmail } from '../../../utils/email.js'
-import { validatePassword } from '../../../utils/password.js'
+import { validatePassword } from '../../../utils/password'
 import { resolveAud } from '../../../utils/cors.js'
 import { buildTokenScope } from '../../../utils/scopes.js'
-import { verifyTurnstile } from '../../../utils/turnstile.js'
+import { verifyTurnstile } from '../../../utils/turnstile'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
-import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ACCESS_TOKEN_TTL   = '15m'

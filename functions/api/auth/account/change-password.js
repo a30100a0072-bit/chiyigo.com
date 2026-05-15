@@ -31,11 +31,11 @@
  *   change-password = 知道密碼想換（step-up 替代驗證）
  */
 
-import { generateSalt, hashPassword } from '../../../utils/crypto.js'
-import { validatePassword } from '../../../utils/password.js'
+import { generateSalt, hashPassword } from '../../../utils/crypto'
+import { validatePassword } from '../../../utils/password'
 import { requireStepUp, bumpTokenVersion, res } from '../../../utils/auth.js'
 import { SCOPES } from '../../../utils/scopes.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 
 export async function onRequestPost({ request, env }) {
   // step-up 守門：驗 step_up_token + scope=elevated:account + for_action=change_password

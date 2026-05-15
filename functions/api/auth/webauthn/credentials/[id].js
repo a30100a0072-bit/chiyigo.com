@@ -26,7 +26,7 @@
 import { requireAuth, requireStepUp, res } from '../../../../utils/auth.js'
 import { getCorsHeaders } from '../../../../utils/cors.js'
 import { SCOPES } from '../../../../utils/scopes.js'
-import { safeUserAudit, hashIdentifierForAudit } from '../../../../utils/user-audit.js'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../../utils/user-audit'
 
 const ELEVATED_ACTION_REMOVE = 'remove_passkey'
 const NICKNAME_MAX = 64

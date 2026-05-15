@@ -14,7 +14,7 @@
 //    data.observe.extras = { feature: 'requisition_revoke', id }
 
 import { getCorsHeaders } from '../utils/cors.js'
-import { refreshClientsCache } from '../utils/oauth-clients.js'
+import { refreshClientsCache } from '../utils/oauth-clients'
 
 const CT_EXEMPT_EXACT   = new Set(['/api/auth/logout'])
 // 第三方 webhook 多用 application/x-www-form-urlencoded（ECPay、PSP 等）；

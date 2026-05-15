@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { generateSecureToken, hashToken } from '../../functions/utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh.js'
 import { onRequestPost as tokenHandler } from '../../functions/api/auth/oauth/token.js'
 import { checkRateLimit } from '../../functions/utils/rate-limit.js'

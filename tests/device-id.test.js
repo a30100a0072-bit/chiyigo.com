@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { pickOrMakeDeviceUuid } from '../functions/utils/device-id.js'
+import { pickOrMakeDeviceUuid } from '../functions/utils/device-id'
 
 const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000'
 

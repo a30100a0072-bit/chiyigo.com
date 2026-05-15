@@ -7,7 +7,7 @@
  *  - 不在白名單的 Origin：回傳空物件（不加 CORS 標頭，瀏覽器自行攔截）
  */
 
-import { getAllowedCorsOrigins, getAudByOrigin, getValidAuds } from './oauth-clients.js'
+import { getAllowedCorsOrigins, getAudByOrigin, getValidAuds } from './oauth-clients'
 
 function getAllowedOrigins(env) {
   const extras = env.ALLOWED_ORIGINS

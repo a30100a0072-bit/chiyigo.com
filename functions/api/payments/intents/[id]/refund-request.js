@@ -14,8 +14,8 @@
  */
 
 import { requireAuth, res } from '../../../../utils/auth.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
-import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition.js'
+import { safeUserAudit } from '../../../../utils/user-audit'
+import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'
 
 export async function onRequestPost({ request, env, params }) {
   const { user, error } = await requireAuth(request, env)

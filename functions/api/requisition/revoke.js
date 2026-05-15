@@ -18,8 +18,8 @@
  */
 
 import { requireAuth, res } from '../../utils/auth.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
-import { syncRequisitionTgMessage } from '../../utils/tg-requisition.js'
+import { safeUserAudit } from '../../utils/user-audit'
+import { syncRequisitionTgMessage } from '../../utils/tg-requisition'
 
 async function editTelegramMessage(env, messageId, text) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID || !messageId) return

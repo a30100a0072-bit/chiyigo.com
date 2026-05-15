@@ -20,16 +20,16 @@
  */
 
 import { decodeProtectedHeader, jwtVerify, importJWK } from 'jose'
-import { hashToken } from '../../../utils/crypto.js'
+import { hashToken } from '../../../utils/crypto'
 import { getPublicJwks } from '../../../utils/jwt.js'
 import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies.js'
 import { dispatchBackchannelLogout } from '../../../utils/backchannel'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import {
   getAllowedPostLogoutUris,
   getFrontchannelUris,
   getFrontchannelFrameOrigins,
-} from '../../../utils/oauth-clients.js'
+} from '../../../utils/oauth-clients'
 
 function escAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')

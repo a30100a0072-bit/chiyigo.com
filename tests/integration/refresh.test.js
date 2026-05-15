@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { generateSecureToken, hashToken } from '../../functions/utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh.js'
 
 async function seedRefresh(userId, {

@@ -17,7 +17,7 @@
 
 import { res } from './auth.js'
 import { requireAuth } from './auth.js'
-import { safeUserAudit } from './user-audit.js'
+import { safeUserAudit } from './user-audit'
 
 export const KYC_STATUS = Object.freeze({
   UNVERIFIED: 'unverified',
@@ -189,7 +189,7 @@ export async function requireKyc(request, env, opts = {}) {
 //
 // 目前只 ship `mock` vendor 給 tests + scaffold demo。
 
-import { mockKycAdapter } from './kyc-vendors/mock.js'
+import { mockKycAdapter } from './kyc-vendors/mock'
 
 const ADAPTERS = {
   mock: mockKycAdapter,

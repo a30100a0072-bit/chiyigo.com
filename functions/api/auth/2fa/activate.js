@@ -22,10 +22,10 @@
  *  { backup_codes: ['XXXXX-XXXXX-XXXXX-XXXXX', ...] }  (10 組)
  */
 
-import { verifyTotpReplaySafe } from '../../../utils/totp.js'
-import { generateBackupCodes, verifyPassword } from '../../../utils/crypto.js'
+import { verifyTotpReplaySafe } from '../../../utils/totp'
+import { generateBackupCodes, verifyPassword } from '../../../utils/crypto'
 import { requireAuth, res } from '../../../utils/auth.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
 
 const RL_WINDOW_SEC = 60

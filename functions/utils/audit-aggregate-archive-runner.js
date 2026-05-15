@@ -40,7 +40,7 @@
  */
 
 import { res } from './auth.js'
-import { safeUserAudit } from './user-audit.js'
+import { safeUserAudit } from './user-audit'
 import {
   ARCHIVE_SCHEMA_VERSION,
   gzipCompress,

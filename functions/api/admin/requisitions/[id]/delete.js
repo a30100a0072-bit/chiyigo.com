@@ -21,8 +21,8 @@
 import { res } from '../../../../utils/auth.js'
 import { requireRole } from '../../../../utils/requireRole.js'
 import { getCorsHeaders } from '../../../../utils/cors.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
-import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition.js'
+import { safeUserAudit } from '../../../../utils/user-audit'
+import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })

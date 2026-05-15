@@ -27,7 +27,7 @@
  *   任何 R2 物件刪除走 admin 獨立 endpoint + 多重審核，不在此 codepath。
  */
 
-import { classifyForCold } from './audit-policy.js'
+import { classifyForCold } from './audit-policy'
 
 export const ARCHIVE_SCHEMA_VERSION = '2.0'
 export const ARCHIVE_WRITER         = 'cron-archive-worker'

@@ -18,7 +18,7 @@
 import { res } from '../../../../utils/auth.js'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../../../utils/requireRole.js'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../../utils/user-audit'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes.js'
 
 export async function onRequestPost({ request, env, params }) {

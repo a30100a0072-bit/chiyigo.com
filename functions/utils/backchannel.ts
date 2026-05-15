@@ -23,7 +23,7 @@
  */
 
 import { SignJWT, importJWK } from 'jose'
-import { getBackchannelEndpoints } from './oauth-clients.js'
+import { getBackchannelEndpoints } from './oauth-clients'
 
 const LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout'
 

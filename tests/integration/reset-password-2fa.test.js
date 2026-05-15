@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { TOTP, Secret } from 'otpauth'
 import { onRequestPost as resetPost } from '../../functions/api/auth/local/reset-password.js'
-import { hashPassword } from '../../functions/utils/crypto.js'
+import { hashPassword } from '../../functions/utils/crypto'
 import { env } from 'cloudflare:test'
 import {
   resetDb, seedUser, seedResetToken, seedOauthOnlyUser, enableTotp, seedBackupCode,

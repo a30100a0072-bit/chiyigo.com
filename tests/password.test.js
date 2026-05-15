@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validatePassword } from '../functions/utils/password.js'
+import { validatePassword } from '../functions/utils/password'
 
 describe('validatePassword', () => {
   it('rejects non-string', () => {

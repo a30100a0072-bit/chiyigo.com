@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, callFunction, seedUser } from './_helpers.js'
 import { onRequestGet } from '../../functions/api/auth/oauth/authorize.js'
-import { generateSecureToken, hashToken } from '../../functions/utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 
 const BASE = 'http://localhost/api/auth/oauth/authorize'
 const REDIRECT_URI = 'https://sport-app-web.pages.dev/auth/callback'

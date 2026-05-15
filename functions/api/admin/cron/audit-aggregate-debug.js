@@ -26,7 +26,7 @@
  */
 
 import { res } from '../../../utils/auth.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { hotRetentionDaysFor } from '../../../utils/audit-archive.js'
 import {
   AGGREGATE_DEBUG_WRITER_VERSION,

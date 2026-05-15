@@ -15,7 +15,7 @@
  */
 
 import { requireAuth, res }          from '../../../utils/auth.js'
-import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../../utils/crypto'
 
 const CODE_TTL_MS = 5 * 60 * 1000 // auth code 5 分鐘有效
 

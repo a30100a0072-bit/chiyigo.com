@@ -27,8 +27,8 @@
 
 import { requireAuth, res } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
-import { verifySiweMessage, consumeWalletNonce } from '../../../utils/siwe.js'
-import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit.js'
+import { verifySiweMessage, consumeWalletNonce } from '../../../utils/siwe'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 
 const NICKNAME_MAX = 64
 

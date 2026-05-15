@@ -23,7 +23,7 @@ import { res, requireScope, requireAnyScope, requireStepUp } from '../../../util
 import { getCorsHeaders } from '../../../utils/cors.js'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
 import { PAYMENT_STATUS } from '../../../utils/payments.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 
 const VALID_STATUSES = new Set(Object.values(PAYMENT_STATUS))

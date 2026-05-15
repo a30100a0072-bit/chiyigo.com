@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getProvider, SUPPORTED_PROVIDERS } from '../functions/utils/oauth-providers.js'
+import { getProvider, SUPPORTED_PROVIDERS } from '../functions/utils/oauth-providers'
 
 const env = {
   DISCORD_CLIENT_ID: 'd-id', DISCORD_CLIENT_SECRET: 'd-sec',

@@ -24,8 +24,8 @@
 
 import { res, requireAnyScope } from '../../utils/auth.js'
 import { SCOPES } from '../../utils/scopes.js'
-import { canRoleSeeAuditEvent } from '../../utils/roles.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
+import { canRoleSeeAuditEvent } from '../../utils/roles'
+import { safeUserAudit } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 const VALID_SEVERITY = new Set(['info', 'warn', 'critical'])

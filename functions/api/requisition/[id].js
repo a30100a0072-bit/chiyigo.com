@@ -7,7 +7,7 @@
  */
 
 import { requireAuth, res } from '../../utils/auth.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
+import { safeUserAudit } from '../../utils/user-audit'
 
 export async function onRequestGet({ request, env, params }) {
   const { user, error } = await requireAuth(request, env)

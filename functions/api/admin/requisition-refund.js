@@ -20,7 +20,7 @@
 import { res, requireAnyScope } from '../../utils/auth.js'
 import { SCOPES } from '../../utils/scopes.js'
 import { getCorsHeaders } from '../../utils/cors.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
+import { safeUserAudit } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 // Codex r6 P1：approve.js 在 ECPay 網路錯誤 / DLQ reconciliation 路徑會把 rr 留

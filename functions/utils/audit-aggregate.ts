@@ -32,7 +32,7 @@
  *     state 機與 aggregate 互不影響）。
  */
 
-import { classifyForCold } from './audit-policy.js'
+import { classifyForCold } from './audit-policy'
 
 export const AGGREGATE_WRITER         = 'cron-aggregate-worker'
 export const AGGREGATE_WRITER_VERSION = '3.0.0-pr3.0-telemetry'

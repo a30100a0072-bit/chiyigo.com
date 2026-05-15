@@ -10,7 +10,7 @@
  *  4. 302 重導向至第三方授權頁
  */
 
-import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-providers.js'
+import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-providers'
 import { requireAuth, res } from '../../../../utils/auth.js'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit.js'
 import { resolveAud } from '../../../../utils/cors.js'

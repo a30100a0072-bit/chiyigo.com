@@ -18,7 +18,7 @@ import {
   invalidateClientsCache,
   getAllClients,
   _resetCacheForTests,
-} from '../../functions/utils/oauth-clients.js'
+} from '../../functions/utils/oauth-clients'
 import {
   onRequestGet  as listHandler,
   onRequestPost as createHandler,

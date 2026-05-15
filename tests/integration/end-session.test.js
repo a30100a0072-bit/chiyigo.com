@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach, beforeAll } from 'vitest'
 import { env } from 'cloudflare:test'
 import { SignJWT, importJWK } from 'jose'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { generateSecureToken, hashToken } from '../../functions/utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 
 import { onRequestGet as endSessionGet } from '../../functions/api/auth/oauth/end-session.js'
 

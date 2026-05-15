@@ -39,14 +39,14 @@
  *   429 → step-up 限流
  */
 
-import { verifyBackupCode } from '../../utils/crypto.js'
+import { verifyBackupCode } from '../../utils/crypto'
 import { requireAuth, res } from '../../utils/auth.js'
 import { signJwt } from '../../utils/jwt.js'
 import { resolveAud } from '../../utils/cors.js'
 import { KNOWN_ELEVATED_SCOPES } from '../../utils/scopes.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../utils/rate-limit.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
-import { verifyTotpReplaySafe } from '../../utils/totp.js'
+import { safeUserAudit } from '../../utils/user-audit'
+import { verifyTotpReplaySafe } from '../../utils/totp'
 
 const STEP_UP_TTL = '5m'
 const STEP_UP_TTL_SECONDS = 300

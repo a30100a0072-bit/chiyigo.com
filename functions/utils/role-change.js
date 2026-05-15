@@ -14,9 +14,9 @@
  *      但寫 critical audit（避免誤操作鎖死 console）
  */
 
-import { isValidRole } from './roles.js'
+import { isValidRole } from './roles'
 import { bumpTokenVersion } from './auth.js'
-import { safeUserAudit } from './user-audit.js'
+import { safeUserAudit } from './user-audit'
 import { appendAuditLog } from './audit-log.js'
 
 const ADMIN_LIKE_ROLES = new Set(['admin', 'developer', 'super_admin'])

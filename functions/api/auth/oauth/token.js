@@ -22,12 +22,12 @@
  *  - scope 不含 openid：行為與舊 PKCE 完全相同（向後相容）
  */
 
-import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto.js'
+import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt.js'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 

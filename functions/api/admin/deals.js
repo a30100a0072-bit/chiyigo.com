@@ -19,7 +19,7 @@
 import { res, requireAnyScope } from '../../utils/auth.js'
 import { SCOPES } from '../../utils/scopes.js'
 import { getCorsHeaders } from '../../utils/cors.js'
-import { safeUserAudit } from '../../utils/user-audit.js'
+import { safeUserAudit } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
 
 export async function onRequestOptions({ request, env }) {

@@ -8,9 +8,9 @@
  */
 
 import { requireAuth, bumpTokenVersion, res } from '../../../utils/auth.js'
-import { verifyTotpReplaySafe } from '../../../utils/totp.js'
-import { verifyBackupCode } from '../../../utils/crypto.js'
-import { safeUserAudit } from '../../../utils/user-audit.js'
+import { verifyTotpReplaySafe } from '../../../utils/totp'
+import { verifyBackupCode } from '../../../utils/crypto'
+import { safeUserAudit } from '../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
 
 const RL_WINDOW_SEC = 60

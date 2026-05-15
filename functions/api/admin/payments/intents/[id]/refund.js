@@ -33,7 +33,7 @@ import {
   lockIntentForRefund, unlockIntentToSucceeded,
 } from '../../../../../utils/payments.js'
 import { ecpayRefund } from '../../../../../utils/payment-vendors/ecpay.js'
-import { safeUserAudit } from '../../../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../../../utils/audit-aggregate-debug.js'
 
 export async function onRequestOptions({ request, env }) {

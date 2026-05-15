@@ -2,10 +2,10 @@
 // Requires JWT + OTP or backup_code verification.
 // Replaces all existing backup codes with 10 freshly generated ones.
 
-import { generateBackupCodes, verifyBackupCode } from '../../../../utils/crypto.js'
-import { verifyTotpReplaySafe } from '../../../../utils/totp.js'
+import { generateBackupCodes, verifyBackupCode } from '../../../../utils/crypto'
+import { verifyTotpReplaySafe } from '../../../../utils/totp'
 import { requireAuth, res } from '../../../../utils/auth.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../../utils/rate-limit.js'
 
 const RL_WINDOW_SEC = 60

@@ -12,7 +12,7 @@ import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt.js'
 import { onRequestGet as listHandler } from '../../functions/api/auth/devices.js'
 import { onRequestPost as logoutHandler } from '../../functions/api/auth/devices/logout.js'
-import { generateSecureToken, hashToken } from '../../functions/utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 
 async function userToken(userId, email = 'd@x') {
   return signJwt(

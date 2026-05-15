@@ -18,13 +18,13 @@
 
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { signJwt } from '../../../../utils/jwt.js'
-import { generateSecureToken, hashToken } from '../../../../utils/crypto.js'
-import { getProvider } from '../../../../utils/oauth-providers.js'
+import { generateSecureToken, hashToken } from '../../../../utils/crypto'
+import { getProvider } from '../../../../utils/oauth-providers'
 import { resolveAud } from '../../../../utils/cors.js'
 import { refreshCookie, readOAuthDeviceCookie, CLEAR_OAUTH_DEVICE_COOKIE } from '../../../../utils/cookies.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
-import { safeAlertAnomalies } from '../../../../utils/device-alerts.js'
-import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../../utils/risk-score.js'
+import { safeUserAudit } from '../../../../utils/user-audit'
+import { safeAlertAnomalies } from '../../../../utils/device-alerts'
+import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../../utils/risk-score'
 import { sendRiskBlockedAlertEmail } from '../../../../utils/email.js'
 import { buildTokenScope } from '../../../../utils/scopes.js'
 

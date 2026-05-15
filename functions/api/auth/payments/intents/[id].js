@@ -13,7 +13,7 @@
 import { res } from '../../../../utils/auth.js'
 import { getCorsHeaders } from '../../../../utils/cors.js'
 import { requirePaymentAccess, getPaymentIntent, PAYMENT_STATUS } from '../../../../utils/payments.js'
-import { safeUserAudit } from '../../../../utils/user-audit.js'
+import { safeUserAudit } from '../../../../utils/user-audit'
 
 // 使用者可自刪的 status：未真正動到金流的 row。succeeded / processing / refunded
 // 涉及帳務或 PSP 對帳，禁止 user 端刪（admin 才能強制清）。

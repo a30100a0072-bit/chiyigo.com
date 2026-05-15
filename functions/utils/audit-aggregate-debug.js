@@ -31,7 +31,7 @@
  *   避開同時 D1 contention + audit event emission race。
  */
 
-import { classifyForCold } from './audit-policy.js'
+import { classifyForCold } from './audit-policy'
 
 export const AGGREGATE_DEBUG_WRITER         = 'cron-aggregate-debug-worker'
 export const AGGREGATE_DEBUG_WRITER_VERSION = '3.1.0-pr3.1-debug'

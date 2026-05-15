@@ -19,7 +19,7 @@ import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import {
   hashToken,
   generateSecureToken,
-} from '../../functions/utils/crypto.js'
+} from '../../functions/utils/crypto'
 
 // PKCE S256: code_challenge = BASE64URL(SHA-256(code_verifier))
 async function pkceChallenge(verifier) {

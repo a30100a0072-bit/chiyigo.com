@@ -11,7 +11,7 @@
  */
 
 import { requireAuth, res } from '../../../utils/auth.js'
-import { generateSecureToken, hashToken } from '../../../utils/crypto.js'
+import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { sendVerificationEmail } from '../../../utils/email.js'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 

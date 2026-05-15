@@ -20,7 +20,7 @@
 
 import { requireAuth, res } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors.js'
-import { issueWalletNonce, isValidEthAddress, getSiweConfig } from '../../../utils/siwe.js'
+import { issueWalletNonce, isValidEthAddress, getSiweConfig } from '../../../utils/siwe'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
