@@ -22,6 +22,7 @@ export default defineConfig({
       exclude: [
         // (A) D1-dependent
         'functions/utils/audit-log.js',          // hash-chain INSERT/SELECT
+        'functions/utils/audit-aggregate-archive-runner.js', // D1/R2 cron orchestration runner
         'functions/utils/rate-limit.js',         // login_attempts CRUD
         'functions/utils/payments.js',           // payment_intents lockForRefund 等
         'functions/utils/kyc.js',                // kyc_verifications schema + adapter
@@ -36,7 +37,7 @@ export default defineConfig({
         'functions/utils/brute-force.js',        // ip_blacklist CRUD
         'functions/utils/user-audit.js',         // audit_log INSERT + Discord webhook
         'functions/utils/device-alerts.js',      // D1 lookup + email send
-        'functions/utils/backchannel.js',        // D1 oauth_clients + fetch logout
+        'functions/utils/backchannel.ts',        // D1 oauth_clients + fetch logout
 
         // (B) 外部 API call（要 mock fetch 才能單測，目前由 integration 真打測試環境）
         'functions/utils/email.js',              // Resend API send paths
