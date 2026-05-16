@@ -2,7 +2,7 @@
  * Phase F-1 — KYC scaffold 整合測試
  *
  * 涵蓋：
- *  - utils/kyc.js helper（getUserKycStatus / setUserKycStatus / requireKyc）
+ *  - utils/kyc.ts helper（getUserKycStatus / setUserKycStatus / requireKyc）
  *  - GET /api/auth/kyc/status
  *  - POST /api/webhooks/kyc/[vendor]（mock adapter HMAC + dedupe + UPSERT）
  */
