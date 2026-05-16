@@ -55,9 +55,14 @@ export async function onRequestPost(context) {
   if (payload.scope !== 'temp_bind')
     return res({ error: '連結類型錯誤', code: 'LINK_TYPE_INVALID' }, 401)
 
-  const { sub: provider_id, provider, name, avatar } = payload
-  if (!provider_id || !provider)
+  const { sub: provider_id, provider: providerRaw, name, avatar } = payload
+  if (!provider_id || typeof providerRaw !== 'string')
     return res({ error: 'Token 資料不完整', code: 'TOKEN_DATA_INCOMPLETE' }, 401)
+
+  // F6 canonicalize：JWT 內 provider 字串可能來自未來新增的簽發路徑，未做 .toLowerCase()
+  // 會以 `Google`/`GOOGLE` 過 case-insensitive allowlist 但污染 user_identities.provider，
+  // 破壞 (provider, provider_id) invariant；DB/audit/response/token 一律走小寫 key。
+  const provider = providerRaw.toLowerCase()
 
   // Defense-in-depth：temp_bind token 由 callback 簽出已過 allowlist，這裡再驗
   // 一次避免 callback 未來新增路徑漏校；getProvider null = 不在 PROVIDERS map
