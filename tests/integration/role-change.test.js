@@ -169,9 +169,15 @@ describe('changeUserRole', () => {
     expect(ua).toBeFalsy()
   })
 
-  it('F2 atomicity：CAS race (真 DB — SELECT 後 role 被改) → ROLE_RACE', async () => {
+  it('F2 atomicity：CAS race (真 DB — SELECT 後 role 被改) → ROLE_RACE，不誤撤 refresh', async () => {
     const actor  = await seedUser({ email: 'admin@x', role: 'admin' })
     const target = await seedUser({ email: 'b@x', role: 'player' })
+
+    // 種未撤 refresh — codex PR-A r1: 驗 batch revoke EXISTS-gate 真擋
+    await env.chiyigo_db
+      .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+                VALUES (?, 'rt-real-race', datetime('now','+30 day'))`)
+      .bind(target.id).run()
 
     // 攔截 SELECT，回過去的 role；底層 DB 已被改 → batch CAS 0 changes
     await env.chiyigo_db
@@ -216,6 +222,74 @@ describe('changeUserRole', () => {
       .prepare(`SELECT action FROM admin_audit_log
                  WHERE action = 'role_change:player->finance' ORDER BY id DESC LIMIT 1`).first()
     expect(adminLog?.action).toBe('role_change:player->finance')
+    const chain = await verifyAuditChain(env.chiyigo_db)
+    expect(chain.valid).toBe(true)
+
+    // codex PR-A r1 high: refresh token 未被誤撤
+    const rt = await env.chiyigo_db
+      .prepare('SELECT revoked_at FROM refresh_tokens WHERE user_id=? AND token_hash=?')
+      .bind(target.id, 'rt-real-race').first()
+    expect(rt.revoked_at).toBeNull()
+  })
+
+  it('F2 atomicity：soft-delete race (SELECT 後 deleted_at 被設) → ROLE_RACE，不動 DB', async () => {
+    // codex PR-A r1 medium: CAS 補 deleted_at IS NULL；軟刪期間 role 仍同也不能改
+    const actor  = await seedUser({ email: 'admin@x', role: 'admin' })
+    const target = await seedUser({ email: 'b@x', role: 'player' })
+
+    await env.chiyigo_db
+      .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+                VALUES (?, 'rt-soft-del', datetime('now','+30 day'))`)
+      .bind(target.id).run()
+    const before = await env.chiyigo_db
+      .prepare('SELECT role, token_version FROM users WHERE id=?').bind(target.id).first()
+
+    // 攔截 SELECT 回 active user，底層 DB SELECT 後 user 被軟刪
+    const realDb = env.chiyigo_db
+    const stubEnv = {
+      ...env,
+      chiyigo_db: {
+        prepare: (sql) => {
+          const stmt = realDb.prepare(sql)
+          if (/SELECT id, email, role FROM users WHERE id = \? AND deleted_at IS NULL/.test(sql)) {
+            return {
+              bind: (...args) => ({
+                first: async () => {
+                  // SELECT 回過去快照；同時把 user 軟刪掉，模擬 race
+                  await realDb.prepare(`UPDATE users SET deleted_at = datetime('now') WHERE id = ?`)
+                    .bind(args[0]).run()
+                  return { id: args[0], email: 'b@x', role: 'player' }
+                },
+              }),
+            }
+          }
+          return stmt
+        },
+        batch: realDb.batch.bind(realDb),
+      },
+    }
+
+    const r = await changeUserRole(stubEnv, {
+      userId: target.id, newRole: 'finance',
+      actorId: actor.id, actorEmail: 'admin@x', request: REQ,
+    })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('ROLE_RACE')
+
+    // role / token_version 不變
+    const after = await env.chiyigo_db
+      .prepare('SELECT role, token_version, deleted_at FROM users WHERE id=?').bind(target.id).first()
+    expect(after.role).toBe(before.role)
+    expect(after.token_version).toBe(before.token_version)
+    expect(after.deleted_at).toBeTruthy()
+
+    // refresh 不被誤撤
+    const rt = await env.chiyigo_db
+      .prepare('SELECT revoked_at FROM refresh_tokens WHERE user_id=? AND token_hash=?')
+      .bind(target.id, 'rt-soft-del').first()
+    expect(rt.revoked_at).toBeNull()
+
+    // hash-chain 仍 valid（嘗試 row 已寫）
     const chain = await verifyAuditChain(env.chiyigo_db)
     expect(chain.valid).toBe(true)
   })

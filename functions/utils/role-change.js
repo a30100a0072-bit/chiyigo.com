@@ -80,20 +80,28 @@ export async function changeUserRole(env, { userId, newRole, actorId, actorEmail
     return { ok: false, code: 'AUDIT_CHAIN_FAILED' }
   }
 
+  // CAS 補 deleted_at IS NULL：防 SELECT 與 batch 之間 user 被軟刪、role 卻仍同。
   const updateRoleStmt = db
     .prepare(`
       UPDATE users
          SET role = ?, token_version = token_version + 1
-       WHERE id = ? AND role = ?
+       WHERE id = ? AND role = ? AND deleted_at IS NULL
     `)
     .bind(newRole, userId, oldRole)
 
+  // revoke 由 EXISTS 子句 gate：D1 batch 序列化執行，role UPDATE 成功後
+  // users.role = newRole，revoke 觸發；CAS 失敗時 role 仍 = oldRole，
+  // EXISTS 不成立 → 0 changes，refresh 不被誤撤。
   const revokeStmt = db
     .prepare(`
       UPDATE refresh_tokens SET revoked_at = datetime('now')
        WHERE user_id = ? AND revoked_at IS NULL
+         AND EXISTS (
+           SELECT 1 FROM users
+            WHERE id = ? AND role = ? AND deleted_at IS NULL
+         )
     `)
-    .bind(userId)
+    .bind(userId, userId, newRole)
 
   let batchResults
   try {
