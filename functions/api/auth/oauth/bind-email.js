@@ -92,6 +92,18 @@ export async function onRequestPost(context) {
     })
     return res({ error: '連結無效或已過期，請重新登入', code: 'LINK_INVALID_OR_EXPIRED' }, 401)
   }
+  // codex r6 optional hardening：consumeJtiOnce 對非 finite expSec 會 fallback 1hr TTL，
+  // signer 改寫漏設 exp 時 revoked_jti row 仍會建但 TTL 被 caller 端決定，違反 token 自含
+  // TTL 的安全模型。signJwt 一定 setExpirationTime（jwt.ts L130）所以 prod path 不可達。
+  if (!Number.isFinite(payload.exp)) {
+    await safeUserAudit(env, {
+      event_type: 'oauth.bind_email.fail',
+      severity:   'warn',
+      request,
+      data: { provider, reason_code: 'missing_exp' },
+    })
+    return res({ error: '連結無效或已過期，請重新登入', code: 'LINK_INVALID_OR_EXPIRED' }, 401)
+  }
   const consume = await consumeJtiOnce(env, tokenJti, payload.exp)
   if (!consume.ok) {
     await safeUserAudit(env, {

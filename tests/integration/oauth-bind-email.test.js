@@ -319,6 +319,45 @@ describe('bind-email token 驗證', () => {
     expect(res.status).toBe(401)
     expect((await res.json()).code).toBe('TOKEN_DATA_INCOMPLETE')
   })
+
+  it('codex r6: payload.exp 缺值（hand-rolled token 沒 setExpirationTime）→ 401 + audit reason_code=missing_exp', async () => {
+    // signJwt 一定 setExpirationTime，所以這條 prod path 不可達；手簽繞過 signJwt
+    // 來驗 defense-in-depth：避免 consumeJtiOnce 用 fallback 1hr TTL 寫 revoked_jti
+    const { SignJWT, importJWK } = await import('jose')
+    const jwk = JSON.parse(env.JWT_PRIVATE_KEY)
+    const key = await importJWK(jwk, 'ES256')
+    const token = await new SignJWT({
+      sub: 'discord-uid-no-exp', provider: 'discord', scope: 'temp_bind',
+      jti: crypto.randomUUID(),
+    })
+      .setProtectedHeader({ alg: 'ES256', kid: jwk.kid })
+      .setIssuer('https://chiyigo.com')
+      .setIssuedAt()
+      .setAudience('chiyigo')
+      // 刻意不 setExpirationTime → jwtVerify 仍會放行（jose 對 exp 缺值預設不擋）
+      .sign(key)
+
+    const r = await callBindEmail({ token, email: 'no-exp@example.com' })
+    expect(r.status).toBe(401)
+    expect((await r.json()).code).toBe('LINK_INVALID_OR_EXPIRED')
+
+    // 不可寫 revoked_jti（fail 在 consumeJtiOnce 之前）
+    const rev = await env.chiyigo_db
+      .prepare('SELECT COUNT(*) AS n FROM revoked_jti').first()
+    expect(rev.n).toBe(0)
+
+    // 不可有任何 user / refresh_token
+    const u = await env.chiyigo_db
+      .prepare('SELECT COUNT(*) AS n FROM users').first()
+    expect(u.n).toBe(0)
+
+    // Audit 留 reason_code=missing_exp
+    const audit = await env.chiyigo_db
+      .prepare(`SELECT event_data FROM audit_log WHERE event_type = 'oauth.bind_email.fail'`)
+      .first()
+    expect(audit).toBeTruthy()
+    expect(JSON.parse(audit.event_data).reason_code).toBe('missing_exp')
+  })
 })
 
 describe('bind-email email 碰撞', () => {
