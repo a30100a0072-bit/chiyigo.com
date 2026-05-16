@@ -13,7 +13,7 @@
  *  ai:         ai_audit 24h 狀態分布
  */
 
-import { requireAnyScope } from '../../utils/auth.js'
+import { requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 import { verifyAuditChain } from '../../utils/audit-log.js'
 

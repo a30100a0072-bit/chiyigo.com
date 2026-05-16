@@ -17,11 +17,11 @@
 
 import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils/crypto'
 import { verifyTotpReplaySafe } from '../../../utils/totp'
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth'
 import { signJwt } from '../../../utils/jwt'
 import { resolveAud } from '../../../utils/cors'
 import { refreshCookie, isWebClient } from '../../../utils/cookies'
-import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes'
 import { safeAlertAnomalies } from '../../../utils/device-alerts'

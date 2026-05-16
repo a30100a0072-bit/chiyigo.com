@@ -25,11 +25,11 @@
 import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors'
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { refreshCookie, isWebClient } from '../../../utils/cookies'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes'
-import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
 const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）

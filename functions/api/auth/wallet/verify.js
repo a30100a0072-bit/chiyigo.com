@@ -25,7 +25,7 @@
  *   409 → 已綁
  */
 
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { verifySiweMessage, consumeWalletNonce } from '../../../utils/siwe'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'

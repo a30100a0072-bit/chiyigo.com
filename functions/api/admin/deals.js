@@ -16,11 +16,11 @@
  *   200 → { rows, total, page, limit, totals: { count, sum_total_subunit, sum_refunded_subunit } }
  */
 
-import { res, requireAnyScope } from '../../utils/auth.js'
+import { res, requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 import { getCorsHeaders } from '../../utils/cors'
 import { safeUserAudit } from '../../utils/user-audit'
-import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })

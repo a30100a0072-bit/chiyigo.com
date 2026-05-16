@@ -24,7 +24,7 @@
  * 404 → 用戶不存在 / 已軟刪
  */
 
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireAuth, res } from '../../utils/auth'
 
 export async function onRequestGet({ request, env }) {
   // OIDC userinfo 是跨 aud 端點（mbti/talo/sport-app 等用各自 aud token 來查 sub）

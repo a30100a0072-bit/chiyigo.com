@@ -18,7 +18,7 @@
  *   409 → 此 address 已綁過
  */
 
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { issueWalletNonce, isValidEthAddress, getSiweConfig } from '../../../utils/siwe'
 

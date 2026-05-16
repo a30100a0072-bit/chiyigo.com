@@ -16,16 +16,14 @@ import { isJtiRevoked, consumeJtiOnce } from './revocation'
 import { safeUserAudit } from './user-audit'
 import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedScope } from './scopes'
 
-/**
- * @param {Request}     request
- * @param {object}      env
- * @param {string|null} requiredScope  若指定，則 JWT payload.scope 必須吻合
- * @param {object}      [opts]
- * @param {string|string[]} [opts.audience]  若指定，jwtVerify 會強制驗 aud claim
- *                                            （chiyigo IAM resource server 端點建議帶 'chiyigo'）
- * @returns {{ user: object, error: null } | { user: null, error: Response }}
- */
-export async function requireAuth(request, env, requiredScope = null, opts = {}) {
+// requiredScope: 若指定，則 JWT payload.scope 必須吻合（用於 pre_auth_token 等）
+// opts.audience: 若指定，jwtVerify 會強制驗 aud claim（chiyigo IAM resource server 端點建議帶 'chiyigo'）
+export async function requireAuth(
+  request: Request,
+  env: Env,
+  requiredScope: string | null = null,
+  opts: { audience?: string | string[] } = {},
+) {
   const authHeader = request.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) {
     return { user: null, error: res({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401) }
@@ -38,7 +36,7 @@ export async function requireAuth(request, env, requiredScope = null, opts = {})
 
   let payload
   try {
-    const verifyOpts = {}
+    const verifyOpts: { audience?: string | string[] } = {}
     if (opts.audience !== undefined) verifyOpts.audience = opts.audience
     payload = await verifyJwt(token, env, verifyOpts)
   } catch {
@@ -105,11 +103,9 @@ export async function requireAuth(request, env, requiredScope = null, opts = {})
  *   - 帳號封禁
  *   - 帳號刪除
  *
- * @param {D1Database} db
- * @param {number}     userId
- * @returns {Promise<void>}
+ * NOTE: db 暫不標型別等 §1.5c wrangler types 上線（D1Database global）
  */
-export async function bumpTokenVersion(db, userId) {
+export async function bumpTokenVersion(db, userId: number): Promise<void> {
   await db.batch([
     db.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').bind(userId),
     db.prepare(`
@@ -132,12 +128,8 @@ export async function bumpTokenVersion(db, userId) {
  *   if (error) return error
  *
  * 多 scope（AND）：requireScope(request, env, 'admin:users', 'admin:revoke')
- *
- * @param {Request} request
- * @param {object}  env
- * @param  {...string} requiredScopes
  */
-export async function requireScope(request, env, ...requiredScopes) {
+export async function requireScope(request: Request, env: Env, ...requiredScopes: string[]) {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
 
@@ -165,12 +157,8 @@ export async function requireScope(request, env, ...requiredScopes) {
  *     只拿到 :read fine 的 role 也能讀。
  *
  * 既有 admin/super_admin/developer 透過 hierarchy 拿到所有 fine，全通過；零 regression。
- *
- * @param {Request} request
- * @param {object}  env
- * @param  {...string} acceptedScopes   任一命中即放行
  */
-export async function requireAnyScope(request, env, ...acceptedScopes) {
+export async function requireAnyScope(request: Request, env: Env, ...acceptedScopes: string[]) {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
 
@@ -202,12 +190,15 @@ export async function requireAnyScope(request, env, ...acceptedScopes) {
  *   const { user, error } = await requireStepUp(request, env, 'elevated:account', 'delete_account')
  *   if (error) return error
  *
- * @param {Request} request
- * @param {object}  env
- * @param {string}  requiredScope        必須 elevated:* 開頭
- * @param {string} [requiredAction]      若 token 帶 for_action，必須相符；可省略
+ * requiredScope: 必須 elevated:* 開頭
+ * requiredAction: 若 token 帶 for_action 必須相符；可省略
  */
-export async function requireStepUp(request, env, requiredScope, requiredAction = null) {
+export async function requireStepUp(
+  request: Request,
+  env: Env,
+  requiredScope: string,
+  requiredAction: string | null = null,
+) {
   if (!isElevatedScope(requiredScope)) {
     // 程式錯誤而非 user 錯誤：caller 給了非 elevated 的 scope
     return { user: null, error: res({ error: 'requireStepUp must check an elevated:* scope', code: 'INTERNAL_ERROR' }, 500) }
@@ -290,7 +281,11 @@ export async function requireStepUp(request, env, requiredScope, requiredAction 
   return { user, error: null }
 }
 
-export function res(data, status = 200, extraHeaders = {}) {
+export function res(
+  data: unknown,
+  status: number = 200,
+  extraHeaders: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: { 'Content-Type': 'application/json', ...extraHeaders },

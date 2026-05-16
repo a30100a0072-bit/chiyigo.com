@@ -39,7 +39,7 @@
  *    eslint archive-discipline 都會掃此檔（規則見 scripts/_archive-lint-patterns.js）。
  */
 
-import { res } from './auth.js'
+import { res } from './auth'
 import { safeUserAudit } from './user-audit'
 import {
   ARCHIVE_SCHEMA_VERSION,

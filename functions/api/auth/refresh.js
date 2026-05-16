@@ -25,11 +25,11 @@
 import { generateSecureToken, hashToken } from '../../utils/crypto'
 import { signJwt } from '../../utils/jwt'
 import { getCorsHeaders, resolveAud } from '../../utils/cors'
-import { res } from '../../utils/auth.js'
+import { res } from '../../utils/auth'
 import { refreshCookie } from '../../utils/cookies'
 import { safeUserAudit } from '../../utils/user-audit'
 import { buildTokenScope } from '../../utils/scopes'
-import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7

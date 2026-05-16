@@ -17,7 +17,7 @@
  *   - 已付款分支需要 reason（min 1 char），便於 admin 審核
  */
 
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireAuth, res } from '../../utils/auth'
 import { safeUserAudit } from '../../utils/user-audit'
 import { syncRequisitionTgMessage } from '../../utils/tg-requisition'
 

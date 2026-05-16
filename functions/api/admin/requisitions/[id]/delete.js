@@ -18,7 +18,7 @@
  * Body：optional { confirm: true, notes?: string }
  */
 
-import { res } from '../../../../utils/auth.js'
+import { res } from '../../../../utils/auth'
 import { requireRole } from '../../../../utils/requireRole'
 import { getCorsHeaders } from '../../../../utils/cors'
 import { safeUserAudit } from '../../../../utils/user-audit'

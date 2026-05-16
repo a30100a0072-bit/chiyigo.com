@@ -19,7 +19,7 @@
  */
 
 import { generateAuthenticationOptions } from '@simplewebauthn/server'
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { getRpConfig, saveChallenge, listUserCredentials } from '../../../utils/webauthn'
 

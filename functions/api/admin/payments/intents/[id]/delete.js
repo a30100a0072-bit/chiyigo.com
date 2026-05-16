@@ -21,7 +21,7 @@
  * 認證：admin:payments scope + elevated:payment step-up
  */
 
-import { res, requireStepUp } from '../../../../../utils/auth.js'
+import { res, requireStepUp } from '../../../../../utils/auth'
 import { getCorsHeaders } from '../../../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes'
 import { getPaymentIntent, PAYMENT_STATUS } from '../../../../../utils/payments.js'

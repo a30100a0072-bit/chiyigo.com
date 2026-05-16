@@ -6,7 +6,7 @@
  * 最多回傳最近 50 筆，由新到舊排序。
  */
 
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireAuth, res } from '../../utils/auth'
 
 export async function onRequestGet({ request, env }) {
   const { user, error } = await requireAuth(request, env)

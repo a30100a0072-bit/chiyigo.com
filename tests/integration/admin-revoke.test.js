@@ -19,7 +19,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
-import { requireAuth } from '../../functions/utils/auth.js'
+import { requireAuth } from '../../functions/utils/auth'
 import { hashToken, generateSecureToken } from '../../functions/utils/crypto'
 import { onRequestPost as revokeHandler } from '../../functions/api/admin/revoke.js'
 

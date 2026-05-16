@@ -3,7 +3,7 @@
 // No JWT required — the token itself proves authorization.
 
 import { hashToken } from '../../../utils/crypto'
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
 
 export async function onRequestPost({ request, env }) {

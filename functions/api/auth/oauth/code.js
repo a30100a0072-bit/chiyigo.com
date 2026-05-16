@@ -14,7 +14,7 @@
  *  401 → access_token 無效
  */
 
-import { requireAuth, res }          from '../../../utils/auth.js'
+import { requireAuth, res }          from '../../../utils/auth'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
 
 const CODE_TTL_MS = 5 * 60 * 1000 // auth code 5 分鐘有效

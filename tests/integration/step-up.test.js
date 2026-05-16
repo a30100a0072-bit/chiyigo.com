@@ -13,7 +13,7 @@ import {
   resetDb, ensureJwtKeys, seedUser, enableTotp, seedBackupCode, jsonPost,
 } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
-import { requireStepUp } from '../../functions/utils/auth.js'
+import { requireStepUp } from '../../functions/utils/auth'
 import { SCOPES } from '../../functions/utils/scopes'
 import { onRequestPost as stepUpHandler } from '../../functions/api/auth/step-up.js'
 

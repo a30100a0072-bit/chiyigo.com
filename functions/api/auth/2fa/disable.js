@@ -7,11 +7,11 @@
  * 並刪除所有備用碼。
  */
 
-import { requireAuth, bumpTokenVersion, res } from '../../../utils/auth.js'
+import { requireAuth, bumpTokenVersion, res } from '../../../utils/auth'
 import { verifyTotpReplaySafe } from '../../../utils/totp'
 import { verifyBackupCode } from '../../../utils/crypto'
 import { safeUserAudit } from '../../../utils/user-audit'
-import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit'
 
 const RL_WINDOW_SEC = 60
 const RL_MAX        = 5

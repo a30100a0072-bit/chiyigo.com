@@ -25,7 +25,7 @@
  *  400 → { error: string }
  */
 
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 
 const SUPPORTED_PROVIDERS = ['discord']
 

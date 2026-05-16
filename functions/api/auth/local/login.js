@@ -16,12 +16,12 @@ import { verifyPassword, generateSecureToken, hashToken } from '../../../utils/c
 import { signJwt } from '../../../utils/jwt'
 import { resolveAud } from '../../../utils/cors'
 import { verifyTurnstile } from '../../../utils/turnstile'
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { refreshCookie, isWebClient } from '../../../utils/cookies'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes'
 import { safeAlertAnomalies } from '../../../utils/device-alerts'
-import { checkRateLimit } from '../../../utils/rate-limit.js'
+import { checkRateLimit } from '../../../utils/rate-limit'
 import {
   isIpBlacklisted,
   getUserCooldownSeconds,

@@ -18,7 +18,7 @@
  * Scope: admin:payments
  */
 
-import { res, requireAnyScope } from '../../../utils/auth.js'
+import { res, requireAnyScope } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES } from '../../../utils/scopes'
 import { PAYMENT_STATUS } from '../../../utils/payments.js'

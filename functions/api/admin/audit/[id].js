@@ -10,7 +10,7 @@
  * 保護 evidence trail。再寫一筆 user-audit critical（觸發 Discord 告警）。
  */
 
-import { res, requireStepUp } from '../../../utils/auth.js'
+import { res, requireStepUp } from '../../../utils/auth'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import { prepareAppendAuditLog } from '../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../utils/user-audit'

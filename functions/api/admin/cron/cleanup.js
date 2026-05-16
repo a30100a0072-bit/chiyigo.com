@@ -16,7 +16,7 @@
  *   - 各表保留期見下面註釋
  */
 
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 
 const TASKS = [
   // pkce_sessions: 5min TTL，過期就沒用

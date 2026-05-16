@@ -37,7 +37,7 @@
  */
 
 import { generateSecureToken } from '../../../utils/crypto'
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { getAllowedRedirectUris } from '../../../utils/oauth-clients'
 import {
   readRefreshCookie,

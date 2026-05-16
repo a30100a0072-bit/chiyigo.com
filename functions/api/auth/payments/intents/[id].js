@@ -10,7 +10,7 @@
  *   404 → 不存在 / 越權
  */
 
-import { res } from '../../../../utils/auth.js'
+import { res } from '../../../../utils/auth'
 import { getCorsHeaders } from '../../../../utils/cors'
 import { requirePaymentAccess, getPaymentIntent, PAYMENT_STATUS } from '../../../../utils/payments.js'
 import { safeUserAudit } from '../../../../utils/user-audit'

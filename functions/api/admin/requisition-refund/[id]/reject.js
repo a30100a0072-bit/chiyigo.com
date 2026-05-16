@@ -16,7 +16,7 @@
  * Body：optional { admin_note?: string }（建議填，方便追溯為何拒絕）
  */
 
-import { res, requireStepUp } from '../../../../utils/auth.js'
+import { res, requireStepUp } from '../../../../utils/auth'
 import { getCorsHeaders } from '../../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes'
 import { safeUserAudit } from '../../../../utils/user-audit'

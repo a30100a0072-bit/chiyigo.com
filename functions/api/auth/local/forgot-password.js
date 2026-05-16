@@ -12,7 +12,7 @@
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { sendPasswordResetEmail } from '../../../utils/email'
 import { verifyTurnstile } from '../../../utils/turnstile'
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { verifyJwt } from '../../../utils/jwt'
 import { safeUserAudit } from '../../../utils/user-audit'
 

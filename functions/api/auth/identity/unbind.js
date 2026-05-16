@@ -10,7 +10,7 @@
  *  防止產生無任何登入方式的幽靈帳號。
  */
 
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
 
 const ALLOWED_PROVIDERS = new Set(['google', 'discord', 'line', 'facebook'])

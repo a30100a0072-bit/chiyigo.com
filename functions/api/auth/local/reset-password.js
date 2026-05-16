@@ -19,7 +19,7 @@ import {
   verifyBackupCode,
 } from '../../../utils/crypto'
 import { validatePassword } from '../../../utils/password'
-import { bumpTokenVersion, res } from '../../../utils/auth.js'
+import { bumpTokenVersion, res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
 
 export async function onRequestPost({ request, env }) {

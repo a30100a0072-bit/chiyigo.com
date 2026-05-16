@@ -3,7 +3,7 @@
 // Step 2 is POST /api/auth/delete/confirm with the emailed token.
 
 import { verifyPassword, generateSecureToken, hashToken } from '../../utils/crypto'
-import { requireStepUp, res } from '../../utils/auth.js'
+import { requireStepUp, res } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 import { sendDeleteConfirmationEmail } from '../../utils/email'
 import { safeUserAudit } from '../../utils/user-audit'

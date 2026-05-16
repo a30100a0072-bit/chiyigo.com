@@ -13,7 +13,7 @@
  * 用 saved_at 為 bucket 基準（admin 「保存」當下視為成交時間）。
  */
 
-import { res, requireAnyScope } from '../../../utils/auth.js'
+import { res, requireAnyScope } from '../../../utils/auth'
 import { SCOPES } from '../../../utils/scopes'
 import { getCorsHeaders } from '../../../utils/cors'
 

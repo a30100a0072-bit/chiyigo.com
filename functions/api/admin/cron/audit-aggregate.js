@@ -32,7 +32,7 @@
  * archive worker 18:00 UTC 之前 1 小時；codex r1 H-1 改 daily 避開 archived_at IS NULL 漏網）
  */
 
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { hotRetentionDaysFor } from '../../../utils/audit-archive.js'
 import {

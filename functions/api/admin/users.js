@@ -16,7 +16,7 @@
  *  401 / 403 → 未授權或角色不足
  */
 
-import { res, requireAnyScope } from '../../utils/auth.js'
+import { res, requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 
 export async function onRequestGet({ request, env }) {

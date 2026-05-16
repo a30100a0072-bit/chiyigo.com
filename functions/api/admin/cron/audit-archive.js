@@ -42,7 +42,7 @@
  * Cron 觸發：.github/workflows/cron-audit-archive.yml（每日 18:00 UTC = 02:00 Asia/Taipei）。
  */
 
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
 import {
   PR20_SUPPORTED_TABLE,

@@ -23,7 +23,7 @@
  *          404 → 該 user 沒有此 credential
  */
 
-import { requireAuth, requireStepUp, res } from '../../../../utils/auth.js'
+import { requireAuth, requireStepUp, res } from '../../../../utils/auth'
 import { getCorsHeaders } from '../../../../utils/cors'
 import { SCOPES } from '../../../../utils/scopes'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../../utils/user-audit'

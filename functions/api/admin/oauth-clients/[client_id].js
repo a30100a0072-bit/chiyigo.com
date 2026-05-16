@@ -10,7 +10,7 @@
  *   要硬刪：admin 直接走 SQL（不開 API，避免誤操作）。
  */
 
-import { res, requireStepUp, requireAnyScope } from '../../../utils/auth.js'
+import { res, requireStepUp, requireAnyScope } from '../../../utils/auth'
 import { requireRole } from '../../../utils/requireRole'
 import { invalidateClientsCache } from '../../../utils/oauth-clients'
 import { appendAuditLog } from '../../../utils/audit-log.js'

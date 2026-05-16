@@ -30,7 +30,7 @@
  * 404 → 該 user 沒有此 device 任何 refresh_tokens（無論已撤未撤）
  */
 
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireAuth, res } from '../../utils/auth'
 import { getCorsHeaders } from '../../utils/cors'
 
 export async function onRequestOptions({ request, env }) {

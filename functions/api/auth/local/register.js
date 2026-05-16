@@ -16,7 +16,7 @@ import { validatePassword } from '../../../utils/password'
 import { resolveAud } from '../../../utils/cors'
 import { buildTokenScope } from '../../../utils/scopes'
 import { verifyTurnstile } from '../../../utils/turnstile'
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { refreshCookie, isWebClient } from '../../../utils/cookies'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 

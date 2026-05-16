@@ -12,7 +12,7 @@
  *  - 不可封禁角色層級 ≥ 自己的用戶（admin 不可封禁 admin 或 developer）
  */
 
-import { res } from '../../../../utils/auth.js'
+import { res } from '../../../../utils/auth'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../../../utils/requireRole'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../../utils/user-audit'

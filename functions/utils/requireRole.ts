@@ -16,7 +16,7 @@
  *   if (error) return error
  */
 
-import { requireAuth, res } from './auth.js'
+import { requireAuth, res } from './auth'
 import { safeUserAudit } from './user-audit'
 
 const ROLE_LEVEL = {

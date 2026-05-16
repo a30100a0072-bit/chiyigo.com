@@ -6,7 +6,7 @@
  * 之後可在後台兩段式清理 audit row 本身。
  */
 
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireAuth, res } from '../../utils/auth'
 import { safeUserAudit } from '../../utils/user-audit'
 
 export async function onRequestGet({ request, env, params }) {

@@ -15,7 +15,7 @@
  * 回傳：{ rows: [...] }
  */
 
-import { res, requireStepUp } from '../../../utils/auth.js'
+import { res, requireStepUp } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import { safeUserAudit } from '../../../utils/user-audit'

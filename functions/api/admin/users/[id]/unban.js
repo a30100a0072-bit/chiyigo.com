@@ -15,7 +15,7 @@
  *  404 → 用戶不存在
  */
 
-import { res } from '../../../../utils/auth.js'
+import { res } from '../../../../utils/auth'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../../../utils/requireRole'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../../utils/user-audit'

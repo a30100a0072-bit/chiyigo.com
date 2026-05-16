@@ -140,6 +140,9 @@ export default [
         AbortSignal: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        // Ambient types from types/env.d.ts (TS-only; ESLint only needs to know
+        // the names exist as globals so type-position references don't trip no-undef)
+        Env: 'readonly',
       },
     },
     rules: {

@@ -40,11 +40,11 @@
  */
 
 import { verifyBackupCode } from '../../utils/crypto'
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireAuth, res } from '../../utils/auth'
 import { signJwt } from '../../utils/jwt'
 import { resolveAud } from '../../utils/cors'
 import { KNOWN_ELEVATED_SCOPES } from '../../utils/scopes'
-import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../utils/rate-limit'
 import { safeUserAudit } from '../../utils/user-audit'
 import { verifyTotpReplaySafe } from '../../utils/totp'
 

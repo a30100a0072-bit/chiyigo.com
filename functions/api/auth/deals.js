@@ -13,7 +13,7 @@
  * 不含敏感欄位：notes（admin 內部備註）、saved_by_admin_id 不回。
  */
 
-import { res, requireAuth } from '../../utils/auth.js'
+import { res, requireAuth } from '../../utils/auth'
 import { getCorsHeaders } from '../../utils/cors'
 
 export async function onRequestOptions({ request, env }) {

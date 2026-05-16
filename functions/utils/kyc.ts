@@ -15,8 +15,8 @@
  *   - 等真的撞到 perf 瓶頸再進 token（migration 容易：buildTokenScope 加欄位）
  */
 
-import { res } from './auth.js'
-import { requireAuth } from './auth.js'
+import { res } from './auth'
+import { requireAuth } from './auth'
 import { safeUserAudit } from './user-audit'
 
 export const KYC_STATUS = Object.freeze({

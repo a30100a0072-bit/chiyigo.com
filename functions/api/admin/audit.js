@@ -22,11 +22,11 @@
  * Step-up 鎖：未來 Phase C 上線後再要求 step_up_token；目前只 requireRole admin。
  */
 
-import { res, requireAnyScope } from '../../utils/auth.js'
+import { res, requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 import { canRoleSeeAuditEvent } from '../../utils/roles'
 import { safeUserAudit } from '../../utils/user-audit'
-import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
 const VALID_SEVERITY = new Set(['info', 'warn', 'critical'])
 

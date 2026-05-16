@@ -24,7 +24,7 @@
  *   8. Workers AI Structured Output JSON schema 強制
  */
 
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireAuth, res } from '../../utils/auth'
 
 const MAX_PROMPT_LEN = 500
 const MODEL          = '@cf/meta/llama-3.1-8b-instruct-fast'

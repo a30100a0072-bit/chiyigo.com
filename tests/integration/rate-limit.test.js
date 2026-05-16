@@ -20,7 +20,7 @@ import { onRequestPost as loginPost } from '../../functions/api/auth/local/login
 import { onRequestGet as oauthInit } from '../../functions/api/auth/oauth/[provider]/init.js'
 import {
   checkRateLimit, recordRateLimit, clearRateLimit,
-} from '../../functions/utils/rate-limit.js'
+} from '../../functions/utils/rate-limit'
 import { signJwt } from '../../functions/utils/jwt'
 
 const TEST_SECRET = 'JBSWY3DPEHPK3PXP'

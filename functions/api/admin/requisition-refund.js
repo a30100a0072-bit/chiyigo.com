@@ -17,11 +17,11 @@
  *   實際退款動作走 step-up + elevated:payment（approve/reject endpoint），這裡只是讀。
  */
 
-import { res, requireAnyScope } from '../../utils/auth.js'
+import { res, requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 import { getCorsHeaders } from '../../utils/cors'
 import { safeUserAudit } from '../../utils/user-audit'
-import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
 // Codex r6 P1：approve.js 在 ECPay 網路錯誤 / DLQ reconciliation 路徑會把 rr 留
 // 在 'processing'，admin 必須能查到才能人工接手；少了它最需要對帳的卡住狀態

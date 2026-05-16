@@ -11,8 +11,8 @@
  */
 
 import { TOTP, Secret } from 'otpauth'
-import { requireAuth, res } from '../../../utils/auth.js'
-import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
+import { requireAuth, res } from '../../../utils/auth'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 
 const TOTP_ISSUER = 'CHIYIGO'
 const RL_WINDOW_SEC = 60

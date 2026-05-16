@@ -22,7 +22,7 @@
  * Body：optional { admin_note?: string }（最多 500 字）
  */
 
-import { res, requireStepUp } from '../../../../utils/auth.js'
+import { res, requireStepUp } from '../../../../utils/auth'
 import { getCorsHeaders } from '../../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes'
 import {

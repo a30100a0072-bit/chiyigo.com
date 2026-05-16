@@ -16,7 +16,7 @@
  *  401 → 未攜帶或 token 無效
  */
 
-import { requireAuth, res } from '../../utils/auth.js'
+import { requireAuth, res } from '../../utils/auth'
 
 export async function onRequestGet({ request, env }) {
   // ── 1. JWT 驗證（含 banned 檢查）────────────────────────────

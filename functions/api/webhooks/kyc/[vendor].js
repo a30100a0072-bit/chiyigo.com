@@ -17,7 +17,7 @@
  *   401 → 簽章驗證失敗（adapter 報的）
  */
 
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { resolveKycAdapter, setUserKycStatus } from '../../../utils/kyc'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug.js'

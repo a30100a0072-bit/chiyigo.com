@@ -43,7 +43,7 @@
  *   admin 身份 / IP / action。
  */
 
-import { res, requireStepUp } from '../../../utils/auth.js'
+import { res, requireStepUp } from '../../../utils/auth'
 import { requireRole } from '../../../utils/requireRole'
 import { appendAuditLog } from '../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../utils/user-audit'

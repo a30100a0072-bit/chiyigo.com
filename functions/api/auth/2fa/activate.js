@@ -24,9 +24,9 @@
 
 import { verifyTotpReplaySafe } from '../../../utils/totp'
 import { generateBackupCodes, verifyPassword } from '../../../utils/crypto'
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
-import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit'
 
 const RL_WINDOW_SEC = 60
 const RL_MAX        = 5

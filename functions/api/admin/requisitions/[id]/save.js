@@ -23,7 +23,7 @@
  *   409 → status 不是 pending
  */
 
-import { res } from '../../../../utils/auth.js'
+import { res } from '../../../../utils/auth'
 import { requireRole } from '../../../../utils/requireRole'
 import { getCorsHeaders } from '../../../../utils/cors'
 import { safeUserAudit } from '../../../../utils/user-audit'

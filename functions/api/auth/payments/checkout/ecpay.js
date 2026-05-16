@@ -34,7 +34,7 @@
  *   403 → KYC_REQUIRED
  */
 
-import { res } from '../../../../utils/auth.js'
+import { res } from '../../../../utils/auth'
 import { getCorsHeaders } from '../../../../utils/cors'
 import {
   requirePaymentAccess, createPaymentIntent,

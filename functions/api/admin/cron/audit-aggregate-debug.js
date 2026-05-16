@@ -25,7 +25,7 @@
  * 共用 audit_log raw row 來源但 cold_class 分群不重疊（drift 各自 fail-fast）。
  */
 
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { hotRetentionDaysFor } from '../../../utils/audit-archive.js'
 import {

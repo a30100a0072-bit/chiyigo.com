@@ -18,7 +18,7 @@
  *   - currency 區分（TWD/USD/ETH/USDT...）
  */
 
-import { res, requireAuth } from './auth.js'
+import { res, requireAuth } from './auth'
 import { safeUserAudit } from './user-audit'
 import { getUserKycStatus, KYC_STATUS } from './kyc'
 

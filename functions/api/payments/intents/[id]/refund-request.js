@@ -13,7 +13,7 @@
  *   - 防重複：同 intent 已有 pending refund_request → 409
  */
 
-import { requireAuth, res } from '../../../../utils/auth.js'
+import { requireAuth, res } from '../../../../utils/auth'
 import { safeUserAudit } from '../../../../utils/user-audit'
 import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'
 

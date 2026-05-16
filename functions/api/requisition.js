@@ -9,7 +9,7 @@
  * 寫入 owner_guest_id 供註冊時 takeover；無 guest_id 時退回純 IP 限流。
  */
 
-import { requireAuth, res } from '../utils/auth.js'
+import { requireAuth, res } from '../utils/auth'
 
 const REQUIRED = ['name', 'contact', 'service_type', 'message']
 

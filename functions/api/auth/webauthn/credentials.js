@@ -12,7 +12,7 @@
  *   401 → access_token 無效
  */
 
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 
 export async function onRequestOptions({ request, env }) {

@@ -33,7 +33,7 @@
 
 import { generateSalt, hashPassword } from '../../../utils/crypto'
 import { validatePassword } from '../../../utils/password'
-import { requireStepUp, bumpTokenVersion, res } from '../../../utils/auth.js'
+import { requireStepUp, bumpTokenVersion, res } from '../../../utils/auth'
 import { SCOPES } from '../../../utils/scopes'
 import { safeUserAudit } from '../../../utils/user-audit'
 

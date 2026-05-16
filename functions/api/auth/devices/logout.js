@@ -21,7 +21,7 @@
  *   404 → 該 user 在此 device 沒任何 refresh_tokens（防瞎刪別人 device 的探測）
  */
 
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 

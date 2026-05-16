@@ -16,7 +16,7 @@
  *   401 → access_token 無效
  */
 
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { requirePaymentAccess, PAYMENT_STATUS, PAYMENT_KIND } from '../../../utils/payments.js'
 

@@ -10,10 +10,10 @@
  *  500 → 內部錯誤（DB / Resend 交握失敗）
  */
 
-import { requireAuth, res } from '../../../utils/auth.js'
+import { requireAuth, res } from '../../../utils/auth'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { sendVerificationEmail } from '../../../utils/email'
-import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 
 const COOLDOWN_SECONDS    = 60
 const TOKEN_TTL_HOURS     = 1

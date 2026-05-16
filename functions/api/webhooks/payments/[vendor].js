@@ -18,7 +18,7 @@
  *   401 → 簽章驗證失敗
  */
 
-import { res } from '../../../utils/auth.js'
+import { res } from '../../../utils/auth'
 import {
   resolvePaymentAdapter, getPaymentIntent, createPaymentIntent, updatePaymentStatus,
   PAYMENT_KIND,

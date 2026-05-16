@@ -31,7 +31,7 @@
  *   404 → user not found（mode user/device）
  */
 
-import { res } from '../../utils/auth.js'
+import { res } from '../../utils/auth'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../utils/requireRole'
 import { revokeJti } from '../../utils/revocation'
 import { appendAuditLog } from '../../utils/audit-log.js'

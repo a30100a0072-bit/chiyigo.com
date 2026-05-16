@@ -16,7 +16,7 @@
  *   404 → 該 user 沒此 wallet
  */
 
-import { requireStepUp, res } from '../../../utils/auth.js'
+import { requireStepUp, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES } from '../../../utils/scopes'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
