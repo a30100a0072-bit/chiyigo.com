@@ -51,7 +51,7 @@ export async function sendDeleteConfirmationEmail(apiKey, to, token, env) {
   })
 }
 
-async function sendEmail(apiKey, env, { to, subject, html }, signal) {
+async function sendEmail(apiKey, env, { to, subject, html, signal }) {
   const res = await fetch(RESEND_API, {
     method: 'POST',
     headers: {
@@ -107,7 +107,8 @@ export async function sendVerificationEmail(apiKey, to, token, env, signal) {
     to,
     subject: '驗證你的 Chiyigo 帳號 Email',
     html,
-  }, signal);
+    signal,
+  });
 }
 
 /**
