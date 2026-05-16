@@ -1,5 +1,5 @@
 /**
- * changeUserRole（IAM P1-17 Phase 2，2026-05-09）
+ * changeUserRole（IAM P1-17 Phase 2，2026-05-09；F2 atomicity 修 2026-05-16）
  *
  * latent helper — 目前 prod 沒有任何 admin endpoint 呼叫這個 helper；單一
  * super_admin 結構維持不變。將來真要建第二個 admin/operator 帳號時，新 endpoint
@@ -7,17 +7,23 @@
  *
  * 關鍵保證：
  *   1. application-layer VALID_ROLES 驗證（不依賴 D1 CHECK constraint）
- *   2. role 變更 → 必 bumpTokenVersion → 撤該 user 全部 refresh family
+ *   2. role 變更原子性（codex F2 2026-05-16）：
+ *      - SELECT oldRole 後，將 [admin_audit_log INSERT, UPDATE users SET role+token_version
+ *        WHERE id=? AND role=?, UPDATE refresh_tokens revoked_at] 綁進同一 db.batch()
+ *      - role UPDATE 帶 CAS（WHERE role=oldRole）；changes !== 1 → ROLE_RACE 409
+ *      - 即使 CAS 失敗，admin_audit_log INSERT 仍隨 batch commit，hash-chain
+ *        記錄「admin 嘗試 role_change」的證據，verifyAuditChain.valid 不破
+ *      - 比照 functions/api/admin/audit/[id].js F3 pattern
+ *   3. role 變更 → 必 bumpTokenVersion → 撤該 user 全部 refresh family
  *      → 強制重新登入；舊 access_token 帶舊 scope 在 token_version mismatch 後失效
- *   3. critical user_audit + admin_audit_log（hash-chain）雙寫；hash-chain 失敗拒動
- *   4. self-demotion 防呆：actor 若把自己從 admin-like 降到非 admin-like，仍允許
+ *   4. critical user_audit + admin_audit_log（hash-chain）雙寫；hash-chain 失敗拒動
+ *   5. self-demotion 防呆：actor 若把自己從 admin-like 降到非 admin-like，仍允許
  *      但寫 critical audit（避免誤操作鎖死 console）
  */
 
 import { isValidRole } from './roles'
-import { bumpTokenVersion } from './auth.js'
 import { safeUserAudit } from './user-audit'
-import { appendAuditLog } from './audit-log.js'
+import { prepareAppendAuditLog } from './audit-log.js'
 
 const ADMIN_LIKE_ROLES = new Set(['admin', 'developer', 'super_admin'])
 
@@ -57,9 +63,12 @@ export async function changeUserRole(env, { userId, newRole, actorId, actorEmail
     return { ok: true, code: 'NOOP', oldRole }
   }
 
-  // hash-chain 先寫；失敗 → 不動 row（無證據的權限變更不接受）
+  // F2 atomicity（codex 2026-05-16）：admin_audit_log + role/version UPDATE + revoke
+  // 綁進同一 db.batch；CAS WHERE role=oldRole 失敗 → ROLE_RACE，audit row 仍 commit
+  // 作為「嘗試 role_change」的 hash-chain 證據（chain 仍 verifiable，比照 F3 admin/audit）。
+  let prepared
   try {
-    await appendAuditLog(db, {
+    prepared = await prepareAppendAuditLog(db, {
       admin_id:     actorId,
       admin_email:  actorEmail ?? null,
       action:       `role_change:${oldRole}->${newRole}`,
@@ -71,8 +80,34 @@ export async function changeUserRole(env, { userId, newRole, actorId, actorEmail
     return { ok: false, code: 'AUDIT_CHAIN_FAILED' }
   }
 
-  await db.prepare('UPDATE users SET role = ? WHERE id = ?').bind(newRole, userId).run()
-  await bumpTokenVersion(db, userId)
+  const updateRoleStmt = db
+    .prepare(`
+      UPDATE users
+         SET role = ?, token_version = token_version + 1
+       WHERE id = ? AND role = ?
+    `)
+    .bind(newRole, userId, oldRole)
+
+  const revokeStmt = db
+    .prepare(`
+      UPDATE refresh_tokens SET revoked_at = datetime('now')
+       WHERE user_id = ? AND revoked_at IS NULL
+    `)
+    .bind(userId)
+
+  let batchResults
+  try {
+    batchResults = await db.batch([prepared.statement, updateRoleStmt, revokeStmt])
+  } catch {
+    return { ok: false, code: 'AUDIT_CHAIN_FAILED' }
+  }
+
+  const roleChanges = batchResults?.[1]?.meta?.changes ?? 0
+  if (roleChanges !== 1) {
+    // race: SELECT 與 batch commit 之間 role 被別人改/被軟刪。
+    // admin_audit_log 已寫入「嘗試紀錄」，hash-chain valid，DB 其他狀態未改。
+    return { ok: false, code: 'ROLE_RACE', oldRole }
+  }
 
   const isSelfDemotion = actorId === userId &&
     ADMIN_LIKE_ROLES.has(oldRole) && !ADMIN_LIKE_ROLES.has(newRole)

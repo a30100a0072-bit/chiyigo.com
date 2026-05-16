@@ -3,12 +3,18 @@
  *
  * 驗證：合法 role / 非法 role / 不存在 user / role 未變 / token_version bump /
  * refresh family revoke / hash-chain audit_log + user_audit / self-demotion critical
+ *
+ * F2 atomicity（codex 2026-05-16）：
+ *   - CAS race（role 在 SELECT 與 batch 之間被改）→ ROLE_RACE 409；hash-chain
+ *     仍寫「嘗試紀錄」；DB role/token_version/refresh 不變
+ *   - stub batch 模擬 CAS=0 + 真 DB race 兩個 case
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { changeUserRole } from '../../functions/utils/role-change.js'
+import { verifyAuditChain } from '../../functions/utils/audit-log.js'
 
 const REQ = new Request('http://x/role', { headers: { 'CF-Connecting-IP': '203.0.113.9' } })
 
@@ -93,5 +99,124 @@ describe('changeUserRole', () => {
       .first()
     expect(userAudit.severity).toBe('critical')
     expect(JSON.parse(userAudit.event_data).self_demotion).toBe(true)
+  })
+
+  it('F2 atomicity：CAS race (stub batch 模擬 changes=0) → ROLE_RACE，hash-chain 仍記錄嘗試', async () => {
+    const actor  = await seedUser({ email: 'admin@x', role: 'admin' })
+    const target = await seedUser({ email: 'b@x', role: 'player' })
+
+    // 種一個未撤 refresh token，驗證 race 時不會被誤撤
+    await env.chiyigo_db
+      .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+                VALUES (?, 'rt-race', datetime('now','+30 day'))`)
+      .bind(target.id).run()
+
+    const before = await env.chiyigo_db
+      .prepare('SELECT role, token_version FROM users WHERE id=?').bind(target.id).first()
+
+    // stub batch：INSERT admin_audit_log 真實執行；UPDATE+revoke 回 changes=0
+    // 模擬「SELECT 後別人改了 role，CAS WHERE role=oldRole 失敗」
+    const realDb = env.chiyigo_db
+    const stubEnv = {
+      ...env,
+      chiyigo_db: {
+        prepare: realDb.prepare.bind(realDb),
+        batch: async (stmts) => {
+          await stmts[0].run() // INSERT admin_audit_log 真寫
+          return [
+            { meta: { changes: 1 } },
+            { meta: { changes: 0 } }, // CAS 失敗
+            { meta: { changes: 0 } }, // revoke 跟著回 0（batch 視為整體失敗時 D1 仍 commit；這裡只是讓 caller 看不到副作用）
+          ]
+        },
+      },
+    }
+
+    const r = await changeUserRole(stubEnv, {
+      userId: target.id, newRole: 'finance',
+      actorId: actor.id, actorEmail: 'admin@x', request: REQ,
+    })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('ROLE_RACE')
+    expect(r.oldRole).toBe('player')
+
+    // role + token_version 不變（stub 沒實際跑 UPDATE）
+    const after = await env.chiyigo_db
+      .prepare('SELECT role, token_version FROM users WHERE id=?').bind(target.id).first()
+    expect(after.role).toBe(before.role)
+    expect(after.token_version).toBe(before.token_version)
+
+    // refresh token 未被撤（stub batch 沒實跑 revoke）
+    const rt = await env.chiyigo_db
+      .prepare('SELECT revoked_at FROM refresh_tokens WHERE user_id=? AND token_hash=?')
+      .bind(target.id, 'rt-race').first()
+    expect(rt.revoked_at).toBeNull()
+
+    // hash-chain 嘗試紀錄已寫
+    const adminLog = await env.chiyigo_db
+      .prepare(`SELECT action, target_id FROM admin_audit_log
+                 WHERE action = 'role_change:player->finance' ORDER BY id DESC LIMIT 1`).first()
+    expect(adminLog).toBeTruthy()
+    expect(Number(adminLog.target_id)).toBe(target.id)
+
+    // hash chain 仍 valid
+    const chain = await verifyAuditChain(env.chiyigo_db)
+    expect(chain.valid).toBe(true)
+
+    // user_audit (admin.user.role_changed) 不寫（race 退出在 safeUserAudit 之前）
+    const ua = await env.chiyigo_db
+      .prepare(`SELECT id FROM audit_log WHERE event_type='admin.user.role_changed'`).first()
+    expect(ua).toBeFalsy()
+  })
+
+  it('F2 atomicity：CAS race (真 DB — SELECT 後 role 被改) → ROLE_RACE', async () => {
+    const actor  = await seedUser({ email: 'admin@x', role: 'admin' })
+    const target = await seedUser({ email: 'b@x', role: 'player' })
+
+    // 攔截 SELECT，回過去的 role；底層 DB 已被改 → batch CAS 0 changes
+    await env.chiyigo_db
+      .prepare(`UPDATE users SET role='support' WHERE id=?`).bind(target.id).run()
+    const versionBeforeBatch = await env.chiyigo_db
+      .prepare('SELECT token_version FROM users WHERE id=?').bind(target.id).first()
+
+    const realDb = env.chiyigo_db
+    const stubEnv = {
+      ...env,
+      chiyigo_db: {
+        prepare: (sql) => {
+          const stmt = realDb.prepare(sql)
+          if (/SELECT id, email, role FROM users WHERE id = \? AND deleted_at IS NULL/.test(sql)) {
+            return {
+              bind: (...args) => ({
+                first: async () => ({ id: args[0], email: 'b@x', role: 'player' }),
+              }),
+            }
+          }
+          return stmt
+        },
+        batch: realDb.batch.bind(realDb),
+      },
+    }
+
+    const r = await changeUserRole(stubEnv, {
+      userId: target.id, newRole: 'finance',
+      actorId: actor.id, actorEmail: 'admin@x', request: REQ,
+    })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('ROLE_RACE')
+
+    // DB 真實 role 仍是 race 寫入的 'support'，沒被打成 'finance'
+    const after = await env.chiyigo_db
+      .prepare('SELECT role, token_version FROM users WHERE id=?').bind(target.id).first()
+    expect(after.role).toBe('support')
+    expect(after.token_version).toBe(versionBeforeBatch.token_version)
+
+    // hash-chain row 已 commit，verifyAuditChain valid
+    const adminLog = await env.chiyigo_db
+      .prepare(`SELECT action FROM admin_audit_log
+                 WHERE action = 'role_change:player->finance' ORDER BY id DESC LIMIT 1`).first()
+    expect(adminLog?.action).toBe('role_change:player->finance')
+    const chain = await verifyAuditChain(env.chiyigo_db)
+    expect(chain.valid).toBe(true)
   })
 })
