@@ -1,4 +1,5 @@
 import globals from 'globals'
+import tseslint from 'typescript-eslint'
 import {
   FORBIDDEN_PATTERNS as ARCHIVE_FORBIDDEN_PATTERNS,
   ALLOW_TAGS as ARCHIVE_ALLOW_TAGS,
@@ -113,9 +114,12 @@ export default [
   },
 
   // Cloudflare Pages Functions (server) — Workers runtime, ES modules
+  // JS→TS 遷移期：.js + .ts 兩種副檔名都走同一套 lint（Workers globals/規則）；
+  // .ts 用 typescript-eslint parser 解析 TS 語法（type annotations / interfaces）。
   {
-    files: ['functions/**/*.js'],
+    files: ['functions/**/*.js', 'functions/**/*.ts'],
     languageOptions: {
+      parser: tseslint.parser,
       ecmaVersion: 2023,
       sourceType: 'module',
       globals: {
@@ -133,6 +137,7 @@ export default [
         fetch: 'readonly',
         console: 'readonly',
         AbortController: 'readonly',
+        AbortSignal: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
       },
@@ -153,14 +158,17 @@ export default [
   // Archive worker codepath — PR 2.2c lint hardening
   {
     files: [
-      'functions/api/admin/cron/audit-archive*.js',
-      'functions/utils/audit-archive*.js',
+      'functions/api/admin/cron/audit-archive*.{js,ts}',
+      'functions/utils/audit-archive*.{js,ts}',
       // PR 3.2 codex r2 P3：aggregate→R2 worker 也要進 ESLint archive-discipline
       // scope；build guard scripts/lint-archive-no-delete.js 已透過共用 FILE_PATTERN
       // 掃到，IDE early warning / npm run lint 同步擴齊。
-      'functions/api/admin/cron/audit-aggregate-archive*.js',
-      'functions/utils/audit-aggregate-archive*.js',
+      'functions/api/admin/cron/audit-aggregate-archive*.{js,ts}',
+      'functions/utils/audit-aggregate-archive*.{js,ts}',
     ],
+    languageOptions: {
+      parser: tseslint.parser,
+    },
     plugins: { 'archive-discipline': archiveDisciplinePlugin },
     rules: { 'archive-discipline/no-forbidden-r2-or-sql': 'error' },
   },
