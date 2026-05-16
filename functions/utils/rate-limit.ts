@@ -13,10 +13,24 @@
  *   - DELETE...RETURNING / batch 原子保證在 D1 自然成立
  */
 
-type RateLimitKind = 'login' | '2fa' | 'email_send' | 'oauth_init' | 'oauth_token' | 'refresh' | 'step_up'
+// 全站實際使用中的 rate-limit bucket 字串（typo 防護用，新增 kind 必同步加入）。
+// codex r1 nit：原 `| string` 退化成 plain string，等於沒型別防護；改全集 union。
+type RateLimitKind =
+  | 'login'
+  | 'refresh'
+  | 'step_up'
+  | 'email_send'
+  | 'oauth_init'
+  | 'oauth_token'
+  | '2fa'
+  | '2fa_setup'
+  | '2fa_activate'
+  | '2fa_disable'
+  | '2fa_regen'
+  | 'admin_read'
 
 interface RateLimitScope {
-  kind: RateLimitKind | string
+  kind: RateLimitKind
   ip?: string | null
   userId?: number | null
   email?: string | null
@@ -69,7 +83,7 @@ export async function recordRateLimit(
 /** 清除指定 user 在指定 kind 的所有記錄（成功事件後呼叫）。 */
 export async function clearRateLimit(
   db,
-  { kind, userId = null, email = null }: { kind: RateLimitKind | string, userId?: number | null, email?: string | null },
+  { kind, userId = null, email = null }: { kind: RateLimitKind, userId?: number | null, email?: string | null },
 ): Promise<void> {
   if (userId) {
     await db.prepare(`DELETE FROM login_attempts WHERE kind = ? AND user_id = ?`)
