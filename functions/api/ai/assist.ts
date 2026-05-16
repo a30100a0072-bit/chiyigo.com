@@ -231,7 +231,17 @@ async function verifyTurnstile(token, secret, ip) {
   }
 }
 
-async function logAudit(db, { userId, ip, fingerprint, sessionId, prompt, response, status, blockReason, durationMs }) {
+async function logAudit(db, { userId, ip, fingerprint, sessionId, prompt, response, status, blockReason, durationMs }: {
+  userId: number | null;
+  ip: string | null;
+  fingerprint: string | null;
+  sessionId: string | null;
+  prompt: string;
+  response?: string | null;
+  status: string;
+  blockReason?: string | null;
+  durationMs: number | null;
+}) {
   try {
     await db.prepare(`
       INSERT INTO ai_audit
