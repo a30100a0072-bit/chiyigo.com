@@ -61,6 +61,13 @@ import {
   splitIntoChunks,
 } from './audit-aggregate-archive'
 
+// resume / verify-path error carriers — local typing only, mirrors PR-4/5/6 pattern
+// (callers catch by e.code string; e.data_key surfaces R2 key for forensic logs)
+interface ArchiveError extends Error {
+  code?: string
+  data_key?: string
+}
+
 const COLD_CLASS_VERSION = 1
 
 function isDryRun(env) {
@@ -165,7 +172,31 @@ export async function runAggregateArchive(args) {
   const maxRows           = parseMaxRowsPerRun(env)
   const cutoff            = cutoffMonthStartUTC()
 
-  const report = {
+  // Type annotation declares all optional counters / late-set fields so TS doesn't
+  // freeze the literal shape (runtime: JSON.stringify omits undefined → no diff).
+  const report: {
+    ok: boolean
+    mode: string
+    run_id: string
+    started_at: string
+    table: string
+    cold_class: string
+    writer_version: string
+    cutoff: string
+    max_rows_per_run: number
+    rows_scanned: number
+    chunks_planned: number
+    chunks_uploaded: number
+    chunks_verified: number
+    chunks_marked_archived: number
+    rows_marked_archived: number
+    skipped_reason: string | null
+    errors: Array<{ event: string; [k: string]: unknown }>
+    chunks_blocked_terminal?: number
+    chunks_resumed_uploaded?: number
+    chunks_skipped?: number
+    finished_at?: string
+  } = {
     ok: true,
     mode: dryRun ? 'dry_run' : 'live',
     run_id: runId,
@@ -704,12 +735,12 @@ function extractIdsFromJsonl(text) {
     try {
       obj = JSON.parse(line)
     } catch (err) {
-      const e = new Error(`extractIdsFromJsonl: malformed json at line ${lineNo}: ${err?.message ?? err}`)
+      const e: ArchiveError = new Error(`extractIdsFromJsonl: malformed json at line ${lineNo}: ${err?.message ?? err}`)
       e.code = 'JSONL_MALFORMED'
       throw e
     }
     if (typeof obj?.id !== 'number' || !Number.isInteger(obj.id)) {
-      const e = new Error(`extractIdsFromJsonl: non-integer id at line ${lineNo}`)
+      const e: ArchiveError = new Error(`extractIdsFromJsonl: non-integer id at line ${lineNo}`)
       e.code = 'JSONL_BAD_ID'
       throw e
     }
@@ -802,7 +833,7 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
   const obj = await bucket.get(dataKey)
   if (!obj) {
     await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'r2_object_not_found')
-    const e = new Error('uploaded_blocker_verify_failed: r2_object_not_found')
+    const e: ArchiveError = new Error('uploaded_blocker_verify_failed: r2_object_not_found')
     e.code = 'VERIFY_FAILED_R2_MISSING'
     e.data_key = dataKey
     throw e
@@ -814,7 +845,7 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
     text = new TextDecoder().decode(jsonlBytes)
   } catch (err) {
     await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'gzip_decompress_failed')
-    const e = new Error(`uploaded_blocker_verify_failed: gzip_decompress_failed (${err?.message ?? err})`)
+    const e: ArchiveError = new Error(`uploaded_blocker_verify_failed: gzip_decompress_failed (${err?.message ?? err})`)
     e.code = 'VERIFY_FAILED_DECOMPRESS'
     throw e
   }
@@ -822,7 +853,7 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
   const reRowCount = text.length === 0 ? 0 : (text.match(/\n/g) ?? []).length
   if (reSha !== sha || reRowCount !== rowCount) {
     await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'sha_or_row_count_mismatch')
-    const e = new Error(`uploaded_blocker_verify_failed: sha_or_row_count_mismatch (sha ${reSha}/${sha}; rows ${reRowCount}/${rowCount})`)
+    const e: ArchiveError = new Error(`uploaded_blocker_verify_failed: sha_or_row_count_mismatch (sha ${reSha}/${sha}; rows ${reRowCount}/${rowCount})`)
     e.code = 'VERIFY_FAILED_SHA_MISMATCH'
     throw e
   }
@@ -835,13 +866,13 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
     chunkIds = extractIdsFromJsonl(text)
   } catch (err) {
     await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'jsonl_parse_failed')
-    const e = new Error(`uploaded_blocker_verify_failed: jsonl_parse_failed (${err?.message ?? err})`)
+    const e: ArchiveError = new Error(`uploaded_blocker_verify_failed: jsonl_parse_failed (${err?.message ?? err})`)
     e.code = 'VERIFY_FAILED_JSONL_PARSE'
     throw e
   }
   if (chunkIds.length !== rowCount) {
     await transitionUploadedToFailed(db, envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt, 'jsonl_id_count_mismatch')
-    const e = new Error(`uploaded_blocker_verify_failed: jsonl_id_count_mismatch (ids ${chunkIds.length} vs row_count ${rowCount})`)
+    const e: ArchiveError = new Error(`uploaded_blocker_verify_failed: jsonl_id_count_mismatch (ids ${chunkIds.length} vs row_count ${rowCount})`)
     e.code = 'VERIFY_FAILED_JSONL_ID_COUNT'
     throw e
   }
@@ -870,7 +901,7 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
   ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha, dryRunInt).run()
   if ((updUploadedToVerified?.meta?.changes ?? 0) !== 1) {
     // race（極罕見；admin 在 Step 0 內動作）→ throw 給 outer catch
-    const e = new Error('uploaded_blocker_race_with_admin: state changed during resume')
+    const e: ArchiveError = new Error('uploaded_blocker_race_with_admin: state changed during resume')
     e.code = 'RACE_WITH_ADMIN'
     throw e
   }
@@ -920,7 +951,7 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
  * 誤標 archived_at 的問題；ids 由 chain caller 傳，或本函式自行 GET R2 data parse。
  * archived_at NOT NULL 預期已有，UPDATE changes=0 也視為正常（已標完）。
  */
-async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
+async function resumeVerifiedBlocker({ ctx, blocker, report, ids = null }) {
   const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
   if (chunkDryRun) {
     // dry-run verified 是 PR 3.2 part 2 終態，跳過。
@@ -951,7 +982,7 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
     })
     const dataObj = await bucket.get(verifiedDataKey)
     if (!dataObj) {
-      const e = new Error('verified_blocker_resume_failed: r2_data_missing')
+      const e: ArchiveError = new Error('verified_blocker_resume_failed: r2_data_missing')
       e.code = 'VERIFY_RESUME_R2_MISSING'
       e.data_key = verifiedDataKey
       throw e
@@ -962,7 +993,7 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
       const jsonlBytes = await gzipDecompress(gzBytes)
       text = new TextDecoder().decode(jsonlBytes)
     } catch (err) {
-      const e = new Error(`verified_blocker_resume_failed: gzip_decompress_failed (${err?.message ?? err})`)
+      const e: ArchiveError = new Error(`verified_blocker_resume_failed: gzip_decompress_failed (${err?.message ?? err})`)
       e.code = 'VERIFY_RESUME_DECOMPRESS'
       throw e
     }
@@ -970,12 +1001,12 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
     const reSha = await sha256Hex(text)
     const reRowCount = text.length === 0 ? 0 : (text.match(/\n/g) ?? []).length
     if (reSha !== blocker.chunk_sha256) {
-      const e = new Error(`verified_blocker_resume_failed: sha_mismatch (expected ${blocker.chunk_sha256}, got ${reSha})`)
+      const e: ArchiveError = new Error(`verified_blocker_resume_failed: sha_mismatch (expected ${blocker.chunk_sha256}, got ${reSha})`)
       e.code = 'VERIFY_RESUME_SHA_MISMATCH'
       throw e
     }
     if (reRowCount !== blocker.row_count) {
-      const e = new Error(`verified_blocker_resume_failed: row_count_mismatch (expected ${blocker.row_count}, got ${reRowCount})`)
+      const e: ArchiveError = new Error(`verified_blocker_resume_failed: row_count_mismatch (expected ${blocker.row_count}, got ${reRowCount})`)
       e.code = 'VERIFY_RESUME_ROW_COUNT_MISMATCH'
       throw e
     }
@@ -984,12 +1015,12 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids }) {
     try {
       chunkIds = extractIdsFromJsonl(text)
     } catch (err) {
-      const e = new Error(`verified_blocker_resume_failed: jsonl_parse_failed (${err?.message ?? err})`)
+      const e: ArchiveError = new Error(`verified_blocker_resume_failed: jsonl_parse_failed (${err?.message ?? err})`)
       e.code = 'VERIFY_RESUME_JSONL_PARSE'
       throw e
     }
     if (chunkIds.length !== blocker.row_count) {
-      const e = new Error(`verified_blocker_resume_failed: jsonl_id_count_mismatch (ids ${chunkIds.length} vs row_count ${blocker.row_count})`)
+      const e: ArchiveError = new Error(`verified_blocker_resume_failed: jsonl_id_count_mismatch (ids ${chunkIds.length} vs row_count ${blocker.row_count})`)
       e.code = 'VERIFY_RESUME_JSONL_ID_COUNT'
       throw e
     }

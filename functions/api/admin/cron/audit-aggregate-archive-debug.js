@@ -18,7 +18,7 @@ import {
   AGGREGATE_TABLES,
   debugRowsToJsonl,
 } from '../../../utils/audit-aggregate-archive'
-import { runAggregateArchive } from '../../../utils/audit-aggregate-archive-runner.js'
+import { runAggregateArchive } from '../../../utils/audit-aggregate-archive-runner'
 
 const TABLE_NAME   = 'audit_log_aggregate_debug'
 const COLD_CLASS   = AGGREGATE_TABLES[TABLE_NAME]    // 'aggregate_debug'
