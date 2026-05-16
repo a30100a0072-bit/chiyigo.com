@@ -17,7 +17,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
 import { SCOPES } from '../../functions/utils/scopes'
-import { verifyAuditChain } from '../../functions/utils/audit-log.js'
+import { verifyAuditChain } from '../../functions/utils/audit-log'
 import { onRequestDelete as deleteHandler } from '../../functions/api/admin/audit/[id].js'
 
 async function adminStepUpToken(userId, forAction = 'delete_audit') {

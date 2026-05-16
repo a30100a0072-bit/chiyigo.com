@@ -24,7 +24,7 @@ import {
   PAYMENT_KIND,
 } from '../../../utils/payments'
 import { safeUserAudit } from '../../../utils/user-audit'
-import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug.js'
+import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug'
 
 export async function onRequestPost({ request, env, params }) {
   const vendor = String(params?.vendor ?? '').toLowerCase()

@@ -7,7 +7,7 @@ import { requireStepUp, res } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 import { sendDeleteConfirmationEmail } from '../../utils/email'
 import { safeUserAudit } from '../../utils/user-audit'
-import { DEBUG_REASON_CODES } from '../../utils/audit-aggregate-debug.js'
+import { DEBUG_REASON_CODES } from '../../utils/audit-aggregate-debug'
 
 const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_MINUTES = 15

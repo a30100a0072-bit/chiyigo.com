@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb } from './_helpers.js'
-import { appendAuditLog, verifyAuditChain, _internal } from '../../functions/utils/audit-log.js'
+import { appendAuditLog, verifyAuditChain, _internal } from '../../functions/utils/audit-log'
 
 const ENTRY = (action, targetId) => ({
   admin_id:     1,

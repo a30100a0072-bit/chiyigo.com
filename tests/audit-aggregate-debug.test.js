@@ -35,7 +35,7 @@ import {
   extractRetryCount,
   reduceDebugBuckets,
   rowIsDebugFailure,
-} from '../functions/utils/audit-aggregate-debug.js'
+} from '../functions/utils/audit-aggregate-debug'
 
 describe('constants', () => {
   it('cold_class = debug_failure / writer version 帶 pr3.1 / sample size 10', () => {

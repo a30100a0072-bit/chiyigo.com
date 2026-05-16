@@ -12,7 +12,7 @@
 
 import { res, requireStepUp } from '../../../utils/auth'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
-import { prepareAppendAuditLog } from '../../../utils/audit-log.js'
+import { prepareAppendAuditLog } from '../../../utils/audit-log'
 import { safeUserAudit } from '../../../utils/user-audit'
 
 const DELETABLE_EVENTS = new Set(['requisition.deleted'])

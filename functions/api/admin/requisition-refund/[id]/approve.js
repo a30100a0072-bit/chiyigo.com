@@ -31,7 +31,7 @@ import {
 } from '../../../../utils/payments'
 import { ecpayRefund } from '../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../utils/user-audit'
-import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug.js'
+import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug'
 import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'
 
 export async function onRequestOptions({ request, env }) {

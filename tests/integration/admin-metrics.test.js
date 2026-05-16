@@ -14,7 +14,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, seedUser, ensureJwtKeys } from './_helpers.js'
 import { onRequestGet as metricsGet } from '../../functions/api/admin/metrics.js'
 import { signJwt } from '../../functions/utils/jwt'
-import { appendAuditLog } from '../../functions/utils/audit-log.js'
+import { appendAuditLog } from '../../functions/utils/audit-log'
 
 function authReq(token) {
   return new Request('http://x/api/admin/metrics', {

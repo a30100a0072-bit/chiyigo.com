@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { changeUserRole } from '../../functions/utils/role-change'
-import { verifyAuditChain } from '../../functions/utils/audit-log.js'
+import { verifyAuditChain } from '../../functions/utils/audit-log'
 
 const REQ = new Request('http://x/role', { headers: { 'CF-Connecting-IP': '203.0.113.9' } })
 

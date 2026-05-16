@@ -14,7 +14,7 @@
 
 import { res } from '../../../../utils/auth'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../../../utils/requireRole'
-import { appendAuditLog } from '../../../../utils/audit-log.js'
+import { appendAuditLog } from '../../../../utils/audit-log'
 import { safeUserAudit } from '../../../../utils/user-audit'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes'
 

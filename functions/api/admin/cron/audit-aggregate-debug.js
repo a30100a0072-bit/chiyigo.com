@@ -36,7 +36,7 @@ import {
   totalCutoffHours,
   reduceDebugBuckets,
   rowIsDebugFailure,
-} from '../../../utils/audit-aggregate-debug.js'
+} from '../../../utils/audit-aggregate-debug'
 
 function archiveEnv(env) {
   return String(env.ARCHIVE_ENV ?? 'prod')

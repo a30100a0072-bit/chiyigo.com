@@ -170,7 +170,7 @@ export const DEBUG_REASON_CODES = Object.freeze({
 
 // codex r3 L：allow set 改 module-private — 公開 mutable Set 會弱化 dictionary 邊界，
 // 改 export `isDebugReasonCode(s)` predicate 作唯一外部 contract。
-const _DEBUG_REASON_CODE_VALUES = new Set(Object.values(DEBUG_REASON_CODES))
+const _DEBUG_REASON_CODE_VALUES = new Set<string>(Object.values(DEBUG_REASON_CODES))
 
 /** 是否屬於 debug_failure dictionary 收錄值（codex r2 M + r3 L）。 */
 export function isDebugReasonCode(s) {

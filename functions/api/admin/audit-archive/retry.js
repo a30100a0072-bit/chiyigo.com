@@ -45,7 +45,7 @@
 
 import { res, requireStepUp } from '../../../utils/auth'
 import { requireRole } from '../../../utils/requireRole'
-import { appendAuditLog } from '../../../utils/audit-log.js'
+import { appendAuditLog } from '../../../utils/audit-log'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import { SUPPORTED_COLD_CLASSES, PR20_SUPPORTED_TABLE, purgeChunk } from '../../../utils/audit-archive.js'

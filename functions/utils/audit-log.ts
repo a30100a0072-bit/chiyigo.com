@@ -91,8 +91,7 @@ export async function prepareAppendAuditLog(db, entry) {
 /**
  * 寫入一筆 admin_audit_log，自動串接 hash chain。
  *
- * @param {D1Database} db
- * @param {object} entry  { admin_id, admin_email, action, target_id, target_email, ip_address }
+ * entry: { admin_id, admin_email, action, target_id, target_email, ip_address }
  */
 export async function appendAuditLog(db, entry) {
   const prepared = await prepareAppendAuditLog(db, entry)
@@ -103,15 +102,14 @@ export async function appendAuditLog(db, entry) {
 /**
  * 從頭驗證整條 hash chain。
  *
- * @param {D1Database} db
- * @returns {{
- *   valid: boolean,
- *   total: number,
- *   brokenAt: number|null,   // 第一筆 hash 不符的 id，valid=true 時為 null
- *   reason:   string|null,
- * }}
+ * brokenAt: 第一筆 hash 不符的 id，valid=true 時為 null
  */
-export async function verifyAuditChain(db) {
+export async function verifyAuditChain(db): Promise<{
+  valid: boolean,
+  total: number,
+  brokenAt: number | null,
+  reason: string | null,
+}> {
   const { results } = await db
     .prepare(`
       SELECT id, admin_id, admin_email, action, target_id, target_email,

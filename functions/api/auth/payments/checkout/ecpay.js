@@ -44,7 +44,7 @@ import {
   buildEcpayCheckoutFields, generateMerchantTradeNo, getEcpayCheckoutUrl,
 } from '../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../utils/user-audit'
-import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug.js'
+import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug'
 
 const MIN_AMOUNT = 1
 const MAX_AMOUNT = 200000  // 單筆綠界限額；金融操作上限再調

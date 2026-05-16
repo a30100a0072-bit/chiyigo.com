@@ -15,7 +15,7 @@
 
 import { requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
-import { verifyAuditChain } from '../../utils/audit-log.js'
+import { verifyAuditChain } from '../../utils/audit-log'
 
 export async function onRequestGet({ request, env }) {
   // P1-17 Phase 3: metrics 主要是用戶/session 統計 → 收進 admin:users:read|write

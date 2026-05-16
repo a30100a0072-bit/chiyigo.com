@@ -29,7 +29,7 @@
 
 import { isValidRole } from './roles'
 import { safeUserAudit } from './user-audit'
-import { prepareAppendAuditLog } from './audit-log.js'
+import { prepareAppendAuditLog } from './audit-log'
 
 const ADMIN_LIKE_ROLES = new Set(['admin', 'developer', 'super_admin'])
 
