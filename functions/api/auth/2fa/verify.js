@@ -196,7 +196,7 @@ async function respondWithToken(userId, record, db, deviceUuid, platform, env, a
 
   // Web 瀏覽器（Origin 屬於 chiyigo + platform 非明確 non-web）→ HttpOnly cookie，
   // 不把 refresh_token 暴露到 JSON body / Network panel。
-  // 規格 B：device_uuid 不參與通道判斷；見 functions/utils/cookies.js isWebClient
+  // 規格 B：device_uuid 不參與通道判斷；見 functions/utils/cookies.ts isWebClient
   const isWeb = isWebClient(request, { platform })
   if (isWeb) {
     return new Response(JSON.stringify(payload), {

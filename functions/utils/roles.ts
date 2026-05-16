@@ -16,7 +16,7 @@
  *   3. 新 token 簽發時透過 ROLE_BASE_SCOPES 拿到新 scope set
  */
 
-// Single source of truth；新增 role 時順便更新 scopes.js#ROLE_BASE_SCOPES
+// Single source of truth；新增 role 時順便更新 scopes.ts#ROLE_BASE_SCOPES
 export const VALID_ROLES = Object.freeze([
   // legacy / current production
   'player',

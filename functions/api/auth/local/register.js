@@ -223,7 +223,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
   }
 
   // Web 瀏覽器（Origin 屬於 chiyigo + platform 非明確 non-web）→ HttpOnly cookie，
-  // 不把 refresh_token 暴露到 JSON body。規格 B：見 functions/utils/cookies.js isWebClient
+  // 不把 refresh_token 暴露到 JSON body。規格 B：見 functions/utils/cookies.ts isWebClient
   const isWeb = isWebClient(request, { platform })
   if (isWeb) {
     return new Response(JSON.stringify(payload), {

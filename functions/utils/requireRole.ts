@@ -4,7 +4,7 @@
  * 角色層級（低 → 高）：player/user/finance/support < moderator < admin/super_admin < developer
  * 呼叫方指定最低所需角色，低於此層級的 JWT 一律回 403。
  *
- * Codex #6（2026-05-10）：scopes.js 已定義 super_admin/finance/support/user 但本表
+ * Codex #6（2026-05-10）：scopes.ts 已定義 super_admin/finance/support/user 但本表
  * 原本不認，導致這四個 role 全部被當未知 role(-1) 一律 403。對齊規則：
  *   super_admin = admin 同義詞（同 level=2）
  *   user        = player 同義詞（同 level=0）
