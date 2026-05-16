@@ -7,10 +7,16 @@
  *
  * 關鍵保證：
  *   1. application-layer VALID_ROLES 驗證（不依賴 D1 CHECK constraint）
- *   2. role 變更原子性（codex F2 2026-05-16）：
- *      - SELECT oldRole 後，將 [admin_audit_log INSERT, UPDATE users SET role+token_version
- *        WHERE id=? AND role=?, UPDATE refresh_tokens revoked_at] 綁進同一 db.batch()
- *      - role UPDATE 帶 CAS（WHERE role=oldRole）；changes !== 1 → ROLE_RACE 409
+ *   2. role 變更原子性（codex F2 2026-05-16 + r1 high/medium + r2 medium）：
+ *      - SELECT oldRole 後，將 [admin_audit_log INSERT, UPDATE refresh_tokens revoked_at,
+ *        UPDATE users SET role+token_version] 依序綁進同一 db.batch()
+ *      - revoke 與 role CAS 都 gate on `role=oldRole AND deleted_at IS NULL` —
+ *        D1 batch 序列化執行，兩 statement 共享同一前提，同步成立或同步失敗。
+ *        revoke 故意放在 CAS 之前：same-target race（B 用舊 oldRole 快照、A 已
+ *        把 role 改成同一 newRole）時，oldRole 已不成立 → revoke 0 changes，
+ *        refresh 不誤撤；若 gate on newRole 則此 race 會誤觸發
+ *      - caller 讀 batchResults[2].meta.changes（role CAS 在 index 2）；
+ *        !== 1 → ROLE_RACE，DB role/token_version/refresh 全不動
  *      - 即使 CAS 失敗，admin_audit_log INSERT 仍隨 batch commit，hash-chain
  *        記錄「admin 嘗試 role_change」的證據，verifyAuditChain.valid 不破
  *      - 比照 functions/api/admin/audit/[id].js F3 pattern
