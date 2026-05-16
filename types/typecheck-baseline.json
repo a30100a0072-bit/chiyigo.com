@@ -1,15 +1,14 @@
 {
-  "baselineSha": "b3e2cec",
-  "cleanFiles": 191,
+  "baselineSha": "9496507",
+  "cleanFiles": 192,
   "createdAt": "2026-05-16",
-  "errorCount": 983,
-  "errorFiles": 53,
+  "errorCount": 979,
+  "errorFiles": 52,
   "errorsByFile": {
     "functions/api/admin/oauth-clients.js": 1,
     "functions/api/admin/payments/aggregate.js": 1,
     "functions/api/admin/payments/intents.js": 1,
     "functions/api/auth/payments/checkout/ecpay.js": 1,
-    "functions/api/auth/payments/intents.js": 4,
     "functions/api/webhooks/payments/[vendor].js": 1,
     "functions/utils/payment-vendors/ecpay.js": 12,
     "src/js/404.js": 11,
@@ -59,7 +58,7 @@
     "tests/integration/webauthn-login.test.js": 3,
     "tests/integration/webauthn-register.test.js": 3
   },
-  "fileErrors": 983,
+  "fileErrors": 979,
   "globalErrors": 0,
   "sourceFilesTotal": 244,
   "stage": 1

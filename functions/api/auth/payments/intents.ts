@@ -38,11 +38,11 @@ export async function onRequestGet({ request, env }) {
 
   // Codex r1 P0-1：列表過濾 soft-deleted（user delete 後不再顯示）
   const where = ['user_id = ?', 'deleted_at IS NULL']
-  const binds = [Number(user.sub)]
-  if (status && Object.values(PAYMENT_STATUS).includes(status)) {
+  const binds: (string | number)[] = [Number(user.sub)]
+  if (status && (Object.values(PAYMENT_STATUS) as string[]).includes(status)) {
     where.push('status = ?'); binds.push(status)
   }
-  if (kind && Object.values(PAYMENT_KIND).includes(kind)) {
+  if (kind && (Object.values(PAYMENT_KIND) as string[]).includes(kind)) {
     where.push('kind = ?'); binds.push(kind)
   }
 

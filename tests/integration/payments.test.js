@@ -51,7 +51,7 @@ const {
   PAYMENT_STATUS, PAYMENT_KIND,
 } = await import('../../functions/utils/payments')
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
-import { onRequestGet  as listHandler    } from '../../functions/api/auth/payments/intents.js'
+import { onRequestGet  as listHandler    } from '../../functions/api/auth/payments/intents'
 import { onRequestGet  as detailHandler  } from '../../functions/api/auth/payments/intents/[id].js'
 import { onRequestPost as webhookHandler } from '../../functions/api/webhooks/payments/[vendor].js'
 import { onRequestDelete as userDeleteHandler } from '../../functions/api/auth/payments/intents/[id].js'
