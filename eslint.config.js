@@ -16,6 +16,43 @@ const browserGlobals = {
   tailwind: 'readonly',
 }
 
+// Cloudflare Pages Functions (Workers runtime) 共用 globals — JS / TS block 共享。
+const functionsServerGlobals = {
+  ...globals.serviceworker,
+  crypto: 'readonly',
+  btoa: 'readonly',
+  atob: 'readonly',
+  TextEncoder: 'readonly',
+  TextDecoder: 'readonly',
+  URL: 'readonly',
+  URLSearchParams: 'readonly',
+  Response: 'readonly',
+  Request: 'readonly',
+  Headers: 'readonly',
+  fetch: 'readonly',
+  console: 'readonly',
+  AbortController: 'readonly',
+  AbortSignal: 'readonly',
+  setTimeout: 'readonly',
+  clearTimeout: 'readonly',
+  // Ambient types from types/env.d.ts (TS-only; ESLint only needs to know
+  // the names exist as globals so type-position references don't trip no-undef)
+  Env: 'readonly',
+}
+
+// Functions JS / TS 共用 rules（no-unused-vars 在 TS block 會被換成 @typescript-eslint 版）。
+const functionsServerRules = {
+  'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+  'no-undef': 'error',
+  'no-const-assign': 'error',
+  'no-dupe-keys': 'error',
+  'no-dupe-args': 'error',
+  'no-unreachable': 'error',
+  'no-empty': ['warn', { allowEmptyCatch: true }],
+  'prefer-const': 'warn',
+  eqeqeq: ['warn', 'smart'],
+}
+
 // ── archive-discipline plugin (PR 2.2c / codex r1) ──────────────────
 // 鏡射 scripts/lint-archive-no-delete.js 的 grep 規則，讓 `npm run lint`
 // 也能擋到 archive worker codepath 的 R2 .delete()/.put() / SQL DELETE FROM
@@ -113,52 +150,52 @@ export default [
     ],
   },
 
-  // Cloudflare Pages Functions (server) — Workers runtime, ES modules
-  // JS→TS 遷移期：.js + .ts 兩種副檔名都走同一套 lint（Workers globals/規則）；
-  // .ts 用 typescript-eslint parser 解析 TS 語法（type annotations / interfaces）。
+  // ── Cloudflare Pages Functions: JS ───────────────────────────────
+  // 純 JS，用 ESLint 預設 parser（espree）。codex r3 F3：與 TS block 拆開，
+  // 避免 .js 被 typescript-eslint parser 強制當 TS 解析；同時讓 TS-only
+  // rules / 型別感知 rules 不會誤套到 .js。
   {
-    files: ['functions/**/*.js', 'functions/**/*.ts'],
+    files: ['functions/**/*.js'],
     languageOptions: {
-      parser: tseslint.parser,
       ecmaVersion: 2023,
       sourceType: 'module',
-      globals: {
-        ...globals.serviceworker,
-        crypto: 'readonly',
-        btoa: 'readonly',
-        atob: 'readonly',
-        TextEncoder: 'readonly',
-        TextDecoder: 'readonly',
-        URL: 'readonly',
-        URLSearchParams: 'readonly',
-        Response: 'readonly',
-        Request: 'readonly',
-        Headers: 'readonly',
-        fetch: 'readonly',
-        console: 'readonly',
-        AbortController: 'readonly',
-        AbortSignal: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        // Ambient types from types/env.d.ts (TS-only; ESLint only needs to know
-        // the names exist as globals so type-position references don't trip no-undef)
-        Env: 'readonly',
-      },
+      globals: functionsServerGlobals,
     },
+    rules: functionsServerRules,
+  },
+
+  // ── Cloudflare Pages Functions: TS ───────────────────────────────
+  // typescript-eslint parser + plugin；parserOptions.projectService 啟用
+  // 型別資訊（型別感知 rule 例如 no-floating-promises 需要它）。tsconfig
+  // 根在 repo 根目錄。codex r3 F3：TS-only rule 集中在這個 block。
+  {
+    files: ['functions/**/*.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: functionsServerGlobals,
+    },
+    plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      'no-undef': 'error',
-      'no-const-assign': 'error',
-      'no-dupe-keys': 'error',
-      'no-dupe-args': 'error',
-      'no-unreachable': 'error',
-      'no-empty': ['warn', { allowEmptyCatch: true }],
-      'prefer-const': 'warn',
-      eqeqeq: ['warn', 'smart'],
+      ...functionsServerRules,
+      // base no-unused-vars 換 TS 版（避免 interface/type 誤報 + 支援 TS 語法）
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // feedback_ts_ratchet_discipline：禁 `:any`
+      '@typescript-eslint/no-explicit-any': 'error',
+      // 型別感知 rule（demonstrates projectService 真的有掛上）
+      '@typescript-eslint/no-floating-promises': 'warn',
     },
   },
 
-  // Archive worker codepath — PR 2.2c lint hardening
+  // ── Archive worker codepath — PR 2.2c lint hardening ──────────────
+  // 純 source-text grep rule，不需要 parser；JS / TS 各自的 parser 由前面
+  // 的 functions block 決定（codex r3 F3：移除 parser override）。
   {
     files: [
       'functions/api/admin/cron/audit-archive*.{js,ts}',
@@ -169,14 +206,11 @@ export default [
       'functions/api/admin/cron/audit-aggregate-archive*.{js,ts}',
       'functions/utils/audit-aggregate-archive*.{js,ts}',
     ],
-    languageOptions: {
-      parser: tseslint.parser,
-    },
     plugins: { 'archive-discipline': archiveDisciplinePlugin },
     rules: { 'archive-discipline/no-forbidden-r2-or-sql': 'error' },
   },
 
-  // Vitest unit tests
+  // ── Vitest unit tests: JS ─────────────────────────────────────────
   {
     files: ['tests/**/*.js'],
     languageOptions: {
@@ -189,10 +223,51 @@ export default [
     },
   },
 
-  // Integration tests run inside workerd via @cloudflare/vitest-pool-workers
+  // ── Vitest unit tests: TS ─────────────────────────────────────────
+  // 為 Stage 7 test TS 化預先鋪路；現在 tests/ 下沒 .ts 檔，block 仍掛著
+  // 確保未來新增 .ts test 不會踩 parser 問題。
+  {
+    files: ['tests/**/*.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    plugins: { '@typescript-eslint': tseslint.plugin },
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'error',
+    },
+  },
+
+  // ── Integration tests (workerd via @cloudflare/vitest-pool-workers) ──
+  // 與 unit tests 同 glob 重疊；flat config 會 merge globals，這裡只加
+  // workerd / serviceworker globals。
   {
     files: ['tests/integration/**/*.js'],
     languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: {
+        ...globals.serviceworker,
+        crypto: 'readonly',
+      },
+    },
+  },
+  {
+    files: ['tests/integration/**/*.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
       ecmaVersion: 2023,
       sourceType: 'module',
       globals: {
