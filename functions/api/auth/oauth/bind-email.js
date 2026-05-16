@@ -15,6 +15,7 @@
 
 import { verifyJwt, signJwt } from '../../../utils/jwt'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
+import { getProvider } from '../../../utils/oauth-providers'
 import { resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth'
 import { refreshCookie } from '../../../utils/cookies'
@@ -57,6 +58,11 @@ export async function onRequestPost(context) {
   const { sub: provider_id, provider, name, avatar } = payload
   if (!provider_id || !provider)
     return res({ error: 'Token 資料不完整', code: 'TOKEN_DATA_INCOMPLETE' }, 401)
+
+  // Defense-in-depth：temp_bind token 由 callback 簽出已過 allowlist，這裡再驗
+  // 一次避免 callback 未來新增路徑漏校；getProvider null = 不在 PROVIDERS map
+  if (!getProvider(provider, env))
+    return res({ error: 'Unsupported OAuth provider', code: 'UNSUPPORTED_PROVIDER' }, 400)
 
   const db  = env.chiyigo_db
 
