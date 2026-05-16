@@ -12,7 +12,7 @@
 
 import { res } from '../../../../utils/auth'
 import { getCorsHeaders } from '../../../../utils/cors'
-import { requirePaymentAccess, getPaymentIntent, PAYMENT_STATUS } from '../../../../utils/payments.js'
+import { requirePaymentAccess, getPaymentIntent, PAYMENT_STATUS } from '../../../../utils/payments'
 import { safeUserAudit } from '../../../../utils/user-audit'
 
 // 使用者可自刪的 status：未真正動到金流的 row。succeeded / processing / refunded

@@ -22,7 +22,7 @@ import { res } from '../../../utils/auth'
 import {
   resolvePaymentAdapter, getPaymentIntent, createPaymentIntent, updatePaymentStatus,
   PAYMENT_KIND,
-} from '../../../utils/payments.js'
+} from '../../../utils/payments'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug.js'
 

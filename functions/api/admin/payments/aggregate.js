@@ -21,7 +21,7 @@
 import { res, requireAnyScope } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES } from '../../../utils/scopes'
-import { PAYMENT_STATUS } from '../../../utils/payments.js'
+import { PAYMENT_STATUS } from '../../../utils/payments'
 
 const VALID_STATUSES = new Set(Object.values(PAYMENT_STATUS))
 

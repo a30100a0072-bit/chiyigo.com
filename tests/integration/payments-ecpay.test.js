@@ -18,7 +18,7 @@ import {
   ecpayCheckMacValue, ecpayPaymentAdapter, generateMerchantTradeNo,
 } from '../../functions/utils/payment-vendors/ecpay.js'
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
-import { getPaymentIntent, PAYMENT_STATUS } from '../../functions/utils/payments.js'
+import { getPaymentIntent, PAYMENT_STATUS } from '../../functions/utils/payments'
 import { onRequestPost as checkoutHandler } from '../../functions/api/auth/payments/checkout/ecpay.js'
 import { onRequestPost as webhookHandler  } from '../../functions/api/webhooks/payments/[vendor].js'
 

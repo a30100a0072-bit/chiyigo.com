@@ -39,7 +39,7 @@ import { getCorsHeaders } from '../../../../utils/cors'
 import {
   requirePaymentAccess, createPaymentIntent,
   PAYMENT_KIND, PAYMENT_STATUS,
-} from '../../../../utils/payments.js'
+} from '../../../../utils/payments'
 import {
   buildEcpayCheckoutFields, generateMerchantTradeNo, getEcpayCheckoutUrl,
 } from '../../../../utils/payment-vendors/ecpay.js'

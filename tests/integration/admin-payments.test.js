@@ -12,7 +12,7 @@ import { signJwt } from '../../functions/utils/jwt'
 import { SCOPES } from '../../functions/utils/scopes'
 import {
   createPaymentIntent, getPaymentIntent, PAYMENT_STATUS,
-} from '../../functions/utils/payments.js'
+} from '../../functions/utils/payments'
 import { onRequestGet  as listHandler   } from '../../functions/api/admin/payments/intents.js'
 import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund.js'
 import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject.js'

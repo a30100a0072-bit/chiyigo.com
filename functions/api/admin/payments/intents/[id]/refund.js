@@ -31,7 +31,7 @@ import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes'
 import {
   getPaymentIntent, updatePaymentStatus, PAYMENT_STATUS,
   lockIntentForRefund, unlockIntentToSucceeded,
-} from '../../../../../utils/payments.js'
+} from '../../../../../utils/payments'
 import { ecpayRefund } from '../../../../../utils/payment-vendors/ecpay.js'
 import { safeUserAudit } from '../../../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../../../utils/audit-aggregate-debug.js'

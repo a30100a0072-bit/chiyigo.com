@@ -31,7 +31,7 @@ export const PAYMENT_STATUS = Object.freeze({
   REFUNDED:   'refunded',
 })
 
-const VALID_STATUSES = new Set(Object.values(PAYMENT_STATUS))
+const VALID_STATUSES = new Set<string>(Object.values(PAYMENT_STATUS))
 
 export const PAYMENT_KIND = Object.freeze({
   DEPOSIT:      'deposit',
@@ -40,7 +40,7 @@ export const PAYMENT_KIND = Object.freeze({
   REFUND:       'refund',
 })
 
-const VALID_KINDS = new Set(Object.values(PAYMENT_KIND))
+const VALID_KINDS = new Set<string>(Object.values(PAYMENT_KIND))
 
 // T11（2026-05-06）：metadata 寫入 allowlist，避免任意鍵污染查詢與 ETL
 //   anonymized_*：anonymize endpoint 會用，加在這裡讓 createPaymentIntent 也能 round-trip
@@ -58,12 +58,12 @@ const METADATA_ALLOWED_KEYS = new Set([
   'payment_info',       // ATM/CVS 取號資訊（webhook handler mergeMetadata 寫入）
 ])
 
-function sanitizeMetadata(metadata) {
+function sanitizeMetadata(metadata): Record<string, unknown> | null {
   if (metadata == null) return null
   if (typeof metadata !== 'object' || Array.isArray(metadata)) {
     throw new Error('metadata must be a plain object')
   }
-  const out = {}
+  const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(metadata)) {
     if (!METADATA_ALLOWED_KEYS.has(k)) continue  // 默默丟棄不在白名單的鍵
     // 值大小限制：避免單欄塞 MB 級 payload
@@ -80,7 +80,20 @@ function sanitizeMetadata(metadata) {
  * INSERT 一筆 payment_intent。caller 應自行 build vendor_intent_id（PSP 回的）。
  * 同 (vendor, vendor_intent_id) UNIQUE 撞到 → throw（caller 應改走 update）。
  */
-export async function createPaymentIntent(env, payload = {}) {
+interface CreatePaymentIntentPayload {
+  user_id?: number | string | null
+  vendor?: string
+  vendor_intent_id?: string | number
+  kind?: string
+  status?: string
+  amount_subunit?: number | null
+  amount_raw?: string | null
+  currency?: string
+  metadata?: Record<string, unknown> | null
+  requisition_id?: number | string | null
+}
+
+export async function createPaymentIntent(env, payload: CreatePaymentIntentPayload = {}) {
   if (!env?.chiyigo_db) throw new Error('db not available')
   const { user_id, vendor, vendor_intent_id, kind = PAYMENT_KIND.DEPOSIT,
           status = PAYMENT_STATUS.PENDING, amount_subunit = null, amount_raw = null,
@@ -117,7 +130,15 @@ export async function createPaymentIntent(env, payload = {}) {
   return result?.id ?? null
 }
 
-export async function getPaymentIntent(env, { id, vendor, vendor_intent_id, includeDeleted = false } = {}) {
+export async function getPaymentIntent(
+  env,
+  { id, vendor, vendor_intent_id, includeDeleted = false }: {
+    id?: number | string | null,
+    vendor?: string | null,
+    vendor_intent_id?: string | number | null,
+    includeDeleted?: boolean,
+  } = {},
+) {
   if (!env?.chiyigo_db) return null
   // Codex r1 P0-1：預設過濾 soft-deleted；只有 webhook orphan 偵測會 includeDeleted=true
   const deletedFilter = includeDeleted ? '' : 'AND deleted_at IS NULL'
@@ -311,7 +332,11 @@ export async function unlockIntentToSucceeded(env, intentId) {
  * @param {boolean} [opts.skipKyc=false]   只查一般 intent 列表時 true
  * @param {string}  [opts.requiredLevel]   'enhanced' = 高額提款
  */
-export async function requirePaymentAccess(request, env, opts = {}) {
+export async function requirePaymentAccess(
+  request,
+  env,
+  opts: { skipKyc?: boolean, requiredLevel?: string } = {},
+) {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
 

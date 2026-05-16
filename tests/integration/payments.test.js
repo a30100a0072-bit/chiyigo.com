@@ -24,7 +24,7 @@ const mockState = vi.hoisted(() => ({
   casLostMode: false,  // Codex r8 P2：強迫 updatePaymentStatus 回 no_row 模擬 CAS lost race
 }))
 
-vi.mock('../../functions/utils/payments.js', async (importOriginal) => {
+vi.mock('../../functions/utils/payments', async (importOriginal) => {
   const actual = await importOriginal()
   return {
     ...actual,
@@ -49,7 +49,7 @@ const {
   createPaymentIntent, getPaymentIntent, updatePaymentStatus,
   requirePaymentAccess,
   PAYMENT_STATUS, PAYMENT_KIND,
-} = await import('../../functions/utils/payments.js')
+} = await import('../../functions/utils/payments')
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
 import { onRequestGet  as listHandler    } from '../../functions/api/auth/payments/intents.js'
 import { onRequestGet  as detailHandler  } from '../../functions/api/auth/payments/intents/[id].js'

@@ -24,7 +24,7 @@
 import { res, requireStepUp } from '../../../../../utils/auth'
 import { getCorsHeaders } from '../../../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes'
-import { getPaymentIntent, PAYMENT_STATUS } from '../../../../../utils/payments.js'
+import { getPaymentIntent, PAYMENT_STATUS } from '../../../../../utils/payments'
 import { safeUserAudit } from '../../../../../utils/user-audit'
 
 const SOFT_DELETABLE = new Set([

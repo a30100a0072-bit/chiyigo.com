@@ -18,7 +18,7 @@
 
 import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
-import { requirePaymentAccess, PAYMENT_STATUS, PAYMENT_KIND } from '../../../utils/payments.js'
+import { requirePaymentAccess, PAYMENT_STATUS, PAYMENT_KIND } from '../../../utils/payments'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
