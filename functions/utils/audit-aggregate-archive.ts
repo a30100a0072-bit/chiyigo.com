@@ -190,7 +190,7 @@ export function buildAggregateChunkKeys({
 /**
  * 從 audit_archive_chunks row 反推 aggregate chunk 的 data/manifest key（recovery 路徑用）。
  *
- * 與 audit-archive.js `deriveKeysFromChunk` 同設計：dry_run / compression 都由 row 自身帶，
+ * 與 audit-archive `deriveKeysFromChunk` 同設計：dry_run / compression 都由 row 自身帶，
  * 不吃當前 env flag（PR 4 flip dry_run 後 state 升級用的 key 仍對齊當初 PUT 的 prefix）。
  */
 export function deriveAggregateKeysFromChunk(row) {
@@ -210,7 +210,7 @@ export function deriveAggregateKeysFromChunk(row) {
 /**
  * 組 aggregate chunk manifest JSON。
  *
- * 與 audit-archive.js buildManifest 結構大致相同，但：
+ * 與 audit-archive buildManifest 結構大致相同，但：
  *   - 無 severities reduce（aggregate 表沒 severity 欄；telemetry 有但已是 bucket 計數）
  *   - 多 row_kind 欄區分 telemetry / debug（forensic 可一眼判別 schema）
  *   - cold_class_version 仍保留欄位，aggregate 表不走 classify 故設 1 常數（未來保留升級空間）
@@ -253,7 +253,7 @@ export function buildAggregateManifest({
  *
  * 純函式 / 可單測。worker 端依結果 sequential 跑 gzip+PUT+chunks INSERT。
  */
-export function splitIntoChunks(rows, toJsonl, opts = {}) {
+export function splitIntoChunks(rows, toJsonl, opts: { maxRows?: number; maxBytes?: number } = {}) {
   const maxRows  = opts.maxRows  ?? CHUNK_MAX_ROWS
   const maxBytes = opts.maxBytes ?? CHUNK_MAX_BYTES
   const chunks = []
@@ -323,6 +323,13 @@ export function splitIntoChunks(rows, toJsonl, opts = {}) {
  * @throws Error                            CHUNK_NOT_FOUND / CHUNK_STATE_MISMATCH /
  *                                          DRY_RUN_MISMATCH / R2 / D1 exception
  */
+interface AggregatePurgeError extends Error {
+  code: 'CHUNK_NOT_FOUND' | 'DRY_RUN_MISMATCH' | 'CHUNK_STATE_MISMATCH'
+  expectedDryRun?: number
+  actualDryRun?: number
+  actualState?: string
+}
+
 export async function purgeAggregateChunk({ env, db, target }) {
   const bucket = env?.AUDIT_ARCHIVE_BUCKET
   if (!bucket) throw new Error('AUDIT_ARCHIVE_BUCKET binding missing')
@@ -344,20 +351,20 @@ export async function purgeAggregateChunk({ env, db, target }) {
   ).first()
 
   if (!row) {
-    const e = new Error('chunk_not_found')
+    const e = new Error('chunk_not_found') as AggregatePurgeError
     e.code = 'CHUNK_NOT_FOUND'
     throw e
   }
   const actualDryRunInt = row.dry_run === 1 || row.dry_run === true ? 1 : 0
   if (actualDryRunInt !== expectedDryRunInt) {
-    const e = new Error(`dry_run_mismatch; expected ${expectedDryRunInt}, got ${actualDryRunInt}`)
+    const e = new Error(`dry_run_mismatch; expected ${expectedDryRunInt}, got ${actualDryRunInt}`) as AggregatePurgeError
     e.code = 'DRY_RUN_MISMATCH'
     e.expectedDryRun = expectedDryRunInt
     e.actualDryRun   = actualDryRunInt
     throw e
   }
   if (row.state !== 'blacklisted') {
-    const e = new Error(`chunk_state_must_be_blacklisted; got '${row.state}'`)
+    const e = new Error(`chunk_state_must_be_blacklisted; got '${row.state}'`) as AggregatePurgeError
     e.code = 'CHUNK_STATE_MISMATCH'
     e.actualState = row.state
     throw e

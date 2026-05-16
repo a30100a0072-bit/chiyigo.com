@@ -22,7 +22,7 @@
 import {
   AGGREGATE_TABLES,
   telemetryRowsToJsonl,
-} from '../../../utils/audit-aggregate-archive.js'
+} from '../../../utils/audit-aggregate-archive'
 import { runAggregateArchive } from '../../../utils/audit-aggregate-archive-runner.js'
 
 const TABLE_NAME   = 'audit_log_aggregate_telemetry'

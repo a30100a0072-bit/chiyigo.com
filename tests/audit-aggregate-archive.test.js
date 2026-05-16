@@ -28,7 +28,7 @@ import {
   splitIntoChunks,
   CHUNK_MAX_ROWS,
   CHUNK_MAX_BYTES,
-} from '../functions/utils/audit-aggregate-archive.js'
+} from '../functions/utils/audit-aggregate-archive'
 
 describe('constants', () => {
   it('AGGREGATE_TABLES 對 2 表 + cold_class 對照', () => {
@@ -226,7 +226,7 @@ describe('buildAggregateManifest', () => {
       compression: 'gzip', sha256Gz: 'gz', rowKind: 'aggregate_telemetry',
     })
     expect(m.row_kind).toBe('aggregate_telemetry')
-    expect(m.severities).toBeUndefined()
+    expect(/** @type {any} */ (m).severities).toBeUndefined()
     expect(m.cold_class).toBe('aggregate_telemetry')
     expect(m.cold_class_version).toBe(1)
     expect(m.compression).toBe('gzip')

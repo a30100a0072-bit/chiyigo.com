@@ -59,7 +59,7 @@ import {
   buildAggregateManifest,
   deriveAggregateKeysFromChunk,
   splitIntoChunks,
-} from './audit-aggregate-archive.js'
+} from './audit-aggregate-archive'
 
 const COLD_CLASS_VERSION = 1
 
@@ -1104,5 +1104,5 @@ async function fail(env, report, eventPrefix, eventCode, data) {
   return res(report, 500)
 }
 
-// AGGREGATE_WRITER 從 audit-aggregate-archive.js 來；export pass-through 方便 caller
+// AGGREGATE_WRITER 從 audit-aggregate-archive 來；export pass-through 方便 caller
 export { AGGREGATE_WRITER }

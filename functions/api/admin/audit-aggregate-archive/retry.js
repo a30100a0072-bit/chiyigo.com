@@ -34,7 +34,7 @@
  *     分開：aggregate / raw 兩個 force_purge 路徑各自 enable，避免 raw 動作開了
  *     aggregate 也跟著開）。state 必 'blacklisted'。
  *     呼叫 purgeAggregateChunk（**不共用 raw purgeChunk**：prefix derive 不同；
- *     見 audit-aggregate-archive.js#purgeAggregateChunk header）。
+ *     見 audit-aggregate-archive#purgeAggregateChunk header）。
  *
  * 護欄（user + codex 2026-05-14 拍板）：
  *   - target 必含 dry_run flag（boolean）— 所有 SELECT / UPDATE / DELETE 都 AND
@@ -72,7 +72,7 @@ import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import {
   AGGREGATE_TABLES,
   purgeAggregateChunk,
-} from '../../../utils/audit-aggregate-archive.js'
+} from '../../../utils/audit-aggregate-archive'
 
 const VALID_ACTIONS = new Set(['re_verify', 'mark_resolved', 'force_purge'])
 

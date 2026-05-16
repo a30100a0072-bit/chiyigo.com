@@ -21,7 +21,7 @@ import { env } from 'cloudflare:test'
 import { resetDb } from './_helpers.js'
 import { onRequestPost as cronTelemetry } from '../../functions/api/admin/cron/audit-aggregate-archive-telemetry.js'
 import { onRequestPost as cronDebug } from '../../functions/api/admin/cron/audit-aggregate-archive-debug.js'
-import { cutoffMonthStartUTC } from '../../functions/utils/audit-aggregate-archive.js'
+import { cutoffMonthStartUTC } from '../../functions/utils/audit-aggregate-archive'
 
 const CRON_SECRET = 'test-cron-secret'
 const ARCHIVE_ENV = 'test'
