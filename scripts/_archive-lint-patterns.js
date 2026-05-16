@@ -96,7 +96,9 @@ export const SCAN_GLOBS = [
 // 0044 (codex P2b)：擴 aggregate-archive — audit-aggregate-archive*.js（PR 3.2 helpers + 兩 handler）
 // 既有 'audit-archive*'   涵蓋 audit_log archive worker（PR 2.x）；
 // 新增  'audit-aggregate-archive*' 涵蓋 aggregate→R2 worker（PR 3.2+）。
-export const FILE_PATTERN = /^audit-(aggregate-)?archive.*\.js$/
+// PR-5 ts-migration (2026-05-16)：擴 `.(js|ts)` 副檔名 — audit-archive.js→.ts rename 後
+// 守備必須跟上，不能讓 no-delete discipline 因 ext 變更而失效（同 feedback_coverage_exclude_ext_glob 教訓）。
+export const FILE_PATTERN = /^audit-(aggregate-)?archive.*\.(js|ts)$/
 
 // Helper: 給定 line + pattern，判斷是否被同行 ALLOW_TAG 豁免（per-kind）。
 //   line-scope pattern 用此 helper；source-scope pattern 由 caller 自行決定
