@@ -990,7 +990,7 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
   - 測試：unit 281→287（+6 in `tests/scopes.test.js`），int 544 不變
 - **PR 2.3** force_purge 真實作 ✅ — endpoint + `purgeChunk` helper（manual R2 chunk+manifest+chunks row delete）
   - retry.js `force_purge`：501 stub → 真實作；要求 chunk state='blacklisted'（接 mark_resolved 收尾）+ step-up + env `AUDIT_ARCHIVE_PURGE_ENABLED='1'`，未設回 503 PURGE_DISABLED + emit `audit.archive.force_purge_disabled` warn
-  - `purgeChunk(env, db, target)`（functions/utils/audit-archive.js）：SELECT row → R2 chunk DELETE → R2 manifest DELETE → D1 chunks row DELETE（嚴格 `state='blacklisted'` 再驗一次防 race）；前面失敗 propagate exception，D1 row 留著可重試
+  - `purgeChunk(env, db, target)`（functions/utils/audit-archive.ts）：SELECT row → R2 chunk DELETE → R2 manifest DELETE → D1 chunks row DELETE（嚴格 `state='blacklisted'` 再驗一次防 race）；前面失敗 propagate exception，D1 row 留著可重試
   - **audit_log raw row 不刪**：response 帶 `source_rows_deleted: false / chunks_row_deleted: true` 明示分界；raw 真刪屬 PR 4 marked_archived→7d→purged lifecycle。只刪 chunks row 代表「移除壞掉的 archive attempt / 讓 pipeline 可重跑」，不是「永久跳過該段 raw audit_log」；若未來需永久跳過要另設 tombstone state，不偷靠 raw DELETE
   - 3 新 events 入 registry（121→124）：`force_purge_succeeded` / `_failed` / `_disabled` 全 immutable category
   - lint waiver：helper 內單點同行 tag — `// archive-delete-allow: PR 2.3 force_purge`（line-scope, R2 .delete）+ `/* archive-sql-allow: PR 2.3 force_purge */`（source-scope, SQL DELETE）；不改 lint script 白名單
@@ -1007,7 +1007,7 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
 - **PR 3.2 aggregate→R2 月度冷存** — telemetry + debug 兩 aggregate 表上 R2，retention 1y
   - **part 1**（migration 0044 + audit-policy + helpers + unit）
     - migration 0044：兩 aggregate 表 ALTER 加 `archived_at` + `cold_class`；audit_archive_chunks rebuild 移除 cold_class CHECK（容納 `aggregate_telemetry` / `aggregate_debug` 兩新 class）
-    - helpers `functions/utils/audit-aggregate-archive.js`：`cutoffMonthStartUTC`（月度文字格式避 ISO 比較陷阱）/ `telemetryRowsToJsonl` / `debugRowsToJsonl` / `aggregatePrefixes` / `buildAggregateChunkKeys` / `deriveAggregateKeysFromChunk` / `buildAggregateManifest`（多 `row_kind` 欄）/ `splitIntoChunks`
+    - helpers `functions/utils/audit-aggregate-archive.ts`：`cutoffMonthStartUTC`（月度文字格式避 ISO 比較陷阱）/ `telemetryRowsToJsonl` / `debugRowsToJsonl` / `aggregatePrefixes` / `buildAggregateChunkKeys` / `deriveAggregateKeysFromChunk` / `buildAggregateManifest`（多 `row_kind` 欄）/ `splitIntoChunks`
     - audit-policy +6 events `audit.aggregate_archive.{telemetry,debug}.{run_completed,run_skipped,run_failed}`
     - ESLint archive-discipline + build lint glob 擴 `audit-(aggregate-)?archive*.js`
   - **part 2**（cron handler ×2 + workflow ×2 + int test + 本段 docs）

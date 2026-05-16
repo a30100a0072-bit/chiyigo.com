@@ -226,7 +226,7 @@ describe('buildAggregateManifest', () => {
       compression: 'gzip', sha256Gz: 'gz', rowKind: 'aggregate_telemetry',
     })
     expect(m.row_kind).toBe('aggregate_telemetry')
-    expect(/** @type {any} */ (m).severities).toBeUndefined()
+    expect(Object.hasOwn(m, 'severities')).toBe(false)
     expect(m.cold_class).toBe('aggregate_telemetry')
     expect(m.cold_class_version).toBe(1)
     expect(m.compression).toBe('gzip')
