@@ -42,7 +42,7 @@ import {
 } from '../../../../utils/payments'
 import {
   buildEcpayCheckoutFields, generateMerchantTradeNo, getEcpayCheckoutUrl,
-} from '../../../../utils/payment-vendors/ecpay.js'
+} from '../../../../utils/payment-vendors/ecpay'
 import { safeUserAudit } from '../../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug'
 
@@ -58,7 +58,16 @@ export async function onRequestPost({ request, env }) {
   const { user, error } = await requirePaymentAccess(request, env)
   if (error) return error
 
-  let body = {}
+  let body: {
+    amount?: unknown
+    kind?: string
+    trade_desc?: string
+    item_name?: string
+    metadata?: Record<string, unknown> | null
+    choose_payment?: string
+    client_back_url?: string
+    order_result_url?: string
+  } = {}
   try { body = await request.json() } catch { /* keep empty */ }
 
   const amount = Math.round(Number(body?.amount))

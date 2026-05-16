@@ -19,8 +19,8 @@ import {
 } from '../../functions/utils/payment-vendors/ecpay.js'
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
 import { getPaymentIntent, PAYMENT_STATUS } from '../../functions/utils/payments'
-import { onRequestPost as checkoutHandler } from '../../functions/api/auth/payments/checkout/ecpay.js'
-import { onRequestPost as webhookHandler  } from '../../functions/api/webhooks/payments/[vendor].js'
+import { onRequestPost as checkoutHandler } from '../../functions/api/auth/payments/checkout/ecpay'
+import { onRequestPost as webhookHandler  } from '../../functions/api/webhooks/payments/[vendor]'
 
 // 必須跟 functions/utils/payment-vendors/ecpay.js 的 SANDBOX_CREDS 一致；
 // 否則 webhook handler 在 env 沒設 ECPAY_HASH_KEY 時 fallback 到程式內的 sandbox creds，

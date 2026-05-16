@@ -53,7 +53,7 @@ const {
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
 import { onRequestGet  as listHandler    } from '../../functions/api/auth/payments/intents'
 import { onRequestGet  as detailHandler  } from '../../functions/api/auth/payments/intents/[id].js'
-import { onRequestPost as webhookHandler } from '../../functions/api/webhooks/payments/[vendor].js'
+import { onRequestPost as webhookHandler } from '../../functions/api/webhooks/payments/[vendor]'
 import { onRequestDelete as userDeleteHandler } from '../../functions/api/auth/payments/intents/[id].js'
 
 env.PAYMENT_MOCK_SECRET = 'test-payment-secret'

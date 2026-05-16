@@ -39,7 +39,7 @@ export async function onRequestPost({ request, env, params }) {
   const parsed = await adapter.parseWebhook(request, env)
 
   // success/dedup 都要照 vendor 規格回（ECPay 要 plain text "1|OK"，否則 retry）
-  const successFn = typeof adapter.successResponse === 'function'
+  const successFn: (extra?: { deduplicated?: boolean }) => Response = typeof adapter.successResponse === 'function'
     ? (extra) => adapter.successResponse(extra)
     : (extra = {}) => res({ ok: true, ...(extra.deduplicated ? { deduplicated: true } : {}) })
 

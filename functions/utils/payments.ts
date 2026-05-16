@@ -99,6 +99,10 @@ interface CreatePaymentIntentPayload {
   currency?: string
   metadata?: Record<string, unknown> | null
   requisition_id?: number | string | null
+  // Stage 3：webhook PSP-direct 路徑會傳入但 destructure 不接（保留欄位讓 caller
+  // 編譯通過、runtime 沿用既有行為「silently dropped」）。修正落 DB 為獨立 PR
+  // 處理，避免綁進 JS→TS rename 的金流邊界 PR（[[feedback_security_boundary_pr_first_do_no_harm]]）。
+  failure_reason?: string | null
 }
 
 export async function createPaymentIntent(env, payload: CreatePaymentIntentPayload = {}) {

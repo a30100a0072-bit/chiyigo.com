@@ -250,6 +250,8 @@ export const ecpayPaymentAdapter = {
  * @param {string} payload.itemName         商品名稱（≤ 400 char，多項用 # 分隔）
  * @param {string} payload.returnUrl        ECPay server-to-server 通知（必須 https）
  * @param {string} [payload.clientBackUrl]  user 付款後跳回的瀏覽器 URL
+ * @param {string} [payload.orderResultUrl] 付款成功後 ECPay 主動 POST 的 URL（瀏覽器層；
+ *                                          沒設則 ECPay 停在自家成功頁等 user 點 ClientBackURL）
  * @param {string} [payload.choosePayment='ALL']  ALL|Credit|ATM|CVS|BARCODE|ApplePay
  *
  * @returns {Promise<{ checkout_url: string, fields: object }>}
