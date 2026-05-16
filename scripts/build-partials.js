@@ -22,7 +22,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // P2-8：build-time cache-bust 版號（git short hash），全站 <script src> / <link href> 統一蓋。
 // 失敗（沒裝 git / 不在 repo）退回 timestamp，不擋 build。
+// BUILD_VER env override：cache-bust commit 重跑 build 時鎖定目標 hash，保證 idempotent。
 function resolveBuildVer() {
+  const envVer = process.env.BUILD_VER && process.env.BUILD_VER.trim()
+  if (envVer && /^[0-9a-zA-Z._-]{1,40}$/.test(envVer)) return envVer
   try {
     const h = execSync('git rev-parse --short=8 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString().trim()
