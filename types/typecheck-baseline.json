@@ -1,11 +1,10 @@
 {
-  "baselineSha": "3be4662",
-  "cleanFiles": 197,
+  "baselineSha": "eaeb26e",
+  "cleanFiles": 198,
   "createdAt": "2026-05-16",
-  "errorCount": 973,
-  "errorFiles": 48,
+  "errorCount": 972,
+  "errorFiles": 47,
   "errorsByFile": {
-    "functions/api/admin/oauth-clients.js": 1,
     "functions/utils/payment-vendors/ecpay.js": 10,
     "src/js/404.js": 11,
     "src/js/about.js": 21,
@@ -54,7 +53,7 @@
     "tests/integration/webauthn-login.test.js": 3,
     "tests/integration/webauthn-register.test.js": 3
   },
-  "fileErrors": 973,
+  "fileErrors": 972,
   "globalErrors": 0,
   "sourceFilesTotal": 245,
   "stage": 1
