@@ -27,7 +27,7 @@
 
 import { res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
-import { hotRetentionDaysFor } from '../../../utils/audit-archive.js'
+import { hotRetentionDaysFor } from '../../../utils/audit-archive'
 import {
   AGGREGATE_DEBUG_WRITER_VERSION,
   PR31_SUPPORTED_COLD_CLASS,

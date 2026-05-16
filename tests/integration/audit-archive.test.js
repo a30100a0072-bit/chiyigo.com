@@ -26,7 +26,7 @@ import {
   sha256Hex,
   gzipDecompress,
   buildChunkKeys,
-} from '../../functions/utils/audit-archive.js'
+} from '../../functions/utils/audit-archive'
 
 const CRON_SECRET = 'test-cron-secret'
 const ARCHIVE_ENV = 'test'

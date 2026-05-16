@@ -29,6 +29,13 @@
 
 import { classifyForCold } from './audit-policy'
 
+// purgeChunk pre-condition guard errors — local typing only, not a shared error class
+// (codex PR-4/PR-5 r1: minimal blast radius; callers catch by e.code string)
+interface ChunkPurgeError extends Error {
+  code?: string
+  actualState?: string
+}
+
 export const ARCHIVE_SCHEMA_VERSION = '2.0'
 export const ARCHIVE_WRITER         = 'cron-archive-worker'
 export const ARCHIVE_WRITER_VERSION = '2.1.0-pr2.1b-gzip'
@@ -362,7 +369,11 @@ export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
  * 三次 backoff（1s/4s/16s）= 4 次 attempt 機會 = 累計最多 21s wait。Pages Functions
  * wallclock 在 await 期間不算 CPU，不會撞 30s 上限。
  */
-export async function putWithRetry(bucket, key, body, putOpts, opts = {}) {
+export async function putWithRetry(bucket, key, body, putOpts, opts: {
+  backoffMs?: number[],
+  sleep?: (ms: number) => Promise<void>,
+  onAttemptFailed?: (info: any) => void | Promise<void>,
+} = {}) {
   const backoff = opts.backoffMs ?? DEFAULT_PUT_RETRY_BACKOFF_MS
   const sleep = opts.sleep ?? (ms => new Promise(r => setTimeout(r, ms)))
   const onAttemptFailed = opts.onAttemptFailed
@@ -466,12 +477,12 @@ export async function purgeChunk({ env, db, target }) {
   ).first()
 
   if (!row) {
-    const e = new Error('chunk_not_found')
+    const e = new Error('chunk_not_found') as ChunkPurgeError
     e.code = 'CHUNK_NOT_FOUND'
     throw e
   }
   if (row.state !== 'blacklisted') {
-    const e = new Error(`chunk_state_must_be_blacklisted; got '${row.state}'`)
+    const e = new Error(`chunk_state_must_be_blacklisted; got '${row.state}'`) as ChunkPurgeError
     e.code = 'CHUNK_STATE_MISMATCH'
     e.actualState = row.state
     throw e

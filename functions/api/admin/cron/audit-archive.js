@@ -66,7 +66,7 @@ import {
   newRunId,
   utcDate,
   ARCHIVE_WRITER_VERSION,
-} from '../../../utils/audit-archive.js'
+} from '../../../utils/audit-archive'
 
 // PR 2.0：cold_class 版本固定 1。audit-policy 改動時 bump（design doc v8 cold_class_version）
 const COLD_CLASS_VERSION = 1

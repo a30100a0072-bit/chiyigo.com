@@ -614,7 +614,7 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
 
     // 把 R2 data object 內容替換 — 用同 row count 但完全不同 JSONL 內容
     // （另起 gzip：合法 JSONL、id 都 integer、行數同 → strict parser 過、sha 不同）
-    const { gzipCompress } = await import('../../functions/utils/audit-archive.js')
+    const { gzipCompress } = await import('../../functions/utils/audit-archive')
     const fakeJsonl =
       JSON.stringify({ id: 999999, event_type: 'fake', user_id: null, severity: 'info',
                        hour_bucket: '2099-01-01T00:00', count: 1, ip_hash_top: null,

@@ -24,7 +24,7 @@
  *    lock 擋住 → endpoint catch 後落 502 / 423；force_purge 本身的 lint 豁免不變。
  */
 
-import { ARCHIVE_SCHEMA_VERSION } from './audit-archive.js'
+import { ARCHIVE_SCHEMA_VERSION } from './audit-archive'
 
 export const AGGREGATE_WRITER         = 'cron-aggregate-archive-worker'
 export const AGGREGATE_WRITER_VERSION = '3.2.0'

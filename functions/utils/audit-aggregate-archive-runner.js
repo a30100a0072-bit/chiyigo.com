@@ -50,7 +50,7 @@ import {
   newRunId,
   utcDate,
   appendStateHistory,
-} from './audit-archive.js'
+} from './audit-archive'
 import {
   AGGREGATE_WRITER,
   AGGREGATE_WRITER_VERSION,

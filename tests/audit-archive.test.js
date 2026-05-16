@@ -32,7 +32,7 @@ import {
   SUPPORTED_COLD_CLASSES,
   hotRetentionDaysFor,
   purgeChunk,
-} from '../functions/utils/audit-archive.js'
+} from '../functions/utils/audit-archive'
 
 describe('rowsToJsonl', () => {
   it('輸出固定欄位順序 + trailing newline', () => {
