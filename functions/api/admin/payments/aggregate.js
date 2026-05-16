@@ -21,9 +21,7 @@
 import { res, requireAnyScope } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES } from '../../../utils/scopes'
-import { PAYMENT_STATUS } from '../../../utils/payments'
-
-const VALID_STATUSES = new Set(Object.values(PAYMENT_STATUS))
+import { PAYMENT_STATUS, isPaymentStatus } from '../../../utils/payments'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
@@ -42,7 +40,7 @@ export async function onRequestGet({ request, env }) {
   const url    = new URL(request.url)
   const period = url.searchParams.get('period') === 'monthly' ? 'monthly' : 'daily'
   const status = url.searchParams.get('status') ?? PAYMENT_STATUS.SUCCEEDED
-  if (!VALID_STATUSES.has(status)) return res({ error: 'invalid status', code: 'INVALID_STATUS' }, 400, cors)
+  if (!isPaymentStatus(status)) return res({ error: 'invalid status', code: 'INVALID_STATUS' }, 400, cors)
 
   const from = url.searchParams.get('from') ?? null
   const to   = url.searchParams.get('to')   ?? null
@@ -54,6 +52,7 @@ export async function onRequestGet({ request, env }) {
 
   // Codex r5 P2：aggregate 預設過濾 soft-deleted（對帳基準應反映「真實有效」row）
   const conds = ['status = ?', 'deleted_at IS NULL']
+  /** @type {string[]} */
   const binds = [status]
   if (from) { conds.push('created_at >= ?'); binds.push(from) }
   if (to)   { conds.push('created_at < ?');  binds.push(to) }

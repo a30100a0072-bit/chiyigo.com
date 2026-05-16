@@ -22,11 +22,9 @@
 import { res, requireAnyScope, requireStepUp } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
-import { PAYMENT_STATUS } from '../../../utils/payments'
+import { PAYMENT_STATUS, isPaymentStatus } from '../../../utils/payments'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
-
-const VALID_STATUSES = new Set(Object.values(PAYMENT_STATUS))
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
@@ -91,7 +89,7 @@ export async function onRequestGet({ request, env }) {
 
   const status = url.searchParams.get('status')
   if (status) {
-    if (!VALID_STATUSES.has(status)) return res({ error: 'invalid status', code: 'INVALID_STATUS' }, 400, cors)
+    if (!isPaymentStatus(status)) return res({ error: 'invalid status', code: 'INVALID_STATUS' }, 400, cors)
     conds.push('pi.status = ?'); binds.push(status)
   }
 
