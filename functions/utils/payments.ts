@@ -29,18 +29,26 @@ export const PAYMENT_STATUS = Object.freeze({
   FAILED:     'failed',
   CANCELED:   'canceled',
   REFUNDED:   'refunded',
-})
+} as const)
+export type PaymentStatus = typeof PAYMENT_STATUS[keyof typeof PAYMENT_STATUS]
 
-const VALID_STATUSES = new Set<string>(Object.values(PAYMENT_STATUS))
+const VALID_STATUSES: ReadonlySet<string> = new Set(Object.values(PAYMENT_STATUS))
+export function isPaymentStatus(s: unknown): s is PaymentStatus {
+  return typeof s === 'string' && VALID_STATUSES.has(s)
+}
 
 export const PAYMENT_KIND = Object.freeze({
   DEPOSIT:      'deposit',
   WITHDRAW:     'withdraw',
   SUBSCRIPTION: 'subscription',
   REFUND:       'refund',
-})
+} as const)
+export type PaymentKind = typeof PAYMENT_KIND[keyof typeof PAYMENT_KIND]
 
-const VALID_KINDS = new Set<string>(Object.values(PAYMENT_KIND))
+const VALID_KINDS: ReadonlySet<string> = new Set(Object.values(PAYMENT_KIND))
+export function isPaymentKind(s: unknown): s is PaymentKind {
+  return typeof s === 'string' && VALID_KINDS.has(s)
+}
 
 // T11（2026-05-06）：metadata 寫入 allowlist，避免任意鍵污染查詢與 ETL
 //   anonymized_*：anonymize endpoint 會用，加在這裡讓 createPaymentIntent 也能 round-trip

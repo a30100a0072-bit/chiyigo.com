@@ -18,7 +18,7 @@
 
 import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
-import { requirePaymentAccess, PAYMENT_STATUS, PAYMENT_KIND } from '../../../utils/payments'
+import { requirePaymentAccess, isPaymentStatus, isPaymentKind } from '../../../utils/payments'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -39,10 +39,10 @@ export async function onRequestGet({ request, env }) {
   // Codex r1 P0-1：列表過濾 soft-deleted（user delete 後不再顯示）
   const where = ['user_id = ?', 'deleted_at IS NULL']
   const binds: (string | number)[] = [Number(user.sub)]
-  if (status && (Object.values(PAYMENT_STATUS) as string[]).includes(status)) {
+  if (isPaymentStatus(status)) {
     where.push('status = ?'); binds.push(status)
   }
-  if (kind && (Object.values(PAYMENT_KIND) as string[]).includes(kind)) {
+  if (isPaymentKind(kind)) {
     where.push('kind = ?'); binds.push(kind)
   }
 
