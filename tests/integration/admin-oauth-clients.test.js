@@ -22,7 +22,7 @@ import {
 import {
   onRequestGet  as listHandler,
   onRequestPost as createHandler,
-} from '../../functions/api/admin/oauth-clients.js'
+} from '../../functions/api/admin/oauth-clients'
 import {
   onRequestGet    as getOneHandler,
   onRequestPatch  as patchHandler,
