@@ -73,7 +73,7 @@ export const FORBIDDEN_PATTERNS = [
   ...r2MethodPatterns('delete', 'delete', 'R2 .delete()'),
 
   // ── kind=put: PR 2.2c — R2 .put() 必走 archivePut wrapper ───────
-  //    唯一合法 bare site: functions/utils/audit-archive.js#putWithRetry
+  //    唯一合法 bare site: functions/utils/audit-archive#putWithRetry
   //    用同行 `// archive-put-allow` 豁免。
   ...r2MethodPatterns('put', 'put', 'R2 .put() (must go through archivePut wrapper)'),
 
