@@ -36,7 +36,7 @@ const { onRequestPost: optionsHandler } = await import(
   '../../functions/api/auth/webauthn/register-options.js'
 )
 const { onRequestPost: verifyHandler } = await import(
-  '../../functions/api/auth/webauthn/register-verify.js'
+  '../../functions/api/auth/webauthn/register-verify'
 )
 
 env.WEBAUTHN_RP_ID    = 'localhost'
