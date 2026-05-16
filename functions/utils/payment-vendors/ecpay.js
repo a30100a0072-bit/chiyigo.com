@@ -23,8 +23,8 @@
  *   - MerchantTradeNo 是我方 generated；存到 vendor_intent_id 做 lookup key
  */
 
-// 不從 ../payments.js 引 PAYMENT_STATUS（會跟 payments.js 引 ADAPTERS map 形成 circular import
-// → adapter 註冊時 payments.js 還沒 ready 為 undefined → resolvePaymentAdapter 找不到）
+// 不從 ../payments.ts 引 PAYMENT_STATUS（會跟 payments.ts 引 ADAPTERS map 形成 circular import
+// → adapter 註冊時 payments.ts 還沒 ready 為 undefined → resolvePaymentAdapter 找不到）
 const PAYMENT_STATUS = Object.freeze({
   PENDING: 'pending', PROCESSING: 'processing', SUCCEEDED: 'succeeded',
   FAILED: 'failed', CANCELED: 'canceled', REFUNDED: 'refunded',

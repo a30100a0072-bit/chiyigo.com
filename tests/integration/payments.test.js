@@ -2,7 +2,7 @@
  * Phase F-2 — Payment scaffold 整合測試
  *
  * 涵蓋：
- *  - utils/payments.js helper（create / get / updateStatus）
+ *  - utils/payments.ts helper（create / get / updateStatus）
  *  - requirePaymentAccess gate（KYC verified vs not）
  *  - GET /api/auth/payments/intents（list + filter + 越權隔離）
  *  - GET /api/auth/payments/intents/:id（詳情 + 越權 → 404）

@@ -74,7 +74,7 @@ export async function onRequestPost({ request, env }) {
   const userId = Number(user.sub)
 
   // Codex r1 P1-5：body.metadata.requisition_id 必驗 owner。
-  // 原本 createPaymentIntent 把 metadata.requisition_id 直接落 FK 欄位（payments.js
+  // 原本 createPaymentIntent 把 metadata.requisition_id 直接落 FK 欄位（payments.ts
   // P0-3）→ A 可塞 B 的 req id 污染對帳（admin / TG summary join 用此欄位）。
   const reqIdRaw = body?.metadata?.requisition_id
   if (reqIdRaw != null && reqIdRaw !== '') {
