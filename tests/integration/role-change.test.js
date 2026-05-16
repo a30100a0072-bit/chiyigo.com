@@ -124,9 +124,9 @@ describe('changeUserRole', () => {
         batch: async (stmts) => {
           await stmts[0].run() // INSERT admin_audit_log 真寫
           return [
-            { meta: { changes: 1 } },
-            { meta: { changes: 0 } }, // CAS 失敗
-            { meta: { changes: 0 } }, // revoke 跟著回 0（batch 視為整體失敗時 D1 仍 commit；這裡只是讓 caller 看不到副作用）
+            { meta: { changes: 1 } }, // audit insert
+            { meta: { changes: 0 } }, // revoke 0（stub 不實跑）
+            { meta: { changes: 0 } }, // role CAS 失敗（caller 讀 [2]）
           ]
         },
       },
@@ -230,6 +230,68 @@ describe('changeUserRole', () => {
       .prepare('SELECT revoked_at FROM refresh_tokens WHERE user_id=? AND token_hash=?')
       .bind(target.id, 'rt-real-race').first()
     expect(rt.revoked_at).toBeNull()
+  })
+
+  it('F2 atomicity：same-target race (B 用舊快照、A 已改成同 newRole) → ROLE_RACE，refresh 不誤撤', async () => {
+    // codex PR-A r2 medium: B SELECT 看到 player；A 已把 role 改成 finance（同 newRole）。
+    // 若 revoke gate on newRole，B 的 EXISTS 仍成立 → 誤撤；現改 gate on oldRole 後應擋住。
+    const actor  = await seedUser({ email: 'admin@x', role: 'admin' })
+    const target = await seedUser({ email: 'b@x', role: 'player' })
+
+    await env.chiyigo_db
+      .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+                VALUES (?, 'rt-same-target', datetime('now','+30 day'))`)
+      .bind(target.id).run()
+
+    // A 已把 role 改成 finance（race winner）
+    await env.chiyigo_db
+      .prepare(`UPDATE users SET role='finance' WHERE id=?`).bind(target.id).run()
+    const versionBefore = await env.chiyigo_db
+      .prepare('SELECT token_version FROM users WHERE id=?').bind(target.id).first()
+
+    const realDb = env.chiyigo_db
+    const stubEnv = {
+      ...env,
+      chiyigo_db: {
+        prepare: (sql) => {
+          const stmt = realDb.prepare(sql)
+          // B SELECT 攔截：回 player 舊快照
+          if (/SELECT id, email, role FROM users WHERE id = \? AND deleted_at IS NULL/.test(sql)) {
+            return {
+              bind: (...args) => ({
+                first: async () => ({ id: args[0], email: 'b@x', role: 'player' }),
+              }),
+            }
+          }
+          return stmt
+        },
+        batch: realDb.batch.bind(realDb),
+      },
+    }
+
+    // B 也想改成 finance（same-target）
+    const r = await changeUserRole(stubEnv, {
+      userId: target.id, newRole: 'finance',
+      actorId: actor.id, actorEmail: 'admin@x', request: REQ,
+    })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('ROLE_RACE')
+
+    // role 仍是 A 寫入的 finance；token_version 不變
+    const after = await env.chiyigo_db
+      .prepare('SELECT role, token_version FROM users WHERE id=?').bind(target.id).first()
+    expect(after.role).toBe('finance')
+    expect(after.token_version).toBe(versionBefore.token_version)
+
+    // refresh 未被 B 誤撤（gate on oldRole='player'，已不成立）
+    const rt = await env.chiyigo_db
+      .prepare('SELECT revoked_at FROM refresh_tokens WHERE user_id=? AND token_hash=?')
+      .bind(target.id, 'rt-same-target').first()
+    expect(rt.revoked_at).toBeNull()
+
+    // hash-chain 嘗試紀錄已寫；chain 仍 valid
+    const chain = await verifyAuditChain(env.chiyigo_db)
+    expect(chain.valid).toBe(true)
   })
 
   it('F2 atomicity：soft-delete race (SELECT 後 deleted_at 被設) → ROLE_RACE，不動 DB', async () => {

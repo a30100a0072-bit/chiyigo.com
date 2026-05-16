@@ -80,18 +80,10 @@ export async function changeUserRole(env, { userId, newRole, actorId, actorEmail
     return { ok: false, code: 'AUDIT_CHAIN_FAILED' }
   }
 
-  // CAS 補 deleted_at IS NULL：防 SELECT 與 batch 之間 user 被軟刪、role 卻仍同。
-  const updateRoleStmt = db
-    .prepare(`
-      UPDATE users
-         SET role = ?, token_version = token_version + 1
-       WHERE id = ? AND role = ? AND deleted_at IS NULL
-    `)
-    .bind(newRole, userId, oldRole)
-
-  // revoke 由 EXISTS 子句 gate：D1 batch 序列化執行，role UPDATE 成功後
-  // users.role = newRole，revoke 觸發；CAS 失敗時 role 仍 = oldRole，
-  // EXISTS 不成立 → 0 changes，refresh 不被誤撤。
+  // revoke gate on oldRole（codex PR-A r2 medium 修）：放在 CAS UPDATE 之前。
+  // D1 batch 序列化執行：兩條 statement 共享同一前提（users.role 仍為 oldRole
+  // 且 deleted_at IS NULL）。same-target race 場景（別人已把 role 改成同一
+  // newRole）下，oldRole 已不成立 → revoke 0 changes，refresh 不被誤撤。
   const revokeStmt = db
     .prepare(`
       UPDATE refresh_tokens SET revoked_at = datetime('now')
@@ -101,16 +93,25 @@ export async function changeUserRole(env, { userId, newRole, actorId, actorEmail
             WHERE id = ? AND role = ? AND deleted_at IS NULL
          )
     `)
-    .bind(userId, userId, newRole)
+    .bind(userId, userId, oldRole)
+
+  // CAS 補 deleted_at IS NULL：防 SELECT 與 batch 之間 user 被軟刪、role 仍同。
+  const updateRoleStmt = db
+    .prepare(`
+      UPDATE users
+         SET role = ?, token_version = token_version + 1
+       WHERE id = ? AND role = ? AND deleted_at IS NULL
+    `)
+    .bind(newRole, userId, oldRole)
 
   let batchResults
   try {
-    batchResults = await db.batch([prepared.statement, updateRoleStmt, revokeStmt])
+    batchResults = await db.batch([prepared.statement, revokeStmt, updateRoleStmt])
   } catch {
     return { ok: false, code: 'AUDIT_CHAIN_FAILED' }
   }
 
-  const roleChanges = batchResults?.[1]?.meta?.changes ?? 0
+  const roleChanges = batchResults?.[2]?.meta?.changes ?? 0
   if (roleChanges !== 1) {
     // race: SELECT 與 batch commit 之間 role 被別人改/被軟刪。
     // admin_audit_log 已寫入「嘗試紀錄」，hash-chain valid，DB 其他狀態未改。
