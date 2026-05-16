@@ -6,7 +6,7 @@
  *  其他              → 呼叫後續 handler 後附加 CORS 標頭
  */
 
-import { getCorsHeaders } from '../../utils/cors.js'
+import { getCorsHeaders } from '../../utils/cors'
 
 export async function onRequest({ request, env, next }) {
   const corsHeaders = getCorsHeaders(request, env)

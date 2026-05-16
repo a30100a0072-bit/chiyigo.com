@@ -10,14 +10,14 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser, callFunction } from './_helpers.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 import {
   getUserKycStatus,
   setUserKycStatus,
   requireKyc,
   KYC_STATUS,
   KYC_LEVEL,
-} from '../../functions/utils/kyc.js'
+} from '../../functions/utils/kyc'
 import { onRequestGet  as statusHandler  } from '../../functions/api/auth/kyc/status.js'
 import { onRequestPost as webhookHandler } from '../../functions/api/webhooks/kyc/[vendor].js'
 

@@ -17,7 +17,7 @@
  */
 
 import { res } from '../../../utils/auth.js'
-import { getCorsHeaders } from '../../../utils/cors.js'
+import { getCorsHeaders } from '../../../utils/cors'
 import { requirePaymentAccess, PAYMENT_STATUS, PAYMENT_KIND } from '../../../utils/payments.js'
 
 export async function onRequestOptions({ request, env }) {

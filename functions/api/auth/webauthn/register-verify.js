@@ -25,7 +25,7 @@
 
 import { verifyRegistrationResponse } from '@simplewebauthn/server'
 import { requireAuth, res } from '../../../utils/auth.js'
-import { getCorsHeaders } from '../../../utils/cors.js'
+import { getCorsHeaders } from '../../../utils/cors'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 

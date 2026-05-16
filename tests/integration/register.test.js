@@ -10,7 +10,7 @@ const sentEmails = vi.hoisted(() => [])
 const sendVerifyMock = vi.hoisted(() => vi.fn(async (apiKey, to, token) => {
   sentEmails.push({ apiKey, to, token })
 }))
-vi.mock('../../functions/utils/email.js', () => ({
+vi.mock('../../functions/utils/email', () => ({
   sendVerificationEmail:  sendVerifyMock,
   sendPasswordResetEmail: vi.fn(async () => {}),
 }))

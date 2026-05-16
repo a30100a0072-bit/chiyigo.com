@@ -20,7 +20,7 @@
 
 import { generateAuthenticationOptions } from '@simplewebauthn/server'
 import { res } from '../../../utils/auth.js'
-import { getCorsHeaders } from '../../../utils/cors.js'
+import { getCorsHeaders } from '../../../utils/cors'
 import { getRpConfig, saveChallenge, listUserCredentials } from '../../../utils/webauthn'
 
 export async function onRequestOptions({ request, env }) {

@@ -20,7 +20,7 @@
 
 import { res, requireAuth } from './auth.js'
 import { safeUserAudit } from './user-audit'
-import { getUserKycStatus, KYC_STATUS } from './kyc.js'
+import { getUserKycStatus, KYC_STATUS } from './kyc'
 
 export const PAYMENT_STATUS = Object.freeze({
   PENDING:    'pending',

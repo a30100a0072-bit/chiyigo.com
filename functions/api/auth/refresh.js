@@ -23,8 +23,8 @@
  */
 
 import { generateSecureToken, hashToken } from '../../utils/crypto'
-import { signJwt } from '../../utils/jwt.js'
-import { getCorsHeaders, resolveAud } from '../../utils/cors.js'
+import { signJwt } from '../../utils/jwt'
+import { getCorsHeaders, resolveAud } from '../../utils/cors'
 import { res } from '../../utils/auth.js'
 import { refreshCookie } from '../../utils/cookies.js'
 import { safeUserAudit } from '../../utils/user-audit'

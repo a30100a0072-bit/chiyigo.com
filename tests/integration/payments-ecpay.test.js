@@ -13,11 +13,11 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 import {
   ecpayCheckMacValue, ecpayPaymentAdapter, generateMerchantTradeNo,
 } from '../../functions/utils/payment-vendors/ecpay.js'
-import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc.js'
+import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
 import { getPaymentIntent, PAYMENT_STATUS } from '../../functions/utils/payments.js'
 import { onRequestPost as checkoutHandler } from '../../functions/api/auth/payments/checkout/ecpay.js'
 import { onRequestPost as webhookHandler  } from '../../functions/api/webhooks/payments/[vendor].js'

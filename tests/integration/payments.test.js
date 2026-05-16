@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 
 // Codex r7 P2：TOCTOU 補救分支（updatePaymentStatus no_row → re-read includeDeleted
 // → handleOrphan）在純 SQL 測試裡撞不到 —— lookup includeDeleted=true 看到的就是
@@ -50,7 +50,7 @@ const {
   requirePaymentAccess,
   PAYMENT_STATUS, PAYMENT_KIND,
 } = await import('../../functions/utils/payments.js')
-import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc.js'
+import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
 import { onRequestGet  as listHandler    } from '../../functions/api/auth/payments/intents.js'
 import { onRequestGet  as detailHandler  } from '../../functions/api/auth/payments/intents/[id].js'
 import { onRequestPost as webhookHandler } from '../../functions/api/webhooks/payments/[vendor].js'

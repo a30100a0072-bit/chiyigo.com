@@ -12,7 +12,7 @@
 
 import { requireAuth, res } from '../../../utils/auth.js'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
-import { sendVerificationEmail } from '../../../utils/email.js'
+import { sendVerificationEmail } from '../../../utils/email'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 
 const COOLDOWN_SECONDS    = 60

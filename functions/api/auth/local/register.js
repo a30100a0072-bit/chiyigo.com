@@ -10,10 +10,10 @@
  */
 
 import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../../../utils/crypto'
-import { signJwt } from '../../../utils/jwt.js'
-import { sendVerificationEmail } from '../../../utils/email.js'
+import { signJwt } from '../../../utils/jwt'
+import { sendVerificationEmail } from '../../../utils/email'
 import { validatePassword } from '../../../utils/password'
-import { resolveAud } from '../../../utils/cors.js'
+import { resolveAud } from '../../../utils/cors'
 import { buildTokenScope } from '../../../utils/scopes.js'
 import { verifyTurnstile } from '../../../utils/turnstile'
 import { res } from '../../../utils/auth.js'

@@ -31,7 +31,7 @@ function isAllowedOrigin(origin, env) {
  * @param {boolean} [opts.credentials] 跨子網域帶 cookie 的端點（refresh / logout / web token）
  *                                     傳 true 會加 Access-Control-Allow-Credentials: true
  */
-export function getCorsHeaders(request, env, opts = {}) {
+export function getCorsHeaders(request, env, opts: { credentials?: boolean } = {}) {
   const origin = request.headers.get('Origin') ?? ''
   if (!isAllowedOrigin(origin, env)) return {}
   const headers = {

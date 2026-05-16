@@ -11,7 +11,7 @@
  *   const { user, error } = await requireAuth(request, env, 'pre_auth')
  */
 
-import { verifyJwt } from './jwt.js'
+import { verifyJwt } from './jwt'
 import { isJtiRevoked, consumeJtiOnce } from './revocation'
 import { safeUserAudit } from './user-audit'
 import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedScope } from './scopes.js'

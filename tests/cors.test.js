@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCorsHeaders, resolveAud } from '../functions/utils/cors.js'
+import { getCorsHeaders, resolveAud } from '../functions/utils/cors'
 
 function req(origin) {
   return new Request('http://x/', { headers: origin ? { Origin: origin } : {} })

@@ -3,7 +3,7 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendDeleteConfirmationEmail,
-} from '../functions/utils/email.js'
+} from '../functions/utils/email'
 
 const RESEND_API = 'https://api.resend.com/emails'
 

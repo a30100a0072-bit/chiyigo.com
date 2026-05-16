@@ -119,7 +119,7 @@ async function getVerifyingKey(env, kid) {
  * Codex #1（2026-05-10）：簽發端預設 aud='chiyigo'，配合 verifyJwt 預設驗 'chiyigo'，
  * 把跨 app token 互打的攻擊面收斂到顯式 opt-out（mbti/talo/sport-app 走 resolveAud 帶值）。
  */
-export async function signJwt(payload, expiresIn, env, opts = {}) {
+export async function signJwt(payload, expiresIn, env, opts: { audience?: string | null } = {}) {
   const { key, kid } = await getSigningKey(env)
   // 自動補 jti（Phase B：精準 revoke 用）。caller 已自帶 jti 則尊重之。
   const enriched = payload.jti ? payload : { ...payload, jti: crypto.randomUUID() }
@@ -149,14 +149,14 @@ export async function signJwt(payload, expiresIn, env, opts = {}) {
  * Codex #1（2026-05-10）：預設驗 aud='chiyigo'，避免 mbti/talo/sport-app aud 的 token
  * 直接打 chiyigo resource API；跨 aud endpoint 必須 explicit `audience: null`。
  */
-export async function verifyJwt(token, env, opts = {}) {
+export async function verifyJwt(token, env, opts: { audience?: string | string[] | null; issuer?: string | null } = {}) {
   let kid = null
   try { kid = decodeProtectedHeader(token).kid ?? null } catch { /* malformed → 下方 verify 會 throw */ }
 
   const key = await getVerifyingKey(env, kid)
   if (!key) throw new Error(`No public key matches kid=${kid}`)
 
-  const verifyOpts = { algorithms: ['ES256'] }
+  const verifyOpts: { algorithms: string[]; audience?: string | string[]; issuer?: string } = { algorithms: ['ES256'] }
   if (opts.audience === null) {
     // 明確不驗（OIDC userinfo 等跨 aud 端點）
   } else {
@@ -181,7 +181,8 @@ export async function verifyJwt(token, env, opts = {}) {
 export function getPublicJwk(env) {
   const [jwk] = readPublicJwks(env)
   const { kty, crv, x, y, kid, use, alg } = jwk
-  return { kty, crv, x, y, kid, use: use ?? 'sig', alg: alg ?? 'ES256' }
+  return { kty, crv, x, y, kid, use: use ?? 'sig', alg: alg ?? 'ES256' } as
+    { kty; crv; x; y; kid; use; alg; d?: undefined }
 }
 
 /**
@@ -205,7 +206,7 @@ export function getPublicJwks(env) {
     kid: stripWs(kid),
     use: use ?? 'sig',
     alg: alg ?? 'ES256',
-  }))
+  })) as Array<{ kty; crv; x; y; kid; use; alg; d?: undefined }>
 }
 
 // 測試用：清除模組級快取（vitest 在 keypair 切換時呼叫）

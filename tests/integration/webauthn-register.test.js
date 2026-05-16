@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 
 // ── Hoisted mock state（vi.mock factory 必須是 pure）─────────────
 const mockState = vi.hoisted(() => ({

@@ -46,7 +46,14 @@ const ADMIN_LIKE_ROLES = new Set(['admin', 'developer', 'super_admin'])
  * @param {string} [opts.reason]          audit 用人類可讀理由
  * @returns {Promise<{ ok: boolean, code?: string, oldRole?: string }>}
  */
-export async function changeUserRole(env, { userId, newRole, actorId, actorEmail, request, reason }) {
+export async function changeUserRole(env, { userId, newRole, actorId, actorEmail, request, reason }: {
+  userId: number;
+  newRole: string;
+  actorId: number;
+  actorEmail?: string | null;
+  request?: Request;
+  reason?: string | null;
+}) {
   if (!isValidRole(newRole)) {
     return { ok: false, code: 'INVALID_ROLE' }
   }

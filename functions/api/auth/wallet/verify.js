@@ -26,7 +26,7 @@
  */
 
 import { requireAuth, res } from '../../../utils/auth.js'
-import { getCorsHeaders } from '../../../utils/cors.js'
+import { getCorsHeaders } from '../../../utils/cors'
 import { verifySiweMessage, consumeWalletNonce } from '../../../utils/siwe'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 

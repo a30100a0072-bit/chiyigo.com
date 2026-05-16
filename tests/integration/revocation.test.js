@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 import { requireAuth } from '../../functions/utils/auth.js'
 import { revokeJti, isJtiRevoked } from '../../functions/utils/revocation'
 

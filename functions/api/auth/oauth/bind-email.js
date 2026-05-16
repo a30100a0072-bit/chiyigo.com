@@ -13,10 +13,10 @@
  *  5. 簽發 Access Token + Refresh Token（HttpOnly Cookie）
  */
 
-import { verifyJwt, signJwt } from '../../../utils/jwt.js'
+import { verifyJwt, signJwt } from '../../../utils/jwt'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { getProvider } from '../../../utils/oauth-providers'
-import { resolveAud } from '../../../utils/cors.js'
+import { resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie } from '../../../utils/cookies.js'
 import { safeUserAudit } from '../../../utils/user-audit'

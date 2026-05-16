@@ -13,8 +13,8 @@
  */
 
 import { verifyPassword, generateSecureToken, hashToken } from '../../../utils/crypto'
-import { signJwt } from '../../../utils/jwt.js'
-import { resolveAud } from '../../../utils/cors.js'
+import { signJwt } from '../../../utils/jwt'
+import { resolveAud } from '../../../utils/cors'
 import { verifyTurnstile } from '../../../utils/turnstile'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
@@ -28,7 +28,7 @@ import {
   detectAndBlacklistCrossUserScan,
 } from '../../../utils/brute-force'
 import { computeRiskScore, hashUa, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score'
-import { sendRiskBlockedAlertEmail } from '../../../utils/email.js'
+import { sendRiskBlockedAlertEmail } from '../../../utils/email'
 
 const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'

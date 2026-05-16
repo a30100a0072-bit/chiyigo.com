@@ -15,7 +15,7 @@
  */
 
 import { hashToken } from '../../utils/crypto'
-import { getCorsHeaders } from '../../utils/cors.js'
+import { getCorsHeaders } from '../../utils/cors'
 import { CLEAR_REFRESH_COOKIE } from '../../utils/cookies.js'
 import { safeUserAudit } from '../../utils/user-audit'
 

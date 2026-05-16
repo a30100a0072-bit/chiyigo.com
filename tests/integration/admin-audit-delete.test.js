@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 import { SCOPES } from '../../functions/utils/scopes.js'
 import { verifyAuditChain } from '../../functions/utils/audit-log.js'
 import { onRequestDelete as deleteHandler } from '../../functions/api/admin/audit/[id].js'

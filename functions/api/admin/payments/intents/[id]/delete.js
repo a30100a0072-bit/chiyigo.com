@@ -22,7 +22,7 @@
  */
 
 import { res, requireStepUp } from '../../../../../utils/auth.js'
-import { getCorsHeaders } from '../../../../../utils/cors.js'
+import { getCorsHeaders } from '../../../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../../utils/scopes.js'
 import { getPaymentIntent, PAYMENT_STATUS } from '../../../../../utils/payments.js'
 import { safeUserAudit } from '../../../../../utils/user-audit'

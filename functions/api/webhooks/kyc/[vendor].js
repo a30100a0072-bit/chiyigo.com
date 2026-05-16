@@ -18,7 +18,7 @@
  */
 
 import { res } from '../../../utils/auth.js'
-import { resolveKycAdapter, setUserKycStatus } from '../../../utils/kyc.js'
+import { resolveKycAdapter, setUserKycStatus } from '../../../utils/kyc'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug.js'
 

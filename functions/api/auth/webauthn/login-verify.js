@@ -33,8 +33,8 @@
 
 import { verifyAuthenticationResponse } from '@simplewebauthn/server'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
-import { signJwt } from '../../../utils/jwt.js'
-import { getCorsHeaders, resolveAud } from '../../../utils/cors.js'
+import { signJwt } from '../../../utils/jwt'
+import { getCorsHeaders, resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth.js'
 import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
@@ -42,7 +42,7 @@ import { buildTokenScope } from '../../../utils/scopes.js'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn'
 import { safeAlertAnomalies } from '../../../utils/device-alerts'
 import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score'
-import { sendRiskBlockedAlertEmail } from '../../../utils/email.js'
+import { sendRiskBlockedAlertEmail } from '../../../utils/email'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7

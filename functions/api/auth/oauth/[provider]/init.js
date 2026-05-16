@@ -13,7 +13,7 @@
 import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-providers'
 import { requireAuth, res } from '../../../../utils/auth.js'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit.js'
-import { resolveAud } from '../../../../utils/cors.js'
+import { resolveAud } from '../../../../utils/cors'
 
 const STATE_BYTES       = 16   // 128 bits
 const VERIFIER_BYTES    = 32   // 256 bits

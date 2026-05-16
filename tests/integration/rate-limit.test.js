@@ -21,7 +21,7 @@ import { onRequestGet as oauthInit } from '../../functions/api/auth/oauth/[provi
 import {
   checkRateLimit, recordRateLimit, clearRateLimit,
 } from '../../functions/utils/rate-limit.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 
 const TEST_SECRET = 'JBSWY3DPEHPK3PXP'
 

@@ -12,7 +12,7 @@ import {
   resetDb, seedUser, enableTotp, ensureJwtKeys, callFunction,
 } from './_helpers.js'
 import { onRequestPost as twofaVerify } from '../../functions/api/auth/2fa/verify.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 
 const TEST_SECRET = 'JBSWY3DPEHPK3PXP'
 

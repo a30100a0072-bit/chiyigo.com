@@ -41,8 +41,8 @@
 
 import { verifyBackupCode } from '../../utils/crypto'
 import { requireAuth, res } from '../../utils/auth.js'
-import { signJwt } from '../../utils/jwt.js'
-import { resolveAud } from '../../utils/cors.js'
+import { signJwt } from '../../utils/jwt'
+import { resolveAud } from '../../utils/cors'
 import { KNOWN_ELEVATED_SCOPES } from '../../utils/scopes.js'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../utils/rate-limit.js'
 import { safeUserAudit } from '../../utils/user-audit'

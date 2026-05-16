@@ -35,7 +35,7 @@
  */
 
 import { res } from '../../../../utils/auth.js'
-import { getCorsHeaders } from '../../../../utils/cors.js'
+import { getCorsHeaders } from '../../../../utils/cors'
 import {
   requirePaymentAccess, createPaymentIntent,
   PAYMENT_KIND, PAYMENT_STATUS,

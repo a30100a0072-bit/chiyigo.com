@@ -11,7 +11,7 @@
  */
 
 import { res } from '../../../../utils/auth.js'
-import { getCorsHeaders } from '../../../../utils/cors.js'
+import { getCorsHeaders } from '../../../../utils/cors'
 import { requirePaymentAccess, getPaymentIntent, PAYMENT_STATUS } from '../../../../utils/payments.js'
 import { safeUserAudit } from '../../../../utils/user-audit'
 

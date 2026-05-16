@@ -19,7 +19,7 @@
  */
 
 import { requireAuth, res } from '../../../utils/auth.js'
-import { getCorsHeaders } from '../../../utils/cors.js'
+import { getCorsHeaders } from '../../../utils/cors'
 import { issueWalletNonce, isValidEthAddress, getSiweConfig } from '../../../utils/siwe'
 
 export async function onRequestOptions({ request, env }) {

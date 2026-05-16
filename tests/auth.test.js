@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { generateKeyPair, exportJWK } from 'jose'
-import { signJwt } from '../functions/utils/jwt.js'
+import { signJwt } from '../functions/utils/jwt'
 import { requireAuth, requireScope, requireAnyScope, res } from '../functions/utils/auth.js'
 import { requireRole } from '../functions/utils/requireRole.js'
 import { SCOPES } from '../functions/utils/scopes.js'

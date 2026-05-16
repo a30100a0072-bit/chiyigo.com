@@ -10,7 +10,7 @@ import { env } from 'cloudflare:test'
 import {
   resetDb, ensureJwtKeys, seedUser, enableTotp,
 } from './_helpers.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 import { requireAuth } from '../../functions/utils/auth.js'
 import { verifyPassword } from '../../functions/utils/crypto'
 import { SCOPES } from '../../functions/utils/scopes.js'

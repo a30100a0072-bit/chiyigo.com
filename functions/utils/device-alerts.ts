@@ -19,7 +19,7 @@
  */
 
 import { safeUserAudit, hashIdentifierForAudit } from './user-audit'
-import { sendNewDeviceAlertEmail } from './email.js'
+import { sendNewDeviceAlertEmail } from './email'
 
 /**
  * 主入口。caller 一律 fire-and-forget：

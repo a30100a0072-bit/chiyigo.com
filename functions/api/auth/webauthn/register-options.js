@@ -15,7 +15,7 @@
 
 import { generateRegistrationOptions } from '@simplewebauthn/server'
 import { requireAuth, res } from '../../../utils/auth.js'
-import { getCorsHeaders } from '../../../utils/cors.js'
+import { getCorsHeaders } from '../../../utils/cors'
 import { getRpConfig, saveChallenge, listUserCredentials } from '../../../utils/webauthn'
 import { safeUserAudit } from '../../../utils/user-audit'
 

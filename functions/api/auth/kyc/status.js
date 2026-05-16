@@ -10,8 +10,8 @@
  */
 
 import { requireAuth, res } from '../../../utils/auth.js'
-import { getCorsHeaders } from '../../../utils/cors.js'
-import { getUserKycStatus, KYC_STATUS } from '../../../utils/kyc.js'
+import { getCorsHeaders } from '../../../utils/cors'
+import { getUserKycStatus, KYC_STATUS } from '../../../utils/kyc'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })

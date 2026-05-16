@@ -9,7 +9,7 @@
  *  其他              → 呼叫後續 handler 後，在回應上附加 CORS 標頭
  */
 
-import { getCorsHeaders } from '../../utils/cors.js'
+import { getCorsHeaders } from '../../utils/cors'
 
 export async function onRequest({ request, env, next }) {
   // 全 /api/auth/* 都可能帶 cookie / Authorization，統一加 Allow-Credentials: true

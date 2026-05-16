@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
-import { signJwt } from '../../functions/utils/jwt.js'
+import { signJwt } from '../../functions/utils/jwt'
 import { onRequestGet as listHandler } from '../../functions/api/auth/devices.js'
 import { onRequestPost as logoutHandler } from '../../functions/api/auth/devices/logout.js'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'

@@ -17,15 +17,15 @@
  */
 
 import { jwtVerify, createRemoteJWKSet } from 'jose'
-import { signJwt } from '../../../../utils/jwt.js'
+import { signJwt } from '../../../../utils/jwt'
 import { generateSecureToken, hashToken } from '../../../../utils/crypto'
 import { getProvider } from '../../../../utils/oauth-providers'
-import { resolveAud } from '../../../../utils/cors.js'
+import { resolveAud } from '../../../../utils/cors'
 import { refreshCookie, readOAuthDeviceCookie, CLEAR_OAUTH_DEVICE_COOKIE } from '../../../../utils/cookies.js'
 import { safeUserAudit } from '../../../../utils/user-audit'
 import { safeAlertAnomalies } from '../../../../utils/device-alerts'
 import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../../utils/risk-score'
-import { sendRiskBlockedAlertEmail } from '../../../../utils/email.js'
+import { sendRiskBlockedAlertEmail } from '../../../../utils/email'
 import { buildTokenScope } from '../../../../utils/scopes.js'
 
 const ACCESS_TOKEN_TTL   = '15m'

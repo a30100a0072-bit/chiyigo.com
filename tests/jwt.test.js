@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { generateKeyPair, exportJWK } from 'jose'
-import { signJwt, verifyJwt, getPublicJwk, getPublicJwks, _resetJwtCache } from '../functions/utils/jwt.js'
+import { signJwt, verifyJwt, getPublicJwk, getPublicJwks, _resetJwtCache } from '../functions/utils/jwt'
 
 let env
 

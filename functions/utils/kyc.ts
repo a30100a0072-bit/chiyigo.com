@@ -27,14 +27,14 @@ export const KYC_STATUS = Object.freeze({
   EXPIRED:    'expired',
 })
 
-const VALID_STATUSES = new Set(Object.values(KYC_STATUS))
+const VALID_STATUSES = new Set<string>(Object.values(KYC_STATUS))
 
 export const KYC_LEVEL = Object.freeze({
   BASIC:    'basic',
   ENHANCED: 'enhanced',
 })
 
-const VALID_LEVELS = new Set(Object.values(KYC_LEVEL))
+const VALID_LEVELS = new Set<string>(Object.values(KYC_LEVEL))
 
 /**
  * 撈 user 當前 KYC 狀態。沒 row → 視為 'unverified'（user 還沒開過 KYC）。
@@ -77,11 +77,21 @@ export async function getUserKycStatus(env, userId) {
  */
 export async function setUserKycStatus(env, userId, patch = {}) {
   if (!env?.chiyigo_db || !userId) return
-  if (patch.status && !VALID_STATUSES.has(patch.status)) {
-    throw new Error(`Invalid KYC status: ${patch.status}`)
+  const p = patch as {
+    status?: string;
+    level?: string;
+    vendor?: string | null;
+    vendor_session_id?: string | null;
+    vendor_review_id?: string | null;
+    rejection_reason?: string | null;
+    verified_at?: string | null;
+    expires_at?: string | null;
   }
-  if (patch.level && !VALID_LEVELS.has(patch.level)) {
-    throw new Error(`Invalid KYC level: ${patch.level}`)
+  if (p.status && !VALID_STATUSES.has(p.status)) {
+    throw new Error(`Invalid KYC status: ${p.status}`)
+  }
+  if (p.level && !VALID_LEVELS.has(p.level)) {
+    throw new Error(`Invalid KYC level: ${p.level}`)
   }
 
   // SQLite UPSERT
@@ -99,14 +109,14 @@ export async function setUserKycStatus(env, userId, patch = {}) {
     )
     .bind(
       userId,
-      patch.status ?? KYC_STATUS.UNVERIFIED,
-      patch.level ?? KYC_LEVEL.BASIC,
-      patch.vendor ?? null,
-      patch.vendor_session_id ?? null,
-      patch.vendor_review_id ?? null,
-      patch.rejection_reason ?? null,
-      patch.verified_at ?? null,
-      patch.expires_at ?? null,
+      p.status ?? KYC_STATUS.UNVERIFIED,
+      p.level ?? KYC_LEVEL.BASIC,
+      p.vendor ?? null,
+      p.vendor_session_id ?? null,
+      p.vendor_review_id ?? null,
+      p.rejection_reason ?? null,
+      p.verified_at ?? null,
+      p.expires_at ?? null,
       now,
     )
     .run()
@@ -125,7 +135,7 @@ export async function setUserKycStatus(env, userId, patch = {}) {
  * @param {string}  [opts.requiredStatus='verified']
  * @param {string}  [opts.requiredLevel]    若指定 'enhanced'，basic 也算不夠
  */
-export async function requireKyc(request, env, opts = {}) {
+export async function requireKyc(request, env, opts: { requiredStatus?: string; requiredLevel?: string | null } = {}) {
   const requiredStatus = opts.requiredStatus ?? KYC_STATUS.VERIFIED
   const requiredLevel  = opts.requiredLevel  ?? null
 

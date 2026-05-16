@@ -10,10 +10,10 @@
  */
 
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
-import { sendPasswordResetEmail } from '../../../utils/email.js'
+import { sendPasswordResetEmail } from '../../../utils/email'
 import { verifyTurnstile } from '../../../utils/turnstile'
 import { res } from '../../../utils/auth.js'
-import { verifyJwt } from '../../../utils/jwt.js'
+import { verifyJwt } from '../../../utils/jwt'
 import { safeUserAudit } from '../../../utils/user-audit'
 
 const COOLDOWN_SECONDS  = 60

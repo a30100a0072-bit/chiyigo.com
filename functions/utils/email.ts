@@ -51,7 +51,7 @@ export async function sendDeleteConfirmationEmail(apiKey, to, token, env) {
   })
 }
 
-async function sendEmail(apiKey, env, { to, subject, html, signal }) {
+async function sendEmail(apiKey, env, { to, subject, html, signal }: { to: string; subject: string; html: string; signal?: AbortSignal }) {
   const res = await fetch(RESEND_API, {
     method: 'POST',
     headers: {
