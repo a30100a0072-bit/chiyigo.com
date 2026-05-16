@@ -184,6 +184,7 @@ const SECURITY_SIGNAL = [
   'mfa.totp.verify.replay',
   'mfa.totp.verify.success',
   'oauth.bind_email.collision_blocked',
+  'oauth.bind_email.fail',
   'oauth.callback.fail',
   'oauth.code.exchange.fail',
   'payment.checkout.requisition_owner_mismatch',

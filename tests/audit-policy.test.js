@@ -180,8 +180,9 @@ describe('registry coverage', () => {
     //    force_purge_failed,force_purge_disabled}）→ 160。
     // PR 3.3 r1 codex P2-1 加 2 個 chunk_skipped events × 兩 cold_class
     //   （aggregate_archive.{telemetry,debug}.chunk_skipped；info/warn severity）→ 162。
+    // F7 codex r5 加 1 個 oauth.bind_email.fail（SECURITY_SIGNAL；H1 replay + F8 unsupported_provider）→ 163。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(162)
+    expect(_registrySize).toBe(163)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

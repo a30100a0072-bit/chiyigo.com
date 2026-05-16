@@ -18,9 +18,10 @@ import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { getProvider } from '../../../utils/oauth-providers'
 import { resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth'
-import { refreshCookie } from '../../../utils/cookies'
+import { refreshCookie, readOAuthDeviceCookie, CLEAR_OAUTH_DEVICE_COOKIE } from '../../../utils/cookies'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes'
+import { consumeJtiOnce } from '../../../utils/revocation'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -66,8 +67,41 @@ export async function onRequestPost(context) {
 
   // Defense-in-depth：temp_bind token 由 callback 簽出已過 allowlist，這裡再驗
   // 一次避免 callback 未來新增路徑漏校；getProvider null = 不在 PROVIDERS map
-  if (!getProvider(provider, env))
+  if (!getProvider(provider, env)) {
+    // F8 觀測性：unsupported provider 是 signer/config drift 訊號，必須留 audit
+    await safeUserAudit(env, {
+      event_type: 'oauth.bind_email.fail',
+      severity:   'warn',
+      request,
+      data: { provider, reason_code: 'unsupported_provider' },
+    })
     return res({ error: 'Unsupported OAuth provider', code: 'UNSUPPORTED_PROVIDER' }, 400)
+  }
+
+  // Replay 防禦（codex r5 H1）：temp_bind 是一次性 token，被截獲在 TTL 內可重複打
+  // bind-email 鑄出多份 session。用 consumeJtiOnce atomic claim：第一個 caller 寫入
+  // revoked_jti 才放行，後續同 jti 一律 401。signJwt 自動帶 jti（jwt.ts L124）。
+  // exp 為 epoch 秒，缺值（不該發生）也 fail-closed。
+  const tokenJti = typeof payload.jti === 'string' ? payload.jti : null
+  if (!tokenJti) {
+    await safeUserAudit(env, {
+      event_type: 'oauth.bind_email.fail',
+      severity:   'warn',
+      request,
+      data: { provider, reason_code: 'missing_jti' },
+    })
+    return res({ error: '連結無效或已過期，請重新登入', code: 'LINK_INVALID_OR_EXPIRED' }, 401)
+  }
+  const consume = await consumeJtiOnce(env, tokenJti, payload.exp)
+  if (!consume.ok) {
+    await safeUserAudit(env, {
+      event_type: 'oauth.bind_email.fail',
+      severity:   'warn',
+      request,
+      data: { provider, reason_code: 'link_already_used' },
+    })
+    return res({ error: '連結已使用，請重新登入', code: 'LINK_ALREADY_USED' }, 401)
+  }
 
   const db  = env.chiyigo_db
 
@@ -157,21 +191,25 @@ export async function onRequestPost(context) {
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 86400_000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // Codex r5 M1：保留 callback path 的 browser-level device binding。client JS 在按
+  // OAuth 按鈕前寫 chiyigo_oauth_device cookie；callback redirect→bind-email.html 沿用，
+  // bind-email 完成後也要把 cookie 值寫進 refresh_tokens.device_uuid 不然「我的裝置」
+  // 對「需補填 email」的 OAuth 帳號永遠看不到裝置標籤。沒 cookie → NULL（舊行為）。
+  const webDeviceUuid = readOAuthDeviceCookie(request)
+
   // Codex r9-5：issued_aud 鎖定發行時的 audience
   await db.prepare(`
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
-    VALUES (?, ?, NULL, ?, datetime('now'), ?)
-  `).bind(userId, refreshTokenHash, refreshExpiresAt, audience).run()
+    VALUES (?, ?, ?, ?, datetime('now'), ?)
+  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience).run()
 
   await safeUserAudit(env, { event_type: 'oauth.bind_email.success', user_id: userId, request, data: { provider } })
 
-  return new Response(JSON.stringify({ access_token: accessToken }), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Set-Cookie':   refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400),
-    },
-  })
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  headers.append('Set-Cookie', refreshCookie(refreshToken, REFRESH_TOKEN_DAYS * 86400))
+  // device_uuid 已轉存到 refresh_tokens，cookie 任務完成（同 callback.js 收尾語意）
+  headers.append('Set-Cookie', CLEAR_OAUTH_DEVICE_COOKIE)
+  return new Response(JSON.stringify({ access_token: accessToken }), { status: 200, headers })
 }
 
 
