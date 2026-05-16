@@ -16,10 +16,10 @@
  */
 
 import { res } from '../../../../utils/auth.js'
-import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../../../utils/requireRole.js'
+import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../../../utils/requireRole'
 import { appendAuditLog } from '../../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../../utils/user-audit'
-import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes'
 
 export async function onRequestPost({ request, env, params }) {
   const { user, error } = await requireRole(request, env, 'admin')

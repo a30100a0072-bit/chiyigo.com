@@ -32,7 +32,7 @@
  */
 
 import { res } from '../../utils/auth.js'
-import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../utils/requireRole.js'
+import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../utils/requireRole'
 import { revokeJti } from '../../utils/revocation'
 import { appendAuditLog } from '../../utils/audit-log.js'
 import { safeUserAudit } from '../../utils/user-audit'

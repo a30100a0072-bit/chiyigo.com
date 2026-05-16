@@ -13,7 +13,7 @@ import {
 import { signJwt } from '../../functions/utils/jwt'
 import { requireAuth } from '../../functions/utils/auth.js'
 import { verifyPassword } from '../../functions/utils/crypto'
-import { SCOPES } from '../../functions/utils/scopes.js'
+import { SCOPES } from '../../functions/utils/scopes'
 import { onRequestPost as stepUpHandler } from '../../functions/api/auth/step-up.js'
 import { onRequestPost as changePwHandler } from '../../functions/api/auth/account/change-password.js'
 

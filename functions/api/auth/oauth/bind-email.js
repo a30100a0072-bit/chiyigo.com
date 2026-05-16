@@ -18,9 +18,9 @@ import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { getProvider } from '../../../utils/oauth-providers'
 import { resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth.js'
-import { refreshCookie } from '../../../utils/cookies.js'
+import { refreshCookie } from '../../../utils/cookies'
 import { safeUserAudit } from '../../../utils/user-audit'
-import { buildTokenScope } from '../../../utils/scopes.js'
+import { buildTokenScope } from '../../../utils/scopes'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7

@@ -14,7 +14,7 @@
  */
 
 import { res, requireAnyScope } from '../../../utils/auth.js'
-import { SCOPES } from '../../../utils/scopes.js'
+import { SCOPES } from '../../../utils/scopes'
 import { getCorsHeaders } from '../../../utils/cors'
 
 export async function onRequestOptions({ request, env }) {

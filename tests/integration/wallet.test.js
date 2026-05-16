@@ -17,7 +17,7 @@ import { secp256k1 } from '@noble/curves/secp256k1'
 import { keccak_256 } from '@noble/hashes/sha3'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
-import { SCOPES } from '../../functions/utils/scopes.js'
+import { SCOPES } from '../../functions/utils/scopes'
 import { _internal as siweInternal } from '../../functions/utils/siwe'
 
 import { onRequestPost as nonceHandler  } from '../../functions/api/auth/wallet/nonce.js'

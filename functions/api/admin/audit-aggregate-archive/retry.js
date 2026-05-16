@@ -65,10 +65,10 @@
  */
 
 import { res, requireStepUp } from '../../../utils/auth.js'
-import { requireRole } from '../../../utils/requireRole.js'
+import { requireRole } from '../../../utils/requireRole'
 import { appendAuditLog } from '../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../utils/user-audit'
-import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import {
   AGGREGATE_TABLES,
   purgeAggregateChunk,

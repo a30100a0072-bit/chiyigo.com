@@ -19,7 +19,7 @@
  */
 
 import { res } from '../../../../utils/auth.js'
-import { requireRole } from '../../../../utils/requireRole.js'
+import { requireRole } from '../../../../utils/requireRole'
 import { getCorsHeaders } from '../../../../utils/cors'
 import { safeUserAudit } from '../../../../utils/user-audit'
 import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'

@@ -14,7 +14,7 @@ import {
 } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
 import { requireStepUp } from '../../functions/utils/auth.js'
-import { SCOPES } from '../../functions/utils/scopes.js'
+import { SCOPES } from '../../functions/utils/scopes'
 import { onRequestPost as stepUpHandler } from '../../functions/api/auth/step-up.js'
 
 const TEST_TOTP_SECRET = 'JBSWY3DPEHPK3PXP'  // base32 已知 secret

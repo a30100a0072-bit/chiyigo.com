@@ -14,10 +14,10 @@ import { signJwt } from '../../../utils/jwt'
 import { sendVerificationEmail } from '../../../utils/email'
 import { validatePassword } from '../../../utils/password'
 import { resolveAud } from '../../../utils/cors'
-import { buildTokenScope } from '../../../utils/scopes.js'
+import { buildTokenScope } from '../../../utils/scopes'
 import { verifyTurnstile } from '../../../utils/turnstile'
 import { res } from '../../../utils/auth.js'
-import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
+import { refreshCookie, isWebClient } from '../../../utils/cookies'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

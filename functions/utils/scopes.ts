@@ -111,7 +111,7 @@ function expandHierarchy(set) {
 }
 
 /** 已知 elevated 集合：step-up endpoint 接受的 scope 白名單 */
-export const KNOWN_ELEVATED_SCOPES = new Set([
+export const KNOWN_ELEVATED_SCOPES = new Set<string>([
   SCOPES.ELEVATED_ACCOUNT,
   SCOPES.ELEVATED_PAYMENT,
   SCOPES.ELEVATED_WITHDRAW,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isWebClient } from '../functions/utils/cookies.js'
+import { isWebClient } from '../functions/utils/cookies'
 
 function req(origin) {
   return new Request('http://x/', { headers: origin ? { Origin: origin } : {} })

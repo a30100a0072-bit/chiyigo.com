@@ -11,7 +11,7 @@
  */
 
 import { res, requireStepUp } from '../../../utils/auth.js'
-import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes.js'
+import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import { prepareAppendAuditLog } from '../../../utils/audit-log.js'
 import { safeUserAudit } from '../../../utils/user-audit'
 

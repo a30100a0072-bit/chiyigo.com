@@ -16,7 +16,7 @@
 
 import { hashToken } from '../../utils/crypto'
 import { getCorsHeaders } from '../../utils/cors'
-import { CLEAR_REFRESH_COOKIE } from '../../utils/cookies.js'
+import { CLEAR_REFRESH_COOKIE } from '../../utils/cookies'
 import { safeUserAudit } from '../../utils/user-audit'
 
 export async function onRequestOptions({ request, env }) {

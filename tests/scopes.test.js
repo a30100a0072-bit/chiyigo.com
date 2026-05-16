@@ -10,7 +10,7 @@ import {
   effectiveScopesFromJwt,
   hasScope,
   hasAllScopes,
-} from '../functions/utils/scopes.js'
+} from '../functions/utils/scopes'
 
 describe('scopesForRole', () => {
   it('player → 基本 read/write profile', () => {

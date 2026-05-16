@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi, afterEach } from 'vite
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
-import { SCOPES } from '../../functions/utils/scopes.js'
+import { SCOPES } from '../../functions/utils/scopes'
 import {
   createPaymentIntent, getPaymentIntent, PAYMENT_STATUS,
 } from '../../functions/utils/payments.js'

@@ -38,7 +38,7 @@ export const CLEAR_OAUTH_DEVICE_COOKIE = OAUTH_DEVICE_BASE.replace('%VAL%', '') 
 // 會在 web client 不小心送 device_uuid 時把 refresh_token 寫進 body / Network panel，
 // 違反 HttpOnly 設計；且 App 沒送 platform 又沒送 device_uuid 時誤判 web，
 // 嘗試 Set-Cookie 又不回 body refresh_token → App 登入靜默失敗。
-export function isWebClient(request, { platform } = {}) {
+export function isWebClient(request, { platform }: { platform?: string | null } = {}) {
   // 顯式 non-web platform → 永遠 non-web（含 hybrid webview 在 chiyigo 開但宣告 ios）
   if (platform && platform !== 'web') return false
   // Origin 必須屬於 chiyigo（含子網域）

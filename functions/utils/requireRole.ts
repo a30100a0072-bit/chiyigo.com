@@ -47,7 +47,6 @@ export function safeRoleString(role) {
  * @param {Request} request
  * @param {object}  env
  * @param {string}  minRole  — 'player' | 'moderator' | 'admin' | 'developer'
- * @returns {{ user: object, error: null } | { user: null, error: Response }}
  */
 export async function requireRole(request, env, minRole) {
   const { user, error } = await requireAuth(request, env)

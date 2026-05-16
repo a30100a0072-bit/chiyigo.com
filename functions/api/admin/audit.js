@@ -23,7 +23,7 @@
  */
 
 import { res, requireAnyScope } from '../../utils/auth.js'
-import { SCOPES } from '../../utils/scopes.js'
+import { SCOPES } from '../../utils/scopes'
 import { canRoleSeeAuditEvent } from '../../utils/roles'
 import { safeUserAudit } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit.js'

@@ -14,7 +14,7 @@
 import { verifyJwt } from './jwt'
 import { isJtiRevoked, consumeJtiOnce } from './revocation'
 import { safeUserAudit } from './user-audit'
-import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedScope } from './scopes.js'
+import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedScope } from './scopes'
 
 /**
  * @param {Request}     request

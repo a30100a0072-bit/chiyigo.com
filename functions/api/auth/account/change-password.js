@@ -34,7 +34,7 @@
 import { generateSalt, hashPassword } from '../../../utils/crypto'
 import { validatePassword } from '../../../utils/password'
 import { requireStepUp, bumpTokenVersion, res } from '../../../utils/auth.js'
-import { SCOPES } from '../../../utils/scopes.js'
+import { SCOPES } from '../../../utils/scopes'
 import { safeUserAudit } from '../../../utils/user-audit'
 
 export async function onRequestPost({ request, env }) {

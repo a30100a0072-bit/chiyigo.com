@@ -14,7 +14,7 @@
  */
 
 import { requireAnyScope } from '../../utils/auth.js'
-import { SCOPES } from '../../utils/scopes.js'
+import { SCOPES } from '../../utils/scopes'
 import { verifyAuditChain } from '../../utils/audit-log.js'
 
 export async function onRequestGet({ request, env }) {

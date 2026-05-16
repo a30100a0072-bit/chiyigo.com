@@ -26,9 +26,9 @@ import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypt
 import { signJwt } from '../../../utils/jwt'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth.js'
-import { refreshCookie, isWebClient } from '../../../utils/cookies.js'
+import { refreshCookie, isWebClient } from '../../../utils/cookies'
 import { safeUserAudit } from '../../../utils/user-audit'
-import { buildTokenScope } from '../../../utils/scopes.js'
+import { buildTokenScope } from '../../../utils/scopes'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit.js'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session

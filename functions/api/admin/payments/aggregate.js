@@ -20,7 +20,7 @@
 
 import { res, requireAnyScope } from '../../../utils/auth.js'
 import { getCorsHeaders } from '../../../utils/cors'
-import { SCOPES } from '../../../utils/scopes.js'
+import { SCOPES } from '../../../utils/scopes'
 import { PAYMENT_STATUS } from '../../../utils/payments.js'
 
 const VALID_STATUSES = new Set(Object.values(PAYMENT_STATUS))

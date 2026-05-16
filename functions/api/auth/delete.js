@@ -4,7 +4,7 @@
 
 import { verifyPassword, generateSecureToken, hashToken } from '../../utils/crypto'
 import { requireStepUp, res } from '../../utils/auth.js'
-import { SCOPES } from '../../utils/scopes.js'
+import { SCOPES } from '../../utils/scopes'
 import { sendDeleteConfirmationEmail } from '../../utils/email'
 import { safeUserAudit } from '../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../utils/audit-aggregate-debug.js'

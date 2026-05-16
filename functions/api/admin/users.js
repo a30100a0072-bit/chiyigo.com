@@ -17,7 +17,7 @@
  */
 
 import { res, requireAnyScope } from '../../utils/auth.js'
-import { SCOPES } from '../../utils/scopes.js'
+import { SCOPES } from '../../utils/scopes'
 
 export async function onRequestGet({ request, env }) {
   // P1-17 Phase 3: GET 同時接受 admin:users:read 或 :write

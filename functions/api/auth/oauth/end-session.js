@@ -22,7 +22,7 @@
 import { decodeProtectedHeader, jwtVerify, importJWK } from 'jose'
 import { hashToken } from '../../../utils/crypto'
 import { getPublicJwks } from '../../../utils/jwt'
-import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies.js'
+import { CLEAR_REFRESH_COOKIE } from '../../../utils/cookies'
 import { dispatchBackchannelLogout } from '../../../utils/backchannel'
 import { safeUserAudit } from '../../../utils/user-audit'
 import {
