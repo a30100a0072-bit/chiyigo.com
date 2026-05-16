@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { TOTP, Secret } from 'otpauth'
 import { env } from 'cloudflare:test'
 import {
-  resetDb, ensureJwtKeys, seedUser, enableTotp, seedBackupCode, jsonPost,
+  resetDb, ensureJwtKeys, seedUser, enableTotp, seedBackupCode,
 } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
 import { requireStepUp } from '../../functions/utils/auth'

@@ -19,7 +19,7 @@
  *   400 → 參數錯
  */
 
-import { res, requireScope, requireAnyScope, requireStepUp } from '../../../utils/auth'
+import { res, requireAnyScope, requireStepUp } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import { PAYMENT_STATUS } from '../../../utils/payments'

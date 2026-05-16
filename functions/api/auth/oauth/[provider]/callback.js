@@ -540,12 +540,6 @@ async function verifyLineIdToken(idToken, channelSecret) {
   return payload
 }
 
-function decodeJwtPayload(token) {
-  const part = token.split('.')[1]
-  const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'))
-  return JSON.parse(json)
-}
-
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'

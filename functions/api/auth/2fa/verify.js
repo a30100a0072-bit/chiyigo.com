@@ -25,7 +25,7 @@ import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/
 import { safeUserAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes'
 import { safeAlertAnomalies } from '../../../utils/device-alerts'
-import { computeRiskScore, hashUa } from '../../../utils/risk-score'
+import { hashUa } from '../../../utils/risk-score'
 
 const TOTP_RL_WINDOW_SEC = 5 * 60
 const TOTP_RL_MAX        = 5

@@ -58,7 +58,7 @@ export async function onRequestDelete({ request, env, params }) {
       target_email: `audit_log:${id}:${row.event_type}`,
       ip_address:   request.headers.get('CF-Connecting-IP') ?? null,
     })
-  } catch (e) {
+  } catch {
     return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
   }
 
@@ -69,7 +69,7 @@ export async function onRequestDelete({ request, env, params }) {
   let batchResults
   try {
     batchResults = await env.chiyigo_db.batch([prepared.statement, deleteStmt])
-  } catch (e) {
+  } catch {
     return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
   }
 

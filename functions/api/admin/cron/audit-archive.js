@@ -646,7 +646,7 @@ async function handleVerifiedBlocker(ctx) {
 
 // ── 沒 blocker：撈新範圍 + planned→uploaded 一氣呵成（PR 2.0 既有路徑）─────
 async function runFreshChunkPipeline(ctx) {
-  const { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, cursor } = ctx
+  const { env, envName, tableName, coldClass, dryRun, runId, db, bucket: _bucket, report, cursor } = ctx
 
   // PR 2.2a：per-class hot retention（design doc §「Retention Matrix」）
   const hotDays = hotRetentionDaysFor(env, coldClass)

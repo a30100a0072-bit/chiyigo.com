@@ -10,7 +10,6 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { env } from 'cloudflare:test'
 import { resetDb, callFunction, jsonPost } from './_helpers.js'
 import { onRequestPost as requisitionPost } from '../../functions/api/requisition.js'
 

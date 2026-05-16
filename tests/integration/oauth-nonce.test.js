@@ -45,13 +45,6 @@ async function signLineIdToken(payload, secret) {
   return `${data}.${b64url(sig)}`
 }
 
-/** Build an Apple-style id_token (unsigned — Apple path uses decodeJwtPayload only). */
-function fakeAppleIdToken(payload) {
-  const headerB64  = b64urlString(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
-  const payloadB64 = b64urlString(JSON.stringify(payload))
-  return `${headerB64}.${payloadB64}.fake-signature`
-}
-
 async function seedOauthState({
   state, codeVerifier = 'verifier-xyz', nonce = null,
   redirectUri = 'https://chiyigo.com/api/auth/oauth/line/callback',

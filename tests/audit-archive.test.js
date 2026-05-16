@@ -412,7 +412,7 @@ describe('putWithRetry (PR 2.1d F-3)', () => {
 
   it('第一次成功 → 不重試、不 sleep、不 callback', async () => {
     const calls = []
-    const bucket = { put: async (k, b) => { calls.push(k); return { ok: true } } }
+    const bucket = { put: async (k, _b) => { calls.push(k); return { ok: true } } }
     const sleeps = []
     const failed = []
     const r = await putWithRetry(bucket, 'k', 'body', { ct: 'x' }, {

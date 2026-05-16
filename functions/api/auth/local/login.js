@@ -27,7 +27,7 @@ import {
   getUserCooldownSeconds,
   detectAndBlacklistCrossUserScan,
 } from '../../../utils/brute-force'
-import { computeRiskScore, hashUa, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score'
+import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score'
 import { sendRiskBlockedAlertEmail } from '../../../utils/email'
 
 const ACCESS_TOKEN_TTL    = '15m'

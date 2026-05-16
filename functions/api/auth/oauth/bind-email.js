@@ -15,7 +15,6 @@
 
 import { verifyJwt, signJwt } from '../../../utils/jwt'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
-import { getProvider } from '../../../utils/oauth-providers'
 import { resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth'
 import { refreshCookie } from '../../../utils/cookies'
@@ -59,7 +58,6 @@ export async function onRequestPost(context) {
   if (!provider_id || !provider)
     return res({ error: 'Token 資料不完整', code: 'TOKEN_DATA_INCOMPLETE' }, 401)
 
-  const cfg = getProvider(provider, env)
   const db  = env.chiyigo_db
 
   // ── 2. 防重放：identity 是否已在 DB 內 ────────────────────────

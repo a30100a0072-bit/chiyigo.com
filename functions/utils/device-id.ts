@@ -30,5 +30,5 @@ export function pickOrMakeDeviceUuid({ read, write, makeUuid }) {
 
 function safeCall(fn) {
   try { return fn() }
-  catch (_) { return null }
+  catch { return null }
 }

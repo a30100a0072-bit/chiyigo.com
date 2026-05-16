@@ -15,7 +15,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
 import {
-  ecpayCheckMacValue, ecpayPaymentAdapter, generateMerchantTradeNo,
+  ecpayCheckMacValue, ecpayPaymentAdapter,
 } from '../../functions/utils/payment-vendors/ecpay.js'
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
 import { getPaymentIntent, PAYMENT_STATUS } from '../../functions/utils/payments'
@@ -86,7 +86,7 @@ describe('ECPay CheckMacValue 演算法', () => {
       A: '1', B: '2', CheckMacValue: 'should-be-ignored',
     }
     const sigWith    = await ecpayCheckMacValue(params, 'k', 'iv')
-    const { CheckMacValue, ...rest } = params
+    const { CheckMacValue: _CheckMacValue, ...rest } = params
     const sigWithout = await ecpayCheckMacValue(rest, 'k', 'iv')
     expect(sigWith).toBe(sigWithout)
   })

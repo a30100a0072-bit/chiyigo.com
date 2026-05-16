@@ -21,7 +21,7 @@ import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payme
 
 // 對齊 functions/utils/payment-vendors/ecpay.js 的新 SANDBOX_CREDS
 // 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
-const SANDBOX = {
+const _SANDBOX = {
   MerchantID: '3002607',
   HashKey:    'pwFHCqoQZGmho4w6',
   HashIV:     'EkRm7iFT261dpevs',

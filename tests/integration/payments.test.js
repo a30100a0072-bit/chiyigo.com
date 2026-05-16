@@ -48,7 +48,7 @@ vi.mock('../../functions/utils/payments', async (importOriginal) => {
 const {
   createPaymentIntent, getPaymentIntent, updatePaymentStatus,
   requirePaymentAccess,
-  PAYMENT_STATUS, PAYMENT_KIND,
+  PAYMENT_STATUS,
 } = await import('../../functions/utils/payments')
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
 import { onRequestGet  as listHandler    } from '../../functions/api/auth/payments/intents'

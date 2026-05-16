@@ -371,8 +371,8 @@ export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
  */
 export async function putWithRetry(bucket, key, body, putOpts, opts: {
   backoffMs?: number[],
-  sleep?: (ms: number) => Promise<void>,
-  onAttemptFailed?: (info: { attempt: number; error: unknown; willRetry: boolean; nextDelayMs: number | null; key: string }) => void | Promise<void>,
+  sleep?: (_ms: number) => Promise<void>,
+  onAttemptFailed?: (_info: { attempt: number; error: unknown; willRetry: boolean; nextDelayMs: number | null; key: string }) => void | Promise<void>,
 } = {}) {
   const backoff = opts.backoffMs ?? DEFAULT_PUT_RETRY_BACKOFF_MS
   const sleep = opts.sleep ?? (ms => new Promise(r => setTimeout(r, ms)))

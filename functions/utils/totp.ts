@@ -41,7 +41,7 @@ export async function verifyTotpReplaySafe(env, { userId, secret, code, window =
       .prepare(`INSERT INTO used_totp (user_id, slot) VALUES (?, ?)`)
       .bind(userId, matchedSlot)
       .run()
-  } catch (e) {
+  } catch {
     // SQLITE_CONSTRAINT — 視為 replay。其他 DB 錯誤也保守當失敗（不放行）
     return { ok: false, reason: 'replay' }
   }

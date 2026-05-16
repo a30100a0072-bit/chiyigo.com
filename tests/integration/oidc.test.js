@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest'
 import { env } from 'cloudflare:test'
-import { jwtVerify, importJWK, SignJWT } from 'jose'
+import { importJWK, SignJWT } from 'jose'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 
 import { onRequestGet as discoveryGet } from '../../functions/.well-known/openid-configuration.js'
