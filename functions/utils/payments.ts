@@ -412,7 +412,7 @@ export async function requirePaymentAccess(
 // 目前只 ship `mock` adapter 給 tests + scaffold smoke test。
 
 import { mockPaymentAdapter } from './payment-vendors/mock'
-import { ecpayPaymentAdapter } from './payment-vendors/ecpay.js'
+import { ecpayPaymentAdapter } from './payment-vendors/ecpay'
 
 const ADAPTERS = {
   mock:  mockPaymentAdapter,

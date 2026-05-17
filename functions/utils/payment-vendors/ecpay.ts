@@ -169,7 +169,16 @@ export const ecpayPaymentAdapter = {
     }
 
     // 取號類事件 → 把繳款資訊抽成 payment_info（給 webhook handler 寫進 metadata）
-    let paymentInfo = null
+    let paymentInfo: {
+      method?: 'atm' | 'cvs' | 'barcode'
+      bank_code?: string
+      v_account?: string
+      payment_no?: string
+      barcode_1?: string
+      barcode_2?: string
+      barcode_3?: string
+      expire_date?: string
+    } | null = null
     if (status === PAYMENT_STATUS.PROCESSING) {
       paymentInfo = {}
       if (hasAtmInfo) {
@@ -261,7 +270,7 @@ export async function buildEcpayCheckoutFields(env, payload) {
   const checkoutUrl = isProd ? ECPAY_PROD_URL : ECPAY_STAGE_URL
 
   const tradeDate = formatTradeDate(new Date())
-  const fields = {
+  const fields: Record<string, string> = {
     MerchantID:        merchantId,
     MerchantTradeNo:   payload.merchantTradeNo,
     MerchantTradeDate: tradeDate,
@@ -345,7 +354,7 @@ export async function ecpayRefund(env, { merchantTradeNo, tradeNo, totalAmount, 
   const { merchantId, hashKey, hashIV, isProd } = getCreds(env)
   const url = isProd ? ECPAY_REFUND_PROD_URL : ECPAY_REFUND_STAGE_URL
 
-  const fields = {
+  const fields: Record<string, string> = {
     MerchantID:       merchantId,
     MerchantTradeNo:  String(merchantTradeNo),
     TradeNo:          String(tradeNo),

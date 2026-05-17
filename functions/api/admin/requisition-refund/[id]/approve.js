@@ -29,7 +29,7 @@ import {
   getPaymentIntent, updatePaymentStatus, PAYMENT_STATUS,
   lockIntentForRefund, unlockIntentToSucceeded,
 } from '../../../../utils/payments'
-import { ecpayRefund } from '../../../../utils/payment-vendors/ecpay.js'
+import { ecpayRefund } from '../../../../utils/payment-vendors/ecpay'
 import { safeUserAudit } from '../../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug'
 import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'

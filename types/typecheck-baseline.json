@@ -1,11 +1,10 @@
 {
-  "baselineSha": "eaeb26e",
-  "cleanFiles": 198,
-  "createdAt": "2026-05-16",
-  "errorCount": 972,
-  "errorFiles": 47,
+  "baselineSha": "0b6cf6a",
+  "cleanFiles": 200,
+  "createdAt": "2026-05-17",
+  "errorCount": 953,
+  "errorFiles": 45,
   "errorsByFile": {
-    "functions/utils/payment-vendors/ecpay.js": 10,
     "src/js/404.js": 11,
     "src/js/about.js": 21,
     "src/js/admin-deals.js": 21,
@@ -44,7 +43,6 @@
     "tests/integration/oauth-clients-d1.test.js": 8,
     "tests/integration/oauth-nonce.test.js": 8,
     "tests/integration/oidc.test.js": 6,
-    "tests/integration/payments-ecpay.test.js": 9,
     "tests/integration/payments.test.js": 6,
     "tests/integration/rate-limit.test.js": 2,
     "tests/integration/refresh.test.js": 11,
@@ -53,7 +51,7 @@
     "tests/integration/webauthn-login.test.js": 3,
     "tests/integration/webauthn-register.test.js": 3
   },
-  "fileErrors": 972,
+  "fileErrors": 953,
   "globalErrors": 0,
   "sourceFilesTotal": 245,
   "stage": 1

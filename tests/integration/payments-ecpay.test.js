@@ -16,7 +16,7 @@ import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
 import {
   ecpayCheckMacValue, ecpayPaymentAdapter,
-} from '../../functions/utils/payment-vendors/ecpay.js'
+} from '../../functions/utils/payment-vendors/ecpay'
 import { setUserKycStatus, KYC_STATUS } from '../../functions/utils/kyc'
 import { getPaymentIntent, PAYMENT_STATUS } from '../../functions/utils/payments'
 import { onRequestPost as checkoutHandler } from '../../functions/api/auth/payments/checkout/ecpay'
