@@ -51,6 +51,7 @@ declare global {
     ECPAY_HASH_IV?: string;
     PAYMENT_MOCK_SECRET?: string;
     KYC_MOCK_SECRET?: string;
+    PSP_DIRECT_INTENT_ENABLED?: string;
 
     // ── Audit archive pipeline ─────────────────────────────────────────
     ARCHIVE_ENV?: string;

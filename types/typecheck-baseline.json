@@ -1,8 +1,8 @@
 {
-  "baselineSha": "0b6cf6a",
+  "baselineSha": "af86a91",
   "cleanFiles": 200,
   "createdAt": "2026-05-17",
-  "errorCount": 953,
+  "errorCount": 951,
   "errorFiles": 45,
   "errorsByFile": {
     "src/js/404.js": 11,
@@ -43,7 +43,7 @@
     "tests/integration/oauth-clients-d1.test.js": 8,
     "tests/integration/oauth-nonce.test.js": 8,
     "tests/integration/oidc.test.js": 6,
-    "tests/integration/payments.test.js": 6,
+    "tests/integration/payments.test.js": 4,
     "tests/integration/rate-limit.test.js": 2,
     "tests/integration/refresh.test.js": 11,
     "tests/integration/silent-sso.test.js": 1,
@@ -51,7 +51,7 @@
     "tests/integration/webauthn-login.test.js": 3,
     "tests/integration/webauthn-register.test.js": 3
   },
-  "fileErrors": 953,
+  "fileErrors": 951,
   "globalErrors": 0,
   "sourceFilesTotal": 245,
   "stage": 1

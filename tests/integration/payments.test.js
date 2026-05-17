@@ -335,6 +335,31 @@ describe('POST /api/webhooks/payments/:vendor', () => {
     }
   })
 
+  it('PSP-direct orphan create + failed → row.failure_reason 落 DB', async () => {
+    // PR-4 type-only relax 收尾：createPaymentIntent INSERT 漏 failure_reason 欄
+    // 導致初次 PSP webhook 就是 failed 的 orphan intent 在 DB 留 NULL。
+    env.PSP_DIRECT_INTENT_ENABLED = '1'
+    try {
+      const u = await seedUser({ email: 'w2c@x' })
+      const body = JSON.stringify({
+        event_id: 'evt_w2c', vendor_intent_id: 'pi_w2c', user_id: u.id,
+        status: 'failed', amount_subunit: 3000, currency: 'TWD',
+        failure_reason: 'card_declined',
+      })
+      const sig = await hmacHex(env.PAYMENT_MOCK_SECRET, body)
+      const resp = await webhookHandler({
+        request: webhookReq(body, sig), env, params: { vendor: 'mock' },
+      })
+      expect(resp.status).toBe(200)
+      const row = await getPaymentIntent(env, { vendor: 'mock', vendor_intent_id: 'pi_w2c' })
+      expect(row).not.toBeNull()
+      expect(row.status).toBe(PAYMENT_STATUS.FAILED)
+      expect(row.failure_reason).toBe('card_declined')
+    } finally {
+      delete env.PSP_DIRECT_INTENT_ENABLED
+    }
+  })
+
   it('P0-9：沒既存 intent + flag 關 → 不建 intent + critical audit + DLQ', async () => {
     const u = await seedUser({ email: 'w2b@x' })
     const body = JSON.stringify({

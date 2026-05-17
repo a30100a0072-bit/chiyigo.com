@@ -99,9 +99,6 @@ interface CreatePaymentIntentPayload {
   currency?: string
   metadata?: Record<string, unknown> | null
   requisition_id?: number | string | null
-  // Stage 3：webhook PSP-direct 路徑會傳入但 destructure 不接（保留欄位讓 caller
-  // 編譯通過、runtime 沿用既有行為「silently dropped」）。修正落 DB 為獨立 PR
-  // 處理，避免綁進 JS→TS rename 的金流邊界 PR（[[feedback_security_boundary_pr_first_do_no_harm]]）。
   failure_reason?: string | null
 }
 
@@ -109,7 +106,8 @@ export async function createPaymentIntent(env, payload: CreatePaymentIntentPaylo
   if (!env?.chiyigo_db) throw new Error('db not available')
   const { user_id, vendor, vendor_intent_id, kind = PAYMENT_KIND.DEPOSIT,
           status = PAYMENT_STATUS.PENDING, amount_subunit = null, amount_raw = null,
-          currency, metadata = null, requisition_id = null } = payload
+          currency, metadata = null, requisition_id = null,
+          failure_reason = null } = payload
   if (!user_id || !vendor || !vendor_intent_id || !currency) {
     throw new Error('createPaymentIntent: missing required field')
   }
@@ -131,13 +129,13 @@ export async function createPaymentIntent(env, payload: CreatePaymentIntentPaylo
     .prepare(
       `INSERT INTO payment_intents
          (user_id, vendor, vendor_intent_id, kind, status,
-          amount_subunit, amount_raw, currency, metadata, requisition_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          amount_subunit, amount_raw, currency, metadata, requisition_id, failure_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id`,
     )
     .bind(user_id, vendor, String(vendor_intent_id), kind, status,
           amount_subunit, amount_raw, currency,
-          cleanMeta ? JSON.stringify(cleanMeta) : null, reqId)
+          cleanMeta ? JSON.stringify(cleanMeta) : null, reqId, failure_reason)
     .first()
   return result?.id ?? null
 }
