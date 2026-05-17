@@ -19,7 +19,7 @@ import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requi
 import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve.js'
 import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete.js'
 
-// 對齊 functions/utils/payment-vendors/ecpay.js 的新 SANDBOX_CREDS
+// 對齊 functions/utils/payment-vendors/ecpay.ts 的新 SANDBOX_CREDS
 // 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
 const _SANDBOX = {
   MerchantID: '3002607',

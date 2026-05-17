@@ -407,7 +407,7 @@ export async function requirePaymentAccess(
 // 接真實 PSP 時：
 //   functions/utils/payment-vendors/stripe.js  — Stripe-Signature 驗章 + event.type → status
 //   functions/utils/payment-vendors/tappay.js  — TapPay HMAC + 通知格式
-//   functions/utils/payment-vendors/ecpay.js   — 綠界 CheckMacValue
+//   functions/utils/payment-vendors/ecpay.ts   — 綠界 CheckMacValue
 //
 // 目前只 ship `mock` adapter 給 tests + scaffold smoke test。
 
