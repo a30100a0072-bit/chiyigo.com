@@ -32,7 +32,7 @@ import { buildTokenScope } from '../../../utils/scopes'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 
 const REFRESH_TOKEN_DAYS = 30 // 遊戲 / App 端長效 session
-const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.js 設定）
+const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.ts 設定）
 
 // Web client 判定走共用 isWebClient（規格 B，Origin 為 source of truth）。
 // 此 endpoint 沒有 platform 欄位（OAuth code exchange spec 不帶），所以只看 Origin：
@@ -130,9 +130,9 @@ export async function onRequestPost({ request, env }) {
   const deviceUuid     = (headerDeviceId && headerDeviceId.trim()) || null
   // 簽發前先決定 aud（依 redirect_uri origin），下方 INSERT 也要把 issued_aud 寫入
   const aud = resolveAud(redirect_uri)
-  // P1-5：把 OIDC scope 落 refresh_tokens；refresh.js rotation 時透傳，
+  // P1-5：把 OIDC scope 落 refresh_tokens；refresh.ts rotation 時透傳，
   // silent refresh 後 access_token 仍帶 openid/email 等
-  // Codex r9-5：issued_aud 鎖定發行時的 audience；refresh.js 用此簽新 token 防 body.aud 切換
+  // Codex r9-5：issued_aud 鎖定發行時的 audience；refresh.ts 用此簽新 token 防 body.aud 切換
   await db
     .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud)
               VALUES (?, ?, ?, ?, ?, ?, ?)`)

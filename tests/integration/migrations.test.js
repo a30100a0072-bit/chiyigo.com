@@ -282,7 +282,7 @@ describe('migrations smoke', () => {
 // 維持手建 fixture 形式作 0037 issued_aud 行為 targeted 驗證。
 //
 // 本 case 只手建 0037 必要的 fixture（users + pre-0037 refresh_tokens），跑 0037 migration，
-// 驗欄位/索引/NULL 行為/綁定持久化。F-2 refresh.js 邏輯（rawAudProvided 條件、effectiveAud
+// 驗欄位/索引/NULL 行為/綁定持久化。F-2 refresh.ts 邏輯（rawAudProvided 條件、effectiveAud
 // 由 issued_aud 主導）屬 handler integration test 範疇，不在此覆蓋；TODO 補 refresh.test.js。
 describe('migrations smoke 0037 targeted', () => {
   beforeAll(async () => {
@@ -350,7 +350,7 @@ describe('migrations smoke 0037 targeted', () => {
       `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, issued_aud)
        VALUES (?, 'h_bound_sport', datetime('now','+7 days'), 'sport-app')`,
     ).bind(u.id).run()
-    // 模擬 refresh.js rotation 不應改 issued_aud：UPDATE 只動 revoked_at
+    // 模擬 refresh.ts rotation 不應改 issued_aud：UPDATE 只動 revoked_at
     await env.chiyigo_db.prepare(
       `UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE token_hash='h_bound_sport'`,
     ).run()

@@ -18,7 +18,7 @@ import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedS
 
 // requiredScope: 若指定，則 JWT payload.scope 必須吻合（用於 pre_auth_token 等）
 // opts.audience: 若指定，jwtVerify 會強制驗 aud claim（chiyigo IAM resource server 端點建議帶 'chiyigo'）；
-//   明確傳 null 才省略 aud claim 驗證（userinfo.js 跨 aud 用），undefined 則套 jwt.ts 預設 'chiyigo'
+//   明確傳 null 才省略 aud claim 驗證（userinfo.ts 跨 aud 用），undefined 則套 jwt.ts 預設 'chiyigo'
 export async function requireAuth(
   request: Request,
   env: Env,
