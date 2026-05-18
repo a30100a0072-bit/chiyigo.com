@@ -153,12 +153,60 @@ describe('GET /api/admin/requisitions', () => {
     expect(rCo.body.requisitions.some(r => r.company === 'aliceCorp')).toBe(true)
   })
 
-  // q-length boundary test 故意不寫：requisitions.ts L47 slice 上限是 100 字元，
-  // 但 D1 SQLite「LIKE or GLOB pattern too complex」會在更短就先觸發（4-OR LIKE
-  // 把 complexity 放大；exact ceiling 需 PR-16c spike）。此 PR 是純 regression
-  // test，不夾帶 production fix；PR-16c 候選範圍：
-  //   (1) 確認 D1 真實上限並把 slice cap 改到安全值（或先 SELECT instr 替代 LIKE）；
-  //   (2) 加 q 長度邊界測試 + 觀察 endpoint 在過長 q 不應 500（截斷或 400 都比 500 好）。
+  // ── q filter regression（PR-16c INSTR pivot 修 D1 LIKE complexity 上限後新增）
+  // 背景：舊版用 `%${q}%` LIKE × 4-OR，D1 SQLite 限制 ~48 bytes（非 char）→ 中文
+  // input 16 字以上 prod 直接 500。PR-16c pivot 到 INSTR(LOWER, LOWER) 後無此限制。
+  it('q filter 長 input（100 char ASCII）不再 500，回正常結果（PR-16c regression）', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedReq({ name: 'shortMatch', message: 'x' })
+    const tok = await tokenFor(aid, 'admin')
+
+    // 100 ASCII，舊版（LIKE）會 500，PR-16c pivot 後 200 + 無 match（正常結果，不爆）
+    const longQ = 'unmatched_' + 'a'.repeat(90)
+    const r = await callList(tok, `?q=${encodeURIComponent(longQ)}`)
+    expect(r.status).toBe(200)
+    expect(r.body.requisitions.length).toBe(0)
+  })
+
+  it('q filter UTF-8 中文（32 char = 96 bytes）不再 500（PR-16c regression）', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedReq({ name: '艾莉絲', contact: 'a@x', message: '訊息' })
+    const tok = await tokenFor(aid, 'admin')
+
+    // 32 中文 = 96 UTF-8 bytes，超過舊 48-byte LIKE ceiling 兩倍
+    const longChinese = '不匹配' + '測'.repeat(29)
+    const r = await callList(tok, `?q=${encodeURIComponent(longChinese)}`)
+    expect(r.status).toBe(200)
+    expect(r.body.requisitions.length).toBe(0)
+
+    // 短中文真實 match
+    const hit = await callList(tok, `?q=${encodeURIComponent('艾莉絲')}`)
+    expect(hit.status).toBe(200)
+    expect(hit.body.requisitions.some(x => x.name === '艾莉絲')).toBe(true)
+  })
+
+  it('q filter case-insensitive via LOWER（與舊 LIKE ASCII 行為等價 + 擴及非 ASCII）', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedReq({ name: 'Alice', message: 'hi' })
+    const tok = await tokenFor(aid, 'admin')
+
+    // 大寫 q 應命中小寫 name（INSTR(LOWER, LOWER) 行為）
+    const r = await callList(tok, '?q=ALICE')
+    expect(r.status).toBe(200)
+    expect(r.body.requisitions.some(x => x.name === 'Alice')).toBe(true)
+  })
+
+  it('q filter `%` / `_` / `\\` 變成 literal substring 不再被當 wildcard（INSTR 副效益）', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedReq({ name: 'pct%user', message: 'x' })
+    await seedReq({ name: 'pctXuser', message: 'x' })  // 舊 LIKE `%` 會誤命中
+    const tok = await tokenFor(aid, 'admin')
+
+    const r = await callList(tok, `?q=${encodeURIComponent('pct%user')}`)
+    expect(r.status).toBe(200)
+    expect(r.body.requisitions.some(x => x.name === 'pct%user')).toBe(true)
+    expect(r.body.requisitions.some(x => x.name === 'pctXuser')).toBe(false)
+  })
 
   it('include_deleted=1 顯示軟刪 row，預設隱藏', async () => {
     const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })

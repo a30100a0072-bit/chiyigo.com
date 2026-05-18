@@ -43,7 +43,13 @@ export async function onRequestGet({ request, env }) {
   const url    = new URL(request.url)
   const page   = Math.max(1, parseInt(url.searchParams.get('page')  ?? '1', 10))
   const limit  = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10)))
-  // P1-12：q 長度上限 100，避免 SQLite LIKE 在大 dataset 上拖慢 + 防注入式爆炸
+  // PR-16c：q 長度上限 100 純粹 anti-DoS（避免無上限 input）。實際搜尋不用 LIKE：
+  //   D1 spike 量測「LIKE or GLOB pattern too complex」上限是 ~48 *bytes*（非 char），
+  //   單一中文字佔 3 bytes → 用 LIKE 對中文 input 在 16 字元就會 500，prod 不可接受。
+  //   改用 INSTR(LOWER(col), LOWER(?)) > 0：(a) 無 pattern complexity 上限；
+  //   (b) 對 ASCII 仍 case-insensitive（與舊 LIKE 預設行為等價）；(c) 對非 ASCII
+  //   也 case-insensitive（嚴格更鬆，沒 regression 風險）；(d) 順手清掉舊版 LIKE
+  //   未 escape `%`/`_`/`\` 的 latent 問題——user 輸 `%foo` 不再被當 wildcard。
   const q      = (url.searchParams.get('q') ?? '').slice(0, 100)
   const offset = (page - 1) * limit
 
@@ -53,8 +59,11 @@ export async function onRequestGet({ request, env }) {
   const bindings   = []
 
   if (q) {
-    conditions.push('(name LIKE ? OR contact LIKE ? OR message LIKE ? OR company LIKE ?)')
-    bindings.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`)
+    conditions.push(`(INSTR(LOWER(name), LOWER(?)) > 0
+                   OR INSTR(LOWER(contact), LOWER(?)) > 0
+                   OR INSTR(LOWER(message), LOWER(?)) > 0
+                   OR INSTR(LOWER(COALESCE(company, '')), LOWER(?)) > 0)`)
+    bindings.push(q, q, q, q)
   }
 
   // T8 soft delete：預設隱藏已刪 row；?include_deleted=1 可看
