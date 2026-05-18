@@ -1,20 +1,26 @@
 /**
  * GET /api/admin/requisition-refund
- * Header: Authorization: Bearer <access_token>  (scope: admin:requisitions; fallback admin role)
+ * Header: Authorization: Bearer <access_token>
+ *   Scope（任一）：admin:payments:{read|write|refund|approve}
+ *   既有 admin/super_admin/developer role base scopes 含 admin:payments coarse →
+ *   經 expandHierarchy 自動具備上述 fine scopes。
  *
  * Phase F-2 wave 7 — admin 退款申請列表（pending 優先）。
  *
  * Query string：
- *   status   pending|approved|rejected（預設 pending）
+ *   status   pending|approved|rejected|processing（預設 pending；processing 由
+ *            approve.ts 在 ECPay 網路錯誤 / DLQ reconciliation 路徑留下，admin
+ *            必須能查到才能人工接手）
  *   page     預設 1
  *   limit    預設 50，上限 200
  *
  * 回傳：
  *   200 → { rows, total, page, limit }
  *
- * 為什麼用 admin role 守門而非新加 admin:requisitions scope：
- *   既有 /api/admin/requisitions 也是 requireRole('admin') pattern，沿用一致。
- *   實際退款動作走 step-up + elevated:payment（approve/reject endpoint），這裡只是讀。
+ * 為什麼是讀 scope 任一即可、寫不在這支：
+ *   實際退款動作走 step-up + elevated:payment（approve.ts / reject.ts），本檔
+ *   只是讀列表給 admin 對帳，所以 :read 已足，:write/:refund/:approve 也接受
+ *   讓既有 admin token 不必額外帶 :read 也能進。
  */
 
 import { res, requireAnyScope } from '../../utils/auth'
