@@ -90,7 +90,7 @@ export async function requireRole(request, env, minRole) {
 }
 
 /**
- * Codex audit r2 #4（2026-05-10）：admin/users/[id]/ban.js、unban.js、admin/revoke.js
+ * Codex audit r2 #4（2026-05-10）：admin/users/[id]/ban.ts、unban.ts、admin/revoke.js
  * 過去各自 const ROLE_LEVEL = { player:0, moderator:1, admin:2, developer:3 } —
  * 不認 super_admin/finance/support，且本檔擴充後 endpoint 不會自動跟上。
  * 集中此 helper：actor 嚴格高於 target 才放行（admin 不能 ban admin / super_admin）。
