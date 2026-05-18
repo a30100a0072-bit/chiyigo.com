@@ -19,6 +19,7 @@ import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requi
 import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve.js'
 import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete.js'
 import { onRequestGet  as aggregateHandler } from '../../functions/api/admin/payments/aggregate'
+import { onRequestGet  as dlqHandler       } from '../../functions/api/admin/payments/webhook-dlq'
 
 // 對齊 functions/utils/payment-vendors/ecpay.ts 的新 SANDBOX_CREDS
 // 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
@@ -41,6 +42,15 @@ async function playerToken(userId) {
     { sub: String(userId), email: 'p@x', role: 'player', status: 'active', ver: 0,
       scope: 'read:profile write:profile' },
     '15m', env, { audience: 'chiyigo' },
+  )
+}
+
+async function dlqStepUpToken(userId, forAction = 'view_webhook_dlq') {
+  return signJwt(
+    { sub: String(userId), role: 'admin', status: 'active', ver: 0,
+      scope: SCOPES.ELEVATED_PAYMENT, for_action: forAction,
+      amr: ['pwd', 'totp'], acr: 'urn:chiyigo:loa:2' },
+    '5m', env,
   )
 }
 
@@ -246,6 +256,96 @@ describe('GET /api/admin/payments/aggregate', () => {
     expect(bucket.sum_subunit).toBe(350)          // 100 + 250（不含 9000）
     expect(bucket.refunded_count).toBe(1)         // refunded bucket join 對齊
     expect(bucket.refunded_sum_subunit).toBe(80)
+  })
+})
+
+describe('GET /api/admin/payments/webhook-dlq', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  /**
+   * @param {{ vendor?: string; eventId: string; replayed?: boolean }} args
+   */
+  async function seedDlq({ vendor = 'ecpay', eventId, replayed = false }) {
+    const replayedSql = replayed ? `strftime('%Y-%m-%dT%H:%M:%fZ','now')` : `NULL`
+    await env.chiyigo_db.prepare(
+      `INSERT INTO payment_webhook_dlq
+         (vendor, event_id, vendor_intent_id, raw_body, payload_hash,
+          error_stage, error_message, http_status_returned, replayed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${replayedSql})`,
+    ).bind(vendor, eventId, `intent_${eventId}`, `{"raw":"${eventId}"}`,
+           `h_${eventId}`, 'parse', 'boom', 200).run()
+  }
+
+  it('沒 step-up token → 401/403', async () => {
+    const a = await seedUser({ email: 'dlq-no-step@x', role: 'admin' })
+    const tok = await adminToken(a.id) // 一般 access_token
+    const resp = await dlqHandler({ request: bearer('GET', 'http://x/', tok), env })
+    expect([401, 403]).toContain(resp.status)
+  })
+
+  it('step-up 但缺 admin:payments scope → 403 INSUFFICIENT_SCOPE', async () => {
+    const a = await seedUser({ email: 'dlq-noscope@x' })
+    // step-up token 真實 shape：scope 僅 elevated:payment + role=player（fallback 不補 admin:payments）
+    const tok = await signJwt(
+      { sub: String(a.id), role: 'player', status: 'active', ver: 0,
+        scope: SCOPES.ELEVATED_PAYMENT, for_action: 'view_webhook_dlq',
+        amr: ['pwd', 'totp'], acr: 'urn:chiyigo:loa:2' },
+      '5m', env,
+    )
+    const resp = await dlqHandler({ request: bearer('GET', 'http://x/', tok), env })
+    expect(resp.status).toBe(403)
+    const body = await resp.json()
+    expect(body.code).toBe('INSUFFICIENT_SCOPE')
+  })
+
+  it('pending/vendor/limit 過濾 + critical read audit', async () => {
+    const a = await seedUser({ email: 'dlq-ok@x', role: 'admin' })
+    await seedDlq({ vendor: 'ecpay', eventId: 'e1' })
+    await seedDlq({ vendor: 'ecpay', eventId: 'e2' })
+    await seedDlq({ vendor: 'mock',  eventId: 'm1' })
+    await seedDlq({ vendor: 'ecpay', eventId: 'replayed1', replayed: true })
+
+    // step-up token 走 atomic consumeJtiOnce → 每次呼叫必須是新 token
+    // 預設 pending=1 vendor 不限 → 排除 replayed1，剩 3
+    const r1 = await dlqHandler({
+      request: bearer('GET', 'http://x/', await dlqStepUpToken(a.id)), env,
+    })
+    expect(r1.status).toBe(200)
+    const b1 = await r1.json()
+    expect(b1.rows.length).toBe(3)
+    expect(b1.rows.every(r => r.replayed_at === null)).toBe(true)
+
+    // vendor=ecpay → 只剩 e1/e2
+    const r2 = await dlqHandler({
+      request: bearer('GET', 'http://x/?vendor=ecpay', await dlqStepUpToken(a.id)), env,
+    })
+    const b2 = await r2.json()
+    expect(b2.rows.map(r => r.event_id).sort()).toEqual(['e1', 'e2'])
+
+    // limit=1 → 只回 1 筆
+    const r3 = await dlqHandler({
+      request: bearer('GET', 'http://x/?limit=1', await dlqStepUpToken(a.id)), env,
+    })
+    expect((await r3.json()).rows.length).toBe(1)
+
+    // pending=0 → 包含 replayed1
+    const r4 = await dlqHandler({
+      request: bearer('GET', 'http://x/?pending=0', await dlqStepUpToken(a.id)), env,
+    })
+    const b4 = await r4.json()
+    expect(b4.rows.length).toBe(4)
+
+    // T14 critical read audit 寫入（每次讀都該寫，pending=0 那次是最後一發）
+    const audit = await env.chiyigo_db
+      .prepare(`SELECT severity, event_data FROM audit_log
+                 WHERE event_type = 'admin.payment_webhook_dlq.read'
+                 ORDER BY id DESC LIMIT 1`)
+      .first()
+    expect(audit.severity).toBe('critical')
+    const data = JSON.parse(audit.event_data)
+    expect(data.filters.pending).toBe(false)
+    expect(data.result_count).toBe(4)
   })
 })
 
