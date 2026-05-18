@@ -21,7 +21,7 @@
  *     只撤該 user 在指定 device 上的 refresh_token。
  *     access_token 仍有效到 exp，但 refresh 失敗後即下線（不影響其他裝置）。
  *
- * 保護規則（同 ban.js）：
+ * 保護規則（同 ban.ts）：
  *  - mode='user' / 'device'：不可撤自己 / 不可撤同層級或更高層級 role
  *
  * 回傳：
