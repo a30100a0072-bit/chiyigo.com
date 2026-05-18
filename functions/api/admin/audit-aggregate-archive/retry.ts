@@ -2,7 +2,7 @@
  * POST /api/admin/audit-aggregate-archive/retry
  *
  * F-3 Phase 2 PR 3.3 — admin retry endpoint for aggregate archive chunks
- * (mirror PR 2.2b/2.3 raw retry.js；差異見「設計差異」段)
+ * (mirror PR 2.2b/2.3 raw retry.ts；差異見「設計差異」段)
  *
  * Auth（reuse PR 2.2d 既有 admin:audit_archive:* fine scopes — aggregate ops 與 raw
  * ops 同 admin role 操作、blast radius 同級，不再切第二組 scope；step-up for_action
@@ -49,7 +49,7 @@
  *   - dry-run verified → blacklisted 額外加 NOT EXISTS aggregate row archived_at
  *     檢查 — 違反即 fail-fast critical（feedback_stepup_atomic_consume 風格）。
  *
- * 設計差異 vs raw retry.js：
+ * 設計差異 vs raw retry.ts：
  *   1. target 多帶 dry_run flag（raw 不要求；aggregate dry_run / live 混存同一表）
  *   2. table_name + cold_class 白名單只認 aggregate 兩組（raw 認 audit_log + 6 class）
  *   3. mark_resolved 多 dry_run=1 verified→blacklisted special transition
@@ -153,7 +153,7 @@ function chunkIdString(t) {
 async function emitRejected(env, request, ctx, reason) {
   const cls = classForColdClass(ctx.target?.cold_class)
   // 若 cold_class 不合法（pre-validate 階段），cls 會是 null — emit 不該 fail 整個流程，
-  // fallback 一個 generic prefix 仍寫 audit（與 raw retry.js policy 一致）
+  // fallback 一個 generic prefix 仍寫 audit（與 raw retry.ts policy 一致）
   const evt = cls
     ? `audit.aggregate_archive.${cls}.retry_rejected`
     : 'audit.aggregate_archive.telemetry.retry_rejected' // safe default; reason 會說明

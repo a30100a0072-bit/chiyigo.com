@@ -399,7 +399,7 @@ describe('audit-aggregate-archive — verified blocker resume (codex H-2 / M-2)'
     expect(after1[0].state).toBe('verified')
 
     // Step 2：模擬 admin re_verify 後狀態 — UPDATE state='uploaded'
-    //   （等同於：state='failed' chunk 被 retry.js re_verify 推到 'uploaded'）
+    //   （等同於：state='failed' chunk 被 retry.ts re_verify 推到 'uploaded'）
     //   R2 物件本就存在（前次 dry-run PUT），符合 re_verify 後的真實狀態
     await env.chiyigo_db.prepare(
       `UPDATE audit_archive_chunks SET state = 'uploaded' WHERE state = 'verified'`

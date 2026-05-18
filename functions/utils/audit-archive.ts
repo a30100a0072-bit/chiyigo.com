@@ -463,7 +463,7 @@ export async function purgeChunk({ env, db, target }) {
   const bucket = env?.AUDIT_ARCHIVE_BUCKET
   if (!bucket) throw new Error('AUDIT_ARCHIVE_BUCKET binding missing')
 
-  // 1) 從 D1 撈 chunk row，取 dry_run / compression 反推 R2 key（與 retry.js 的
+  // 1) 從 D1 撈 chunk row，取 dry_run / compression 反推 R2 key（與 retry.ts 的
   //    target 不必含 dry_run / compression — 那是 server side schema 細節）
   const row = await db.prepare(
     `SELECT env, table_name, cold_class, archive_date,

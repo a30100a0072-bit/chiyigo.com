@@ -82,7 +82,7 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate_archive.telemetry.chunk_skipped',  // info / warn
   'audit.aggregate_archive.debug.chunk_skipped',      // info / warn
   // PR 3.3 admin retry / force_purge endpoint（POST /api/admin/audit-aggregate-archive/retry）
-  //   mirror PR 2.2b/2.3 raw retry.js 三段事件 × 兩 cold_class（telemetry / debug）
+  //   mirror PR 2.2b/2.3 raw retry.ts 三段事件 × 兩 cold_class（telemetry / debug）
   //   force_purge_disabled / retry_rejected = warn；其餘 retry_* info；force_purge_*
   //   critical（destructive R2 + chunks row delete）
   'audit.aggregate_archive.telemetry.retry_requested',          // info

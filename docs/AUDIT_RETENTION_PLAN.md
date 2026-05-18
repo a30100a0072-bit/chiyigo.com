@@ -984,12 +984,12 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
   - 新增 coarse `admin:audit_archive` + 3 fine（`:retry/:resolve/:purge`）入 `SCOPES`
   - `SCOPE_HIERARCHY`：coarse → 3 fine（fine→fine 不互相蘊含，最少特權）
   - `ROLE_BASE_SCOPES`：admin/developer/super_admin 加 coarse → 經 role fallback 自動含全套（prod token 不必重簽）
-  - `retry.js` baseline gate 拆 per-action fine（re_verify→retry / mark_resolved→resolve / force_purge→purge），fine scope check 放在 action validate 後，保留 invalid_action=400 而非被 scope gate 吃成 403
+  - `retry.ts` baseline gate 拆 per-action fine（re_verify→retry / mark_resolved→resolve / force_purge→purge），fine scope check 放在 action validate 後，保留 invalid_action=400 而非被 scope gate 吃成 403
   - finance/support 嚴格驗證**不**取得任何 audit_archive fine（避免誤升權）
   - 現況為 architectural prep：現役 admin-role token 皆含全套，差異化要等未來 audit_ops 之類窄 role 才 activate
   - 測試：unit 281→287（+6 in `tests/scopes.test.js`），int 544 不變
 - **PR 2.3** force_purge 真實作 ✅ — endpoint + `purgeChunk` helper（manual R2 chunk+manifest+chunks row delete）
-  - retry.js `force_purge`：501 stub → 真實作；要求 chunk state='blacklisted'（接 mark_resolved 收尾）+ step-up + env `AUDIT_ARCHIVE_PURGE_ENABLED='1'`，未設回 503 PURGE_DISABLED + emit `audit.archive.force_purge_disabled` warn
+  - retry.ts `force_purge`：501 stub → 真實作；要求 chunk state='blacklisted'（接 mark_resolved 收尾）+ step-up + env `AUDIT_ARCHIVE_PURGE_ENABLED='1'`，未設回 503 PURGE_DISABLED + emit `audit.archive.force_purge_disabled` warn
   - `purgeChunk(env, db, target)`（functions/utils/audit-archive.ts）：SELECT row → R2 chunk DELETE → R2 manifest DELETE → D1 chunks row DELETE（嚴格 `state='blacklisted'` 再驗一次防 race）；前面失敗 propagate exception，D1 row 留著可重試
   - **audit_log raw row 不刪**：response 帶 `source_rows_deleted: false / chunks_row_deleted: true` 明示分界；raw 真刪屬 PR 4 marked_archived→7d→purged lifecycle。只刪 chunks row 代表「移除壞掉的 archive attempt / 讓 pipeline 可重跑」，不是「永久跳過該段 raw audit_log」；若未來需永久跳過要另設 tombstone state，不偷靠 raw DELETE
   - 3 新 events 入 registry（121→124）：`force_purge_succeeded` / `_failed` / `_disabled` 全 immutable category
@@ -1018,10 +1018,10 @@ wrangler r2 bucket lifecycle add chiyigo-audit-archive expire-agg-manifest-debug
     - DRY_RUN 沿用 `AUDIT_ARCHIVE_DRY_RUN`：dry-run 寫 `audit-log-aggregate-{telemetry,debug}-dryrun/` prefix、停在 `verified`、aggregate row 不標 archived_at；PR 4 翻 flag 開 live + 真刪 aggregate row（marked_archived → purge 走 PR 4）
     - 整合測試 `tests/integration/audit-aggregate-archive.test.js`（11 case）：happy ×2 表 / archived_at filter / month boundary / DRY_RUN prefix split / idempotent / chunks PK 共存 / no_rows_eligible / auth 401 / CRON_SECRET 缺 500
     - audit-policy +4 chunk-level events `audit.aggregate_archive.{telemetry,debug}.{chunk_uploaded,upload_failed}`（mirror PR 2.x archive worker；registry 142→146）
-- **PR 3.3 admin retry / force_purge endpoint**（mirror PR 2.2b/2.3 raw retry.js；
+- **PR 3.3 admin retry / force_purge endpoint**（mirror PR 2.2b/2.3 raw retry.ts；
   single file，三 action：re_verify / mark_resolved / force_purge）—
   ✅ **2026-05-14 完工 + codex 9 輪 review LGTM**（HEAD `a8977f7`；r1-r6 part 1/2 → `0c77257`，part 3 H-1 chain → `a8977f7`）
-  - `functions/api/admin/audit-aggregate-archive/retry.js`：白名單只認 aggregate 兩
+  - `functions/api/admin/audit-aggregate-archive/retry.ts`：白名單只認 aggregate 兩
     `(table_name, cold_class)` 對；不允許 raw audit_log 從此 endpoint 進來（cross-system
     防護）。`target` 必含 `dry_run` boolean — 全程 `AND dry_run = ?` expected guard
     防 operator 以為刪 dry-run 實際刪 live。reason_code（白名單 grep）+ operator_reason
