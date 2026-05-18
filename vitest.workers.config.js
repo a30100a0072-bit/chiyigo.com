@@ -8,6 +8,7 @@ export default defineWorkersConfig({
         singleWorker: true,
         isolatedStorage: false,
         miniflare: {
+          // Keep aligned with wrangler.toml; lint:compat-date enforces this.
           compatibilityDate: '2024-09-23',
           compatibilityFlags: ['nodejs_compat'],
           d1Databases: ['chiyigo_db'],
