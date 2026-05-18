@@ -680,7 +680,7 @@ describe('[Codex r1 P1-6] POST /api/admin/requisition-refund/:id/reject atomic C
       user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_REC', currency: 'TWD',
       amount_subunit: 500, status: PAYMENT_STATUS.SUCCEEDED,
     })
-    // 提供 trade_no（approve.js 需要拿 TradeNo 打 ECPay）
+    // 提供 trade_no（approve.ts 需要拿 TradeNo 打 ECPay）
     await env.chiyigo_db.prepare(
       `INSERT INTO payment_webhook_events (vendor, event_id, intent_id, user_id, status_to)
        VALUES ('ecpay', 'TRADE_REC', ?, ?, 'succeeded')`,

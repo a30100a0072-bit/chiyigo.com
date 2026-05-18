@@ -29,7 +29,7 @@ import { getCorsHeaders } from '../../utils/cors'
 import { safeUserAudit } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
-// Codex r6 P1：approve.js 在 ECPay 網路錯誤 / DLQ reconciliation 路徑會把 rr 留
+// Codex r6 P1：approve.ts 在 ECPay 網路錯誤 / DLQ reconciliation 路徑會把 rr 留
 // 在 'processing'，admin 必須能查到才能人工接手；少了它最需要對帳的卡住狀態
 // 反而在 UI/API 隱形。
 const VALID_STATUS = new Set(['pending', 'approved', 'rejected', 'processing'])
