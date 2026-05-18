@@ -18,7 +18,7 @@ import {
   KYC_STATUS,
   KYC_LEVEL,
 } from '../../functions/utils/kyc'
-import { onRequestGet  as statusHandler  } from '../../functions/api/auth/kyc/status.js'
+import { onRequestGet  as statusHandler  } from '../../functions/api/auth/kyc/status'
 import { onRequestPost as webhookHandler } from '../../functions/api/webhooks/kyc/[vendor].js'
 
 env.KYC_MOCK_SECRET = 'test-mock-secret'
