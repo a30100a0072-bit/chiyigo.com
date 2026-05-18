@@ -101,7 +101,7 @@ export async function onRequestPost({ request, env, params }) {
     return res({ error: 'TradeNo not found; cannot call refund API', code: 'TRADE_NO_NOT_FOUND' }, 400, cors)
   }
 
-  let body = {}
+  let body: { reason?: unknown } = {}
   try { body = await request.json() } catch { /* keep empty */ }
   const reason = String(body?.reason ?? '').slice(0, 200) || null
 

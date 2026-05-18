@@ -14,7 +14,7 @@ import {
   createPaymentIntent, getPaymentIntent, PAYMENT_STATUS,
 } from '../../functions/utils/payments'
 import { onRequestGet  as listHandler   } from '../../functions/api/admin/payments/intents.js'
-import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund.js'
+import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund'
 import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject.js'
 import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve.js'
 import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete'
