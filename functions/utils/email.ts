@@ -76,7 +76,7 @@ async function sendEmail(apiKey, env, { to, subject, html, signal }: { to: strin
  * @param {string} to      收件人信箱
  * @param {string} token   原始 token（hex，64 字元）
  */
-export async function sendVerificationEmail(apiKey, to, token, env, signal) {
+export async function sendVerificationEmail(apiKey, to, token, env, signal?) {
   const BASE_URL = baseUrlOf(env)
   // 改指向前端確認頁，使用者按下按鈕才 POST 核銷，避免郵件代理 / 預載提前消耗 token
   const link = `${BASE_URL}/verify-email.html?token=${token}`;

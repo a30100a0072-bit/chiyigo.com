@@ -13,7 +13,7 @@ vi.mock('../../functions/utils/email', () => ({
 }))
 
 // 必須在 mock 之後 import
-const { onRequestPost: forgotPost } = await import('../../functions/api/auth/local/forgot-password.js')
+const { onRequestPost: forgotPost } = await import('../../functions/api/auth/local/forgot-password')
 
 const URL_FORGOT = 'http://localhost/api/auth/local/forgot-password'
 

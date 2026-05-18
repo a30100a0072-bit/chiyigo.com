@@ -16,7 +16,7 @@ vi.mock('../../functions/utils/email', () => ({
 }))
 
 const { onRequestPost: registerPost } = await import(
-  '../../functions/api/auth/local/register.js'
+  '../../functions/api/auth/local/register'
 )
 
 const URL_REG = 'http://localhost/api/auth/local/register'

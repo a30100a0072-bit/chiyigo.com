@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { onRequestPost as resetPost } from '../../functions/api/auth/local/reset-password.js'
+import { onRequestPost as resetPost } from '../../functions/api/auth/local/reset-password'
 import { hashPassword } from '../../functions/utils/crypto'
 import { env } from 'cloudflare:test'
 import { resetDb, seedUser, seedResetToken, callFunction, jsonPost } from './_helpers.js'

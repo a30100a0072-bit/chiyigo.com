@@ -14,7 +14,7 @@ import {
   isIpBlacklisted,
   detectAndBlacklistCrossUserScan,
 } from '../../functions/utils/brute-force'
-import { onRequestPost as loginPost } from '../../functions/api/auth/local/login.js'
+import { onRequestPost as loginPost } from '../../functions/api/auth/local/login'
 
 async function seedFailRow(email, ip, agoSeconds = 0) {
   // 用 datetime('now', '-Ns') 控制 created_at

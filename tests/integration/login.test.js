@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { jwtVerify, importJWK } from 'jose'
-import { onRequestPost as loginPost } from '../../functions/api/auth/local/login.js'
+import { onRequestPost as loginPost } from '../../functions/api/auth/local/login'
 import {
   resetDb, seedUser, seedOauthOnlyUser, enableTotp,
   callFunction, jsonPost, ensureJwtKeys,

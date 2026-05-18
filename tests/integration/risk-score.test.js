@@ -17,7 +17,7 @@ import {
   RISK_LEVEL_HIGH,
   RISK_LEVEL_MEDIUM,
 } from '../../functions/utils/risk-score'
-import { onRequestPost as loginPost } from '../../functions/api/auth/local/login.js'
+import { onRequestPost as loginPost } from '../../functions/api/auth/local/login'
 
 // 攔 fetch 觀察 Resend email 端點（同 device-alerts test 的策略）
 const mailLog = []
