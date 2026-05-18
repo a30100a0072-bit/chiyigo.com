@@ -196,7 +196,7 @@ describe('GET /api/admin/requisitions', () => {
     expect(r.body.requisitions.some(x => x.name === 'Alice')).toBe(true)
   })
 
-  it('q filter `%` / `_` / `\\` 變成 literal substring 不再被當 wildcard（INSTR 副效益）', async () => {
+  it('q filter `%` 變 literal substring（INSTR 副效益）', async () => {
     const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
     await seedReq({ name: 'pct%user', message: 'x' })
     await seedReq({ name: 'pctXuser', message: 'x' })  // 舊 LIKE `%` 會誤命中
@@ -206,6 +206,30 @@ describe('GET /api/admin/requisitions', () => {
     expect(r.status).toBe(200)
     expect(r.body.requisitions.some(x => x.name === 'pct%user')).toBe(true)
     expect(r.body.requisitions.some(x => x.name === 'pctXuser')).toBe(false)
+  })
+
+  it('q filter `_` 變 literal substring（單字元 wildcard 不再 expand）', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedReq({ name: 'und_user', message: 'x' })
+    await seedReq({ name: 'undXuser', message: 'x' })  // 舊 LIKE `_` 會誤命中
+    const tok = await tokenFor(aid, 'admin')
+
+    const r = await callList(tok, `?q=${encodeURIComponent('und_user')}`)
+    expect(r.status).toBe(200)
+    expect(r.body.requisitions.some(x => x.name === 'und_user')).toBe(true)
+    expect(r.body.requisitions.some(x => x.name === 'undXuser')).toBe(false)
+  })
+
+  it('q filter `\\` 變 literal substring（舊 LIKE escape char 不再有特殊意義）', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedReq({ name: 'back\\slash', message: 'x' })
+    await seedReq({ name: 'backslash', message: 'x' })  // 無反斜線版作對照
+    const tok = await tokenFor(aid, 'admin')
+
+    const r = await callList(tok, `?q=${encodeURIComponent('back\\slash')}`)
+    expect(r.status).toBe(200)
+    expect(r.body.requisitions.some(x => x.name === 'back\\slash')).toBe(true)
+    expect(r.body.requisitions.some(x => x.name === 'backslash')).toBe(false)
   })
 
   it('include_deleted=1 顯示軟刪 row，預設隱藏', async () => {

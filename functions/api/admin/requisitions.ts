@@ -47,9 +47,11 @@ export async function onRequestGet({ request, env }) {
   //   D1 spike 量測「LIKE or GLOB pattern too complex」上限是 ~48 *bytes*（非 char），
   //   單一中文字佔 3 bytes → 用 LIKE 對中文 input 在 16 字元就會 500，prod 不可接受。
   //   改用 INSTR(LOWER(col), LOWER(?)) > 0：(a) 無 pattern complexity 上限；
-  //   (b) 對 ASCII 仍 case-insensitive（與舊 LIKE 預設行為等價）；(c) 對非 ASCII
-  //   也 case-insensitive（嚴格更鬆，沒 regression 風險）；(d) 順手清掉舊版 LIKE
-  //   未 escape `%`/`_`/`\` 的 latent 問題——user 輸 `%foo` 不再被當 wildcard。
+  //   (b) ASCII case-insensitive（與舊 LIKE 預設行為等價）；(c) Unicode literal
+  //   substring 支援（中文 / emoji 等仍可搜，但是否完整 case-fold 取決於 SQLite/
+  //   D1 LOWER() 對 codepoint 的支援度，未做斷言，不宣稱完整 Unicode case-fold）；
+  //   (d) 順手清掉舊版 LIKE 未 escape `%`/`_`/`\` 的 latent 問題——user 輸 `%foo`
+  //   不再被當 wildcard。
   const q      = (url.searchParams.get('q') ?? '').slice(0, 100)
   const offset = (page - 1) * limit
 
