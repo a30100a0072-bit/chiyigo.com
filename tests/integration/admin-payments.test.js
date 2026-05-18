@@ -17,7 +17,7 @@ import { onRequestGet  as listHandler   } from '../../functions/api/admin/paymen
 import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund.js'
 import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject.js'
 import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve.js'
-import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete.js'
+import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete'
 import { onRequestGet  as aggregateHandler } from '../../functions/api/admin/payments/aggregate'
 import { onRequestGet  as dlqHandler       } from '../../functions/api/admin/payments/webhook-dlq'
 
