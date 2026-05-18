@@ -14,7 +14,7 @@ import { signJwt } from '../../functions/utils/jwt'
 import { requireAuth } from '../../functions/utils/auth'
 import { verifyPassword } from '../../functions/utils/crypto'
 import { SCOPES } from '../../functions/utils/scopes'
-import { onRequestPost as stepUpHandler } from '../../functions/api/auth/step-up.js'
+import { onRequestPost as stepUpHandler } from '../../functions/api/auth/step-up'
 import { onRequestPost as changePwHandler } from '../../functions/api/auth/account/change-password.js'
 
 const TEST_TOTP_SECRET = 'JBSWY3DPEHPK3PXP'

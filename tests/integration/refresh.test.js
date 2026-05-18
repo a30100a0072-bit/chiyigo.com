@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
-import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh.js'
+import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh'
 
 async function seedRefresh(userId, {
   deviceUuid = null, expired = false, revoked = false, issuedAud = null,

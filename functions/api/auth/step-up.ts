@@ -155,7 +155,7 @@ export async function onRequestPost({ request, env }) {
 
   // ── 5. 簽 step_up_token（5min，含 elevated:* + for_action + amr/acr）──
   const audience = resolveAud(aud)
-  const claims = {
+  const claims: Record<string, unknown> = {
     sub:    String(userId),
     role:   record.role,
     status: record.status,

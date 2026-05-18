@@ -12,7 +12,7 @@ import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 
 import { onRequestGet as discoveryGet } from '../../functions/.well-known/openid-configuration.js'
 import { onRequestGet as jwksGet      } from '../../functions/.well-known/jwks.json.js'
-import { onRequestGet as userinfoGet  } from '../../functions/api/auth/userinfo.js'
+import { onRequestGet as userinfoGet  } from '../../functions/api/auth/userinfo'
 
 const ORIGIN = 'https://chiyigo.com'
 
