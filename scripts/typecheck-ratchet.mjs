@@ -27,9 +27,31 @@
  *   F8 — getBaseRef fallback HEAD~1 印 console.warn，便於 force-push / shallow
  *        clone 場景追溯 baseRef 解析路徑；ratchet log 同步加 effectiveRange
  *
- * 延後（依 §1.5g 不在 day-1）：per-file errorsByFile 強制 enforce、完整 tsconfig invariant、
- * Stage 4.5a classic/module 分流檢查。errorsByFile 仍會寫進 baseline，但不 enforce 個別檔。
- * → PR-治理-2 規劃補 errorsByFile diff（含 rename mapping 例外）+ tsconfigSnapshot invariant
+ * r6 hardening（Stage 1 governance PR-2，2026-05-18，post-Stage-1 review）：
+ *   F3 — 規則 B' errorsByFile diff：current 新出現的 error 檔（baseline 無對應）→ exit 1
+ *        例外：git mv X.js Y.ts 後 Y.ts 在 baseline.errorsByFile[X.js] 有 entry 視為合法轉移
+ *        填補 §1.5g day-1 延後的「per-file errorsByFile 強制 enforce」
+ *   F4 — tsconfigSnapshot invariant：baseline 多 tsconfigSnapshot 欄位（每個 tsconfig*.json
+ *        的 include/exclude 陣列）；ratchet 比對若 include 縮小或 exclude 擴大 → exit 1
+ *        填補 §1.5g day-1 延後的「完整 tsconfig invariant」；破例需走 governance review
+ *        （人工流程；本 script 未實作 env gate）
+ *   F3-BASE / F4-BASE — codex PR-治理-2 r1 高：原 F3/F4 只比 PR branch baseline，
+ *        同 PR 改 baseline 就能繞過。擴 P1.1 BASE 守備：current 同時比對 base ref
+ *        上的 baseline；base 缺欄位視為 bootstrap 跳過該層。errorsByFile 同 PR
+ *        baseline 改動 attacker 必須同步改 base ref（不可能），rename 例外保留。
+ *   F4-CO — codex PR-治理-2 r2 高：tsconfigSnapshot 原只 include/exclude，但
+ *        compilerOptions.checkJs:false 可零成本歸零 errorCount 繞過所有 ratchet。
+ *        擴 snapshot 多 compilerOptions 守備清單（allowJs/checkJs/noEmit/strict/
+ *        noImplicitAny/strictNullChecks/skipLibCheck/moduleResolution/moduleDetection/
+ *        isolatedModules/types/lib）；任一變更 → exit 1，走 governance review。
+ *   F4-BASE-LIVE — codex PR-治理-2 r3 高：BASE 層 tsconfig 不依賴 baseBaseline cache，
+ *        直接 git show baseRef:tsconfig*.json live read。原 r1 設計在「首次導入
+ *        tsconfigSnapshot」情境下 base ref baseline 還沒 tsconfigSnapshot → bootstrap
+ *        skip → 「弱化 tsconfig + 同 PR 跑 baseline:update」繞過所有 ratchet。改 live
+ *        read 後 BASE-D-tsconfig 永遠 active，不再有 bootstrap window。
+ *
+ * 延後（依 §1.5g 不在 day-1，亦未在 PR-治理-2 範圍）：
+ *   - Stage 4.5a classic/module 分流檢查（等 browser pipeline ready）
  */
 
 import { execSync, execFileSync } from 'node:child_process'
@@ -214,6 +236,8 @@ function getDiff(baseRef) {
 
   const added = []
   const modified = []
+  // F3（PR-治理-2）：renameMap newPath→oldPath 供規則 B' 排除合法 rename 帶過來的 error
+  const renameMap = new Map()
   for (const line of nameStatus.split(/\r?\n/)) {
     if (!line) continue
     // P2: rename = R<score>\told\tnew；其他 = X\tfile
@@ -221,8 +245,10 @@ function getDiff(baseRef) {
     const status = parts[0]
     if (status.startsWith('R') || status.startsWith('C')) {
       // rename / copy：用 new path，視為「新增」以擋 rename 偷渡進禁區
+      const oldPath = parts[1]
       const newPath = parts[2]
       if (newPath) added.push(newPath)
+      if (oldPath && newPath) renameMap.set(newPath.replace(/\\/g, '/'), oldPath.replace(/\\/g, '/'))
     } else if (status === 'A') {
       added.push(parts[1])
     } else if (status === 'M' || status === 'T') {
@@ -238,7 +264,149 @@ function getDiff(baseRef) {
     console.error('  name-status 成功但 unified diff 失敗 — 拒絕對 suppression check fail-open')
     process.exit(3)
   }
-  return { added, modified, unifiedDiff, effectiveRange }
+  return { added, modified, unifiedDiff, effectiveRange, renameMap }
+}
+
+// ─── 6.5 tsconfig snapshot（F4 invariant） ──────────────────────────────
+
+function listRootTsconfigs() {
+  // root 層 tsconfig*.json；Stage 4.5a 後可能加 tsconfig.browser-classic.json 等
+  return fs.readdirSync(ROOT)
+    .filter((f) => /^tsconfig.*\.json$/.test(f))
+    .sort()
+}
+
+// codex PR-治理-2 r2 高：除 include/exclude 外，這些 compilerOptions 直接影響 typecheck
+// 強度，必須進 snapshot 才能擋「checkJs:false 把 errorCount 歸零」類 bypass。
+// 任一欄位變更要走 governance review。Stage 4.5/6/7 升級時也是這個流程。
+const TSCONFIG_COMPILER_OPTIONS_GUARDED = [
+  'allowJs', 'checkJs', 'noEmit',
+  'strict', 'noImplicitAny', 'strictNullChecks',
+  'skipLibCheck', 'moduleResolution', 'moduleDetection',
+  'isolatedModules', 'types', 'lib',
+]
+
+function normalizeTsconfigParsed(parsed) {
+  // 統一 normalize 給 loadTsconfigsSnapshot 與 loadTsconfigsSnapshotFromRef 用，
+  // 確保 base ref live read 與 working tree read 用同一份 canonical 格式比對。
+  const co = parsed.compilerOptions || {}
+  const compilerOptions = Object.create(null)
+  for (const key of TSCONFIG_COMPILER_OPTIONS_GUARDED) {
+    if (key in co) {
+      const v = co[key]
+      compilerOptions[key] = Array.isArray(v) ? [...v].sort() : v
+    }
+  }
+  return {
+    include: Array.isArray(parsed.include) ? [...parsed.include].sort() : [],
+    exclude: Array.isArray(parsed.exclude) ? [...parsed.exclude].sort() : [],
+    compilerOptions,
+  }
+}
+
+function loadTsconfigsSnapshot() {
+  // 讀 working tree 上每個 root tsconfig*.json 的 include / exclude / 守備 compilerOptions
+  const snapshot = Object.create(null)
+  for (const f of listRootTsconfigs()) {
+    try {
+      const raw = fs.readFileSync(path.join(ROOT, f), 'utf8')
+      snapshot[f] = normalizeTsconfigParsed(JSON.parse(raw))
+    } catch (e) {
+      console.error(`FAIL: loadTsconfigsSnapshot ${f} parse 失敗：${e.message}`)
+      process.exit(3)
+    }
+  }
+  return snapshot
+}
+
+function loadTsconfigsSnapshotFromRef(baseRef) {
+  // F4-BASE r3 高（codex PR-治理-2 r3）：BASE 層 tsconfig 直接從 base ref live read，
+  // 不依賴 baseBaseline.tsconfigSnapshot cache。
+  // Why：首次導入 tsconfigSnapshot 的 PR（本 PR）若靠 baseBaseline cache，base ref
+  // 還沒 tsconfigSnapshot → bootstrap skip → 「弱化 tsconfig + 同 PR 跑 baseline:update」
+  // 攻擊可繞所有 ratchet（base ref 上 tsconfig 實際存在、可直接讀，不該靠 cache）。
+  // 讀失敗 fail-closed exit 3，不靜默 bootstrap。
+  let tree
+  try {
+    tree = git(['ls-tree', '--name-only', baseRef])
+  } catch (e) {
+    console.error(`FAIL: loadTsconfigsSnapshotFromRef ls-tree baseRef=${baseRef} 失敗：${e.message}`)
+    process.exit(3)
+  }
+  const tsconfigFiles = tree.split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter((f) => /^tsconfig.*\.json$/.test(f))
+    .sort()
+
+  const snapshot = Object.create(null)
+  for (const f of tsconfigFiles) {
+    let raw
+    try {
+      raw = git(['show', `${baseRef}:${f}`])
+    } catch (e) {
+      console.error(`FAIL: loadTsconfigsSnapshotFromRef git show ${baseRef}:${f} 失敗：${e.message}`)
+      process.exit(3)
+    }
+    try {
+      snapshot[f] = normalizeTsconfigParsed(JSON.parse(raw))
+    } catch (e) {
+      console.error(`FAIL: loadTsconfigsSnapshotFromRef parse ${baseRef}:${f} 失敗：${e.message}`)
+      process.exit(3)
+    }
+  }
+  return snapshot
+}
+
+function compareTsconfigSnapshot(baselineSnap, currentSnap, label = 'D-tsconfig') {
+  // 規則 D（F4）：include 不得縮小、exclude 不得擴大；新增 tsconfig 視為擴展（允許）；
+  // 刪除 baseline 已有的 tsconfig 視為縮小掃描面（不允許）。
+  // label：違規 prefix（PR branch baseline = 'D-tsconfig'；base ref baseline = 'BASE-D-tsconfig'）
+  const violations = []
+  if (!baselineSnap || typeof baselineSnap !== 'object') return violations  // bootstrap：跳過
+  for (const f of Object.keys(baselineSnap)) {
+    if (!(f in currentSnap)) {
+      violations.push(`[${label}] ${f} 在 current 被刪除（baseline 有此 tsconfig；刪除 = 縮小掃描面）`)
+      continue
+    }
+    const bInc = new Set(baselineSnap[f].include || [])
+    const cInc = new Set(currentSnap[f].include || [])
+    for (const entry of bInc) {
+      if (!cInc.has(entry)) violations.push(`[${label}] ${f} include 縮小：缺 "${entry}"`)
+    }
+    const bExc = new Set(baselineSnap[f].exclude || [])
+    const cExc = new Set(currentSnap[f].exclude || [])
+    for (const entry of cExc) {
+      if (!bExc.has(entry)) violations.push(`[${label}] ${f} exclude 擴大：新增 "${entry}"`)
+    }
+    // codex r2 高：守備 compilerOptions 弱化（如 checkJs:false / allowJs:false / strict:false→...）
+    // 任一欄位 value 不同（含 undefined ↔ value 的雙向）→ violation。
+    // canonical 比對用 JSON.stringify（陣列 load 時已 sort）。
+    const bCO = baselineSnap[f].compilerOptions || {}
+    const cCO = currentSnap[f].compilerOptions || {}
+    const coKeys = new Set([...Object.keys(bCO), ...Object.keys(cCO)])
+    for (const key of coKeys) {
+      const bv = JSON.stringify(bCO[key])
+      const cv = JSON.stringify(cCO[key])
+      if (bv !== cv) {
+        violations.push(`[${label}] ${f} compilerOptions.${key} 變更：${bv} → ${cv}（影響 typecheck 強度；升級走 governance review）`)
+      }
+    }
+  }
+  return violations
+}
+
+function findNewErrorFiles(currentErrors, baselineErrors, renameMap) {
+  // F3：current 中、baseline 沒有的 error 檔；rename 過來且原檔在 baseline 有 entry 視為合法轉移。
+  // baseline 缺 errorsByFile（bootstrap）→ 回 null 讓 caller 跳過該層比對。
+  if (!baselineErrors || typeof baselineErrors !== 'object') return null
+  const result = []
+  for (const f of Object.keys(currentErrors)) {
+    if (f in baselineErrors) continue
+    const oldPath = renameMap.get(f)
+    if (oldPath && oldPath in baselineErrors) continue
+    result.push(f)
+  }
+  return result
 }
 
 function checkDiffSuppressions(unifiedDiff, addedFiles = new Set()) {
@@ -354,12 +522,13 @@ function main() {
       cleanFiles: current.cleanFiles,
       sourceFilesTotal: current.sourceFilesTotal,
       errorsByFile: current.errorsByFile,
+      tsconfigSnapshot: loadTsconfigsSnapshot(),  // F4（PR-治理-2）
       baselineSha: headSha,
       createdAt: new Date().toISOString().slice(0, 10),
       stage: 1,
     }
     writeBaseline(baseline)
-    console.log(`baseline written → types/typecheck-baseline.json (errorCount=${baseline.errorCount}, cleanFiles=${baseline.cleanFiles})`)
+    console.log(`baseline written → types/typecheck-baseline.json (errorCount=${baseline.errorCount}, cleanFiles=${baseline.cleanFiles}, tsconfigs=${Object.keys(baseline.tsconfigSnapshot).length})`)
     return
   }
 
@@ -391,8 +560,37 @@ function main() {
     failures.push(`[B] cleanFiles 倒退：${baseline.cleanFiles} → ${current.cleanFiles}（-${baseline.cleanFiles - current.cleanFiles}；可能新增 error 檔）`)
   }
 
-  const { added, unifiedDiff, effectiveRange } = getDiff(baseRef)
+  const { added, unifiedDiff, effectiveRange, renameMap } = getDiff(baseRef)
   const addedFiles = new Set(added.map((f) => f.replace(/\\/g, '/')))
+
+  // 規則 B'（F3，PR-治理-2）：current 新出現的 error 檔 → fail；rename 例外。
+  // 雙層比對防同 PR 改 baseline 偷渡（codex PR-治理-2 r1 高）：
+  //   (1) PR branch baseline：擋一般 PR 新增 error 檔
+  //   (2) base ref baseline：即使同 PR 把新檔加進 baseline.errorsByFile，base ref 上仍無
+  const newVsBranch = findNewErrorFiles(current.errorsByFile, baseline.errorsByFile, renameMap)
+  if (newVsBranch && newVsBranch.length > 0) {
+    failures.push(`[B'] 新增 error 檔（PR branch baseline 無對應，亦無合法 rename）：${newVsBranch.join(', ')}`)
+  }
+  if (baseBaseline) {
+    const newVsBase = findNewErrorFiles(current.errorsByFile, baseBaseline.errorsByFile, renameMap)
+    if (newVsBase && newVsBase.length > 0) {
+      failures.push(`[BASE-B'] 新增 error 檔（base ref baseline 無對應；同 PR 改 baseline 也擋）：${newVsBase.join(', ')}`)
+    }
+  }
+
+  // 規則 D-tsconfig（F4 + F4-CO + F4-BASE r3）：tsconfig*.json include/exclude 不得縮小、
+  // compilerOptions 守備欄位不得變更。雙層守備：
+  //   (1) PR branch baseline.tsconfigSnapshot：擋一般 PR 弱化 tsconfig
+  //   (2) base ref live tsconfig（r3）：直接 git show baseRef:tsconfig*.json，不依賴
+  //       baseBaseline cache；擋「弱化 tsconfig + 同 PR 跑 baseline:update」攻擊
+  const currentTsconfigSnap = loadTsconfigsSnapshot()
+  for (const v of compareTsconfigSnapshot(baseline.tsconfigSnapshot, currentTsconfigSnap, 'D-tsconfig')) {
+    failures.push(v)
+  }
+  const baseTsconfigSnap = loadTsconfigsSnapshotFromRef(baseRef)
+  for (const v of compareTsconfigSnapshot(baseTsconfigSnap, currentTsconfigSnap, 'BASE-D-tsconfig')) {
+    failures.push(v)
+  }
 
   const supViolations = checkDiffSuppressions(unifiedDiff, addedFiles)
   for (const v of supViolations) {

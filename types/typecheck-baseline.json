@@ -1,5 +1,5 @@
 {
-  "baselineSha": "7079c2d",
+  "baselineSha": "69b937c",
   "cleanFiles": 203,
   "createdAt": "2026-05-18",
   "errorCount": 951,
@@ -54,5 +54,48 @@
   "fileErrors": 951,
   "globalErrors": 0,
   "sourceFilesTotal": 248,
-  "stage": 1
+  "stage": 1,
+  "tsconfigSnapshot": {
+    "tsconfig.json": {
+      "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "isolatedModules": true,
+        "lib": [
+          "DOM",
+          "DOM.Iterable",
+          "ES2022",
+          "WebWorker"
+        ],
+        "moduleDetection": "force",
+        "moduleResolution": "Bundler",
+        "noEmit": true,
+        "noImplicitAny": false,
+        "skipLibCheck": true,
+        "strict": false,
+        "types": [
+          "@cloudflare/vitest-pool-workers"
+        ]
+      },
+      "exclude": [
+        "**/*.min.js",
+        ".scripts",
+        ".wrangler",
+        "legacy_snapshots",
+        "node_modules",
+        "public"
+      ],
+      "include": [
+        "functions/**/*.js",
+        "functions/**/*.ts",
+        "scripts/**/*.js",
+        "scripts/**/*.ts",
+        "src/js/**/*.js",
+        "src/js/**/*.ts",
+        "tests/**/*.js",
+        "tests/**/*.ts",
+        "types/**/*.d.ts"
+      ]
+    }
+  }
 }
