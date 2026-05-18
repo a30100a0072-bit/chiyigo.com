@@ -21,7 +21,7 @@
     "typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
     "typecheck:ratchet:report": "node scripts/typecheck-ratchet.mjs --report",
     "typecheck:baseline:update": "node scripts/typecheck-ratchet.mjs --update",
-    "build:functions": "wrangler pages functions build functions --outdir .tmp-pages-functions-build --compatibility-date 2024-09-23"
+    "build:functions": "wrangler pages functions build functions --outdir .tmp-pages-functions-build"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",
