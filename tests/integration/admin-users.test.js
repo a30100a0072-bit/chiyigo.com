@@ -190,12 +190,16 @@ describe('GET /api/admin/users', () => {
   it('q filter escape `%`：literal 百分號不被當 wildcard', async () => {
     const { id: adminId } = await seedUser({ email: 'a@x', role: 'admin' })
     await seedUser({ email: 'pct%user@x' })
+    // PR-15c-nit：對照組 — 若 `%` 未 escape 會被當 wildcard，pattern `pct<any>user`
+    // 會誤命中 pctXuser@x；escape 正確時只命中 literal pct%user@x。
+    await seedUser({ email: 'pctXuser@x' })
     await seedUser({ email: 'normaluser@x' })
     const tok = await tokenFor(adminId, 'admin')
 
     const r = await callList(tok, `?q=${encodeURIComponent('pct%user')}`)
     expect(r.status).toBe(200)
     expect(r.body.users.some(u => u.email === 'pct%user@x')).toBe(true)
+    expect(r.body.users.some(u => u.email === 'pctXuser@x')).toBe(false)
     expect(r.body.users.some(u => u.email === 'normaluser@x')).toBe(false)
   })
 
