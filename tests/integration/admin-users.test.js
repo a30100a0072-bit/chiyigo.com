@@ -172,11 +172,68 @@ describe('GET /api/admin/users', () => {
     const devs = await callList(tok, '?role=developer')
     expect(devs.body.users.every(u => u.role === 'developer')).toBe(true)
 
-    // q LIKE filter 故意不測：users.ts L45 用 `ESCAPE '\\\\'`（傳給 SQLite
-    // 是 2 字元 `\\`），違反「ESCAPE expression must be a single character」→
-    // 任何 ?q=... 請求都 500 D1_ERROR。此 PR 是純 regression test，不夾帶
-    // production fix；獨立 PR-15c 修這條 + 加 q-filter 正向 + escape 反向（含
-    // %、_、\ 三種特殊字元穿透）測試。
+  })
+
+  // ── q filter（PR-15c 修 ESCAPE 後新增 / regression）─────────────
+  it('q filter 正向：substring match by email', async () => {
+    const { id: adminId } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedUser({ email: 'devops@x', role: 'developer' })
+    await seedUser({ email: 'frontend@x' })
+    const tok = await tokenFor(adminId, 'admin')
+
+    const r = await callList(tok, '?q=devops')
+    expect(r.status).toBe(200)
+    expect(r.body.users.some(u => u.email === 'devops@x')).toBe(true)
+    expect(r.body.users.some(u => u.email === 'frontend@x')).toBe(false)
+  })
+
+  it('q filter escape `%`：literal 百分號不被當 wildcard', async () => {
+    const { id: adminId } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedUser({ email: 'pct%user@x' })
+    await seedUser({ email: 'normaluser@x' })
+    const tok = await tokenFor(adminId, 'admin')
+
+    const r = await callList(tok, `?q=${encodeURIComponent('pct%user')}`)
+    expect(r.status).toBe(200)
+    expect(r.body.users.some(u => u.email === 'pct%user@x')).toBe(true)
+    expect(r.body.users.some(u => u.email === 'normaluser@x')).toBe(false)
+  })
+
+  it('q filter escape `_`：literal 底線不被當 single-char wildcard', async () => {
+    const { id: adminId } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedUser({ email: 'a_b@x' })  // literal underscore
+    await seedUser({ email: 'axb@x' })  // 若 _ 沒 escape 會誤命中
+    const tok = await tokenFor(adminId, 'admin')
+
+    const r = await callList(tok, `?q=${encodeURIComponent('a_b')}`)
+    expect(r.status).toBe(200)
+    expect(r.body.users.some(u => u.email === 'a_b@x')).toBe(true)
+    expect(r.body.users.some(u => u.email === 'axb@x')).toBe(false)
+  })
+
+  it('q filter escape `\\`：literal 反斜線通過 escape 配對（ESCAPE 1 字元解回）', async () => {
+    const { id: adminId } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedUser({ email: 'a\\b@x' })
+    await seedUser({ email: 'normal@x' })
+    const tok = await tokenFor(adminId, 'admin')
+
+    const r = await callList(tok, `?q=${encodeURIComponent('a\\b')}`)
+    expect(r.status).toBe(200)
+    expect(r.body.users.some(u => u.email === 'a\\b@x')).toBe(true)
+    expect(r.body.users.some(u => u.email === 'normal@x')).toBe(false)
+  })
+
+  it('q filter `_` 單字元不會 dump 全表（escape 生效後 _ 是 literal）', async () => {
+    const { id: adminId } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedUser({ email: 'no_under@x' })
+    await seedUser({ email: 'plain@x' })
+    const tok = await tokenFor(adminId, 'admin')
+
+    const r = await callList(tok, '?q=_')
+    expect(r.status).toBe(200)
+    expect(r.body.users.some(u => u.email === 'no_under@x')).toBe(true)
+    expect(r.body.users.some(u => u.email === 'plain@x')).toBe(false)
+    expect(r.body.users.some(u => u.email === 'a@x')).toBe(false)
   })
 
   it('pagination limit + page', async () => {

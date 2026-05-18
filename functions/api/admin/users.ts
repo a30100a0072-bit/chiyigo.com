@@ -42,7 +42,9 @@ export async function onRequestGet({ request, env }) {
   if (role)   { conditions.push('role = ?');    bindings.push(role) }
   if (q) {
     const escaped = q.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
-    conditions.push("email LIKE ? ESCAPE '\\\\'")
+    // ESCAPE must be a single character per SQLite spec; JS literal '\\' = 1 backslash.
+    // 配對 L44 escape function 把 `\` 雙寫成 `\\`，ESCAPE '\' 解回字面 `\`。
+    conditions.push("email LIKE ? ESCAPE '\\'")
     bindings.push(`%${escaped}%`)
   }
 
