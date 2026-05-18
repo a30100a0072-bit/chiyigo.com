@@ -51,9 +51,8 @@ export async function onRequestGet({ request, env }) {
     : `date(created_at, '+8 hours')`
 
   // Codex r5 P2：aggregate 預設過濾 soft-deleted（對帳基準應反映「真實有效」row）
-  const conds = ['status = ?', 'deleted_at IS NULL']
-  /** @type {string[]} */
-  const binds = [status]
+  const conds: string[] = ['status = ?', 'deleted_at IS NULL']
+  const binds: string[] = [status]
   if (from) { conds.push('created_at >= ?'); binds.push(from) }
   if (to)   { conds.push('created_at < ?');  binds.push(to) }
   const where = `WHERE ${conds.join(' AND ')}`
@@ -88,7 +87,10 @@ export async function onRequestGet({ request, env }) {
     )
     .bind(...refundBinds).all()
 
-  const refundMap = new Map((refunded.results ?? []).map(r => [r.bucket, r]))
+  type RefundRow = { bucket: string; refunded_count: number; refunded_sum_subunit: number }
+  const refundMap = new Map(
+    ((refunded.results ?? []) as RefundRow[]).map(r => [r.bucket, r] as const),
+  )
   const buckets = (main.results ?? []).map(r => ({
     bucket:               r.bucket,
     count:                Number(r.count) || 0,
