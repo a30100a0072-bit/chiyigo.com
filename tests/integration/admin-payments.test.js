@@ -18,6 +18,7 @@ import { onRequestPost as refundHandler } from '../../functions/api/admin/paymen
 import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject.js'
 import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve.js'
 import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete.js'
+import { onRequestGet  as aggregateHandler } from '../../functions/api/admin/payments/aggregate'
 
 // 對齊 functions/utils/payment-vendors/ecpay.ts 的新 SANDBOX_CREDS
 // 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
@@ -176,6 +177,75 @@ describe('GET /api/admin/payments/intents', () => {
     expect(body.total).toBe(1)
     expect(body.rows[0].vendor_intent_id).toBe('date_in')
     expect(body.totals.sum_subunit_succeeded).toBe(100)
+  })
+})
+
+describe('GET /api/admin/payments/aggregate', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('player 無金流 scope → 403', async () => {
+    const u = await seedUser({ email: 'agg-np@x' })
+    const tok = await playerToken(u.id)
+    const resp = await aggregateHandler({ request: bearer('GET', 'http://x/', tok), env })
+    expect(resp.status).toBe(403)
+  })
+
+  it('invalid status → 400 INVALID_STATUS', async () => {
+    const a = await seedUser({ email: 'agg-a1@x', role: 'admin' })
+    const tok = await adminToken(a.id)
+    const resp = await aggregateHandler({
+      request: bearer('GET', 'http://x/?status=bogus', tok), env,
+    })
+    expect(resp.status).toBe(400)
+    const body = await resp.json()
+    expect(body.code).toBe('INVALID_STATUS')
+  })
+
+  it('預設過濾 soft-deleted + refunded bucket 對齊 main bucket', async () => {
+    const a = await seedUser({ email: 'agg-a2@x', role: 'admin' })
+    const u = await seedUser({ email: 'agg-u@x' })
+
+    // 兩筆 succeeded（同 bucket）+ 一筆 soft-deleted succeeded（不該算）+ 一筆 refunded
+    const okA = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'agg_ok_a',
+      currency: 'TWD', amount_subunit: 100, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    const okB = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'agg_ok_b',
+      currency: 'TWD', amount_subunit: 250, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    const delId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'agg_del',
+      currency: 'TWD', amount_subunit: 9000, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    const refId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'agg_ref',
+      currency: 'TWD', amount_subunit: 80, status: PAYMENT_STATUS.REFUNDED,
+    })
+    // 鎖到同一天 bucket（台北 +8h 後仍為 2026-03-15）
+    for (const id of [okA, okB, delId, refId]) {
+      await env.chiyigo_db
+        .prepare(`UPDATE payment_intents SET created_at = ? WHERE id = ?`)
+        .bind('2026-03-15 04:00:00', id).run()
+    }
+    await env.chiyigo_db
+      .prepare(`UPDATE payment_intents SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+      .bind(delId).run()
+
+    const tok = await adminToken(a.id)
+    const resp = await aggregateHandler({ request: bearer('GET', 'http://x/', tok), env })
+    expect(resp.status).toBe(200)
+    const body = await resp.json()
+    expect(body.period).toBe('daily')
+    expect(body.status).toBe('succeeded')
+    expect(body.buckets).toHaveLength(1)
+    const bucket = body.buckets[0]
+    expect(bucket.bucket).toBe('2026-03-15')
+    expect(bucket.count).toBe(2)                  // soft-deleted 排除
+    expect(bucket.sum_subunit).toBe(350)          // 100 + 250（不含 9000）
+    expect(bucket.refunded_count).toBe(1)         // refunded bucket join 對齊
+    expect(bucket.refunded_sum_subunit).toBe(80)
   })
 })
 
