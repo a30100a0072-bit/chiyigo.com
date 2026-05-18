@@ -19,7 +19,7 @@
  *        !== 1 → ROLE_RACE，DB role/token_version/refresh 全不動
  *      - 即使 CAS 失敗，admin_audit_log INSERT 仍隨 batch commit，hash-chain
  *        記錄「admin 嘗試 role_change」的證據，verifyAuditChain.valid 不破
- *      - 比照 functions/api/admin/audit/[id].js F3 pattern
+ *      - 比照 functions/api/admin/audit/[id].ts F3 pattern
  *   3. role 變更 → 必 bumpTokenVersion → 撤該 user 全部 refresh family
  *      → 強制重新登入；舊 access_token 帶舊 scope 在 token_version mismatch 後失效
  *   4. critical user_audit + admin_audit_log（hash-chain）雙寫；hash-chain 失敗拒動
