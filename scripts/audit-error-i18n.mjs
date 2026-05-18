@@ -10,7 +10,7 @@ function walk(dir) {
     const p = join(dir, name);
     const st = statSync(p);
     if (st.isDirectory()) walk(p);
-    else if (p.endsWith('.js')) files.push(p);
+    else if (p.endsWith('.js') || p.endsWith('.ts')) files.push(p);
   }
 }
 walk(ROOT);
