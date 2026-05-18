@@ -56,7 +56,7 @@ export async function onRequestPost({ request, env, params }) {
     }, 409, cors)
   }
 
-  let body = {}
+  let body: { notes?: unknown } = {}
   try { body = await request.json() } catch { /* keep empty */ }
   const notes = String(body?.notes ?? '').slice(0, 500) || null
 
@@ -180,7 +180,7 @@ export async function onRequestPost({ request, env, params }) {
       notes,
     },
   })
-  await syncRequisitionTgMessage(env, id)
+  await syncRequisitionTgMessage(env, id, undefined)
 
   return res({
     ok: true,
