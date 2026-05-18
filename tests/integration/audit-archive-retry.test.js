@@ -6,7 +6,8 @@
  * 蓋三個 action + 護欄：
  *   - re_verify    : failed → uploaded（strict WHERE 帶完整 target key）
  *   - mark_resolved: failed → blacklisted
- *   - force_purge  : 501 + critical event（PR 2.2b 第一版 stub，不碰 R2/D1 delete）
+ *   - force_purge  : PR 2.3 真實作（step-up + PURGE_ENABLED env flag；flag 未設 → 503
+ *                    PURGE_DISABLED + emit force_purge_disabled warn，R2/chunks 全不動）
  *
  * 防線：
  *   - auth 401 / role 不夠 403
