@@ -82,7 +82,7 @@ export async function onRequestPost({ request, env, params }) {
     return res({ error: `refund not implemented for vendor: ${intent.vendor}`, code: 'REFUND_NOT_IMPLEMENTED' }, 400, cors)
   }
 
-  let body = {}
+  let body: { admin_note?: unknown } = {}
   try { body = await request.json() } catch { /* keep empty */ }
   const adminNote = String(body?.admin_note ?? '').slice(0, 500) || null
 
@@ -250,7 +250,7 @@ export async function onRequestPost({ request, env, params }) {
       },
     })
     // 仍 TG sync — requisition.status 已是 revoked，UI 不能顯示 pending 退款
-    if (rr.requisition_id) await syncRequisitionTgMessage(env, rr.requisition_id)
+    if (rr.requisition_id) await syncRequisitionTgMessage(env, rr.requisition_id, undefined)
     return res({
       ok: false,
       code:               'REFUND_RECONCILIATION_REQUIRED',
@@ -277,7 +277,7 @@ export async function onRequestPost({ request, env, params }) {
     },
   })
   // TG sync（refunded 狀態納入摘要）
-  if (rr.requisition_id) await syncRequisitionTgMessage(env, rr.requisition_id)
+  if (rr.requisition_id) await syncRequisitionTgMessage(env, rr.requisition_id, undefined)
 
   return res({
     ok: true,
