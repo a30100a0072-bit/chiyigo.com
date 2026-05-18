@@ -20,8 +20,16 @@
  *   P1.3 push base — push 時 origin/main == HEAD 自動 fallback HEAD~1
  *   P2 — git 全改 execFileSync 防注入；rename status 視為 added 擋 rename 偷渡進禁區
  *
+ * r5 hardening（Stage 1 governance PR-1，2026-05-18，post-Stage-1 review）：
+ *   F5 — getDiff fail-closed：name-status 與 unifiedDiff 共用 effectiveRange；
+ *        兩條 range 候選任一階段失敗就 exit 3，不再靜默回空 collection 讓
+ *        規則 C（suppression / any）/ D（新 .js 禁區）/ E（src/js *.ts 禁區）漏網
+ *   F8 — getBaseRef fallback HEAD~1 印 console.warn，便於 force-push / shallow
+ *        clone 場景追溯 baseRef 解析路徑；ratchet log 同步加 effectiveRange
+ *
  * 延後（依 §1.5g 不在 day-1）：per-file errorsByFile 強制 enforce、完整 tsconfig invariant、
  * Stage 4.5a classic/module 分流檢查。errorsByFile 仍會寫進 baseline，但不 enforce 個別檔。
+ * → PR-治理-2 規劃補 errorsByFile diff（含 rename mapping 例外）+ tsconfigSnapshot invariant
  */
 
 import { execSync, execFileSync } from 'node:child_process'
@@ -176,16 +184,34 @@ function getBaseRef() {
   const originMain = refResolve('origin/main')
   const head = refResolve('HEAD')
   if (originMain && originMain !== head) return 'origin/main'
+  // F8（PR-治理-1）：fallback HEAD~1 在 force-push / shallow clone 場景可能對到非預期 base。
+  // main 是 protected + CI fetch-depth=0 已大幅降風險，但 explicit warn 便於事後追溯。
+  console.warn('WARN: getBaseRef fell back to HEAD~1 (RATCHET_BASE_REF / GITHUB_BASE_REF 缺失；origin/main == HEAD 或無法解析)')
+  console.warn('  force-push / shallow clone 場景下 diff gate 可能比對到非預期 base — 檢視 CI 日誌的 ratchet baseRef 行確認')
   return 'HEAD~1'
 }
 
 function getDiff(baseRef) {
+  // F5（PR-治理-1）：name-status 與 unifiedDiff 共用同一個成功解析的 range（effectiveRange）。
+  // 原實作 unifiedDiff 寫死 baseRef，當 name-status fallback HEAD~1 時兩者 range 不一致；
+  // 且兩處 catch 都 fail-open 回空 collection，讓規則 C/D/E（suppression / 禁區）靜默漏網。
+  // 改為：兩條 range 候選依序嘗試 name-status；成功才繼續用同 range 抓 unifiedDiff；任一失敗 exit 3。
+  const candidates = [`${baseRef}...HEAD`, 'HEAD~1...HEAD']
+  let effectiveRange = null
   let nameStatus = ''
-  try {
-    nameStatus = git(['diff', '--name-status', '-M', `${baseRef}...HEAD`])
-  } catch {
-    try { nameStatus = git(['diff', '--name-status', '-M', 'HEAD~1...HEAD']) } catch { return { added: [], modified: [], unifiedDiff: '' } }
+  for (const range of candidates) {
+    try {
+      nameStatus = git(['diff', '--name-status', '-M', range])
+      effectiveRange = range
+      break
+    } catch { /* try next candidate */ }
   }
+  if (!effectiveRange) {
+    console.error(`FAIL: getDiff 無法解析任何 diff range（嘗試 ${candidates.join(', ')}）`)
+    console.error('  suppression / new-source gates 在無 diff 下會靜默 no-op — 拒絕 fail-open')
+    process.exit(3)
+  }
+
   const added = []
   const modified = []
   for (const line of nameStatus.split(/\r?\n/)) {
@@ -206,9 +232,13 @@ function getDiff(baseRef) {
 
   let unifiedDiff = ''
   try {
-    unifiedDiff = git(['diff', '-U0', '-M', `${baseRef}...HEAD`])
-  } catch { /* ignore */ }
-  return { added, modified, unifiedDiff }
+    unifiedDiff = git(['diff', '-U0', '-M', effectiveRange])
+  } catch {
+    console.error(`FAIL: getDiff unifiedDiff 在已解析的 range ${effectiveRange} 失敗`)
+    console.error('  name-status 成功但 unified diff 失敗 — 拒絕對 suppression check fail-open')
+    process.exit(3)
+  }
+  return { added, modified, unifiedDiff, effectiveRange }
 }
 
 function checkDiffSuppressions(unifiedDiff, addedFiles = new Set()) {
@@ -361,7 +391,7 @@ function main() {
     failures.push(`[B] cleanFiles 倒退：${baseline.cleanFiles} → ${current.cleanFiles}（-${baseline.cleanFiles - current.cleanFiles}；可能新增 error 檔）`)
   }
 
-  const { added, unifiedDiff } = getDiff(baseRef)
+  const { added, unifiedDiff, effectiveRange } = getDiff(baseRef)
   const addedFiles = new Set(added.map((f) => f.replace(/\\/g, '/')))
 
   const supViolations = checkDiffSuppressions(unifiedDiff, addedFiles)
@@ -374,7 +404,7 @@ function main() {
     failures.push(`[D/E] ${v.file}：${v.reason}`)
   }
 
-  console.log(`baseline: errorCount=${baseline.errorCount} cleanFiles=${baseline.cleanFiles} (baseRef=${baseRef})`)
+  console.log(`baseline: errorCount=${baseline.errorCount} cleanFiles=${baseline.cleanFiles} (baseRef=${baseRef} effectiveRange=${effectiveRange})`)
   console.log(`current : errorCount=${current.errorCount} cleanFiles=${current.cleanFiles}`)
 
   if (failures.length === 0) {
