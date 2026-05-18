@@ -555,6 +555,87 @@ describe('[Codex r1 P2-8] admin anonymize archives metadata as parseable JSON', 
   })
 })
 
+describe('POST /api/admin/payments/intents/:id/delete', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('沒 step-up token → 401/403', async () => {
+    const a = await seedUser({ email: 'del-no-step@x', role: 'admin' })
+    const u = await seedUser({ email: 'del-u@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_DEL_NS',
+      currency: 'TWD', amount_subunit: 100, status: PAYMENT_STATUS.PENDING,
+    })
+    const tok = await adminToken(a.id) // 一般 admin access token，不是 step-up
+    const resp = await deleteHandler({
+      request: bearer('POST', 'http://x/', tok, {}),
+      env, params: { id: String(intentId) },
+    })
+    expect([401, 403]).toContain(resp.status)
+  })
+
+  it('pending intent → 200 soft_delete + deleted_at 寫入（row 保留給 webhook orphan 偵測）', async () => {
+    const a = await seedUser({ email: 'del-pending-a@x', role: 'admin' })
+    const u = await seedUser({ email: 'del-pending-u@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_DEL_PEND',
+      currency: 'TWD', amount_subunit: 100, status: PAYMENT_STATUS.PENDING,
+    })
+    const tok = await adminStepUpToken(a.id, 'delete_payment')
+    const resp = await deleteHandler({
+      request: bearer('POST', 'http://x/', tok, {}),
+      env, params: { id: String(intentId) },
+    })
+    expect(resp.status).toBe(200)
+    const body = await resp.json()
+    expect(body.mode).toBe('soft_delete')
+
+    // P0-1 invariant：row 仍存在（給 PSP race 補送 webhook 找得到）+ deleted_at 已寫
+    const row = await env.chiyigo_db
+      .prepare(`SELECT status, deleted_at FROM payment_intents WHERE id = ?`)
+      .bind(intentId).first()
+    expect(row).not.toBeNull()
+    expect(row.status).toBe(PAYMENT_STATUS.PENDING) // status 不改
+    expect(row.deleted_at).not.toBeNull()
+
+    // 沒有 anonymize archive（soft_delete 路徑不應落 archive）
+    const archive = await env.chiyigo_db
+      .prepare(`SELECT 1 FROM payment_metadata_archive WHERE intent_id = ?`)
+      .bind(intentId).first()
+    expect(archive).toBeNull()
+  })
+
+  it('refunded intent → 409 STATUS_LOCKED + 0 anonymize archive', async () => {
+    const a = await seedUser({ email: 'del-refunded-a@x', role: 'admin' })
+    const u = await seedUser({ email: 'del-refunded-u@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_DEL_REF',
+      currency: 'TWD', amount_subunit: 100, status: PAYMENT_STATUS.REFUNDED,
+      metadata: { trade_no: 'TN_DEL_REF_REAL' },
+    })
+    const tok = await adminStepUpToken(a.id, 'delete_payment')
+    const resp = await deleteHandler({
+      request: bearer('POST', 'http://x/', tok, {}),
+      env, params: { id: String(intentId) },
+    })
+    expect(resp.status).toBe(409)
+    const body = await resp.json()
+    expect(body.code).toBe('STATUS_LOCKED')
+    expect(body.status).toBe(PAYMENT_STATUS.REFUNDED)
+
+    // refunded 不可被任何形式改動：metadata 不清、無 archive row
+    const row = await env.chiyigo_db
+      .prepare(`SELECT metadata, deleted_at FROM payment_intents WHERE id = ?`)
+      .bind(intentId).first()
+    expect(row.deleted_at).toBeNull()
+    expect(JSON.parse(row.metadata).trade_no).toBe('TN_DEL_REF_REAL')
+    const archive = await env.chiyigo_db
+      .prepare(`SELECT 1 FROM payment_metadata_archive WHERE intent_id = ?`)
+      .bind(intentId).first()
+    expect(archive).toBeNull()
+  })
+})
+
 describe('[Codex r1 P1-6] POST /api/admin/requisition-refund/:id/reject atomic CAS', () => {
   beforeAll(async () => { await ensureJwtKeys() })
   beforeEach(async () => { await resetDb() })
