@@ -215,4 +215,76 @@ describe('GET /api/admin/audit', () => {
     const r = await callAudit(tok, 'limit=999')
     expect(r.body.limit).toBe(200)
   })
+
+  // ─── PR-11 smoke（Stage 3 admin/audit.ts 補 direct coverage） ─────────
+  // 鎖三點：(1) event_data 白名單裁切 + _redacted_keys 計數
+  //        (2) from/to ISO 8601 驗證 → 400 INVALID
+  //        (3) admin.audit.read 觀測 audit 寫入含 result_count + filters
+  // ref: project_js_to_ts_stage3_audit_chain.md
+
+  it('PR-11 smoke: event_data 白名單裁切 — 敏感欄位轉 _redacted_keys', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const safe   = JSON.stringify({ reason_code: 'unknown_email', trace_id: 't-1', amount_subunit: 100 })
+    const unsafe = JSON.stringify({ password: 'leak', email: 'pii@x', token: 'tok', reason_code: 'kept' })
+    const mixed  = JSON.stringify({ raw_ip: '1.2.3.4', otp: '999999', trace_id: 't-2' })
+    await env.chiyigo_db.prepare(`INSERT INTO audit_log (event_type, severity, user_id, event_data) VALUES (?, ?, ?, ?)`)
+      .bind('a.safe',   'info', 7, safe).run()
+    await env.chiyigo_db.prepare(`INSERT INTO audit_log (event_type, severity, user_id, event_data) VALUES (?, ?, ?, ?)`)
+      .bind('b.unsafe', 'info', 7, unsafe).run()
+    await env.chiyigo_db.prepare(`INSERT INTO audit_log (event_type, severity, user_id, event_data) VALUES (?, ?, ?, ?)`)
+      .bind('c.mixed',  'info', 7, mixed).run()
+    const tok = await adminToken(id)
+    const r = await callAudit(tok, 'user_id=7')
+    expect(r.status).toBe(200)
+    expect(r.body.total).toBe(3)
+    const byType = Object.fromEntries(r.body.rows.map(x => [x.event_type, x.event_data]))
+    // 全 safe → 無 _redacted_keys
+    expect(byType['a.safe']).toEqual({ reason_code: 'unknown_email', trace_id: 't-1', amount_subunit: 100 })
+    expect('_redacted_keys' in byType['a.safe']).toBe(false)
+    // 全敏感（保留 reason_code）→ 3 unsafe + 1 safe
+    expect(byType['b.unsafe'].reason_code).toBe('kept')
+    expect(byType['b.unsafe'].password).toBeUndefined()
+    expect(byType['b.unsafe'].email).toBeUndefined()
+    expect(byType['b.unsafe'].token).toBeUndefined()
+    expect(byType['b.unsafe']._redacted_keys).toBe(3)
+    // 混合 → 保 trace_id 移除 raw_ip + otp
+    expect(byType['c.mixed'].trace_id).toBe('t-2')
+    expect(byType['c.mixed']._redacted_keys).toBe(2)
+  })
+
+  it('PR-11 smoke: from/to 非 ISO 8601 → 400 FROM_DATE_INVALID / TO_DATE_INVALID', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminToken(id)
+    const r1 = await callAudit(tok, 'from=not-a-date')
+    expect(r1.status).toBe(400)
+    expect(r1.body.code).toBe('FROM_DATE_INVALID')
+    const r2 = await callAudit(tok, 'to=2026/05/18')
+    expect(r2.status).toBe(400)
+    expect(r2.body.code).toBe('TO_DATE_INVALID')
+    // 合法 ISO date 不擋
+    const r3 = await callAudit(tok, 'from=2026-01-01&to=2026-12-31T00:00:00Z')
+    expect(r3.status).toBe(200)
+  })
+
+  it('PR-11 smoke: 成功讀取後寫 admin.audit.read 觀測 row（含 result_count + filters）', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    await seedAudit([
+      { event_type: 'auth.login.success', user_id: 500 },
+      { event_type: 'auth.login.success', user_id: 500 },
+    ])
+    const tok = await adminToken(id)
+    const r = await callAudit(tok, 'user_id=500&limit=10')
+    expect(r.status).toBe(200)
+    // 觀測 audit row（取最新一筆 admin.audit.read）
+    const row = await env.chiyigo_db
+      .prepare(`SELECT user_id, severity, event_data FROM audit_log WHERE event_type = 'admin.audit.read' ORDER BY id DESC LIMIT 1`)
+      .first()
+    expect(row).toBeTruthy()
+    expect(row.user_id).toBe(id)
+    expect(row.severity).toBe('info')
+    const data = JSON.parse(row.event_data)
+    expect(data.result_count).toBe(2)
+    expect(data.filters.user_id).toBe('500')
+    expect(data.filters.limit).toBe(10)
+  })
 })
