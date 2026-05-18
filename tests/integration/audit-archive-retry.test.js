@@ -20,7 +20,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
-import { onRequestPost as retryHandler } from '../../functions/api/admin/audit-archive/retry.js'
+import { onRequestPost as retryHandler } from '../../functions/api/admin/audit-archive/retry'
 
 async function adminToken(userId, role = 'admin') {
   return signJwt(
