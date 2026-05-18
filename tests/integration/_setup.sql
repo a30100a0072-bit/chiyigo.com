@@ -440,6 +440,30 @@ CREATE TABLE IF NOT EXISTS payment_webhook_dlq (
   replay_result   TEXT
 );
 
+-- migration 0028 deals 表（Phase F-2 wave 8；admin 保存 requisition → deal 成交快照）
+CREATE TABLE IF NOT EXISTS deals (
+  id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_requisition_id    INTEGER REFERENCES requisition(id) ON DELETE SET NULL,
+  user_id                  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  customer_name            TEXT    NOT NULL,
+  customer_contact         TEXT    NOT NULL,
+  customer_company         TEXT,
+  service_type             TEXT,
+  budget                   TEXT,
+  timeline                 TEXT,
+  message                  TEXT,
+  total_amount_subunit     INTEGER NOT NULL DEFAULT 0,
+  refunded_amount_subunit  INTEGER NOT NULL DEFAULT 0,
+  currency                 TEXT    NOT NULL DEFAULT 'TWD',
+  payment_intent_ids       TEXT,
+  notes                    TEXT,
+  saved_by_admin_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  saved_at                 TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_deals_user      ON deals(user_id, saved_at DESC);
+CREATE INDEX IF NOT EXISTS idx_deals_req       ON deals(source_requisition_id);
+CREATE INDEX IF NOT EXISTS idx_deals_saved_at  ON deals(saved_at DESC);
+
 CREATE TABLE IF NOT EXISTS auth_codes (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   code_hash       TEXT    NOT NULL UNIQUE,

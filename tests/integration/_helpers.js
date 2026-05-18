@@ -123,6 +123,7 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM audit_archive_chunks'),  // F-3 Phase 2 PR 2.1a
     env.chiyigo_db.prepare('DELETE FROM audit_log_aggregate_telemetry'),  // F-3 Phase 2 PR 3.0
     env.chiyigo_db.prepare('DELETE FROM audit_log_aggregate_debug'),       // F-3 Phase 2 PR 3.1
+    env.chiyigo_db.prepare('DELETE FROM deals'),                            // Stage 3 PR-17b
   ])
 
   // oauth-clients 模組級 cache 也歸零（避免跨 test file 撞資料）
