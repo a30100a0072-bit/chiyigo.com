@@ -43,7 +43,7 @@ export async function onRequestPost({ request, env, params }) {
 
   const db = env.chiyigo_db
 
-  let body = {}
+  let body: { admin_note?: unknown } = {}
   try { body = await request.json() } catch { /* keep empty */ }
   const adminNote = String(body?.admin_note ?? '').slice(0, 500) || null
 

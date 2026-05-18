@@ -15,7 +15,7 @@ import {
 } from '../../functions/utils/payments'
 import { onRequestGet  as listHandler   } from '../../functions/api/admin/payments/intents.js'
 import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund'
-import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject.js'
+import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject'
 import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve.js'
 import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete'
 import { onRequestGet  as aggregateHandler } from '../../functions/api/admin/payments/aggregate'
