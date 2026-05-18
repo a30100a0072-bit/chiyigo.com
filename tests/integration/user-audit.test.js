@@ -15,7 +15,7 @@ import { resetDb, ensureJwtKeys, seedUser, jsonPost } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
 import { safeUserAudit } from '../../functions/utils/user-audit'
 import { onRequestPost as loginHandler } from '../../functions/api/auth/local/login.js'
-import { onRequestGet as auditHandler } from '../../functions/api/admin/audit.js'
+import { onRequestGet as auditHandler } from '../../functions/api/admin/audit'
 
 function reqWithSalt(extraEnv = {}) {
   return { ...env, ...extraEnv }

@@ -48,7 +48,7 @@ function redactEventData(raw) {
   try { parsed = JSON.parse(String(raw)) }
   catch { return null }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
-  const out = {}
+  const out: Record<string, unknown> = {}
   let redactedCount = 0
   for (const [k, v] of Object.entries(parsed)) {
     if (SAFE_EVENT_DATA_KEYS.has(k)) out[k] = v
