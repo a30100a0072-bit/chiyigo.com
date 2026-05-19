@@ -33,7 +33,7 @@ vi.mock('@simplewebauthn/server', async (importOriginal) => {
 
 // 動態 import：vi.mock 必須在 import target 之前生效
 const { onRequestPost: optionsHandler } = await import(
-  '../../functions/api/auth/webauthn/register-options.js'
+  '../../functions/api/auth/webauthn/register-options'
 )
 const { onRequestPost: verifyHandler } = await import(
   '../../functions/api/auth/webauthn/register-verify'

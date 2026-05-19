@@ -11,11 +11,11 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
-import { onRequestGet as listHandler } from '../../functions/api/auth/webauthn/credentials.js'
+import { onRequestGet as listHandler } from '../../functions/api/auth/webauthn/credentials'
 import {
   onRequestPatch as patchHandler,
   onRequestDelete as deleteHandler,
-} from '../../functions/api/auth/webauthn/credentials/[id].js'
+} from '../../functions/api/auth/webauthn/credentials/[id]'
 
 async function userToken(userId, email = 'wac@x') {
   return signJwt(

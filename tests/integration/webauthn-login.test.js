@@ -31,10 +31,10 @@ vi.mock('@simplewebauthn/server', async (importOriginal) => {
 })
 
 const { onRequestPost: optionsHandler } = await import(
-  '../../functions/api/auth/webauthn/login-options.js'
+  '../../functions/api/auth/webauthn/login-options'
 )
 const { onRequestPost: verifyHandler } = await import(
-  '../../functions/api/auth/webauthn/login-verify.js'
+  '../../functions/api/auth/webauthn/login-verify'
 )
 
 env.WEBAUTHN_RP_ID    = 'localhost'
