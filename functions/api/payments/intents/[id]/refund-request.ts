@@ -104,7 +104,7 @@ export async function onRequestPost({ request, env, params }) {
                  WHERE id = ? AND user_id = ?`)
       .bind(reqId, userId).run()
     // TG 訊息更新（refund_pending header）
-    await syncRequisitionTgMessage(env, reqId)
+    await syncRequisitionTgMessage(env, reqId, undefined)
   }
 
   await safeUserAudit(env, {
