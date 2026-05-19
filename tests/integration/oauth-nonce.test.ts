@@ -105,10 +105,12 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetDb()
-  env.LINE_CLIENT_ID     = 'line-cid'
-  env.LINE_CLIENT_SECRET = 'line-channel-secret'
-  env.APPLE_CLIENT_ID     = 'apple-cid'
-  env.APPLE_CLIENT_SECRET = 'apple-secret'
+  Object.assign(env, {
+    LINE_CLIENT_ID:      'line-cid',
+    LINE_CLIENT_SECRET:  'line-channel-secret',
+    APPLE_CLIENT_ID:     'apple-cid',
+    APPLE_CLIENT_SECRET: 'apple-secret',
+  })
   fetchCalls = []
 })
 
@@ -223,8 +225,10 @@ describe('LINE callback nonce 驗證', () => {
 describe('init.js OIDC nonce 生成', () => {
   it('google init → 寫入 nonce + 授權 URL 帶 nonce 參數', async () => {
     const { onRequestGet: initGet } = await import('../../functions/api/auth/oauth/[provider]/init')
-    env.GOOGLE_CLIENT_ID     = 'goog-cid'
-    env.GOOGLE_CLIENT_SECRET = 'goog-sec'
+    Object.assign(env, {
+      GOOGLE_CLIENT_ID:     'goog-cid',
+      GOOGLE_CLIENT_SECRET: 'goog-sec',
+    })
     const res = await initGet({
       request: new Request('http://localhost/api/auth/oauth/google/init?platform=web'),
       env, params: { provider: 'google' },
@@ -247,8 +251,10 @@ describe('init.js OIDC nonce 生成', () => {
 
   it('discord init（純 OAuth2，無 id_token）→ 不寫 nonce', async () => {
     const { onRequestGet: initGet } = await import('../../functions/api/auth/oauth/[provider]/init')
-    env.DISCORD_CLIENT_ID     = 'd-cid'
-    env.DISCORD_CLIENT_SECRET = 'd-sec'
+    Object.assign(env, {
+      DISCORD_CLIENT_ID:     'd-cid',
+      DISCORD_CLIENT_SECRET: 'd-sec',
+    })
     const res = await initGet({
       request: new Request('http://localhost/api/auth/oauth/discord/init?platform=web'),
       env, params: { provider: 'discord' },

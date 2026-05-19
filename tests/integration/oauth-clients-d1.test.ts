@@ -24,7 +24,15 @@ import {
   _resetCacheForTests,
 } from '../../functions/utils/oauth-clients'
 
-async function seedRP({ client_id, aud, redirect_uris = [], origins = [], post_logout = [], frontchannel = [], backchannel = null }) {
+async function seedRP({ client_id, aud, redirect_uris = [], origins = [], post_logout = [], frontchannel = [], backchannel = null }: {
+  client_id?: string;
+  aud?: string;
+  redirect_uris?: string[];
+  origins?: string[];
+  post_logout?: string[];
+  frontchannel?: string[];
+  backchannel?: string | null;
+}) {
   await env.chiyigo_db
     .prepare(`
       INSERT OR REPLACE INTO oauth_clients (

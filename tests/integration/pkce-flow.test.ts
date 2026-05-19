@@ -563,7 +563,7 @@ describe('POST /api/auth/oauth/token — code exchange', () => {
       const redirectUri = 'https://mbti.chiyigo.com/login.html'
       const code = await seedAuthCode({ userId: user.id, codeChallenge: challenge, redirectUri })
 
-      const headers = { 'Content-Type': 'application/json' }
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (c.origin) headers.Origin = c.origin
       const req = new Request(`${ORIGIN}/api/auth/oauth/token`, {
         method: 'POST',

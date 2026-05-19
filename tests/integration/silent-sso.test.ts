@@ -21,7 +21,7 @@ const REDIRECT_URI = 'https://sport-app-web.pages.dev/auth/callback'
 const CODE_CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'
 const STATE = 'test-state-xyz'
 
-function authorizeUrl(extra = {}) {
+function authorizeUrl(extra: Record<string, string> = {}) {
   const u = new URL(BASE)
   u.searchParams.set('response_type', 'code')
   u.searchParams.set('redirect_uri', REDIRECT_URI)
