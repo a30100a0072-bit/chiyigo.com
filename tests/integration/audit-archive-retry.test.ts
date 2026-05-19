@@ -41,7 +41,8 @@ async function adminStepUpToken(userId, forAction) {
   )
 }
 
-async function callRetry({ token, body }) {
+// PR-41 inline TS: token / body 都可選（同 audit-aggregate-archive-retry.test.ts pattern）
+async function callRetry({ token, body }: { token?: string; body?: unknown }) {
   const headers = token
     ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
     : { 'Content-Type': 'application/json' }

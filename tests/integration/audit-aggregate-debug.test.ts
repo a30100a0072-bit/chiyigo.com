@@ -42,9 +42,10 @@ function makeEnv(overrides = {}) {
   }
 }
 
-async function runCron(overrides) {
+// PR-41 inline TS: 同 audit-aggregate.test.ts runCron pattern。
+async function runCron(overrides?: Record<string, unknown>) {
   const r = await cronAggregateDebug({ request: makeRequest(), env: makeEnv(overrides) })
-  return { status: r.status, body: await r.json() }
+  return { status: r.status, body: (await r.json()) as Record<string, unknown> }
 }
 
 async function seed(over = {}) {
@@ -74,7 +75,8 @@ async function listBuckets() {
        FROM audit_log_aggregate_debug
       ORDER BY hour_bucket ASC, event_type ASC, COALESCE(reason_code,'') ASC`
   ).all()
-  return r.results ?? []
+  // PR-41 inline TS: 同 audit-aggregate.test.ts listBuckets pattern。
+  return (r.results ?? []) as Record<string, unknown>[]
 }
 
 async function listAuditEvents() {
@@ -188,7 +190,7 @@ describe('audit-aggregate-debug cron — happy path', () => {
     expect(rows[0].total_count).toBe(15)
     expect(rows[0].sample_count).toBe(10)
     expect(rows[0].sampled).toBe(1)
-    const samples = JSON.parse(rows[0].samples_json)
+    const samples = JSON.parse(rows[0].samples_json as string)
     expect(samples).toHaveLength(10)
     // samples id 應是 audit_log 中 cold_class='debug_failure' 的 row id 子集
     const candIds = (await env.chiyigo_db.prepare(

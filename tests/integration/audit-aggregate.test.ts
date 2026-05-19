@@ -40,9 +40,11 @@ function makeEnv(overrides = {}) {
   }
 }
 
-async function runCron(overrides) {
+// PR-41 inline TS: overrides 預設 undefined（多數 caller 不傳）；
+//   body 從 .json() 回 unknown，cast 成 Record<string, unknown> 讓 .foo 取值通過 type check。
+async function runCron(overrides?: Record<string, unknown>) {
   const r = await cronAggregate({ request: makeRequest(), env: makeEnv(overrides) })
-  return { status: r.status, body: await r.json() }
+  return { status: r.status, body: (await r.json()) as Record<string, unknown> }
 }
 
 // 種 1 row at given ts，可指定 cold_class / event_type / user_id / ip_hash / archived
@@ -72,7 +74,8 @@ async function listBuckets() {
        FROM audit_log_aggregate_telemetry
       ORDER BY hour_bucket ASC, event_type ASC`
   ).all()
-  return r.results ?? []
+  // PR-41 inline TS: D1 .all().results 為 unknown[]，cast 成 row-shape 讓 Map / r.foo 取值通過
+  return (r.results ?? []) as Record<string, unknown>[]
 }
 
 async function listAuditEvents() {

@@ -47,7 +47,8 @@ async function seedAuditLogRow({ event_type = 'requisition.deleted', user_id = n
   return r.meta.last_row_id
 }
 
-async function callDelete(id, token, dbOverride) {
+// PR-41 inline TS: dbOverride 預設 undefined（caller 三處只傳 2 arg）
+async function callDelete(id, token, dbOverride?: unknown) {
   return deleteHandler({
     request: bearerDel(id, token),
     env: dbOverride ? { ...env, chiyigo_db: dbOverride } : env,
