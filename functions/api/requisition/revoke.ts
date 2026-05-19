@@ -134,7 +134,7 @@ export async function onRequestPost({ request, env }) {
       },
     })
     // TG 訊息同步到 refund_pending 狀態
-    await syncRequisitionTgMessage(env, row.id)
+    await syncRequisitionTgMessage(env, row.id, undefined)
 
     return res({
       ok: true,

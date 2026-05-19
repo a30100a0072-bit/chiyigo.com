@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { resetDb, callFunction, jsonPost } from './_helpers.js'
-import { onRequestPost as requisitionPost } from '../../functions/api/requisition.js'
+import { onRequestPost as requisitionPost } from '../../functions/api/requisition'
 
 beforeAll(async () => { await resetDb() })
 beforeEach(async () => { await resetDb() })
