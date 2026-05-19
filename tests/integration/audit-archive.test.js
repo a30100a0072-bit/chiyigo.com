@@ -71,7 +71,7 @@ async function resetR2Bucket() {
   const list = await env.AUDIT_ARCHIVE_BUCKET.list({ limit: 1000 })
   for (const obj of list.objects ?? []) {
     // 注意：這是 *test cleanup*，不是 archive worker codepath。
-    // archive worker lint 只掃 functions/{utils,api/admin/cron}/audit-archive*.js — test 檔不在掃描範圍。
+    // archive worker lint 只掃 functions/{utils,api/admin/cron}/audit-archive*.{js,ts} — test 檔不在掃描範圍。
     await env.AUDIT_ARCHIVE_BUCKET.delete(obj.key)
   }
 }
