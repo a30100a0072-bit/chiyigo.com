@@ -10,7 +10,7 @@
  *      每月 1 號 19:00 UTC（與 telemetry 同檔同分；兩 worker 各寫獨立 R2 prefix
  *      + 獨立 cold_class，互不撞 chunks row PK）。
  *
- * 細節對齊 audit-aggregate-archive-telemetry.js；orchestration 共用
+ * 細節對齊 audit-aggregate-archive-telemetry.ts；orchestration 共用
  * functions/utils/audit-aggregate-archive-runner.js `runAggregateArchive`。
  */
 

@@ -70,7 +70,7 @@ export function parseLeadHours(env) {
  * 故意不直接 re-export 避免兩檔耦合；schema 不同（aggregate_debug 沒 ip_hash_top）
  * 但 hour_bucket 字串格式 spec 是 design doc 級的全域規範。
  *
- * 詳見 audit-aggregate.js#hourBucket 的 codex r1 M-1 修正（SQLite local TZ parse 坑）。
+ * 詳見 audit-aggregate.ts#hourBucket 的 codex r1 M-1 修正（SQLite local TZ parse 坑）。
  */
 export function hourBucket(input) {
   let v = input
