@@ -9,7 +9,11 @@ import { defineConfig } from 'vitest/config'
 // v8 coverage（node:inspector 模組缺，見 2026-04-30 探勘）。
 export default defineConfig({
   test: {
-    include: ['tests/**/*.test.js'],
+    // PR-39 (Stage 4 tests/integration migration enabler)：副檔名用 .{js,ts} glob
+    // 同 coverage exclude 的 [[feedback_coverage_exclude_ext_glob]] 教訓 — rename
+    // 期間 vitest include 不能寫死 .js，否則 .test.ts 被靜默忽略從 CI 消失。
+    // ESLint files block 已先鋪路（eslint.config.js line 215 + 230 + 253 + 264）。
+    include: ['tests/**/*.test.{js,ts}'],
     exclude: ['tests/integration/**', 'node_modules/**'],
     coverage: {
       provider: 'v8',

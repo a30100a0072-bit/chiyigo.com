@@ -2,7 +2,9 @@ import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config'
 
 export default defineWorkersConfig({
   test: {
-    include: ['tests/integration/**/*.test.js'],
+    // PR-39 (Stage 4 enabler)：副檔名用 .{js,ts} glob，rename 期不漏 .test.ts
+    // 參考 vitest.config.js 同步註解。
+    include: ['tests/integration/**/*.test.{js,ts}'],
     poolOptions: {
       workers: {
         singleWorker: true,
