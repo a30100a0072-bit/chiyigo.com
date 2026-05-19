@@ -28,7 +28,7 @@ export async function onRequest({ request, env, next }) {
   // 不需手動解構 Headers，避免 getAll('set-cookie') 的環境相容性風險。
   const newResponse = new Response(response.body, response)
 
-  for (const [k, v] of Object.entries(corsHeaders)) {
+  for (const [k, v] of Object.entries(corsHeaders) as [string, string][]) {
     newResponse.headers.set(k, v)
   }
 
