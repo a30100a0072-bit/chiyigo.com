@@ -13,7 +13,7 @@ import { SCOPES } from '../../functions/utils/scopes'
 import {
   createPaymentIntent, getPaymentIntent, PAYMENT_STATUS,
 } from '../../functions/utils/payments'
-import { onRequestGet  as listHandler   } from '../../functions/api/admin/payments/intents.js'
+import { onRequestGet  as listHandler   } from '../../functions/api/admin/payments/intents'
 import { onRequestPost as refundHandler } from '../../functions/api/admin/payments/intents/[id]/refund'
 import { onRequestPost as rejectHandler  } from '../../functions/api/admin/requisition-refund/[id]/reject'
 import { onRequestPost as approveHandler } from '../../functions/api/admin/requisition-refund/[id]/approve'
