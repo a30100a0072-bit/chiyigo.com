@@ -19,7 +19,7 @@ export async function onRequest({ request, env, next }) {
   if (response.status >= 300 && response.status < 400) return response
 
   const newResponse = new Response(response.body, response)
-  for (const [k, v] of Object.entries(corsHeaders)) {
+  for (const [k, v] of Object.entries(corsHeaders) as [string, string][]) {
     newResponse.headers.set(k, v)
   }
   return newResponse

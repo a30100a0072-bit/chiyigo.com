@@ -21,7 +21,7 @@ export async function onRequest({ request, env, next }) {
     if (k.toLowerCase() !== 'set-cookie') newHeaders.append(k, v)
   }
   for (const c of response.headers.getAll('set-cookie')) newHeaders.append('set-cookie', c)
-  for (const [k, v] of Object.entries(corsHeaders)) newHeaders.set(k, v)
+  for (const [k, v] of Object.entries(corsHeaders) as [string, string][]) newHeaders.set(k, v)
 
   return new Response(response.body, {
     status:     response.status,
