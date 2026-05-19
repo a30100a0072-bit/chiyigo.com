@@ -160,7 +160,7 @@ R2 retention lock 不可逆 — 一旦 `--retention-days 2555` 設下去，該 p
 
 | codex finding | v3 解法 |
 |---|---|
-| High 1：cleanup.js 既有 destructive archive 路徑 | **PR 0 第一步必先 neuter** `functions/api/admin/cron/cleanup.js` 的 `audit_log_archive` special — 改為 no-op；舊路徑寫死 disabled，避免加 binding 後直接觸發舊邏輯 |
+| High 1：cleanup.js 既有 destructive archive 路徑 | **PR 0 第一步必先 neuter** `functions/api/admin/cron/cleanup.ts` 的 `audit_log_archive` special — 改為 no-op；舊路徑寫死 disabled，避免加 binding 後直接觸發舊邏輯（檔案於 PR-35 由 .js 改 .ts，2026-05-19） |
 | High 2：manifest key 用 run_id 不可重入 | manifest key 改為 deterministic：`manifest/{env}/{table}/{yyyy}/{mm}/{dd}/{min_id}-{max_id}-{chunk_sha256}.json`；run_id 降為 metadata + 獨立 run-index 檔 |
 | M-H 3：audit_archive_state schema 過粗 | 改 per-chunk 行：`(env, table, date, min_id, max_id, chunk_sha256)` 為 PK，欄位含 state / retry_count / last_failure_at / next_reminder_at / blacklisted_at |
 | M 4：verifyAuditChain 會被 admin_audit_log 歸檔打斷 | Phase 2 admin_audit_log **不 purge**（user decision），verifier 完全不動；Phase 3 才考慮 anchor |
@@ -730,7 +730,7 @@ Phase 3 加：
 ### PR 0（前置）— Neuter 舊路徑 + R2 bucket + versioning + IAM
 
 **Step 0.1（必先做，commit 後再動 binding）— 拆掉 cleanup.js 既有 destructive archive 路徑（codex H-1）**
-- `functions/api/admin/cron/cleanup.js`：
+- `functions/api/admin/cron/cleanup.ts`（PR-35 由 .js 改 .ts，2026-05-19）：
   - 移除 `audit_log_archive` special branch 內部邏輯（`archiveAndDeleteAuditLog` 改為 no-op + 註明「Phase 2 archive worker 接手」）
   - audit_log task 改成 `{ name: 'audit_log', noop: true, note: 'phase2-pending' }` 或直接從 TASKS 陣列移除
   - 整個函式體刪掉，避免 future 誤啟用
