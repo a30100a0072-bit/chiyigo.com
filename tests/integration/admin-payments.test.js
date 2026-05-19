@@ -779,13 +779,27 @@ describe('GET /api/admin/payments/metadata-archive', () => {
       .run()
   }
 
-  it('沒 step-up token → 401/403', async () => {
+  it('沒 step-up token → 403 STEP_UP_REQUIRED', async () => {
     const a = await seedUser({ email: 'mda-no-step@x', role: 'admin' })
     const tok = await adminToken(a.id) // 一般 admin access token，不是 step-up
     const resp = await metadataArchiveHandler({
       request: bearer('GET', 'http://x/?intent_id=1', tok), env,
     })
-    expect([401, 403]).toContain(resp.status)
+    expect(resp.status).toBe(403)
+    const body = await resp.json()
+    expect(body.code).toBe('STEP_UP_REQUIRED')
+  })
+
+  it('for_action 不符（step-up 為他用途簽發）→ 403 STEP_UP_ACTION_MISMATCH', async () => {
+    const a = await seedUser({ email: 'mda-action-mismatch@x', role: 'admin' })
+    // step-up token 簽發給 refund_payment，但要拿來看 metadata-archive → 應被 action gate 擋
+    const tok = await adminStepUpToken(a.id, 'refund_payment')
+    const resp = await metadataArchiveHandler({
+      request: bearer('GET', 'http://x/?intent_id=1', tok), env,
+    })
+    expect(resp.status).toBe(403)
+    const body = await resp.json()
+    expect(body.code).toBe('STEP_UP_ACTION_MISMATCH')
   })
 
   it('player step-up 無 admin:payments → 403 INSUFFICIENT_SCOPE', async () => {
