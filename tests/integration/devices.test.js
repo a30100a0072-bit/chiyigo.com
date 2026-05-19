@@ -10,8 +10,8 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
-import { onRequestGet as listHandler } from '../../functions/api/auth/devices.js'
-import { onRequestPost as logoutHandler } from '../../functions/api/auth/devices/logout.js'
+import { onRequestGet as listHandler } from '../../functions/api/auth/devices'
+import { onRequestPost as logoutHandler } from '../../functions/api/auth/devices/logout'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 
 async function userToken(userId, email = 'd@x') {
