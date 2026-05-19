@@ -21,7 +21,7 @@
  *   - DRY_RUN 時 key prefix 走 audit-log-dryrun/，不寫進正式 cold_class prefix
  *
  * 🔴 no-delete discipline（design doc v11 §「PR 2 archive worker 必須加的 code discipline」）
- *   本檔與 functions/api/admin/cron/audit-archive.js 路徑下，
+ *   本檔與 functions/api/admin/cron/audit-archive.ts 路徑下，
  *   **禁止** 出現 env.AUDIT_ARCHIVE_BUCKET.delete( 任何形式。
  *   scripts/lint-archive-no-delete.js 會在 CI/build 時掃；違者 build fail。
  *   任何 R2 物件刪除走 admin 獨立 endpoint + 多重審核，不在此 codepath。

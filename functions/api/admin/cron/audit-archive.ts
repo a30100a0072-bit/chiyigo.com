@@ -36,8 +36,8 @@
  *
  * 🔴 no-delete discipline：
  *   本檔禁止呼叫 env.AUDIT_ARCHIVE_BUCKET.delete( 任何形式（含 .delete、['delete']、解構）。
- *   scripts/lint-archive-no-delete.js 在 build 時掃 functions/api/admin/cron/audit-archive*.js
- *   + functions/utils/audit-archive*.js，違者 build fail。
+ *   scripts/lint-archive-no-delete.js 在 build 時掃 functions/api/admin/cron/audit-archive*.{js,ts}
+ *   + functions/utils/audit-archive*.{js,ts}，違者 build fail。
  *
  * Cron 觸發：.github/workflows/cron-audit-archive.yml（每日 18:00 UTC = 02:00 Asia/Taipei）。
  */
@@ -206,6 +206,8 @@ export async function onRequestPost({ request, env }) {
 
   const tableName = PR20_SUPPORTED_TABLE
 
+  // PR-37 inline TS：recovery / finished_at 在升態後才賦值；literal 推窄需先佔位
+  //   （照 PR-27 token.ts pattern：在 literal 列出 optional 欄位才能後續條件式 assign）。
   const report = {
     ok: true,
     mode: dryRun ? 'dry_run' : 'live',
@@ -228,6 +230,9 @@ export async function onRequestPost({ request, env }) {
     blocker: null,
     blocker_action: null,
     skipped_reason: null,
+    // PR-37 inline TS：條件式賦值前先佔位（recovery / finished_at 升態後才填）
+    recovery: undefined as unknown,
+    finished_at: '' as string,
   }
 
   let workUnits = 0
