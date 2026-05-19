@@ -29,8 +29,8 @@ async function pkceChallenge(verifier) {
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
-import { onRequestGet  as authorizeGet  } from '../../functions/api/auth/oauth/authorize.js'
-import { onRequestPost as tokenPost     } from '../../functions/api/auth/oauth/token.js'
+import { onRequestGet  as authorizeGet  } from '../../functions/api/auth/oauth/authorize'
+import { onRequestPost as tokenPost     } from '../../functions/api/auth/oauth/token'
 
 const ORIGIN = 'https://chiyigo.com'
 

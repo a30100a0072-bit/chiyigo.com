@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, callFunction, seedUser } from './_helpers.js'
-import { onRequestGet } from '../../functions/api/auth/oauth/authorize.js'
+import { onRequestGet } from '../../functions/api/auth/oauth/authorize'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 
 const BASE = 'http://localhost/api/auth/oauth/authorize'

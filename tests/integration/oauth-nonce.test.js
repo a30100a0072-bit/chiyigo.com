@@ -13,7 +13,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, appleSignIdToken, appleJwksBody } from './_helpers.js'
 import {
   onRequestGet as cbGet,
-} from '../../functions/api/auth/oauth/[provider]/callback.js'
+} from '../../functions/api/auth/oauth/[provider]/callback'
 
 const BASE = 'http://localhost/api/auth/oauth'
 
@@ -222,7 +222,7 @@ describe('LINE callback nonce 驗證', () => {
 
 describe('init.js OIDC nonce 生成', () => {
   it('google init → 寫入 nonce + 授權 URL 帶 nonce 參數', async () => {
-    const { onRequestGet: initGet } = await import('../../functions/api/auth/oauth/[provider]/init.js')
+    const { onRequestGet: initGet } = await import('../../functions/api/auth/oauth/[provider]/init')
     env.GOOGLE_CLIENT_ID     = 'goog-cid'
     env.GOOGLE_CLIENT_SECRET = 'goog-sec'
     const res = await initGet({
@@ -246,7 +246,7 @@ describe('init.js OIDC nonce 生成', () => {
   })
 
   it('discord init（純 OAuth2，無 id_token）→ 不寫 nonce', async () => {
-    const { onRequestGet: initGet } = await import('../../functions/api/auth/oauth/[provider]/init.js')
+    const { onRequestGet: initGet } = await import('../../functions/api/auth/oauth/[provider]/init')
     env.DISCORD_CLIENT_ID     = 'd-cid'
     env.DISCORD_CLIENT_SECRET = 'd-sec'
     const res = await initGet({

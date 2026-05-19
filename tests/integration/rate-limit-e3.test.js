@@ -12,7 +12,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh'
-import { onRequestPost as tokenHandler } from '../../functions/api/auth/oauth/token.js'
+import { onRequestPost as tokenHandler } from '../../functions/api/auth/oauth/token'
 import { checkRateLimit } from '../../functions/utils/rate-limit'
 
 async function seedRT(userId, deviceUuid = null) {

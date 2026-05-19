@@ -6,7 +6,7 @@ import {
 } from './_helpers.js'
 import {
   onRequestGet as cbGet,
-} from '../../functions/api/auth/oauth/[provider]/callback.js'
+} from '../../functions/api/auth/oauth/[provider]/callback'
 
 const BASE = 'http://localhost/api/auth/oauth'
 

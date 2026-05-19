@@ -154,7 +154,17 @@ export async function onRequestPost({ request, env }) {
   const scopes = (authCode.scope ?? '').split(/\s+/).filter(Boolean)
   const isOidc = scopes.includes('openid')
 
-  const responseBody = {
+  const responseBody: {
+    access_token: string
+    token_type: string
+    expires_in: number
+    user_id: unknown
+    role: unknown
+    status: unknown
+    refresh_token?: string
+    scope?: string
+    id_token?: string
+  } = {
     access_token:  accessToken,
     token_type:    'Bearer',
     expires_in:    900,
@@ -175,7 +185,13 @@ export async function onRequestPost({ request, env }) {
     const authTimeSec = authCode.auth_time
       ? Math.floor(Date.parse(authCode.auth_time.replace(' ', 'T') + 'Z') / 1000)
       : Math.floor(Date.now() / 1000)
-    const idTokenPayload = {
+    const idTokenPayload: {
+      sub: string
+      auth_time: number
+      email?: string
+      email_verified?: boolean
+      nonce?: string
+    } = {
       sub:            String(user.id),
       auth_time:      authTimeSec,
     }

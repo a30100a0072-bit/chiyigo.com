@@ -16,7 +16,7 @@ import { SignJWT, importJWK } from 'jose'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 
-import { onRequestGet as endSessionGet } from '../../functions/api/auth/oauth/end-session.js'
+import { onRequestGet as endSessionGet } from '../../functions/api/auth/oauth/end-session'
 
 const ORIGIN = 'https://chiyigo.com'
 

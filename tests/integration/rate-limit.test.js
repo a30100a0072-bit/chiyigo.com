@@ -17,7 +17,7 @@ import {
 } from './_helpers.js'
 import { onRequestPost as twofaVerify } from '../../functions/api/auth/2fa/verify'
 import { onRequestPost as loginPost } from '../../functions/api/auth/local/login'
-import { onRequestGet as oauthInit } from '../../functions/api/auth/oauth/[provider]/init.js'
+import { onRequestGet as oauthInit } from '../../functions/api/auth/oauth/[provider]/init'
 import {
   checkRateLimit, recordRateLimit, clearRateLimit,
 } from '../../functions/utils/rate-limit'
