@@ -5,7 +5,7 @@ import { onRequestPost as loginPost } from '../../functions/api/auth/local/login
 import {
   resetDb, seedUser, seedOauthOnlyUser, enableTotp,
   callFunction, jsonPost, ensureJwtKeys,
-} from './_helpers.js'
+} from './_helpers'
 
 const URL_LOGIN = 'http://localhost/api/auth/local/login'
 const TEST_SECRET = 'JBSWY3DPEHPK3PXP'
@@ -48,7 +48,7 @@ describe('POST /api/auth/local/login — happy path & failures', () => {
     expect(payload.email).toBe('a@b.com')
     // Phase C-2 regression：access_token 必有 scope claim（role 推導出來）
     expect(payload.scope).toBeTypeOf('string')
-    expect(payload.scope.split(' ')).toContain('read:profile')
+    expect((payload.scope as string).split(' ')).toContain('read:profile')
 
     // refresh_tokens DB row 存在
     const rt = await env.chiyigo_db.prepare(

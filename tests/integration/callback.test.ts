@@ -3,7 +3,7 @@ import { env } from 'cloudflare:test'
 import {
   resetDb, seedUser, ensureJwtKeys,
   googleSignIdToken, googleJwksBody,
-} from './_helpers.js'
+} from './_helpers'
 import {
   onRequestGet as cbGet,
 } from '../../functions/api/auth/oauth/[provider]/callback'
@@ -90,10 +90,12 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetDb()
-  env.GOOGLE_CLIENT_ID     = 'goog-cid'
-  env.GOOGLE_CLIENT_SECRET = 'goog-sec'
-  env.LINE_CLIENT_ID       = 'line-cid'
-  env.LINE_CLIENT_SECRET   = 'line-sec'
+  Object.assign(env, {
+    GOOGLE_CLIENT_ID:     'goog-cid',
+    GOOGLE_CLIENT_SECRET: 'goog-sec',
+    LINE_CLIENT_ID:       'line-cid',
+    LINE_CLIENT_SECRET:   'line-sec',
+  })
   fetchPlan = {}
   vi.stubGlobal('fetch', makeFetchMock(fetchPlan))
 })

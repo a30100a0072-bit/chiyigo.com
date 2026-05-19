@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest'
 import { env } from 'cloudflare:test'
 import { importJWK, SignJWT } from 'jose'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 
 import { onRequestGet as discoveryGet } from '../../functions/.well-known/openid-configuration'
 import { onRequestGet as jwksGet      } from '../../functions/.well-known/jwks.json'
@@ -18,7 +18,7 @@ const ORIGIN = 'https://chiyigo.com'
 
 describe('GET /.well-known/openid-configuration — OIDC discovery', () => {
   it('回 OIDC 必填 metadata', async () => {
-    const res  = await discoveryGet({ request: new Request(`${ORIGIN}/.well-known/openid-configuration`), env })
+    const res  = await discoveryGet()
     const body = await res.json()
     expect(res.status).toBe(200)
     expect(body.issuer).toBe('https://chiyigo.com')
@@ -35,25 +35,25 @@ describe('GET /.well-known/openid-configuration — OIDC discovery', () => {
   })
 
   it('Cache-Control 1 小時 + CORS 公開', async () => {
-    const res = await discoveryGet({ request: new Request(`${ORIGIN}/.well-known/openid-configuration`), env })
+    const res = await discoveryGet()
     expect(res.headers.get('Cache-Control')).toMatch(/max-age=3600/)
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*')
   })
 
   it('Phase C-4：acr_values_supported 含 urn:chiyigo:loa:2 (step-up)', async () => {
-    const res  = await discoveryGet({ request: new Request(`${ORIGIN}/.well-known/openid-configuration`), env })
+    const res  = await discoveryGet()
     const body = await res.json()
     expect(body.acr_values_supported).toContain('urn:chiyigo:loa:2')
   })
 
   it('Phase C-4：claims_parameter_supported = false（明確宣告不支援）', async () => {
-    const res  = await discoveryGet({ request: new Request(`${ORIGIN}/.well-known/openid-configuration`), env })
+    const res  = await discoveryGet()
     const body = await res.json()
     expect(body.claims_parameter_supported).toBe(false)
   })
 
   it('Phase C-4：claims_supported 含 step-up token claims（acr/amr/for_action/scope）', async () => {
-    const res  = await discoveryGet({ request: new Request(`${ORIGIN}/.well-known/openid-configuration`), env })
+    const res  = await discoveryGet()
     const body = await res.json()
     for (const c of ['acr', 'amr', 'for_action', 'scope']) {
       expect(body.claims_supported).toContain(c)
@@ -61,7 +61,7 @@ describe('GET /.well-known/openid-configuration — OIDC discovery', () => {
   })
 
   it('Phase C-4：自訂 metadata 公告 step_up_endpoint + supported scopes', async () => {
-    const res  = await discoveryGet({ request: new Request(`${ORIGIN}/.well-known/openid-configuration`), env })
+    const res  = await discoveryGet()
     const body = await res.json()
     expect(body['urn:chiyigo:step_up_endpoint']).toBe('https://chiyigo.com/api/auth/step-up')
     const stepUpScopes = body['urn:chiyigo:step_up_scopes_supported']

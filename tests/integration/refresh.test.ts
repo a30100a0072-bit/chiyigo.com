@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh'
 
@@ -31,7 +31,11 @@ async function seedRefresh(userId, {
   return plain
 }
 
-function refreshReq({ token, headers = {}, body = {} } = {}) {
+function refreshReq({ token, headers = {}, body = {} }: {
+  token?: string
+  headers?: Record<string, string>
+  body?: Record<string, unknown>
+} = {}) {
   const finalBody = token ? { refresh_token: token, ...body } : body
   return new Request('http://x/api/auth/refresh', {
     method: 'POST',

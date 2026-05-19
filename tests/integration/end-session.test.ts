@@ -13,14 +13,19 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest'
 import { env } from 'cloudflare:test'
 import { SignJWT, importJWK } from 'jose'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 
 import { onRequestGet as endSessionGet } from '../../functions/api/auth/oauth/end-session'
 
 const ORIGIN = 'https://chiyigo.com'
 
-async function signTestIdToken({ sub, exp = '15m', iss = 'https://chiyigo.com', aud = 'mbti' }) {
+async function signTestIdToken({ sub, exp = '15m', iss = 'https://chiyigo.com', aud = 'mbti' }: {
+  sub: string | number
+  exp?: string | number
+  iss?: string
+  aud?: string
+}) {
   const priv = JSON.parse(env.JWT_PRIVATE_KEY)
   const key  = await importJWK(priv, 'ES256')
   return await new SignJWT({ sub: String(sub) })
@@ -67,7 +72,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     const idToken = await signTestIdToken({ sub: user.id })
     const url = `${ORIGIN}/api/auth/oauth/end-session?id_token_hint=${idToken}` +
                 `&post_logout_redirect_uri=${encodeURIComponent('https://mbti.chiyigo.com/')}`
-    const res = await endSessionGet({ request: new Request(url), env })
+    const res = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
 
     expect(res.status).toBe(200)
     expect(await countActiveTokens(user.id)).toBe(0) // 全撤光
@@ -81,7 +86,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     const idToken = await signTestIdToken({ sub: user.id, exp: Math.floor(Date.now()/1000) - 1 })
     const url = `${ORIGIN}/api/auth/oauth/end-session?id_token_hint=${idToken}` +
                 `&post_logout_redirect_uri=${encodeURIComponent('https://mbti.chiyigo.com/')}`
-    const res = await endSessionGet({ request: new Request(url), env })
+    const res = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
 
     expect(res.status).toBe(200)
     expect(await countActiveTokens(user.id)).toBe(0)
@@ -93,7 +98,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
 
     const url = `${ORIGIN}/api/auth/oauth/end-session?id_token_hint=eyJhbGciOiJFUzI1NiJ9.fake.payload` +
                 `&post_logout_redirect_uri=${encodeURIComponent('https://mbti.chiyigo.com/')}`
-    const res = await endSessionGet({ request: new Request(url), env })
+    const res = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
 
     expect(res.status).toBe(200) // 端點本身仍 200（HTML 頁面）
     expect(await countActiveTokens(user.id)).toBe(1) // 沒撤（簽章偽造，cookie 也沒帶）
@@ -113,6 +118,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     const res = await endSessionGet({
       request: new Request(url, { headers: { Cookie: `chiyigo_refresh=${t1.plain}` } }),
       env,
+      waitUntil: () => {},
     })
 
     expect(res.status).toBe(200)
@@ -122,20 +128,20 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
   it('post_logout_redirect_uri 不在白名單 → 400', async () => {
     const url = `${ORIGIN}/api/auth/oauth/end-session` +
                 `?post_logout_redirect_uri=${encodeURIComponent('https://evil.com/')}`
-    const res = await endSessionGet({ request: new Request(url), env })
+    const res = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
     expect(res.status).toBe(400)
   })
 
   it('post_logout_redirect_uri 缺失 → 預設回 chiyigo home（白名單內）', async () => {
     const url = `${ORIGIN}/api/auth/oauth/end-session`
-    const res = await endSessionGet({ request: new Request(url), env })
+    const res = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
     expect(res.status).toBe(200)
   })
 
   it('回 HTML：含全站 frontchannel iframe + meta refresh + clear cookie', async () => {
     const url = `${ORIGIN}/api/auth/oauth/end-session` +
                 `?post_logout_redirect_uri=${encodeURIComponent('https://mbti.chiyigo.com/')}`
-    const res  = await endSessionGet({ request: new Request(url), env })
+    const res  = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
     const html = await res.text()
 
     expect(res.headers.get('Content-Type')).toMatch(/text\/html/)
@@ -164,7 +170,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     ]) {
       const url = `${ORIGIN}/api/auth/oauth/end-session` +
                   `?post_logout_redirect_uri=${encodeURIComponent(target)}`
-      const res = await endSessionGet({ request: new Request(url), env })
+      const res = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
       expect(res.status).toBe(200)
       const html = await res.text()
       expect(html).toMatch(new RegExp(`<meta http-equiv="refresh"[^>]*url=${target.replace(/\//g, '\\/').replace(/\./g, '\\.')}`))
@@ -175,7 +181,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     const url = `${ORIGIN}/api/auth/oauth/end-session` +
                 `?post_logout_redirect_uri=${encodeURIComponent('https://talo.chiyigo.com/')}` +
                 `&state=abc123`
-    const res  = await endSessionGet({ request: new Request(url), env })
+    const res  = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
     const html = await res.text()
     expect(html).toMatch(/url=https:\/\/talo\.chiyigo\.com\/\?state=abc123/)
   })
@@ -187,7 +193,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     const idToken = await signTestIdToken({ sub: user.id, iss: 'https://evil.com' })
     const url = `${ORIGIN}/api/auth/oauth/end-session?id_token_hint=${idToken}` +
                 `&post_logout_redirect_uri=${encodeURIComponent('https://chiyigo.com/')}`
-    const res = await endSessionGet({ request: new Request(url), env })
+    const res = await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
 
     expect(res.status).toBe(200)
     expect(await countActiveTokens(user.id)).toBe(1) // 沒撤（iss mismatch）
@@ -202,7 +208,7 @@ describe('GET /api/auth/oauth/end-session — OIDC RP-Initiated Logout', () => {
     const idToken = await signTestIdToken({ sub: u1.id })
     const url = `${ORIGIN}/api/auth/oauth/end-session?id_token_hint=${idToken}` +
                 `&post_logout_redirect_uri=${encodeURIComponent('https://mbti.chiyigo.com/')}`
-    await endSessionGet({ request: new Request(url), env })
+    await endSessionGet({ request: new Request(url), env, waitUntil: () => {} })
 
     expect(await countActiveTokens(u1.id)).toBe(0)
     expect(await countActiveTokens(u2.id)).toBe(1) // u2 不受影響
