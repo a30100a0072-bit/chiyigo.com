@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb } from './_helpers.js'
-import { onRequestPost as cronAggregate } from '../../functions/api/admin/cron/audit-aggregate.js'
+import { onRequestPost as cronAggregate } from '../../functions/api/admin/cron/audit-aggregate'
 
 const CRON_SECRET = 'test-cron-secret'
 const ARCHIVE_ENV = 'test'
