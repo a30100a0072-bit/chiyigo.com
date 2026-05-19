@@ -20,6 +20,7 @@ import { onRequestPost as approveHandler } from '../../functions/api/admin/requi
 import { onRequestPost as deleteHandler  } from '../../functions/api/admin/payments/intents/[id]/delete'
 import { onRequestGet  as aggregateHandler } from '../../functions/api/admin/payments/aggregate'
 import { onRequestGet  as dlqHandler       } from '../../functions/api/admin/payments/webhook-dlq'
+import { onRequestGet  as metadataArchiveHandler } from '../../functions/api/admin/payments/metadata-archive'
 
 // 對齊 functions/utils/payment-vendors/ecpay.ts 的新 SANDBOX_CREDS
 // 舊 2000132/5294y0726k67Nck0/v77hoKGq4kWxNNIS 已被綠界停用
@@ -755,5 +756,112 @@ describe('[Codex r1 P1-6] POST /api/admin/requisition-refund/:id/reject atomic C
       .prepare(`SELECT admin_note FROM requisition_refund_request WHERE id = ?`)
       .bind(rrId).first()
     expect(rr.admin_note).toBe('first')
+  })
+})
+
+describe('GET /api/admin/payments/metadata-archive', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  async function seedArchive(intentId, opts) {
+    const status      = opts.status      ?? 'succeeded'
+    const metadata    = opts.metadata    ?? { trade_no: 'X' }
+    const archivedAt  = opts.archivedAt  ?? null
+    const archivedBy  = opts.archivedBy
+    const reason      = opts.reason
+    await env.chiyigo_db
+      .prepare(
+        `INSERT INTO payment_metadata_archive
+           (intent_id, original_status, original_metadata, original_failure_reason, archived_at, archived_by, reason)
+         VALUES (?, ?, ?, NULL, COALESCE(?, strftime('%Y-%m-%dT%H:%M:%fZ','now')), ?, ?)`,
+      )
+      .bind(intentId, status, JSON.stringify(metadata), archivedAt, archivedBy, reason)
+      .run()
+  }
+
+  it('沒 step-up token → 401/403', async () => {
+    const a = await seedUser({ email: 'mda-no-step@x', role: 'admin' })
+    const tok = await adminToken(a.id) // 一般 admin access token，不是 step-up
+    const resp = await metadataArchiveHandler({
+      request: bearer('GET', 'http://x/?intent_id=1', tok), env,
+    })
+    expect([401, 403]).toContain(resp.status)
+  })
+
+  it('player step-up 無 admin:payments → 403 INSUFFICIENT_SCOPE', async () => {
+    const p = await seedUser({ email: 'mda-player@x' })
+    // player 拿到 step-up 但 role!=admin、scope 只 elevated:payment → 無任一 admin:payments:* fine scope
+    const tok = await signJwt(
+      { sub: String(p.id), role: 'player', status: 'active', ver: 0,
+        scope: SCOPES.ELEVATED_PAYMENT, for_action: 'view_metadata_archive',
+        amr: ['pwd', 'totp'], acr: 'urn:chiyigo:loa:2' },
+      '5m', env,
+    )
+    const resp = await metadataArchiveHandler({
+      request: bearer('GET', 'http://x/?intent_id=1', tok), env,
+    })
+    expect(resp.status).toBe(403)
+    const body = await resp.json()
+    expect(body.code).toBe('INSUFFICIENT_SCOPE')
+  })
+
+  it('缺 / 非數字 / <1 的 intent_id → 400 INTENT_ID_REQUIRED', async () => {
+    const a = await seedUser({ email: 'mda-bad-id@x', role: 'admin' })
+
+    // step-up token 每次 atomic consume，迴圈內必須重簽
+    for (const qs of ['', '?intent_id=abc', '?intent_id=0', '?intent_id=-1']) {
+      const tok = await adminStepUpToken(a.id, 'view_metadata_archive')
+      const resp = await metadataArchiveHandler({
+        request: bearer('GET', `http://x/${qs}`, tok), env,
+      })
+      expect(resp.status).toBe(400)
+      const body = await resp.json()
+      expect(body.code).toBe('INTENT_ID_REQUIRED')
+    }
+  })
+
+  it('valid step-up + admin → 200 + rows DESC by archived_at + critical audit', async () => {
+    const a = await seedUser({ email: 'mda-ok@x', role: 'admin' })
+    const u = await seedUser({ email: 'mda-u@x' })
+    const intentId = await createPaymentIntent(env, {
+      user_id: u.id, vendor: 'ecpay', vendor_intent_id: 'TN_MDA',
+      currency: 'TWD', amount_subunit: 500, status: PAYMENT_STATUS.SUCCEEDED,
+    })
+    // 兩筆 archive：older + newer，驗 ORDER BY archived_at DESC
+    await seedArchive(intentId, { archivedBy: a.id, reason: 'first',  archivedAt: '2026-01-01T00:00:00.000Z', metadata: { trade_no: 'OLD' } })
+    await seedArchive(intentId, { archivedBy: a.id, reason: 'second', archivedAt: '2026-02-01T00:00:00.000Z', metadata: { trade_no: 'NEW' } })
+
+    const tok = await adminStepUpToken(a.id, 'view_metadata_archive')
+    const resp = await metadataArchiveHandler({
+      request: bearer('GET', `http://x/?intent_id=${intentId}`, tok), env,
+    })
+    expect(resp.status).toBe(200)
+    const body = await resp.json()
+    expect(body.rows).toHaveLength(2)
+    expect(body.rows[0].reason).toBe('second') // newer first
+    expect(body.rows[1].reason).toBe('first')
+    expect(body.rows[0].original_metadata).toBeTypeOf('string')
+    expect(JSON.parse(body.rows[0].original_metadata).trade_no).toBe('NEW')
+
+    // critical audit 落地 + intent_id / archive_count 入 data
+    const audit = await env.chiyigo_db
+      .prepare(`SELECT severity, event_data FROM audit_log WHERE event_type = 'payment.metadata_archive.viewed' ORDER BY id DESC LIMIT 1`)
+      .first()
+    expect(audit).not.toBeNull()
+    expect(audit.severity).toBe('critical')
+    const data = JSON.parse(audit.event_data)
+    expect(data.intent_id).toBe(intentId)
+    expect(data.archive_count).toBe(2)
+  })
+
+  it('valid step-up + 無 archive row → 200 + 空 rows', async () => {
+    const a = await seedUser({ email: 'mda-empty@x', role: 'admin' })
+    const tok = await adminStepUpToken(a.id, 'view_metadata_archive')
+    const resp = await metadataArchiveHandler({
+      request: bearer('GET', 'http://x/?intent_id=999999', tok), env,
+    })
+    expect(resp.status).toBe(200)
+    const body = await resp.json()
+    expect(body.rows).toEqual([])
   })
 })
