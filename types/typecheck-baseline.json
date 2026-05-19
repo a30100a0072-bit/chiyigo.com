@@ -1,9 +1,9 @@
 {
-  "baselineSha": "69b937c",
-  "cleanFiles": 203,
-  "createdAt": "2026-05-18",
-  "errorCount": 951,
-  "errorFiles": 45,
+  "baselineSha": "24d3107",
+  "cleanFiles": 208,
+  "createdAt": "2026-05-19",
+  "errorCount": 943,
+  "errorFiles": 41,
   "errorsByFile": {
     "src/js/404.js": 11,
     "src/js/about.js": 21,
@@ -35,8 +35,6 @@
     "tests/audit-archive.test.js": 5,
     "tests/integration/admin-metrics.test.js": 1,
     "tests/integration/admin-oauth-clients.test.js": 1,
-    "tests/integration/audit-aggregate-archive-retry.test.js": 1,
-    "tests/integration/audit-archive-retry.test.js": 1,
     "tests/integration/callback.test.js": 4,
     "tests/integration/end-session.test.js": 12,
     "tests/integration/login.test.js": 1,
@@ -47,13 +45,11 @@
     "tests/integration/rate-limit.test.js": 2,
     "tests/integration/refresh.test.js": 11,
     "tests/integration/silent-sso.test.js": 1,
-    "tests/integration/wallet.test.js": 2,
-    "tests/integration/webauthn-login.test.js": 3,
-    "tests/integration/webauthn-register.test.js": 3
+    "tests/integration/wallet.test.js": 2
   },
-  "fileErrors": 951,
+  "fileErrors": 943,
   "globalErrors": 0,
-  "sourceFilesTotal": 248,
+  "sourceFilesTotal": 249,
   "stage": 1,
   "tsconfigSnapshot": {
     "tsconfig.json": {

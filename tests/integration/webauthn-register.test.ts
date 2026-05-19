@@ -21,7 +21,7 @@ const mockState = vi.hoisted(() => ({
 }))
 
 vi.mock('@simplewebauthn/server', async (importOriginal) => {
-  const actual = await importOriginal()
+  const actual = await importOriginal() as Record<string, unknown>
   return {
     ...actual,
     verifyRegistrationResponse: vi.fn(async () => {
@@ -39,9 +39,11 @@ const { onRequestPost: verifyHandler } = await import(
   '../../functions/api/auth/webauthn/register-verify'
 )
 
-env.WEBAUTHN_RP_ID    = 'localhost'
-env.WEBAUTHN_RP_NAME  = 'Chiyigo Test'
-env.WEBAUTHN_ORIGINS  = 'http://localhost'
+Object.assign(env, {
+  WEBAUTHN_RP_ID:   'localhost',
+  WEBAUTHN_RP_NAME: 'Chiyigo Test',
+  WEBAUTHN_ORIGINS: 'http://localhost',
+})
 
 async function userToken(userId, email = 'wa@x') {
   return signJwt(
