@@ -68,7 +68,24 @@ export async function onRequestPost({ request, env }) {
     ? new Date(Date.now() - effectiveHours * 3600 * 1000).toISOString()
     : null
 
-  const report = {
+  const report: {
+    ok: boolean
+    run_id: string
+    started_at: string
+    cold_class: string
+    writer_version: string
+    hot_days: number
+    lead_hours: number
+    effective_cutoff_hours: number
+    cutoff: string | null
+    max_rows_per_run: number
+    rows_scanned: number
+    buckets_upserted: number
+    samples_total: number
+    skipped_reason: string | null
+    errors: unknown[]
+    finished_at?: string
+  } = {
     ok: true,
     run_id: runId,
     started_at: startedAt,

@@ -19,8 +19,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb } from './_helpers.js'
-import { onRequestPost as cronTelemetry } from '../../functions/api/admin/cron/audit-aggregate-archive-telemetry.js'
-import { onRequestPost as cronDebug } from '../../functions/api/admin/cron/audit-aggregate-archive-debug.js'
+import { onRequestPost as cronTelemetry } from '../../functions/api/admin/cron/audit-aggregate-archive-telemetry'
+import { onRequestPost as cronDebug } from '../../functions/api/admin/cron/audit-aggregate-archive-debug'
 import { cutoffMonthStartUTC } from '../../functions/utils/audit-aggregate-archive'
 
 const CRON_SECRET = 'test-cron-secret'
