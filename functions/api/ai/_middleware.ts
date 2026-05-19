@@ -1,7 +1,7 @@
 /**
  * CORS Middleware — /api/ai/* 全路由生效
  *
- * 與 /api/auth/_middleware.js 行為一致：
+ * 與 /api/auth/_middleware.ts 行為一致：
  *  OPTIONS preflight → 204
  *  其他              → 呼叫後續 handler 後附加 CORS 標頭
  */

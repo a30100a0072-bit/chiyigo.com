@@ -15,7 +15,7 @@
  *
  * 防護（Phase 1 全部）：
  *   1. Cloudflare Turnstile（若 env.TURNSTILE_SECRET_KEY 已設定才驗證；未設定時跳過，方便先上線）
- *   2. CORS 鎖白名單（由 _middleware.js 處理）
+ *   2. CORS 鎖白名單（由 _middleware.ts 處理）
  *   3. 輸入長度上限 500 字
  *   4. 黑名單關鍵字過濾
  *   5. 多維限流：IP 3/day、session 2/hour、fingerprint 5/day、user 10/day

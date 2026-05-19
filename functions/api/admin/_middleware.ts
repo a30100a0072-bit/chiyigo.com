@@ -1,6 +1,6 @@
 /**
  * CORS Middleware — /api/admin/* 全路由生效
- * 與 /api/auth/_middleware.js 相同策略，供未來 Admin Panel 跨域存取使用。
+ * 與 /api/auth/_middleware.ts 相同策略，供未來 Admin Panel 跨域存取使用。
  */
 
 import { getCorsHeaders } from '../../utils/cors'

@@ -63,6 +63,6 @@ export async function onRequestGet({ request, env }) {
 }
 
 export async function onRequestOptions() {
-  // CORS preflight 由 _middleware.js 處理；這裡保險回 204
+  // CORS preflight 由 _middleware.ts 處理；這裡保險回 204
   return new Response(null, { status: 204 })
 }

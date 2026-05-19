@@ -6,7 +6,7 @@
  *   - Phase C-1 Wave 1（2026-05-05）：D1 表 + KV cache + async getters；
  *     consumers 仍用 sync exports（值取自 in-code）。
  *   - Phase C-1 Wave 2（2026-05-05）：sync getters 讀 module-level mutable cache，
- *     `refreshClientsCache(env)` 由 _middleware.js 在每個 /api/* 請求前觸發
+ *     `refreshClientsCache(env)` 由 _middleware.ts 在每個 /api/* 請求前觸發
  *     （per-isolate 60s throttle），cache 從 KV → D1 → in-code 三層讀。
  *     consumers 從 sync const 改成 sync getter function（getXxx），不必 cascade async。
  *

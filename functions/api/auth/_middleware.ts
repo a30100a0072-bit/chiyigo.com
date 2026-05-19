@@ -1,7 +1,7 @@
 /**
  * CORS Middleware — /api/auth/* 全路由生效
  *
- * Cloudflare Pages Functions _middleware.js 自動攔截同目錄及子目錄的所有請求。
+ * Cloudflare Pages Functions _middleware.ts 自動攔截同目錄及子目錄的所有請求。
  *
  * 行為：
  *  OPTIONS preflight → 直接回 204（不呼叫後續 handler）
