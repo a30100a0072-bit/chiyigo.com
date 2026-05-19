@@ -164,7 +164,7 @@ describe('requireStepUp helper', () => {
   }
 
   async function getStepUpToken(userId, scope, for_action = null) {
-    const claims = {
+    const claims: Record<string, unknown> = {
       sub: String(userId), role: 'player', status: 'active', ver: 0, scope,
       amr: ['pwd', 'totp'], acr: 'urn:chiyigo:loa:2',
     }
