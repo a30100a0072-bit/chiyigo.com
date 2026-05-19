@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, seedUser, ensureJwtKeys } from './_helpers.js'
-import { onRequestGet as metricsGet } from '../../functions/api/admin/metrics.js'
+import { onRequestGet as metricsGet } from '../../functions/api/admin/metrics'
 import { signJwt } from '../../functions/utils/jwt'
 import { appendAuditLog } from '../../functions/utils/audit-log'
 

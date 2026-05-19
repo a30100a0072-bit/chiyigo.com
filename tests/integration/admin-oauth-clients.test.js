@@ -27,7 +27,7 @@ import {
   onRequestGet    as getOneHandler,
   onRequestPatch  as patchHandler,
   onRequestDelete as deleteHandler,
-} from '../../functions/api/admin/oauth-clients/[client_id].js'
+} from '../../functions/api/admin/oauth-clients/[client_id]'
 
 async function adminToken(userId) {
   return signJwt(

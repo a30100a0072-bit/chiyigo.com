@@ -21,7 +21,7 @@ import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
 import { signJwt } from '../../functions/utils/jwt'
 import { requireAuth } from '../../functions/utils/auth'
 import { hashToken, generateSecureToken } from '../../functions/utils/crypto'
-import { onRequestPost as revokeHandler } from '../../functions/api/admin/revoke.js'
+import { onRequestPost as revokeHandler } from '../../functions/api/admin/revoke'
 
 async function adminToken(userId, role = 'admin') {
   return signJwt({
