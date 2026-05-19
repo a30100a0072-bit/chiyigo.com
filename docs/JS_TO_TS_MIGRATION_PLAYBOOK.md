@@ -98,11 +98,33 @@ env:
 - build 抓的是 commit 前 HEAD（舊 hash），所以順序必須是「refactor commit → build → cache-bust commit」，不能反過來
 - cache-bust commit 必須**純 hash sync**：grep `git diff --cached` 過濾非 `?v=` 行應為 0；嚴禁挾帶 i18n / runtime drift
 
-### Why 不用 subshell 算 hash
+### Why 不用 subshell 算 hash（shell-context 注意）
 
-`git commit -m "... $(git rev-parse HEAD)"` 在 PowerShell 是字面字串，不會展開。改成手寫 hash 或先 `hash=$(...) && commit -m "...$hash..."` 算好。
+**bash / git-bash**：
+```bash
+# ❌ 在 PowerShell 跑會留字面字串；在 bash 雙引號內才會展開
+git commit -m "... $(git rev-parse HEAD)"
 
-**教訓來源**：cache-bust commit subject 留下 `$(...)` 字面 string 的多次案例。
+# ✅ 兩個 shell 都最穩妥的版本：先算好 hash 再 commit
+hash=$(git rev-parse --short HEAD)
+git commit -m "... $hash"
+```
+
+**PowerShell**：
+```powershell
+# PowerShell 的子表達式語法是 $(...) 但是放在 double-quoted string 內才會展開；
+# 上面 git-bash 那行直接複製到 PowerShell 也會展開（不是字面字串）。
+# 真正會留字面字串的情境是「shell escaping 不一致」，例如雙引號被 HEREDOC 包住、
+# 或 git commit -m 走 -F /dev/stdin / @'...'@ here-string 時。
+
+# ✅ 最穩妥：先算 hash 變數，subject 直接帶字串字面
+$hash = git rev-parse --short HEAD
+git commit -m "chore(cache-bust): hash sync — <prev> -> $hash (...)"
+```
+
+**最低風險寫法**（跨 shell 通用）：直接手寫 hash 字面，不依賴 shell 展開。每次 cache-bust commit 前先 `git rev-parse --short HEAD` 看一次，貼進 subject。
+
+**教訓來源**：cache-bust commit subject 留下 `$(...)` 字面 string 的多次案例；codex r2 review 點名語境不精準（2026-05-19）。
 
 ---
 
