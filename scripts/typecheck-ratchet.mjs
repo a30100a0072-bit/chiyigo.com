@@ -27,6 +27,13 @@
  *   F8 — getBaseRef fallback HEAD~1 印 console.warn，便於 force-push / shallow
  *        clone 場景追溯 baseRef 解析路徑；ratchet log 同步加 effectiveRange
  *
+ * r7 hardening（PR-34 codex r1 non-blocking nit，2026-05-19）：
+ *   F8-CI — CI 環境（GITHUB_ACTIONS=true / CI=true）禁止 fallback HEAD~1：
+ *        RATCHET_BASE_REF / GITHUB_BASE_REF 缺失且 origin/main == HEAD 時，本機 dev
+ *        印 WARN 並 fallback；CI 直接 exit 3，視為 workflow 設定錯誤。
+ *        填補 F8 codex r5 留下的「CI 仍建議看 baseRef 行」procedural check，把
+ *        審查者手動驗證的規範升級成 script 強 enforce。
+ *
  * r6 hardening（Stage 1 governance PR-2，2026-05-18，post-Stage-1 review）：
  *   F3 — 規則 B' errorsByFile diff：current 新出現的 error 檔（baseline 無對應）→ exit 1
  *        例外：git mv X.js Y.ts 後 Y.ts 在 baseline.errorsByFile[X.js] 有 entry 視為合法轉移
@@ -206,10 +213,21 @@ function getBaseRef() {
   const originMain = refResolve('origin/main')
   const head = refResolve('HEAD')
   if (originMain && originMain !== head) return 'origin/main'
+  // F8-CI（r7，PR-34 codex r1 nit）：CI 環境禁止 fallback HEAD~1
+  //   - workflow 必須注入 RATCHET_BASE_REF（pull_request.base.sha / push event.before）
+  //     或 GITHUB_BASE_REF（PR base branch 名）
+  //   - 兩者缺失且 origin/main == HEAD → 視為 CI 設定錯誤，exit 3 而非靜默 fallback
+  if (process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true') {
+    console.error('FAIL: CI 環境 fallback HEAD~1 被禁止（RATCHET_BASE_REF / GITHUB_BASE_REF 必須由 workflow 注入）')
+    console.error('  檢查 .github/workflows/ci.yml env: RATCHET_BASE_REF=${{ github.event.pull_request.base.sha || github.event.before }}')
+    console.error('  檢查 .github/workflows/ci.yml env: GITHUB_BASE_REF=${{ github.base_ref }}')
+    process.exit(3)
+  }
   // F8（PR-治理-1）：fallback HEAD~1 在 force-push / shallow clone 場景可能對到非預期 base。
   // main 是 protected + CI fetch-depth=0 已大幅降風險，但 explicit warn 便於事後追溯。
-  console.warn('WARN: getBaseRef fell back to HEAD~1 (RATCHET_BASE_REF / GITHUB_BASE_REF 缺失；origin/main == HEAD 或無法解析)')
-  console.warn('  force-push / shallow clone 場景下 diff gate 可能比對到非預期 base — 檢視 CI 日誌的 ratchet baseRef 行確認')
+  // 本機 dev 場景才會走到這條（CI 已被 F8-CI 攔截）。
+  console.warn('WARN: getBaseRef fell back to HEAD~1 (本機 dev；RATCHET_BASE_REF / GITHUB_BASE_REF 缺失且 origin/main == HEAD)')
+  console.warn('  force-push / shallow clone 場景下 diff gate 可能比對到非預期 base — 檢視 ratchet baseRef 行確認')
   return 'HEAD~1'
 }
 
