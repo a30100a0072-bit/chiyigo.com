@@ -33,10 +33,14 @@ declare global {
   // Why：root tsconfig.json `moduleDetection: "force"` 把 src/js/api.ts 當 module，
   //      top-level `class ApiError` 不會註冊到全域 → dashboard.js 等 bare `instanceof ApiError`
   //      caller 失去 typing（codex r1 critical risk）。
-  // Runtime：實際 class 仍由 src/js/api.ts IIFE-private 定義 + `window.ApiError = ApiError`
-  //         掛到 window；browser 中 window === globalThis，bare `ApiError` 自然解析為
-  //         window.ApiError。ambient `declare class` 與 IIFE-local class 不重複 identifier
-  //         （IIFE 內 class 不出 closure），故無原 PR-58 commit-1 顧慮的 duplicate identifier。
+  // Runtime：src/js/api.ts 將 ApiError class 放在 module top-level（不在 IIFE 內，且 IIFE 後
+  //         以 `window.ApiError = ApiError` 對外掛載）。prod tsconfig 以 module:"none" 編譯
+  //         emit 後是 classic <script> top-level class，瀏覽器 global namespace 自然可見；
+  //         root tsconfig 以 moduleDetection:"force" 讓 api.ts 是 module → top-level class
+  //         module-scoped 不污染全域 → 與本檔的 ambient `declare class ApiError` 不衝突。
+  //         注意：因 emit 為 top-level class，重複載入同支 /js/api.js 會在 runtime 拋
+  //         `SyntaxError: Identifier 'ApiError' has already been declared`；目前 built
+  //         public pages 不重複 include /js/api.js，未來新增載入點要避免雙 include。
   class ApiError extends Error {
     constructor(payload: ApiErrorPayload);
     status: number;
