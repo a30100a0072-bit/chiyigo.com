@@ -1,9 +1,9 @@
 {
-  "baselineSha": "702f129",
-  "cleanFiles": 220,
+  "baselineSha": "f790bf7",
+  "cleanFiles": 221,
   "createdAt": "2026-05-20",
-  "errorCount": 886,
-  "errorFiles": 29,
+  "errorCount": 882,
+  "errorFiles": 28,
   "errorsByFile": {
     "src/js/404.js": 11,
     "src/js/about.js": 21,
@@ -32,10 +32,9 @@
     "src/js/requisition.js": 37,
     "src/js/reset-password.js": 18,
     "src/js/verify-email.js": 6,
-    "tests/audit-archive.test.js": 5,
-    "tests/integration/payments.test.js": 4
+    "tests/audit-archive.test.js": 5
   },
-  "fileErrors": 886,
+  "fileErrors": 882,
   "globalErrors": 0,
   "sourceFilesTotal": 249,
   "stage": 1,

@@ -25,7 +25,7 @@ const mockState = vi.hoisted(() => ({
 }))
 
 vi.mock('../../functions/utils/payments', async (importOriginal) => {
-  const actual = await importOriginal()
+  const actual = await importOriginal() as typeof import('../../functions/utils/payments')
   return {
     ...actual,
     getPaymentIntent: vi.fn(async (env, opts) => {
