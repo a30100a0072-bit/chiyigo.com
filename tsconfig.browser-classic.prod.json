@@ -7,10 +7,10 @@
     "isolatedModules": false,
     "resolveJsonModule": false,
     "noEmit": false,
-    "outDir": ".tmp-pipeline-canary/classic",
-    "rootDir": ".",
+    "outDir": "public/js",
+    "rootDir": "src/js",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["src/js/form-enter.ts", "scripts/fixtures/pipeline-canary-classic.ts"]
+  "include": ["src/js/form-enter.ts"]
 }

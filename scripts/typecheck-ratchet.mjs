@@ -98,11 +98,18 @@ const REQUIRED_FILES = [
   'src/js/browser-script-manifest.json',
   'scripts/fixtures/pipeline-canary-classic.ts',
   'scripts/fixtures/pipeline-canary-module.ts',
+  // PR-56 (Stage 4.5b-1)：prod tsconfig 是 manifest.classic → public/js emit 的唯一入口
+  'tsconfig.browser-classic.prod.json',
 ]
 const MANIFEST_REL = 'src/js/browser-script-manifest.json'
+// BROWSER_TSCONFIGS：tier + kind 決定 include expected：
+//   kind='canary' → include === [...manifest[tier], manifest.canary[tier]]
+//   kind='prod'   → include === manifest[tier]（純 production entries，無 canary）
 const BROWSER_TSCONFIGS = [
-  { file: 'tsconfig.browser-classic.json', tier: 'classic' },
-  { file: 'tsconfig.browser-module.json', tier: 'module' },
+  { file: 'tsconfig.browser-classic.json', tier: 'classic', kind: 'canary' },
+  { file: 'tsconfig.browser-module.json', tier: 'module', kind: 'canary' },
+  // PR-56 (Stage 4.5b-1)：classic prod emit config，include === manifest.classic
+  { file: 'tsconfig.browser-classic.prod.json', tier: 'classic', kind: 'prod' },
 ]
 
 // ─── git helper（全 execFileSync 防 shell 注入；預設 silence stderr） ──
@@ -408,7 +415,7 @@ function checkManifestSync() {
   validateManifestEntry(manifest.canary.module, 'manifest.canary.module', MANIFEST_CANARY_PATTERN, seen, violations)
   if (violations.length > 0) return violations
 
-  for (const { file, tier } of BROWSER_TSCONFIGS) {
+  for (const { file, tier, kind } of BROWSER_TSCONFIGS) {
     let cfg
     try {
       cfg = JSON.parse(fs.readFileSync(path.join(ROOT, file), 'utf8'))
@@ -416,11 +423,15 @@ function checkManifestSync() {
       violations.push(`${file} parse 失敗：${e.message}`)
       continue
     }
-    const expected = [...manifest[tier], manifest.canary[tier]]
+    // PR-56：kind=canary 走「production entries + canary fixture」；
+    //        kind=prod  走「production entries only」（emit 到 public/js，不夾 canary 污染）
+    const expected = kind === 'prod'
+      ? [...manifest[tier]]
+      : [...manifest[tier], manifest.canary[tier]]
     const actual = Array.isArray(cfg.include) ? cfg.include : []
     if (!arraysShallowEqual(actual, expected)) {
       violations.push(
-        `${file} include 與 manifest 不同步\n` +
+        `${file} include 與 manifest 不同步 (kind=${kind})\n` +
         `    expected: ${JSON.stringify(expected)}\n` +
         `    actual  : ${JSON.stringify(actual)}`
       )
@@ -607,6 +618,24 @@ function checkDiffSuppressions(unifiedDiff, addedFiles = new Set()) {
 
 function checkNewSourceFiles(added) {
   const violations = []
+  // PR-56 (Stage 4.5b-1)：規則 E 改 manifest-aware
+  //   原規則：所有新增 src/js/*.ts 一律違反
+  //   現規則：在 manifest.classic ∪ manifest.module 內 → 允許（pipeline 已 own emit）
+  //          不在 set 內 → 仍違反（防偷渡未過 pipeline 的 .ts）
+  // per-entry validation（pattern / POSIX / unique / statSync().isFile()）由 checkManifestSync
+  // 與 scripts/verify-browser-pipeline.mjs 兩 gate 守住（[[feedback_two_gate_defense_in_depth]]）。
+  const manifestSrcSet = new Set()
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'))
+    if (Array.isArray(manifest.classic)) {
+      for (const e of manifest.classic) if (typeof e === 'string') manifestSrcSet.add(e)
+    }
+    if (Array.isArray(manifest.module)) {
+      for (const e of manifest.module) if (typeof e === 'string') manifestSrcSet.add(e)
+    }
+  } catch {
+    // manifest 壞 / 缺 → checkRequiredFiles + checkManifestSync 會獨立 fail，這裡保守當空集
+  }
   for (const f of added) {
     const norm = f.replace(/\\/g, '/')
     if (/\.(js|mjs|cjs)$/.test(norm) && !norm.endsWith('.d.ts')) {
@@ -616,7 +645,8 @@ function checkNewSourceFiles(added) {
       }
     }
     if (/^src\/js\/.*\.ts$/.test(norm)) {
-      violations.push({ file: norm, reason: '新增 src/js/*.ts 違反規則 E：Stage 4.5a pipeline 未上線，classic <script> 接 ESM emit 會 SyntaxError' })
+      if (manifestSrcSet.has(norm)) continue
+      violations.push({ file: norm, reason: '新增 src/js/*.ts 違反規則 E：未列入 src/js/browser-script-manifest.json classic/module 陣列；manifest 才是 browser pipeline 收編的 source of truth' })
     }
   }
   return violations

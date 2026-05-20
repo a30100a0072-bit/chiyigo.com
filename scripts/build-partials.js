@@ -15,7 +15,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { execSync } from 'node:child_process'
+import { execSync, execFileSync } from 'node:child_process'
 import Handlebars from 'handlebars'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -154,11 +154,31 @@ async function buildPage(filename) {
 }
 
 // ── JS build ────────────────────────────────────────────
-// 把 src/js/*.js 注入 i18n sentinel 後 copy 到 public/js/。
+// 兩段式：
+//   1) Stage 4.5b-1 起 src/js/*.ts → 走 tsc -p tsconfig.browser-classic.prod.json → emit public/js/*.js
+//   2) src/js/*.js → 注入 i18n sentinel 後 copy 到 public/js/
 // 與 page 相同的字典（src/i18n/<name>.json）會被引用，例如
 // src/js/login.js 對應 src/i18n/login.json。
 async function buildJs() {
-  let count = 0
+  let tsCount = 0
+  // 1) tsc emit classic prod entries（manifest.classic 所列 src/js/*.ts）
+  try {
+    const manifestRaw = await fs.readFile(path.join(SRC_JS, 'browser-script-manifest.json'), 'utf8')
+    const manifest = JSON.parse(manifestRaw)
+    if (Array.isArray(manifest.classic) && manifest.classic.length > 0) {
+      const tscJs = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc')
+      execFileSync(process.execPath, [tscJs, '-p', 'tsconfig.browser-classic.prod.json', '--pretty', 'false'], {
+        cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'],
+        maxBuffer: 16 * 1024 * 1024,
+      })
+      tsCount = manifest.classic.length
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e
+  }
+
+  // 2) .js sources → injectI18n → public/js/
+  let jsCount = 0
   try {
     const files = await fs.readdir(SRC_JS)
     await fs.mkdir(OUT_JS, { recursive: true })
@@ -167,12 +187,12 @@ async function buildJs() {
       const src = await fs.readFile(path.join(SRC_JS, f), 'utf8')
       const out = await injectI18n(f, src)
       await fs.writeFile(path.join(OUT_JS, f), out, 'utf8')
-      count++
+      jsCount++
     }
   } catch (e) {
     if (e.code !== 'ENOENT') throw e
   }
-  return count
+  return tsCount + jsCount
 }
 
 // ── CSS copy ────────────────────────────────────────────

@@ -30,6 +30,10 @@ const TMP_DIR = path.join(ROOT, '.tmp-pipeline-canary')
 const MANIFEST_PATH = path.join(ROOT, 'src', 'js', 'browser-script-manifest.json')
 const CONFIG_CLASSIC = 'tsconfig.browser-classic.json'
 const CONFIG_MODULE = 'tsconfig.browser-module.json'
+// PR-56 (Stage 4.5b-1)：prod tsconfig 把 manifest.classic emit 進 public/js/；
+// verify 走獨立 temp outDir 比對 committed bytes，避免寫穿 public/js 自我修復。
+const CONFIG_CLASSIC_PROD = 'tsconfig.browser-classic.prod.json'
+const PROD_TEMP_OUTDIR = '.tmp-pipeline-canary/classic-prod'
 
 const MARKER_CLASSIC = 'PIPELINE_CANARY_CLASSIC_OK'
 const MARKER_MODULE = 'PIPELINE_CANARY_MODULE_OK'
@@ -47,12 +51,13 @@ function readJson(p, label) {
   }
 }
 
-function runTsc(config) {
+function runTsc(config, extraArgs = []) {
   // 用 node 直接執行 typescript/bin/tsc（node-executable JS），跨平台一致，
   // 避免 npx 解析、.cmd shim 在 Windows 上的 CVE-2024-27980 shell 限制、DEP0190 警告
   const tscJs = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc')
+  const args = [tscJs, '-p', config, '--pretty', 'false', ...extraArgs]
   try {
-    execFileSync(process.execPath, [tscJs, '-p', config, '--pretty', 'false'], {
+    execFileSync(process.execPath, args, {
       cwd: ROOT,
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
@@ -60,10 +65,28 @@ function runTsc(config) {
     })
   } catch (e) {
     const out = (e.stdout || '') + (e.stderr || '')
-    console.error(`tsc -p ${config} 失敗：`)
+    console.error(`tsc -p ${config}${extraArgs.length ? ' ' + extraArgs.join(' ') : ''} 失敗：`)
     console.error(out.split(/\r?\n/).slice(0, 30).map((l) => '  ' + l).join('\n'))
     process.exit(1)
   }
+}
+
+// PR-56 (Stage 4.5b-1)：抽出 classic <script> shape scan，給 canary fixture 與
+// 每個 manifest.classic production entry 的 temp emit 共用。
+//   classic <script> 不能含 ESM 或 CommonJS 結構：
+//     - ESM：top-level export { } / export 宣告 / top-level import → SyntaxError
+//     - CJS：require( / module.exports / exports.<name> / Object.defineProperty(exports →
+//            browser classic 環境無 CommonJS runtime → ReferenceError
+//   註解內字面字串需先剝（stripComments）以免 false-positive。
+function assertClassicShape(content, label) {
+  const code = stripComments(content)
+  if (/\bexport\s*\{/.test(code)) fail(`${label} 含 \`export {\`（會讓 <script> SyntaxError）`)
+  if (/^\s*export\s+/m.test(code)) fail(`${label} 含 top-level \`export\` 宣告（會讓 <script> SyntaxError）`)
+  if (/^\s*import\s+/m.test(code)) fail(`${label} 含 top-level \`import\`（會讓 <script> SyntaxError）`)
+  if (/\brequire\s*\(/.test(code)) fail(`${label} 含 \`require(\`（browser classic 無 CommonJS runtime）`)
+  if (/\bmodule\.exports\b/.test(code)) fail(`${label} 含 \`module.exports\`（browser classic 無 CommonJS runtime）`)
+  if (/\bexports\.[A-Za-z_$]/.test(code)) fail(`${label} 含 \`exports.<name>\`（browser classic 無 CommonJS runtime）`)
+  if (/\bObject\.defineProperty\s*\(\s*exports\b/.test(code)) fail(`${label} 含 \`Object.defineProperty(exports\`（CommonJS shim）`)
 }
 
 function cleanTmp() {
@@ -190,35 +213,72 @@ function main() {
   console.log(`→ tsc -p ${CONFIG_MODULE}`)
   runTsc(CONFIG_MODULE)
 
-  // 7. 驗 classic emit（output 路徑由 manifest + tsconfig 推導）
+  // 7. 驗 classic canary emit（output 路徑由 manifest + tsconfig 推導）
   const classicOut = deriveOutputPath(classicCfg, manifest.canary.classic)
-  if (!fs.existsSync(classicOut)) fail(`classic emit 缺檔：${classicOut}`)
+  if (!fs.existsSync(classicOut)) fail(`classic canary emit 缺檔：${classicOut}`)
   const classicContent = fs.readFileSync(classicOut, 'utf8')
-  if (!classicContent.includes(MARKER_CLASSIC)) fail(`classic emit 缺 marker "${MARKER_CLASSIC}"`)
-  // 關鍵：classic <script> 不能含 ESM 或 CommonJS 結構（會 SyntaxError 或 ReferenceError）
-  // 註解內提到 `export {};` 等不算，scan 前先剝 // 與 /* */ 註解
-  const classicCode = stripComments(classicContent)
-  // ESM 結構
-  if (/\bexport\s*\{/.test(classicCode)) fail('classic emit 含 `export {`（會讓 <script> SyntaxError）')
-  if (/^\s*export\s+/m.test(classicCode)) fail('classic emit 含 top-level `export` 宣告（會讓 <script> SyntaxError）')
-  if (/^\s*import\s+/m.test(classicCode)) fail('classic emit 含 top-level `import`（會讓 <script> SyntaxError）')
-  // CommonJS 結構（瀏覽器 classic 環境 require/exports/module 未定義 → ReferenceError）
-  if (/\brequire\s*\(/.test(classicCode)) fail('classic emit 含 `require(`（browser classic 無 CommonJS runtime）')
-  if (/\bmodule\.exports\b/.test(classicCode)) fail('classic emit 含 `module.exports`（browser classic 無 CommonJS runtime）')
-  if (/\bexports\.[A-Za-z_$]/.test(classicCode)) fail('classic emit 含 `exports.<name>`（browser classic 無 CommonJS runtime）')
-  if (/\bObject\.defineProperty\s*\(\s*exports\b/.test(classicCode)) fail('classic emit 含 `Object.defineProperty(exports`（CommonJS shim）')
-  console.log(`✓ classic emit OK（${classicContent.length} bytes，含 marker，無 ESM/CJS 結構）`)
+  if (!classicContent.includes(MARKER_CLASSIC)) fail(`classic canary emit 缺 marker "${MARKER_CLASSIC}"`)
+  assertClassicShape(classicContent, 'classic canary emit')
+  console.log(`✓ classic canary emit OK（${classicContent.length} bytes，含 marker，無 ESM/CJS 結構）`)
 
-  // 8. 驗 module emit（output 路徑由 manifest + tsconfig 推導）
+  // 8. 驗 module canary emit（output 路徑由 manifest + tsconfig 推導）
   const moduleOut = deriveOutputPath(moduleCfg, manifest.canary.module)
-  if (!fs.existsSync(moduleOut)) fail(`module emit 缺檔：${moduleOut}`)
+  if (!fs.existsSync(moduleOut)) fail(`module canary emit 缺檔：${moduleOut}`)
   const moduleContent = fs.readFileSync(moduleOut, 'utf8')
-  if (!moduleContent.includes(MARKER_MODULE)) fail(`module emit 缺 marker "${MARKER_MODULE}"`)
+  if (!moduleContent.includes(MARKER_MODULE)) fail(`module canary emit 缺 marker "${MARKER_MODULE}"`)
   const moduleCode = stripComments(moduleContent)
-  if (!/\bexport\b/.test(moduleCode)) fail('module emit 缺 `export`（應為 ES module 形狀）')
-  console.log(`✓ module emit OK（${moduleContent.length} bytes，含 marker 與 export）`)
+  if (!/\bexport\b/.test(moduleCode)) fail('module canary emit 缺 `export`（應為 ES module 形狀）')
+  console.log(`✓ module canary emit OK（${moduleContent.length} bytes，含 marker 與 export）`)
 
-  // 9. 清乾淨
+  // 9. PR-56 (Stage 4.5b-1)：prod classic entries pipeline 驗證
+  //    對 manifest.classic 每個 entry：
+  //      a. tsc emit 到 .tmp-pipeline-canary/classic-prod/（避免寫穿 public/js 自我修復）
+  //      b. assertClassicShape on temp emit（防 ESM/CJS 結構偷渡）
+  //      c. byte-compare temp vs committed public/js artifact
+  //         （committed 不存在 / 不同步 → fail；證 build artifact 已 commit）
+  //    cloned config 算 tempOut 路徑，避免用回原 prodCfg outDir 比對到 committed 本身。
+  const prodCfg = readJson(path.join(ROOT, CONFIG_CLASSIC_PROD), CONFIG_CLASSIC_PROD)
+  if (!arraysEqual(prodCfg.include, [...manifest.classic])) {
+    fail(`${CONFIG_CLASSIC_PROD} include 與 manifest.classic 不同步\n  expected: ${JSON.stringify([...manifest.classic])}\n  actual  : ${JSON.stringify(prodCfg.include)}`)
+  }
+  const prodCO = prodCfg.compilerOptions || {}
+  if (prodCO.module !== 'none') fail(`${CONFIG_CLASSIC_PROD} compilerOptions.module 必須 === "none"（actual=${JSON.stringify(prodCO.module)}）`)
+  if (prodCO.outDir !== 'public/js') fail(`${CONFIG_CLASSIC_PROD} compilerOptions.outDir 必須 === "public/js"（actual=${JSON.stringify(prodCO.outDir)}）`)
+  if (prodCO.rootDir !== 'src/js') fail(`${CONFIG_CLASSIC_PROD} compilerOptions.rootDir 必須 === "src/js"（actual=${JSON.stringify(prodCO.rootDir)}）`)
+
+  if (manifest.classic.length === 0) {
+    console.log(`✓ ${CONFIG_CLASSIC_PROD} invariant OK（manifest.classic 為空，跳過 prod emit）`)
+  } else {
+    console.log(`→ tsc -p ${CONFIG_CLASSIC_PROD} --outDir ${PROD_TEMP_OUTDIR}`)
+    runTsc(CONFIG_CLASSIC_PROD, ['--outDir', PROD_TEMP_OUTDIR])
+
+    // cloned config 推 tempOut；committedOut 用原 prodCfg outDir（public/js）
+    const prodTempCfg = {
+      ...prodCfg,
+      compilerOptions: { ...prodCfg.compilerOptions, outDir: PROD_TEMP_OUTDIR },
+    }
+
+    for (const entry of manifest.classic) {
+      const tempOut = deriveOutputPath(prodTempCfg, entry)
+      const committedOut = deriveOutputPath(prodCfg, entry)
+      if (!fs.existsSync(tempOut)) fail(`prod temp emit 缺檔（${entry} → ${tempOut}）`)
+      const tempContent = fs.readFileSync(tempOut, 'utf8')
+      assertClassicShape(tempContent, `prod emit ${entry}`)
+      if (!fs.existsSync(committedOut)) fail(`prod committed artifact 缺檔（${committedOut}）；請跑 npm run build 後 commit`)
+      const committedContent = fs.readFileSync(committedOut, 'utf8')
+      if (tempContent !== committedContent) {
+        fail(
+          `prod committed artifact 與 fresh tsc emit 不同步（${entry}）\n` +
+          `  temp     : ${tempOut} (${tempContent.length} bytes)\n` +
+          `  committed: ${committedOut} (${committedContent.length} bytes)\n` +
+          `  請跑 npm run build 後 commit；或檢查 src/js source 與 build artifact 是否同 PR`
+        )
+      }
+    }
+    console.log(`✓ prod emit OK（${manifest.classic.length} entries：classic shape + temp/committed byte-equal）`)
+  }
+
+  // 10. 清乾淨
   cleanTmp()
 
   console.log('=== browser pipeline canary OK ===')

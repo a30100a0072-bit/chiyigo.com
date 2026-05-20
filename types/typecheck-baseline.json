@@ -1,6 +1,6 @@
 {
-  "baselineSha": "80f3874",
-  "cleanFiles": 225,
+  "baselineSha": "0f86ad6",
+  "cleanFiles": 226,
   "createdAt": "2026-05-20",
   "errorCount": 877,
   "errorFiles": 27,
@@ -35,7 +35,7 @@
   },
   "fileErrors": 877,
   "globalErrors": 0,
-  "sourceFilesTotal": 252,
+  "sourceFilesTotal": 253,
   "stage": 1,
   "tsconfigSnapshot": {
     "tsconfig.browser-classic.json": {
@@ -57,7 +57,30 @@
       },
       "exclude": [],
       "include": [
-        "scripts/fixtures/pipeline-canary-classic.ts"
+        "scripts/fixtures/pipeline-canary-classic.ts",
+        "src/js/form-enter.ts"
+      ]
+    },
+    "tsconfig.browser-classic.prod.json": {
+      "compilerOptions": {
+        "isolatedModules": false,
+        "lib": [
+          "DOM",
+          "DOM.Iterable",
+          "ES2022"
+        ],
+        "module": "none",
+        "moduleDetection": "auto",
+        "moduleResolution": "node10",
+        "noEmit": false,
+        "outDir": "public/js",
+        "resolveJsonModule": false,
+        "rootDir": "src/js",
+        "types": []
+      },
+      "exclude": [],
+      "include": [
+        "src/js/form-enter.ts"
       ]
     },
     "tsconfig.browser-module.json": {
