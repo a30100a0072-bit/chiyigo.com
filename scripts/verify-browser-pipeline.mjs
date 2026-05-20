@@ -88,6 +88,27 @@ function arraysEqual(a, b) {
   return true
 }
 
+// PR-55 r1（codex 拍板 2026-05-20）：manifest entry per-entry 驗證
+//   TS 對 tsconfig.include 不存在路徑 silent ignore；["src/js/typo.ts"] 同步進
+//   tsconfig.include 仍可通過 emit（因 canary 存在，tsc 不抱怨整體無檔），
+//   bogus entry 悄悄被吞。Stage 5 加 production 入口首發就會踩。
+const MANIFEST_PROD_PATTERN = /^src\/js\/[^/].*\.ts$/
+const MANIFEST_CANARY_PATTERN = /^scripts\/fixtures\/[^/].*\.ts$/
+
+function validateManifestEntry(entry, label, pattern, seen) {
+  if (typeof entry !== 'string') fail(`${label} 必須是 string（actual=${JSON.stringify(entry)}）`)
+  if (entry.length === 0) fail(`${label} 為空字串`)
+  if (entry.includes('\\')) fail(`${label} 含反斜線（必須 POSIX 路徑）：${entry}`)
+  if (entry.startsWith('/')) fail(`${label} 開頭 "/"（必須相對路徑）：${entry}`)
+  if (/(^|\/)\.\.?(\/|$)/.test(entry)) fail(`${label} 含 "." 或 ".." 區段：${entry}`)
+  if (!pattern.test(entry)) fail(`${label} 不符 pattern ${pattern}：${entry}`)
+  if (seen.has(entry)) fail(`${label} 在 manifest 內重複（跨 classic/module/canary 不可重）：${entry}`)
+  seen.add(entry)
+  if (!fs.existsSync(path.join(ROOT, entry))) {
+    fail(`${label} 檔案不存在（TS 對不存在 include 是 silent ignore）：${entry}`)
+  }
+}
+
 function deriveOutputPath(tsconfig, sourceRelative) {
   // 從 tsconfig 的 outDir + rootDir 推導 source.ts → output.js 的相對路徑
   const co = tsconfig.compilerOptions || {}
@@ -118,11 +139,13 @@ function main() {
   if (!Array.isArray(manifest.classic)) fail('manifest.classic 必須是 array')
   if (!Array.isArray(manifest.module)) fail('manifest.module 必須是 array')
 
-  const canaryClassicSrc = path.join(ROOT, manifest.canary.classic)
-  const canaryModuleSrc = path.join(ROOT, manifest.canary.module)
-  if (!fs.existsSync(canaryClassicSrc)) fail(`canary.classic 來源不存在：${manifest.canary.classic}`)
-  if (!fs.existsSync(canaryModuleSrc)) fail(`canary.module 來源不存在：${manifest.canary.module}`)
-  console.log(`✓ manifest 結構 OK（classic=${manifest.classic.length} module=${manifest.module.length} canary=2）`)
+  // PR-55 r1：per-entry 驗證（型別/POSIX/unique/檔案存在/pattern；防 TS silent ignore 偽綠）
+  const seen = new Set()
+  manifest.classic.forEach((e, i) => validateManifestEntry(e, `manifest.classic[${i}]`, MANIFEST_PROD_PATTERN, seen))
+  manifest.module.forEach((e, i) => validateManifestEntry(e, `manifest.module[${i}]`, MANIFEST_PROD_PATTERN, seen))
+  validateManifestEntry(manifest.canary.classic, 'manifest.canary.classic', MANIFEST_CANARY_PATTERN, seen)
+  validateManifestEntry(manifest.canary.module, 'manifest.canary.module', MANIFEST_CANARY_PATTERN, seen)
+  console.log(`✓ manifest 結構 OK（classic=${manifest.classic.length} module=${manifest.module.length} canary=2，全 entry 驗 type/POSIX/unique/存在/pattern）`)
 
   // 2. manifest ↔ tsconfig.include 同步檢查（codex PR-54 r1 medium）
   //    PR-54 內 manifest.classic/module 兩條 production 陣列都空，tsconfig.include 只含 canary；

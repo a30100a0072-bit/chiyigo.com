@@ -330,6 +330,37 @@ function arraysShallowEqual(a, b) {
   return true
 }
 
+// PR-55 r1（codex 拍板 2026-05-20）：manifest entry per-entry 驗證。
+//   Why：TS 對 tsconfig.include 內不存在的 path 是 silent ignore；
+//        manifest.classic=["src/js/typo.ts"] + 同步 tsconfig.include 兩 gate 都能通過
+//        但 emit 什麼都沒有。Stage 5 加第一個 production 入口就會踩。
+//   Rules：
+//        - 必 string
+//        - POSIX 正規（無反斜線、無 leading "/"、無 . / .. 區段）
+//        - 跨 production+canary 全集合 unique
+//        - 真檔案存在於 working tree
+//        - production entry 必符 ^src/js/.+\.ts$（manifest 平面，Stage 5 加 src/js/*.ts）
+//        - canary entry 必符 ^scripts/fixtures/.+\.ts$（fixture-specific allowance）
+const MANIFEST_PROD_PATTERN = /^src\/js\/[^/].*\.ts$/
+const MANIFEST_CANARY_PATTERN = /^scripts\/fixtures\/[^/].*\.ts$/
+
+function validateManifestEntry(entry, label, pattern, seen, violations) {
+  if (typeof entry !== 'string') {
+    violations.push(`${label} 必須是 string（actual=${JSON.stringify(entry)}）`)
+    return
+  }
+  if (entry.length === 0) { violations.push(`${label} 為空字串`); return }
+  if (entry.includes('\\')) violations.push(`${label} 含反斜線（必須 POSIX 路徑）：${entry}`)
+  if (entry.startsWith('/')) violations.push(`${label} 開頭 "/"（必須相對路徑）：${entry}`)
+  if (/(^|\/)\.\.?(\/|$)/.test(entry)) violations.push(`${label} 含 "." 或 ".." 區段：${entry}`)
+  if (!pattern.test(entry)) violations.push(`${label} 不符 pattern ${pattern}：${entry}`)
+  if (seen.has(entry)) violations.push(`${label} 在 manifest 內重複（跨 classic/module/canary 不可重）：${entry}`)
+  seen.add(entry)
+  if (!fs.existsSync(path.join(ROOT, entry))) {
+    violations.push(`${label} 檔案不存在（TS 對不存在 include 是 silent ignore，會偽綠）：${entry}`)
+  }
+}
+
 function checkManifestSync() {
   const violations = []
   let manifest
@@ -347,6 +378,18 @@ function checkManifestSync() {
   if (typeof manifest.canary.module !== 'string') violations.push('manifest.canary.module 必須是 string 路徑')
   if (!Array.isArray(manifest.classic)) violations.push('manifest.classic 必須是 array')
   if (!Array.isArray(manifest.module)) violations.push('manifest.module 必須是 array')
+  if (violations.length > 0) return violations
+
+  // PR-55 r1：per-entry 驗證（跨 classic+module+canary 共用 seen set 強制 unique）
+  const seen = new Set()
+  for (let i = 0; i < manifest.classic.length; i++) {
+    validateManifestEntry(manifest.classic[i], `manifest.classic[${i}]`, MANIFEST_PROD_PATTERN, seen, violations)
+  }
+  for (let i = 0; i < manifest.module.length; i++) {
+    validateManifestEntry(manifest.module[i], `manifest.module[${i}]`, MANIFEST_PROD_PATTERN, seen, violations)
+  }
+  validateManifestEntry(manifest.canary.classic, 'manifest.canary.classic', MANIFEST_CANARY_PATTERN, seen, violations)
+  validateManifestEntry(manifest.canary.module, 'manifest.canary.module', MANIFEST_CANARY_PATTERN, seen, violations)
   if (violations.length > 0) return violations
 
   for (const { file, tier } of BROWSER_TSCONFIGS) {
