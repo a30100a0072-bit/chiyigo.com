@@ -71,7 +71,9 @@ type ApiFetchFn = <T = unknown>(
 interface Window {
   apiFetch: ApiFetchFn
   ApiError: typeof ApiError
-  silentRefresh: () => Promise<boolean>
+  // PR-58 commit-2 (H slice)：optional 反映 runtime — api.js 未 load 時 undefined。
+  // caller 必走 typeof window.silentRefresh === 'function' narrow。
+  silentRefresh?: () => Promise<boolean>
   formatApiError: (err: unknown, fallback?: string) => string
   tApiError: (err: unknown, fallback?: string) => string
   tApiErrorData: (data: unknown, fallback?: string) => string

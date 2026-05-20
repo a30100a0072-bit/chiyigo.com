@@ -50,8 +50,12 @@ declare global {
    * login/register/2fa 走 raw fetch 用這個）。回 string，與 tApiError 一致。 */
   function tApiErrorData(data: unknown, fallback?: string): string;
 
-  /** Silent token refresh — returns true on success. */
-  function silentRefresh(): Promise<boolean>;
+  // PR-58 commit-2 (H slice)：移除 bare global `declare function silentRefresh()`。
+  // Runtime 上 silentRefresh 是由 src/js/api.ts IIFE 把 closure-private `_silentRefresh`
+  // 掛到 `window.silentRefresh`；api.js 未 load 時 window.silentRefresh === undefined。
+  // 沒有任何 caller 走 bare global `silentRefresh()`（全走 `window.silentRefresh` /
+  // `win.silentRefresh`），因此移除 bare declaration 不破壞 typing。Window 屬性下方
+  // 改 optional 反映 runtime 真相。
 
   interface Window {
     apiFetch: typeof apiFetch;
@@ -66,7 +70,9 @@ declare global {
     formatApiError: typeof formatApiError;
     tApiError: typeof tApiError;
     tApiErrorData: typeof tApiErrorData;
-    silentRefresh: typeof silentRefresh;
+    /** PR-58 H slice：optional 反映 runtime 真相（api.js 未 load → undefined）；
+     * caller 必走 `typeof window.silentRefresh === 'function'` narrow。 */
+    silentRefresh?: () => Promise<boolean>;
 
     /** Latest X-Request-Id captured by apiFetch; for user error reports. */
     __lastTraceId?: string;
