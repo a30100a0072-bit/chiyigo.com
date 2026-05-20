@@ -127,7 +127,7 @@ PR-38 preflight / inventory（docs-only，不碰 runtime，不 cache-bust）。
 | 階段 | 範圍 | 估 PR | 估 -err | 依賴 | 風險 |
 |---|---|---:|---:|---|---|
 | **Stage 4** | `tests/integration/**` 18 檔 74 errors（純測試檔，rename + extensionless importer）| 3–5 | -74 | 無 | 🟢 低，照 PR-29~37 套路 |
-| **Stage 4.5a** | `tsconfig.browser-classic.json` + `tsconfig.browser-module.json` + `browser-script-manifest.json` + `scripts/build-partials.js` 擴 emit pipeline；**不動現有 public/js 內容** | 2–3 | 0 | 無 | 🟠 中，touch build pipeline，需 resolver matrix smoke |
+| **Stage 4.5a** ✅ | `tsconfig.browser-classic.json` + `tsconfig.browser-module.json` + `src/js/browser-script-manifest.json` + canary fixture + verify pipeline + ratchet governance；**不動 build-partials**（emit 由獨立 verify 驗，4.5b 才整合）；**不動現有 public/js 內容**。實作走 PR-54 + PR-55，HEAD `498af2f`。 | 2（PR-54+55）| 0 | 無 | 🟠 中，touch build pipeline，已過 codex 5 輪 review，雙 gate 雙層防禦 |
 | **Stage 4.5b** | `public/js/{api,sidebar-auth,form-enter}.js` 搬到 `src/js/`；ambient ownership 從 `types/globals.d.ts` 搬到 `src/js/api-globals.d.ts`（不移除 ambient，只搬家）| 1–3 | 0 | 4.5a | **🔴 高**，api.js 是 auth/session 樞紐（[[feedback_iswebclient_origin_source_of_truth]]）|
 | **Stage 5** | 前端低 error 檔（Tier-C/A 共 8–10 檔：login-boot / notify / confirm-dialog / 404 / privacy / about / portfolio / verify-email / bind-email / confirm-delete）| 6–10 | -120 | 4.5a + 4.5b | 🟡 中，照 PR-29~37 套路但須 DOM smoke |
 | **Stage 6.0** | tsconfig.json 拆 references（root → backend + browser-classic + browser-module + tests），完整分流；ratchet `.checkedConfigs` 升 4 個 tsconfig | 1 | 0 | Stage 5 | 🟠 中，但純 config |
@@ -168,21 +168,32 @@ PR-38 preflight / inventory（docs-only，不碰 runtime，不 cache-bust）。
 
 ## 8. 開工順序與起手 checklist
 
-**下一棒順序**（user 拍板後執行）：
+**已完成路徑**（2026-05-20 截止）：
 
-1. **PR-38 = 本文 commit**（docs-only，不 cache-bust，不變 baseline）
-2. **PR-39 起 Stage 4 tests/integration** rename — 3–5 PR；比 functions/ 簡單，照 PR-29~37 套路
-3. **PR-40+ Stage 4.5a** browser pipeline — 投入 2–3 PR；本階段最大不確定性
+1. ✅ **PR-38 preflight**（本文 commit）
+2. ✅ **PR-39~53 Stage 4 tests/integration** — 67 檔全 .ts，baseline 877/222
+3. ✅ **PR-54+55 Stage 4.5a** browser pipeline emit skeleton + canary + ratchet governance（HEAD `498af2f`，baseline 877/225 / 3 tsconfigs）
+
+**下一棒順序**（待 user 拍板）：
+
 4. **Stage 4.5b api.js 收編** — codex 強 review，[[feedback_iswebclient_origin_source_of_truth]] 不能破
-5. **Stage 5 Tier-C 首發**：`login-boot.js`（0 error，最低風險試水溫）
+5. **Stage 5 Tier-C 首發**：`login-boot.js`（0 error，最低風險試水溫；4.5b 可前可後依風險偏好）
 
-**起手前必驗**：
+**起手前必驗（4.5b / Stage 5 共用）**：
 
-- [ ] `npm run typecheck` 確認 errorCount=951 / cleanFiles=204 沒漂
-- [ ] `git log -1` HEAD = `b5028b8`（PR-37 收尾後）
-- [ ] 讀 [[project_js_to_ts_migration]] §1.5b（tsconfig 拆兩階段）+ §1.5f（public/js 收編）+ §1.5e（熱區 glob）
+- [ ] `npm run typecheck:ratchet` → errorCount=877 / cleanFiles=225 / 3 tsconfigs sync
+- [ ] `npm run verify:browser-pipeline` → 雙 gate 全綠
+- [ ] `git log -1` HEAD = `498af2f`（Stage 4.5a 收尾，PR-55 r2 cache-bust）
+- [ ] 讀 [[project_js_to_ts_stage45a_plan]]（PR-54+55 設計與 codex 5 輪 review 全紀錄）
+- [ ] 讀 [[project_js_to_ts_migration]] §1.5b/§1.5e/§1.5f
 - [ ] 讀 `docs/JS_TO_TS_MIGRATION_PLAYBOOK.md`（PR-34 收進 repo 的 6 節紀律）
 - [ ] **F-2 金流期間動 dashboard.js 鎖最小 .js 修，不順手遷**（migration plan §紀律 §2 r3 刪了「順手遷」條款）
+
+**Stage 5 加 production entry 紀律**（PR-55 r1/r2 codex 立的不變式）：
+
+- manifest.classic / module push 新 entry **同時** 改對應 tsconfig.include；兩者 string 必須 byte-identical（normalize 折疊不算）
+- entry 路徑必須 `src/js/[^/].*\.ts$`、canonical POSIX、unique、真為 regular file
+- ratchet + verify 雙層擋；任一層紅就停下查 manifest ↔ tsconfig drift
 
 **Stage 4 (tests/) PR 切法建議**（4 PR 鏈）：
 
@@ -200,6 +211,7 @@ PR-38 preflight / inventory（docs-only，不碰 runtime，不 cache-bust）。
 ## 相關 memory / docs
 
 - [[project_js_to_ts_migration]] — 主計畫；§1.5b tsconfig 拆 / §1.5e 熱區 / §1.5f public/js 收編
+- [[project_js_to_ts_stage45a_plan]] — Stage 4.5a 開工計畫 + PR-54/55 5 輪 codex review 全紀錄
 - [[project_js_to_ts_stage3_non_auth_plan]] — Stage 3 functions/ 非 auth 收尾參考
 - [[feedback_src_vs_public_build]] — src/ vs public/ 邊界
 - [[feedback_cache_bust_versioning]] / [[feedback_cache_bust_build_order_trap]] — cache-bust 紀律
