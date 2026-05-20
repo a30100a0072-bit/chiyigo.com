@@ -49,7 +49,7 @@ function makeEnv(overrides = {}) {
   }
 }
 
-async function runCron(overrides) {
+async function runCron(overrides: Record<string, unknown> = {}) {
   const r = await cronArchive({ request: makeRequest(), env: makeEnv(overrides) })
   expect(r.status).toBeLessThan(500)
   return await r.json()

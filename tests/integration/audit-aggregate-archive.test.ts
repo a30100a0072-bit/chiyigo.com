@@ -44,7 +44,7 @@ function makeEnv(overrides = {}) {
   }
 }
 
-async function runTelemetry(over) {
+async function runTelemetry(over: Record<string, unknown> = {}) {
   const r = await cronTelemetry({
     request: makeRequest('/api/admin/cron/audit-aggregate-archive-telemetry'),
     env: makeEnv(over),
@@ -52,7 +52,7 @@ async function runTelemetry(over) {
   return { status: r.status, body: await r.json() }
 }
 
-async function runDebug(over) {
+async function runDebug(over: Record<string, unknown> = {}) {
   const r = await cronDebug({
     request: makeRequest('/api/admin/cron/audit-aggregate-archive-debug'),
     env: makeEnv(over),
