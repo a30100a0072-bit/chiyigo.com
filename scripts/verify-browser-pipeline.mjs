@@ -180,6 +180,13 @@ function main() {
   validateManifestEntry(manifest.canary.module, 'manifest.canary.module', MANIFEST_CANARY_PATTERN, seen)
   console.log(`✓ manifest 結構 OK（classic=${manifest.classic.length} module=${manifest.module.length} canary=2，全 entry 驗 type/POSIX/unique/存在/pattern）`)
 
+  // PR-56 (Stage 4.5b-1)：module lane 未開 prod pipeline；ratchet 規則 E 對應只放行 manifest.classic 新增 src/js/*.ts。
+  // 此 gate 防止未來 PR「悄悄」push 進 manifest.module 拿到 ratchet bypass 但 build 不會 emit / verify 不會比對 committed artifact。
+  // 解除條件：新增 tsconfig.browser-module.prod.json + build-partials module prod emit + 此檔 module temp/committed compare loop。
+  if (manifest.module.length > 0) {
+    fail(`manifest.module production entries 未支援（Stage 4.5b-1 僅收編 classic lane；module prod build / verify 待 future PR 補 tsconfig.browser-module.prod.json + build emit + temp/committed artifact compare；ratchet 規則 E 也對應 enforce）：${JSON.stringify(manifest.module)}`)
+  }
+
   // 2. manifest ↔ tsconfig.include 同步檢查（codex PR-54 r1 medium）
   //    PR-54 內 manifest.classic/module 兩條 production 陣列都空，tsconfig.include 只含 canary；
   //    Stage 5+ 加 production 入口時 include 必須 == [...production, canary]（單一 source of truth）。

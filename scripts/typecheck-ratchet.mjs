@@ -630,9 +630,10 @@ function checkNewSourceFiles(added) {
     if (Array.isArray(manifest.classic)) {
       for (const e of manifest.classic) if (typeof e === 'string') manifestSrcSet.add(e)
     }
-    if (Array.isArray(manifest.module)) {
-      for (const e of manifest.module) if (typeof e === 'string') manifestSrcSet.add(e)
-    }
+    // PR-56 (Stage 4.5b-1)：module lane 暫未開 prod pipeline（無 tsconfig.browser-module.prod.json /
+    // build emit / temp-vs-committed verify），故 manifest.module **不**放行新增 src/js/*.ts。
+    // verify-browser-pipeline.mjs 也對應 enforce `manifest.module.length === 0` 雙層防禦。
+    // 未來 PR 補齊 module prod 三件套後同步開放此處 + verify。
   } catch {
     // manifest 壞 / 缺 → checkRequiredFiles + checkManifestSync 會獨立 fail，這裡保守當空集
   }
@@ -646,7 +647,7 @@ function checkNewSourceFiles(added) {
     }
     if (/^src\/js\/.*\.ts$/.test(norm)) {
       if (manifestSrcSet.has(norm)) continue
-      violations.push({ file: norm, reason: '新增 src/js/*.ts 違反規則 E：未列入 src/js/browser-script-manifest.json classic/module 陣列；manifest 才是 browser pipeline 收編的 source of truth' })
+      violations.push({ file: norm, reason: '新增 src/js/*.ts 違反規則 E：未列入 src/js/browser-script-manifest.json classic 陣列（Stage 4.5b-1 起 manifest.classic 為唯一放行集；module lane prod pipeline 未建，verify 端對應 enforce manifest.module.length === 0）' })
     }
   }
   return violations
