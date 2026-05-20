@@ -57,6 +57,18 @@
  *        skip → 「弱化 tsconfig + 同 PR 跑 baseline:update」繞過所有 ratchet。改 live
  *        read 後 BASE-D-tsconfig 永遠 active，不再有 bootstrap window。
  *
+ * r8 hardening（Stage 4.5b-3 收尾，2026-05-20，PR-58 codex r1 critical risk 後續修補）：
+ *   B'' — per-file error count enforcement：對既存於 baseline.errorsByFile 的 error 檔，
+ *        current 計數上升即 exit 1。填補 B' 盲點：B' 只擋「baseline 無此檔但 current 有」
+ *        類新增 error 檔；若檔早在 baseline（如 dashboard.js）+ current 計數從 N 升 N+k，
+ *        B' 完全不觸發。PR-58 commit-1 引入 dashboard.js 4 個新 TS2552 但
+ *        errorCount aggregate -1（其他位置 -5+4 = -1）→ 規則 A 過、B' 也過，
+ *        靠 codex r1 人工 review 才抓到。B'' 機械化抓 per-file 增量。
+ *   BASE-B'' — base ref baseline 同層守備：防同 PR 把 baseline.errorsByFile[dashboard.js]
+ *        計數調高來繞過 B''；base ref 上 baseline 無此調動，比對仍 fail（與 BASE-B' 同模式）。
+ *   rename 例外保留：current[Y.ts] vs baseline[X.js] 走 renameMap。
+ *   baseline 缺 errorsByFile（bootstrap）→ 跳過該層比對。
+ *
  * PR-55 hardening（Stage 4.5a 治理收尾，2026-05-20，承接 PR-54 emit skeleton）：
  *   STRUCT — REQUIRED_FILES 不可刪 invariant：canary fixtures + manifest 三檔
  *        必須存在；所有 mode（含 --report / --update）missing 即 exit 1，
@@ -587,6 +599,40 @@ function findNewErrorFiles(currentErrors, baselineErrors, renameMap) {
   return result
 }
 
+function findIncreasedErrorFiles(currentErrors, baselineErrors, renameMap) {
+  // r8（PR-58 codex r1 critical risk 後續）：規則 B'' per-file error count enforcement。
+  //
+  // B' 只擋「新增 error 檔」（baseline 無 entry → current 出現）；既存 error 檔的計數上升
+  // 完全不觸發 B'。PR-58 commit-1 引入 dashboard.js 4 個新 TS2552（原本 baseline 已有
+  // dashboard.js entry 多筆），靠 codex r1 人工 review 才抓到。本函數對 current ∩ baseline
+  // 的 error 檔逐檔比計數，current[f] > baseline[f] → 紀錄 violation。
+  //
+  // rename：current[Y.ts] 若在 baseline 找不到（new entry），但 renameMap.get(Y.ts) = X.js
+  // 且 baseline[X.js] 存在 → 視為合法轉移，比對 current[Y.ts] vs baseline[X.js]。
+  //
+  // baseline 缺 errorsByFile（bootstrap）→ 回 null 跳過該層；
+  // genuinely new file（不在 baseline 也非 rename）→ 不報，由 B' 抓。
+  if (!baselineErrors || typeof baselineErrors !== 'object') return null
+  const violations = []
+  for (const f of Object.keys(currentErrors)) {
+    const currentCount = currentErrors[f]
+    let baselineCount = baselineErrors[f]
+    let mappedFrom = null
+    if (baselineCount === undefined) {
+      const oldPath = renameMap.get(f)
+      if (oldPath && oldPath in baselineErrors) {
+        baselineCount = baselineErrors[oldPath]
+        mappedFrom = oldPath
+      }
+    }
+    if (baselineCount === undefined) continue
+    if (currentCount > baselineCount) {
+      violations.push({ file: f, current: currentCount, baseline: baselineCount, mappedFrom })
+    }
+  }
+  return violations
+}
+
 function checkDiffSuppressions(unifiedDiff, addedFiles = new Set()) {
   const violations = []
   let currentFile = null
@@ -792,6 +838,25 @@ function main() {
     const newVsBase = findNewErrorFiles(current.errorsByFile, baseBaseline.errorsByFile, renameMap)
     if (newVsBase && newVsBase.length > 0) {
       failures.push(`[BASE-B'] 新增 error 檔（base ref baseline 無對應；同 PR 改 baseline 也擋）：${newVsBase.join(', ')}`)
+    }
+  }
+
+  // 規則 B''（r8，PR-58 codex r1 後續）：per-file error 計數上升 → fail。
+  // B' 不抓「既存 error 檔的計數上升」；本規則補上。雙層防禦同 B'/BASE-B' 模式。
+  const incrVsBranch = findIncreasedErrorFiles(current.errorsByFile, baseline.errorsByFile, renameMap)
+  if (incrVsBranch && incrVsBranch.length > 0) {
+    for (const v of incrVsBranch) {
+      const fromStr = v.mappedFrom ? ` (renamed from ${v.mappedFrom})` : ''
+      failures.push(`[B''] ${v.file}${fromStr} error 計數上升：${v.baseline} → ${v.current} (+${v.current - v.baseline})`)
+    }
+  }
+  if (baseBaseline) {
+    const incrVsBase = findIncreasedErrorFiles(current.errorsByFile, baseBaseline.errorsByFile, renameMap)
+    if (incrVsBase && incrVsBase.length > 0) {
+      for (const v of incrVsBase) {
+        const fromStr = v.mappedFrom ? ` (renamed from ${v.mappedFrom})` : ''
+        failures.push(`[BASE-B''] ${v.file}${fromStr} error 計數上升（base ref baseline；同 PR 改 baseline 也擋）：${v.baseline} → ${v.current} (+${v.current - v.baseline})`)
+      }
     }
   }
 
