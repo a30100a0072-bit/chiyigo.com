@@ -14,15 +14,10 @@
  * 由 tsconfig.browser-classic.prod.json + build-partials 走 tsc emit
  * 回 public/js/sidebar-auth.js。classic IIFE shape；不引入 ESM 結構。
  */
-// Script-mode global augmentation：本檔不引入 ESM 結構（IIFE 包裝），top-level
-// `interface Window` 直接 merge 進全域 Window。同時與 types/globals.d.ts 的
-// declare global 宣告同 signature，root tsconfig 載入時亦 compatible 合併。
-// canary/prod tsconfig 不載 types/globals.d.ts → 本檔內宣告即唯一 source。
-interface Window {
-  silentRefresh: () => Promise<boolean>
-  __chiyigoMemoryDeviceUuid?: string
-}
-
+// PR-58 (Stage 4.5b-3)：原 PR-57 本檔的 `interface Window { silentRefresh, __chiyigoMemoryDeviceUuid }`
+// 全域 augmentation 已搬到 src/js/api.ts top-level（api.ts 進 manifest.classic 後同 canary/prod
+// 編譯單元載入，augmentation 對本檔自動可見）；root tsconfig 仍由 types/globals.d.ts 提供。
+// 此處不再內嵌 augmentation，避免雙處維護。
 type AuthBroadcast =
   | { type: 'login'; token: string }
   | { type: 'logout' }

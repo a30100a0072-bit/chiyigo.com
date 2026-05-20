@@ -1,8 +1,8 @@
 {
-  "baselineSha": "67e3ef9",
-  "cleanFiles": 227,
+  "baselineSha": "672ad30",
+  "cleanFiles": 228,
   "createdAt": "2026-05-20",
-  "errorCount": 877,
+  "errorCount": 876,
   "errorFiles": 27,
   "errorsByFile": {
     "src/js/404.js": 11,
@@ -13,7 +13,7 @@
     "src/js/admin-refund-requests.js": 25,
     "src/js/admin-requisitions.js": 54,
     "src/js/ai-assistant.js": 27,
-    "src/js/auth-ui.js": 45,
+    "src/js/auth-ui.js": 44,
     "src/js/bind-email.js": 7,
     "src/js/case-platform.js": 38,
     "src/js/concert-system.js": 21,
@@ -33,9 +33,9 @@
     "src/js/reset-password.js": 18,
     "src/js/verify-email.js": 6
   },
-  "fileErrors": 877,
+  "fileErrors": 876,
   "globalErrors": 0,
-  "sourceFilesTotal": 254,
+  "sourceFilesTotal": 255,
   "stage": 1,
   "tsconfigSnapshot": {
     "tsconfig.browser-classic.json": {
@@ -58,6 +58,7 @@
       "exclude": [],
       "include": [
         "scripts/fixtures/pipeline-canary-classic.ts",
+        "src/js/api.ts",
         "src/js/form-enter.ts",
         "src/js/sidebar-auth.ts"
       ]
@@ -81,6 +82,7 @@
       },
       "exclude": [],
       "include": [
+        "src/js/api.ts",
         "src/js/form-enter.ts",
         "src/js/sidebar-auth.ts"
       ]

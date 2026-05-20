@@ -29,18 +29,14 @@ interface ApiErrorPayload {
 }
 
 declare global {
-  class ApiError extends Error {
-    constructor(payload: ApiErrorPayload);
-    status: number;
-    traceId: string | null;
-    code: string | null;
-    body: unknown;
-  }
+  // PR-58 (Stage 4.5b-3)：`ApiError` 的真實 class 宣告搬到 src/js/api.ts top-level
+  // （script-mode 全域 class），避免 ambient `declare class` 與真實 class 重複
+  // identifier。此處不再宣告；callers `e instanceof ApiError` 由 api.ts 全域 class 提供。
 
-  /** Wrapper around fetch — see public/js/api.js header for full contract. */
+  /** Wrapper around fetch — see src/js/api.ts header for full contract. */
   function apiFetch<T = unknown>(
     url: string,
-    opts?: RequestInit & { skipAuthRetry?: boolean },
+    opts?: RequestInit & { skipRefresh?: boolean },
   ): Promise<T>;
 
   /** Format an ApiError (or any thrown value) into a user-facing string. */
@@ -49,15 +45,24 @@ declare global {
   /** i18n-aware ApiError formatter — returns localised message. */
   function tApiError(err: unknown, fallback?: string): string;
 
-  /** Same as tApiError but returns { message, traceId } structured payload. */
-  function tApiErrorData(err: unknown): { message: string; traceId: string | null };
+  /** 對 raw fetch（非 apiFetch）後拿到的 { error, code, ... } 物件做 code-based 在地化；
+   * 跟 tApiError 同 mapping 但接 plain object 而非 ApiError instance（auth-ui.js 的
+   * login/register/2fa 走 raw fetch 用這個）。回 string，與 tApiError 一致。 */
+  function tApiErrorData(data: unknown, fallback?: string): string;
 
   /** Silent token refresh — returns true on success. */
   function silentRefresh(): Promise<boolean>;
 
   interface Window {
     apiFetch: typeof apiFetch;
-    ApiError: typeof ApiError;
+    /** PR-58: ApiError class 由 src/js/api.ts top-level 宣告（script-mode 全域）；
+     * 結構性 typed 避免依賴已搬走的 `declare class ApiError`。 */
+    ApiError: new (payload: ApiErrorPayload) => Error & {
+      status: number;
+      traceId: string | null;
+      code: string | null;
+      body: unknown;
+    };
     formatApiError: typeof formatApiError;
     tApiError: typeof tApiError;
     tApiErrorData: typeof tApiErrorData;
