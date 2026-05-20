@@ -352,12 +352,28 @@ function validateManifestEntry(entry, label, pattern, seen, violations) {
   if (entry.length === 0) { violations.push(`${label} 為空字串`); return }
   if (entry.includes('\\')) violations.push(`${label} 含反斜線（必須 POSIX 路徑）：${entry}`)
   if (entry.startsWith('/')) violations.push(`${label} 開頭 "/"（必須相對路徑）：${entry}`)
-  if (/(^|\/)\.\.?(\/|$)/.test(entry)) violations.push(`${label} 含 "." 或 ".." 區段：${entry}`)
+  // PR-55 r2（codex 拍板 2026-05-20）：拒絕非 canonical POSIX 字串。
+  //   normalize 折疊 "./" / "../" / 重複斜線；不等於原字串 = 含這些變體 → 兩條 manifest
+  //   entry 帶 "src//js/foo.ts" 可能在某些 ts 解析下視同 "src/js/foo.ts"，但 string
+  //   equality 比對 tsconfig.include 會偽不同步 → 拒於門外比寬鬆放行更安全
+  if (path.posix.normalize(entry) !== entry) {
+    violations.push(`${label} 非 canonical POSIX 路徑（含 "./" "../" 或重複斜線等變體）：${entry}`)
+  }
   if (!pattern.test(entry)) violations.push(`${label} 不符 pattern ${pattern}：${entry}`)
   if (seen.has(entry)) violations.push(`${label} 在 manifest 內重複（跨 classic/module/canary 不可重）：${entry}`)
   seen.add(entry)
-  if (!fs.existsSync(path.join(ROOT, entry))) {
+  // PR-55 r2（codex 拍板 2026-05-20）：existsSync 對 directory 也回 true → 用 statSync
+  //   .isFile() 鎖 regular file（含 symlink target 為 file 的情況；symlink 本體不算
+  //   regular file 但 statSync follow symlink 後檢查 target type，合 source-file 語意）
+  let stat
+  try {
+    stat = fs.statSync(path.join(ROOT, entry))
+  } catch {
     violations.push(`${label} 檔案不存在（TS 對不存在 include 是 silent ignore，會偽綠）：${entry}`)
+    return
+  }
+  if (!stat.isFile()) {
+    violations.push(`${label} 不是 regular file（是 directory / special / broken symlink；TS 對 directory include 是 silent ignore）：${entry}`)
   }
 }
 

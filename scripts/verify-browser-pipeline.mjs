@@ -100,12 +100,22 @@ function validateManifestEntry(entry, label, pattern, seen) {
   if (entry.length === 0) fail(`${label} 為空字串`)
   if (entry.includes('\\')) fail(`${label} 含反斜線（必須 POSIX 路徑）：${entry}`)
   if (entry.startsWith('/')) fail(`${label} 開頭 "/"（必須相對路徑）：${entry}`)
-  if (/(^|\/)\.\.?(\/|$)/.test(entry)) fail(`${label} 含 "." 或 ".." 區段：${entry}`)
+  // PR-55 r2（codex 拍板 2026-05-20）：canonical POSIX 字串檢查
+  if (path.posix.normalize(entry) !== entry) {
+    fail(`${label} 非 canonical POSIX 路徑（含 "./" "../" 或重複斜線等變體）：${entry}`)
+  }
   if (!pattern.test(entry)) fail(`${label} 不符 pattern ${pattern}：${entry}`)
   if (seen.has(entry)) fail(`${label} 在 manifest 內重複（跨 classic/module/canary 不可重）：${entry}`)
   seen.add(entry)
-  if (!fs.existsSync(path.join(ROOT, entry))) {
+  // PR-55 r2（codex 拍板 2026-05-20）：existsSync 對 directory 也 true → statSync().isFile()
+  let stat
+  try {
+    stat = fs.statSync(path.join(ROOT, entry))
+  } catch {
     fail(`${label} 檔案不存在（TS 對不存在 include 是 silent ignore）：${entry}`)
+  }
+  if (!stat.isFile()) {
+    fail(`${label} 不是 regular file（是 directory / special / broken symlink；TS 對 directory include 是 silent ignore）：${entry}`)
   }
 }
 
