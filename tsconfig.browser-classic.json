@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "none",
+    "moduleResolution": "node10",
+    "moduleDetection": "auto",
+    "isolatedModules": false,
+    "resolveJsonModule": false,
+    "noEmit": false,
+    "outDir": ".tmp-pipeline-canary/classic",
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["scripts/fixtures/pipeline-canary-classic.ts"]
+}

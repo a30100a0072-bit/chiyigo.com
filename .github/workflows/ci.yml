@@ -34,6 +34,11 @@ jobs:
           RATCHET_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
 
+      - name: Verify browser pipeline (Stage 4.5a canary)
+        # 驗 tsconfig.browser-classic.json + tsconfig.browser-module.json 真能 emit ；
+        # classic 不插 ESM 結構（防 <script> SyntaxError），module 含 export 形狀。
+        run: npm run verify:browser-pipeline
+
       - name: Run unit tests with coverage (functions/utils ≥ 80%)
         run: npm run test:cov
 

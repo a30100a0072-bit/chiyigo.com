@@ -1,0 +1,9 @@
+{
+  "_comment": "Stage 4.5a browser pipeline manifest — single source of truth for which src/js/*.ts entries belong to classic <script> vs <script type='module'> load paths. PR-54 內 classic/module 兩條 production 陣列都空；canary fixture 兩條留作 CI pipeline round-trip 驗證。Stage 5 起把 src/js/*.ts 入口加進對應陣列；同步更新 tsconfig.browser-classic.json / tsconfig.browser-module.json 的 include 欄位。PR-55 ratchet 升級會加 invariant 鎖 manifest ↔ tsconfig.include 同步。",
+  "classic": [],
+  "module": [],
+  "canary": {
+    "classic": "scripts/fixtures/pipeline-canary-classic.ts",
+    "module": "scripts/fixtures/pipeline-canary-module.ts"
+  }
+}

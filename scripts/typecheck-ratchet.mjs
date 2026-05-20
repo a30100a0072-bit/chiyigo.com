@@ -74,7 +74,11 @@ const args = new Set(process.argv.slice(2))
 const MODE_UPDATE = args.has('--update')
 const MODE_REPORT = args.has('--report')
 const SELF_FILE = 'scripts/typecheck-ratchet.mjs'
-const NEW_JS_ALLOWLIST = new Set([SELF_FILE])
+// NEW_JS_ALLOWLIST：governance / pipeline verification infrastructure（非 application source）
+//   - SELF_FILE：ratchet script 本身
+//   - scripts/verify-browser-pipeline.mjs：Stage 4.5a browser pipeline canary verifier
+//     （PR-54 加入；不改規則 A/B/C/D/E 判定語意，僅白名單新 verifier 與 ratchet 同類）
+const NEW_JS_ALLOWLIST = new Set([SELF_FILE, 'scripts/verify-browser-pipeline.mjs'])
 
 // ─── git helper（全 execFileSync 防 shell 注入；預設 silence stderr） ──
 
