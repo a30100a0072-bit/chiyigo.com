@@ -54,7 +54,7 @@ async function tokenFor(userId, role = 'admin', extra = {}) {
 }
 
 function reqWith(token, url, body = {}) {
-  const headers = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers.Authorization = `Bearer ${token}`
   return new Request(url, { method: 'POST', headers, body: JSON.stringify(body) })
 }

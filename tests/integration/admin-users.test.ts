@@ -65,7 +65,7 @@ function listReq(token, query = '') {
 }
 
 function banReq(token, id, body = {}) {
-  const headers = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers.Authorization = `Bearer ${token}`
   return new Request(`http://x/api/admin/users/${id}/ban`, {
     method: 'POST', headers, body: JSON.stringify(body),
@@ -73,7 +73,7 @@ function banReq(token, id, body = {}) {
 }
 
 function unbanReq(token, id) {
-  const headers = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (token) headers.Authorization = `Bearer ${token}`
   return new Request(`http://x/api/admin/users/${id}/unban`, {
     method: 'POST', headers, body: '{}',

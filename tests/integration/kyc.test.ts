@@ -105,7 +105,7 @@ describe('utils/kyc — requireKyc gate', () => {
   beforeAll(async () => { await ensureJwtKeys() })
   beforeEach(async () => { await resetDb() })
 
-  async function callGate(userId, opts) {
+  async function callGate(userId, opts?: Parameters<typeof requireKyc>[2]) {
     const tok = await userToken(userId)
     return requireKyc(bearer('GET', 'http://x/', tok), env, opts)
   }
