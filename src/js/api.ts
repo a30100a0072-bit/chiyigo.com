@@ -18,14 +18,23 @@
  *
  * 漸進遷移：頁面原有 fetch 不必馬上換，需要錯誤可追溯時再改用 apiFetch。
  *
- * Stage 4.5b-3 (PR-58)：自 public/js/api.js 收編進 src/js/，由
+ * Stage 4.5b-3 (PR-58 r1，codex Reject fix)：自 public/js/api.js 收編進 src/js/，由
  * tsconfig.browser-classic.prod.json + build-partials 走 tsc emit 回 public/js/api.js。
- * classic IIFE shape；不引入 ESM。ApiError class 移到 top-level（script-mode 全域），
- * 取代原 types/globals.d.ts 的 `declare class ApiError`，避免 ambient 與真實宣告衝突。
- * 其餘 surface（apiFetch / formatApiError / tApiError / tApiErrorData）仍 IIFE-private，
- * 由 window.X = X 對外暴露；globals.d.ts 保留它們的 `declare function` 給 dashboard.js
- * 等 bare global caller。silentRefresh 為 optional 反映 runtime（api.js 未 load 即 undefined），
- * caller 必走 `typeof window.silentRefresh === 'function'` narrow。
+ * classic IIFE shape；不引入 ESM。
+ *
+ * 設計：
+ *   - root tsconfig.json `moduleDetection: "force"` 把 api.ts 當 module → top-level
+ *     `class ApiError` 是 module-scoped（**不**註冊全域），不與 types/globals.d.ts 的
+ *     ambient `declare class ApiError` 衝突（commit-1 顧慮的「duplicate identifier」
+ *     在 force 模式下不成立 — codex r1 critical risk 揭示）。
+ *   - globals.d.ts 的 `declare class ApiError` 為 root tsconfig 下 dashboard.js 等
+ *     bare `instanceof ApiError` caller 的 typing 來源；本檔的 top-level class 是
+ *     module-internal 實作 + 給 canary/prod tsconfig（不載 globals.d.ts）的 Window
+ *     surface 用 `typeof ApiError`。
+ *   - 其餘 surface（apiFetch / formatApiError / tApiError / tApiErrorData / silentRefresh）
+ *     IIFE-private + `window.X = X` 對外。globals.d.ts 保留它們的 declare function。
+ *   - silentRefresh 為 optional 反映 runtime（api.js 未 load 即 undefined）；
+ *     caller 必走 `typeof window.silentRefresh === 'function'` narrow。
  */
 interface ApiErrorPayload {
   status: number
@@ -62,18 +71,12 @@ type ApiFetchFn = <T = unknown>(
   init?: RequestInit & { skipRefresh?: boolean }
 ) => Promise<T>
 
-// Script-mode top-level Window augmentation：本檔 IIFE 不引入 ESM，top-level
-// `interface Window` 直接 merge 進全域 Window。types/globals.d.ts 的 declare global
-// 同 signature 並存（同 PR commit-1 移除 globals.d.ts 的 declare class ApiError —
-// 避免 ambient class 與本檔 top-level real class 重複 identifier）；其他 declare function
-// 仍保留給 dashboard.js / auth-ui.js 等 bare global caller。canary/prod tsconfig 不載
-// types/globals.d.ts，本檔的 augmentation 即為 manifest.classic 內其他 entry
-// （form-enter / sidebar-auth）的唯一 source。
+// Top-level Window augmentation 給 canary/prod tsconfig（不載 types/globals.d.ts）用；
+// 同 PR 其他 classic entry 透過此 interface 看到 api.ts 對外暴露的 surface。root tsconfig
+// 載入時，與 globals.d.ts 的同名 interface 合併（同 signature 兼容）。
 interface Window {
   apiFetch: ApiFetchFn
   ApiError: typeof ApiError
-  // PR-58 commit-2 (H slice)：optional 反映 runtime — api.js 未 load 時 undefined。
-  // caller 必走 typeof window.silentRefresh === 'function' narrow。
   silentRefresh?: () => Promise<boolean>
   formatApiError: (err: unknown, fallback?: string) => string
   tApiError: (err: unknown, fallback?: string) => string

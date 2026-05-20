@@ -29,9 +29,21 @@ interface ApiErrorPayload {
 }
 
 declare global {
-  // PR-58 (Stage 4.5b-3)：`ApiError` 的真實 class 宣告搬到 src/js/api.ts top-level
-  // （script-mode 全域 class），避免 ambient `declare class` 與真實 class 重複
-  // identifier。此處不再宣告；callers `e instanceof ApiError` 由 api.ts 全域 class 提供。
+  // PR-58 r1 (Stage 4.5b-3，codex Reject fix)：恢復 bare global `declare class ApiError`。
+  // Why：root tsconfig.json `moduleDetection: "force"` 把 src/js/api.ts 當 module，
+  //      top-level `class ApiError` 不會註冊到全域 → dashboard.js 等 bare `instanceof ApiError`
+  //      caller 失去 typing（codex r1 critical risk）。
+  // Runtime：實際 class 仍由 src/js/api.ts IIFE-private 定義 + `window.ApiError = ApiError`
+  //         掛到 window；browser 中 window === globalThis，bare `ApiError` 自然解析為
+  //         window.ApiError。ambient `declare class` 與 IIFE-local class 不重複 identifier
+  //         （IIFE 內 class 不出 closure），故無原 PR-58 commit-1 顧慮的 duplicate identifier。
+  class ApiError extends Error {
+    constructor(payload: ApiErrorPayload);
+    status: number;
+    traceId: string | null;
+    code: string | null;
+    body: unknown;
+  }
 
   /** Wrapper around fetch — see src/js/api.ts header for full contract. */
   function apiFetch<T = unknown>(
@@ -59,14 +71,7 @@ declare global {
 
   interface Window {
     apiFetch: typeof apiFetch;
-    /** PR-58: ApiError class 由 src/js/api.ts top-level 宣告（script-mode 全域）；
-     * 結構性 typed 避免依賴已搬走的 `declare class ApiError`。 */
-    ApiError: new (payload: ApiErrorPayload) => Error & {
-      status: number;
-      traceId: string | null;
-      code: string | null;
-      body: unknown;
-    };
+    ApiError: typeof ApiError;
     formatApiError: typeof formatApiError;
     tApiError: typeof tApiError;
     tApiErrorData: typeof tApiErrorData;
