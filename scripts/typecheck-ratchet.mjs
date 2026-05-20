@@ -64,10 +64,26 @@
  *        B' 完全不觸發。PR-58 commit-1 引入 dashboard.js 4 個新 TS2552 但
  *        errorCount aggregate -1（其他位置 -5+4 = -1）→ 規則 A 過、B' 也過，
  *        靠 codex r1 人工 review 才抓到。B'' 機械化抓 per-file 增量。
- *   BASE-B'' — base ref baseline 同層守備：防同 PR 把 baseline.errorsByFile[dashboard.js]
- *        計數調高來繞過 B''；base ref 上 baseline 無此調動，比對仍 fail（與 BASE-B' 同模式）。
+ *   BASE-B'' — base ref baseline 同層守備：current vs baseBaseline 確保未跨層繞過。
  *   rename 例外保留：current[Y.ts] vs baseline[X.js] 走 renameMap。
  *   baseline 缺 errorsByFile（bootstrap）→ 跳過該層比對。
+ *
+ * r8 r1 hardening（codex r1 Reject 後續，2026-05-20）：補上 baseline-vs-base 層守備。
+ *   原 r8 的 BASE-B'' 只比 current vs baseBaseline，沒擋「PR 不改 source、只改 branch
+ *   baseline 把某檔計數墊高 / 新增 entry」的攻擊 — pre-allocate per-file budget 給後續 PR 用。
+ *   舉例：dashboard.js base=228, current=228，PR 把 branch baseline 改 232 → B''
+ *   (current 228 < branch 232 → 過)、BASE-B'' (current 228 = base 228 → 過)、A/B aggregate
+ *   配合改 errorCount/fileErrors 同步 +4 也都過。合進 main 後 base baseline 變 232，
+ *   下個 PR 就可悄悄塞 +4 errors。
+ *   BASE-EBF — branch baseline.errorsByFile 不得相對 base baseline 走弱：
+ *        per-file 計數不得高於 base / 不得新增 entry（rename 例外經 renameMap.get 對 oldPath）。
+ *        合法 per-file 增加（罕見大幅 refactor）必走人工 governance review override。
+ *   SCHEMA — baseline 內部一致性：
+ *        errorsByFile 所有 count 為 non-negative integer；
+ *        sum(errorsByFile.values()) === fileErrors；
+ *        Object.keys(errorsByFile).length === errorFiles。
+ *        防止「shuffle budget」（改 errorsByFile 但不同步 fileErrors / errorFiles 對齊）。
+ *        branch baseline 與 base baseline 兩處都驗。
  *
  * PR-55 hardening（Stage 4.5a 治理收尾，2026-05-20，承接 PR-54 emit skeleton）：
  *   STRUCT — REQUIRED_FILES 不可刪 invariant：canary fixtures + manifest 三檔
@@ -599,6 +615,78 @@ function findNewErrorFiles(currentErrors, baselineErrors, renameMap) {
   return result
 }
 
+function compareBaselineEbfVsBase(branchBaseline, baseBaseline, renameMap) {
+  // r8 r1（codex Reject fix）：branch baseline.errorsByFile 不得相對 base baseline 走弱。
+  // 防 PR 不改 source、只改 branch baseline 預 pre-allocate per-file budget：
+  //   case A — branch.errorsByFile[f] > base.errorsByFile[f]：per-file 計數升高
+  //   case B — branch.errorsByFile[f] 存在但 base.errorsByFile 沒有 + 不是合法 rename：
+  //           新增 baseline entry（攻擊 pre-allocate budget；或 author 真要走 governance override）
+  // rename：branch.errorsByFile[Y.ts] 經 renameMap.get(Y.ts)=X.js 對應 base.errorsByFile[X.js]
+  // bootstrap：baseBaseline 缺 errorsByFile → 跳過
+  const violations = []
+  const branchEbf = branchBaseline.errorsByFile || {}
+  const baseEbf = baseBaseline.errorsByFile
+  if (!baseEbf || typeof baseEbf !== 'object') return violations
+  for (const f of Object.keys(branchEbf)) {
+    const branchCount = branchEbf[f]
+    let baseCount = baseEbf[f]
+    let mappedFrom = null
+    if (baseCount === undefined) {
+      const oldPath = renameMap.get(f)
+      if (oldPath && oldPath in baseEbf) {
+        baseCount = baseEbf[oldPath]
+        mappedFrom = oldPath
+      }
+    }
+    if (baseCount === undefined) {
+      violations.push({ kind: 'new', file: f, branch: branchCount })
+      continue
+    }
+    if (branchCount > baseCount) {
+      violations.push({ kind: 'increase', file: f, branch: branchCount, base: baseCount, mappedFrom })
+    }
+  }
+  return violations
+}
+
+function validateBaselineSchema(baseline, label) {
+  // r8 r1（codex Reject fix）：baseline 內部結構一致性。
+  //   - errorsByFile 所有 count 為 non-negative integer
+  //   - sum(errorsByFile.values()) === fileErrors
+  //   - Object.keys(errorsByFile).length === errorFiles
+  // 防 shuffle budget（改 errorsByFile 但不同步 fileErrors / errorFiles）。
+  const violations = []
+  if (!baseline || typeof baseline !== 'object') {
+    violations.push(`[SCHEMA-${label}] baseline 不是 object`)
+    return violations
+  }
+  const ebf = baseline.errorsByFile
+  if (ebf === undefined) {
+    // bootstrap：很舊的 baseline 沒此欄位 → 跳過 schema 驗（其他 rule 也 bootstrap-skip）
+    return violations
+  }
+  if (!ebf || typeof ebf !== 'object' || Array.isArray(ebf)) {
+    violations.push(`[SCHEMA-${label}] baseline.errorsByFile 不是 plain object`)
+    return violations
+  }
+  let sum = 0
+  for (const [f, n] of Object.entries(ebf)) {
+    if (!Number.isInteger(n) || n < 0) {
+      violations.push(`[SCHEMA-${label}] errorsByFile[${f}] 不是 non-negative integer：${JSON.stringify(n)}`)
+      continue
+    }
+    sum += n
+  }
+  if (typeof baseline.fileErrors === 'number' && sum !== baseline.fileErrors) {
+    violations.push(`[SCHEMA-${label}] sum(errorsByFile)=${sum} 與 fileErrors=${baseline.fileErrors} 不符`)
+  }
+  const keyCount = Object.keys(ebf).length
+  if (typeof baseline.errorFiles === 'number' && keyCount !== baseline.errorFiles) {
+    violations.push(`[SCHEMA-${label}] Object.keys(errorsByFile).length=${keyCount} 與 errorFiles=${baseline.errorFiles} 不符`)
+  }
+  return violations
+}
+
 function findIncreasedErrorFiles(currentErrors, baselineErrors, renameMap) {
   // r8（PR-58 codex r1 critical risk 後續）：規則 B'' per-file error count enforcement。
   //
@@ -857,6 +945,33 @@ function main() {
         const fromStr = v.mappedFrom ? ` (renamed from ${v.mappedFrom})` : ''
         failures.push(`[BASE-B''] ${v.file}${fromStr} error 計數上升（base ref baseline；同 PR 改 baseline 也擋）：${v.baseline} → ${v.current} (+${v.current - v.baseline})`)
       }
+    }
+  }
+
+  // 規則 BASE-EBF（r8 r1，codex Reject fix）：branch baseline.errorsByFile 不得相對
+  // base baseline 走弱（per-file count 升 / 新增 entry 非合法 rename）。
+  // 防 PR 不改 source、只把 branch baseline 墊高 pre-allocate per-file budget。
+  if (baseBaseline) {
+    const ebfDrift = compareBaselineEbfVsBase(baseline, baseBaseline, renameMap)
+    for (const v of ebfDrift) {
+      if (v.kind === 'new') {
+        failures.push(`[BASE-EBF] branch baseline.errorsByFile 新增 ${v.file} (count=${v.branch}) — base baseline 無此檔且非合法 rename；防 PR 同 commit 預先擴 baseline 加 budget`)
+      } else {
+        const fromStr = v.mappedFrom ? ` (renamed from ${v.mappedFrom})` : ''
+        failures.push(`[BASE-EBF] branch baseline.errorsByFile[${v.file}]${fromStr} 計數升高（base baseline）：${v.base} → ${v.branch} (+${v.branch - v.base})；防 PR 同 commit 預先放寬 per-file budget`)
+      }
+    }
+  }
+
+  // 規則 SCHEMA（r8 r1，codex Reject fix）：baseline 內部一致性。
+  // 防 shuffle budget — 改 errorsByFile 但不同步 fileErrors / errorFiles 對齊。
+  // branch baseline 與 base baseline 兩處都驗（base 缺 errorsByFile 時 bootstrap 跳過）。
+  for (const v of validateBaselineSchema(baseline, 'baseline')) {
+    failures.push(v)
+  }
+  if (baseBaseline) {
+    for (const v of validateBaselineSchema(baseBaseline, 'baseBaseline')) {
+      failures.push(v)
     }
   }
 
