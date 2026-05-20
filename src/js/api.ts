@@ -24,7 +24,8 @@
  * 取代原 types/globals.d.ts 的 `declare class ApiError`，避免 ambient 與真實宣告衝突。
  * 其餘 surface（apiFetch / formatApiError / tApiError / tApiErrorData）仍 IIFE-private，
  * 由 window.X = X 對外暴露；globals.d.ts 保留它們的 `declare function` 給 dashboard.js
- * 等 bare global caller。silentRefresh 仍 required（H slice 在後續 commit 改 optional）。
+ * 等 bare global caller。silentRefresh 為 optional 反映 runtime（api.js 未 load 即 undefined），
+ * caller 必走 `typeof window.silentRefresh === 'function'` narrow。
  */
 interface ApiErrorPayload {
   status: number
