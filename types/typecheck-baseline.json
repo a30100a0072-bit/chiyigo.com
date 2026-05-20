@@ -1,6 +1,6 @@
 {
-  "baselineSha": "0f86ad6",
-  "cleanFiles": 226,
+  "baselineSha": "67e3ef9",
+  "cleanFiles": 227,
   "createdAt": "2026-05-20",
   "errorCount": 877,
   "errorFiles": 27,
@@ -35,7 +35,7 @@
   },
   "fileErrors": 877,
   "globalErrors": 0,
-  "sourceFilesTotal": 253,
+  "sourceFilesTotal": 254,
   "stage": 1,
   "tsconfigSnapshot": {
     "tsconfig.browser-classic.json": {
@@ -58,7 +58,8 @@
       "exclude": [],
       "include": [
         "scripts/fixtures/pipeline-canary-classic.ts",
-        "src/js/form-enter.ts"
+        "src/js/form-enter.ts",
+        "src/js/sidebar-auth.ts"
       ]
     },
     "tsconfig.browser-classic.prod.json": {
@@ -80,7 +81,8 @@
       },
       "exclude": [],
       "include": [
-        "src/js/form-enter.ts"
+        "src/js/form-enter.ts",
+        "src/js/sidebar-auth.ts"
       ]
     },
     "tsconfig.browser-module.json": {

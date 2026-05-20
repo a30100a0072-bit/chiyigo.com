@@ -12,5 +12,5 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["src/js/form-enter.ts", "scripts/fixtures/pipeline-canary-classic.ts"]
+  "include": ["src/js/form-enter.ts", "src/js/sidebar-auth.ts", "scripts/fixtures/pipeline-canary-classic.ts"]
 }
