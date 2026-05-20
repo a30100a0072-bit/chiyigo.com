@@ -25,8 +25,10 @@ import { onRequestPost as verifyHandler } from '../../functions/api/auth/wallet/
 import { onRequestGet  as listHandler   } from '../../functions/api/auth/wallet'
 import { onRequestDelete as deleteHandler } from '../../functions/api/auth/wallet/[id]'
 
-env.WALLET_SIWE_DOMAIN = 'localhost'
-env.WALLET_SIWE_URI    = 'http://localhost'
+Object.assign(env, {
+  WALLET_SIWE_DOMAIN: 'localhost',
+  WALLET_SIWE_URI:    'http://localhost',
+})
 
 // ── 測試用 ETH wallet（純 @noble，沒 ethers 依賴）──
 function createWallet() {

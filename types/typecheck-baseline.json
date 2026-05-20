@@ -1,9 +1,9 @@
 {
-  "baselineSha": "dfc5ce4",
-  "cleanFiles": 216,
-  "createdAt": "2026-05-19",
-  "errorCount": 892,
-  "errorFiles": 33,
+  "baselineSha": "702f129",
+  "cleanFiles": 220,
+  "createdAt": "2026-05-20",
+  "errorCount": 886,
+  "errorFiles": 29,
   "errorsByFile": {
     "src/js/404.js": 11,
     "src/js/about.js": 21,
@@ -33,13 +33,9 @@
     "src/js/reset-password.js": 18,
     "src/js/verify-email.js": 6,
     "tests/audit-archive.test.js": 5,
-    "tests/integration/admin-metrics.test.js": 1,
-    "tests/integration/admin-oauth-clients.test.js": 1,
-    "tests/integration/payments.test.js": 4,
-    "tests/integration/rate-limit.test.js": 2,
-    "tests/integration/wallet.test.js": 2
+    "tests/integration/payments.test.js": 4
   },
-  "fileErrors": 892,
+  "fileErrors": 886,
   "globalErrors": 0,
   "sourceFilesTotal": 249,
   "stage": 1,

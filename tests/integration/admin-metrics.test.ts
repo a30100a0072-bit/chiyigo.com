@@ -32,7 +32,6 @@ async function adminToken(userId = 1, role = 'admin') {
 async function callMetrics(token) {
   return metricsGet({
     request: authReq(token), env,
-    params: {}, waitUntil: () => {}, data: {}, next: async () => new Response('next'),
   })
 }
 

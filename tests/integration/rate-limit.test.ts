@@ -170,8 +170,10 @@ describe('login kind 隔離（回歸）', () => {
 
 describe('oauth init rate limit', () => {
   it('同 IP 第 11 次 → 429', async () => {
-    env.GOOGLE_CLIENT_ID     = 'goog-cid'
-    env.GOOGLE_CLIENT_SECRET = 'goog-sec'
+    Object.assign(env, {
+      GOOGLE_CLIENT_ID:     'goog-cid',
+      GOOGLE_CLIENT_SECRET: 'goog-sec',
+    })
     const ip = '9.9.9.9'
 
     for (let i = 0; i < 10; i++) {

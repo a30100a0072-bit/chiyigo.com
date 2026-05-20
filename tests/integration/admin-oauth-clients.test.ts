@@ -46,10 +46,24 @@ async function adminStepUpToken(userId, forAction) {
   )
 }
 
-async function call(handler, { token, method = 'GET', body = null, params = {}, query = '' }) {
+async function call(handler, {
+  token = null,
+  method = 'GET',
+  body = null,
+  params = {},
+  query = '',
+}: {
+  token?: string | null
+  method?: string
+  body?: unknown
+  params?: Record<string, string>
+  query?: string
+}) {
   const url = `http://x/api/admin/oauth-clients${query ? '?' + query : ''}`
-  const headers = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : {}
-  const init = { method, headers }
+  const headers: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    : {}
+  const init: RequestInit = { method, headers }
   if (body !== null) init.body = JSON.stringify(body)
   const resp = await handler({ request: new Request(url, init), env, params })
   return { status: resp.status, body: await resp.json() }
