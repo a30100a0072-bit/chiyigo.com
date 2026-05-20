@@ -620,8 +620,9 @@ function checkNewSourceFiles(added) {
   const violations = []
   // PR-56 (Stage 4.5b-1)：規則 E 改 manifest-aware
   //   原規則：所有新增 src/js/*.ts 一律違反
-  //   現規則：在 manifest.classic ∪ manifest.module 內 → 允許（pipeline 已 own emit）
-  //          不在 set 內 → 仍違反（防偷渡未過 pipeline 的 .ts）
+  //   現規則：列入 manifest.classic → 允許（classic prod pipeline 已 own emit）
+  //          其餘（含 manifest.module）仍違反；module lane prod pipeline 未建，
+  //          verify-browser-pipeline.mjs 對應 enforce `manifest.module.length === 0`
   // per-entry validation（pattern / POSIX / unique / statSync().isFile()）由 checkManifestSync
   // 與 scripts/verify-browser-pipeline.mjs 兩 gate 守住（[[feedback_two_gate_defense_in_depth]]）。
   const manifestSrcSet = new Set()
