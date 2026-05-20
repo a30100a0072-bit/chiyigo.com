@@ -325,7 +325,8 @@ describe('buildManifest', () => {
       stateHistory: [{ state: 'planned', at: '2026-05-11T00:00:00Z' }],
       rowCount: 3, minId: 1, maxId: 5,
       minTs: '2026-05-01T00:00:00Z', maxTs: '2026-05-02T00:00:00Z',
-      sha256Jsonl: 'abc', dryRun: true, dataKey: 'audit-log-dryrun/...'
+      sha256Jsonl: 'abc', dryRun: true, dataKey: 'audit-log-dryrun/...',
+      severities: undefined, compression: undefined, sha256Gz: undefined,
     })
     expect(m.schema_version).toBe('2.0')
     expect(m.cold_class).toBe('telemetry')
@@ -346,6 +347,7 @@ describe('buildManifest', () => {
       minTs: 't', maxTs: 't', sha256Jsonl: 'h',
       dryRun: false, dataKey: 'k',
       compression: 'gzip', sha256Gz: 'feedface',
+      severities: undefined,
     })
     expect(m.compression).toBe('gzip')
     expect(m.sha256_gz).toBe('feedface')
@@ -360,6 +362,7 @@ describe('buildManifest', () => {
       minTs: 't', maxTs: 't', sha256Jsonl: 'h',
       dryRun: false, dataKey: 'k',
       compression: 'none',
+      severities: undefined, sha256Gz: undefined,
     })
     expect(m.compression).toBe('none')
     expect(m.sha256_gz).toBeNull()
@@ -372,6 +375,7 @@ describe('buildManifest', () => {
       stateHistory: [], rowCount: 5, minId: 1, maxId: 5,
       minTs: 't', maxTs: 't', sha256Jsonl: 'h',
       dryRun: false, dataKey: 'k', severities: { info: 4, warn: 1 },
+      compression: undefined, sha256Gz: undefined,
     })
     expect(m1.severities).toEqual({ info: 4, warn: 1 })
 
@@ -381,6 +385,7 @@ describe('buildManifest', () => {
       stateHistory: [], rowCount: 0, minId: 0, maxId: 0,
       minTs: 't', maxTs: 't', sha256Jsonl: 'h',
       dryRun: false, dataKey: 'k',
+      severities: undefined, compression: undefined, sha256Gz: undefined,
     })
     expect(m2.severities).toEqual({})
   })

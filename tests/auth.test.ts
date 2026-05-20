@@ -26,7 +26,7 @@ function reqWithAuth(token) {
   })
 }
 
-async function expectError(promise, status, errorMatch) {
+async function expectError(promise, status, errorMatch?: Record<string, unknown>) {
   const r = await promise
   expect(r.user).toBeNull()
   expect(r.error.status).toBe(status)

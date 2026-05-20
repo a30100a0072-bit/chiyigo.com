@@ -41,7 +41,7 @@ describe('sendVerificationEmail', () => {
 
   it('env 缺 MAIL_FROM_ADDRESS → 用預設 noreply@chiyigo.com', async () => {
     mockOk()
-    await sendVerificationEmail('k', 'a@b', 't')
+    await sendVerificationEmail('k', 'a@b', 't', undefined)
     expect(lastReq.body.from).toBe('noreply@chiyigo.com')
   })
 
@@ -67,7 +67,7 @@ describe('sendPasswordResetEmail', () => {
   })
   it('Resend 失敗拋例外（含 status 與 body）', async () => {
     mockFail(429, 'rate')
-    await expect(sendPasswordResetEmail('k', 'a@b', 't')).rejects.toThrow(/Resend API 429.*rate/)
+    await expect(sendPasswordResetEmail('k', 'a@b', 't', undefined)).rejects.toThrow(/Resend API 429.*rate/)
   })
 })
 
