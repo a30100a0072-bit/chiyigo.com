@@ -266,11 +266,17 @@ function main() {
       assertClassicShape(tempContent, `prod emit ${entry}`)
       if (!fs.existsSync(committedOut)) fail(`prod committed artifact 缺檔（${committedOut}）；請跑 npm run build 後 commit`)
       const committedContent = fs.readFileSync(committedOut, 'utf8')
-      if (tempContent !== committedContent) {
+      // Windows checkout 可能把 LF 轉成 CRLF（autocrlf），tsc 直接 emit LF；
+      // line-ending 差異不算 source drift，比對前統一 normalize \r\n → \n。
+      // 其餘任何差異（內容 / 漏 import / 空白以外字元）都視為真實 drift。
+      const normalize = (s) => s.replace(/\r\n/g, '\n')
+      const tempNorm = normalize(tempContent)
+      const committedNorm = normalize(committedContent)
+      if (tempNorm !== committedNorm) {
         fail(
           `prod committed artifact 與 fresh tsc emit 不同步（${entry}）\n` +
-          `  temp     : ${tempOut} (${tempContent.length} bytes)\n` +
-          `  committed: ${committedOut} (${committedContent.length} bytes)\n` +
+          `  temp     : ${tempOut} (${tempContent.length} bytes raw / ${tempNorm.length} LF-normalized)\n` +
+          `  committed: ${committedOut} (${committedContent.length} bytes raw / ${committedNorm.length} LF-normalized)\n` +
           `  請跑 npm run build 後 commit；或檢查 src/js source 與 build artifact 是否同 PR`
         )
       }
