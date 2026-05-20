@@ -217,7 +217,7 @@ async function exportCsv() {
       credentials: 'include',
     });
     if (r.status === 401) {
-      const ok = window.silentRefresh ? await window.silentRefresh() : false;
+      const ok = typeof window.silentRefresh === 'function' ? await window.silentRefresh() : false;
       if (!ok) { location.href = '/login.html'; return; }
       r = await fetch(`/api/admin/deals?${qs}`, {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('access_token')}` },

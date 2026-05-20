@@ -207,7 +207,7 @@ async function exportCsv() {
     });
     if (r.status === 401) {
       // 用 silent refresh 補一次
-      const ok = window.silentRefresh ? await window.silentRefresh() : false;
+      const ok = typeof window.silentRefresh === 'function' ? await window.silentRefresh() : false;
       if (!ok) { location.href = '/login.html'; return; }
       const r2 = await fetch(`/api/admin/payments/intents?${qs}`, {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('access_token')}` },
