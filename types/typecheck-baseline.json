@@ -1,6 +1,6 @@
 {
-  "baselineSha": "313b651",
-  "cleanFiles": 222,
+  "baselineSha": "80f3874",
+  "cleanFiles": 225,
   "createdAt": "2026-05-20",
   "errorCount": 877,
   "errorFiles": 27,
@@ -35,9 +35,50 @@
   },
   "fileErrors": 877,
   "globalErrors": 0,
-  "sourceFilesTotal": 249,
+  "sourceFilesTotal": 252,
   "stage": 1,
   "tsconfigSnapshot": {
+    "tsconfig.browser-classic.json": {
+      "compilerOptions": {
+        "isolatedModules": false,
+        "lib": [
+          "DOM",
+          "DOM.Iterable",
+          "ES2022"
+        ],
+        "module": "none",
+        "moduleDetection": "auto",
+        "moduleResolution": "node10",
+        "noEmit": false,
+        "outDir": ".tmp-pipeline-canary/classic",
+        "resolveJsonModule": false,
+        "rootDir": ".",
+        "types": []
+      },
+      "exclude": [],
+      "include": [
+        "scripts/fixtures/pipeline-canary-classic.ts"
+      ]
+    },
+    "tsconfig.browser-module.json": {
+      "compilerOptions": {
+        "lib": [
+          "DOM",
+          "DOM.Iterable",
+          "ES2022"
+        ],
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "noEmit": false,
+        "outDir": ".tmp-pipeline-canary/module",
+        "rootDir": ".",
+        "types": []
+      },
+      "exclude": [],
+      "include": [
+        "scripts/fixtures/pipeline-canary-module.ts"
+      ]
+    },
     "tsconfig.json": {
       "compilerOptions": {
         "allowJs": true,
@@ -49,10 +90,12 @@
           "ES2022",
           "WebWorker"
         ],
+        "module": "ESNext",
         "moduleDetection": "force",
         "moduleResolution": "Bundler",
         "noEmit": true,
         "noImplicitAny": false,
+        "resolveJsonModule": true,
         "skipLibCheck": true,
         "strict": false,
         "types": [

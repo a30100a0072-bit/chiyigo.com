@@ -57,8 +57,17 @@
  *        skip → 「弱化 tsconfig + 同 PR 跑 baseline:update」繞過所有 ratchet。改 live
  *        read 後 BASE-D-tsconfig 永遠 active，不再有 bootstrap window。
  *
- * 延後（依 §1.5g 不在 day-1，亦未在 PR-治理-2 範圍）：
- *   - Stage 4.5a classic/module 分流檢查（等 browser pipeline ready）
+ * PR-55 hardening（Stage 4.5a 治理收尾，2026-05-20，承接 PR-54 emit skeleton）：
+ *   STRUCT — REQUIRED_FILES 不可刪 invariant：canary fixtures + manifest 三檔
+ *        必須存在；所有 mode（含 --report / --update）missing 即 exit 1，
+ *        避免 snapshot 壞狀態擴大
+ *   SYNC  — manifest ↔ tsconfig.include 同步檢查：tsconfig.browser-classic/module
+ *        的 include 必須 === [...manifest.<tier>, manifest.canary.<tier>]；
+ *        與 scripts/verify-browser-pipeline.mjs 重複防禦（emit integration test +
+ *        diff-time gate 雙層），防 hardcode drift
+ *   F4-EXT — TSCONFIG_COMPILER_OPTIONS_GUARDED 擴 module/outDir/rootDir/
+ *        resolveJsonModule：鎖 browser pipeline emit shape（module:"none" / "ESNext"、
+ *        emit 路徑、resolveJsonModule 與 module:"none" 互斥約束）
  */
 
 import { execSync, execFileSync } from 'node:child_process'
@@ -79,6 +88,22 @@ const SELF_FILE = 'scripts/typecheck-ratchet.mjs'
 //   - scripts/verify-browser-pipeline.mjs：Stage 4.5a browser pipeline canary verifier
 //     （PR-54 加入；不改規則 A/B/C/D/E 判定語意，僅白名單新 verifier 與 ratchet 同類）
 const NEW_JS_ALLOWLIST = new Set([SELF_FILE, 'scripts/verify-browser-pipeline.mjs'])
+
+// PR-55（Stage 4.5a 治理收尾）：Stage 4.5a browser pipeline 結構不變式
+//   - REQUIRED_FILES：canary fixtures + manifest 必須存在；刪 / rename-away → exit 1
+//   - MANIFEST_PATH / BROWSER_TSCONFIGS：manifest ↔ tsconfig.include 同步檢查（與
+//     scripts/verify-browser-pipeline.mjs 重複防禦；verify 是 emit integration test，
+//     ratchet 是 diff-time gate；任一層擋住都防 hardcode drift）
+const REQUIRED_FILES = [
+  'src/js/browser-script-manifest.json',
+  'scripts/fixtures/pipeline-canary-classic.ts',
+  'scripts/fixtures/pipeline-canary-module.ts',
+]
+const MANIFEST_REL = 'src/js/browser-script-manifest.json'
+const BROWSER_TSCONFIGS = [
+  { file: 'tsconfig.browser-classic.json', tier: 'classic' },
+  { file: 'tsconfig.browser-module.json', tier: 'module' },
+]
 
 // ─── git helper（全 execFileSync 防 shell 注入；預設 silence stderr） ──
 
@@ -289,6 +314,62 @@ function getDiff(baseRef) {
   return { added, modified, unifiedDiff, effectiveRange, renameMap }
 }
 
+// ─── 6.4 Stage 4.5a browser pipeline structural invariants（PR-55） ─────
+
+function checkRequiredFiles() {
+  const missing = []
+  for (const rel of REQUIRED_FILES) {
+    if (!fs.existsSync(path.join(ROOT, rel))) missing.push(rel)
+  }
+  return missing
+}
+
+function arraysShallowEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+function checkManifestSync() {
+  const violations = []
+  let manifest
+  try {
+    manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'))
+  } catch (e) {
+    violations.push(`manifest parse 失敗 (${MANIFEST_REL})：${e.message}`)
+    return violations
+  }
+  if (!manifest.canary || typeof manifest.canary !== 'object') {
+    violations.push('manifest.canary 必須是 object（{classic, module}）')
+    return violations
+  }
+  if (typeof manifest.canary.classic !== 'string') violations.push('manifest.canary.classic 必須是 string 路徑')
+  if (typeof manifest.canary.module !== 'string') violations.push('manifest.canary.module 必須是 string 路徑')
+  if (!Array.isArray(manifest.classic)) violations.push('manifest.classic 必須是 array')
+  if (!Array.isArray(manifest.module)) violations.push('manifest.module 必須是 array')
+  if (violations.length > 0) return violations
+
+  for (const { file, tier } of BROWSER_TSCONFIGS) {
+    let cfg
+    try {
+      cfg = JSON.parse(fs.readFileSync(path.join(ROOT, file), 'utf8'))
+    } catch (e) {
+      violations.push(`${file} parse 失敗：${e.message}`)
+      continue
+    }
+    const expected = [...manifest[tier], manifest.canary[tier]]
+    const actual = Array.isArray(cfg.include) ? cfg.include : []
+    if (!arraysShallowEqual(actual, expected)) {
+      violations.push(
+        `${file} include 與 manifest 不同步\n` +
+        `    expected: ${JSON.stringify(expected)}\n` +
+        `    actual  : ${JSON.stringify(actual)}`
+      )
+    }
+  }
+  return violations
+}
+
 // ─── 6.5 tsconfig snapshot（F4 invariant） ──────────────────────────────
 
 function listRootTsconfigs() {
@@ -304,8 +385,13 @@ function listRootTsconfigs() {
 const TSCONFIG_COMPILER_OPTIONS_GUARDED = [
   'allowJs', 'checkJs', 'noEmit',
   'strict', 'noImplicitAny', 'strictNullChecks',
-  'skipLibCheck', 'moduleResolution', 'moduleDetection',
+  'skipLibCheck', 'module', 'moduleResolution', 'moduleDetection',
   'isolatedModules', 'types', 'lib',
+  // PR-55（Stage 4.5a 治理收尾）：browser pipeline emit shape 鎖
+  //   `module` — classic 必須 "none"、module 必須 "ESNext"，無聲弱化會炸 <script>
+  //   `outDir` / `rootDir` — 控制 emit 路徑；移動會讓 manifest ↔ output path 推導斷鏈
+  //   `resolveJsonModule` — classic 必須 false（與 module:"none" 互斥；TS5071）
+  'outDir', 'rootDir', 'resolveJsonModule',
 ]
 
 function normalizeTsconfigParsed(parsed) {
@@ -485,6 +571,24 @@ function dumpTscOutput(tscOutput) {
 }
 
 function main() {
+  // PR-55 structural pre-check（所有 mode 都跑，含 --report / --update）
+  //   早退 exit 1 是刻意：missing canary / manifest drift = baseline state 已壞，
+  //   繼續跑 tsc 或 snapshot baseline 都會擴大爛狀態
+  const missingRequired = checkRequiredFiles()
+  if (missingRequired.length > 0) {
+    console.error('FAIL: Stage 4.5a 必要檔遺失（pipeline 不完整）：')
+    for (const f of missingRequired) console.error('  - ' + f)
+    console.error('\n參考：memory/project_js_to_ts_stage45a_plan.md / [[feedback_ts_ratchet_discipline]]')
+    process.exit(1)
+  }
+  const manifestViolations = checkManifestSync()
+  if (manifestViolations.length > 0) {
+    console.error('FAIL: manifest / tsconfig.include 結構違反：')
+    for (const v of manifestViolations) console.error('  - ' + v)
+    console.error('\n參考：src/js/browser-script-manifest.json 是 single source of truth；改 include 必須同步動 manifest')
+    process.exit(1)
+  }
+
   const { output: tscOutput, exitCode: tscExit } = runTypecheck()
   const parsed = parseTscOutput(tscOutput)
 
