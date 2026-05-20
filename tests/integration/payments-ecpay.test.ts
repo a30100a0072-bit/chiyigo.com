@@ -62,7 +62,7 @@ describe('ECPay CheckMacValue 演算法', () => {
     // 綠界開發手冊 範例：
     //   MerchantID=2000132, MerchantTradeNo=Test123, ...
     //   依照排序 + .NET URL encode + lowercase → SHA256 大寫
-    const params = {
+    const params: Record<string, string> = {
       MerchantID:        SANDBOX.MerchantID,
       MerchantTradeNo:   'mtn0001',
       MerchantTradeDate: '2026/01/01 12:00:00',
@@ -82,7 +82,7 @@ describe('ECPay CheckMacValue 演算法', () => {
   })
 
   it('CheckMacValue 欄位被忽略（避免遞迴）', async () => {
-    const params = {
+    const params: Record<string, string> = {
       A: '1', B: '2', CheckMacValue: 'should-be-ignored',
     }
     const sigWith    = await ecpayCheckMacValue(params, 'k', 'iv')
@@ -96,7 +96,7 @@ describe('ecpayPaymentAdapter.parseWebhook', () => {
   beforeAll(async () => { await ensureJwtKeys() })
 
   it('正確簽章 + RtnCode=1 → status=succeeded', async () => {
-    const params = {
+    const params: Record<string, string> = {
       MerchantID:      SANDBOX.MerchantID,
       MerchantTradeNo: 'mtn_succ',
       RtnCode:         '1',
@@ -118,7 +118,7 @@ describe('ecpayPaymentAdapter.parseWebhook', () => {
   })
 
   it('簽章錯 → ok=false signature_invalid', async () => {
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_x',
       RtnCode: '1', TradeNo: 't1',
       CheckMacValue: 'WRONG_SIG_VALUE',
@@ -129,14 +129,14 @@ describe('ecpayPaymentAdapter.parseWebhook', () => {
   })
 
   it('缺 MerchantTradeNo → missing_required_fields', async () => {
-    const params = { RtnCode: '1', CheckMacValue: 'x' }
+    const params: Record<string, string> = { RtnCode: '1', CheckMacValue: 'x' }
     const parsed = await ecpayPaymentAdapter.parseWebhook(ecpayWebhookReq(params), env)
     expect(parsed.ok).toBe(false)
     expect(parsed.error).toBe('missing_required_fields')
   })
 
   it('RtnCode != 1 → status=failed + failure_reason 帶 RtnMsg', async () => {
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_fail',
       RtnCode: '10100050', RtnMsg: '額度不足',
       TradeNo: 'tnFail', TradeAmt: '100',
@@ -149,7 +149,7 @@ describe('ecpayPaymentAdapter.parseWebhook', () => {
   })
 
   it('ATM 取號成功 → status=processing + payment_info.method=atm', async () => {
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_atm',
       RtnCode: '2', RtnMsg: 'ATM 取號成功',
       TradeNo: 'TN_ATM', TradeAmt: '500',
@@ -169,7 +169,7 @@ describe('ecpayPaymentAdapter.parseWebhook', () => {
   })
 
   it('CVS 取號成功 → status=processing + payment_info.method=cvs', async () => {
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_cvs',
       RtnCode: '10100073', RtnMsg: 'CVS 取號成功',
       TradeNo: 'TN_CVS', TradeAmt: '300',
@@ -186,7 +186,7 @@ describe('ecpayPaymentAdapter.parseWebhook', () => {
   })
 
   it('Barcode 取號成功 → payment_info.method=barcode + 三段條碼', async () => {
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_bc',
       RtnCode: '10100073', RtnMsg: 'Barcode 取號成功',
       TradeNo: 'TN_BC', TradeAmt: '200',
@@ -327,7 +327,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     const { vendor_intent_id, intent_id } = await checkoutResp.json()
 
     // 模擬 ECPay 回 ReturnURL
-    const params = {
+    const params: Record<string, string> = {
       MerchantID:      SANDBOX.MerchantID,
       MerchantTradeNo: vendor_intent_id,
       RtnCode:         '1',
@@ -359,7 +359,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     })
     const { vendor_intent_id } = await co.json()
 
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: vendor_intent_id,
       RtnCode: '1', RtnMsg: 'OK', TradeNo: 'TN_DEDUP_1',
       TradeAmt: '200', PaymentDate: '2026/01/01 12:30:00',
@@ -395,7 +395,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     })
     const { vendor_intent_id, intent_id } = await co.json()
 
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: vendor_intent_id,
       RtnCode: '2', RtnMsg: 'ATM 取號成功', TradeNo: 'TN_ATM_E2E',
       TradeAmt: '500', BankCode: '004', vAccount: '9990001234567890',
@@ -424,7 +424,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     })
     const { vendor_intent_id, intent_id } = await co.json()
 
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: vendor_intent_id,
       RtnCode: '10100073', RtnMsg: 'CVS 取號成功', TradeNo: 'TN_CVS_E2E',
       TradeAmt: '300', PaymentNo: 'LLL12345678',
@@ -453,7 +453,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     })
     const { vendor_intent_id, intent_id } = await co.json()
 
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: vendor_intent_id,
       RtnCode: '10100073', RtnMsg: 'Barcode 取號成功', TradeNo: 'TN_BARCODE_E2E',
       TradeAmt: '200',
@@ -476,7 +476,7 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
   })
 
   it('簽章錯 → 回 "0|signature_invalid" + audit warn', async () => {
-    const params = {
+    const params: Record<string, string> = {
       MerchantID: SANDBOX.MerchantID, MerchantTradeNo: 'mtn_bad',
       RtnCode: '1', TradeNo: 'TN_BAD',
       CheckMacValue: 'BADSIG',
