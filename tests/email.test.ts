@@ -104,4 +104,30 @@ describe('內部 timeout（caller 無 signal）', () => {
     await sendVerificationEmail('k', 'a@b', 't', { RESEND_TIMEOUT_MS: '50' }, ctrl.signal)
     expect(lastReq.init.signal).toBe(ctrl.signal)
   })
+
+  // F1 regression：headers 已回但 body 卡住的情境。修補前 `return res.json()` 在
+  // try 內回傳 unresolved Promise，finally 立刻 clearTimeout，body read 失去保護
+  // → 此 test 會卡 vitest 5s default timeout fail。修補後 `return await res.json()`
+  // 讓 timer 覆蓋整個 fetch lifecycle，body 卡 50ms 後 abort 觸發 reject、test 過。
+  it('headers 已回但 body 卡住 → internal timer 仍有效 reject (F1 regression)', async () => {
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      const fakeRes = {
+        ok: true,
+        status: 200,
+        json: () => new Promise<unknown>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(new Error('body read aborted by timeout'))
+          }, { once: true })
+        }),
+        text: async () => '',
+      }
+      return fakeRes as unknown as Response
+    })
+    const t0 = Date.now()
+    await expect(
+      sendVerificationEmail('k', 'a@b', 't', { RESEND_TIMEOUT_MS: '50' }),
+    ).rejects.toThrow()
+    const elapsed = Date.now() - t0
+    expect(elapsed).toBeLessThan(2000)
+  })
 })
