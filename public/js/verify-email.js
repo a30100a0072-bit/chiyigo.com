@@ -77,10 +77,13 @@
             }
         });
     })();
-    // Stage 5 PR-5 cleanup：移除 dead code
+    // Stage 5 PR-5 cleanup：移除 dead copy-paste / latent hazard
     //   原：`document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit);`
-    //   verify-email page 沒有 #form-forgot 且 handleSubmit 未定義；此行從
-    //   forgot-password.js 複製過來，runtime 載入時會 ReferenceError。
+    //   verify-email page 沒有 #form-forgot；optional chaining 在 null 時短路，
+    //   handleSubmit 不會被求值（無 runtime ReferenceError），但 handleSubmit
+    //   本檔未定義，是從 forgot-password.js 複製過來的殘骸 — 若日後有人加上
+    //   #form-forgot 立即爆。刪除為安全清理。
+    //   （codex PR-5 r1 Low：修正先前注釋誤稱「runtime ReferenceError」之描述）
     // ── Mobile overlay (m-ham-btn / m-overlay open-close) ──
     (function () {
         const hamBtn = document.getElementById('m-ham-btn');
