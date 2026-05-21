@@ -93,7 +93,9 @@ async function sendEmail(apiKey, env, { to, subject, html, signal }: { to: strin
       throw new Error(`Resend API ${res.status}: ${body}`);
     }
 
-    return res.json();
+    // await 拉進 try：success path 也要等 body 解析完才 clearTimeout，避免
+    // Resend header 已回但 body 卡住時 timeout 提早被 finally 清掉。
+    return await res.json();
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId)
   }
