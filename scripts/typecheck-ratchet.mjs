@@ -115,7 +115,14 @@ const SELF_FILE = 'scripts/typecheck-ratchet.mjs'
 //   - SELF_FILE：ratchet script 本身
 //   - scripts/verify-browser-pipeline.mjs：Stage 4.5a browser pipeline canary verifier
 //     （PR-54 加入；不改規則 A/B/C/D/E 判定語意，僅白名單新 verifier 與 ratchet 同類）
-const NEW_JS_ALLOWLIST = new Set([SELF_FILE, 'scripts/verify-browser-pipeline.mjs'])
+//   - scripts/lib/inject-i18n.js：Stage 5 prep i18n-aware build pipeline shared helper
+//     （build-partials.js / verify-browser-pipeline.mjs 共用同一條 inject path；
+//     codex Stage 5 prep r1 Reject fix 加入：純 build infrastructure helper，非 application source）
+const NEW_JS_ALLOWLIST = new Set([
+  SELF_FILE,
+  'scripts/verify-browser-pipeline.mjs',
+  'scripts/lib/inject-i18n.js',
+])
 
 // PR-55（Stage 4.5a 治理收尾）：Stage 4.5a browser pipeline 結構不變式
 //   - REQUIRED_FILES：canary fixtures + manifest 必須存在；刪 / rename-away → exit 1
