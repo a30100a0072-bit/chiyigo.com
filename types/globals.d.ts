@@ -101,5 +101,16 @@ declare global {
       warning: (msg: unknown, opts?: { duration?: number }) => () => void;
       info: (msg: unknown, opts?: { duration?: number }) => () => void;
     };
+
+    /** Confirm modal attached by src/js/confirm-dialog.ts (loaded on every page via head-foot
+     * partial). Signature must stay byte-aligned with the `interface Window { confirmDialog }`
+     * script-scope augmentation in src/js/confirm-dialog.ts (prod tsconfig 不載本檔). */
+    confirmDialog: (opts?: {
+      title?: string;
+      message?: string;
+      confirmText?: string;
+      cancelText?: string;
+      danger?: boolean;
+    }) => Promise<boolean>;
   }
 }
