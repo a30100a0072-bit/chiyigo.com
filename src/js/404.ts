@@ -1,3 +1,10 @@
+// Stage 5 PR-4 retro (2026-05-21)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（openMenu / closeMenu / applyLangI / toggleTopLangDrop ...）
+// 在同 tsc program 全域 scope 撞名 → TS2393 Duplicate function implementation。
+// PR-3 落地時是唯一 page entry 沒撞，PR-4 privacy.ts 加入時暴露 → retro-wrap 404.ts。
+// 內層 block 2/2 既有 IIFE 維持不動。
+;(function () {
 // ── block 1/2 ──
 // ── Mobile overlay ──────────────────────────────────────────
 const hamBtn  = document.getElementById('m-ham-btn');
@@ -93,3 +100,4 @@ document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDr
 
 // 返回上一頁（取代原 href="javascript:history.back()" CSP 違規）
 document.getElementById('nf-back-btn')?.addEventListener('click', () => history.back());
+})();

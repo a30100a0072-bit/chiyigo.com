@@ -1,3 +1,9 @@
+// Stage 5 PR-4 (2026-05-21)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（openMenu / closeMenu / applyLangI / toggleTopLangDrop ...）
+// 在同 tsc program 全域 scope 撞名 → TS2393 Duplicate function implementation。
+// 內層 block 2/2 既有 IIFE 維持不動。
+;(function () {
 // ── block 1/2 ──
 // ── Mobile overlay ──────────────────────────────────────────
 const hamBtn  = document.getElementById('m-ham-btn');
@@ -28,7 +34,7 @@ function applyTheme(dark) {
   document.documentElement.classList.toggle('theme-light', !dark);
   [themeBtn, mThemeBtn].forEach(btn => {
     if (!btn) return;
-    const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+    const sun = btn.querySelector<HTMLElement>('.icon-sun'), moon = btn.querySelector<HTMLElement>('.icon-moon');
     if (sun)  sun.hidden = dark;
     if (moon) moon.hidden = !dark;
   });
@@ -49,7 +55,7 @@ function applyLangI(lang) {
   if (!LANGS_I18N[lang]) return;
   curLangI = lang;
   const t = LANGS_I18N[lang];
-  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k]; });
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (k && t[k] !== undefined) el.textContent = t[k]; });
   // disclaimer 顯示控制：非 zh-TW 顯示
   const dis = document.getElementById('privacy-disclaimer');
   if (dis) dis.classList.toggle('show', lang !== 'zh-TW');
@@ -57,24 +63,24 @@ function applyLangI(lang) {
   const lBtn = document.getElementById('lang-toggle-btn');
   if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
   if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
-  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-  document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
 }
 const langTogBtnI = document.getElementById('lang-toggle-btn');
 const langDropI   = document.getElementById('lang-dropdown');
 langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
 document.addEventListener('click', () => langDropI?.classList.remove('open'));
-langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
-document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
-function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
+langDropI?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop')?.classList.toggle('open'); }
 document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
-document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop')?.classList.remove('open'); });
 applyLangI(curLangI);
 
 // ── block 2/2 ──
 (function(){
-  const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+  const canvas=document.getElementById('neural-canvas') as HTMLCanvasElement | null;if(!canvas)return;
   const ctx=canvas.getContext('2d');if(!ctx)return;
   let W=0,H=0,nodes=[];const DIST=155;
   function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
@@ -92,3 +98,4 @@ applyLangI(curLangI);
 
 // ── Phase C-3 m-lang-btn wire ──
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
+})();
