@@ -1,3 +1,8 @@
+// Stage 5 PR-5 (2026-05-21)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl 在同 tsc program 全域 scope 撞名 → TS2393。
+// 內層 verify-flow / mobile-overlay / theme-lang 既有 IIFE 維持不動。
+;(function () {
 // ── i18n ─────────────────────────────────────────────────────
 const I18N = /*@i18n@*/{};
 
@@ -8,10 +13,10 @@ function applyLang(lang) {
   try { localStorage.setItem('lang', lang) } catch {}
   document.documentElement.lang = lang;
   const dict = I18N[lang] || I18N['zh-TW'];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const k = el.dataset.i18n; if (dict[k] != null) el.textContent = dict[k];
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n; if (k && dict[k] != null) el.textContent = dict[k];
   });
-  document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -20,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── 驗證流程 ─────────────────────────────────────────────────
-(() => {
+(function () {
   const params = new URLSearchParams(location.search)
   const token  = params.get('token')
 
@@ -36,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (!token) {
-    document.getElementById('btn-verify').disabled = true
+    const btn = document.getElementById('btn-verify') as HTMLButtonElement | null
+    if (btn) btn.disabled = true
     document.getElementById('err-missing').classList.remove('hidden')
     return
   }
@@ -63,9 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
       show('error')
     }
   })
-})()
+})();
 
-document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit);
+// Stage 5 PR-5 cleanup：移除 dead code
+//   原：`document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit);`
+//   verify-email page 沒有 #form-forgot 且 handleSubmit 未定義；此行從
+//   forgot-password.js 複製過來，runtime 載入時會 ReferenceError。
 
 // ── Mobile overlay (m-ham-btn / m-overlay open-close) ──
 (function () {
@@ -112,15 +121,16 @@ document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit)
     mLangDrop?.classList.remove('open');
   });
   langDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang); langDrop.classList.remove('open');
   });
   mLangDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang); mLangDrop.classList.remove('open');
   });
   document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
-    const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang);
   });
+})();
 })();
