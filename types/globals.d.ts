@@ -91,5 +91,15 @@ declare global {
 
     /** API_ERROR_I18N dictionary attached at runtime. */
     __apiErrorI18n?: Record<string, Record<string, string>>;
+
+    /** Toast system attached by src/js/notify.ts (loaded on every page via head-foot partial).
+     * Signature must stay byte-aligned with the `interface Window { notify }` script-scope
+     * augmentation in src/js/notify.ts (prod tsconfig 不載本檔). */
+    notify: {
+      success: (msg: unknown, opts?: { duration?: number }) => () => void;
+      error: (msg: unknown, opts?: { duration?: number }) => () => void;
+      warning: (msg: unknown, opts?: { duration?: number }) => () => void;
+      info: (msg: unknown, opts?: { duration?: number }) => () => void;
+    };
   }
 }
