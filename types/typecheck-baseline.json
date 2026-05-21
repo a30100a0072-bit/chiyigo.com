@@ -1,11 +1,10 @@
 {
-  "baselineSha": "57275a8",
-  "cleanFiles": 230,
+  "baselineSha": "02d200e",
+  "cleanFiles": 232,
   "createdAt": "2026-05-21",
-  "errorCount": 864,
-  "errorFiles": 25,
+  "errorCount": 853,
+  "errorFiles": 24,
   "errorsByFile": {
-    "src/js/404.js": 11,
     "src/js/about.js": 21,
     "src/js/admin-deals.js": 20,
     "src/js/admin-payment-records.js": 22,
@@ -31,9 +30,9 @@
     "src/js/reset-password.js": 18,
     "src/js/verify-email.js": 6
   },
-  "fileErrors": 864,
+  "fileErrors": 853,
   "globalErrors": 0,
-  "sourceFilesTotal": 255,
+  "sourceFilesTotal": 256,
   "stage": 1,
   "tsconfigSnapshot": {
     "tsconfig.browser-classic.json": {
@@ -56,6 +55,7 @@
       "exclude": [],
       "include": [
         "scripts/fixtures/pipeline-canary-classic.ts",
+        "src/js/404.ts",
         "src/js/api.ts",
         "src/js/confirm-dialog.ts",
         "src/js/form-enter.ts",
@@ -82,6 +82,7 @@
       },
       "exclude": [],
       "include": [
+        "src/js/404.ts",
         "src/js/api.ts",
         "src/js/confirm-dialog.ts",
         "src/js/form-enter.ts",
