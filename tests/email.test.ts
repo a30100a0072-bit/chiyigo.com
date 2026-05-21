@@ -79,3 +79,29 @@ describe('sendDeleteConfirmationEmail', () => {
     expect(lastReq.body.subject).toContain('刪除')
   })
 })
+
+describe('內部 timeout（caller 無 signal）', () => {
+  it('RESEND_TIMEOUT_MS=50 → 50ms 後 abort、reject', async () => {
+    // fetch 不解析，只在 signal aborted 時 reject；模擬 Resend 卡住
+    globalThis.fetch = vi.fn((_url, init) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => {
+          reject(new Error('aborted by internal timeout'))
+        }, { once: true })
+      })
+    })
+    const t0 = Date.now()
+    await expect(
+      sendVerificationEmail('k', 'a@b', 't', { RESEND_TIMEOUT_MS: '50' }),
+    ).rejects.toThrow()
+    const elapsed = Date.now() - t0
+    expect(elapsed).toBeLessThan(1000)  // 確認真的 50ms 觸發、不是 default 5s
+  })
+
+  it('caller 給 signal → 原樣 pass、不建內部 timeout（不 wrap）', async () => {
+    mockOk()
+    const ctrl = new AbortController()
+    await sendVerificationEmail('k', 'a@b', 't', { RESEND_TIMEOUT_MS: '50' }, ctrl.signal)
+    expect(lastReq.init.signal).toBe(ctrl.signal)
+  })
+})

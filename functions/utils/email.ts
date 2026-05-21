@@ -2,8 +2,22 @@ const RESEND_API = 'https://api.resend.com/emails';
 const DEFAULT_FROM     = 'noreply@chiyigo.com';
 const DEFAULT_BASE_URL = 'https://chiyigo.com';
 
+// 補 §程式碼要求「外部呼叫必設 timeout」基線。caller 自帶 signal 時不 wrap、
+// 保 signal contract（如 send-verification.ts 自管 timeout）；無 signal 才建內部
+// AbortController + setTimeout，避免裸 fetch 無限等。env override RESEND_TIMEOUT_MS。
+// retry policy 延後到 F-2 金流 smoke 一起設計（屆時有 Resend 真實 5xx/429 訊號）。
+const RESEND_TIMEOUT_MS_DEFAULT = 5_000
+
 function fromOf(env)    { return env?.MAIL_FROM_ADDRESS ?? DEFAULT_FROM }
 function baseUrlOf(env) { return env?.IAM_BASE_URL      ?? DEFAULT_BASE_URL }
+
+function parseTimeoutMs(env): number {
+  const raw = env?.RESEND_TIMEOUT_MS
+  if (raw == null || raw === '') return RESEND_TIMEOUT_MS_DEFAULT
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 10) return RESEND_TIMEOUT_MS_DEFAULT
+  return Math.floor(n)
+}
 
 /**
  * 所有 send* 函式皆額外接受 env，用以讀取 MAIL_FROM_ADDRESS / IAM_BASE_URL。
@@ -52,22 +66,37 @@ export async function sendDeleteConfirmationEmail(apiKey, to, token, env) {
 }
 
 async function sendEmail(apiKey, env, { to, subject, html, signal }: { to: string; subject: string; html: string; signal?: AbortSignal }) {
-  const res = await fetch(RESEND_API, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from: fromOf(env), to, subject, html }),
-    signal,
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Resend API ${res.status}: ${body}`);
+  // caller 給 signal = caller 已自管 timeout / cancellation；原樣 pass 不 wrap。
+  // 沒 signal 才建內部 timeout，避免裸 fetch 無限等 + Worker 卡到 wall-clock 終止。
+  let actualSignal = signal
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  if (!signal) {
+    const timeoutMs = parseTimeoutMs(env)
+    const ctrl = new AbortController()
+    timeoutId = setTimeout(() => ctrl.abort(new Error(`Resend timeout after ${timeoutMs}ms`)), timeoutMs)
+    actualSignal = ctrl.signal
   }
 
-  return res.json();
+  try {
+    const res = await fetch(RESEND_API, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: fromOf(env), to, subject, html }),
+      signal: actualSignal,
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Resend API ${res.status}: ${body}`);
+    }
+
+    return res.json();
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId)
+  }
 }
 
 /**
