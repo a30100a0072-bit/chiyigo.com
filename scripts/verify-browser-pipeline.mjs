@@ -23,6 +23,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
+import { injectI18n, I18N_RESIDUAL } from './lib/inject-i18n.js'
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -37,6 +38,9 @@ const PROD_TEMP_OUTDIR = '.tmp-pipeline-canary/classic-prod'
 
 const MARKER_CLASSIC = 'PIPELINE_CANARY_CLASSIC_OK'
 const MARKER_MODULE = 'PIPELINE_CANARY_MODULE_OK'
+// Stage 5 prep (2026-05-21)：classic canary 加 i18n sentinel，validate
+// TS-emitted /*@i18n:NAME@*\/{} 真會被 injectI18n 替換 + 字典 marker 注入到位
+const MARKER_CLASSIC_I18N = 'PIPELINE_CANARY_I18N_OK'
 
 function fail(msg) {
   console.error('FAIL: ' + msg)
@@ -161,7 +165,7 @@ function deriveOutputPath(tsconfig, sourceRelative) {
   return path.join(ROOT, outDir, jsRel)
 }
 
-function main() {
+async function main() {
   console.log('=== Stage 4.5a browser pipeline canary verify ===')
 
   // 1. manifest 結構檢查
@@ -226,7 +230,18 @@ function main() {
   const classicContent = fs.readFileSync(classicOut, 'utf8')
   if (!classicContent.includes(MARKER_CLASSIC)) fail(`classic canary emit 缺 marker "${MARKER_CLASSIC}"`)
   assertClassicShape(classicContent, 'classic canary emit')
-  console.log(`✓ classic canary emit OK（${classicContent.length} bytes，含 marker，無 ESM/CJS 結構）`)
+  // Stage 5 prep (2026-05-21)：對 classic canary emit 跑 injectI18n（in-memory，
+  // 不寫回 .tmp），驗 TS-emitted `/*@i18n:pipeline-canary-classic@*\/ {}` 真會被替換為
+  // src/i18n/pipeline-canary-classic.json 的字典 + dict marker 進到 emit
+  const classicCanaryBasename = path.basename(classicOut)
+  const classicInjected = await injectI18n(classicCanaryBasename, classicContent)
+  if (!classicInjected.includes(MARKER_CLASSIC_I18N)) {
+    fail(`classic canary post-inject 缺 i18n dict marker "${MARKER_CLASSIC_I18N}"（檢查 src/i18n/pipeline-canary-classic.json 是否含 i18nMarker key + classic fixture 是否仍有 sentinel）`)
+  }
+  if (I18N_RESIDUAL.test(classicInjected)) {
+    fail(`classic canary post-inject 殘留 @i18n sentinel pattern（regex 沒抓到 → I18N_SENTINEL replacement 失效）`)
+  }
+  console.log(`✓ classic canary emit OK（${classicContent.length} bytes，含 marker，無 ESM/CJS 結構，i18n inject 通）`)
 
   // 8. 驗 module canary emit（output 路徑由 manifest + tsconfig 推導）
   const moduleOut = deriveOutputPath(moduleCfg, manifest.canary.module)
@@ -273,22 +288,31 @@ function main() {
       assertClassicShape(tempContent, `prod emit ${entry}`)
       if (!fs.existsSync(committedOut)) fail(`prod committed artifact 缺檔（${committedOut}）；請跑 npm run build 後 commit`)
       const committedContent = fs.readFileSync(committedOut, 'utf8')
+      // Stage 5 prep (2026-05-21)：對 temp emit 跑 injectI18n（in-memory），committed 已是
+      // build-partials post-inject 結果。compare 之前先讓 temp 同步注入，否則 sentinel-bearing
+      // entry 一定 fail（codex prep r1 拍板）。current 5 entries 無 sentinel → no-op，向後相容。
+      const tempBasename = path.basename(tempOut)
+      const tempInjected = await injectI18n(tempBasename, tempContent)
+      // post-inject 後不該殘留 sentinel pattern（若 source 含 sentinel）
+      if (I18N_RESIDUAL.test(tempInjected)) {
+        fail(`prod temp emit (${entry}) post-inject 殘留 @i18n sentinel（regex 沒抓到 → I18N_SENTINEL replacement 失效；source 必須使 sentinel 維持可替換形狀）`)
+      }
       // Windows checkout 可能把 LF 轉成 CRLF（autocrlf），tsc 直接 emit LF；
       // line-ending 差異不算 source drift，比對前統一 normalize \r\n → \n。
       // 其餘任何差異（內容 / 漏 import / 空白以外字元）都視為真實 drift。
       const normalize = (s) => s.replace(/\r\n/g, '\n')
-      const tempNorm = normalize(tempContent)
+      const tempNorm = normalize(tempInjected)
       const committedNorm = normalize(committedContent)
       if (tempNorm !== committedNorm) {
         fail(
-          `prod committed artifact 與 fresh tsc emit 不同步（${entry}）\n` +
-          `  temp     : ${tempOut} (${tempContent.length} bytes raw / ${tempNorm.length} LF-normalized)\n` +
+          `prod committed artifact 與 fresh tsc emit+inject 不同步（${entry}）\n` +
+          `  temp     : ${tempOut} (${tempContent.length} bytes raw / ${tempNorm.length} LF-normalized post-inject)\n` +
           `  committed: ${committedOut} (${committedContent.length} bytes raw / ${committedNorm.length} LF-normalized)\n` +
           `  請跑 npm run build 後 commit；或檢查 src/js source 與 build artifact 是否同 PR`
         )
       }
     }
-    console.log(`✓ prod emit OK（${manifest.classic.length} entries：classic shape + temp/committed byte-equal）`)
+    console.log(`✓ prod emit OK（${manifest.classic.length} entries：classic shape + temp+inject/committed byte-equal）`)
   }
 
   // 10. 清乾淨
@@ -297,4 +321,4 @@ function main() {
   console.log('=== browser pipeline canary OK ===')
 }
 
-main()
+main().catch((e) => fail(e && e.stack ? e.stack : String(e)))

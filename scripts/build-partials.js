@@ -17,6 +17,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execSync, execFileSync } from 'node:child_process'
 import Handlebars from 'handlebars'
+import { injectI18n } from './lib/inject-i18n.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -59,9 +60,8 @@ const OUT_DIR = path.join(ROOT, 'public')
 const OUT_JS = path.join(OUT_DIR, 'js')
 const OUT_CSS = path.join(OUT_DIR, 'css')
 
-// 支援任意變數名（LANGS_I18N / LANGS_D / LANGS / ...），sentinel 統一為 /*@i18n@*/{}
-// 也支援 /*@i18n:NAME@*/{} 指向 src/i18n/NAME.json（讓多檔共用同字典，例：embed 元件）
-const I18N_SENTINEL = /const (\w+) = \/\*@i18n(?::([a-zA-Z0-9_-]+))?@\*\/\{\};/g
+// Stage 5 prep (2026-05-21)：injectI18n 抽至 scripts/lib/inject-i18n.js（ESM helper），
+// build-partials 與 verify-browser-pipeline 共用同一條 inject path。
 
 // ── Helpers ─────────────────────────────────────────────
 Handlebars.registerHelper('eq', (a, b) => a === b)
@@ -89,56 +89,6 @@ async function loadPartials() {
   return count
 }
 
-// ── i18n inject ─────────────────────────────────────────
-// 頁面內以 `const LANGS_I18N = /*@i18n@*/{};` 標記注入點，
-// build 時讀 src/i18n/<page>.json 替換為實際字典。
-async function injectI18n(filename, html) {
-  // 收集所有 sentinel 出現（一頁可能有多個字典，例如 LANGS_I18N + LANGS_D）
-  const matches = [...html.matchAll(I18N_SENTINEL)]
-  if (!matches.length) {
-    const defaultJson = path.join(SRC_I18N, filename.replace(/\.(html|js)$/, '.json'))
-    try { await fs.access(defaultJson); console.warn(`[warn] ${path.relative(ROOT, defaultJson)} exists but ${filename} has no @i18n@ sentinel`) }
-    catch {}
-    return html
-  }
-
-  // 將 sentinel 依「來源 JSON 檔名」分群：未指定 → 用 filename 對應；指定 → 用該 name
-  const dictCache = new Map() // jsonName -> parsed dict
-  async function loadDict(jsonName) {
-    if (dictCache.has(jsonName)) return dictCache.get(jsonName)
-    const p = path.join(SRC_I18N, jsonName + '.json')
-    let d
-    try { d = JSON.parse(await fs.readFile(p, 'utf8')) }
-    catch (e) {
-      if (e.code === 'ENOENT') throw new Error(`${filename} references i18n '${jsonName}' but ${path.relative(ROOT, p)} not found`)
-      throw e
-    }
-    dictCache.set(jsonName, d)
-    return d
-  }
-
-  // 預先把每個 sentinel 對應的 source name 算好，並計算同 source 的 sentinel 數量（用來判斷 multi 結構）
-  const defaultName = filename.replace(/\.(html|js)$/, '')
-  const sentinelMeta = matches.map(m => ({ varName: m[1], jsonName: m[2] || defaultName }))
-  const countPerSource = sentinelMeta.reduce((acc, s) => { acc[s.jsonName] = (acc[s.jsonName] || 0) + 1; return acc }, {})
-
-  // 預載所有需要的 dict + 結構檢查
-  for (const s of sentinelMeta) {
-    const dict = await loadDict(s.jsonName)
-    if (countPerSource[s.jsonName] > 1 && !dict[s.varName]) {
-      throw new Error(`${filename}: sentinel '${s.varName}' for ${s.jsonName}.json but missing key '${s.varName}'`)
-    }
-  }
-
-  let idx = 0
-  return html.replace(I18N_SENTINEL, () => {
-    const { varName, jsonName } = sentinelMeta[idx++]
-    const dict = dictCache.get(jsonName)
-    const data = countPerSource[jsonName] > 1 ? dict[varName] : dict
-    return `const ${varName} = ${JSON.stringify(data)};`
-  })
-}
-
 // ── Page build ──────────────────────────────────────────
 async function buildPage(filename) {
   const srcPath = path.join(SRC_PAGES, filename)
@@ -162,6 +112,10 @@ async function buildPage(filename) {
 async function buildJs() {
   let tsCount = 0
   // 1) tsc emit classic prod entries（manifest.classic 所列 src/js/*.ts）
+  //    Stage 5 prep (2026-05-21)：tsc emit 之後對每個 emit 結果跑 injectI18n，
+  //    讓 manifest.classic entries 也支援 /*@i18n@*\/{} sentinel
+  //    （rename .js→.ts 後 i18n 在 prod 不再 silently 壞掉）。
+  //    路徑用 rootDir-derived 推導，避免 nested entry 未來分叉（codex prep r1 拍板）。
   try {
     const manifestRaw = await fs.readFile(path.join(SRC_JS, 'browser-script-manifest.json'), 'utf8')
     const manifest = JSON.parse(manifestRaw)
@@ -171,6 +125,17 @@ async function buildJs() {
         cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'],
         maxBuffer: 16 * 1024 * 1024,
       })
+      // post-emit i18n inject（rootDir=src/js, outDir=public/js；同 tsconfig.browser-classic.prod.json）
+      for (const entry of manifest.classic) {
+        const rel = path.relative(SRC_JS, path.join(ROOT, entry))
+        const emittedPath = path.join(OUT_JS, rel.replace(/\.ts$/, '.js'))
+        const emittedBasename = path.basename(emittedPath)
+        const emitted = await fs.readFile(emittedPath, 'utf8')
+        const injected = await injectI18n(emittedBasename, emitted)
+        if (injected !== emitted) {
+          await fs.writeFile(emittedPath, injected, 'utf8')
+        }
+      }
       tsCount = manifest.classic.length
     }
   } catch (e) {
