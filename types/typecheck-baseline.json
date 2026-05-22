@@ -1,9 +1,9 @@
 {
-  "baselineSha": "cc61e93",
-  "cleanFiles": 237,
+  "baselineSha": "82e7b6e",
+  "cleanFiles": 238,
   "createdAt": "2026-05-22",
-  "errorCount": 811,
-  "errorFiles": 19,
+  "errorCount": 793,
+  "errorFiles": 18,
   "errorsByFile": {
     "src/js/about.js": 21,
     "src/js/admin-deals.js": 20,
@@ -22,10 +22,9 @@
     "src/js/login.js": 28,
     "src/js/meeting-system.js": 21,
     "src/js/portfolio.js": 26,
-    "src/js/requisition.js": 37,
-    "src/js/reset-password.js": 18
+    "src/js/requisition.js": 37
   },
-  "fileErrors": 811,
+  "fileErrors": 793,
   "globalErrors": 0,
   "sourceFilesTotal": 256,
   "stage": 1,
@@ -59,6 +58,7 @@
         "src/js/form-enter.ts",
         "src/js/notify.ts",
         "src/js/privacy.ts",
+        "src/js/reset-password.ts",
         "src/js/sidebar-auth.ts",
         "src/js/verify-email.ts"
       ]
@@ -91,6 +91,7 @@
         "src/js/form-enter.ts",
         "src/js/notify.ts",
         "src/js/privacy.ts",
+        "src/js/reset-password.ts",
         "src/js/sidebar-auth.ts",
         "src/js/verify-email.ts"
       ]

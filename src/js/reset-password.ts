@@ -1,3 +1,11 @@
+// Stage 5 PR-5e (2026-05-22)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（getLang / T / applyLang / showPanel / setMsg /
+// togglePwd / handlePasswordSubmit / handle2faSubmit / submitReset /
+// startCountdown / tBackend / token / newPassword 等）在同 tsc program 全域
+// scope 撞名 → TS2393。內層 mobile-overlay / theme-lang 既有 IIFE 維持不動。
+// auth family 收尾（Stage 5 PR-5e）。
+;(function () {
 // ── i18n 字典 ────────────────────────────────────────────────
 const I18N = /*@i18n@*/{};
 
@@ -15,13 +23,13 @@ function applyLang(lang) {
   try { localStorage.setItem('lang', lang) } catch {}
   document.documentElement.lang = lang;
   const dict = I18N[lang] || I18N['zh-TW'];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const k = el.dataset.i18n; if (dict[k] != null) el.textContent = dict[k];
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n; if (k && dict[k] != null) el.textContent = dict[k];
   });
-  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
-    const k = el.dataset.i18nPh; if (dict[k] != null) el.placeholder = dict[k];
+  document.querySelectorAll<HTMLInputElement>('[data-i18n-ph]').forEach(el => {
+    const k = el.dataset.i18nPh; if (k && dict[k] != null) el.placeholder = dict[k];
   });
-  document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -50,8 +58,9 @@ function setMsg(text, type = 'error') {
 }
 
 function togglePwd(inputId, iconId) {
-  const input = document.getElementById(inputId);
+  const input = document.getElementById(inputId) as HTMLInputElement | null;
   const icon  = document.getElementById(iconId);
+  if (!input || !icon) return;
   const show  = input.type === 'password';
   input.type  = show ? 'text' : 'password';
   icon.style.opacity = show ? '0.5' : '1';
@@ -59,9 +68,9 @@ function togglePwd(inputId, iconId) {
 
 async function handlePasswordSubmit(e) {
   e.preventDefault();
-  const pwd     = document.getElementById('new-password').value;
-  const confirm = document.getElementById('confirm-password').value;
-  const btn     = document.getElementById('pwd-btn');
+  const pwd     = (document.getElementById('new-password') as HTMLInputElement | null)?.value ?? '';
+  const confirm = (document.getElementById('confirm-password') as HTMLInputElement | null)?.value ?? '';
+  const btn     = document.getElementById('pwd-btn') as HTMLButtonElement | null;
   if (pwd !== confirm) { setMsg(T('err_pwd_mismatch')); return; }
   if (pwd.length < 8)  { setMsg(T('err_pwd_short')); return; }
   newPassword = pwd;
@@ -70,18 +79,17 @@ async function handlePasswordSubmit(e) {
 
 async function handle2faSubmit(e) {
   e.preventDefault();
-  const code = document.getElementById('totp-code').value.trim();
-  const btn  = document.getElementById('totp-btn');
+  const code = (document.getElementById('totp-code') as HTMLInputElement | null)?.value.trim() ?? '';
+  const btn  = document.getElementById('totp-btn') as HTMLButtonElement | null;
   if (!code) { setMsg(T('err_otp_empty')); return; }
   await submitReset(btn, 'totp-btn', code);
 }
 
 async function submitReset(btn, btnId, totpCode) {
-  btn.disabled    = true;
-  btn.textContent = T('loading');
+  if (btn) { btn.disabled = true; btn.textContent = T('loading'); }
   setMsg('');
 
-  const body = { token, new_password: newPassword };
+  const body: { token: string; new_password: string; totp_code?: string } = { token, new_password: newPassword };
   if (totpCode) body.totp_code = totpCode;
 
   try {
@@ -95,14 +103,15 @@ async function submitReset(btn, btnId, totpCode) {
     if (res.ok) {
       // P1-22：成功 / 各種終止分支都要清掉 newPassword（敏感資料留 module scope 是 XSS 攻擊面）
       newPassword = '';
-      try { document.getElementById('new-password').value = ''; document.getElementById('confirm-password').value = ''; } catch {}
+      // try/catch 包裹保留：缺 element 時 silent skip（與原 .js 行為等價）
+      try { (document.getElementById('new-password') as HTMLInputElement).value = ''; (document.getElementById('confirm-password') as HTMLInputElement).value = ''; } catch {}
       showPanel('panel-success'); startCountdown(); return;
     }
 
     if (res.status === 403 && data.requires_2fa) {
       // 2FA 分支保留 newPassword（要送第二段）；其餘失敗一律清
       showPanel('panel-2fa');
-      document.getElementById('totp-code').focus();
+      document.getElementById('totp-code')?.focus();
       return;
     }
 
@@ -118,8 +127,10 @@ async function submitReset(btn, btnId, totpCode) {
     newPassword = '';
     setMsg(T('err_network'));
   } finally {
-    btn.disabled    = false;
-    btn.textContent = btnId === 'pwd-btn' ? T('btn_reset') : T('btn_verify_reset');
+    if (btn) {
+      btn.disabled    = false;
+      btn.textContent = btnId === 'pwd-btn' ? T('btn_reset') : T('btn_verify_reset');
+    }
   }
 }
 
@@ -127,7 +138,8 @@ function startCountdown() {
   let sec = 3;
   const el = document.getElementById('countdown');
   const iv = setInterval(() => {
-    sec--; el.textContent = sec;
+    sec--;
+    if (el) el.textContent = String(sec);
     if (sec <= 0) { clearInterval(iv); location.href = '/login.html?password_reset=1'; }
   }, 1000);
 }
@@ -135,14 +147,19 @@ function startCountdown() {
 // ── Phase C-3 listener wiring ──
 document.getElementById('panel-password')?.addEventListener('submit', handlePasswordSubmit);
 document.getElementById('panel-2fa')?.addEventListener('submit', handle2faSubmit);
-document.querySelectorAll('[data-toggle-pwd]').forEach(btn => {
+document.querySelectorAll<HTMLElement>('[data-toggle-pwd]').forEach(btn => {
   btn.addEventListener('click', () => togglePwd(btn.dataset.togglePwd, btn.dataset.toggleEye));
 });
-document.querySelectorAll('[data-show-panel]').forEach(btn => {
+document.querySelectorAll<HTMLElement>('[data-show-panel]').forEach(btn => {
   btn.addEventListener('click', () => showPanel(btn.dataset.showPanel));
 });
 
-document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit);
+// Stage 5 PR-5e cleanup：移除 dead copy-paste / latent hazard
+//   原：`document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit);`
+//   reset-password page 沒有 #form-forgot 且 handleSubmit 未定義 → TS2304；
+//   optional chaining 在 null 時短路（無 runtime ReferenceError），但屬
+//   forgot-password.js 複製殘骸，若日後 #form-forgot 出現立即爆。
+//   （與 PR-5 verify-email / PR-5c confirm-delete 同款 cleanup）
 
 // ── Mobile overlay (m-ham-btn / m-overlay open-close) ──
 (function () {
@@ -189,15 +206,16 @@ document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit)
     mLangDrop?.classList.remove('open');
   });
   langDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang); langDrop.classList.remove('open');
   });
   mLangDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang); mLangDrop.classList.remove('open');
   });
   document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
-    const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang);
   });
+})();
 })();
