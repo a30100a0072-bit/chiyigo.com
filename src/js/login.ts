@@ -1,3 +1,18 @@
+// login — /login.html page entry
+// Stage 5 PR-5o (2026-05-22)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（applyTheme / initIcons / hamBtn / overlay /
+// openMenu / closeMenu / LANGS_I18N / TAB_TITLES / applyLangI / curLangI /
+// langDropI / toggleLangDrop / toggleTopLangDrop）在同 tsc program 全域 scope
+// 撞名 → TS2393。內層 pre-notice / drag-to-close 兩段既有 IIFE 維持不動。
+//
+// TAB_CONFIG 由 auth-ui.js（仍 .js, classic <script>）以 `const` 宣告於 script-global，
+// 同 Realm 內所有 classic <script> 共享 lexical scope，故 bare 識別字 lookup 可達。
+// 不能改走 `globalThis.TAB_CONFIG` — top-level `const` 不會掛到 window/globalThis。
+// `declare const` 是 TS 純型別宣告，emit 後無 runtime artifact，與既有 typeof 防衛同手感。
+declare const TAB_CONFIG: Record<string, { title: string; subtitle: string; showTabs: boolean }> | undefined;
+
+;(function () {
 // Query param notifications
 (function(){
   const p = new URLSearchParams(location.search);
@@ -30,16 +45,16 @@ function applyTheme(isDark) {
   document.documentElement.classList.toggle('theme-light', !isDark);
   localStorage.setItem('theme', isDark ? 'dark' : 'light');
   const dark = document.documentElement.classList.contains('theme-dark');
-  document.querySelectorAll('.icon-sun').forEach(el => el.hidden = dark);
-  document.querySelectorAll('.icon-moon').forEach(el => el.hidden = !dark);
+  document.querySelectorAll<HTMLElement>('.icon-sun').forEach(el => el.hidden = dark);
+  document.querySelectorAll<HTMLElement>('.icon-moon').forEach(el => el.hidden = !dark);
 }
 (function initIcons() {
   const dark = document.documentElement.classList.contains('theme-dark');
-  document.querySelectorAll('.icon-sun').forEach(el => el.hidden = dark);
-  document.querySelectorAll('.icon-moon').forEach(el => el.hidden = !dark);
+  document.querySelectorAll<HTMLElement>('.icon-sun').forEach(el => el.hidden = dark);
+  document.querySelectorAll<HTMLElement>('.icon-moon').forEach(el => el.hidden = !dark);
 })();
-document.getElementById('theme-toggle-btn').addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('theme-dark')));
-document.getElementById('m-theme-btn').addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('theme-dark')));
+document.getElementById('theme-toggle-btn')?.addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('theme-dark')));
+document.getElementById('m-theme-btn')?.addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('theme-dark')));
 
 // Mobile overlay
 const hamBtn  = document.getElementById('m-ham-btn');
@@ -70,14 +85,14 @@ const TAB_TITLES = {
 
 function applyLangI(lang) {
   localStorage.setItem('lang', lang);
-  const t = LANGS_I18N[lang] || LANGS_I18N['zh-TW'];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k];
+  const t = LANGS_I18N[lang] || LANGS_I18N['zh-TW'] || {};
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n; if (k && t[k] !== undefined) el.textContent = t[k];
   });
-  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
-    const k = el.dataset.i18nPh; if (t[k] !== undefined) el.placeholder = t[k];
+  document.querySelectorAll<HTMLInputElement>('[data-i18n-ph]').forEach(el => {
+    const k = el.dataset.i18nPh; if (k && t[k] !== undefined) el.placeholder = t[k];
   });
-  document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(btn => {
+  document.querySelectorAll<HTMLElement>('.lang-opt,.m-ov-lang-opt').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.lang === lang);
   });
   // patch TAB_CONFIG and re-apply current tab title/subtitle
@@ -115,15 +130,15 @@ document.addEventListener('click', () => {
   document.getElementById('m-top-lang-drop')?.classList.remove('open');
 });
 langDropI?.addEventListener('click', e => {
-  const opt = e.target.closest('.lang-opt'); if (!opt) return;
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
   applyLangI(opt.dataset.lang); langDropI.classList.remove('open');
 });
 document.getElementById('m-top-lang-drop')?.addEventListener('click', e => {
-  const opt = e.target.closest('.lang-opt'); if (!opt) return;
-  applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open');
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
+  applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop')?.classList.remove('open');
 });
 document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
-  const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return;
   applyLangI(opt.dataset.lang);
 });
 
@@ -134,11 +149,11 @@ document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
   document.addEventListener('touchstart', function (e) {
     const ov = document.getElementById('m-overlay')
     if (!ov || !ov.classList.contains('is-open')) return
-    const wrap = ov.querySelector('.m-ov-wrap')
+    const wrap = ov.querySelector<HTMLElement>('.m-ov-wrap')
     if (!wrap) return
     const t = e.touches[0], r = wrap.getBoundingClientRect()
     if (t.clientY < r.top || t.clientY > r.bottom) return
-    const nav = wrap.querySelector('.m-ov-nav')
+    const nav = wrap.querySelector<HTMLElement>('.m-ov-nav')
     if (nav && nav.scrollTop > 0) {
       const nr = nav.getBoundingClientRect()
       if (t.clientY >= nr.top && t.clientY <= nr.bottom) return
@@ -152,8 +167,8 @@ document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
     const dy = lastY - startY
     if (dy <= 0) return
     const ov = document.getElementById('m-overlay')
-    const wrap = ov && ov.querySelector('.m-ov-wrap')
-    if (!wrap) return
+    const wrap = ov && ov.querySelector<HTMLElement>('.m-ov-wrap')
+    if (!wrap || !ov) return
     wrap.style.transform = `translateY(${dy}px)`
     const ratio = Math.max(0, 1 - dy / wrap.offsetHeight * 1.5)
     ov.style.background = `rgba(10,12,28,${(0.32 * ratio).toFixed(3)})`
@@ -163,8 +178,8 @@ document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
     if (!active) return
     active = false
     const ov = document.getElementById('m-overlay')
-    const wrap = ov && ov.querySelector('.m-ov-wrap')
-    if (!wrap) { startY = 0; lastY = 0; return }
+    const wrap = ov && ov.querySelector<HTMLElement>('.m-ov-wrap')
+    if (!wrap || !ov) { startY = 0; lastY = 0; return }
     const dy = lastY - startY
     ov.style.background = ''
     if (dy > THRESHOLD) {
@@ -188,3 +203,4 @@ document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
     startY = 0; lastY = 0
   }, { passive: true })
 })()
+})();
