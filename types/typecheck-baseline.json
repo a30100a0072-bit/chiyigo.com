@@ -1,17 +1,16 @@
 {
-  "baselineSha": "40c7814",
-  "cleanFiles": 251,
+  "baselineSha": "57aef4c",
+  "cleanFiles": 252,
   "createdAt": "2026-05-22",
-  "errorCount": 418,
-  "errorFiles": 5,
+  "errorCount": 381,
+  "errorFiles": 4,
   "errorsByFile": {
     "src/js/auth-ui.js": 44,
     "src/js/dashboard.js": 227,
     "src/js/erp-architecture-3d.js": 66,
-    "src/js/erp-architecture.js": 44,
-    "src/js/requisition.js": 37
+    "src/js/erp-architecture.js": 44
   },
-  "fileErrors": 418,
+  "fileErrors": 381,
   "globalErrors": 0,
   "sourceFilesTotal": 256,
   "stage": 1,
@@ -58,6 +57,7 @@
         "src/js/notify.ts",
         "src/js/portfolio.ts",
         "src/js/privacy.ts",
+        "src/js/requisition.ts",
         "src/js/reset-password.ts",
         "src/js/sidebar-auth.ts",
         "src/js/verify-email.ts"
@@ -104,6 +104,7 @@
         "src/js/notify.ts",
         "src/js/portfolio.ts",
         "src/js/privacy.ts",
+        "src/js/requisition.ts",
         "src/js/reset-password.ts",
         "src/js/sidebar-auth.ts",
         "src/js/verify-email.ts"
