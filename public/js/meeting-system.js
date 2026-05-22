@@ -5,8 +5,7 @@
 // curLangI / applyLangI / langTogBtnI / langDropI / toggleTopLangDrop /
 // osContent / revRoot / revObs）在同 tsc program 全域 scope 撞名 → TS2393。
 // 內層 drag-to-close / neural-canvas 既有 IIFE 維持不動。
-// 結構與 concert-system.ts / about.ts 同源（meeting-system.js 與 concert-system.js
-// pre-rename 為 byte-identical 來源 modulo CRLF；PR-5g pattern 直接套用）。
+// 結構與 about.ts 同源（PR-5g/PR-5h pattern）。
 ;
 (function () {
     // ── block 1/2 ──
