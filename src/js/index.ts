@@ -1,8 +1,33 @@
+// index — / (homepage) page entry
+// Stage 5 PR-5q (2026-05-22)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（syncThemeIcons / toggleTheme / LANGS_I18N /
+// curLangI / applyLangI / langTogBtnI / langDropI / toggleTopLangDrop /
+// toggleOverlay / closeOverlay / handleOverlayClick / revealObs / sectionObs /
+// cvs / ctx / NODES / MAXDIST / SPEED / pts / cc / updateCanvasColors /
+// resizeCvs / initPts / draw）在同 tsc program 全域 scope 撞名 → TS2393。
+// 內層 drag-to-close 既有 IIFE 維持不動；Phase C-3 兩段尾部 wire 收進外層
+// IIFE 末段。
+//
+// 首頁含 embed host contract：呼叫 window.cpArchSetLang / window.erpArchSetLang —
+// 兩者由 src/js/case-platform.js / erp-architecture.js 以 `window.foo = ...`
+// 賦值（真 window-attached，非 classic-script-shared const；不同於 PR-5o
+// TAB_CONFIG），所以走 WindowWithArchEmbed type-alias cast pattern（per PR-5p
+// WindowWithAi 立樁）；optional call `?.()` 維持原 .js 對未初始化 callback 的
+// 容忍語意。
+;(function () {
+
+// window globals: arch embed callbacks (case-platform / erp-architecture 仍 .js)
+type WindowWithArchEmbed = Window & {
+  cpArchSetLang?: (lang: string) => void;
+  erpArchSetLang?: (lang: string) => void;
+};
+
 // ── Theme ──
 function syncThemeIcons() {
   const dark = document.documentElement.classList.contains('theme-dark')
-  document.querySelectorAll('.icon-moon').forEach(el => el.hidden = !dark)
-  document.querySelectorAll('.icon-sun' ).forEach(el => el.hidden = dark)
+  document.querySelectorAll<HTMLElement>('.icon-moon').forEach(el => el.hidden = !dark)
+  document.querySelectorAll<HTMLElement>('.icon-sun' ).forEach(el => el.hidden = dark)
 }
 function toggleTheme() {
   const html = document.documentElement
@@ -23,33 +48,36 @@ function applyLangI(lang) {
   if (!LANGS_I18N[lang]) return;
   curLangI = lang;
   const t = LANGS_I18N[lang];
-  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k]; });
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (k && t[k] !== undefined) el.textContent = t[k]; });
   const tBtn = document.getElementById('theme-toggle-btn');
   const lBtn = document.getElementById('lang-toggle-btn');
   if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
   if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
-  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-  document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
-  window.cpArchSetLang?.(lang);
-  window.erpArchSetLang?.(lang);
+  (window as WindowWithArchEmbed).cpArchSetLang?.(lang);
+  (window as WindowWithArchEmbed).erpArchSetLang?.(lang);
 }
 const langTogBtnI = document.getElementById('lang-toggle-btn');
 const langDropI   = document.getElementById('lang-dropdown');
 langTogBtnI?.addEventListener('click', e => { e.stopPropagation(); langDropI?.classList.toggle('open'); });
 document.addEventListener('click', () => langDropI?.classList.remove('open'));
-langDropI?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
-document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
-// Mobile topbar lang dropdown
-function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
+langDropI?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDropI.classList.remove('open'); });
+document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+// Mobile topbar lang dropdown — 原 .js bare .classList.toggle('open') 對 null 會 throw；
+// 用非空斷言保留原 throw 語意（zero-drift；避免引入 ?. 進 sweep backlog [[project_js_to_ts_stage5_plan]]）
+function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop')!.classList.toggle('open'); }
 document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
-document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); document.getElementById('m-top-lang-drop')!.classList.remove('open'); });
 applyLangI(curLangI);
 
 // ── Mobile overlay ──
+// toggleOverlay / closeOverlay / handleOverlayClick — 原 .js 對 ov / btn 為 null 時 throw；
+// 用非空斷言保留原語意（首頁實際 markup 100% 含 m-overlay / m-ham-btn，throw 永遠不會發生）
 function toggleOverlay() {
-  const ov  = document.getElementById('m-overlay')
-  const btn = document.getElementById('m-ham-btn')
+  const ov  = document.getElementById('m-overlay')!
+  const btn = document.getElementById('m-ham-btn')!
   const open = ov.classList.contains('is-open')
   if (open) closeOverlay()
   else {
@@ -61,8 +89,8 @@ function toggleOverlay() {
   }
 }
 function closeOverlay() {
-  const ov  = document.getElementById('m-overlay')
-  const btn = document.getElementById('m-ham-btn')
+  const ov  = document.getElementById('m-overlay')!
+  const btn = document.getElementById('m-ham-btn')!
   ov.classList.remove('is-open')
   ov.setAttribute('aria-hidden','true')
   btn.classList.remove('is-open')
@@ -77,17 +105,18 @@ document.getElementById('m-overlay')?.addEventListener('click', handleOverlayCli
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('m-overlay')?.classList.contains('is-open')) closeOverlay() })
 
 // ── Drag-to-close (bottom sheet swipe down) ──────────
+// 內層 IIFE 既有；narrow pattern 同 login.ts 立樁（per PR-5o）
 ;(function () {
   const THRESHOLD = 110
   let startY = 0, lastY = 0, active = false
   document.addEventListener('touchstart', function (e) {
     const ov = document.getElementById('m-overlay')
     if (!ov || !ov.classList.contains('is-open')) return
-    const wrap = ov.querySelector('.m-ov-wrap')
+    const wrap = ov.querySelector<HTMLElement>('.m-ov-wrap')
     if (!wrap) return
     const t = e.touches[0], r = wrap.getBoundingClientRect()
     if (t.clientY < r.top || t.clientY > r.bottom) return
-    const nav = wrap.querySelector('.m-ov-nav')
+    const nav = wrap.querySelector<HTMLElement>('.m-ov-nav')
     if (nav && nav.scrollTop > 0) {
       const nr = nav.getBoundingClientRect()
       if (t.clientY >= nr.top && t.clientY <= nr.bottom) return
@@ -101,8 +130,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.g
     const dy = lastY - startY
     if (dy <= 0) return
     const ov = document.getElementById('m-overlay')
-    const wrap = ov && ov.querySelector('.m-ov-wrap')
-    if (!wrap) return
+    const wrap = ov && ov.querySelector<HTMLElement>('.m-ov-wrap')
+    if (!wrap || !ov) return
     wrap.style.transform = `translateY(${dy}px)`
     const ratio = Math.max(0, 1 - dy / wrap.offsetHeight * 1.5)
     ov.style.background = `rgba(10,12,28,${(0.32 * ratio).toFixed(3)})`
@@ -112,8 +141,8 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.g
     if (!active) return
     active = false
     const ov = document.getElementById('m-overlay')
-    const wrap = ov && ov.querySelector('.m-ov-wrap')
-    if (!wrap) { startY = 0; lastY = 0; return }
+    const wrap = ov && ov.querySelector<HTMLElement>('.m-ov-wrap')
+    if (!wrap || !ov) { startY = 0; lastY = 0; return }
     const dy = lastY - startY
     ov.style.background = ''
     if (dy > THRESHOLD) {
@@ -158,10 +187,12 @@ const sectionObs = new IntersectionObserver(
 ;['hero','services','process','cta'].forEach(id => { const el = document.getElementById(id); if(el) sectionObs.observe(el) })
 
 // ── Neural canvas ──
-const cvs = document.getElementById('neural-canvas')
-const ctx = cvs.getContext('2d')
+// cvs / ctx 兩處非空斷言：原 .js 對 null 直接 throw（首頁 markup 100% 含
+// #neural-canvas + 2d context），zero-drift narrow
+const cvs = document.getElementById('neural-canvas') as HTMLCanvasElement
+const ctx = cvs.getContext('2d')!
 const NODES=55, MAXDIST=145, SPEED=0.28, pts=[]
-let cc={}
+let cc = { r: '108', g: '110', b: '229', node: 0.22, line: 0.09 }
 function updateCanvasColors() {
   const s = getComputedStyle(document.documentElement)
   cc = { r: s.getPropertyValue('--neural-r').trim()||'108', g: s.getPropertyValue('--neural-g').trim()||'110', b: s.getPropertyValue('--neural-b').trim()||'229', node: parseFloat(s.getPropertyValue('--neural-node-opacity'))||0.22, line: parseFloat(s.getPropertyValue('--neural-line-opacity'))||0.09 }
@@ -186,3 +217,5 @@ document.querySelectorAll('.m-ov-item, .m-ov-cta-btn').forEach(el => {
 
 // ── Phase C-3 m-lang-btn wire ──
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
+
+})();
