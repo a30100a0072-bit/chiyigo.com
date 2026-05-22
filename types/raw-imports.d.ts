@@ -21,7 +21,12 @@ declare module '*.html?raw' {
 }
 
 declare module '/js/vendor/*.module.min.js' {
-  // Vendored ES module served from /public — treat as opaque, no types.
+  // Catch-all for self-hosted vendor ES modules with no dedicated shim.
+  // Three.js (`three.module.min.js`) has its own typed shim in types/three.d.ts
+  // using a more-specific wildcard pattern (`/js/vendor/three.module.min*`),
+  // which TypeScript prefers over this catch-all via longest-prefix matching.
+  // New vendor modules: add a typed shim in types/<lib>.d.ts rather than rely
+  // on this opaque fallback.
   const mod: unknown;
   export default mod;
 }

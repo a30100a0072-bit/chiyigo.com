@@ -9,5 +9,5 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["scripts/fixtures/pipeline-canary-module.ts"]
+  "include": ["src/js/erp-architecture-3d.ts", "scripts/fixtures/pipeline-canary-module.ts"]
 }

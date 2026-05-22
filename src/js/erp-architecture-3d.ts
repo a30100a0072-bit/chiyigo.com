@@ -1,4 +1,5 @@
-// ── erp-architecture-3d.js — ERP 8 層立體架構頁（Three.js 版本）──
+/// <reference path="../../types/three.d.ts" />
+// ── erp-architecture-3d.ts — ERP 8 層立體架構頁（Three.js 版本）──
 // WebGL 真實 3D：PerspectiveCamera + DirectionalLight + Raycaster picking
 // 自託管 three.module.min.js（~180KB gzipped），無外部依賴、CSP 不動
 //
@@ -10,6 +11,11 @@
 //   - WebGL context loss → 顯示 fallback 訊息，requestAnimationFrame 自動暫停
 //
 // 模組化：本檔以 ES module 載入（<script type="module">），無 IIFE 必要
+// Three.js typing：triple-slash reference 強制 tsc 載入 types/three.d.ts。
+//   root tsconfig 透過 include: ["types/**/*.d.ts"] 自動拿到 shim；
+//   tsconfig.browser-module.prod.json 的 include 只含 manifest.module 入口（受 ratchet
+//   manifest-sync 規則約束，不能加進 .d.ts），所以這支 prod build 靠本檔頂的
+//   reference path 把 shim 帶進編譯單元。
 
 import * as THREE from '/js/vendor/three.module.min.js';
 
@@ -101,7 +107,10 @@ function hexStr(hex){ return '#' + hex.toString(16).padStart(6, '0'); }
 
 // ── DOM refs ──
 const SCENE_EL = document.getElementById('erp3-scene');
-const CANVAS = document.getElementById('erp3-canvas');
+// CANVAS narrowed to HTMLCanvasElement — passed to new THREE.WebGLRenderer({ canvas }).
+// `getElementById` returns HTMLElement | null in lib.dom; the .html template guarantees
+// `<canvas id="erp3-canvas">` so the cast is safe at the boundary.
+const CANVAS = document.getElementById('erp3-canvas') as HTMLCanvasElement | null;
 const A11Y_LIST = document.getElementById('erp3-a11y');
 const FALLBACK = document.getElementById('erp3-fallback');
 const AUTO_BTN = document.getElementById('erp3-auto-toggle');
@@ -466,7 +475,7 @@ function buildChain(name){
 
 function setChain(name){
   activeChain = (name && CHAINS[name]) ? name : null;
-  CHAIN_BAR?.querySelectorAll('.erp3-chain-btn').forEach(b => {
+  CHAIN_BAR?.querySelectorAll<HTMLElement>('.erp3-chain-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.chain === (activeChain || 'none'));
   });
   // chain note 文字
@@ -703,7 +712,7 @@ RESET_BTN?.addEventListener('click', () => {
   cam.theta = 0.6; cam.phi = 0.18; cam.radius = 850;
 });
 CHAIN_BAR?.addEventListener('click', e => {
-  const btn = e.target.closest('.erp3-chain-btn');
+  const btn = (e.target as Element | null)?.closest<HTMLElement>('.erp3-chain-btn');
   if (!btn) return;
   const c = btn.dataset.chain;
   setChain(c === 'none' ? null : c);
@@ -746,9 +755,9 @@ function rebuildLabelTextures(){
 function applyDomI18n(lang){
   const dict = LANGS_I18N[lang] || LANGS_I18N['en'] || LANGS_I18N['zh-TW'];
   if (!dict) return;
-  document.querySelectorAll('[data-i18n]').forEach(el => {
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
     const k = el.dataset.i18n;
-    if (dict[k] !== undefined) el.textContent = dict[k];
+    if (k && dict[k] !== undefined) el.textContent = dict[k];
   });
 }
 
@@ -763,8 +772,8 @@ function applyLang(lang){
   if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
   if (mTBtn) mTBtn.title = t.tooltip_theme;
   if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
-  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-  document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
   rebuildLabelTextures();
   buildA11yList();
@@ -785,12 +794,11 @@ const langToggleBtn = document.getElementById('lang-toggle-btn');
 const langDropdown  = document.getElementById('lang-dropdown');
 langToggleBtn?.addEventListener('click', e => { e.stopPropagation(); langDropdown?.classList.toggle('open'); });
 document.addEventListener('click', () => langDropdown?.classList.remove('open'));
-langDropdown?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); langDropdown.classList.remove('open'); });
-document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); });
-function toggleTopLangDrop(e){ e.stopPropagation(); document.getElementById('m-top-lang-drop')?.classList.toggle('open'); }
-window.toggleTopLangDrop = toggleTopLangDrop;
+langDropdown?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); langDropdown.classList.remove('open'); });
+document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); });
+function toggleTopLangDrop(e: Event){ e.stopPropagation(); document.getElementById('m-top-lang-drop')?.classList.toggle('open'); }
 document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
-document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); document.getElementById('m-top-lang-drop')?.classList.remove('open'); });
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
 
 const hamBtn  = document.getElementById('m-ham-btn');
@@ -810,7 +818,7 @@ function applyTheme(dark){
   document.documentElement.classList.toggle('theme-light', !dark);
   [themeBtn, mThemeBtn].forEach(btn => {
     if (!btn) return;
-    const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+    const sun = btn.querySelector<HTMLElement>('.icon-sun'), moon = btn.querySelector<HTMLElement>('.icon-moon');
     if (sun)  sun.hidden = dark;
     if (moon) moon.hidden = !dark;
   });
@@ -838,10 +846,10 @@ document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
 // Neural canvas (背景)
 (function(){
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-  const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+  const canvas=document.getElementById('neural-canvas') as HTMLCanvasElement | null;if(!canvas)return;
   const ctx=canvas.getContext('2d');if(!ctx)return;
   let W=0,H=0,nodes=[];const DIST=155;
-  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+  function resize(){W=canvas!.width=window.innerWidth;H=canvas!.height=window.innerHeight}
   function initNodes(){const n=W<768?48:115;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
   const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
   let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};

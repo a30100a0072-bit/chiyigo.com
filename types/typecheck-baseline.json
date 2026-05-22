@@ -1,14 +1,13 @@
 {
-  "baselineSha": "4c00d1d",
-  "cleanFiles": 254,
+  "baselineSha": "61bfeed",
+  "cleanFiles": 255,
   "createdAt": "2026-05-22",
-  "errorCount": 293,
-  "errorFiles": 2,
+  "errorCount": 227,
+  "errorFiles": 1,
   "errorsByFile": {
-    "src/js/dashboard.js": 227,
-    "src/js/erp-architecture-3d.js": 66
+    "src/js/dashboard.js": 227
   },
-  "fileErrors": 293,
+  "fileErrors": 227,
   "globalErrors": 0,
   "sourceFilesTotal": 256,
   "stage": 1,
@@ -128,7 +127,8 @@
       },
       "exclude": [],
       "include": [
-        "scripts/fixtures/pipeline-canary-module.ts"
+        "scripts/fixtures/pipeline-canary-module.ts",
+        "src/js/erp-architecture-3d.ts"
       ]
     },
     "tsconfig.browser-module.prod.json": {
@@ -146,7 +146,9 @@
         "types": []
       },
       "exclude": [],
-      "include": []
+      "include": [
+        "src/js/erp-architecture-3d.ts"
+      ]
     },
     "tsconfig.json": {
       "compilerOptions": {
