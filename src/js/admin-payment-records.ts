@@ -1,5 +1,20 @@
-// admin-payment-records.js — read-only 充值紀錄頁
+// admin-payment-records — read-only 充值紀錄頁
 // 走既有 /api/admin/payments/intents 但鎖 status=succeeded；無 delete/refund UI
+// Stage 5 PR-5k (2026-05-22)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（LANGS_I18N / curLang / T / applyLangI /
+// langTogBtn / langDrop / ACCESS_TOKEN_KEY / getToken / logout / themeBtn /
+// applyTheme / esc / formatDate / formatAmount / currentPage / filters /
+// showError / buildQs / load / renderAll / renderTotals / reqCell /
+// renderTable / renderCards / renderPagination / exportCsv / triggerDownload /
+// aggPeriod / loadAgg）在同 tsc program 全域 scope 撞名 → TS2393。
+// + 與 page chrome 同 collision set（hamBtn / overlay / mTopbar / openMenu /
+// closeMenu / mTopLangDrop）。
+// 對 apiFetch 改走 window.apiFetch — 同 PR-5j（per
+// [[feedback_page_entry_apifetch_window_prefix]]）：prod tsconfig (types:[]
+// 不載 globals.d.ts) 下 api.ts 的 script-scope `interface Window { apiFetch }`
+// 是唯一 ambient 來源；runtime 等價，admin-payment-records.html 已先載 api.js。
+;(function () {
 
 // ── i18n ───────────────────────────────────────────────
 const LANGS_I18N = /*@i18n@*/{};
@@ -10,20 +25,20 @@ function applyLangI(lang) {
   curLang = lang;
   const t = T();
   document.documentElement.lang = lang;
-  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (typeof t[k] === 'string') el.textContent = t[k]; });
-  document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.dataset.i18nPh; if (typeof t[k] === 'string') el.placeholder = t[k]; });
-  document.querySelectorAll('[data-i18n-title]').forEach(el => { const k = el.dataset.i18nTitle; if (typeof t[k] === 'string') el.title = t[k]; });
-  document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (k && typeof t[k] === 'string') el.textContent = t[k]; });
+  document.querySelectorAll<HTMLInputElement>('[data-i18n-ph]').forEach(el => { const k = el.dataset.i18nPh; if (k && typeof t[k] === 'string') el.placeholder = t[k]; });
+  document.querySelectorAll<HTMLElement>('[data-i18n-title]').forEach(el => { const k = el.dataset.i18nTitle; if (k && typeof t[k] === 'string') el.title = t[k]; });
+  document.querySelectorAll<HTMLElement>('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
   // 重新 render 表格 + agg（含動態文字）
-  if (typeof renderAll === 'function' && window._lastData) renderAll(window._lastData);
+  if (typeof renderAll === 'function' && (window as Window & { _lastData?: unknown })._lastData) renderAll((window as Window & { _lastData?: unknown })._lastData);
   if (typeof loadAgg === 'function') loadAgg();
 }
 const langTogBtn = document.getElementById('lang-toggle-btn');
 const langDrop   = document.getElementById('lang-dropdown');
 langTogBtn?.addEventListener('click', e => { e.stopPropagation(); langDrop?.classList.toggle('open'); });
 document.addEventListener('click', () => langDrop?.classList.remove('open'));
-langDrop?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDrop.classList.remove('open'); });
+langDrop?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); langDrop.classList.remove('open'); });
 applyLangI(curLang);
 
 const ACCESS_TOKEN_KEY = 'access_token';
@@ -45,8 +60,8 @@ const themeBtn = document.getElementById('theme-toggle-btn');
 function applyTheme(dark) {
   document.documentElement.classList.toggle('theme-dark', dark);
   document.documentElement.classList.toggle('theme-light', !dark);
-  const sun  = themeBtn?.querySelector('.icon-sun');
-  const moon = themeBtn?.querySelector('.icon-moon');
+  const sun  = themeBtn?.querySelector<HTMLElement>('.icon-sun');
+  const moon = themeBtn?.querySelector<HTMLElement>('.icon-moon');
   if (sun)  sun.hidden = dark;
   if (moon) moon.hidden = !dark;
 }
@@ -72,27 +87,34 @@ function formatAmount(row) {
 let currentPage = 1;
 const filters = { user_id:'', vendor:'', from:'', to:'' };
 
-document.getElementById('f-apply').addEventListener('click', () => {
-  filters.user_id = document.getElementById('f-user-id').value.trim();
-  filters.vendor  = document.getElementById('f-vendor').value;
-  filters.from    = document.getElementById('f-from').value;
-  filters.to      = document.getElementById('f-to').value;
+document.getElementById('f-apply')?.addEventListener('click', () => {
+  filters.user_id = (document.getElementById('f-user-id') as HTMLInputElement  | null)?.value.trim() ?? '';
+  filters.vendor  = (document.getElementById('f-vendor')  as HTMLSelectElement | null)?.value ?? '';
+  filters.from    = (document.getElementById('f-from')    as HTMLInputElement  | null)?.value ?? '';
+  filters.to      = (document.getElementById('f-to')      as HTMLInputElement  | null)?.value ?? '';
   currentPage = 1;
   load();
 });
-document.getElementById('f-clear').addEventListener('click', () => {
-  ['f-user-id','f-vendor','f-from','f-to'].forEach(id => { document.getElementById(id).value = ''; });
-  for (const k of Object.keys(filters)) filters[k] = '';
+document.getElementById('f-clear')?.addEventListener('click', () => {
+  ['f-user-id','f-vendor','f-from','f-to'].forEach(id => {
+    const el = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null;
+    if (el) el.value = '';
+  });
+  for (const k of Object.keys(filters)) (filters as Record<string, string>)[k] = '';
   currentPage = 1;
   load();
 });
-document.getElementById('f-export').addEventListener('click', exportCsv);
+document.getElementById('f-export')?.addEventListener('click', exportCsv);
 
 function showError(msg) {
-  document.getElementById('loading').hidden = true;
-  document.getElementById('content').hidden = true;
-  document.getElementById('error-msg').hidden = false;
-  document.getElementById('error-text').textContent = `// error: ${msg}`;
+  const loading = document.getElementById('loading');
+  const content = document.getElementById('content');
+  const errMsg  = document.getElementById('error-msg');
+  const errText = document.getElementById('error-text');
+  if (loading) loading.hidden = true;
+  if (content) content.hidden = true;
+  if (errMsg)  errMsg.hidden = false;
+  if (errText) errText.textContent = `// error: ${msg}`;
 }
 
 function buildQs(page, limit) {
@@ -103,19 +125,23 @@ function buildQs(page, limit) {
 
 async function load() {
   if (!getToken()) { showError('請先登入'); return; }
-  document.getElementById('loading').hidden = false;
-  document.getElementById('content').hidden = true;
-  document.getElementById('error-msg').hidden = true;
+  const loading = document.getElementById('loading');
+  const content = document.getElementById('content');
+  const errMsg  = document.getElementById('error-msg');
+  if (loading) loading.hidden = false;
+  if (content) content.hidden = true;
+  if (errMsg)  errMsg.hidden  = true;
   let data;
   try {
-    data = await apiFetch(`/api/admin/payments/intents?${buildQs(currentPage, 50)}`);
-  } catch (e) {
-    if (e?.code === 'SESSION_EXPIRED') return showError('請先登入');
-    if (e?.status === 403) return showError('權限不足');
-    return showError(e?.message || '網路錯誤');
+    data = await window.apiFetch(`/api/admin/payments/intents?${buildQs(currentPage, 50)}`);
+  } catch (e: unknown) {
+    const err = e as { code?: string; status?: number; message?: string } | null;
+    if (err?.code === 'SESSION_EXPIRED') return showError('請先登入');
+    if (err?.status === 403) return showError('權限不足');
+    return showError(err?.message || '網路錯誤');
   }
-  document.getElementById('loading').hidden = true;
-  document.getElementById('content').hidden = false;
+  if (loading) loading.hidden = true;
+  if (content) content.hidden = false;
   renderAll(data);
 }
 
@@ -127,9 +153,11 @@ function renderAll(data) {
 }
 
 function renderTotals(total, totals) {
+  const el = document.getElementById('totals');
+  if (!el) return;
   const t = T();
   const sumLabel = (totals?.sum_subunit_succeeded ?? 0).toLocaleString();
-  document.getElementById('totals').innerHTML = `
+  el.innerHTML = `
     <div class="totals-cell"><span class="lbl">${esc(t.totals_count_succeeded || '本頁查到 (succeeded)')}</span><span class="val">${total}</span></div>
     <div class="totals-cell"><span class="lbl">${esc(t.totals_sum_subunit || '合計金額 (TWD subunit)')}</span><span class="val accent">${sumLabel}</span></div>
   `;
@@ -144,6 +172,7 @@ function reqCell(r) {
 
 function renderTable(rows) {
   const body = document.getElementById('table-body');
+  if (!body) return;
   if (!rows.length) {
     body.innerHTML = `<tr><td colspan="7" class="empty">${esc(T().empty_text || '// 沒有符合條件的紀錄')}</td></tr>`;
     return;
@@ -163,6 +192,7 @@ function renderTable(rows) {
 
 function renderCards(rows) {
   const c = document.getElementById('cards-container');
+  if (!c) return;
   if (!rows.length) { c.innerHTML = ''; return; }
   c.innerHTML = rows.map(r => `
     <div class="req-card">
@@ -181,6 +211,7 @@ function renderCards(rows) {
 
 function renderPagination(total, page, limit) {
   const pag = document.getElementById('pagination');
+  if (!pag) return;
   const totalPages = Math.max(1, Math.ceil((total || 0) / limit));
   if (totalPages <= 1) { pag.innerHTML = ''; return; }
   const t = T();
@@ -194,7 +225,8 @@ function renderPagination(total, page, limit) {
 }
 
 async function exportCsv() {
-  const btn = document.getElementById('f-export');
+  const btn = document.getElementById('f-export') as HTMLButtonElement | null;
+  if (!btn) return;
   btn.disabled = true; const orig = btn.textContent; btn.textContent = '匯出中…';
   try {
     // T9: 後端直接產 CSV，避免前端跑分頁迴圈撞 401 / OOM
@@ -238,16 +270,17 @@ async function loadAgg() {
   const wrap = document.getElementById('agg-table-wrap');
   const ld   = document.getElementById('agg-loading');
   if (!wrap) return;
-  ld.hidden = false;
+  if (ld) ld.hidden = false;
   let data;
   try {
-    data = await apiFetch(`/api/admin/payments/aggregate?period=${aggPeriod}&status=succeeded`);
-  } catch (e) {
-    if (e?.code === 'SESSION_EXPIRED') { ld.hidden = true; return; }
-    wrap.innerHTML = `<p class="txt-hint-dim">${esc(e?.message || '載入失敗')}</p>`;
-    ld.hidden = true; return;
+    data = await window.apiFetch(`/api/admin/payments/aggregate?period=${aggPeriod}&status=succeeded`);
+  } catch (e: unknown) {
+    const err = e as { code?: string; message?: string } | null;
+    if (err?.code === 'SESSION_EXPIRED') { if (ld) ld.hidden = true; return; }
+    wrap.innerHTML = `<p class="txt-hint-dim">${esc(err?.message || '載入失敗')}</p>`;
+    if (ld) ld.hidden = true; return;
   }
-  ld.hidden = true;
+  if (ld) ld.hidden = true;
   const buckets = data?.buckets ?? [];
   const t = T();
   if (!buckets.length) { wrap.innerHTML = `<p class="txt-hint-dim">${esc(t.agg_empty || '無資料')}</p>`; return; }
@@ -273,10 +306,10 @@ async function loadAgg() {
       <tbody>${rows}</tbody>
     </table>`;
 }
-document.querySelectorAll('.agg-period').forEach(b => {
+document.querySelectorAll<HTMLElement>('.agg-period').forEach(b => {
   b.addEventListener('click', () => {
-    aggPeriod = b.dataset.period;
-    document.querySelectorAll('.agg-period').forEach(x => x.classList.toggle('active', x === b));
+    aggPeriod = b.dataset.period ?? 'monthly';
+    document.querySelectorAll<HTMLElement>('.agg-period').forEach(x => x.classList.toggle('active', x === b));
     loadAgg();
   });
 });
@@ -290,11 +323,13 @@ function openMenu() { hamBtn?.setAttribute('aria-expanded','true'); hamBtn?.clas
 function closeMenu() { hamBtn?.setAttribute('aria-expanded','false'); hamBtn?.classList.remove('is-open'); overlay?.classList.remove('is-open'); overlay?.setAttribute('aria-hidden','true'); mTopbar?.classList.remove('menu-open'); document.body.classList.remove('body-lock'); }
 hamBtn?.addEventListener('click', () => overlay?.classList.contains('is-open') ? closeMenu() : openMenu());
 overlay?.addEventListener('click', e => { if (e.target === overlay) closeMenu(); });
-overlay?.querySelectorAll('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
+overlay?.querySelectorAll<HTMLElement>('[data-close-overlay]').forEach(el => el.addEventListener('click', () => setTimeout(closeMenu, 120)));
 document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.classList.contains('is-open')) closeMenu(); });
 document.getElementById('m-theme-btn')?.addEventListener('click', () => document.getElementById('theme-toggle-btn')?.click());
-overlay?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
+overlay?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); });
 const mTopLangDrop = document.getElementById('m-top-lang-drop');
 document.getElementById('m-lang-btn')?.addEventListener('click', e => { e.stopPropagation(); mTopLangDrop?.classList.toggle('open'); langDrop?.classList.remove('open'); });
 document.addEventListener('click', () => mTopLangDrop?.classList.remove('open'));
-mTopLangDrop?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); mTopLangDrop.classList.remove('open'); });
+mTopLangDrop?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLangI(opt.dataset.lang); mTopLangDrop.classList.remove('open'); });
+
+})();
