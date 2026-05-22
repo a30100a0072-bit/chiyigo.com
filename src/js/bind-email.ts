@@ -1,3 +1,9 @@
+// Stage 5 PR-5b (2026-05-22)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（getLang / T / applyLang / showPanel / showMsg /
+// handleSubmit / bindToken）在同 tsc program 全域 scope 撞名 → TS2393。
+// 內層 mobile-overlay / theme-lang 既有 IIFE 維持不動。
+;(function () {
 // ── i18n ─────────────────────────────────────────────────────
 const I18N = /*@i18n@*/{};
 
@@ -8,10 +14,10 @@ function applyLang(lang) {
   try { localStorage.setItem('lang', lang) } catch {}
   document.documentElement.lang = lang;
   const dict = I18N[lang] || I18N['zh-TW'];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const k = el.dataset.i18n; if (dict[k] != null) el.textContent = dict[k];
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n; if (k && dict[k] != null) el.textContent = dict[k];
   });
-  document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -38,11 +44,10 @@ function showMsg(text, isError = true) {
 
 async function handleSubmit(e) {
   e.preventDefault()
-  const btn   = document.getElementById('submit-btn')
-  const email = document.getElementById('email-input').value.trim()
+  const btn   = document.getElementById('submit-btn') as HTMLButtonElement | null
+  const email = (document.getElementById('email-input') as HTMLInputElement | null)?.value.trim() ?? ''
 
-  btn.disabled    = true
-  btn.textContent = T('loading')
+  if (btn) { btn.disabled = true; btn.textContent = T('loading'); }
 
   try {
     const res  = await fetch('/api/auth/oauth/bind-email', {
@@ -67,8 +72,7 @@ async function handleSubmit(e) {
   } catch {
     showMsg(T('err_network'))
   } finally {
-    btn.disabled    = false
-    btn.textContent = T('btn_submit')
+    if (btn) { btn.disabled = false; btn.textContent = T('btn_submit'); }
   }
 }
 
@@ -122,15 +126,16 @@ document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit)
     mLangDrop?.classList.remove('open');
   });
   langDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang); langDrop.classList.remove('open');
   });
   mLangDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang); mLangDrop.classList.remove('open');
   });
   document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
-    const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang);
   });
+})();
 })();

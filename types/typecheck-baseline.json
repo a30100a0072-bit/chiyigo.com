@@ -1,9 +1,9 @@
 {
-  "baselineSha": "5ad3256",
-  "cleanFiles": 234,
-  "createdAt": "2026-05-21",
-  "errorCount": 836,
-  "errorFiles": 22,
+  "baselineSha": "9639f82",
+  "cleanFiles": 235,
+  "createdAt": "2026-05-22",
+  "errorCount": 829,
+  "errorFiles": 21,
   "errorsByFile": {
     "src/js/about.js": 21,
     "src/js/admin-deals.js": 20,
@@ -13,7 +13,6 @@
     "src/js/admin-requisitions.js": 52,
     "src/js/ai-assistant.js": 27,
     "src/js/auth-ui.js": 44,
-    "src/js/bind-email.js": 7,
     "src/js/case-platform.js": 38,
     "src/js/concert-system.js": 21,
     "src/js/confirm-delete.js": 8,
@@ -28,7 +27,7 @@
     "src/js/requisition.js": 37,
     "src/js/reset-password.js": 18
   },
-  "fileErrors": 836,
+  "fileErrors": 829,
   "globalErrors": 0,
   "sourceFilesTotal": 256,
   "stage": 1,
@@ -55,6 +54,7 @@
         "scripts/fixtures/pipeline-canary-classic.ts",
         "src/js/404.ts",
         "src/js/api.ts",
+        "src/js/bind-email.ts",
         "src/js/confirm-dialog.ts",
         "src/js/form-enter.ts",
         "src/js/notify.ts",
@@ -84,6 +84,7 @@
       "include": [
         "src/js/404.ts",
         "src/js/api.ts",
+        "src/js/bind-email.ts",
         "src/js/confirm-dialog.ts",
         "src/js/form-enter.ts",
         "src/js/notify.ts",
