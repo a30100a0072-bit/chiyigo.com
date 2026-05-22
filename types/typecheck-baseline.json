@@ -1,11 +1,10 @@
 {
-  "baselineSha": "8d6e281",
-  "cleanFiles": 242,
+  "baselineSha": "4d9c1bf",
+  "cleanFiles": 243,
   "createdAt": "2026-05-22",
-  "errorCount": 704,
-  "errorFiles": 14,
+  "errorCount": 684,
+  "errorFiles": 13,
   "errorsByFile": {
-    "src/js/admin-deals.js": 20,
     "src/js/admin-payment-records.js": 22,
     "src/js/admin-payments.js": 45,
     "src/js/admin-refund-requests.js": 25,
@@ -20,7 +19,7 @@
     "src/js/login.js": 28,
     "src/js/requisition.js": 37
   },
-  "fileErrors": 704,
+  "fileErrors": 684,
   "globalErrors": 0,
   "sourceFilesTotal": 256,
   "stage": 1,
@@ -47,6 +46,7 @@
         "scripts/fixtures/pipeline-canary-classic.ts",
         "src/js/404.ts",
         "src/js/about.ts",
+        "src/js/admin-deals.ts",
         "src/js/api.ts",
         "src/js/bind-email.ts",
         "src/js/concert-system.ts",
@@ -84,6 +84,7 @@
       "include": [
         "src/js/404.ts",
         "src/js/about.ts",
+        "src/js/admin-deals.ts",
         "src/js/api.ts",
         "src/js/bind-email.ts",
         "src/js/concert-system.ts",
