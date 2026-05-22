@@ -1,4 +1,21 @@
-// ── block 1/2 ──
+// ai-assistant — /ai-assistant.html page entry
+// Stage 5 PR-5p (2026-05-22)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（TOKEN_KEY / hamBtn / overlay / topbar /
+// openMenu / closeMenu / themeBtn / mThemeBtn / applyTheme / doToggle /
+// LANGS_I18N / curLang / applyLang / langTogBtn / langDrop / toggleTopLangDrop /
+// osContent / revRoot / revObs / fpHash / getFingerprint / getSessionId /
+// TURNSTILE_SITEKEY / _turnstileToken / renderTurnstile / inputEl / countEl /
+// errEl / errEl2 / btnAnal / btnConf / btnRedo / cardRes / cardSucc / succRef /
+// showErr / clearErr / authedFetch / _lastResult / labelMap / renderResult）在
+// 同 tsc program 全域 scope 撞名 → TS2393。內層 neural-canvas 既有 IIFE 維持
+// 不動。Phase C-3 m-lang-btn 單行 wire 收編進外層 IIFE 尾段。
+//
+// API flow 0 行為變更：authedFetch / silentRefresh / /api/ai/assist /
+// /api/auth/me / /api/requisition 全 byte-equivalent，只在 DOM 與 window
+// 全域型別補洞，runtime artifact 為零（per user 護欄）。
+;(function () {
+
 // ── 顯示/語系/主題等共用邏輯（與 requisition.html 對齊） ───────────
 const TOKEN_KEY = 'access_token';
 
@@ -21,8 +38,8 @@ function applyTheme(dark) {
   document.documentElement.classList.toggle('theme-light', !dark);
   [themeBtn, mThemeBtn].forEach(btn => {
     if (!btn) return;
-    const sun  = btn.querySelector('.icon-sun');
-    const moon = btn.querySelector('.icon-moon');
+    const sun  = btn.querySelector<HTMLElement>('.icon-sun');
+    const moon = btn.querySelector<HTMLElement>('.icon-moon');
     if (sun)  sun.hidden = dark;
     if (moon) moon.hidden = !dark;
   });
@@ -39,26 +56,43 @@ mThemeBtn?.addEventListener('click', doToggle);
 // ── i18n ──────────────────────────────────────────────
 const LANGS_I18N = /*@i18n@*/{};
 let curLang = localStorage.getItem('lang') || 'zh-TW';
+
+// window._lastAiResult / window.turnstile / window.onloadTurnstileCallback
+// 走 type-alias cast pattern（per PR-5m WindowWithCache 立樁，[[project_js_to_ts_stage5_plan]]）：
+// IIFE-scope type alias，比 inline cast 整齊；module-local 不污染全域；
+// runtime artifact 為零。AiResult shape 對齊 /api/ai/assist 回傳的核心欄位
+// （server 仍可回更多欄位，cast 不收窄物件實際 keys）。
+type AiResult = { service_type?: string; budget?: string; timeline?: string; summary?: string };
+type TurnstileWidget = {
+  render: (selector: string, opts: Record<string, unknown>) => unknown;
+};
+type WindowWithAi = Window & {
+  _lastAiResult?: AiResult;
+  turnstile?: TurnstileWidget;
+  onloadTurnstileCallback?: () => void;
+};
+
 function applyLang(lang) {
   if (!LANGS_I18N[lang]) return;
   curLang = lang;
   const t = LANGS_I18N[lang];
-  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k]; });
-  document.querySelectorAll('[data-i18n-ph]').forEach(el => { const k = el.dataset.i18nPh; if (t[k] !== undefined) el.placeholder = t[k]; });
-  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-  document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (k && t[k] !== undefined) el.textContent = t[k]; });
+  document.querySelectorAll<HTMLInputElement>('[data-i18n-ph]').forEach(el => { const k = el.dataset.i18nPh; if (k && t[k] !== undefined) el.placeholder = t[k]; });
+  document.querySelectorAll<HTMLElement>('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
   // 若 result 已顯示，重新渲染欄位中文
-  if (window._lastAiResult) renderResult(window._lastAiResult);
+  const cache = (window as WindowWithAi)._lastAiResult;
+  if (cache) renderResult(cache);
 }
 const langTogBtn = document.getElementById('lang-toggle-btn');
 const langDrop   = document.getElementById('lang-dropdown');
 langTogBtn?.addEventListener('click', e => { e.stopPropagation(); langDrop?.classList.toggle('open'); });
 document.addEventListener('click', () => { langDrop?.classList.remove('open'); document.getElementById('m-top-lang-drop')?.classList.remove('open'); });
-langDrop?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); langDrop.classList.remove('open'); });
-document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); });
-function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop').classList.toggle('open'); }
-document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = e.target.closest('.lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open'); });
+langDrop?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); langDrop.classList.remove('open'); });
+document.getElementById('m-overlay')?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); });
+function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop')?.classList.toggle('open'); }
+document.getElementById('m-top-lang-drop')?.addEventListener('click', e => { const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return; applyLang(opt.dataset.lang); document.getElementById('m-top-lang-drop')?.classList.remove('open'); });
 applyLang(curLang);
 
 // ── Reveal animation ──────────────────────────────
@@ -83,6 +117,7 @@ function getFingerprint() {
   try {
     const c = document.createElement('canvas'); c.width = 200; c.height = 30;
     const ctx = c.getContext('2d');
+    if (!ctx) return fpHash(navigator.userAgent + '|' + navigator.language);
     ctx.textBaseline = 'top'; ctx.font = '14px Arial'; ctx.fillStyle = '#069';
     ctx.fillText('chiyigo-ai-' + navigator.platform, 2, 2);
     const data = c.toDataURL();
@@ -91,7 +126,7 @@ function getFingerprint() {
 }
 function getSessionId() {
   const KEY = 'ai_session_id';
-  let s = null;
+  let s: string | null = null;
   try { s = sessionStorage.getItem(KEY); } catch {}
   if (!s) {
     const arr = new Uint8Array(12);
@@ -106,8 +141,9 @@ function getSessionId() {
 const TURNSTILE_SITEKEY = '';
 let _turnstileToken = '';
 function renderTurnstile() {
-  if (!TURNSTILE_SITEKEY || !window.turnstile) return;
-  window.turnstile.render('#turnstile-wrap', {
+  const ts = (window as WindowWithAi).turnstile;
+  if (!TURNSTILE_SITEKEY || !ts) return;
+  ts.render('#turnstile-wrap', {
     sitekey: TURNSTILE_SITEKEY,
     size: 'flexible',
     callback: tok => { _turnstileToken = tok; },
@@ -115,15 +151,15 @@ function renderTurnstile() {
     'expired-callback': () => { _turnstileToken = ''; },
   });
 }
-window.onloadTurnstileCallback = renderTurnstile;
-if (window.turnstile && TURNSTILE_SITEKEY) renderTurnstile();
+(window as WindowWithAi).onloadTurnstileCallback = renderTurnstile;
+if ((window as WindowWithAi).turnstile && TURNSTILE_SITEKEY) renderTurnstile();
 
-const inputEl   = document.getElementById('ai-input');
+const inputEl   = document.getElementById('ai-input') as HTMLTextAreaElement | null;
 const countEl   = document.getElementById('ai-count');
 const errEl     = document.getElementById('ai-error');
 const errEl2    = document.getElementById('ai-confirm-error');
-const btnAnal   = document.getElementById('btn-analyze');
-const btnConf   = document.getElementById('btn-confirm');
+const btnAnal   = document.getElementById('btn-analyze') as HTMLButtonElement | null;
+const btnConf   = document.getElementById('btn-confirm') as HTMLButtonElement | null;
 const btnRedo   = document.getElementById('btn-redo');
 const cardRes   = document.getElementById('ai-result');
 const cardSucc  = document.getElementById('ai-success');
@@ -162,7 +198,7 @@ async function authedFetch(url, opts) {
   return res;
 }
 
-let _lastResult = null;
+let _lastResult: AiResult | null = null;
 
 function labelMap(field, value) {
   const t = LANGS_I18N[curLang] || LANGS_I18N['zh-TW'];
@@ -176,14 +212,19 @@ function labelMap(field, value) {
 }
 
 function renderResult(r) {
-  window._lastAiResult = r;
-  document.getElementById('r-service').textContent  = labelMap('service',  r.service_type);
-  document.getElementById('r-budget').textContent   = labelMap('budget',   r.budget);
-  document.getElementById('r-timeline').textContent = labelMap('timeline', r.timeline);
-  document.getElementById('r-summary').textContent  = r.summary;
+  (window as WindowWithAi)._lastAiResult = r;
+  const rService  = document.getElementById('r-service');
+  const rBudget   = document.getElementById('r-budget');
+  const rTimeline = document.getElementById('r-timeline');
+  const rSummary  = document.getElementById('r-summary');
+  if (rService)  rService.textContent  = labelMap('service',  r.service_type);
+  if (rBudget)   rBudget.textContent   = labelMap('budget',   r.budget);
+  if (rTimeline) rTimeline.textContent = labelMap('timeline', r.timeline);
+  if (rSummary)  rSummary.textContent  = r.summary;
 }
 
 btnAnal?.addEventListener('click', async () => {
+  if (!errEl || !inputEl || !cardRes) return;
   clearErr(errEl);
   const prompt = (inputEl.value || '').trim();
   if (!prompt) return;
@@ -224,12 +265,13 @@ btnAnal?.addEventListener('click', async () => {
 });
 
 btnRedo?.addEventListener('click', () => {
-  cardRes.classList.remove('show');
+  cardRes?.classList.remove('show');
   _lastResult = null;
-  inputEl.focus();
+  inputEl?.focus();
 });
 
 btnConf?.addEventListener('click', async () => {
+  if (!errEl2 || !cardRes || !cardSucc) return;
   clearErr(errEl2);
   if (!_lastResult) return;
 
@@ -249,7 +291,7 @@ btnConf?.addEventListener('click', async () => {
       service_type: _lastResult.service_type,
       budget:       _lastResult.budget,
       timeline:     _lastResult.timeline,
-      message:      'AI 助手生成：\n' + _lastResult.summary + '\n\n[原始輸入]\n' + (inputEl.value || '').trim(),
+      message:      'AI 助手生成：\n' + _lastResult.summary + '\n\n[原始輸入]\n' + (inputEl?.value || '').trim(),
     };
     const res = await authedFetch('/api/requisition', { method: 'POST', body: JSON.stringify(payload) });
     if (res.status === 401) { showErr(errEl2, 'err_auth'); return; }
@@ -276,13 +318,13 @@ btnConf?.addEventListener('click', async () => {
 
 // ── block 2/2 ──
 (function () {
-  const canvas = document.getElementById('neural-canvas');
+  const canvas = document.getElementById('neural-canvas') as HTMLCanvasElement | null;
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   let W = 0, H = 0, nodes = [];
   const DIST = 155;
-  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  function resize() { W = canvas!.width = window.innerWidth; H = canvas!.height = window.innerHeight; }
   function initNodes() {
     const n = W < 768 ? 48 : 115;
     nodes = Array.from({ length: n }, () => ({
@@ -307,7 +349,7 @@ btnConf?.addEventListener('click', async () => {
   syncCfg();
   new MutationObserver(syncCfg).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
   function draw() {
-    ctx.clearRect(0, 0, W, H);
+    ctx!.clearRect(0, 0, W, H);
     const { r, g, b, no, lo } = cfg;
     for (const n of nodes) {
       const dx = n.x - mouse.x, dy = n.y - mouse.y, d2 = dx * dx + dy * dy;
@@ -318,16 +360,16 @@ btnConf?.addEventListener('click', async () => {
       if (n.y < -12) n.y = H + 12; else if (n.y > H + 12) n.y = -12;
       n.pulse += .011;
       const p = Math.sin(n.pulse) * .25 + .75;
-      ctx.beginPath(); ctx.arc(n.x, n.y, n.r * p, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${r},${g},${b},${no * p})`; ctx.fill();
+      ctx!.beginPath(); ctx!.arc(n.x, n.y, n.r * p, 0, Math.PI * 2);
+      ctx!.fillStyle = `rgba(${r},${g},${b},${no * p})`; ctx!.fill();
     }
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y, d2 = dx * dx + dy * dy;
         if (d2 < DIST * DIST) {
           const a = (1 - Math.sqrt(d2) / DIST) * lo;
-          ctx.beginPath(); ctx.moveTo(nodes[i].x, nodes[i].y); ctx.lineTo(nodes[j].x, nodes[j].y);
-          ctx.strokeStyle = `rgba(${r},${g},${b},${a})`; ctx.lineWidth = .5; ctx.stroke();
+          ctx!.beginPath(); ctx!.moveTo(nodes[i].x, nodes[i].y); ctx!.lineTo(nodes[j].x, nodes[j].y);
+          ctx!.strokeStyle = `rgba(${r},${g},${b},${a})`; ctx!.lineWidth = .5; ctx!.stroke();
         }
       }
     }
@@ -339,3 +381,5 @@ btnConf?.addEventListener('click', async () => {
 
 // ── Phase C-3 m-lang-btn wire ──
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
+
+})();
