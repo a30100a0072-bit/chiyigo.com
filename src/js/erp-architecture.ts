@@ -1,12 +1,32 @@
-// ── erp-architecture.js — ERP 企業平台 互動式架構 ──
+// ── erp-architecture — ERP 企業平台 互動式架構 ──
 // 同支同時服務兩個入口：
 //   - /erp-architecture.html（standalone）：完整跑全部（widget + hamburger + theme + neural canvas + lang dropdown）
-//   - /index.html 嵌入區（embed）：只跑 widget；host 頁 index.js 處理 theme/lang/hamburger/canvas
+//   - /index.html 嵌入區（embed）：只跑 widget；host 頁 index.ts 處理 theme/lang/hamburger/canvas
 // 用 DOM 偵測模式：`#erp-arch-embed` 存在 = embed。
 //
-// 整支包 IIFE：避免和 case-platform.js / index.js 的 top-level 識別字撞名。
+// 整支包 IIFE：避免和 case-platform.ts / index.ts 的 top-level 識別字撞名。
+//
+// Stage 5 PR-5t (2026-05-22)：
+//   - 原 .js 已天生 IIFE wrap（line 9/512）— 沿用既有結構，不加外層
+//   - producer side `window.erpArchSetLang = ...` 走 WindowWithErpArchEmbed
+//     type-alias cast（完成 PR-5q index.ts 立樁的 WindowWithArchEmbed
+//     consumer side 另一半 producer 對齊；同 PR-5r case-platform.ts
+//     WindowWithCpArchEmbed 同款獨立 alias 立樁）
+//   - cleanup：移除 dead code `window.toggleTopLangDrop = toggleTopLangDrop`
+//     （per portfolio.ts PR-5i / case-platform.ts PR-5r precedent；CSP D 後
+//     已禁 inline handler，grep 全 repo 無 external caller；erp-architecture-3d.js
+//     仍 .js 含同款 dead 賦值，下顆 .ts 收編一起清）
+//   - DOM narrow 風格：non-null assertion 保留原 .js throw 語意（zero-drift；
+//     避免引入 `?.` 進 Stage 5 zero-drift sweep backlog）
 
 (function(){
+
+// window-attached producer：erpArchSetLang 給 index.ts 等 consumer 呼叫（embed mode）
+// 與 PR-5r case-platform.ts WindowWithCpArchEmbed 同款獨立 alias（producer 端只設一個屬性）
+type WindowWithErpArchEmbed = Window & {
+  erpArchSetLang?: (lang: string) => void;
+};
+
 const isEmbed = !!document.getElementById('erp-arch-embed');
 
 // 16 L2 領域；x/y 為 stage 百分比，環繞 L1 核心成橢圓
@@ -56,7 +76,7 @@ const EDGES = [
 ];
 
 // Chain 啟動時改顯示 chain 內部連線
-const CHAINS = {
+const CHAINS: Record<string, string[]> = {
   order:   ['crm', 'sales', 'mdm', 'finance', 'workflow', 'notify', 'bi', 'file'],
   payment: ['sales', 'finance', 'notify', 'bi', 'integration'],
   tenant:  ['iam', 'mdm', 'metadata', 'workflow', 'notify', 'bi'],
@@ -80,11 +100,11 @@ const PANEL_TECH = document.getElementById('erp-panel-tech');
 const PANEL_CLOSE = document.getElementById('erp-panel-close');
 const CHAIN_BAR = document.getElementById('erp-chain-bar');
 const CHAIN_NOTE = document.getElementById('erp-chain-note');
-const PICKER = document.getElementById('erp-domain-select');
-const PICKER_LABEL = document.querySelector(isEmbed ? '#erp-arch-embed .erp-panel-picker-label' : '.erp-panel-picker-label');
+const PICKER = document.getElementById('erp-domain-select') as HTMLSelectElement | null;
+const PICKER_LABEL = document.querySelector<HTMLElement>(isEmbed ? '#erp-arch-embed .erp-panel-picker-label' : '.erp-panel-picker-label');
 
-let activeId = null;
-let activeChain = null; // null | 'order' | 'payment' | 'tenant' | 'ai'
+let activeId: string | null = null;
+let activeChain: string | null = null; // null | 'order' | 'payment' | 'tenant' | 'ai'
 let curLang = localStorage.getItem('lang') || 'zh-TW';
 
 const isMobile = () => window.matchMedia('(max-width: 960px)').matches;
@@ -147,8 +167,8 @@ function buildLines(){
       const b = NODES.find(x => x.id === chain[i+1]);
       if (!a || !b) continue;
       const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-      line.setAttribute('x1', a.x/100 * w); line.setAttribute('y1', a.y/100 * h);
-      line.setAttribute('x2', b.x/100 * w); line.setAttribute('y2', b.y/100 * h);
+      line.setAttribute('x1', String(a.x/100 * w)); line.setAttribute('y1', String(a.y/100 * h));
+      line.setAttribute('x2', String(b.x/100 * w)); line.setAttribute('y2', String(b.y/100 * h));
       line.setAttribute('marker-end', 'url(#erp-arrow)');
       line.classList.add('chain-line');
       line.style.animationDelay = (i * 0.18) + 's';
@@ -158,8 +178,8 @@ function buildLines(){
     // 靜態：core ↔ 16 領域 spoke
     for (const n of NODES) {
       const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-      line.setAttribute('x1', cx); line.setAttribute('y1', cy);
-      line.setAttribute('x2', n.x/100 * w); line.setAttribute('y2', n.y/100 * h);
+      line.setAttribute('x1', String(cx)); line.setAttribute('y1', String(cy));
+      line.setAttribute('x2', String(n.x/100 * w)); line.setAttribute('y2', String(n.y/100 * h));
       line.dataset.from = 'core'; line.dataset.to = n.id;
       SVG.appendChild(line);
     }
@@ -168,8 +188,8 @@ function buildLines(){
       const na = NODES.find(x => x.id === a), nb = NODES.find(x => x.id === b);
       if (!na || !nb) continue;
       const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-      line.setAttribute('x1', na.x/100 * w); line.setAttribute('y1', na.y/100 * h);
-      line.setAttribute('x2', nb.x/100 * w); line.setAttribute('y2', nb.y/100 * h);
+      line.setAttribute('x1', String(na.x/100 * w)); line.setAttribute('y1', String(na.y/100 * h));
+      line.setAttribute('x2', String(nb.x/100 * w)); line.setAttribute('y2', String(nb.y/100 * h));
       line.dataset.from = a; line.dataset.to = b;
       line.setAttribute('stroke-dasharray', '3 4');
       SVG.appendChild(line);
@@ -182,21 +202,23 @@ function isConnected(a, b){
   return EDGES.some(e => (e[0]===a && e[1]===b) || (e[1]===a && e[0]===b));
 }
 
+// renderPanel：原 .js 不對 PANEL_* dereference 做 null guard，直接賦值；標準頁面 markup
+// 全含這些 ID。用非空斷言保留原 throw 語意（zero-drift；per [[feedback_security_boundary_pr_first_do_no_harm]]）
 function renderPanel(id){
   const n = NODES.find(x => x.id === id);
   const d = getDetails(id);
   if (!n || !d) return;
-  PANEL_EMPTY.hidden = true;
-  PANEL_BODY.hidden = false;
-  PANEL_TAG.textContent = d.tag || n.tag;
-  PANEL_TITLE.textContent = nodeLabel(n);
-  PANEL_PURPOSE.textContent = d.purpose;
-  PANEL_L3.innerHTML = (d.l3 || []).map(s => `<li>${esc(s)}</li>`).join('');
-  PANEL_L4.innerHTML = (d.l4 || []).map(s => `<span>${esc(s)}</span>`).join('');
-  PANEL_EVENTS.innerHTML = (d.events && d.events.length)
+  PANEL_EMPTY!.hidden = true;
+  PANEL_BODY!.hidden = false;
+  PANEL_TAG!.textContent = d.tag || n.tag;
+  PANEL_TITLE!.textContent = nodeLabel(n);
+  PANEL_PURPOSE!.textContent = d.purpose;
+  PANEL_L3!.innerHTML = (d.l3 || []).map(s => `<li>${esc(s)}</li>`).join('');
+  PANEL_L4!.innerHTML = (d.l4 || []).map(s => `<span>${esc(s)}</span>`).join('');
+  PANEL_EVENTS!.innerHTML = (d.events && d.events.length)
     ? d.events.map(s => `<li>${esc(s)}</li>`).join('')
     : `<li class="erp-panel-muted">—</li>`;
-  PANEL_TECH.innerHTML = (d.tech || []).map(s => `<span>${esc(s)}</span>`).join('');
+  PANEL_TECH!.innerHTML = (d.tech || []).map(s => `<span>${esc(s)}</span>`).join('');
 }
 
 function clearPanel(){
@@ -243,12 +265,12 @@ function buildPicker(){
 function setActive(id){
   if (id === 'core') id = null;
   activeId = id;
-  STAGE?.querySelectorAll('.erp-node').forEach(el => {
+  STAGE?.querySelectorAll<HTMLElement>('.erp-node').forEach(el => {
     const eid = el.dataset.id;
     el.classList.toggle('active', eid === id);
     // 在 chain 模式下：非 chain 成員淡化
     if (activeChain && CHAINS[activeChain]) {
-      const inChain = CHAINS[activeChain].includes(eid);
+      const inChain = eid !== undefined && CHAINS[activeChain].includes(eid);
       el.classList.toggle('chain-on', inChain && eid !== 'core');
       el.classList.toggle('dim', !inChain && eid !== 'core' && eid !== id);
     } else {
@@ -258,7 +280,7 @@ function setActive(id){
     }
   });
   // SVG 連線：靜態模式下，點 X 時跟 X 相連的線亮起，其他 dim（chain-line 在 chain 模式下另控）
-  SVG?.querySelectorAll('line').forEach(l => {
+  SVG?.querySelectorAll<SVGLineElement>('line').forEach(l => {
     if (l.classList.contains('chain-line')) return;
     const isHit = id && (l.dataset.from === id || l.dataset.to === id);
     l.classList.toggle('active', !!isHit);
@@ -277,7 +299,7 @@ function setActive(id){
 
 function setChain(name){
   activeChain = (name && CHAINS[name]) ? name : null;
-  CHAIN_BAR?.querySelectorAll('.erp-chain-btn').forEach(b => {
+  CHAIN_BAR?.querySelectorAll<HTMLElement>('.erp-chain-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.chain === (activeChain || 'none'));
   });
   if (CHAIN_NOTE) {
@@ -297,7 +319,7 @@ function setChain(name){
 
 if (STAGE) {
   STAGE.addEventListener('click', e => {
-    const btn = e.target.closest('.erp-node');
+    const btn = (e.target as Element | null)?.closest<HTMLElement>('.erp-node');
     if (!btn) return;
     const id = btn.dataset.id;
     if (id === 'core') { setActive(null); return; }
@@ -305,9 +327,9 @@ if (STAGE) {
     else setActive(id);
   });
   PANEL_CLOSE?.addEventListener('click', () => setActive(null));
-  PICKER?.addEventListener('change', e => setActive(e.target.value || null));
+  PICKER?.addEventListener('change', e => setActive((e.target as HTMLSelectElement | null)?.value || null));
   CHAIN_BAR?.addEventListener('click', e => {
-    const btn = e.target.closest('.erp-chain-btn');
+    const btn = (e.target as Element | null)?.closest<HTMLElement>('.erp-chain-btn');
     if (!btn) return;
     const c = btn.dataset.chain;
     setChain(c === 'none' ? null : c);
@@ -323,16 +345,16 @@ if (STAGE) {
 function applyArchLang(lang){
   if (!LANGS_I18N[lang]) return;
   curLang = lang;
-  STAGE?.querySelectorAll('.erp-node').forEach(el => {
+  STAGE?.querySelectorAll<HTMLElement>('.erp-node').forEach(el => {
     const id = el.dataset.id;
     if (id === 'core') {
-      const sub = el.querySelector('.erp-node-core-sub');
+      const sub = el.querySelector<HTMLElement>('.erp-node-core-sub');
       if (sub) sub.textContent = (tDict().title2 || tFallback().title2 || 'ERP Platform');
       return;
     }
     const n = NODES.find(x => x.id === id);
     if (n) {
-      const lbl = el.querySelector('.erp-node-label');
+      const lbl = el.querySelector<HTMLElement>('.erp-node-label');
       if (lbl) lbl.textContent = nodeLabel(n);
     }
   });
@@ -345,15 +367,17 @@ function applyArchLang(lang){
   // embed 模式：同步 #erp-arch-embed 內所有 [data-i18n]（init + 語言切換都會走這條）
   if (isEmbed) {
     const t = LANGS_I18N[lang];
-    document.querySelectorAll('#erp-arch-embed [data-i18n]').forEach(el => {
+    document.querySelectorAll<HTMLElement>('#erp-arch-embed [data-i18n]').forEach(el => {
       const k = el.dataset.i18n;
-      if (t[k] !== undefined) el.textContent = t[k];
+      if (k && t[k] !== undefined) el.textContent = t[k];
     });
   }
 }
 
-// embed 模式：暴露給 host (index.js) 在 applyLangI 結尾呼叫
-window.erpArchSetLang = function(lang){ applyArchLang(lang); };
+// embed 模式：暴露給 host (index.ts) 在 applyLangI 結尾呼叫
+// 走 WindowWithErpArchEmbed alias（與 PR-5q index.ts WindowWithArchEmbed consumer 對齊；
+// 與 PR-5r case-platform.ts WindowWithCpArchEmbed 為同款獨立 producer alias）
+(window as WindowWithErpArchEmbed).erpArchSetLang = function(lang){ applyArchLang(lang); };
 
 // ── Init widget ──
 if (STAGE) {
@@ -366,7 +390,7 @@ if (STAGE) {
 
 // ──────────────────────────────────────────────────────────────
 // 以下為 standalone (erp-architecture.html) 專屬：
-// embed 模式下 index.js 已處理同樣行為，跳過避免重複綁。
+// embed 模式下 index.ts 已處理同樣行為，跳過避免重複綁。
 // ──────────────────────────────────────────────────────────────
 if (isEmbed) { return; }
 
@@ -374,9 +398,9 @@ if (isEmbed) { return; }
 function applyLang(lang){
   if (!LANGS_I18N[lang]) return;
   const t = LANGS_I18N[lang];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
     const k = el.dataset.i18n;
-    if (t[k] !== undefined) el.textContent = t[k];
+    if (k && t[k] !== undefined) el.textContent = t[k];
   });
   const tBtn = document.getElementById('theme-toggle-btn');
   const mTBtn = document.getElementById('m-theme-btn');
@@ -384,8 +408,8 @@ function applyLang(lang){
   if (tBtn) { tBtn.title = t.tooltip_theme; tBtn.setAttribute('aria-label', t.tooltip_theme); }
   if (mTBtn) mTBtn.title = t.tooltip_theme;
   if (lBtn) { lBtn.title = t.tooltip_lang; lBtn.setAttribute('aria-label', t.tooltip_lang); }
-  document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-  document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
   applyArchLang(lang);
 }
@@ -395,28 +419,33 @@ const langDropdown  = document.getElementById('lang-dropdown');
 langToggleBtn?.addEventListener('click', e => { e.stopPropagation(); langDropdown?.classList.toggle('open'); });
 document.addEventListener('click', () => langDropdown?.classList.remove('open'));
 langDropdown?.addEventListener('click', e => {
-  const opt = e.target.closest('.lang-opt');
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt');
   if (!opt) return;
   applyLang(opt.dataset.lang); langDropdown.classList.remove('open');
 });
 document.getElementById('m-overlay')?.addEventListener('click', e => {
-  const opt = e.target.closest('.m-ov-lang-opt');
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt');
   if (!opt) return;
   applyLang(opt.dataset.lang);
 });
 function toggleTopLangDrop(e){ e.stopPropagation(); document.getElementById('m-top-lang-drop')?.classList.toggle('open'); }
-window.toggleTopLangDrop = toggleTopLangDrop;
+// Stage 5 PR-5t cleanup：移除 `window.toggleTopLangDrop = toggleTopLangDrop;`
+// ← 原為 inline onclick="toggleTopLangDrop(event)" HTML 殘骸（CSP D 後已禁 inline
+//   handler）；grep 顯示無任何 external caller 讀 `window.toggleTopLangDrop`，
+//   函式本檔 standalone 區段內透過下方 #m-lang-btn 直接 wire，不必經 window 中介。
+//   同 [[project_js_to_ts_stage5_plan]] portfolio.ts PR-5i / case-platform.ts PR-5r
+//   precedent；erp-architecture-3d.js 仍 .js 含同款 dead 賦值待後續 .ts 收編時清。
 document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
 document.getElementById('m-top-lang-drop')?.addEventListener('click', e => {
-  const opt = e.target.closest('.lang-opt');
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt');
   if (!opt) return;
-  applyLang(opt.dataset.lang); document.getElementById('m-top-lang-drop').classList.remove('open');
+  applyLang(opt.dataset.lang); document.getElementById('m-top-lang-drop')!.classList.remove('open');
 });
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
 
 applyLang(curLang);
 
-// ── Mobile overlay / drag-close ──（與 portfolio.js 同款）
+// ── Mobile overlay / drag-close ──（與 portfolio.ts 同款）
 const hamBtn  = document.getElementById('m-ham-btn');
 const overlay = document.getElementById('m-overlay');
 const topbar  = document.getElementById('m-topbar');
@@ -431,17 +460,17 @@ document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.cla
   const THRESHOLD=110; let startY=0,lastY=0,active=false;
   document.addEventListener('touchstart', e => {
     const ov=document.getElementById('m-overlay'); if(!ov||!ov.classList.contains('is-open'))return;
-    const wrap=ov.querySelector('.m-ov-wrap'); if(!wrap)return;
+    const wrap=ov.querySelector<HTMLElement>('.m-ov-wrap'); if(!wrap)return;
     const t=e.touches[0],r=wrap.getBoundingClientRect();
     if(t.clientY<r.top||t.clientY>r.bottom)return;
-    const nav=wrap.querySelector('.m-ov-nav');
+    const nav=wrap.querySelector<HTMLElement>('.m-ov-nav');
     if(nav&&nav.scrollTop>0){const nr=nav.getBoundingClientRect();if(t.clientY>=nr.top&&t.clientY<=nr.bottom)return;}
     startY=t.clientY;lastY=startY;active=true;wrap.style.transition='none';
   }, { passive:true });
   document.addEventListener('touchmove', e => {
     if(!active)return;
     lastY=e.touches[0].clientY; const dy=lastY-startY; if(dy<=0)return;
-    const ov=document.getElementById('m-overlay'); const wrap=ov&&ov.querySelector('.m-ov-wrap'); if(!wrap)return;
+    const ov=document.getElementById('m-overlay'); const wrap=ov&&ov.querySelector<HTMLElement>('.m-ov-wrap'); if(!wrap||!ov)return;
     wrap.style.transform=`translateY(${dy}px)`;
     const ratio=Math.max(0,1-dy/wrap.offsetHeight*1.5);
     ov.style.background=`rgba(10,12,28,${(0.32*ratio).toFixed(3)})`;
@@ -449,8 +478,8 @@ document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.cla
   }, { passive:false });
   document.addEventListener('touchend', () => {
     if(!active)return; active=false;
-    const ov=document.getElementById('m-overlay'); const wrap=ov&&ov.querySelector('.m-ov-wrap');
-    if(!wrap){startY=0;lastY=0;return;}
+    const ov=document.getElementById('m-overlay'); const wrap=ov&&ov.querySelector<HTMLElement>('.m-ov-wrap');
+    if(!wrap||!ov){startY=0;lastY=0;return;}
     const dy=lastY-startY; ov.style.background='';
     if(dy>THRESHOLD){
       wrap.style.transition='transform .26s ease'; wrap.style.transform='translateY(100%)';
@@ -468,7 +497,7 @@ function applyTheme(dark){
   document.documentElement.classList.toggle('theme-light', !dark);
   [themeBtn, mThemeBtn].forEach(btn => {
     if (!btn) return;
-    const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+    const sun = btn.querySelector<HTMLElement>('.icon-sun'), moon = btn.querySelector<HTMLElement>('.icon-moon');
     if (sun)  sun.hidden = dark;
     if (moon) moon.hidden = !dark;
   });
@@ -490,21 +519,21 @@ const revObs    = new IntersectionObserver(entries => {
 }, { root: revRoot, threshold: 0.08, rootMargin: '0px 0px -20px 0px' });
 document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
 
-// ── Neural canvas（與 portfolio.js / case-platform.js 同款；尊重 prefers-reduced-motion） ──
+// ── Neural canvas（與 portfolio.ts / case-platform.ts 同款；尊重 prefers-reduced-motion） ──
 (function(){
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-  const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+  const canvas=document.getElementById('neural-canvas') as HTMLCanvasElement | null;if(!canvas)return;
   const ctx=canvas.getContext('2d');if(!ctx)return;
   let W=0,H=0,nodes=[];const DIST=155;
-  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
+  function resize(){W=canvas!.width=window.innerWidth;H=canvas!.height=window.innerHeight}
   function initNodes(){const n=W<768?48:115;nodes=Array.from({length:n},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.28,vy:(Math.random()-.5)*.28,r:Math.random()*1.1+.4,pulse:Math.random()*Math.PI*2}))}
   const mouse={x:-9999,y:-9999};document.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY});
   let cfg={r:'108',g:'110',b:'229',no:.22,lo:.09};
   function syncCfg(){const s=getComputedStyle(document.documentElement);cfg={r:s.getPropertyValue('--neural-r').trim()||'108',g:s.getPropertyValue('--neural-g').trim()||'110',b:s.getPropertyValue('--neural-b').trim()||'229',no:parseFloat(s.getPropertyValue('--neural-node-opacity').trim()||'.22'),lo:parseFloat(s.getPropertyValue('--neural-line-opacity').trim()||'.09')}}
   syncCfg();new MutationObserver(syncCfg).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
-  function draw(){ctx.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
-    for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx.beginPath();ctx.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx.fill()}
-    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx.beginPath();ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx.lineWidth=.5;ctx.stroke()}}
+  function draw(){ctx!.clearRect(0,0,W,H);const{r,g,b,no,lo}=cfg;
+    for(const n of nodes){const dx=n.x-mouse.x,dy=n.y-mouse.y,d2=dx*dx+dy*dy;if(d2<16900){const d=Math.sqrt(d2);n.vx+=dx/d*.055;n.vy+=dy/d*.055}n.vx*=.982;n.vy*=.982;n.x+=n.vx;n.y+=n.vy;if(n.x<-12)n.x=W+12;else if(n.x>W+12)n.x=-12;if(n.y<-12)n.y=H+12;else if(n.y>H+12)n.y=-12;n.pulse+=.011;const p=Math.sin(n.pulse)*.25+.75;ctx!.beginPath();ctx!.arc(n.x,n.y,n.r*p,0,Math.PI*2);ctx!.fillStyle=`rgba(${r},${g},${b},${no*p})`;ctx!.fill()}
+    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy;if(d2<DIST*DIST){const a=(1-Math.sqrt(d2)/DIST)*lo;ctx!.beginPath();ctx!.moveTo(nodes[i].x,nodes[i].y);ctx!.lineTo(nodes[j].x,nodes[j].y);ctx!.strokeStyle=`rgba(${r},${g},${b},${a})`;ctx!.lineWidth=.5;ctx!.stroke()}}
     requestAnimationFrame(draw)}
   resize();initNodes();draw();window.addEventListener('resize',()=>{resize();initNodes()});
 })();

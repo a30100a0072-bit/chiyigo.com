@@ -1,16 +1,15 @@
 {
-  "baselineSha": "57aef4c",
-  "cleanFiles": 252,
+  "baselineSha": "ba6c999",
+  "cleanFiles": 253,
   "createdAt": "2026-05-22",
-  "errorCount": 381,
-  "errorFiles": 4,
+  "errorCount": 337,
+  "errorFiles": 3,
   "errorsByFile": {
     "src/js/auth-ui.js": 44,
     "src/js/dashboard.js": 227,
-    "src/js/erp-architecture-3d.js": 66,
-    "src/js/erp-architecture.js": 44
+    "src/js/erp-architecture-3d.js": 66
   },
-  "fileErrors": 381,
+  "fileErrors": 337,
   "globalErrors": 0,
   "sourceFilesTotal": 256,
   "stage": 1,
@@ -49,6 +48,7 @@
         "src/js/concert-system.ts",
         "src/js/confirm-delete.ts",
         "src/js/confirm-dialog.ts",
+        "src/js/erp-architecture.ts",
         "src/js/forgot-password.ts",
         "src/js/form-enter.ts",
         "src/js/index.ts",
@@ -96,6 +96,7 @@
         "src/js/concert-system.ts",
         "src/js/confirm-delete.ts",
         "src/js/confirm-dialog.ts",
+        "src/js/erp-architecture.ts",
         "src/js/forgot-password.ts",
         "src/js/form-enter.ts",
         "src/js/index.ts",
