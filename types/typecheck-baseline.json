@@ -1,11 +1,10 @@
 {
-  "baselineSha": "82e7b6e",
-  "cleanFiles": 238,
+  "baselineSha": "9969d7d",
+  "cleanFiles": 239,
   "createdAt": "2026-05-22",
-  "errorCount": 793,
-  "errorFiles": 18,
+  "errorCount": 772,
+  "errorFiles": 17,
   "errorsByFile": {
-    "src/js/about.js": 21,
     "src/js/admin-deals.js": 20,
     "src/js/admin-payment-records.js": 22,
     "src/js/admin-payments.js": 45,
@@ -24,7 +23,7 @@
     "src/js/portfolio.js": 26,
     "src/js/requisition.js": 37
   },
-  "fileErrors": 793,
+  "fileErrors": 772,
   "globalErrors": 0,
   "sourceFilesTotal": 256,
   "stage": 1,
@@ -50,6 +49,7 @@
       "include": [
         "scripts/fixtures/pipeline-canary-classic.ts",
         "src/js/404.ts",
+        "src/js/about.ts",
         "src/js/api.ts",
         "src/js/bind-email.ts",
         "src/js/confirm-delete.ts",
@@ -83,6 +83,7 @@
       "exclude": [],
       "include": [
         "src/js/404.ts",
+        "src/js/about.ts",
         "src/js/api.ts",
         "src/js/bind-email.ts",
         "src/js/confirm-delete.ts",

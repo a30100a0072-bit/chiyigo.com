@@ -12,5 +12,5 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["src/js/form-enter.ts", "src/js/sidebar-auth.ts", "src/js/api.ts", "src/js/notify.ts", "src/js/confirm-dialog.ts", "src/js/404.ts", "src/js/privacy.ts", "src/js/verify-email.ts", "src/js/bind-email.ts", "src/js/confirm-delete.ts", "src/js/forgot-password.ts", "src/js/reset-password.ts", "scripts/fixtures/pipeline-canary-classic.ts"]
+  "include": ["src/js/form-enter.ts", "src/js/sidebar-auth.ts", "src/js/api.ts", "src/js/notify.ts", "src/js/confirm-dialog.ts", "src/js/404.ts", "src/js/privacy.ts", "src/js/verify-email.ts", "src/js/bind-email.ts", "src/js/confirm-delete.ts", "src/js/forgot-password.ts", "src/js/reset-password.ts", "src/js/about.ts", "scripts/fixtures/pipeline-canary-classic.ts"]
 }
