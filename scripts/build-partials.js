@@ -104,45 +104,64 @@ async function buildPage(filename) {
 }
 
 // ── JS build ────────────────────────────────────────────
-// 兩段式：
-//   1) Stage 4.5b-1 起 src/js/*.ts → 走 tsc -p tsconfig.browser-classic.prod.json → emit public/js/*.js
-//   2) src/js/*.js → 注入 i18n sentinel 後 copy 到 public/js/
+// 三段式：
+//   1) Stage 4.5b-1 起 src/js/*.ts (manifest.classic) → tsc -p tsconfig.browser-classic.prod.json → emit public/js/*.js
+//   2) PR-5v-a 起 src/js/*.ts (manifest.module) → tsc -p tsconfig.browser-module.prod.json → emit public/js/*.js (ES module)
+//   3) src/js/*.js → 注入 i18n sentinel 後 copy 到 public/js/
 // 與 page 相同的字典（src/i18n/<name>.json）會被引用，例如
 // src/js/login.js 對應 src/i18n/login.json。
 async function buildJs() {
   let tsCount = 0
-  // 1) tsc emit classic prod entries（manifest.classic 所列 src/js/*.ts）
-  //    Stage 5 prep (2026-05-21)：tsc emit 之後對每個 emit 結果跑 injectI18n，
-  //    讓 manifest.classic entries 也支援 /*@i18n@*\/{} sentinel
-  //    （rename .js→.ts 後 i18n 在 prod 不再 silently 壞掉）。
-  //    路徑用 rootDir-derived 推導，避免 nested entry 未來分叉（codex prep r1 拍板）。
+  let manifest = null
   try {
     const manifestRaw = await fs.readFile(path.join(SRC_JS, 'browser-script-manifest.json'), 'utf8')
-    const manifest = JSON.parse(manifestRaw)
-    if (Array.isArray(manifest.classic) && manifest.classic.length > 0) {
-      const tscJs = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc')
-      execFileSync(process.execPath, [tscJs, '-p', 'tsconfig.browser-classic.prod.json', '--pretty', 'false'], {
-        cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'],
-        maxBuffer: 16 * 1024 * 1024,
-      })
-      // post-emit i18n inject（rootDir=src/js, outDir=public/js；同 tsconfig.browser-classic.prod.json）
-      for (const entry of manifest.classic) {
-        const rel = path.relative(SRC_JS, path.join(ROOT, entry))
-        const emittedPath = path.join(OUT_JS, rel.replace(/\.ts$/, '.js'))
-        const emittedBasename = path.basename(emittedPath)
-        const emitted = await fs.readFile(emittedPath, 'utf8')
-        const injected = await injectI18n(emittedBasename, emitted)
-        if (injected !== emitted) {
-          await fs.writeFile(emittedPath, injected, 'utf8')
-        }
-      }
-      tsCount = manifest.classic.length
-    }
+    manifest = JSON.parse(manifestRaw)
   } catch (e) {
     if (e.code !== 'ENOENT') throw e
   }
 
-  // 2) .js sources → injectI18n → public/js/
+  const tscJs = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc')
+
+  async function postEmitI18nInject(entries) {
+    // post-emit i18n inject（rootDir=src/js, outDir=public/js；classic/module prod tsconfig 同 emit 路徑語意）
+    for (const entry of entries) {
+      const rel = path.relative(SRC_JS, path.join(ROOT, entry))
+      const emittedPath = path.join(OUT_JS, rel.replace(/\.ts$/, '.js'))
+      const emittedBasename = path.basename(emittedPath)
+      const emitted = await fs.readFile(emittedPath, 'utf8')
+      const injected = await injectI18n(emittedBasename, emitted)
+      if (injected !== emitted) {
+        await fs.writeFile(emittedPath, injected, 'utf8')
+      }
+    }
+  }
+
+  // 1) tsc emit classic prod entries（manifest.classic）
+  //    Stage 5 prep (2026-05-21)：tsc emit 之後對每個 emit 結果跑 injectI18n，
+  //    讓 manifest.classic entries 也支援 /*@i18n@*\/{} sentinel
+  //    （rename .js→.ts 後 i18n 在 prod 不再 silently 壞掉）。
+  if (manifest && Array.isArray(manifest.classic) && manifest.classic.length > 0) {
+    execFileSync(process.execPath, [tscJs, '-p', 'tsconfig.browser-classic.prod.json', '--pretty', 'false'], {
+      cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'],
+      maxBuffer: 16 * 1024 * 1024,
+    })
+    await postEmitI18nInject(manifest.classic)
+    tsCount += manifest.classic.length
+  }
+
+  // 2) tsc emit module prod entries（manifest.module）— PR-5v-a 起
+  //    module lane 與 classic 同享 i18n inject pipeline；emit 為 ES module，需以
+  //    <script type="module"> 載入（HTML 端責任，build 端不分流）。
+  if (manifest && Array.isArray(manifest.module) && manifest.module.length > 0) {
+    execFileSync(process.execPath, [tscJs, '-p', 'tsconfig.browser-module.prod.json', '--pretty', 'false'], {
+      cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'],
+      maxBuffer: 16 * 1024 * 1024,
+    })
+    await postEmitI18nInject(manifest.module)
+    tsCount += manifest.module.length
+  }
+
+  // 3) .js sources → injectI18n → public/js/
   let jsCount = 0
   try {
     const files = await fs.readdir(SRC_JS)

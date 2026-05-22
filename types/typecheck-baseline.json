@@ -1,5 +1,5 @@
 {
-  "baselineSha": "e6536f1",
+  "baselineSha": "4c00d1d",
   "cleanFiles": 254,
   "createdAt": "2026-05-22",
   "errorCount": 293,
@@ -130,6 +130,23 @@
       "include": [
         "scripts/fixtures/pipeline-canary-module.ts"
       ]
+    },
+    "tsconfig.browser-module.prod.json": {
+      "compilerOptions": {
+        "lib": [
+          "DOM",
+          "DOM.Iterable",
+          "ES2022"
+        ],
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "noEmit": false,
+        "outDir": "public/js",
+        "rootDir": "src/js",
+        "types": []
+      },
+      "exclude": [],
+      "include": []
     },
     "tsconfig.json": {
       "compilerOptions": {

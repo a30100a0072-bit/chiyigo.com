@@ -35,6 +35,10 @@ const CONFIG_MODULE = 'tsconfig.browser-module.json'
 // verify 走獨立 temp outDir 比對 committed bytes，避免寫穿 public/js 自我修復。
 const CONFIG_CLASSIC_PROD = 'tsconfig.browser-classic.prod.json'
 const PROD_TEMP_OUTDIR = '.tmp-pipeline-canary/classic-prod'
+// PR-5v-a (Stage 5 prep for erp-architecture-3d module lane)：module prod tsconfig；
+// 與 classic prod 同款 temp-vs-committed 雙路比對，差別在 emit 形狀為 ES module。
+const CONFIG_MODULE_PROD = 'tsconfig.browser-module.prod.json'
+const MODULE_PROD_TEMP_OUTDIR = '.tmp-pipeline-canary/module-prod'
 
 const MARKER_CLASSIC = 'PIPELINE_CANARY_CLASSIC_OK'
 const MARKER_MODULE = 'PIPELINE_CANARY_MODULE_OK'
@@ -184,12 +188,10 @@ async function main() {
   validateManifestEntry(manifest.canary.module, 'manifest.canary.module', MANIFEST_CANARY_PATTERN, seen)
   console.log(`✓ manifest 結構 OK（classic=${manifest.classic.length} module=${manifest.module.length} canary=2，全 entry 驗 type/POSIX/unique/存在/pattern）`)
 
-  // PR-56 (Stage 4.5b-1)：module lane 未開 prod pipeline；ratchet 規則 E 對應只放行 manifest.classic 新增 src/js/*.ts。
-  // 此 gate 防止未來 PR「悄悄」push 進 manifest.module 拿到 ratchet bypass 但 build 不會 emit / verify 不會比對 committed artifact。
-  // 解除條件：新增 tsconfig.browser-module.prod.json + build-partials module prod emit + 此檔 module temp/committed compare loop。
-  if (manifest.module.length > 0) {
-    fail(`manifest.module production entries 未支援（Stage 4.5b-1 僅收編 classic lane；module prod build / verify 待 future PR 補 tsconfig.browser-module.prod.json + build emit + temp/committed artifact compare；ratchet 規則 E 也對應 enforce）：${JSON.stringify(manifest.module)}`)
-  }
+  // PR-5v-a：module lane prod pipeline 已開通（tsconfig.browser-module.prod.json +
+  // build-partials module prod emit + 本檔 module temp/committed compare loop 三件套）。
+  // ratchet 規則 E 同步擴 manifest.module 為合法 src/js/*.ts 放行集。
+  // manifest.module entries 走步驟 10（在 classic prod 之後）做 ES module 形狀 + byte-equal 驗證。
 
   // 2. manifest ↔ tsconfig.include 同步檢查（codex PR-54 r1 medium）
   //    PR-54 內 manifest.classic/module 兩條 production 陣列都空，tsconfig.include 只含 canary；
@@ -315,7 +317,62 @@ async function main() {
     console.log(`✓ prod emit OK（${manifest.classic.length} entries：classic shape + temp+inject/committed byte-equal）`)
   }
 
-  // 10. 清乾淨
+  // 10. PR-5v-a：module prod entries pipeline 驗證
+  //    對 manifest.module 每個 entry：
+  //      a. tsc emit 到 .tmp-pipeline-canary/module-prod/（避免寫穿 public/js 自我修復）
+  //      b. 不跑 assertClassicShape：ES module 允許 import/export（其實是 expected shape）
+  //         compilerOptions.module === "ESNext" invariant + byte-equal committed 即為 contract
+  //      c. byte-compare temp vs committed public/js artifact（同 classic prod 模式）
+  //    cloned config 算 tempOut 路徑，避免用回原 prodCfg outDir 比對到 committed 本身。
+  const moduleProdCfg = readJson(path.join(ROOT, CONFIG_MODULE_PROD), CONFIG_MODULE_PROD)
+  if (!arraysEqual(moduleProdCfg.include, [...manifest.module])) {
+    fail(`${CONFIG_MODULE_PROD} include 與 manifest.module 不同步\n  expected: ${JSON.stringify([...manifest.module])}\n  actual  : ${JSON.stringify(moduleProdCfg.include)}`)
+  }
+  const moduleProdCO = moduleProdCfg.compilerOptions || {}
+  if (moduleProdCO.module !== 'ESNext') fail(`${CONFIG_MODULE_PROD} compilerOptions.module 必須 === "ESNext"（actual=${JSON.stringify(moduleProdCO.module)}）`)
+  if (moduleProdCO.outDir !== 'public/js') fail(`${CONFIG_MODULE_PROD} compilerOptions.outDir 必須 === "public/js"（actual=${JSON.stringify(moduleProdCO.outDir)}）`)
+  if (moduleProdCO.rootDir !== 'src/js') fail(`${CONFIG_MODULE_PROD} compilerOptions.rootDir 必須 === "src/js"（actual=${JSON.stringify(moduleProdCO.rootDir)}）`)
+
+  if (manifest.module.length === 0) {
+    console.log(`✓ ${CONFIG_MODULE_PROD} invariant OK（manifest.module 為空，跳過 module prod emit）`)
+  } else {
+    console.log(`→ tsc -p ${CONFIG_MODULE_PROD} --outDir ${MODULE_PROD_TEMP_OUTDIR}`)
+    runTsc(CONFIG_MODULE_PROD, ['--outDir', MODULE_PROD_TEMP_OUTDIR])
+
+    const moduleProdTempCfg = {
+      ...moduleProdCfg,
+      compilerOptions: { ...moduleProdCfg.compilerOptions, outDir: MODULE_PROD_TEMP_OUTDIR },
+    }
+
+    for (const entry of manifest.module) {
+      const tempOut = deriveOutputPath(moduleProdTempCfg, entry)
+      const committedOut = deriveOutputPath(moduleProdCfg, entry)
+      if (!fs.existsSync(tempOut)) fail(`module prod temp emit 缺檔（${entry} → ${tempOut}）`)
+      const tempContent = fs.readFileSync(tempOut, 'utf8')
+      if (!fs.existsSync(committedOut)) fail(`module prod committed artifact 缺檔（${committedOut}）；請跑 npm run build 後 commit`)
+      const committedContent = fs.readFileSync(committedOut, 'utf8')
+      // 同 classic prod：對 temp emit 跑 injectI18n（in-memory），committed 已 post-inject。
+      const tempBasename = path.basename(tempOut)
+      const tempInjected = await injectI18n(tempBasename, tempContent)
+      if (I18N_RESIDUAL.test(tempInjected)) {
+        fail(`module prod temp emit (${entry}) post-inject 殘留 @i18n sentinel（regex 沒抓到 → I18N_SENTINEL replacement 失效；source 必須使 sentinel 維持可替換形狀）`)
+      }
+      const normalize = (s) => s.replace(/\r\n/g, '\n')
+      const tempNorm = normalize(tempInjected)
+      const committedNorm = normalize(committedContent)
+      if (tempNorm !== committedNorm) {
+        fail(
+          `module prod committed artifact 與 fresh tsc emit+inject 不同步（${entry}）\n` +
+          `  temp     : ${tempOut} (${tempContent.length} bytes raw / ${tempNorm.length} LF-normalized post-inject)\n` +
+          `  committed: ${committedOut} (${committedContent.length} bytes raw / ${committedNorm.length} LF-normalized)\n` +
+          `  請跑 npm run build 後 commit；或檢查 src/js source 與 build artifact 是否同 PR`
+        )
+      }
+    }
+    console.log(`✓ module prod emit OK（${manifest.module.length} entries：ES module shape + temp+inject/committed byte-equal）`)
+  }
+
+  // 11. 清乾淨
   cleanTmp()
 
   console.log('=== browser pipeline canary OK ===')

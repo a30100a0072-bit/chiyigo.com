@@ -135,6 +135,8 @@ const REQUIRED_FILES = [
   'scripts/fixtures/pipeline-canary-module.ts',
   // PR-56 (Stage 4.5b-1)：prod tsconfig 是 manifest.classic → public/js emit 的唯一入口
   'tsconfig.browser-classic.prod.json',
+  // PR-5v-a：module lane 同款 prod tsconfig，manifest.module → public/js emit（ES module shape）
+  'tsconfig.browser-module.prod.json',
 ]
 const MANIFEST_REL = 'src/js/browser-script-manifest.json'
 // BROWSER_TSCONFIGS：tier + kind 決定 include expected：
@@ -145,6 +147,8 @@ const BROWSER_TSCONFIGS = [
   { file: 'tsconfig.browser-module.json', tier: 'module', kind: 'canary' },
   // PR-56 (Stage 4.5b-1)：classic prod emit config，include === manifest.classic
   { file: 'tsconfig.browser-classic.prod.json', tier: 'classic', kind: 'prod' },
+  // PR-5v-a：module prod emit config，include === manifest.module
+  { file: 'tsconfig.browser-module.prod.json', tier: 'module', kind: 'prod' },
 ]
 
 // ─── git helper（全 execFileSync 防 shell 注入；預設 silence stderr） ──
@@ -759,11 +763,12 @@ function checkDiffSuppressions(unifiedDiff, addedFiles = new Set()) {
 
 function checkNewSourceFiles(added) {
   const violations = []
-  // PR-56 (Stage 4.5b-1)：規則 E 改 manifest-aware
+  // PR-56 (Stage 4.5b-1) → PR-5v-a：規則 E manifest-aware
   //   原規則：所有新增 src/js/*.ts 一律違反
-  //   現規則：列入 manifest.classic → 允許（classic prod pipeline 已 own emit）
-  //          其餘（含 manifest.module）仍違反；module lane prod pipeline 未建，
-  //          verify-browser-pipeline.mjs 對應 enforce `manifest.module.length === 0`
+  //   PR-56：列入 manifest.classic → 允許；其餘（含 manifest.module）仍違反
+  //   PR-5v-a：module lane prod pipeline 已建（tsconfig.browser-module.prod.json +
+  //          build-partials module emit + verify temp/committed compare 三件套），同步開放
+  //          manifest.module 為合法 src/js/*.ts 放行集
   // per-entry validation（pattern / POSIX / unique / statSync().isFile()）由 checkManifestSync
   // 與 scripts/verify-browser-pipeline.mjs 兩 gate 守住（[[feedback_two_gate_defense_in_depth]]）。
   const manifestSrcSet = new Set()
@@ -772,10 +777,9 @@ function checkNewSourceFiles(added) {
     if (Array.isArray(manifest.classic)) {
       for (const e of manifest.classic) if (typeof e === 'string') manifestSrcSet.add(e)
     }
-    // PR-56 (Stage 4.5b-1)：module lane 暫未開 prod pipeline（無 tsconfig.browser-module.prod.json /
-    // build emit / temp-vs-committed verify），故 manifest.module **不**放行新增 src/js/*.ts。
-    // verify-browser-pipeline.mjs 也對應 enforce `manifest.module.length === 0` 雙層防禦。
-    // 未來 PR 補齊 module prod 三件套後同步開放此處 + verify。
+    if (Array.isArray(manifest.module)) {
+      for (const e of manifest.module) if (typeof e === 'string') manifestSrcSet.add(e)
+    }
   } catch {
     // manifest 壞 / 缺 → checkRequiredFiles + checkManifestSync 會獨立 fail，這裡保守當空集
   }
@@ -789,7 +793,7 @@ function checkNewSourceFiles(added) {
     }
     if (/^src\/js\/.*\.ts$/.test(norm)) {
       if (manifestSrcSet.has(norm)) continue
-      violations.push({ file: norm, reason: '新增 src/js/*.ts 違反規則 E：未列入 src/js/browser-script-manifest.json classic 陣列（Stage 4.5b-1 起 manifest.classic 為唯一放行集；module lane prod pipeline 未建，verify 端對應 enforce manifest.module.length === 0）' })
+      violations.push({ file: norm, reason: '新增 src/js/*.ts 違反規則 E：未列入 src/js/browser-script-manifest.json classic 或 module 陣列（PR-5v-a 起 manifest.classic ∪ manifest.module 為合法放行集；兩 lane 各對應自己的 prod tsconfig + build emit + verify byte-equal）' })
     }
   }
   return violations
