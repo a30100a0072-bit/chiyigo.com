@@ -1,4 +1,18 @@
+// Stage 5 PR-5d (2026-05-22)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（getLang / T / applyLang / handleSubmit / setMsg）
+// 在同 tsc program 全域 scope 撞名 → TS2393。內層 mobile-overlay / theme-lang
+// 既有 IIFE 維持不動。
+;(function () {
 const I18N = /*@i18n@*/{};
+
+// Cloudflare Turnstile widget global（由 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js">
+// 注入）；本檔只用 .reset?.()，因此 shape 故意極小。改用 inline cast 而非
+// `interface Window` 全域擴增，因為 root tsconfig (moduleDetection:"force") 下
+// 本檔被當 module、top-level interface Window 變 module-local 而非 global
+// augmentation；prod tsconfig (moduleDetection:"auto" + 無 import/export) 下才
+// 是 script。inline cast 同時相容兩種模式。
+type WindowWithTurnstile = Window & { turnstile?: { reset?: () => void } };
 
 function getLang() { try { return localStorage.getItem('lang') || 'zh-TW' } catch { return 'zh-TW' } }
 function T(key) { const d = I18N[getLang()] || I18N['zh-TW']; return d[key] ?? key; }
@@ -7,10 +21,10 @@ function applyLang(lang) {
   try { localStorage.setItem('lang', lang) } catch {}
   document.documentElement.lang = lang;
   const dict = I18N[lang] || I18N['zh-TW'];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const k = el.dataset.i18n; if (dict[k] != null) el.textContent = dict[k];
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n; if (k && dict[k] != null) el.textContent = dict[k];
   });
-  document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.querySelectorAll<HTMLElement>('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,20 +33,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function handleSubmit(e) {
   e.preventDefault();
-  const btn   = document.getElementById('submit-btn');
-  const email = document.getElementById('email').value.trim();
+  const btn   = document.getElementById('submit-btn') as HTMLButtonElement | null;
+  const email = (document.getElementById('email') as HTMLInputElement | null)?.value.trim() ?? '';
 
   setMsg('');
 
-  const tsToken = document.querySelector('#form-forgot [name="cf-turnstile-response"]')?.value || '';
+  const tsToken = document.querySelector<HTMLInputElement>('#form-forgot [name="cf-turnstile-response"]')?.value || '';
   const hasTsWidget = !!document.querySelector('#form-forgot .cf-turnstile');
   if (hasTsWidget && !tsToken) {
     setMsg(T('err_captcha_pending'), 'error');
     return;
   }
 
-  btn.disabled = true;
-  btn.textContent = T('loading');
+  if (btn) { btn.disabled = true; btn.textContent = T('loading'); }
 
   try {
     const res = await fetch('/api/auth/local/forgot-password', {
@@ -42,20 +55,21 @@ async function handleSubmit(e) {
     });
 
     if (res.ok) {
-      document.getElementById('form-forgot').hidden = true;
-      document.getElementById('success-state').hidden = false;
+      const form = document.getElementById('form-forgot');
+      if (form) form.hidden = true;
+      const success = document.getElementById('success-state');
+      if (success) success.hidden = false;
       return;
     }
 
     const data = await res.json().catch(() => ({}));
     setMsg(data.error ?? T('err_generic'), 'error');
-    try { window.turnstile?.reset?.() } catch {}
+    try { (window as WindowWithTurnstile).turnstile?.reset?.() } catch {}
   } catch {
     setMsg(T('err_network'), 'error');
-    try { window.turnstile?.reset?.() } catch {}
+    try { (window as WindowWithTurnstile).turnstile?.reset?.() } catch {}
   } finally {
-    btn.disabled = false;
-    btn.textContent = T('btn_submit');
+    if (btn) { btn.disabled = false; btn.textContent = T('btn_submit'); }
   }
 }
 
@@ -114,15 +128,16 @@ document.getElementById('form-forgot')?.addEventListener('submit', handleSubmit)
     mLangDrop?.classList.remove('open');
   });
   langDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang); langDrop.classList.remove('open');
   });
   mLangDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang); mLangDrop.classList.remove('open');
   });
   document.querySelector('.m-ov-lang-row')?.addEventListener('click', e => {
-    const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt'); if (!opt) return;
     applyLang(opt.dataset.lang);
   });
+})();
 })();

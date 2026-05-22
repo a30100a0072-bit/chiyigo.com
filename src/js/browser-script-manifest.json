@@ -1,6 +1,6 @@
 {
   "_comment": "Stage 4.5a/b browser pipeline manifest — single source of truth for which src/js/*.ts entries belong to classic <script> vs <script type='module'> load paths. PR-54 內 classic/module 兩條 production 陣列都空；canary fixture 兩條留作 CI pipeline round-trip 驗證。PR-56 (Stage 4.5b-1) classic push src/js/form-enter.ts，成為第一個 manifest-owned production entry。Stage 5 起把 src/js/*.ts 入口加進對應陣列；同步更新 tsconfig.browser-classic.json (canary) / tsconfig.browser-classic.prod.json (prod emit) / tsconfig.browser-module.json 的 include 欄位。PR-55 ratchet 升級會加 invariant 鎖 manifest ↔ tsconfig.include 同步。",
-  "classic": ["src/js/form-enter.ts", "src/js/sidebar-auth.ts", "src/js/api.ts", "src/js/notify.ts", "src/js/confirm-dialog.ts", "src/js/404.ts", "src/js/privacy.ts", "src/js/verify-email.ts", "src/js/bind-email.ts", "src/js/confirm-delete.ts"],
+  "classic": ["src/js/form-enter.ts", "src/js/sidebar-auth.ts", "src/js/api.ts", "src/js/notify.ts", "src/js/confirm-dialog.ts", "src/js/404.ts", "src/js/privacy.ts", "src/js/verify-email.ts", "src/js/bind-email.ts", "src/js/confirm-delete.ts", "src/js/forgot-password.ts"],
   "module": [],
   "canary": {
     "classic": "scripts/fixtures/pipeline-canary-classic.ts",
