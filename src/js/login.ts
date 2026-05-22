@@ -6,11 +6,12 @@
 // langDropI / toggleLangDrop / toggleTopLangDrop）在同 tsc program 全域 scope
 // 撞名 → TS2393。內層 pre-notice / drag-to-close 兩段既有 IIFE 維持不動。
 //
-// TAB_CONFIG 由 auth-ui.js（仍 .js, classic <script>）以 `const` 宣告於 script-global，
-// 同 Realm 內所有 classic <script> 共享 lexical scope，故 bare 識別字 lookup 可達。
-// 不能改走 `globalThis.TAB_CONFIG` — top-level `const` 不會掛到 window/globalThis。
-// `declare const` 是 TS 純型別宣告，emit 後無 runtime artifact，與既有 typeof 防衛同手感。
-declare const TAB_CONFIG: Record<string, { title: string; subtitle: string; showTabs: boolean }> | undefined;
+// TAB_CONFIG 由 auth-ui.ts（同款 classic <script>，PR-5u 收編完後仍維持 top-level
+// 無 IIFE wrap）以 `const` 宣告於 script-global，同 Realm 內所有 classic <script>
+// 共享 lexical scope，故 bare 識別字 lookup 可達。型別宣告搬到 types/globals.d.ts
+// `declare global` 區段（root tsconfig moduleDetection:"force" 模式需要；prod
+// tsconfig types:[] 不載 globals.d.ts，但 auth-ui.ts 同 program 提供 script-global
+// const，TS 直接可見）。Stage 5 PR-5u 解決雙 tsconfig 同名衝突。
 
 ;(function () {
 // Query param notifications

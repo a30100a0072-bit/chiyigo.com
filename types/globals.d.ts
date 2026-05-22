@@ -55,6 +55,17 @@ declare global {
     opts?: RequestInit & { skipRefresh?: boolean },
   ): Promise<T>;
 
+  /**
+   * TAB_CONFIG — auth-ui.ts 內 top-level `const TAB_CONFIG = {...}` 提供（classic
+   * <script> 同 Realm 共享 lexical scope）。login.ts 等其它 classic-page 走 bare
+   * lookup `typeof TAB_CONFIG !== 'undefined'` 讀取。本宣告只為 root tsconfig
+   * (moduleDetection:"force" 把 src/js/*.ts 當 module → 看不到 auth-ui.ts 的
+   * module-local const) 補型別洞；prod tsconfig (types:[] 不載本檔 + module:"none"
+   * 把 src/js/*.ts 當 classic script → 直接看見 auth-ui.ts 的 script-global const)
+   * 不需此宣告。Stage 5 PR-5u 衍生。
+   */
+  const TAB_CONFIG: Record<string, { title: string; subtitle: string; showTabs: boolean }> | undefined;
+
   /** Format an ApiError (or any thrown value) into a user-facing string. */
   function formatApiError(err: unknown, fallback?: string): string;
 

@@ -1,5 +1,5 @@
 /**
- * auth-ui.js — 登入 / 註冊前端邏輯
+ * auth-ui — 登入 / 註冊前端邏輯
  *
  * 功能：
  *  - guest_id 的生成與 LocalStorage 讀寫
@@ -7,925 +7,973 @@
  *  - 登入 / 註冊 / 2FA 表單提交與後端溝通
  *  - JWT + Refresh Token 儲存（sessionStorage）與成功後頁面跳轉
  *  - logout()：撤銷 refresh_token + 清除 session
+ *
+ * Stage 5 PR-5u (2026-05-22)：
+ *   - **故意不裹外層 IIFE**（Stage 5 IIFE-required pattern 的唯一例外）：
+ *     line 425 `const TAB_CONFIG = {...}` 是 PR-5o login.ts 內 `declare const
+ *     TAB_CONFIG` consumer 的 **runtime producer**。consumer 走 classic-script-
+ *     shared lexical scope bare lookup（`typeof TAB_CONFIG !== 'undefined'`），
+ *     若把整支裹 IIFE 會把 TAB_CONFIG 變 IIFE-local，consumer 找不到 → 破壞
+ *     login.html tab 切換。其它所有 Stage 5 .ts entry 已 IIFE-wrap → 它們的
+ *     top-level decl 不會與本檔的 top-level decl 在 tsc program 撞名。
+ *   - window-attached 屬性（Turnstile / silentRefresh / PublicKeyCredential /
+ *     __chiyigoMemoryDeviceUuid / tApiErrorData / __apiErrorI18n）走
+ *     WindowWithAuth type-alias cast pattern（per PR-5p WindowWithAi / PR-5q
+ *     WindowWithArchEmbed 立樁），保留 globals.d.ts 中既有的 root-tsconfig
+ *     ambient declaration 同時補 prod tsconfig (types:[] 不載 globals.d.ts)
+ *     需要的型別洞。
+ *   - DOM narrow：HTMLInputElement / HTMLButtonElement / HTMLAnchorElement 等
+ *     cast 保留原 .js throw-on-null 語意（zero-drift；per
+ *     [[feedback_security_boundary_pr_first_do_no_harm]]）。
+ *   - cred.response narrow 走 PublicKeyCredential cast（navigator.credentials.get
+ *     回 Credential | null，passkey path 必為 PublicKeyCredential）。
  */
-
 'use strict';
-
 // ── browser-level device identity（chiyigo.device_uuid）──────────
 // 每個瀏覽器第一次進站產一次 web-<uuid>，存 localStorage；之後 login / refresh 一律帶。
 // 各瀏覽器看到自己獨立的 device session row。Safari private mode / localStorage 失敗時退到
 // in-memory，同 tab 一致；換 tab 視作新裝置（觸發新裝置告警，預期行為）。
 function _chiyigoGetDeviceUuid() {
-  var KEY = 'chiyigo.device_uuid';
-  try {
-    var v = localStorage.getItem(KEY);
-    if (v && /^web-[0-9a-f-]{36}$/i.test(v)) return v;
-  } catch (_) { /* storage 被擋 */ }
-  if (window.__chiyigoMemoryDeviceUuid) return window.__chiyigoMemoryDeviceUuid;
-  var uuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-    ? crypto.randomUUID() : null;
-  if (!uuid) {
-    if (typeof console !== 'undefined') console.warn('[device-id] crypto.randomUUID unavailable');
-    return null;
-  }
-  var fullUuid = 'web-' + uuid;
-  try { localStorage.setItem(KEY, fullUuid); }
-  catch (_) {
-    window.__chiyigoMemoryDeviceUuid = fullUuid;
-    if (typeof console !== 'undefined') console.warn('[device-id] localStorage unavailable, using in-memory');
-  }
-  return fullUuid;
+    var KEY = 'chiyigo.device_uuid';
+    try {
+        var v = localStorage.getItem(KEY);
+        if (v && /^web-[0-9a-f-]{36}$/i.test(v))
+            return v;
+    }
+    catch (_) { /* storage 被擋 */ }
+    if (window.__chiyigoMemoryDeviceUuid)
+        return window.__chiyigoMemoryDeviceUuid;
+    var uuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID() : null;
+    if (!uuid) {
+        if (typeof console !== 'undefined')
+            console.warn('[device-id] crypto.randomUUID unavailable');
+        return null;
+    }
+    var fullUuid = 'web-' + uuid;
+    try {
+        localStorage.setItem(KEY, fullUuid);
+    }
+    catch (_) {
+        window.__chiyigoMemoryDeviceUuid = fullUuid;
+        if (typeof console !== 'undefined')
+            console.warn('[device-id] localStorage unavailable, using in-memory');
+    }
+    return fullUuid;
 }
-
 // ── i18n：四語系錯誤 / UI 字串 ───────────────────────────────────
 // 後端錯誤訊息（res.json().error）對照：以英文 key 查 4 語對應翻譯
 const ERROR_I18N = {
-  'Invalid credentials':                    { 'zh-TW':'帳號或密碼錯誤', en:'Invalid email or password', ja:'メールアドレスまたはパスワードが正しくありません', ko:'이메일 또는 비밀번호가 올바르지 않습니다' },
-  'email and password are required':        { 'zh-TW':'請填寫信箱與密碼', en:'Email and password are required', ja:'メールアドレスとパスワードを入力してください', ko:'이메일과 비밀번호를 입력해주세요' },
-  'Invalid email format':                   { 'zh-TW':'信箱格式不正確', en:'Invalid email format', ja:'メールアドレスの形式が正しくありません', ko:'이메일 형식이 올바르지 않습니다' },
-  'Password must be at least 8 characters': { 'zh-TW':'密碼至少需要 8 個字元', en:'Password must be at least 8 characters', ja:'パスワードは8文字以上で入力してください', ko:'비밀번호는 8자 이상이어야 합니다' },
-  'Password must be ≥12 chars, or ≥8 chars with 3 of: uppercase / lowercase / digit / symbol': {
-    'zh-TW':'密碼長度需 ≥12 字元，或 ≥8 字元並包含「大寫字母 / 小寫字母 / 數字 / 符號」其中 3 類。',
-    en:'Password must be ≥12 chars, or ≥8 chars and contain 3 of: uppercase / lowercase / digit / symbol.',
-    ja:'パスワードは12文字以上、または8文字以上で「大文字 / 小文字 / 数字 / 記号」のうち3種を含めてください。',
-    ko:'비밀번호는 12자 이상, 또는 8자 이상이며 대문자 / 소문자 / 숫자 / 기호 중 3종을 포함해야 합니다.',
-  },
-  'Email already registered':               { 'zh-TW':'此信箱已被註冊，請直接登入', en:'Email already registered, please log in', ja:'このメールアドレスは既に登録されています。ログインしてください', ko:'이미 등록된 이메일입니다. 로그인해주세요' },
-  'Account is banned':                      { 'zh-TW':'此帳號已被停用，請聯繫客服', en:'This account has been suspended, please contact support', ja:'このアカウントは停止されています。サポートまでご連絡ください', ko:'이 계정은 정지되었습니다. 고객센터로 문의해주세요' },
-  'Invalid OTP or backup code':             { 'zh-TW':'驗證碼錯誤，請重試', en:'Invalid code, please try again', ja:'認証コードが正しくありません。もう一度お試しください', ko:'인증 코드가 올바르지 않습니다. 다시 시도해주세요' },
-  'Local account not found':                { 'zh-TW':'此帳號無法使用密碼登入', en:'This account cannot log in with password', ja:'このアカウントはパスワードログインに対応していません', ko:'이 계정은 비밀번호 로그인을 지원하지 않습니다' },
-  '2FA is already enabled':                 { 'zh-TW':'雙重驗證已啟用', en:'Two-factor authentication is already enabled', ja:'2段階認証は既に有効です', ko:'2단계 인증이 이미 활성화되어 있습니다' },
-  'Invalid request':                        { 'zh-TW':'請求無效，請重新登入', en:'Invalid request, please log in again', ja:'リクエストが無効です。もう一度ログインしてください', ko:'요청이 유효하지 않습니다. 다시 로그인해주세요' },
-  'Invalid or expired PKCE session':        { 'zh-TW':'授權階段已失效或過期，請重新登入', en:'Authorization session is invalid or expired, please log in again', ja:'認可セッションが無効または期限切れです。もう一度ログインしてください', ko:'인증 세션이 유효하지 않거나 만료되었습니다. 다시 로그인해주세요' },
-  'captcha_failed':                         { 'zh-TW':'人機驗證未通過，請重新整理頁面再試', en:'Captcha verification failed, please refresh the page and try again', ja:'ボット認証に失敗しました。ページを再読み込みしてからお試しください', ko:'봇 검증에 실패했습니다. 페이지를 새로고침한 후 다시 시도하세요' },
-}
-
+    'Invalid credentials': { 'zh-TW': '帳號或密碼錯誤', en: 'Invalid email or password', ja: 'メールアドレスまたはパスワードが正しくありません', ko: '이메일 또는 비밀번호가 올바르지 않습니다' },
+    'email and password are required': { 'zh-TW': '請填寫信箱與密碼', en: 'Email and password are required', ja: 'メールアドレスとパスワードを入力してください', ko: '이메일과 비밀번호를 입력해주세요' },
+    'Invalid email format': { 'zh-TW': '信箱格式不正確', en: 'Invalid email format', ja: 'メールアドレスの形式が正しくありません', ko: '이메일 형식이 올바르지 않습니다' },
+    'Password must be at least 8 characters': { 'zh-TW': '密碼至少需要 8 個字元', en: 'Password must be at least 8 characters', ja: 'パスワードは8文字以上で入力してください', ko: '비밀번호는 8자 이상이어야 합니다' },
+    'Password must be ≥12 chars, or ≥8 chars with 3 of: uppercase / lowercase / digit / symbol': {
+        'zh-TW': '密碼長度需 ≥12 字元，或 ≥8 字元並包含「大寫字母 / 小寫字母 / 數字 / 符號」其中 3 類。',
+        en: 'Password must be ≥12 chars, or ≥8 chars and contain 3 of: uppercase / lowercase / digit / symbol.',
+        ja: 'パスワードは12文字以上、または8文字以上で「大文字 / 小文字 / 数字 / 記号」のうち3種を含めてください。',
+        ko: '비밀번호는 12자 이상, 또는 8자 이상이며 대문자 / 소문자 / 숫자 / 기호 중 3종을 포함해야 합니다.',
+    },
+    'Email already registered': { 'zh-TW': '此信箱已被註冊，請直接登入', en: 'Email already registered, please log in', ja: 'このメールアドレスは既に登録されています。ログインしてください', ko: '이미 등록된 이메일입니다. 로그인해주세요' },
+    'Account is banned': { 'zh-TW': '此帳號已被停用，請聯繫客服', en: 'This account has been suspended, please contact support', ja: 'このアカウントは停止されています。サポートまでご連絡ください', ko: '이 계정은 정지되었습니다. 고객센터로 문의해주세요' },
+    'Invalid OTP or backup code': { 'zh-TW': '驗證碼錯誤，請重試', en: 'Invalid code, please try again', ja: '認証コードが正しくありません。もう一度お試しください', ko: '인증 코드가 올바르지 않습니다. 다시 시도해주세요' },
+    'Local account not found': { 'zh-TW': '此帳號無法使用密碼登入', en: 'This account cannot log in with password', ja: 'このアカウントはパスワードログインに対応していません', ko: '이 계정은 비밀번호 로그인을 지원하지 않습니다' },
+    '2FA is already enabled': { 'zh-TW': '雙重驗證已啟用', en: 'Two-factor authentication is already enabled', ja: '2段階認証は既に有効です', ko: '2단계 인증이 이미 활성화되어 있습니다' },
+    'Invalid request': { 'zh-TW': '請求無效，請重新登入', en: 'Invalid request, please log in again', ja: 'リクエストが無効です。もう一度ログインしてください', ko: '요청이 유효하지 않습니다. 다시 로그인해주세요' },
+    'Invalid or expired PKCE session': { 'zh-TW': '授權階段已失效或過期，請重新登入', en: 'Authorization session is invalid or expired, please log in again', ja: '認可セッションが無効または期限切れです。もう一度ログインしてください', ko: '인증 세션이 유효하지 않거나 만료되었습니다. 다시 로그인해주세요' },
+    'captcha_failed': { 'zh-TW': '人機驗證未通過，請重新整理頁面再試', en: 'Captcha verification failed, please refresh the page and try again', ja: 'ボット認証に失敗しました。ページを再読み込みしてからお試しください', ko: '봇 검증에 실패했습니다. 페이지를 새로고침한 후 다시 시도하세요' },
+};
 // 前端內嵌 UI 字串
 const UI_I18N = {
-  loading:        { 'zh-TW':'處理中…', en:'Processing…', ja:'処理中…', ko:'처리 중…' },
-  btn_login:      { 'zh-TW':'登入', en:'Log In', ja:'ログイン', ko:'로그인' },
-  btn_register:   { 'zh-TW':'建立帳號', en:'Create Account', ja:'アカウント作成', ko:'계정 만들기' },
-  btn_verify:     { 'zh-TW':'驗證', en:'Verify', ja:'認証', ko:'인증' },
-  err_pwd_short:  { 'zh-TW':'密碼至少需要 8 個字元', en:'Password must be at least 8 characters', ja:'パスワードは8文字以上で入力してください', ko:'비밀번호는 8자 이상이어야 합니다' },
-  err_pwd_mismatch:{'zh-TW':'兩次輸入的密碼不一致，請重新確認', en:"Passwords don't match, please re-enter", ja:'パスワードが一致しません。もう一度ご確認ください', ko:'비밀번호가 일치하지 않습니다. 다시 확인해주세요' },
-  err_otp_empty:  { 'zh-TW':'請輸入驗證碼', en:'Please enter the verification code', ja:'認証コードを入力してください', ko:'인증 코드를 입력해주세요' },
-  err_otp_expired:{ 'zh-TW':'驗證階段已過期，請重新登入', en:'Verification session expired, please log in again', ja:'認証セッションの有効期限が切れました。もう一度ログインしてください', ko:'인증 세션이 만료되었습니다. 다시 로그인해주세요' },
-  err_login_fail: { 'zh-TW':'登入失敗，請重試', en:'Login failed, please try again', ja:'ログインに失敗しました。もう一度お試しください', ko:'로그인에 실패했습니다. 다시 시도해주세요' },
-  err_reg_fail:   { 'zh-TW':'註冊失敗，請重試', en:'Registration failed, please try again', ja:'登録に失敗しました。もう一度お試しください', ko:'가입에 실패했습니다. 다시 시도해주세요' },
-  reg_success:    { 'zh-TW':'帳號建立成功！正在跳轉…', en:'Account created! Redirecting…', ja:'アカウントを作成しました！移動中…', ko:'계정이 생성되었습니다! 이동 중…' },
-  err_otp_invalid:{ 'zh-TW':'驗證碼錯誤，請重試', en:'Invalid code, please try again', ja:'認証コードが正しくありません。もう一度お試しください', ko:'인증 코드가 올바르지 않습니다. 다시 시도해주세요' },
-  err_network:    { 'zh-TW':'網路錯誤，請檢查連線後重試', en:'Network error, please check your connection and retry', ja:'ネットワークエラーです。接続を確認してもう一度お試しください', ko:'네트워크 오류입니다. 연결을 확인하고 다시 시도해주세요' },
-  err_pkce:       { 'zh-TW':'PKCE 授權失敗，請重試', en:'PKCE authorization failed, please try again', ja:'PKCE認可に失敗しました。もう一度お試しください', ko:'PKCE 인증에 실패했습니다. 다시 시도해주세요' },
-  err_captcha_pending: { 'zh-TW':'人機驗證尚未完成，請稍候再點一次', en:'Captcha is still verifying, please wait and try again', ja:'ボット認証が完了していません。少々お待ちください', ko:'봇 검증이 아직 완료되지 않았습니다. 잠시만 기다려 주세요' },
-  ts_loading_hint: { 'zh-TW':'資安驗證準備中，可先填寫帳號與密碼', en:'Preparing security check — feel free to fill in your account and password', ja:'セキュリティ確認の準備中です。先にアカウントとパスワードをご入力いただけます', ko:'보안 확인 준비 중입니다. 계정과 비밀번호를 먼저 입력하셔도 됩니다' },
-  // Phase D-3c：passkey 登入入口
-  login_passkey_btn: { 'zh-TW':'用 Passkey 登入', en:'Sign in with Passkey', ja:'パスキーでログイン', ko:'Passkey로 로그인' },
-  passkey_logging_in: { 'zh-TW':'請依瀏覽器提示完成驗證…', en:'Follow the browser prompt to continue…', ja:'ブラウザの指示に従って認証してください…', ko:'브라우저 안내에 따라 인증을 완료하세요…' },
-  passkey_login_cancelled: { 'zh-TW':'已取消', en:'Cancelled', ja:'キャンセルしました', ko:'취소되었습니다' },
-  passkey_login_fail: { 'zh-TW':'Passkey 登入失敗', en:'Passkey login failed', ja:'パスキーログインに失敗しました', ko:'Passkey 로그인 실패' },
-}
-
+    loading: { 'zh-TW': '處理中…', en: 'Processing…', ja: '処理中…', ko: '처리 중…' },
+    btn_login: { 'zh-TW': '登入', en: 'Log In', ja: 'ログイン', ko: '로그인' },
+    btn_register: { 'zh-TW': '建立帳號', en: 'Create Account', ja: 'アカウント作成', ko: '계정 만들기' },
+    btn_verify: { 'zh-TW': '驗證', en: 'Verify', ja: '認証', ko: '인증' },
+    err_pwd_short: { 'zh-TW': '密碼至少需要 8 個字元', en: 'Password must be at least 8 characters', ja: 'パスワードは8文字以上で入力してください', ko: '비밀번호는 8자 이상이어야 합니다' },
+    err_pwd_mismatch: { 'zh-TW': '兩次輸入的密碼不一致，請重新確認', en: "Passwords don't match, please re-enter", ja: 'パスワードが一致しません。もう一度ご確認ください', ko: '비밀번호가 일치하지 않습니다. 다시 확인해주세요' },
+    err_otp_empty: { 'zh-TW': '請輸入驗證碼', en: 'Please enter the verification code', ja: '認証コードを入力してください', ko: '인증 코드를 입력해주세요' },
+    err_otp_expired: { 'zh-TW': '驗證階段已過期，請重新登入', en: 'Verification session expired, please log in again', ja: '認証セッションの有効期限が切れました。もう一度ログインしてください', ko: '인증 세션이 만료되었습니다. 다시 로그인해주세요' },
+    err_login_fail: { 'zh-TW': '登入失敗，請重試', en: 'Login failed, please try again', ja: 'ログインに失敗しました。もう一度お試しください', ko: '로그인에 실패했습니다. 다시 시도해주세요' },
+    err_reg_fail: { 'zh-TW': '註冊失敗，請重試', en: 'Registration failed, please try again', ja: '登録に失敗しました。もう一度お試しください', ko: '가입에 실패했습니다. 다시 시도해주세요' },
+    reg_success: { 'zh-TW': '帳號建立成功！正在跳轉…', en: 'Account created! Redirecting…', ja: 'アカウントを作成しました！移動中…', ko: '계정이 생성되었습니다! 이동 중…' },
+    err_otp_invalid: { 'zh-TW': '驗證碼錯誤，請重試', en: 'Invalid code, please try again', ja: '認証コードが正しくありません。もう一度お試しください', ko: '인증 코드가 올바르지 않습니다. 다시 시도해주세요' },
+    err_network: { 'zh-TW': '網路錯誤，請檢查連線後重試', en: 'Network error, please check your connection and retry', ja: 'ネットワークエラーです。接続を確認してもう一度お試しください', ko: '네트워크 오류입니다. 연결을 확인하고 다시 시도해주세요' },
+    err_pkce: { 'zh-TW': 'PKCE 授權失敗，請重試', en: 'PKCE authorization failed, please try again', ja: 'PKCE認可に失敗しました。もう一度お試しください', ko: 'PKCE 인증에 실패했습니다. 다시 시도해주세요' },
+    err_captcha_pending: { 'zh-TW': '人機驗證尚未完成，請稍候再點一次', en: 'Captcha is still verifying, please wait and try again', ja: 'ボット認証が完了していません。少々お待ちください', ko: '봇 검증이 아직 완료되지 않았습니다. 잠시만 기다려 주세요' },
+    ts_loading_hint: { 'zh-TW': '資安驗證準備中，可先填寫帳號與密碼', en: 'Preparing security check — feel free to fill in your account and password', ja: 'セキュリティ確認の準備中です。先にアカウントとパスワードをご入力いただけます', ko: '보안 확인 준비 중입니다. 계정과 비밀번호를 먼저 입력하셔도 됩니다' },
+    // Phase D-3c：passkey 登入入口
+    login_passkey_btn: { 'zh-TW': '用 Passkey 登入', en: 'Sign in with Passkey', ja: 'パスキーでログイン', ko: 'Passkey로 로그인' },
+    passkey_logging_in: { 'zh-TW': '請依瀏覽器提示完成驗證…', en: 'Follow the browser prompt to continue…', ja: 'ブラウザの指示に従って認証してください…', ko: '브라우저 안내에 따라 인증을 완료하세요…' },
+    passkey_login_cancelled: { 'zh-TW': '已取消', en: 'Cancelled', ja: 'キャンセルしました', ko: '취소되었습니다' },
+    passkey_login_fail: { 'zh-TW': 'Passkey 登入失敗', en: 'Passkey login failed', ja: 'パスキーログインに失敗しました', ko: 'Passkey 로그인 실패' },
+};
 function getLang() {
-  try { return localStorage.getItem('lang') || 'zh-TW' } catch { return 'zh-TW' }
+    try {
+        return localStorage.getItem('lang') || 'zh-TW';
+    }
+    catch {
+        return 'zh-TW';
+    }
 }
-
 // 後端錯誤訊息翻譯（保留原訊息為 fallback）
 function t(msg) {
-  const entry = ERROR_I18N[msg]
-  if (!entry) return msg
-  return entry[getLang()] || entry['zh-TW'] || msg
+    const entry = ERROR_I18N[msg];
+    if (!entry)
+        return msg;
+    return entry[getLang()] || entry['zh-TW'] || msg;
 }
-
 // 偏好 api.js 的 code-based 映射（涵蓋 RISK_BLOCKED / COOLDOWN 等），
 // 沒命中就退回到本檔 ERROR_I18N 的英文 string 映射。auth-ui 走 raw fetch 沒 ApiError instance，所以走 tApiErrorData。
 function _tApiErrData(data) {
-  if (!data) return null
-  if (typeof window.tApiErrorData === 'function') {
-    const code = data.code || null
-    if (code && window.__apiErrorI18n) {
-      const dict = window.__apiErrorI18n[getLang()] || window.__apiErrorI18n['zh-TW']
-      if (dict && dict[code]) return window.tApiErrorData(data, null)
+    if (!data)
+        return null;
+    const w = window;
+    if (typeof w.tApiErrorData === 'function') {
+        const code = data.code || null;
+        if (code && w.__apiErrorI18n) {
+            const dict = w.__apiErrorI18n[getLang()] || w.__apiErrorI18n['zh-TW'];
+            if (dict && dict[code])
+                return w.tApiErrorData(data, null);
+        }
     }
-  }
-  return data.error ? t(data.error) : null
+    return data.error ? t(data.error) : null;
 }
-
 // 前端 UI 字串翻譯
 function uiT(key) {
-  const entry = UI_I18N[key]
-  if (!entry) return key
-  return entry[getLang()] || entry['zh-TW'] || key
+    const entry = UI_I18N[key];
+    if (!entry)
+        return key;
+    return entry[getLang()] || entry['zh-TW'] || key;
 }
-
 // ── 常數 ────────────────────────────────────────────────────────
 const API = {
-  login:     '/api/auth/local/login',
-  register:  '/api/auth/local/register',
-  totp:      '/api/auth/2fa/verify',
-  logout:    '/api/auth/logout',
-  oauthCode: '/api/auth/oauth/code',
+    login: '/api/auth/local/login',
+    register: '/api/auth/local/register',
+    totp: '/api/auth/2fa/verify',
+    logout: '/api/auth/logout',
+    oauthCode: '/api/auth/oauth/code',
 };
-
 const REDIRECT_KEY = 'auth_redirect';
-const TOKEN_KEY    = 'access_token';
+const TOKEN_KEY = 'access_token';
 const GUEST_ID_KEY = 'chiyigo_guest_id';
-const PWD_HIDE_MS  = 10_000;
-
+const PWD_HIDE_MS = 10_000;
 // ── PKCE 模式偵測 ─────────────────────────────────────────────────
 // pkce_key 由 GET /api/auth/oauth/authorize 產生，存在 URL ?pkce_key=...
 const _pkceKey = new URLSearchParams(location.search).get('pkce_key');
-
 // ── Cross-App Redirect 模式（子網域 SSO）────────────────────────────
 // 外部子網域帶 ?redirect=https://talo.chiyigo.com 進入登入頁，
 // 登入後把 access_token 帶回目標 origin。
 const _CROSS_APP_WHITELIST = new Set([
-  'https://talo.chiyigo.com',
-  'https://mbti.chiyigo.com',
+    'https://talo.chiyigo.com',
+    'https://mbti.chiyigo.com',
 ]);
-
 const _ORIGIN_TO_AUD = {
-  'https://talo.chiyigo.com': 'talo',
-  'https://mbti.chiyigo.com': 'mbti',
+    'https://talo.chiyigo.com': 'talo',
+    'https://mbti.chiyigo.com': 'mbti',
 };
-
 const _crossAppOrigin = (() => {
-  const r = new URLSearchParams(location.search).get('redirect');
-  if (!r) return null;
-  try {
-    const origin = new URL(r).origin;
-    return _CROSS_APP_WHITELIST.has(origin) ? origin : null;
-  } catch { return null; }
+    const r = new URLSearchParams(location.search).get('redirect');
+    if (!r)
+        return null;
+    try {
+        const origin = new URL(r).origin;
+        return _CROSS_APP_WHITELIST.has(origin) ? origin : null;
+    }
+    catch {
+        return null;
+    }
 })();
-
 // 對應 JWT aud claim — 跨 app 登入時帶給後端，後端據此簽 aud
 const _crossAppAud = _crossAppOrigin ? _ORIGIN_TO_AUD[_crossAppOrigin] : null;
-
 function _decodeJwtPayload(token) {
-  try {
-    return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-  } catch { return {}; }
+    try {
+        return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    }
+    catch {
+        return {};
+    }
 }
-
 function handleCrossAppRedirect(accessToken) {
-  const { email } = _decodeJwtPayload(accessToken);
-  const params = new URLSearchParams({ mbti_token: accessToken });
-  if (email) params.set('mbti_email', email);
-  // 用 fragment 而非 query：避免 token 進入 Referer / server log / 瀏覽器歷史
-  window.location.href = `${_crossAppOrigin}/#${params}`;
+    const { email } = _decodeJwtPayload(accessToken);
+    const params = new URLSearchParams({ mbti_token: accessToken });
+    if (email)
+        params.set('mbti_email', email);
+    // 用 fragment 而非 query：避免 token 進入 Referer / server log / 瀏覽器歷史
+    window.location.href = `${_crossAppOrigin}/#${params}`;
 }
-
 // ── guest_id 管理 ────────────────────────────────────────────────
 // Codex audit r2 #2（2026-05-10）：guest_id 統一用 chiyigo.device_uuid（web-<uuid>），
 // 與 requisition.js 訪客送單寫入的 owner_guest_id 同一個 key，否則 register.js 的
 // takeover WHERE owner_guest_id=? 永不命中。device_uuid 同時被 refresh token 強綁，
 // 不要在 register 成功後 clear（會破壞同 session 的 refresh）。
-
 function getOrCreateGuestId() {
-  // 沿用 _chiyigoGetDeviceUuid（同檔上方定義）：web-<uuid> 格式 + localStorage 失敗退 in-memory
-  return _chiyigoGetDeviceUuid();
+    // 沿用 _chiyigoGetDeviceUuid（同檔上方定義）：web-<uuid> 格式 + localStorage 失敗退 in-memory
+    return _chiyigoGetDeviceUuid();
 }
-
 function clearGuestId() {
-  // 故意 no-op：device_uuid 是裝置身份，refresh token 依此綁定，不能在註冊成功後清掉
-  // 舊 GUEST_ID_KEY ('chiyigo_guest_id') 殘留資料一律清除（單向遷移）
-  try { localStorage.removeItem(GUEST_ID_KEY); } catch (_) { /* ignore */ }
+    // 故意 no-op：device_uuid 是裝置身份，refresh token 依此綁定，不能在註冊成功後清掉
+    // 舊 GUEST_ID_KEY ('chiyigo_guest_id') 殘留資料一律清除（單向遷移）
+    try {
+        localStorage.removeItem(GUEST_ID_KEY);
+    }
+    catch (_) { /* ignore */ }
 }
-
 // ── JWT 儲存（Refresh Token 改由後端 HttpOnly Cookie 管理）────────
-
 function saveToken(token) {
-  sessionStorage.setItem(TOKEN_KEY, token);
+    sessionStorage.setItem(TOKEN_KEY, token);
 }
-
 function getToken() {
-  return sessionStorage.getItem(TOKEN_KEY);
+    return sessionStorage.getItem(TOKEN_KEY);
 }
-
 // 以 HttpOnly Cookie 靜默換取新 access_token，成功回傳 true
 // P0-11：全站收斂 — 委派給 api.js 的 window.silentRefresh（含 navigator.locks 跨 tab 序列化）
 async function refreshAccessToken() {
-  if (typeof window !== 'undefined' && typeof window.silentRefresh === 'function') {
-    return window.silentRefresh();
-  }
-  // fallback：api.js 還沒 load（同頁 script 順序保證罕見）→ 直接打一次
-  try {
-    const _devId = _chiyigoGetDeviceUuid();
-    const res = await fetch('/api/auth/refresh', {
-      method:      'POST',
-      credentials: 'include',
-      headers:     Object.assign({ 'Content-Type': 'application/json' }, _devId ? { 'X-Device-Id': _devId } : {}),
-      body:        '{}',
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    if (data.access_token) { saveToken(data.access_token); return true; }
-    return false;
-  } catch {
-    return false;
-  }
+    const w = window;
+    if (typeof window !== 'undefined' && typeof w.silentRefresh === 'function') {
+        return w.silentRefresh();
+    }
+    // fallback：api.js 還沒 load（同頁 script 順序保證罕見）→ 直接打一次
+    try {
+        const _devId = _chiyigoGetDeviceUuid();
+        const res = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            credentials: 'include',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, _devId ? { 'X-Device-Id': _devId } : {}),
+            body: '{}',
+        });
+        if (!res.ok)
+            return false;
+        const data = await res.json();
+        if (data.access_token) {
+            saveToken(data.access_token);
+            return true;
+        }
+        return false;
+    }
+    catch {
+        return false;
+    }
 }
-
 // ── 登出 ──────────────────────────────────────────────────────────
-
 // OIDC RP-Initiated Logout：跳 chiyigo end_session_endpoint
 // chiyigo 會撤所有 refresh + 嵌 iframe 同步登出 mbti / talo（front-channel logout）
 function logout() {
-  sessionStorage.removeItem(TOKEN_KEY);
-  clearGuestId();
-  // P0-12：先廣播登出 → 其他 tab（dashboard / admin / 公開頁 sidebar）即時同步
-  // 沒有 broadcast 的話別的 tab 要等下次 fetch 撞 401 才察覺
-  try {
-    if ('BroadcastChannel' in window) {
-      new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' });
+    sessionStorage.removeItem(TOKEN_KEY);
+    clearGuestId();
+    // P0-12：先廣播登出 → 其他 tab（dashboard / admin / 公開頁 sidebar）即時同步
+    // 沒有 broadcast 的話別的 tab 要等下次 fetch 撞 401 才察覺
+    try {
+        if ('BroadcastChannel' in window) {
+            new BroadcastChannel('chiyigo-auth').postMessage({ type: 'logout' });
+        }
     }
-  } catch (_) {}
-  const url = '/api/auth/oauth/end-session?post_logout_redirect_uri=' +
-              encodeURIComponent('https://chiyigo.com/login');
-  window.location.href = url;
+    catch (_) { }
+    const url = '/api/auth/oauth/end-session?post_logout_redirect_uri=' +
+        encodeURIComponent('https://chiyigo.com/login');
+    window.location.href = url;
 }
-
 // OIDC Front-Channel Logout 訊號：其他子站登出 → dashboard / 私密頁立刻清 token + 跳登入頁
 // 監聽同源 localStorage 'oidc_logout_at' key 變化（由 frontchannel-logout.html iframe 寫入觸發）
 window.addEventListener('storage', e => {
-  if (e.key !== 'oidc_logout_at') return;
-  sessionStorage.removeItem(TOKEN_KEY);
-  // 已在 login / 公開頁就不再跳；私密頁（dashboard / admin / bind-email …）跳登入
-  const path = location.pathname;
-  const isPublic = path === '/' || path === '' || path.startsWith('/login') ||
-                   path.startsWith('/index') || path.startsWith('/forgot-password') ||
-                   path.startsWith('/reset-password') || path.startsWith('/verify-email');
-  // P0-12：對齊跨 tab logout URL，方便 login.html 顯示「其他分頁登出了」訊息
-  if (!isPublic) location.replace('/login.html?logout=other_tab');
+    if (e.key !== 'oidc_logout_at')
+        return;
+    sessionStorage.removeItem(TOKEN_KEY);
+    // 已在 login / 公開頁就不再跳；私密頁（dashboard / admin / bind-email …）跳登入
+    const path = location.pathname;
+    const isPublic = path === '/' || path === '' || path.startsWith('/login') ||
+        path.startsWith('/index') || path.startsWith('/forgot-password') ||
+        path.startsWith('/reset-password') || path.startsWith('/verify-email');
+    // P0-12：對齊跨 tab logout URL，方便 login.html 顯示「其他分頁登出了」訊息
+    if (!isPublic)
+        location.replace('/login.html?logout=other_tab');
 });
-
 // ── 成功後跳轉 ───────────────────────────────────────────────────
-
 function redirectAfterAuth() {
-  let target = sessionStorage.getItem(REDIRECT_KEY);
-  if (!target) {
-    try {
-      const n = new URLSearchParams(location.search).get('next');
-      if (n && n.charAt(0) === '/' && n.charAt(1) !== '/') target = n;
-    } catch (_) {}
-  }
-  target = target || '/dashboard.html';
-  sessionStorage.removeItem(REDIRECT_KEY);
-  window.location.href = target;
+    let target = sessionStorage.getItem(REDIRECT_KEY);
+    if (!target) {
+        try {
+            const n = new URLSearchParams(location.search).get('next');
+            if (n && n.charAt(0) === '/' && n.charAt(1) !== '/')
+                target = n;
+        }
+        catch (_) { }
+    }
+    target = target || '/dashboard.html';
+    sessionStorage.removeItem(REDIRECT_KEY);
+    window.location.href = target;
 }
-
 // ── PKCE 模式：登入後換取授權碼並跳回 App ──────────────────────
 async function handlePkceRedirect(accessToken) {
-  try {
-    const res = await fetch(API.oauthCode, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': 'Bearer ' + accessToken,
-      },
-      body: JSON.stringify({ pkce_key: _pkceKey }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      showMsg(_tApiErrData(data) || uiT('err_pkce'));
-      return;
+    try {
+        const res = await fetch(API.oauthCode, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + accessToken,
+            },
+            body: JSON.stringify({ pkce_key: _pkceKey }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showMsg(_tApiErrData(data) || uiT('err_pkce'));
+            return;
+        }
+        // 跳轉至 App（chiyigo:// 或 loopback 或 https://）
+        window.location.href = data.redirect_url;
     }
-    // 跳轉至 App（chiyigo:// 或 loopback 或 https://）
-    window.location.href = data.redirect_url;
-  } catch {
-    showMsg(uiT('err_network'));
-  }
+    catch {
+        showMsg(uiT('err_network'));
+    }
 }
-
 // ── 密碼顯示 / 隱藏（10 秒自動回隱藏）──────────────────────────
-
 const _pwdTimers = {};
-
 function togglePassword(inputId, btnId) {
-  const input = document.getElementById(inputId);
-  const btn   = document.getElementById(btnId);
-  const icon  = document.getElementById(btnId + '-icon');
-
-  const isHidden = input.type === 'password';
-
-  if (isHidden) {
-    // 顯示密碼
-    input.type = 'text';
-    btn.classList.add('eye-active');
-    if (icon) {
-      icon.innerHTML = `
+    const input = document.getElementById(inputId);
+    const btn = document.getElementById(btnId);
+    const icon = document.getElementById(btnId + '-icon');
+    const isHidden = input.type === 'password';
+    if (isHidden) {
+        // 顯示密碼
+        input.type = 'text';
+        btn.classList.add('eye-active');
+        if (icon) {
+            icon.innerHTML = `
         <path stroke-linecap="round" stroke-linejoin="round"
           d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />`;
+        }
+        // 清除舊計時器，設定 10 秒後自動隱藏
+        clearTimeout(_pwdTimers[inputId]);
+        _pwdTimers[inputId] = setTimeout(() => hidePassword(inputId, btnId), PWD_HIDE_MS);
     }
-
-    // 清除舊計時器，設定 10 秒後自動隱藏
-    clearTimeout(_pwdTimers[inputId]);
-    _pwdTimers[inputId] = setTimeout(() => hidePassword(inputId, btnId), PWD_HIDE_MS);
-  } else {
-    hidePassword(inputId, btnId);
-  }
+    else {
+        hidePassword(inputId, btnId);
+    }
 }
-
 function hidePassword(inputId, btnId) {
-  const input = document.getElementById(inputId);
-  const btn   = document.getElementById(btnId);
-  const icon  = document.getElementById(btnId + '-icon');
-
-  input.type = 'password';
-  if (btn) btn.classList.remove('eye-active');
-  if (icon) {
-    icon.innerHTML = `
+    const input = document.getElementById(inputId);
+    const btn = document.getElementById(btnId);
+    const icon = document.getElementById(btnId + '-icon');
+    input.type = 'password';
+    if (btn)
+        btn.classList.remove('eye-active');
+    if (icon) {
+        icon.innerHTML = `
       <path stroke-linecap="round" stroke-linejoin="round"
         d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178z" />
       <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />`;
-  }
-  clearTimeout(_pwdTimers[inputId]);
+    }
+    clearTimeout(_pwdTimers[inputId]);
 }
-
 // ── Turnstile：explicit rendering + lazy + closure widgetId ──────
 // 同頁 2 個 widget 會在 iOS Safari 主執行緒同時跑 challenge 卡輸入，
 // 改成只在需要時 render 該 panel 的 widget；fail 必 reset 否則 token 一次性會 403。
 const TURNSTILE_SITEKEY = '0x4AAAAAADISz6kSGZRC94TQ';
 let _loginWidgetId = null;
 let _registerWidgetId = null;
-
 function _setTsReady(containerEl, ready) {
-  const wrap = containerEl?.closest('.ts-wrap');
-  if (!wrap) return;
-  wrap.classList.toggle('is-ready', !!ready);
+    const wrap = containerEl?.closest('.ts-wrap');
+    if (!wrap)
+        return;
+    wrap.classList.toggle('is-ready', !!ready);
 }
-
 function _renderTurnstile(containerId) {
-  if (typeof window.turnstile === 'undefined') return null;
-  const el = document.getElementById(containerId);
-  if (!el) return null;
-  return window.turnstile.render('#' + containerId, {
-    sitekey: TURNSTILE_SITEKEY,
-    theme:   'auto',
-    size:    'flexible',
-    callback:           () => _setTsReady(el, true),
-    'expired-callback': () => _setTsReady(el, false),
-    'error-callback':   () => _setTsReady(el, false),
-    'timeout-callback': () => _setTsReady(el, false),
-  });
+    const ts = window.turnstile;
+    if (typeof ts === 'undefined')
+        return null;
+    const el = document.getElementById(containerId);
+    if (!el)
+        return null;
+    return ts.render('#' + containerId, {
+        sitekey: TURNSTILE_SITEKEY,
+        theme: 'auto',
+        size: 'flexible',
+        callback: () => _setTsReady(el, true),
+        'expired-callback': () => _setTsReady(el, false),
+        'error-callback': () => _setTsReady(el, false),
+        'timeout-callback': () => _setTsReady(el, false),
+    });
 }
-
 function _resetTurnstile(widgetId, containerId) {
-  if (widgetId == null || typeof window.turnstile === 'undefined') return;
-  try { window.turnstile.reset(widgetId); } catch (_) {}
-  const el = document.getElementById(containerId);
-  _setTsReady(el, false);
+    const ts = window.turnstile;
+    if (widgetId == null || typeof ts === 'undefined')
+        return;
+    try {
+        ts.reset(widgetId);
+    }
+    catch (_) { }
+    const el = document.getElementById(containerId);
+    _setTsReady(el, false);
 }
-
 // 嚴格保證任何時刻只有 1 個 widget：切走時把 inactive 的整個 remove 掉
 function _removeWidgetIfNotTab(tab) {
-  if (typeof window.turnstile === 'undefined') return;
-  if (tab !== 'login' && _loginWidgetId != null) {
-    try { window.turnstile.remove(_loginWidgetId); } catch (_) {}
-    _loginWidgetId = null;
-    _setTsReady(document.getElementById('ts-login-container'), false);
-  }
-  if (tab !== 'register' && _registerWidgetId != null) {
-    try { window.turnstile.remove(_registerWidgetId); } catch (_) {}
-    _registerWidgetId = null;
-    _setTsReady(document.getElementById('ts-register-container'), false);
-  }
+    const ts = window.turnstile;
+    if (typeof ts === 'undefined')
+        return;
+    if (tab !== 'login' && _loginWidgetId != null) {
+        try {
+            ts.remove(_loginWidgetId);
+        }
+        catch (_) { }
+        _loginWidgetId = null;
+        _setTsReady(document.getElementById('ts-login-container'), false);
+    }
+    if (tab !== 'register' && _registerWidgetId != null) {
+        try {
+            ts.remove(_registerWidgetId);
+        }
+        catch (_) { }
+        _registerWidgetId = null;
+        _setTsReady(document.getElementById('ts-register-container'), false);
+    }
 }
-
 // 目前 active 的 panel 是哪個（panel.active class 為唯一真相）。
 function _getActiveTurnstileTab() {
-  if (document.getElementById('form-register')?.classList.contains('active')) return 'register';
-  if (document.getElementById('form-login')?.classList.contains('active')) return 'login';
-  return null;
+    if (document.getElementById('form-register')?.classList.contains('active'))
+        return 'register';
+    if (document.getElementById('form-login')?.classList.contains('active'))
+        return 'login';
+    return null;
 }
-
 // 確保「目前 active 的 panel」widget 已 render；API 未 ready 時 no-op，
 // onloadTurnstile 之後會依當下 active tab 補 render。配合 _removeWidgetIfNotTab
 // 一起達成「任何時刻只有 1 個 iframe」。
 function _ensureWidgetForTab(tab) {
-  if (typeof window.turnstile === 'undefined') return;
-  if (tab === 'login' && _loginWidgetId == null && document.getElementById('ts-login-container')) {
-    _loginWidgetId = _renderTurnstile('ts-login-container');
-  } else if (tab === 'register' && _registerWidgetId == null && document.getElementById('ts-register-container')) {
-    _registerWidgetId = _renderTurnstile('ts-register-container');
-  }
+    if (typeof window.turnstile === 'undefined')
+        return;
+    if (tab === 'login' && _loginWidgetId == null && document.getElementById('ts-login-container')) {
+        _loginWidgetId = _renderTurnstile('ts-login-container');
+    }
+    else if (tab === 'register' && _registerWidgetId == null && document.getElementById('ts-register-container')) {
+        _registerWidgetId = _renderTurnstile('ts-register-container');
+    }
 }
-
 // Turnstile API ready 時觸發（?onload=onloadTurnstile）。只 render 目前 active panel
 // 的 widget；若使用者在 API ready 前已切到註冊，這裡會自然只 render 註冊，不會
 // 同時跑兩個 widget 害 iOS 卡頓。
 window.onloadTurnstile = function () {
-  const tab = _getActiveTurnstileTab();
-  if (tab) _ensureWidgetForTab(tab);
+    const tab = _getActiveTurnstileTab();
+    if (tab)
+        _ensureWidgetForTab(tab);
 };
 // 防 race：Turnstile script 是 async，可能在本檔執行前就跑完 onload；補一次。
-if (typeof window.turnstile !== 'undefined') window.onloadTurnstile();
-
+if (typeof window.turnstile !== 'undefined')
+    window.onloadTurnstile();
 // ── 分頁切換 ─────────────────────────────────────────────────────
-
 const TAB_CONFIG = {
-  login:    { title: '歡迎回來',     subtitle: '登入你的 CHIYIGO 帳號',    showTabs: true  },
-  register: { title: '建立帳號',     subtitle: '開始你的 CHIYIGO 旅程',    showTabs: true  },
-  totp:     { title: '兩步驟驗證',   subtitle: '請完成身份驗證以繼續',      showTabs: false },
+    login: { title: '歡迎回來', subtitle: '登入你的 CHIYIGO 帳號', showTabs: true },
+    register: { title: '建立帳號', subtitle: '開始你的 CHIYIGO 旅程', showTabs: true },
+    totp: { title: '兩步驟驗證', subtitle: '請完成身份驗證以繼續', showTabs: false },
 };
-
 function switchTab(tab) {
-  // 1) 先切 active class（這部分必須同步，否則 active 狀態錯亂）
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('form-' + tab).classList.add('active');
-
-  // 2) Turnstile 清理/render 全延到下一幀，並以「rAF 觸發當下的 active tab」
-  //    重新判斷，避免快速切 tab 時 stale closure 把 widget render 進已切走的 panel。
-  //    這也讓 layout 先套用，iframe 量得到正確尺寸。
-  const applyTurnstile = () => {
-    const active = _getActiveTurnstileTab();
-    _removeWidgetIfNotTab(active);
-    if (active) _ensureWidgetForTab(active);
-  };
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(applyTurnstile);
-  } else {
-    applyTurnstile();
-  }
-
-  // 更新標題
-  const cfg = TAB_CONFIG[tab] || TAB_CONFIG.login;
-  document.getElementById('form-title').textContent    = cfg.title;
-  document.getElementById('form-subtitle').textContent = cfg.subtitle;
-
-  // 分頁按鈕樣式（TOTP 時隱藏）
-  const tabBar = document.getElementById('tab-bar');
-  if (!cfg.showTabs) {
-    tabBar.style.display = 'none';
-  } else {
-    tabBar.style.display = '';
-    ['login', 'register'].forEach(t => {
-      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
-    });
-  }
-
-  clearMsg();
-  hidePassword('login-password', 'login-eye');
-  hidePassword('reg-password',   'reg-eye');
-  hidePassword('reg-confirm',    'reg-confirm-eye');
+    // 1) 先切 active class（這部分必須同步，否則 active 狀態錯亂）
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('form-' + tab).classList.add('active');
+    // 2) Turnstile 清理/render 全延到下一幀，並以「rAF 觸發當下的 active tab」
+    //    重新判斷，避免快速切 tab 時 stale closure 把 widget render 進已切走的 panel。
+    //    這也讓 layout 先套用，iframe 量得到正確尺寸。
+    const applyTurnstile = () => {
+        const active = _getActiveTurnstileTab();
+        _removeWidgetIfNotTab(active);
+        if (active)
+            _ensureWidgetForTab(active);
+    };
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(applyTurnstile);
+    }
+    else {
+        applyTurnstile();
+    }
+    // 更新標題
+    const cfg = TAB_CONFIG[tab] || TAB_CONFIG.login;
+    document.getElementById('form-title').textContent = cfg.title;
+    document.getElementById('form-subtitle').textContent = cfg.subtitle;
+    // 分頁按鈕樣式（TOTP 時隱藏）
+    const tabBar = document.getElementById('tab-bar');
+    if (!cfg.showTabs) {
+        tabBar.style.display = 'none';
+    }
+    else {
+        tabBar.style.display = '';
+        ['login', 'register'].forEach(t => {
+            document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+        });
+    }
+    clearMsg();
+    hidePassword('login-password', 'login-eye');
+    hidePassword('reg-password', 'reg-eye');
+    hidePassword('reg-confirm', 'reg-confirm-eye');
 }
-
 // ── 訊息顯示 ─────────────────────────────────────────────────────
-
 function showMsg(text, type = 'error') {
-  const box = document.getElementById('msg-box');
-  box.textContent = text;
-  box.className = 'msg-box ' + (type === 'error' ? 'msg-error' : 'msg-success');
-  box.style.display = 'block';
+    const box = document.getElementById('msg-box');
+    box.textContent = text;
+    box.className = 'msg-box ' + (type === 'error' ? 'msg-error' : 'msg-success');
+    box.style.display = 'block';
 }
-
 function clearMsg() {
-  const box = document.getElementById('msg-box');
-  box.style.display = 'none';
-  box.textContent = '';
+    const box = document.getElementById('msg-box');
+    box.style.display = 'none';
+    box.textContent = '';
 }
-
 function setLoading(btnId, loading) {
-  const btn = document.getElementById(btnId);
-  if (!btn) return;
-  btn.disabled = loading;
-  btn.textContent = loading ? uiT('loading') : btn.dataset.label || btn.textContent;
+    const btn = document.getElementById(btnId);
+    if (!btn)
+        return;
+    btn.disabled = loading;
+    btn.textContent = loading ? uiT('loading') : btn.dataset.label || btn.textContent;
 }
-
 // ── 登入處理 ─────────────────────────────────────────────────────
-
 // 暫存 pre_auth_token，供 TOTP 面板使用
 let _preAuthToken = null;
-
 async function handleLogin(event) {
-  event.preventDefault();
-  clearMsg();
-
-  const email    = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  const btn      = document.getElementById('login-btn');
-  btn.dataset.label = uiT('btn_login');
-
-  const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
-  // login.html 一定有 Turnstile widget，所以這頁 token 必填；空字串 = 使用者搶在驗證完成前點
-  if (!tsToken) {
-    showMsg(uiT('err_captcha_pending'));
-    return;
-  }
-
-  setLoading('login-btn', true);
-
-  try {
-    const res = await fetch(API.login, {
-      method:      'POST',
-      credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' },
-      body:        JSON.stringify({
-        email, password,
-        aud: _crossAppAud ?? undefined,
-        device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
-        'cf-turnstile-response': tsToken,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (res.status === 403 && data.code === 'TOTP_REQUIRED') {
-      _preAuthToken = data.pre_auth_token;
-      // token 已被後端核銷一次；若使用者從 TOTP 返回登入再送一次會帶舊 token → 先 reset
-      _resetTurnstile(_loginWidgetId, 'ts-login-container');
-      switchTab('totp');
-      document.getElementById('totp-code').focus();
-      return;
+    event.preventDefault();
+    clearMsg();
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const btn = document.getElementById('login-btn');
+    btn.dataset.label = uiT('btn_login');
+    const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
+    // login.html 一定有 Turnstile widget，所以這頁 token 必填；空字串 = 使用者搶在驗證完成前點
+    if (!tsToken) {
+        showMsg(uiT('err_captcha_pending'));
+        return;
     }
-
-    if (!res.ok) {
-      // token 一次性，失敗後必 reset 才能讓使用者再送一次
-      _resetTurnstile(_loginWidgetId, 'ts-login-container');
-      showMsg(_tApiErrData(data) || uiT('err_login_fail'));
-      return;
-    }
-
-    saveToken(data.access_token);
-    if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
-    if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
-    redirectAfterAuth();
-
-  } catch {
-    _resetTurnstile(_loginWidgetId, 'ts-login-container');
-    showMsg(uiT('err_network'));
-  } finally {
-    setLoading('login-btn', false);
-  }
-}
-
-// ── 註冊處理 ─────────────────────────────────────────────────────
-
-async function handleRegister(event) {
-  event.preventDefault();
-  clearMsg();
-
-  const email    = document.getElementById('reg-email').value.trim();
-  const password = document.getElementById('reg-password').value;
-  const confirm  = document.getElementById('reg-confirm').value;
-  const guest_id = getOrCreateGuestId();
-  const btn      = document.getElementById('reg-btn');
-  btn.dataset.label = uiT('btn_register');
-
-  if (password.length < 8) {
-    showMsg(uiT('err_pwd_short'));
-    return;
-  }
-
-  if (password !== confirm) {
-    showMsg(uiT('err_pwd_mismatch'));
-    document.getElementById('reg-confirm').focus();
-    return;
-  }
-
-  const tsToken = document.querySelector('#form-register [name="cf-turnstile-response"]')?.value || '';
-  if (!tsToken) {
-    showMsg(uiT('err_captcha_pending'));
-    return;
-  }
-
-  setLoading('reg-btn', true);
-
-  try {
-    const res = await fetch(API.register, {
-      method:      'POST',
-      credentials: 'include',
-      headers:     { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        email, password, guest_id,
-        aud: _crossAppAud ?? undefined,
-        device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
-        'cf-turnstile-response': tsToken,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      _resetTurnstile(_registerWidgetId, 'ts-register-container');
-      showMsg(_tApiErrData(data) || uiT('err_reg_fail'));
-      return;
-    }
-
-    saveToken(data.access_token);
-    clearGuestId();
-    if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
-    if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
-    showMsg(uiT('reg_success'), 'success');
-    setTimeout(redirectAfterAuth, 800);
-
-  } catch {
-    _resetTurnstile(_registerWidgetId, 'ts-register-container');
-    showMsg(uiT('err_network'));
-  } finally {
-    setLoading('reg-btn', false);
-  }
-}
-
-// ── 2FA 驗證處理 ──────────────────────────────────────────────────
-
-async function handleTotp(event) {
-  event.preventDefault();
-  clearMsg();
-
-  const otp_code = document.getElementById('totp-code').value.trim();
-  const btn      = document.getElementById('totp-btn');
-  btn.dataset.label = uiT('btn_verify');
-
-  if (!otp_code) {
-    showMsg(uiT('err_otp_empty'));
-    return;
-  }
-  if (!_preAuthToken) {
-    showMsg(uiT('err_otp_expired'));
-    switchTab('login');
-    return;
-  }
-
-  setLoading('totp-btn', true);
-
-  try {
-    const res = await fetch(API.totp, {
-      method:      'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': 'Bearer ' + _preAuthToken,
-      },
-      body: JSON.stringify({ otp_code, aud: _crossAppAud ?? undefined, device_uuid: _chiyigoGetDeviceUuid() ?? undefined }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      showMsg(_tApiErrData(data) || uiT('err_otp_invalid'));
-      return;
-    }
-
-    _preAuthToken = null;
-    saveToken(data.access_token);
-    if (_pkceKey) { await handlePkceRedirect(data.access_token); return; }
-    if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
-    redirectAfterAuth();
-
-  } catch {
-    showMsg(uiT('err_network'));
-  } finally {
-    setLoading('totp-btn', false);
-  }
-}
-
-// ── 初始化 ───────────────────────────────────────────────────────
-
-(function init() {
-  // 只在登入頁執行重導向邏輯（dashboard 等頁面載入此 js 只需 logout()）
-  if (!document.getElementById('form-login')) return;
-
-  // ── DOM event 綁定（HTML 用 data-* 宣告意圖，這裡集中綁 handler）─────
-  // tab 切換：登入 / 註冊 / 2FA「← 返回登入」
-  document.querySelectorAll('[data-switch-tab]').forEach(btn => {
-    btn.addEventListener('click', e => { e.preventDefault(); switchTab(btn.dataset.switchTab); });
-  });
-  // 顯示密碼眼睛
-  document.querySelectorAll('[data-toggle-pwd]').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.preventDefault();
-      togglePassword(btn.dataset.togglePwd, btn.dataset.toggleEye);
-    });
-  });
-  // form submit
-  document.getElementById('form-login')   ?.addEventListener('submit', handleLogin);
-  document.getElementById('form-register')?.addEventListener('submit', handleRegister);
-  document.getElementById('form-totp')    ?.addEventListener('submit', handleTotp);
-
-  // Discord OAuth 回傳：URL 帶有 ?access_token=...
-  const _urlToken = new URLSearchParams(location.search).get('access_token');
-  if (_urlToken) {
-    saveToken(_urlToken);
-    history.replaceState(null, '', location.pathname);
-    if (_crossAppOrigin) { handleCrossAppRedirect(_urlToken); return; }
-    redirectAfterAuth();
-    return;
-  }
-
-  // 已登入時：PKCE 模式繼續換碼，Cross-App 繼續跳轉，普通模式跳轉儀表板
-  if (getToken()) {
-    if (_pkceKey) { handlePkceRedirect(getToken()); return; }
-    if (_crossAppOrigin) { handleCrossAppRedirect(getToken()); return; }
-    redirectAfterAuth();
-    return;
-  }
-  getOrCreateGuestId();
-  if (_pkceKey) {
-    const notice = document.getElementById('pkce-notice');
-    if (notice) notice.classList.remove('hidden');
-    // 將 pkce_key 帶入 OAuth 按鈕，讓社群登入也能在完成後回到正確頁面
-    document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
-      try {
-        const u = new URL(a.href, location.origin);
-        u.searchParams.set('pkce_key', _pkceKey);
-        a.href = u.toString();
-      } catch { /* 忽略無效連結 */ }
-    });
-  }
-
-  // 將 ?next=/path 帶入 OAuth init 連結，讓 OAuth 完成後 callback worker 能跳回原頁面
-  // （local 登入由 redirectAfterAuth 處理；OAuth 走 worker 直接 redirect，需改 init 端）
-  try {
-    const _nextPath = new URLSearchParams(location.search).get('next');
-    if (_nextPath && _nextPath.charAt(0) === '/' && _nextPath.charAt(1) !== '/') {
-      document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
-        try {
-          const u = new URL(a.href, location.origin);
-          u.searchParams.set('next', _nextPath);
-          a.href = u.toString();
-        } catch { /* 忽略無效連結 */ }
-      });
-    }
-  } catch (_) {}
-
-  // Cross-app redirect：OAuth 會離開此頁再跳回，用 sessionStorage 保留目標 origin
-  // 同時把 aud 注入 OAuth init 連結，讓後端 callback 簽出正確 aud 的 access_token
-  if (_crossAppOrigin && _crossAppAud) {
-    document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
-      try {
-        const u = new URL(a.href, location.origin);
-        if (!u.searchParams.has('aud')) {
-          u.searchParams.set('aud', _crossAppAud);
-          a.href = u.pathname + u.search + u.hash;
+    setLoading('login-btn', true);
+    try {
+        const res = await fetch(API.login, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email, password,
+                aud: _crossAppAud ?? undefined,
+                device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
+                'cf-turnstile-response': tsToken,
+            }),
+        });
+        const data = await res.json();
+        if (res.status === 403 && data.code === 'TOTP_REQUIRED') {
+            _preAuthToken = data.pre_auth_token;
+            // token 已被後端核銷一次；若使用者從 TOTP 返回登入再送一次會帶舊 token → 先 reset
+            _resetTurnstile(_loginWidgetId, 'ts-login-container');
+            switchTab('totp');
+            document.getElementById('totp-code').focus();
+            return;
         }
-      } catch { /* href 無法解析就略過 */ }
-      a.addEventListener('click', () => {
-        sessionStorage.setItem('_cross_app_redirect', _crossAppOrigin);
-      }, { once: true });
-    });
-  }
-})();
-
-// ── Phase D-3c：Passkey 登入入口 ─────────────────────────────────
-
-function passkeySupported() {
-  return typeof window.PublicKeyCredential === 'function' && location.protocol === 'https:';
+        if (!res.ok) {
+            // token 一次性，失敗後必 reset 才能讓使用者再送一次
+            _resetTurnstile(_loginWidgetId, 'ts-login-container');
+            showMsg(_tApiErrData(data) || uiT('err_login_fail'));
+            return;
+        }
+        saveToken(data.access_token);
+        if (_pkceKey) {
+            await handlePkceRedirect(data.access_token);
+            return;
+        }
+        if (_crossAppOrigin) {
+            handleCrossAppRedirect(data.access_token);
+            return;
+        }
+        redirectAfterAuth();
+    }
+    catch {
+        _resetTurnstile(_loginWidgetId, 'ts-login-container');
+        showMsg(uiT('err_network'));
+    }
+    finally {
+        setLoading('login-btn', false);
+    }
 }
-
+// ── 註冊處理 ─────────────────────────────────────────────────────
+async function handleRegister(event) {
+    event.preventDefault();
+    clearMsg();
+    const email = document.getElementById('reg-email').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const confirm = document.getElementById('reg-confirm').value;
+    const guest_id = getOrCreateGuestId();
+    const btn = document.getElementById('reg-btn');
+    btn.dataset.label = uiT('btn_register');
+    if (password.length < 8) {
+        showMsg(uiT('err_pwd_short'));
+        return;
+    }
+    if (password !== confirm) {
+        showMsg(uiT('err_pwd_mismatch'));
+        document.getElementById('reg-confirm').focus();
+        return;
+    }
+    const tsToken = document.querySelector('#form-register [name="cf-turnstile-response"]')?.value || '';
+    if (!tsToken) {
+        showMsg(uiT('err_captcha_pending'));
+        return;
+    }
+    setLoading('reg-btn', true);
+    try {
+        const res = await fetch(API.register, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email, password, guest_id,
+                aud: _crossAppAud ?? undefined,
+                device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
+                'cf-turnstile-response': tsToken,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            _resetTurnstile(_registerWidgetId, 'ts-register-container');
+            showMsg(_tApiErrData(data) || uiT('err_reg_fail'));
+            return;
+        }
+        saveToken(data.access_token);
+        clearGuestId();
+        if (_pkceKey) {
+            await handlePkceRedirect(data.access_token);
+            return;
+        }
+        if (_crossAppOrigin) {
+            handleCrossAppRedirect(data.access_token);
+            return;
+        }
+        showMsg(uiT('reg_success'), 'success');
+        setTimeout(redirectAfterAuth, 800);
+    }
+    catch {
+        _resetTurnstile(_registerWidgetId, 'ts-register-container');
+        showMsg(uiT('err_network'));
+    }
+    finally {
+        setLoading('reg-btn', false);
+    }
+}
+// ── 2FA 驗證處理 ──────────────────────────────────────────────────
+async function handleTotp(event) {
+    event.preventDefault();
+    clearMsg();
+    const otp_code = document.getElementById('totp-code').value.trim();
+    const btn = document.getElementById('totp-btn');
+    btn.dataset.label = uiT('btn_verify');
+    if (!otp_code) {
+        showMsg(uiT('err_otp_empty'));
+        return;
+    }
+    if (!_preAuthToken) {
+        showMsg(uiT('err_otp_expired'));
+        switchTab('login');
+        return;
+    }
+    setLoading('totp-btn', true);
+    try {
+        const res = await fetch(API.totp, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + _preAuthToken,
+            },
+            body: JSON.stringify({ otp_code, aud: _crossAppAud ?? undefined, device_uuid: _chiyigoGetDeviceUuid() ?? undefined }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showMsg(_tApiErrData(data) || uiT('err_otp_invalid'));
+            return;
+        }
+        _preAuthToken = null;
+        saveToken(data.access_token);
+        if (_pkceKey) {
+            await handlePkceRedirect(data.access_token);
+            return;
+        }
+        if (_crossAppOrigin) {
+            handleCrossAppRedirect(data.access_token);
+            return;
+        }
+        redirectAfterAuth();
+    }
+    catch {
+        showMsg(uiT('err_network'));
+    }
+    finally {
+        setLoading('totp-btn', false);
+    }
+}
+// ── 初始化 ───────────────────────────────────────────────────────
+(function init() {
+    // 只在登入頁執行重導向邏輯（dashboard 等頁面載入此 js 只需 logout()）
+    if (!document.getElementById('form-login'))
+        return;
+    // ── DOM event 綁定（HTML 用 data-* 宣告意圖，這裡集中綁 handler）─────
+    // tab 切換：登入 / 註冊 / 2FA「← 返回登入」
+    document.querySelectorAll('[data-switch-tab]').forEach(btn => {
+        btn.addEventListener('click', e => { e.preventDefault(); switchTab(btn.dataset.switchTab); });
+    });
+    // 顯示密碼眼睛
+    document.querySelectorAll('[data-toggle-pwd]').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            togglePassword(btn.dataset.togglePwd, btn.dataset.toggleEye);
+        });
+    });
+    // form submit
+    document.getElementById('form-login')?.addEventListener('submit', handleLogin);
+    document.getElementById('form-register')?.addEventListener('submit', handleRegister);
+    document.getElementById('form-totp')?.addEventListener('submit', handleTotp);
+    // Discord OAuth 回傳：URL 帶有 ?access_token=...
+    const _urlToken = new URLSearchParams(location.search).get('access_token');
+    if (_urlToken) {
+        saveToken(_urlToken);
+        history.replaceState(null, '', location.pathname);
+        if (_crossAppOrigin) {
+            handleCrossAppRedirect(_urlToken);
+            return;
+        }
+        redirectAfterAuth();
+        return;
+    }
+    // 已登入時：PKCE 模式繼續換碼，Cross-App 繼續跳轉，普通模式跳轉儀表板
+    if (getToken()) {
+        if (_pkceKey) {
+            handlePkceRedirect(getToken());
+            return;
+        }
+        if (_crossAppOrigin) {
+            handleCrossAppRedirect(getToken());
+            return;
+        }
+        redirectAfterAuth();
+        return;
+    }
+    getOrCreateGuestId();
+    if (_pkceKey) {
+        const notice = document.getElementById('pkce-notice');
+        if (notice)
+            notice.classList.remove('hidden');
+        // 將 pkce_key 帶入 OAuth 按鈕，讓社群登入也能在完成後回到正確頁面
+        document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+            try {
+                const u = new URL(a.href, location.origin);
+                u.searchParams.set('pkce_key', _pkceKey);
+                a.href = u.toString();
+            }
+            catch { /* 忽略無效連結 */ }
+        });
+    }
+    // 將 ?next=/path 帶入 OAuth init 連結，讓 OAuth 完成後 callback worker 能跳回原頁面
+    // （local 登入由 redirectAfterAuth 處理；OAuth 走 worker 直接 redirect，需改 init 端）
+    try {
+        const _nextPath = new URLSearchParams(location.search).get('next');
+        if (_nextPath && _nextPath.charAt(0) === '/' && _nextPath.charAt(1) !== '/') {
+            document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+                try {
+                    const u = new URL(a.href, location.origin);
+                    u.searchParams.set('next', _nextPath);
+                    a.href = u.toString();
+                }
+                catch { /* 忽略無效連結 */ }
+            });
+        }
+    }
+    catch (_) { }
+    // Cross-app redirect：OAuth 會離開此頁再跳回，用 sessionStorage 保留目標 origin
+    // 同時把 aud 注入 OAuth init 連結，讓後端 callback 簽出正確 aud 的 access_token
+    if (_crossAppOrigin && _crossAppAud) {
+        document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+            try {
+                const u = new URL(a.href, location.origin);
+                if (!u.searchParams.has('aud')) {
+                    u.searchParams.set('aud', _crossAppAud);
+                    a.href = u.pathname + u.search + u.hash;
+                }
+            }
+            catch { /* href 無法解析就略過 */ }
+            a.addEventListener('click', () => {
+                sessionStorage.setItem('_cross_app_redirect', _crossAppOrigin);
+            }, { once: true });
+        });
+    }
+})();
+// ── Phase D-3c：Passkey 登入入口 ─────────────────────────────────
+function passkeySupported() {
+    return typeof window.PublicKeyCredential === 'function' && location.protocol === 'https:';
+}
 function pkB64urlToBuf(s) {
-  const pad = '='.repeat((4 - s.length % 4) % 4);
-  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out.buffer;
+    const pad = '='.repeat((4 - s.length % 4) % 4);
+    const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++)
+        out[i] = bin.charCodeAt(i);
+    return out.buffer;
 }
 function pkBufToB64url(buf) {
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++)
+        bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
-
 function showPasskeyMsg(text, type) {
-  const el = document.getElementById('passkey-login-msg');
-  if (!el) return;
-  el.textContent = text;
-  el.style.color = type === 'err' ? '#f87171' : '#94a3b8';
-  el.hidden = false;
+    const el = document.getElementById('passkey-login-msg');
+    if (!el)
+        return;
+    el.textContent = text;
+    el.style.color = type === 'err' ? '#f87171' : '#94a3b8';
+    el.hidden = false;
 }
-
 async function handlePasskeyLogin() {
-  if (!passkeySupported()) return;
-  const btn   = document.getElementById('passkey-login-btn');
-  const email = document.getElementById('login-email')?.value?.trim() || undefined;
-
-  if (btn) btn.disabled = true;
-  showPasskeyMsg(uiT('passkey_logging_in'), 'ok');
-  clearMsg();
-
-  try {
-    // 1) login-options（email 帶值就 narrow allowCredentials；不帶 = usernameless）
-    const opts = await fetch('/api/auth/webauthn/login-options', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(email ? { email } : {}),
-    }).then(r => r.json());
-
-    const publicKey = {
-      ...opts,
-      challenge: pkB64urlToBuf(opts.challenge),
-      allowCredentials: (opts.allowCredentials ?? []).map(c => ({
-        ...c, id: pkB64urlToBuf(c.id),
-      })),
-    };
-
-    let cred;
+    if (!passkeySupported())
+        return;
+    const btn = document.getElementById('passkey-login-btn');
+    const email = document.getElementById('login-email')?.value?.trim() || undefined;
+    if (btn)
+        btn.disabled = true;
+    showPasskeyMsg(uiT('passkey_logging_in'), 'ok');
+    clearMsg();
     try {
-      cred = await navigator.credentials.get({ publicKey });
-    } catch (e) {
-      if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
-        showPasskeyMsg(uiT('passkey_login_cancelled'), 'err');
-      } else {
+        // 1) login-options（email 帶值就 narrow allowCredentials；不帶 = usernameless）
+        const opts = await fetch('/api/auth/webauthn/login-options', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(email ? { email } : {}),
+        }).then(r => r.json());
+        const publicKey = {
+            ...opts,
+            challenge: pkB64urlToBuf(opts.challenge),
+            allowCredentials: (opts.allowCredentials ?? []).map(c => ({
+                ...c, id: pkB64urlToBuf(c.id),
+            })),
+        };
+        let cred;
+        try {
+            cred = (await navigator.credentials.get({ publicKey }));
+        }
+        catch (e) {
+            if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+                showPasskeyMsg(uiT('passkey_login_cancelled'), 'err');
+            }
+            else {
+                showPasskeyMsg(`${uiT('passkey_login_fail')}：${e?.message ?? e}`, 'err');
+            }
+            if (btn)
+                btn.disabled = false;
+            return;
+        }
+        if (!cred) {
+            showPasskeyMsg(uiT('passkey_login_fail'), 'err');
+            if (btn)
+                btn.disabled = false;
+            return;
+        }
+        // passkey path navigator.credentials.get 帶 publicKey 必回 PublicKeyCredential.AuthenticatorAssertionResponse
+        const r = cred.response;
+        const responseJson = {
+            id: cred.id,
+            rawId: pkBufToB64url(cred.rawId),
+            type: cred.type,
+            response: {
+                clientDataJSON: pkBufToB64url(r.clientDataJSON),
+                authenticatorData: pkBufToB64url(r.authenticatorData),
+                signature: pkBufToB64url(r.signature),
+                userHandle: r.userHandle ? pkBufToB64url(r.userHandle) : null,
+            },
+            clientExtensionResults: typeof cred.getClientExtensionResults === 'function'
+                ? cred.getClientExtensionResults() : {},
+            authenticatorAttachment: cred.authenticatorAttachment ?? undefined,
+        };
+        // 2) login-verify
+        const verifyRes = await fetch('/api/auth/webauthn/login-verify', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                response: responseJson,
+                aud: _crossAppAud ?? undefined,
+                device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
+            }),
+        });
+        const data = await verifyRes.json();
+        if (!verifyRes.ok) {
+            showPasskeyMsg(_tApiErrData(data) || uiT('passkey_login_fail'), 'err');
+            if (btn)
+                btn.disabled = false;
+            return;
+        }
+        // 3) 成功 → 儲 token + 跳轉（鏡射 handleLogin 後段）
+        saveToken(data.access_token);
+        if (_pkceKey) {
+            await handlePkceRedirect(data.access_token);
+            return;
+        }
+        if (_crossAppOrigin) {
+            handleCrossAppRedirect(data.access_token);
+            return;
+        }
+        redirectAfterAuth();
+    }
+    catch (e) {
         showPasskeyMsg(`${uiT('passkey_login_fail')}：${e?.message ?? e}`, 'err');
-      }
-      if (btn) btn.disabled = false;
-      return;
+        if (btn)
+            btn.disabled = false;
     }
-
-    const r = cred.response;
-    const responseJson = {
-      id:    cred.id,
-      rawId: pkBufToB64url(cred.rawId),
-      type:  cred.type,
-      response: {
-        clientDataJSON:    pkBufToB64url(r.clientDataJSON),
-        authenticatorData: pkBufToB64url(r.authenticatorData),
-        signature:         pkBufToB64url(r.signature),
-        userHandle:        r.userHandle ? pkBufToB64url(r.userHandle) : null,
-      },
-      clientExtensionResults: typeof cred.getClientExtensionResults === 'function'
-        ? cred.getClientExtensionResults() : {},
-      authenticatorAttachment: cred.authenticatorAttachment ?? undefined,
-    };
-
-    // 2) login-verify
-    const verifyRes = await fetch('/api/auth/webauthn/login-verify', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        response: responseJson,
-        aud: _crossAppAud ?? undefined,
-        device_uuid: _chiyigoGetDeviceUuid() ?? undefined,
-      }),
-    });
-    const data = await verifyRes.json();
-    if (!verifyRes.ok) {
-      showPasskeyMsg(_tApiErrData(data) || uiT('passkey_login_fail'), 'err');
-      if (btn) btn.disabled = false;
-      return;
-    }
-
-    // 3) 成功 → 儲 token + 跳轉（鏡射 handleLogin 後段）
-    saveToken(data.access_token);
-    if (_pkceKey)        { await handlePkceRedirect(data.access_token); return; }
-    if (_crossAppOrigin) { handleCrossAppRedirect(data.access_token); return; }
-    redirectAfterAuth();
-  } catch (e) {
-    showPasskeyMsg(`${uiT('passkey_login_fail')}：${e?.message ?? e}`, 'err');
-    if (btn) btn.disabled = false;
-  }
 }
-
 // 不支援的瀏覽器 → 隱藏按鈕；否則 unhide + bind click
-;(function setupPasskeyLoginButton() {
-  const btn = document.getElementById('passkey-login-btn');
-  if (!btn) return;
-  if (!passkeySupported()) return;            // 維持 hidden
-  btn.hidden = false;
-  btn.addEventListener('click', handlePasskeyLogin);
+;
+(function setupPasskeyLoginButton() {
+    const btn = document.getElementById('passkey-login-btn');
+    if (!btn)
+        return;
+    if (!passkeySupported())
+        return; // 維持 hidden
+    btn.hidden = false;
+    btn.addEventListener('click', handlePasskeyLogin);
 })();
-
 // bfcache 還原時：已登入 → 直接跳回 dashboard；未登入 → 清空欄位並重置到登入分頁
 window.addEventListener('pageshow', (event) => {
-  if (!document.getElementById('login-password')) return;
-  if (event.persisted) {
-    if (getToken()) {
-      if (_crossAppOrigin) { handleCrossAppRedirect(getToken()); return; }
-      window.location.replace('/dashboard.html');
-      return;
+    if (!document.getElementById('login-password'))
+        return;
+    if (event.persisted) {
+        if (getToken()) {
+            if (_crossAppOrigin) {
+                handleCrossAppRedirect(getToken());
+                return;
+            }
+            window.location.replace('/dashboard.html');
+            return;
+        }
+        // 清空所有欄位，防止帳號密碼殘留
+        ['login-email', 'login-password',
+            'reg-email', 'reg-password', 'reg-confirm', 'totp-code'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el)
+                el.value = '';
+        });
+        // 重置回登入分頁（不殘留 2FA 面板）
+        switchTab('login');
     }
-    // 清空所有欄位，防止帳號密碼殘留
-    ['login-email', 'login-password',
-     'reg-email', 'reg-password', 'reg-confirm', 'totp-code'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
-    // 重置回登入分頁（不殘留 2FA 面板）
-    switchTab('login');
-  }
-  hidePassword('login-password', 'login-eye');
-  hidePassword('reg-password',   'reg-eye');
-  hidePassword('reg-confirm',    'reg-confirm-eye');
-  clearTimeout(_pwdTimers['login-password']);
-  clearTimeout(_pwdTimers['reg-password']);
-  clearTimeout(_pwdTimers['reg-confirm']);
+    hidePassword('login-password', 'login-eye');
+    hidePassword('reg-password', 'reg-eye');
+    hidePassword('reg-confirm', 'reg-confirm-eye');
+    clearTimeout(_pwdTimers['login-password']);
+    clearTimeout(_pwdTimers['reg-password']);
+    clearTimeout(_pwdTimers['reg-confirm']);
 });
-
 // OAuth 按鈕（Discord / Google / LINE / Facebook）→ 寫一次性 cookie 帶 device_uuid
 // 給 callback 用。Cookie SameSite=Lax 可從 IdP 跨 site nav 帶回 callback。
 // 10min TTL；callback 寫進 refresh_tokens 後立即清掉（CLEAR_OAUTH_DEVICE_COOKIE）
 document.addEventListener('click', function (e) {
-  var btn = e.target.closest('.oauth-btn');
-  if (!btn) return;
-  var href = btn.getAttribute('href') || '';
-  if (!/^\/api\/auth\/oauth\//.test(href)) return;
-  var devId = _chiyigoGetDeviceUuid();
-  if (!devId) return;
-  document.cookie = 'chiyigo_oauth_device=' + encodeURIComponent(devId) +
-    '; Path=/; Max-Age=600; SameSite=Lax; Secure';
+    var btn = e.target?.closest('.oauth-btn');
+    if (!btn)
+        return;
+    var href = btn.getAttribute('href') || '';
+    if (!/^\/api\/auth\/oauth\//.test(href))
+        return;
+    var devId = _chiyigoGetDeviceUuid();
+    if (!devId)
+        return;
+    document.cookie = 'chiyigo_oauth_device=' + encodeURIComponent(devId) +
+        '; Path=/; Max-Age=600; SameSite=Lax; Secure';
 });
-
-// 舊版 window.onTurnstileReady 全域 callback 已改成 closure-scoped（見檔頭 Turnstile 區段）。

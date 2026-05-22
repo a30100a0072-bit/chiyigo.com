@@ -1,5 +1,5 @@
 /**
- * auth-ui.js — 登入 / 註冊前端邏輯
+ * auth-ui — 登入 / 註冊前端邏輯
  *
  * 功能：
  *  - guest_id 的生成與 LocalStorage 讀寫
@@ -7,9 +7,47 @@
  *  - 登入 / 註冊 / 2FA 表單提交與後端溝通
  *  - JWT + Refresh Token 儲存（sessionStorage）與成功後頁面跳轉
  *  - logout()：撤銷 refresh_token + 清除 session
+ *
+ * Stage 5 PR-5u (2026-05-22)：
+ *   - **故意不裹外層 IIFE**（Stage 5 IIFE-required pattern 的唯一例外）：
+ *     line 425 `const TAB_CONFIG = {...}` 是 PR-5o login.ts 內 `declare const
+ *     TAB_CONFIG` consumer 的 **runtime producer**。consumer 走 classic-script-
+ *     shared lexical scope bare lookup（`typeof TAB_CONFIG !== 'undefined'`），
+ *     若把整支裹 IIFE 會把 TAB_CONFIG 變 IIFE-local，consumer 找不到 → 破壞
+ *     login.html tab 切換。其它所有 Stage 5 .ts entry 已 IIFE-wrap → 它們的
+ *     top-level decl 不會與本檔的 top-level decl 在 tsc program 撞名。
+ *   - window-attached 屬性（Turnstile / silentRefresh / PublicKeyCredential /
+ *     __chiyigoMemoryDeviceUuid / tApiErrorData / __apiErrorI18n）走
+ *     WindowWithAuth type-alias cast pattern（per PR-5p WindowWithAi / PR-5q
+ *     WindowWithArchEmbed 立樁），保留 globals.d.ts 中既有的 root-tsconfig
+ *     ambient declaration 同時補 prod tsconfig (types:[] 不載 globals.d.ts)
+ *     需要的型別洞。
+ *   - DOM narrow：HTMLInputElement / HTMLButtonElement / HTMLAnchorElement 等
+ *     cast 保留原 .js throw-on-null 語意（zero-drift；per
+ *     [[feedback_security_boundary_pr_first_do_no_harm]]）。
+ *   - cred.response narrow 走 PublicKeyCredential cast（navigator.credentials.get
+ *     回 Credential | null，passkey path 必為 PublicKeyCredential）。
  */
 
 'use strict';
+
+// Window-attached identifiers used by this file. 與 globals.d.ts 中的 root-tsconfig
+// 宣告互補（globals.d.ts 為 root tsconfig 模式服務；本 alias 為 prod tsconfig
+// (types:[] 不載 globals.d.ts) 模式服務；兩條 type path 都 erase 到 0 runtime artifact）
+type TurnstileApi = {
+  render: (selector: string, opts: Record<string, unknown>) => unknown;
+  reset: (widgetId: unknown) => void;
+  remove: (widgetId: unknown) => void;
+};
+type WindowWithAuth = Window & {
+  turnstile?: TurnstileApi;
+  onloadTurnstile?: () => void;
+  PublicKeyCredential?: unknown;
+  __chiyigoMemoryDeviceUuid?: string;
+  tApiErrorData?: (data: unknown, fallback?: string | null) => string;
+  __apiErrorI18n?: Record<string, Record<string, string>>;
+  silentRefresh?: () => Promise<boolean>;
+};
 
 // ── browser-level device identity（chiyigo.device_uuid）──────────
 // 每個瀏覽器第一次進站產一次 web-<uuid>，存 localStorage；之後 login / refresh 一律帶。
@@ -21,7 +59,7 @@ function _chiyigoGetDeviceUuid() {
     var v = localStorage.getItem(KEY);
     if (v && /^web-[0-9a-f-]{36}$/i.test(v)) return v;
   } catch (_) { /* storage 被擋 */ }
-  if (window.__chiyigoMemoryDeviceUuid) return window.__chiyigoMemoryDeviceUuid;
+  if ((window as WindowWithAuth).__chiyigoMemoryDeviceUuid) return (window as WindowWithAuth).__chiyigoMemoryDeviceUuid!;
   var uuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
     ? crypto.randomUUID() : null;
   if (!uuid) {
@@ -31,7 +69,7 @@ function _chiyigoGetDeviceUuid() {
   var fullUuid = 'web-' + uuid;
   try { localStorage.setItem(KEY, fullUuid); }
   catch (_) {
-    window.__chiyigoMemoryDeviceUuid = fullUuid;
+    (window as WindowWithAuth).__chiyigoMemoryDeviceUuid = fullUuid;
     if (typeof console !== 'undefined') console.warn('[device-id] localStorage unavailable, using in-memory');
   }
   return fullUuid;
@@ -100,11 +138,12 @@ function t(msg) {
 // 沒命中就退回到本檔 ERROR_I18N 的英文 string 映射。auth-ui 走 raw fetch 沒 ApiError instance，所以走 tApiErrorData。
 function _tApiErrData(data) {
   if (!data) return null
-  if (typeof window.tApiErrorData === 'function') {
+  const w = window as WindowWithAuth
+  if (typeof w.tApiErrorData === 'function') {
     const code = data.code || null
-    if (code && window.__apiErrorI18n) {
-      const dict = window.__apiErrorI18n[getLang()] || window.__apiErrorI18n['zh-TW']
-      if (dict && dict[code]) return window.tApiErrorData(data, null)
+    if (code && w.__apiErrorI18n) {
+      const dict = w.__apiErrorI18n[getLang()] || w.__apiErrorI18n['zh-TW']
+      if (dict && dict[code]) return w.tApiErrorData(data, null)
     }
   }
   return data.error ? t(data.error) : null
@@ -204,8 +243,9 @@ function getToken() {
 // 以 HttpOnly Cookie 靜默換取新 access_token，成功回傳 true
 // P0-11：全站收斂 — 委派給 api.js 的 window.silentRefresh（含 navigator.locks 跨 tab 序列化）
 async function refreshAccessToken() {
-  if (typeof window !== 'undefined' && typeof window.silentRefresh === 'function') {
-    return window.silentRefresh();
+  const w = window as WindowWithAuth;
+  if (typeof window !== 'undefined' && typeof w.silentRefresh === 'function') {
+    return w.silentRefresh();
   }
   // fallback：api.js 還沒 load（同頁 script 順序保證罕見）→ 直接打一次
   try {
@@ -301,7 +341,7 @@ async function handlePkceRedirect(accessToken) {
 const _pwdTimers = {};
 
 function togglePassword(inputId, btnId) {
-  const input = document.getElementById(inputId);
+  const input = document.getElementById(inputId) as HTMLInputElement;
   const btn   = document.getElementById(btnId);
   const icon  = document.getElementById(btnId + '-icon');
 
@@ -326,7 +366,7 @@ function togglePassword(inputId, btnId) {
 }
 
 function hidePassword(inputId, btnId) {
-  const input = document.getElementById(inputId);
+  const input = document.getElementById(inputId) as HTMLInputElement;
   const btn   = document.getElementById(btnId);
   const icon  = document.getElementById(btnId + '-icon');
 
@@ -355,10 +395,11 @@ function _setTsReady(containerEl, ready) {
 }
 
 function _renderTurnstile(containerId) {
-  if (typeof window.turnstile === 'undefined') return null;
+  const ts = (window as WindowWithAuth).turnstile;
+  if (typeof ts === 'undefined') return null;
   const el = document.getElementById(containerId);
   if (!el) return null;
-  return window.turnstile.render('#' + containerId, {
+  return ts.render('#' + containerId, {
     sitekey: TURNSTILE_SITEKEY,
     theme:   'auto',
     size:    'flexible',
@@ -370,22 +411,24 @@ function _renderTurnstile(containerId) {
 }
 
 function _resetTurnstile(widgetId, containerId) {
-  if (widgetId == null || typeof window.turnstile === 'undefined') return;
-  try { window.turnstile.reset(widgetId); } catch (_) {}
+  const ts = (window as WindowWithAuth).turnstile;
+  if (widgetId == null || typeof ts === 'undefined') return;
+  try { ts.reset(widgetId); } catch (_) {}
   const el = document.getElementById(containerId);
   _setTsReady(el, false);
 }
 
 // 嚴格保證任何時刻只有 1 個 widget：切走時把 inactive 的整個 remove 掉
 function _removeWidgetIfNotTab(tab) {
-  if (typeof window.turnstile === 'undefined') return;
+  const ts = (window as WindowWithAuth).turnstile;
+  if (typeof ts === 'undefined') return;
   if (tab !== 'login' && _loginWidgetId != null) {
-    try { window.turnstile.remove(_loginWidgetId); } catch (_) {}
+    try { ts.remove(_loginWidgetId); } catch (_) {}
     _loginWidgetId = null;
     _setTsReady(document.getElementById('ts-login-container'), false);
   }
   if (tab !== 'register' && _registerWidgetId != null) {
-    try { window.turnstile.remove(_registerWidgetId); } catch (_) {}
+    try { ts.remove(_registerWidgetId); } catch (_) {}
     _registerWidgetId = null;
     _setTsReady(document.getElementById('ts-register-container'), false);
   }
@@ -402,7 +445,7 @@ function _getActiveTurnstileTab() {
 // onloadTurnstile 之後會依當下 active tab 補 render。配合 _removeWidgetIfNotTab
 // 一起達成「任何時刻只有 1 個 iframe」。
 function _ensureWidgetForTab(tab) {
-  if (typeof window.turnstile === 'undefined') return;
+  if (typeof (window as WindowWithAuth).turnstile === 'undefined') return;
   if (tab === 'login' && _loginWidgetId == null && document.getElementById('ts-login-container')) {
     _loginWidgetId = _renderTurnstile('ts-login-container');
   } else if (tab === 'register' && _registerWidgetId == null && document.getElementById('ts-register-container')) {
@@ -413,12 +456,12 @@ function _ensureWidgetForTab(tab) {
 // Turnstile API ready 時觸發（?onload=onloadTurnstile）。只 render 目前 active panel
 // 的 widget；若使用者在 API ready 前已切到註冊，這裡會自然只 render 註冊，不會
 // 同時跑兩個 widget 害 iOS 卡頓。
-window.onloadTurnstile = function () {
+(window as WindowWithAuth).onloadTurnstile = function () {
   const tab = _getActiveTurnstileTab();
   if (tab) _ensureWidgetForTab(tab);
 };
 // 防 race：Turnstile script 是 async，可能在本檔執行前就跑完 onload；補一次。
-if (typeof window.turnstile !== 'undefined') window.onloadTurnstile();
+if (typeof (window as WindowWithAuth).turnstile !== 'undefined') (window as WindowWithAuth).onloadTurnstile!();
 
 // ── 分頁切換 ─────────────────────────────────────────────────────
 
@@ -485,7 +528,7 @@ function clearMsg() {
 }
 
 function setLoading(btnId, loading) {
-  const btn = document.getElementById(btnId);
+  const btn = document.getElementById(btnId) as HTMLButtonElement | null;
   if (!btn) return;
   btn.disabled = loading;
   btn.textContent = loading ? uiT('loading') : btn.dataset.label || btn.textContent;
@@ -500,12 +543,12 @@ async function handleLogin(event) {
   event.preventDefault();
   clearMsg();
 
-  const email    = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  const btn      = document.getElementById('login-btn');
+  const email    = (document.getElementById('login-email') as HTMLInputElement).value.trim();
+  const password = (document.getElementById('login-password') as HTMLInputElement).value;
+  const btn      = document.getElementById('login-btn') as HTMLButtonElement;
   btn.dataset.label = uiT('btn_login');
 
-  const tsToken = document.querySelector('#form-login [name="cf-turnstile-response"]')?.value || '';
+  const tsToken = (document.querySelector('#form-login [name="cf-turnstile-response"]') as HTMLInputElement | null)?.value || '';
   // login.html 一定有 Turnstile widget，所以這頁 token 必填；空字串 = 使用者搶在驗證完成前點
   if (!tsToken) {
     showMsg(uiT('err_captcha_pending'));
@@ -534,7 +577,7 @@ async function handleLogin(event) {
       // token 已被後端核銷一次；若使用者從 TOTP 返回登入再送一次會帶舊 token → 先 reset
       _resetTurnstile(_loginWidgetId, 'ts-login-container');
       switchTab('totp');
-      document.getElementById('totp-code').focus();
+      (document.getElementById('totp-code') as HTMLInputElement).focus();
       return;
     }
 
@@ -564,11 +607,11 @@ async function handleRegister(event) {
   event.preventDefault();
   clearMsg();
 
-  const email    = document.getElementById('reg-email').value.trim();
-  const password = document.getElementById('reg-password').value;
-  const confirm  = document.getElementById('reg-confirm').value;
+  const email    = (document.getElementById('reg-email') as HTMLInputElement).value.trim();
+  const password = (document.getElementById('reg-password') as HTMLInputElement).value;
+  const confirm  = (document.getElementById('reg-confirm') as HTMLInputElement).value;
   const guest_id = getOrCreateGuestId();
-  const btn      = document.getElementById('reg-btn');
+  const btn      = document.getElementById('reg-btn') as HTMLButtonElement;
   btn.dataset.label = uiT('btn_register');
 
   if (password.length < 8) {
@@ -578,11 +621,11 @@ async function handleRegister(event) {
 
   if (password !== confirm) {
     showMsg(uiT('err_pwd_mismatch'));
-    document.getElementById('reg-confirm').focus();
+    (document.getElementById('reg-confirm') as HTMLInputElement).focus();
     return;
   }
 
-  const tsToken = document.querySelector('#form-register [name="cf-turnstile-response"]')?.value || '';
+  const tsToken = (document.querySelector('#form-register [name="cf-turnstile-response"]') as HTMLInputElement | null)?.value || '';
   if (!tsToken) {
     showMsg(uiT('err_captcha_pending'));
     return;
@@ -632,8 +675,8 @@ async function handleTotp(event) {
   event.preventDefault();
   clearMsg();
 
-  const otp_code = document.getElementById('totp-code').value.trim();
-  const btn      = document.getElementById('totp-btn');
+  const otp_code = (document.getElementById('totp-code') as HTMLInputElement).value.trim();
+  const btn      = document.getElementById('totp-btn') as HTMLButtonElement;
   btn.dataset.label = uiT('btn_verify');
 
   if (!otp_code) {
@@ -687,11 +730,11 @@ async function handleTotp(event) {
 
   // ── DOM event 綁定（HTML 用 data-* 宣告意圖，這裡集中綁 handler）─────
   // tab 切換：登入 / 註冊 / 2FA「← 返回登入」
-  document.querySelectorAll('[data-switch-tab]').forEach(btn => {
+  document.querySelectorAll<HTMLElement>('[data-switch-tab]').forEach(btn => {
     btn.addEventListener('click', e => { e.preventDefault(); switchTab(btn.dataset.switchTab); });
   });
   // 顯示密碼眼睛
-  document.querySelectorAll('[data-toggle-pwd]').forEach(btn => {
+  document.querySelectorAll<HTMLElement>('[data-toggle-pwd]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.preventDefault();
       togglePassword(btn.dataset.togglePwd, btn.dataset.toggleEye);
@@ -724,7 +767,7 @@ async function handleTotp(event) {
     const notice = document.getElementById('pkce-notice');
     if (notice) notice.classList.remove('hidden');
     // 將 pkce_key 帶入 OAuth 按鈕，讓社群登入也能在完成後回到正確頁面
-    document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+    document.querySelectorAll<HTMLAnchorElement>('a[href*="/api/auth/oauth/"]').forEach(a => {
       try {
         const u = new URL(a.href, location.origin);
         u.searchParams.set('pkce_key', _pkceKey);
@@ -738,7 +781,7 @@ async function handleTotp(event) {
   try {
     const _nextPath = new URLSearchParams(location.search).get('next');
     if (_nextPath && _nextPath.charAt(0) === '/' && _nextPath.charAt(1) !== '/') {
-      document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+      document.querySelectorAll<HTMLAnchorElement>('a[href*="/api/auth/oauth/"]').forEach(a => {
         try {
           const u = new URL(a.href, location.origin);
           u.searchParams.set('next', _nextPath);
@@ -751,7 +794,7 @@ async function handleTotp(event) {
   // Cross-app redirect：OAuth 會離開此頁再跳回，用 sessionStorage 保留目標 origin
   // 同時把 aud 注入 OAuth init 連結，讓後端 callback 簽出正確 aud 的 access_token
   if (_crossAppOrigin && _crossAppAud) {
-    document.querySelectorAll('a[href*="/api/auth/oauth/"]').forEach(a => {
+    document.querySelectorAll<HTMLAnchorElement>('a[href*="/api/auth/oauth/"]').forEach(a => {
       try {
         const u = new URL(a.href, location.origin);
         if (!u.searchParams.has('aud')) {
@@ -769,7 +812,7 @@ async function handleTotp(event) {
 // ── Phase D-3c：Passkey 登入入口 ─────────────────────────────────
 
 function passkeySupported() {
-  return typeof window.PublicKeyCredential === 'function' && location.protocol === 'https:';
+  return typeof (window as WindowWithAuth).PublicKeyCredential === 'function' && location.protocol === 'https:';
 }
 
 function pkB64urlToBuf(s) {
@@ -797,8 +840,8 @@ function showPasskeyMsg(text, type) {
 
 async function handlePasskeyLogin() {
   if (!passkeySupported()) return;
-  const btn   = document.getElementById('passkey-login-btn');
-  const email = document.getElementById('login-email')?.value?.trim() || undefined;
+  const btn   = document.getElementById('passkey-login-btn') as HTMLButtonElement | null;
+  const email = (document.getElementById('login-email') as HTMLInputElement | null)?.value?.trim() || undefined;
 
   if (btn) btn.disabled = true;
   showPasskeyMsg(uiT('passkey_logging_in'), 'ok');
@@ -821,9 +864,9 @@ async function handlePasskeyLogin() {
       })),
     };
 
-    let cred;
+    let cred: PublicKeyCredential | null;
     try {
-      cred = await navigator.credentials.get({ publicKey });
+      cred = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential | null;
     } catch (e) {
       if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
         showPasskeyMsg(uiT('passkey_login_cancelled'), 'err');
@@ -834,7 +877,13 @@ async function handlePasskeyLogin() {
       return;
     }
 
-    const r = cred.response;
+    if (!cred) {
+      showPasskeyMsg(uiT('passkey_login_fail'), 'err');
+      if (btn) btn.disabled = false;
+      return;
+    }
+    // passkey path navigator.credentials.get 帶 publicKey 必回 PublicKeyCredential.AuthenticatorAssertionResponse
+    const r = cred.response as AuthenticatorAssertionResponse;
     const responseJson = {
       id:    cred.id,
       rawId: pkBufToB64url(cred.rawId),
@@ -881,7 +930,7 @@ async function handlePasskeyLogin() {
 
 // 不支援的瀏覽器 → 隱藏按鈕；否則 unhide + bind click
 ;(function setupPasskeyLoginButton() {
-  const btn = document.getElementById('passkey-login-btn');
+  const btn = document.getElementById('passkey-login-btn') as HTMLButtonElement | null;
   if (!btn) return;
   if (!passkeySupported()) return;            // 維持 hidden
   btn.hidden = false;
@@ -900,7 +949,7 @@ window.addEventListener('pageshow', (event) => {
     // 清空所有欄位，防止帳號密碼殘留
     ['login-email', 'login-password',
      'reg-email', 'reg-password', 'reg-confirm', 'totp-code'].forEach(id => {
-      const el = document.getElementById(id);
+      const el = document.getElementById(id) as HTMLInputElement | null;
       if (el) el.value = '';
     });
     // 重置回登入分頁（不殘留 2FA 面板）
@@ -918,7 +967,7 @@ window.addEventListener('pageshow', (event) => {
 // 給 callback 用。Cookie SameSite=Lax 可從 IdP 跨 site nav 帶回 callback。
 // 10min TTL；callback 寫進 refresh_tokens 後立即清掉（CLEAR_OAUTH_DEVICE_COOKIE）
 document.addEventListener('click', function (e) {
-  var btn = e.target.closest('.oauth-btn');
+  var btn = (e.target as Element | null)?.closest('.oauth-btn');
   if (!btn) return;
   var href = btn.getAttribute('href') || '';
   if (!/^\/api\/auth\/oauth\//.test(href)) return;
