@@ -1,3 +1,14 @@
+// Stage 5 PR-5i (2026-05-22)：page-scoped entry 必須 IIFE 包頂層 code，
+// 避免在 tsconfig.browser-classic (module:"none" + moduleDetection:"auto") 下
+// 多 page entry top-level decl（GRID / SKEL / ERR / EMPTY / FBAR / allItems /
+// curFilter / CAT_LABEL / CAT_ORDER / esc / SSO_HOSTS / decodeJwtPayload /
+// ssoifyLink / cardHTML / renderGrid / buildFilters / applyFilter /
+// loadPortfolio / LANGS / curLang / applyLang / langToggleBtn / langDropdown /
+// toggleTopLangDrop / hamBtn / overlay / topbar / openMenu / closeMenu /
+// themeBtn / mThemeBtn / applyTheme / doToggle / osContent / revRoot / revObs）
+// 在同 tsc program 全域 scope 撞名 → TS2393。
+// 內層 drag-to-close / neural-canvas 既有 IIFE 維持不動。
+;(function () {
 // ── block 1/2 ──
 // ── Portfolio data ────────────────────────────────
 const GRID    = document.getElementById('portfolio-grid');
@@ -70,8 +81,9 @@ function cardHTML(item) {
 }
 
 function renderGrid(items) {
+  if (!GRID || !EMPTY) return;
   GRID.innerHTML = items.map(cardHTML).join('');
-  GRID.querySelectorAll('.p-card').forEach((el, i) => {
+  GRID.querySelectorAll<HTMLElement>('.p-card').forEach((el, i) => {
     el.style.transitionDelay = `${i * 0.045}s`;
     requestAnimationFrame(() => el.classList.add('revealed'));
   });
@@ -80,6 +92,7 @@ function renderGrid(items) {
 }
 
 function buildFilters(items) {
+  if (!FBAR) return;
   const existing = new Set(items.map(i => i.category).filter(Boolean));
   CAT_ORDER.forEach(cat => {
     if (!existing.has(cat)) return;
@@ -92,14 +105,15 @@ function buildFilters(items) {
 }
 
 function applyFilter(filter) {
+  if (!FBAR) return;
   curFilter = filter;
-  FBAR.querySelectorAll('.filter-btn').forEach(b =>
+  FBAR.querySelectorAll<HTMLElement>('.filter-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.filter === filter));
   renderGrid(filter === 'all' ? allItems : allItems.filter(i => i.category === filter));
 }
 
-FBAR.addEventListener('click', e => {
-  const btn = e.target.closest('.filter-btn');
+FBAR?.addEventListener('click', e => {
+  const btn = (e.target as Element | null)?.closest<HTMLElement>('.filter-btn');
   if (!btn) return;
   applyFilter(btn.dataset.filter);
 });
@@ -110,12 +124,12 @@ async function loadPortfolio() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     allItems = data.items ?? [];
-    SKEL.style.display = 'none';
+    if (SKEL) SKEL.style.display = 'none';
     buildFilters(allItems);
     applyFilter(curFilter);
   } catch {
-    SKEL.style.display = 'none';
-    ERR.classList.add('visible');
+    if (SKEL) SKEL.style.display = 'none';
+    ERR?.classList.add('visible');
   }
 }
 // ── i18n ──────────────────────────────────────────────
@@ -126,9 +140,9 @@ function applyLang(lang) {
   if (!LANGS[lang]) return;
   curLang = lang;
   const t = LANGS[lang];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
     const key = el.dataset.i18n;
-    if (t[key] !== undefined) el.textContent = t[key];
+    if (key && t[key] !== undefined) el.textContent = t[key];
   });
   const tBtn = document.getElementById('theme-toggle-btn');
   const mTBtn = document.getElementById('m-theme-btn');
@@ -141,15 +155,15 @@ function applyLang(lang) {
   CAT_LABEL['App'] = t.cat_app; CAT_LABEL['Integration'] = t.cat_integration;
   CAT_LABEL['Game'] = t.cat_game;
   CAT_LABEL['Platform'] = t.cat_platform;
-  document.querySelectorAll('.lang-opt').forEach(b =>
+  document.querySelectorAll<HTMLElement>('.lang-opt').forEach(b =>
     b.classList.toggle('active', b.dataset.lang === lang));
-  document.querySelectorAll('.m-ov-lang-opt').forEach(b =>
+  document.querySelectorAll<HTMLElement>('.m-ov-lang-opt').forEach(b =>
     b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
-  if (allItems.length > 0) {
+  if (FBAR && allItems.length > 0) {
     FBAR.querySelectorAll('.filter-btn:not([data-filter="all"])').forEach(b => b.remove());
     buildFilters(allItems);
-    FBAR.querySelectorAll('.filter-btn').forEach(b =>
+    FBAR.querySelectorAll<HTMLElement>('.filter-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.filter === curFilter));
     renderGrid(curFilter === 'all' ? allItems : allItems.filter(i => i.category === curFilter));
   }
@@ -163,24 +177,28 @@ langToggleBtn?.addEventListener('click', e => {
 });
 document.addEventListener('click', () => langDropdown?.classList.remove('open'));
 langDropdown?.addEventListener('click', e => {
-  const opt = e.target.closest('.lang-opt');
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt');
   if (!opt) return;
   applyLang(opt.dataset.lang);
   langDropdown.classList.remove('open');
 });
 document.getElementById('m-overlay')?.addEventListener('click', e => {
-  const opt = e.target.closest('.m-ov-lang-opt');
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.m-ov-lang-opt');
   if (!opt) return;
   applyLang(opt.dataset.lang);
 });
 function toggleTopLangDrop(e) { e.stopPropagation(); document.getElementById('m-top-lang-drop')?.classList.toggle('open'); }
-window.toggleTopLangDrop = toggleTopLangDrop;
+// Stage 5 PR-5i cleanup：移除 `window.toggleTopLangDrop = toggleTopLangDrop;`
+// ← 原為 inline onclick="toggleTopLangDrop(event)" 殘骸（CSP D 後已禁 inline
+//   handler）；grep 顯示無任何 external caller 讀 `window.toggleTopLangDrop`，
+//   本檔 line 321 `addEventListener('click', toggleTopLangDrop)` 直接綁 local
+//   reference 不依賴 window 屬性。dead-code cleanup（per PR-5/5c/5e 同款）。
 document.addEventListener('click', () => document.getElementById('m-top-lang-drop')?.classList.remove('open'));
 document.getElementById('m-top-lang-drop')?.addEventListener('click', e => {
-  const opt = e.target.closest('.lang-opt');
+  const opt = (e.target as Element | null)?.closest<HTMLElement>('.lang-opt');
   if (!opt) return;
   applyLang(opt.dataset.lang);
-  document.getElementById('m-top-lang-drop').classList.remove('open');
+  document.getElementById('m-top-lang-drop')?.classList.remove('open');
 });
 applyLang(curLang);
 
@@ -213,7 +231,7 @@ document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.cla
   document.addEventListener('touchstart', function (e) {
     const ov = document.getElementById('m-overlay')
     if (!ov || !ov.classList.contains('is-open')) return
-    const wrap = ov.querySelector('.m-ov-wrap')
+    const wrap = ov.querySelector<HTMLElement>('.m-ov-wrap')
     if (!wrap) return
     const t = e.touches[0], r = wrap.getBoundingClientRect()
     if (t.clientY < r.top || t.clientY > r.bottom) return
@@ -231,8 +249,8 @@ document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.cla
     const dy = lastY - startY
     if (dy <= 0) return
     const ov = document.getElementById('m-overlay')
-    const wrap = ov && ov.querySelector('.m-ov-wrap')
-    if (!wrap) return
+    const wrap = ov && ov.querySelector<HTMLElement>('.m-ov-wrap')
+    if (!wrap || !ov) return
     wrap.style.transform = `translateY(${dy}px)`
     const ratio = Math.max(0, 1 - dy / wrap.offsetHeight * 1.5)
     ov.style.background = `rgba(10,12,28,${(0.32 * ratio).toFixed(3)})`
@@ -242,8 +260,8 @@ document.addEventListener('keydown', e => { if (e.key==='Escape' && overlay?.cla
     if (!active) return
     active = false
     const ov = document.getElementById('m-overlay')
-    const wrap = ov && ov.querySelector('.m-ov-wrap')
-    if (!wrap) { startY = 0; lastY = 0; return }
+    const wrap = ov && ov.querySelector<HTMLElement>('.m-ov-wrap')
+    if (!wrap || !ov) { startY = 0; lastY = 0; return }
     const dy = lastY - startY
     ov.style.background = ''
     if (dy > THRESHOLD) {
@@ -277,7 +295,7 @@ function applyTheme(dark) {
   document.documentElement.classList.toggle('theme-light', !dark);
   [themeBtn, mThemeBtn].forEach(btn => {
     if (!btn) return;
-    const sun = btn.querySelector('.icon-sun'), moon = btn.querySelector('.icon-moon');
+    const sun = btn.querySelector<HTMLElement>('.icon-sun'), moon = btn.querySelector<HTMLElement>('.icon-moon');
     if (sun)  sun.hidden = dark;
     if (moon) moon.hidden = !dark;
   });
@@ -301,7 +319,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
 
 // ── block 2/2 ──
 (function(){
-  const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+  const canvas=document.getElementById('neural-canvas') as HTMLCanvasElement | null;if(!canvas)return;
   const ctx=canvas.getContext('2d');if(!ctx)return;
   let W=0,H=0,nodes=[];const DIST=155;
   function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
@@ -319,3 +337,4 @@ document.querySelectorAll('[data-reveal]').forEach(el => revObs.observe(el));
 
 // ── Phase C-3 m-lang-btn wire ──
 document.getElementById('m-lang-btn')?.addEventListener('click', toggleTopLangDrop);
+})();
