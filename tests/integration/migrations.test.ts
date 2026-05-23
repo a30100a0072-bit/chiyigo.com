@@ -41,13 +41,13 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0001..0040 forward 仍是 TODO（見 memory
-// project_db_schema_baseline_drift.md task #4）；本 case 維持手建 fixture 形式。
+// 至少要有 targeted smoke。完整 0001..0045 forward 已實作（見 line 448 describe）；本 case
+// 維持手建 fixture 形式作 0037 issued_aud 行為的 targeted 驗證。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
 import down0038    from '../../migrations/down/0038_audit_log_phase2.down.sql?raw'
 
-// Full forward chain 0013..0040（不含 down，僅驗 forward shape）
+// Full forward chain 0013..0045（不含 down，僅驗 forward shape）
 import up0013 from '../../migrations/0013_oauth_states_aud.sql?raw'
 import up0014 from '../../migrations/0014_pkce_oidc_fields.sql?raw'
 import up0015 from '../../migrations/0015_oauth_clients.sql?raw'
@@ -278,9 +278,9 @@ describe('migrations smoke', () => {
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
 // 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
-// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0040 已可行，
-// 待擴 test（見 memory project_db_schema_baseline_drift.md task #4）。本 case
-// 維持手建 fixture 形式作 0037 issued_aud 行為 targeted 驗證。
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0045 已實作於下方
+// 「full forward chain」describe（line 448）。本 case 維持手建 fixture 形式作 0037
+// issued_aud 行為 targeted 驗證。
 //
 // 本 case 只手建 0037 必要的 fixture（users + pre-0037 refresh_tokens），跑 0037 migration，
 // 驗欄位/索引/NULL 行為/綁定持久化。F-2 refresh.ts 邏輯（rawAudProvided 條件、effectiveAud
@@ -373,10 +373,10 @@ describe('migrations smoke 0037 targeted', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full forward chain 0001..0040 vs prod snapshot
+// Full forward chain 0001..0045 vs prod snapshot
 //
 // 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
-// 完整 forward 變得可行。本 describe 驗 _base + 0001..0040 跑完後的 schema shape
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0045 跑完後的 schema shape
 // 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
 //
 // 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
