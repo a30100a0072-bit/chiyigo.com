@@ -900,10 +900,13 @@ describe('PR 0.2c-pre-1a：isR2LockError 保守 detector', () => {
     expect(isR2LockError(wrapped)).toBe(false)
   })
 
-  it('positive control：cause 自己同時具備 status+marker → true（per-candidate 不影響合法 nested 命中）', () => {
-    // 確認 P2 修法沒破合法 nested 命中：cause 自己就是完整 lock shape
+  it('positive control：cause 自己同時具備 status+marker（無 known code）→ true（走 fallback nested dual-condition，非 fast-path）', () => {
+    // codex r2 nit：原本 cause 帶 ObjectLockedByBucketPolicy 會被 known-code fast-path
+    // 在 dual-condition 前 short-circuit → 沒真正驗到 nested dual-condition path。
+    // 改成 cause 只有 status + 含 marker 的 message（no known code），fast-path miss
+    // → 必須走 fallback per-candidate dual-condition 才能 return true。
     const wrapped = new Error('R2 binding wrapper') as Error & { cause?: unknown }
-    wrapped.cause = { status: 409, code: 'ObjectLockedByBucketPolicy', message: 'locked by bucket policy' }
+    wrapped.cause = { status: 409, message: 'locked by bucket policy' }
     expect(isR2LockError(wrapped)).toBe(true)
   })
 })
