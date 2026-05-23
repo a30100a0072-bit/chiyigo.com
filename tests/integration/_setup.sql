@@ -130,6 +130,12 @@ CREATE TABLE IF NOT EXISTS admin_audit_log (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Migration 0045 (2026-05-23)：hash chain CAS race fix — UNIQUE on prev_hash 強制
+-- 兩個 concurrent writer 算到同 prev_hash 時，第二個 INSERT 觸發 UNIQUE 衝突。
+-- appendAuditLog 內建 retry loop 處理；prepareAppendAuditLog (batch) 由 caller 既有 catch 處理。
+CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_audit_prev_hash_unique
+  ON admin_audit_log(prev_hash);
+
 CREATE TABLE IF NOT EXISTS user_identities (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

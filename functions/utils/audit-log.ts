@@ -8,9 +8,12 @@
  * 任何中間列被改 → 該列 row_hash 不符 → 後續每一筆 prev_hash 都不再 reproducible，
  * verifyAuditChain() 會回報第一個 break 點。
  *
- * 寫入流程：append() 一次完成「取上一筆 hash → 計算 hash → INSERT」，
- * 用 db.batch 把 SELECT 與 INSERT 分開但同一進程，
- * D1 同 worker 同步行為下無 race（admin 操作 QPS 極低）。
+ * 並發保證（migration 0045，2026-05-23）：
+ *   admin_audit_log.prev_hash 上有 UNIQUE INDEX (idx_admin_audit_prev_hash_unique)。
+ *   兩個 concurrent writer 算到同 prev_hash 時，第二個 INSERT 觸發 UNIQUE 衝突。
+ *   appendAuditLog (本檔) 內建 CAS retry loop 在衝突時 re-SELECT + 重算 + 重 INSERT，
+ *   caller 無感；prepareAppendAuditLog 保持 single-shot，UNIQUE 衝突 propagate
+ *   到 batch caller (admin/audit/[id].ts DELETE) 由其既有 catch → 500 回覆。
  */
 
 const GENESIS_HASH = '0'.repeat(64)
@@ -48,8 +51,11 @@ async function computeRowHash(prevHash, row) {
  * 準備一筆 admin_audit_log INSERT，回傳 D1PreparedStatement 但不執行。
  *
  * 用於要把 audit-log INSERT 與其他寫入綁進同一個 db.batch() 的場景
- * （admin/audit/[id] DELETE atomicity）。SELECT prev_hash 仍在 batch 外發生 —
- * D1 沒有 SELECT-in-batch，且 admin QPS 低，這個窗口 race 既有設計已接受。
+ * （admin/audit/[id] DELETE atomicity）。SELECT prev_hash 仍在 batch 外發生，
+ * 但 UNIQUE INDEX on prev_hash (migration 0045) 保證 race 衝突會在 batch 執行時
+ * 以 UNIQUE constraint failure 顯式失敗，不會 silently 寫出兩列同 prev_hash。
+ * Batch caller 收到失敗時應回 500 讓 admin 重送（不適合 batch 內 retry —
+ * 重新算 hash 後 batch 內其他 statement 的綁定可能也需要重做）。
  */
 export async function prepareAppendAuditLog(db, entry) {
   const lastRow = await db
@@ -89,14 +95,44 @@ export async function prepareAppendAuditLog(db, entry) {
 }
 
 /**
- * 寫入一筆 admin_audit_log，自動串接 hash chain。
+ * 寫入一筆 admin_audit_log，自動串接 hash chain。CAS race-safe via UNIQUE INDEX
+ * on prev_hash (migration 0045) + retry loop。
  *
  * entry: { admin_id, admin_email, action, target_id, target_email, ip_address }
  */
+const CAS_MAX_RETRIES = 5
+const CAS_BASE_DELAY_MS = 5
+
 export async function appendAuditLog(db, entry) {
-  const prepared = await prepareAppendAuditLog(db, entry)
-  await prepared.statement.run()
-  return { prevHash: prepared.prevHash, rowHash: prepared.rowHash, createdAt: prepared.createdAt }
+  let lastErr
+  for (let attempt = 0; attempt < CAS_MAX_RETRIES; attempt++) {
+    try {
+      const prepared = await prepareAppendAuditLog(db, entry)
+      await prepared.statement.run()
+      return { prevHash: prepared.prevHash, rowHash: prepared.rowHash, createdAt: prepared.createdAt }
+    } catch (err) {
+      if (!isUniquePrevHashError(err)) throw err
+      lastErr = err
+      if (attempt < CAS_MAX_RETRIES - 1) {
+        // exponential backoff with jitter: 5 + 15 + 35 + 75 ~= 130ms 總預算
+        const delayMs = (1 << attempt) * CAS_BASE_DELAY_MS + Math.floor(Math.random() * CAS_BASE_DELAY_MS)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    }
+  }
+  throw new Error(`audit_log append: CAS retry exhausted after ${CAS_MAX_RETRIES} attempts: ${lastErr?.message ?? 'unknown'}`)
+}
+
+/**
+ * 嚴格 regex 匹配 SQLite UNIQUE 衝突在 admin_audit_log.prev_hash 上的錯誤訊息。
+ * 同 user-audit.ts:109 慣例同時看 e.message 與 e.cause.message（D1 有時把底層
+ * SQLite 錯誤包在 cause 裡，外層只是泛用 'D1_ERROR'）。
+ * 嚴格限定欄位避免捕捉到不相關的 UNIQUE 違例（防呆）。
+ */
+export function isUniquePrevHashError(err) {
+  if (!err) return false
+  const msg = [err?.message, err?.cause?.message].filter(Boolean).join('\n')
+  return /UNIQUE constraint failed:\s*admin_audit_log\.prev_hash/i.test(msg)
 }
 
 /**
