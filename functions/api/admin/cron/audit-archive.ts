@@ -498,12 +498,17 @@ async function handlePlannedBlocker(ctx) {
   report.blocker_action = 'recovery_planned'
 
   // 重撈：cold_class + archived_at IS NULL + id range
+  // PR 0.2c-pre-1a codex r1 P1：跟 runFreshChunkPipeline candidates 同 filter
+  //   `event_type NOT LIKE 'audit.archive.%'` — chunk min/max 範圍可能跨 archive-
+  //   internal rows（不在原 chunk data 內但 id 落在 range）；recovery 重撈若不
+  //   filter，rows.length 會多算 → row_count_mismatch / sha 對不上 → 誤 fail chunk
   const rowsRes = await db.prepare(
     `SELECT id, event_type, severity, user_id, client_id, ip_hash, event_data, cold_class, created_at
        FROM audit_log
       WHERE id BETWEEN ? AND ?
         AND cold_class = ?
         AND archived_at IS NULL
+        AND event_type NOT LIKE 'audit.archive.%'
       ORDER BY id ASC`
   ).bind(blocker.min_id, blocker.max_id, coldClass).all()
   const rows = rowsRes.results ?? []
@@ -536,21 +541,84 @@ async function handlePlannedBlocker(ctx) {
   // PR 2.2a codex r1：標記 quota 消耗點 — 即使下面 PUT throw 也已記錄一次嘗試。
   report.attempted_write = true
 
-  // 1) PUT data（key_scheme=2 走 HEAD 預檢；既存 dataKey 為 idempotent recovery、skip PUT）
+  // 1) PUT data — key_scheme=2 走 sha-verify recovery（codex r1 P2）；legacy 維持 overwrite。
   // PR 2.1b：依 chunk 自己當初寫入的 compression 決定 body / contentEncoding。
   //   - 'gzip'：重新 gzip jsonl（chunk_sha256 仍對齊 decompressed jsonl，不影響 idempotency）
   //   - 'none'：直送 jsonl（PR 2.0 既有 planned chunk recovery 場景）
+  //
+  // PR 0.2c-pre-1a codex r1 P2：head-only skip 在 lock 下不安全 — 若 dataKey 已存
+  //   corrupt object（sha 與 chunk_sha256 不符），head 命中即 skip 然後繼續寫
+  //   .uploaded.json 浪費 write-once budget，下輪 handleUploadedBlocker 才驗 sha 炸；
+  //   中間多寫的 .uploaded.json key 因 lock 永遠無法 fix。必 GET + decompress + sha
+  //   verify；不符立刻 failChunkMismatch，不再寫 manifest 升態。
   let recoveryGzSha: string | null = null
-  if (blockerCompression === 'gzip') {
-    const gzBody = await gzipCompress(jsonl)
-    recoveryGzSha = await sha256Hex(gzBody)
-    await putDataLockSafe(ctx, 'data', chunkInfo, dataKey, gzBody, {
-      httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
-    }, keyScheme)
+  if (keyScheme === KEY_SCHEME_WRITE_ONCE) {
+    const existing = await bucket.get(dataKey)
+    if (existing) {
+      // exists → 必驗 sha 才能 skip（lock-safe recovery；codex r1 P2）。
+      // R2Object body 是 ReadableStream 只能讀一次 → 先一次 arrayBuffer 取出 raw
+      // bytes，gzip 用此 bytes 同時算 sha256_jsonl（解壓後）與 sha256_gz（壓縮 bytes 直接 sha）。
+      let existingJsonl: string
+      let existingRawBytes: Uint8Array | null = null
+      try {
+        if (blockerCompression === 'gzip') {
+          existingRawBytes = new Uint8Array(await existing.arrayBuffer())
+          existingJsonl = new TextDecoder().decode(await gzipDecompress(existingRawBytes))
+        } else {
+          existingJsonl = await existing.text()
+        }
+      } catch (e) {
+        return failChunkMismatch(ctx, 'verification_failed', {
+          reason: 'gzip_decompress_failed_recovery',
+          data_key: dataKey,
+          compression: blockerCompression,
+          error: String((e as { message?: unknown })?.message ?? e),
+          stage: 'planned_recovery',
+        })
+      }
+      const existingSha = await sha256Hex(existingJsonl)
+      if (existingSha !== blocker.chunk_sha256) {
+        return failChunkMismatch(ctx, 'verification_failed', {
+          reason: 'data_sha_mismatch_recovery',
+          expected_sha256: blocker.chunk_sha256,
+          actual_sha256: existingSha,
+          data_key: dataKey,
+          stage: 'planned_recovery',
+        })
+      }
+      // gzip 路徑 recovery sha256_gz 對齊 R2 上實際 bytes（既有物件，不是本次「應 PUT 的」）
+      // — 既然 skip PUT、寫入的 manifest 必須反映 R2 真實 bytes 而非 in-memory 重 gzip 結果
+      if (blockerCompression === 'gzip' && existingRawBytes) {
+        recoveryGzSha = await sha256Hex(existingRawBytes)
+      }
+      // exists + sha 對 → skip PUT，繼續走 manifest 升態
+    } else {
+      // missing → 正常 PUT（HEAD 已隱含 null，無需再走 putDataLockSafe 多一次 head）
+      if (blockerCompression === 'gzip') {
+        const gzBody = await gzipCompress(jsonl)
+        recoveryGzSha = await sha256Hex(gzBody)
+        await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+          httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
+        })
+      } else {
+        await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
+          httpMetadata: { contentType: 'application/x-ndjson' },
+        })
+      }
+    }
   } else {
-    await putDataLockSafe(ctx, 'data', chunkInfo, dataKey, jsonl, {
-      httpMetadata: { contentType: 'application/x-ndjson' },
-    }, keyScheme)
+    // legacy key_scheme=1：原有覆寫行為（無 lock 風險，prod 既有 dryrun chunk 走此）
+    if (blockerCompression === 'gzip') {
+      const gzBody = await gzipCompress(jsonl)
+      recoveryGzSha = await sha256Hex(gzBody)
+      await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+        httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
+      })
+    } else {
+      await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
+        httpMetadata: { contentType: 'application/x-ndjson' },
+      })
+    }
   }
 
   // 2) Manifest 升 uploaded — 讀回 planned manifest（key_scheme=2 走 .planned.json，
@@ -731,12 +799,16 @@ async function handleVerifiedBlocker(ctx) {
 
   // 一階：UPDATE archived_at；對齊 design doc：
   //   WHERE id BETWEEN ? AND ? AND cold_class = ? AND archived_at IS NULL
+  // PR 0.2c-pre-1a codex r1 P1：補 `event_type NOT LIKE 'audit.archive.%'` filter
+  //   — 否則 chunk min/max 範圍跨 archive-internal rows 時會誤標 archived_at
+  //   （那些 row 從未進 R2，標了等於 silent data loss + cursor 過後也再也撈不到）
   const upd = await db.prepare(
     `UPDATE audit_log
         SET archived_at = datetime('now')
       WHERE id BETWEEN ? AND ?
         AND cold_class = ?
-        AND archived_at IS NULL`
+        AND archived_at IS NULL
+        AND event_type NOT LIKE 'audit.archive.%'`
   ).bind(blocker.min_id, blocker.max_id, coldClass).run()
 
   const changes = upd?.meta?.changes ?? 0
@@ -750,12 +822,16 @@ async function handleVerifiedBlocker(ctx) {
     // 雙路徑：UPDATE 沒命中預期數量 → 查實際已標記 count
     //   changes==0 → crash-after-update recovery
     //   0<changes<row_count → partial UPDATE（worker 半途 retry）
+    // PR 0.2c-pre-1a codex r1 P1：dual-path count 同樣加 filter — 否則 archive-
+    //   internal rows 若已意外被標（pre-PR-1a 舊 chunk）會被算進 archivedCount
+    //   造成 partial_then_recovery 誤判 succeeded
     const cntRes = await db.prepare(
       `SELECT COUNT(*) AS c
          FROM audit_log
         WHERE id BETWEEN ? AND ?
           AND cold_class = ?
-          AND archived_at IS NOT NULL`
+          AND archived_at IS NOT NULL
+          AND event_type NOT LIKE 'audit.archive.%'`
     ).bind(blocker.min_id, blocker.max_id, coldClass).first()
     const archivedCount = Number(cntRes?.c ?? 0)
     if (archivedCount === blocker.row_count) {

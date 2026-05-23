@@ -24,6 +24,7 @@ import { onRequestPost as cronArchive } from '../../functions/api/admin/cron/aud
 import {
   rowsToJsonl,
   sha256Hex,
+  gzipCompress,
   gzipDecompress,
   buildChunkKeys,
 } from '../../functions/utils/audit-archive'
@@ -1069,6 +1070,112 @@ describe('audit-archive cron — PR 0.2c-pre-1a write-once R2 key', () => {
     expect(chunk.state).toBe('uploaded')
     expect(chunk.last_manifest_state).toBe('uploaded')
     expect(chunk.key_scheme).toBe(1)
+  })
+
+  // ── Codex r1 P1 regression：跨 archive-internal row 的 chunk range UPDATE 防呆 ──
+  it('codex r1 P1：chunk min/max 範圍跨 archive-internal rows → handleVerifiedBlocker 不誤標 archived_at', async () => {
+    // 模擬 prod 場景：user data ids 有 gap，archive-internal rows 卡在中間
+    //   user row id=1 / archive-internal id=2, 3 (filter 排除) / user row id=4
+    //   chunk 算出 min=1, max=4, row_count=2（user）
+    // 修前：handleVerifiedBlocker UPDATE BETWEEN 1 AND 4 → 把 id 2,3 也標 archived_at
+    //   → archive-internal rows 永遠回不來、但被誤標為已歸檔（silent data loss）
+    // 修後：UPDATE 帶 `event_type NOT LIKE 'audit.archive.%'` → 只標 user rows
+
+    const db = env.chiyigo_db
+    // 顯式 id 插入；SQLite AUTOINCREMENT 會 ratchet 過已用 id
+    await db.prepare(
+      `INSERT INTO audit_log (id, event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+       VALUES (1, 'auth.login.rate_limited', 'info', NULL, 'h', '{}', 'telemetry', datetime('now','-1 hour'))`
+    ).run()
+    await db.prepare(
+      `INSERT INTO audit_log (id, event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+       VALUES (2, 'audit.archive.manifest_written', 'info', NULL, 'h', '{}', 'telemetry', datetime('now','-1 hour'))`
+    ).run()
+    await db.prepare(
+      `INSERT INTO audit_log (id, event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+       VALUES (3, 'audit.archive.r2_lock_detected', 'critical', NULL, 'h', '{}', 'immutable', datetime('now','-1 hour'))`
+    ).run()
+    await db.prepare(
+      `INSERT INTO audit_log (id, event_type, severity, user_id, ip_hash, event_data, cold_class, created_at)
+       VALUES (4, 'auth.login.rate_limited', 'info', NULL, 'h', '{}', 'telemetry', datetime('now','-1 hour'))`
+    ).run()
+
+    // Run 1：fresh telemetry → chunk(min=1, max=4, row_count=2) — id 2 (telemetry archive-internal) 排除
+    const r1 = await runCron()
+    expect(r1.ok).toBe(true)
+    const [chunk1] = await getChunk()
+    expect(chunk1.min_id).toBe(1)
+    expect(chunk1.max_id).toBe(4)
+    expect(chunk1.row_count).toBe(2)   // ← 證明 candidates filter 已生效（只 2 個 user row）
+
+    // Run 2: uploaded blocker → verified
+    await runCron()
+    // Run 3: verified blocker → marked_archived (live)
+    const r3 = await runCron()
+    expect(r3.chunks_marked_archived).toBe(1)
+
+    // 關鍵驗：UPDATE filter 後，只有 user rows (id 1, 4) 被標 archived_at
+    const marked = await db.prepare(
+      `SELECT id, event_type FROM audit_log WHERE archived_at IS NOT NULL ORDER BY id`
+    ).all()
+    const markedIds = marked.results?.map(r => r.id) ?? []
+    expect(markedIds).toEqual([1, 4])
+    // archive-internal rows (id 2, 3) 仍 NULL — 未被誤標
+    const unarchived = await db.prepare(
+      `SELECT id FROM audit_log WHERE id IN (2, 3) AND archived_at IS NULL ORDER BY id`
+    ).all()
+    expect(unarchived.results?.map(r => r.id)).toEqual([2, 3])
+  })
+
+  // ── Codex r1 P2 regression：handlePlannedBlocker data recovery 必驗 sha ──
+  it('codex r1 P2：key_scheme=2 chunk 既有 R2 data 但 sha 不符 → failChunkMismatch、不寫 .uploaded.json', async () => {
+    // 模擬 lock 下 corrupt object：chunks row + planned manifest 都對的，
+    //   dataKey 已存在但 body sha != chunk_sha256。修前 head-only skip → 繼續寫
+    //   .uploaded.json 浪費 write-once budget；修後 GET + sha verify → 立刻 fail。
+
+    const db = env.chiyigo_db
+    // 用真實流程種出對的 chunk row（key_scheme=2 + 正確 manifest），第二步再污染 dataKey
+    await seedTelemetry(2)
+    await runCron()  // → uploaded 狀態 + 正確 dataKey 在 R2
+
+    // 模擬 crash-then-recover 場景：把 chunks.state 強制降回 'planned'
+    await db.prepare(
+      `UPDATE audit_archive_chunks SET state = 'planned', last_manifest_state = 'planned'`
+    ).run()
+    // 把 .uploaded.json 刪掉（不該存在，handler 才會去寫；本測試重點是「不該寫成功」）
+    const ml = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })
+    for (const o of ml.objects ?? []) {
+      if (o.key.endsWith('.uploaded.json')) await env.AUDIT_ARCHIVE_BUCKET.delete(o.key)
+    }
+
+    // 污染 dataKey：用一筆 gzip 後 sha 與 chunks.chunk_sha256 不符的 bytes 覆寫
+    //   （測試環境無 lock，可直接 PUT 覆寫；模擬「prior crashed run 寫進 corrupt data」場景）
+    const dl = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'audit-log/' })
+    const dataKey = (dl.objects ?? []).find(o => o.key.endsWith('.jsonl.gz'))!.key
+    const corruptJsonl = '{"id":999,"event_type":"corrupt","severity":"info","user_id":null,"client_id":null,"ip_hash":null,"event_data":null,"cold_class":"telemetry","created_at":"2026-05-23T00:00:00Z"}\n'
+    const corruptGz = await gzipCompress(corruptJsonl)
+    await env.AUDIT_ARCHIVE_BUCKET.put(dataKey, corruptGz, {
+      httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
+    })
+
+    // 跑 cron → handlePlannedBlocker GET dataKey → 解壓 sha → 不符 → failChunkMismatch
+    const r = await cronArchive({ request: makeRequest(), env: makeEnv() })
+    expect(r.status).toBe(500)
+    const report = await r.json()
+    expect(report.ok).toBe(false)
+    expect(report.errors?.[0]?.event).toBe('verification_failed')
+    expect(report.errors?.[0]?.reason).toBe('data_sha_mismatch_recovery')
+    expect(report.errors?.[0]?.stage).toBe('planned_recovery')
+
+    // chunk → failed + retry_count+1
+    const [chunk] = await getChunk()
+    expect(chunk.state).toBe('failed')
+    expect(chunk.last_failure).toBe('verification_failed')
+
+    // 關鍵驗：.uploaded.json **不該** 被寫（修前 head-only skip 會誤寫；修後 sha-verify fail 提前 return）
+    const ml2 = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })
+    const uploadedKeys = (ml2.objects ?? []).filter(o => o.key.endsWith('.uploaded.json'))
+    expect(uploadedKeys).toHaveLength(0)
   })
 
   it('R2 lock 偵測：bucket.put throw lock-shape error → r2_lock_detected critical + chunk failed + 不 retry sleep', async () => {
