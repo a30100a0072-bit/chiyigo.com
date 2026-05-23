@@ -99,6 +99,19 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate_archive.debug.force_purge_succeeded',        // critical
   'audit.aggregate_archive.debug.force_purge_failed',           // critical
   'audit.aggregate_archive.debug.force_purge_disabled',         // warn
+  // PR 0.2c-pre-1a (2026-05-23) write-once R2 key + lock-aware refactor
+  //   r2_lock_detected：critical — putWithRetry 命中 isR2LockError 時 emit；
+  //                     payload 帶 operation/key/attempt/status/code，不塞 stack
+  //                     或敏感 body 內容（避免 audit 反成 PII / secrets sink）
+  //
+  //   manifest_written 由 TELEMETRY 類接（見下方 TELEMETRY list）— rollout
+  //   telemetry 高頻、每 chunk 4 events、不適合 IMMUTABLE 永久保留；放 IMMUTABLE
+  //   會自我遞迴（每 archive 一個 immutable chunk 又 emit 4 events 進 immutable
+  //   → 下輪 cron 再處理它們 → 跨 class 噬 max_chunks_per_run 配額；測試端親驗
+  //   過會 break telemetry verify 推進與「另 class 應為 no_rows_eligible」契約）。
+  //   留 TELEMETRY 雖然仍會遞迴但只影響 telemetry 自己一條 pipeline，且最終會被
+  //   PR 3.0 aggregate worker rollup 收掉，不會持續累積 raw row。
+  'audit.archive.r2_lock_detected',                              // critical
 ]
 
 // F-3 Phase 2 PR 1.2 codex r3 L：deploy_ordering 是 system ops 類訊號，不是 archive ops。
@@ -206,6 +219,14 @@ const TELEMETRY = [
   'oauth.backchannel.dispatch',
   'oauth.token.rate_limited',
   'webauthn.register.options',
+  // PR 0.2c-pre-1a (2026-05-23) write-once rollout telemetry
+  //   manifest_written：每次 manifest PUT 成功 emit；payload 帶 chunk_id /
+  //                     key_scheme / manifest_state / manifest_key / archive_state；
+  //                     用來追新 chunk 走 write-once 路徑、舊 chunk 走 legacy 路徑
+  //                     的比例 + 各 state 推進。歸 TELEMETRY 不歸 IMMUTABLE 是為
+  //                     了避免自我遞迴噬 max_chunks_per_run 配額（細節見 audit-policy
+  //                     ARCHIVE_OPS_IMMUTABLE 附近註解）。
+  'audit.archive.manifest_written',             // info
 ]
 
 const READ_AUDIT = [

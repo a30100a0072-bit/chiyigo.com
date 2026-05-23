@@ -50,6 +50,8 @@ import {
   CHUNK_MAX_ROWS,
   CHUNK_MAX_BYTES,
   NON_TERMINAL_STATES,
+  KEY_SCHEME_LEGACY,
+  KEY_SCHEME_WRITE_ONCE,
   computeCursorAndBlocker,
   rowsToJsonl,
   sha256Hex,
@@ -57,7 +59,8 @@ import {
   gzipDecompress,
   buildChunkKeys,
   buildManifest,
-  deriveKeysFromChunk,
+  deriveDataKey,
+  deriveManifestKey,
   appendStateHistory,
   aggregateSeverities,
   putWithRetry,
@@ -67,6 +70,7 @@ import {
   utcDate,
   ARCHIVE_WRITER_VERSION,
 } from '../../../utils/audit-archive'
+import type { ManifestStateFile } from '../../../utils/audit-archive'
 
 // PR 2.0：cold_class 版本固定 1。audit-policy 改動時 bump（design doc v8 cold_class_version）
 const COLD_CLASS_VERSION = 1
@@ -107,8 +111,14 @@ function parseRetryBackoffMs(env) {
 //   - 非最後一次 attempt → severity='warn'
 //   - 最後一次 attempt    → severity='critical'
 // Helper 把 role / chunk 上下文塞進 data，方便事後 forensic 區分是 data 還 manifest PUT 失敗。
+//
+// PR 0.2c-pre-1a：lockDetected=true 時**額外** emit audit.archive.r2_lock_detected critical
+// （與 upload_failed 並存，不取代）。lock error 之後 putWithRetry 已 short-circuit
+// 不 retry、立刻 throw（utils isR2LockError + putWithRetry isLockError 分支）。
+// r2_lock_detected payload 不塞完整 error stack 或敏感 body — 僅 operation/key/
+// attempt/status/code 等定位欄位，避免 audit 反成 PII / secrets sink。
 function makePutAuditCallback(ctx, role, chunkInfo, maxAttempts) {
-  return async ({ attempt, error, willRetry, nextDelayMs, key }) => {
+  return async ({ attempt, error, willRetry, nextDelayMs, key, lockDetected }) => {
     const sev = willRetry ? 'warn' : 'critical'
     await safeUserAudit(ctx.env, {
       event_type: 'audit.archive.upload_failed',
@@ -125,11 +135,41 @@ function makePutAuditCallback(ctx, role, chunkInfo, maxAttempts) {
         max_attempts:  maxAttempts,
         next_delay_ms: nextDelayMs,
         final:         !willRetry,
-        error:         String(error?.message ?? error),
+        // PR 0.2c-pre-1a：標 lock_detected 給 forensic 一眼分辨「為何 final=true 在
+        // attempt=1 就觸發」— 是 lock 不 retry，不是 backoff 跑完了
+        lock_detected: lockDetected === true,
+        error:         String((error as { message?: unknown })?.message ?? error),
         min_id:        chunkInfo.minId,
         max_id:        chunkInfo.maxId,
       },
     })
+    if (lockDetected) {
+      const errStatus = Number(
+        (error as { status?: unknown })?.status
+        ?? (error as { httpStatus?: unknown })?.httpStatus
+        ?? (error as { statusCode?: unknown })?.statusCode,
+      )
+      const errCode = (error as { code?: unknown })?.code
+      await safeUserAudit(ctx.env, {
+        event_type: 'audit.archive.r2_lock_detected',
+        severity:   'critical',
+        data: {
+          run_id:     ctx.runId,
+          dry_run:    chunkInfo.dryRun,
+          env:        ctx.envName,
+          table:      ctx.tableName,
+          cold_class: ctx.coldClass,
+          operation:  role,                         // 'data' | 'manifest'
+          key,
+          attempt,
+          // 限定欄位：避免把 error.stack / response body 塞進 audit_log
+          status:     Number.isFinite(errStatus) ? errStatus : null,
+          code:       typeof errCode === 'string' || typeof errCode === 'number' ? errCode : null,
+          min_id:     chunkInfo.minId,
+          max_id:     chunkInfo.maxId,
+        },
+      })
+    }
   }
 }
 
@@ -142,6 +182,88 @@ async function archivePut(ctx, role, chunkInfo, key, body, putOpts) {
     backoffMs,
     sleep,
     onAttemptFailed: makePutAuditCallback(ctx, role, chunkInfo, maxAttempts),
+  })
+}
+
+// ── PR 0.2c-pre-1a：write-once manifest PUT 流程 ─────────────────────────────
+//
+// 對 key_scheme=2 chunk 的 manifest / data key 採 R2 HEAD 預檢（exists → skip
+// PUT），擋掉 crash-after-PUT-before-D1-UPDATE 場景下重 PUT 被 lock 擋的問題。
+//
+// key_scheme=1（legacy）chunk：直接走 archivePut（同 key 覆寫，與既有行為一致）。
+// 既有 prod 唯一 1 row dry-run telemetry chunk 走此路徑；live 路徑由 PR 1a 之後
+// 新 INSERT 的 key_scheme=2 chunk 走 write-once。
+//
+// HEAD missing → PUT；HEAD exists → skip。skip 不算失敗、不 emit upload_failed；
+// emit manifest_written 帶 skipped=true，forensic 可辨識 recovery 軌跡。
+async function archivePutManifestWriteOnce(ctx, role, chunkInfo, key) {
+  // R2 HEAD 預檢；存在 → skip（recovery from prior crash 已寫過此 key）
+  const exists = await ctx.bucket.head(key)
+  return { skipped: !!exists }
+}
+
+// 給 key_scheme=2 chunk 用：HEAD 預檢 + (skip OR archivePut) for manifest 寫入。
+// 回 { skipped: boolean }；caller 後續走 emit + UPDATE last_manifest_state。
+async function putManifestLockSafe(ctx, role, chunkInfo, key, body, putOpts, keyScheme) {
+  if (keyScheme === KEY_SCHEME_WRITE_ONCE) {
+    const pre = await archivePutManifestWriteOnce(ctx, role, chunkInfo, key)
+    if (pre.skipped) return { skipped: true }
+  }
+  await archivePut(ctx, role, chunkInfo, key, body, putOpts)
+  return { skipped: false }
+}
+
+// 給 key_scheme=2 chunk 用：HEAD 預檢 + (skip OR archivePut) for data 寫入。
+// dataKey per chunk 固定 1 把（content-addressed by chunk_sha256），HEAD 命中
+// 意味著 prior run 已成功 PUT 但 chunks state UPDATE crash；skip 安全。
+async function putDataLockSafe(ctx, role, chunkInfo, key, body, putOpts, keyScheme) {
+  if (keyScheme === KEY_SCHEME_WRITE_ONCE) {
+    const exists = await ctx.bucket.head(key)
+    if (exists) return { skipped: true }
+  }
+  await archivePut(ctx, role, chunkInfo, key, body, putOpts)
+  return { skipped: false }
+}
+
+// UPDATE chunks.last_manifest_state — observability bookkeeping（非 correctness
+// source；crash recovery 仍以 chunks.state + R2 existence 為準）。
+async function updateLastManifestState(db, chunkRow, manifestState: ManifestStateFile) {
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET last_manifest_state = ?, updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(
+    manifestState,
+    chunkRow.env, chunkRow.table_name, chunkRow.cold_class,
+    chunkRow.archive_date, chunkRow.min_id, chunkRow.max_id, chunkRow.chunk_sha256,
+  ).run()
+}
+
+// emit audit.archive.manifest_written — PUT 成功（或 skip-due-to-existing）後
+// 一律 emit；payload 不含 error / body。
+//
+// archive_state：emit 時 chunks.state 欄當下值（emit 點在 PUT 與 D1 state UPDATE
+// 之間 → 反映 pre-transition state；happy path 結束時 chunks.state 已是 post-
+// transition；若 emit 後 state UPDATE crash，archive_state 是「上次 cron 看到的
+// 推進前 state」，forensic 可重建）。
+async function emitManifestWritten(ctx, chunkRow, manifestState: ManifestStateFile, keyScheme: number, manifestKey: string, skipped: boolean) {
+  await safeUserAudit(ctx.env, {
+    event_type: 'audit.archive.manifest_written',
+    severity:   'info',
+    data: {
+      run_id:         ctx.runId,
+      dry_run:        chunkRow.dry_run === 1 || chunkRow.dry_run === true,
+      env:            ctx.envName,
+      table:          ctx.tableName,
+      cold_class:     ctx.coldClass,
+      chunk_id:       `${chunkRow.min_id}-${chunkRow.max_id}-${chunkRow.chunk_sha256}`,
+      key_scheme:     keyScheme,
+      manifest_state: manifestState,
+      manifest_key:   manifestKey,
+      archive_state:  chunkRow.state,        // chunks.state 當前值（pre-transition）
+      skipped,                               // true = R2 head 命中、跳過 PUT（recovery）
+    },
   })
 }
 
@@ -312,10 +434,14 @@ export async function onRequestPost({ request, env }) {
 async function processColdClass(args) {
   const { env, envName, tableName, coldClass, dryRun, runId, db, bucket, report, putRetryBackoffMs } = args
 
-  // ── Step 1：算 cursor + blocker（PR 2.1c：chunks 帶 dry_run 欄）────────
+  // ── Step 1：算 cursor + blocker（PR 2.1c：chunks 帶 dry_run 欄；
+  //           PR 0.2c-pre-1a：補 key_scheme + last_manifest_state — blocker handler
+  //           走 write-once 路徑要對的 manifest state key；之前漏 SELECT 會 silently
+  //           fallback 走 legacy 單 .json key，寫去舊路徑 → R2 中找不到 .verified.json）
   const chunksRows = await db.prepare(
     `SELECT env, table_name, cold_class, archive_date,
-            min_id, max_id, state, chunk_sha256, row_count, retry_count, dry_run, compression
+            min_id, max_id, state, chunk_sha256, row_count, retry_count,
+            dry_run, compression, key_scheme, last_manifest_state
        FROM audit_archive_chunks
       WHERE env = ? AND table_name = ? AND cold_class = ?
       ORDER BY min_id ASC`
@@ -359,6 +485,12 @@ async function processColdClass(args) {
 // ── Planned blocker：D1 重撈 + 重 serialize + sha 對齊 → uploaded ─────────
 // 場景：上輪 worker 寫了 planned manifest 與 chunks row，但 data PUT 失敗或 crash。
 // design doc §「marked_archived 升態雙路徑」前置的 idempotent recovery 概念。
+//
+// PR 0.2c-pre-1a：依 blocker.key_scheme 分支：
+//   - key_scheme=1（legacy）：data + 單一 manifest key 覆寫（既有行為，prod 唯
+//                            一 1 row dry-run chunk 走此）
+//   - key_scheme=2（write-once）：data + manifest 各自 HEAD 預檢 + 缺才 PUT；
+//                                 讀 .planned.json，寫 .uploaded.json（不同 key）
 async function handlePlannedBlocker(ctx) {
   const { envName, tableName, coldClass, db, bucket, report, blocker } = ctx
   // PR 2.1c：dryRun 從 chunk row 自己取，不看 env flag（H-1 provenance fix）
@@ -393,41 +525,54 @@ async function handlePlannedBlocker(ctx) {
     })
   }
 
-  const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
+  // PR 0.2c-pre-1a：依 key_scheme 算 R2 key（write-once：planned/uploaded 兩 distinct key）
+  const keyScheme = Number(blocker.key_scheme ?? KEY_SCHEME_LEGACY)
+  const dataKey = deriveDataKey(blocker)
+  const plannedManifestKey  = deriveManifestKey(blocker, keyScheme === KEY_SCHEME_WRITE_ONCE ? 'planned'  : undefined)
+  const uploadedManifestKey = deriveManifestKey(blocker, keyScheme === KEY_SCHEME_WRITE_ONCE ? 'uploaded' : undefined)
   const chunkInfo = { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id }
   const blockerCompression = blocker.compression ?? 'none'
 
   // PR 2.2a codex r1：標記 quota 消耗點 — 即使下面 PUT throw 也已記錄一次嘗試。
   report.attempted_write = true
 
-  // 1) PUT data（R2 PUT idempotent — 同 key 同 body 覆寫無副作用）
+  // 1) PUT data（key_scheme=2 走 HEAD 預檢；既存 dataKey 為 idempotent recovery、skip PUT）
   // PR 2.1b：依 chunk 自己當初寫入的 compression 決定 body / contentEncoding。
   //   - 'gzip'：重新 gzip jsonl（chunk_sha256 仍對齊 decompressed jsonl，不影響 idempotency）
   //   - 'none'：直送 jsonl（PR 2.0 既有 planned chunk recovery 場景）
-  let recoveryGzSha = null
+  let recoveryGzSha: string | null = null
   if (blockerCompression === 'gzip') {
     const gzBody = await gzipCompress(jsonl)
     recoveryGzSha = await sha256Hex(gzBody)
-    await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+    await putDataLockSafe(ctx, 'data', chunkInfo, dataKey, gzBody, {
       httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
-    })
+    }, keyScheme)
   } else {
-    await archivePut(ctx, 'data', chunkInfo, dataKey, jsonl, {
+    await putDataLockSafe(ctx, 'data', chunkInfo, dataKey, jsonl, {
       httpMetadata: { contentType: 'application/x-ndjson' },
-    })
+    }, keyScheme)
   }
 
-  // 2) Manifest 升 uploaded — 讀回現有 planned manifest append state_history
+  // 2) Manifest 升 uploaded — 讀回 planned manifest（key_scheme=2 走 .planned.json，
+  //    legacy 走單一 .json）append state_history，寫到 uploaded key。
   // PR 2.1b codex r1（P2）：recovery 重新 gzip 後 bytes 必與 fresh run 寫入時不同
   // （gzip 含 mtime 非 byte-identical）→ 原 planned manifest 內的 sha256_gz 過期。
   // 覆寫對齊本次 PUT 的 gz bytes，sha256_jsonl / chunk_sha256 不動（data identity 保持）。
-  const uploadedManifest = await loadAndAppend(bucket, manifestKey, 'uploaded')
+  const uploadedManifest = await loadAndAppend(bucket, plannedManifestKey, 'uploaded')
   if (recoveryGzSha) uploadedManifest.sha256_gz = recoveryGzSha
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey, JSON.stringify(uploadedManifest, null, 2), {
-    httpMetadata: { contentType: 'application/json' },
-  })
+  const { skipped: uploadedSkipped } = await putManifestLockSafe(
+    ctx, 'manifest', chunkInfo, uploadedManifestKey,
+    JSON.stringify(uploadedManifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } },
+    keyScheme,
+  )
 
-  // 3) chunks.state planned → uploaded
+  // 3) PR 0.2c-pre-1a：bookkeep last_manifest_state + emit manifest_written
+  //    archive_state 取 blocker.state（pre-transition）— 下方 state UPDATE 才升 uploaded
+  await updateLastManifestState(db, blocker, 'uploaded')
+  await emitManifestWritten(ctx, blocker, 'uploaded', keyScheme, uploadedManifestKey, uploadedSkipped)
+
+  // 4) chunks.state planned → uploaded
   await db.prepare(
     `UPDATE audit_archive_chunks
         SET state = 'uploaded', updated_at = datetime('now')
@@ -458,7 +603,11 @@ async function handleUploadedBlocker(ctx) {
   // PR 2.1c：用 chunk 自身 dry_run 算 key（H-1 provenance fix）
   const chunkDryRun = blocker.dry_run === 1 || blocker.dry_run === true
   const blockerCompression = blocker.compression ?? 'none'
-  const { dataKey, manifestKey } = deriveKeysFromChunk(blocker)
+  // PR 0.2c-pre-1a：依 key_scheme 分支算 uploaded/verified manifest key（write-once 兩 distinct key）
+  const keyScheme = Number(blocker.key_scheme ?? KEY_SCHEME_LEGACY)
+  const dataKey = deriveDataKey(blocker)
+  const uploadedManifestKey = deriveManifestKey(blocker, keyScheme === KEY_SCHEME_WRITE_ONCE ? 'uploaded' : undefined)
+  const verifiedManifestKey = deriveManifestKey(blocker, keyScheme === KEY_SCHEME_WRITE_ONCE ? 'verified' : undefined)
   const obj = await bucket.get(dataKey)
   if (!obj) {
     return failChunkMismatch(ctx, 'verification_failed', {
@@ -507,12 +656,19 @@ async function handleUploadedBlocker(ctx) {
   }
 
   // 升 verified
-  const verifiedManifest = await loadAndAppend(bucket, manifestKey, 'verified')
-  await archivePut(ctx, 'manifest',
-    { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id },
-    manifestKey, JSON.stringify(verifiedManifest, null, 2),
+  const verifiedManifest = await loadAndAppend(bucket, uploadedManifestKey, 'verified')
+  const chunkInfo = { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id }
+  const { skipped: verifiedSkipped } = await putManifestLockSafe(
+    ctx, 'manifest', chunkInfo, verifiedManifestKey,
+    JSON.stringify(verifiedManifest, null, 2),
     { httpMetadata: { contentType: 'application/json' } },
+    keyScheme,
   )
+
+  // PR 0.2c-pre-1a：bookkeep + emit manifest_written 'verified'（archive_state 仍是
+  // pre-transition 的 'uploaded'，下方 state UPDATE 才升 verified）
+  await updateLastManifestState(db, blocker, 'verified')
+  await emitManifestWritten(ctx, blocker, 'verified', keyScheme, verifiedManifestKey, verifiedSkipped)
 
   await db.prepare(
     `UPDATE audit_archive_chunks
@@ -527,6 +683,8 @@ async function handleUploadedBlocker(ctx) {
   // §「chunk_uploaded 語意」。歷史註記：prod audit_log id=924 是 PR 2.0 / 2.1a 舊
   // 語意（upload 就 emit、沒驗 R2 sha 對齊就先發），forensic 比對時要意識到 924
   // 以前的事件不保證 chunk 已 verified。PR 2.1d 起一律先 verified 才發。
+  // PR 0.2c-pre-1a：manifest_key 對 key_scheme=2 改帶 verified state's key（最近一態）；
+  // legacy 仍是單 manifest key。
   await safeUserAudit(ctx.env, {
     event_type: 'audit.archive.chunk_uploaded',
     severity:   'info',
@@ -537,7 +695,7 @@ async function handleUploadedBlocker(ctx) {
       table:         tableName,
       cold_class:    coldClass,
       chunk_key:     dataKey,
-      manifest_key:  manifestKey,
+      manifest_key:  verifiedManifestKey,
       row_count:     blocker.row_count,
       min_id:        blocker.min_id,
       max_id:        blocker.max_id,
@@ -616,13 +774,22 @@ async function handleVerifiedBlocker(ctx) {
   if (!succeeded) return
 
   // 升 marked_archived：寫 manifest + chunks UPDATE（含 marked_archived_at / purge_after = +7d）
-  const { manifestKey } = deriveKeysFromChunk(blocker)
-  const markedManifest = await loadAndAppend(bucket, manifestKey, 'marked_archived')
-  await archivePut(ctx, 'manifest',
-    { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id },
-    manifestKey, JSON.stringify(markedManifest, null, 2),
+  // PR 0.2c-pre-1a：依 key_scheme 算 verified（讀）/ marked_archived（寫）兩 key
+  const keyScheme = Number(blocker.key_scheme ?? KEY_SCHEME_LEGACY)
+  const verifiedManifestKey       = deriveManifestKey(blocker, keyScheme === KEY_SCHEME_WRITE_ONCE ? 'verified'        : undefined)
+  const markedArchivedManifestKey = deriveManifestKey(blocker, keyScheme === KEY_SCHEME_WRITE_ONCE ? 'marked_archived' : undefined)
+  const markedManifest = await loadAndAppend(bucket, verifiedManifestKey, 'marked_archived')
+  const chunkInfo = { dryRun: chunkDryRun, minId: blocker.min_id, maxId: blocker.max_id }
+  const { skipped: markedSkipped } = await putManifestLockSafe(
+    ctx, 'manifest', chunkInfo, markedArchivedManifestKey,
+    JSON.stringify(markedManifest, null, 2),
     { httpMetadata: { contentType: 'application/json' } },
+    keyScheme,
   )
+
+  // PR 0.2c-pre-1a：bookkeep + emit manifest_written 'marked_archived'
+  await updateLastManifestState(db, blocker, 'marked_archived')
+  await emitManifestWritten(ctx, blocker, 'marked_archived', keyScheme, markedArchivedManifestKey, markedSkipped)
 
   await db.prepare(
     `UPDATE audit_archive_chunks
@@ -642,7 +809,7 @@ async function handleVerifiedBlocker(ctx) {
     severity:   'info',
     data: {
       run_id: ctx.runId, dry_run: chunkDryRun, env: envName, table: tableName, cold_class: coldClass,
-      manifest_key: manifestKey, row_count: blocker.row_count,
+      manifest_key: markedArchivedManifestKey, row_count: blocker.row_count,
       min_id: blocker.min_id, max_id: blocker.max_id,
       path,
     },
@@ -650,6 +817,11 @@ async function handleVerifiedBlocker(ctx) {
 }
 
 // ── 沒 blocker：撈新範圍 + planned→uploaded 一氣呵成（PR 2.0 既有路徑）─────
+//
+// PR 0.2c-pre-1a：新 chunk 一律 key_scheme=2（write-once）— planned manifest 寫
+// .planned.json、uploaded manifest 寫 .uploaded.json、data 寫 dataKey；每把 R2
+// key 都走 putManifestLockSafe / putDataLockSafe，prior crash 留下的 key 走
+// HEAD 預檢 + skip。chunks INSERT 帶 key_scheme=2 + last_manifest_state='planned'。
 async function runFreshChunkPipeline(ctx) {
   const { env, envName, tableName, coldClass, dryRun, runId, db, report, cursor } = ctx
 
@@ -659,12 +831,23 @@ async function runFreshChunkPipeline(ctx) {
     ? `AND created_at < datetime('now', '-${hotDays} days')`
     : ''
 
+  // PR 0.2c-pre-1a：candidates 過濾掉 `audit.archive.%` 自身 emit 事件 — archive
+  // worker 在跑時會 emit manifest_written / chunk_uploaded / marked_archived /
+  // upload_failed / r2_lock_detected 等 audit_log row（落 telemetry / immutable cold
+  // class），同輪 round-robin 跑到對應 class 時會把它們撈進新 chunk → rows_uploaded
+  // 內涵汙染 + cross-class budget 噬掉。
+  //
+  // Trade-off：這些 archive-internal events 在 1a 階段不會進 R2 冷存，會留在 D1
+  // audit_log 內累積。對 low-volume 站短期可承受；長期由 aggregate worker 或專屬的
+  // archive-meta 路徑收尾（未列入 1a，PR 0.2c-pre-1c / aggregate 寫 write-once
+  // 一起處理）。Memory：feedback_audit_self_recursion_skip。
   const candidatesRes = await db.prepare(
     `SELECT id, event_type, severity, user_id, client_id, ip_hash, event_data, cold_class, created_at
        FROM audit_log
       WHERE id > ?
         AND cold_class = ?
         AND archived_at IS NULL
+        AND event_type NOT LIKE 'audit.archive.%'
         ${retentionPredicate}
       ORDER BY id ASC
       LIMIT ?`
@@ -735,9 +918,17 @@ async function runFreshChunkPipeline(ctx) {
   const gzBody      = await gzipCompress(jsonl)
   const sha256Gz    = await sha256Hex(gzBody)
 
-  const { dataKey, manifestKey } = buildChunkKeys({
+  // PR 0.2c-pre-1a：新 chunk 一律 key_scheme=2（write-once）
+  const keyScheme = KEY_SCHEME_WRITE_ONCE
+  const { dataKey, manifestKey: plannedManifestKey } = buildChunkKeys({
     env: envName, tableName, coldClass,
     minId, maxId, sha256: sha, archiveDate, dryRun, compression,
+    keyScheme, manifestState: 'planned',
+  })
+  const { manifestKey: uploadedManifestKey } = buildChunkKeys({
+    env: envName, tableName, coldClass,
+    minId, maxId, sha256: sha, archiveDate, dryRun, compression,
+    keyScheme, manifestState: 'uploaded',
   })
 
   // PR 2.1d（codex F-2）：manifest 帶 severities reduce 統計
@@ -758,29 +949,55 @@ async function runFreshChunkPipeline(ctx) {
   // PR 2.2a codex r1：跨過所有 fail-fast skip 後，下面就要寫 R2 + D1 — 標記 quota 消耗。
   report.attempted_write = true
 
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey, JSON.stringify(plannedManifest, null, 2), {
-    httpMetadata: { contentType: 'application/json' },
-  })
+  // PR 0.2c-pre-1a：planned manifest 走 lock-safe PUT（HEAD 預檢；prior crash
+  // 留 .planned.json 走 skip 路徑）— 此時 chunks row 尚未 INSERT，emit 延後到
+  // INSERT 之後（行下方 syntheticChunkForEmit）。
+  const { skipped: plannedSkipped } = await putManifestLockSafe(
+    ctx, 'manifest', chunkInfo, plannedManifestKey,
+    JSON.stringify(plannedManifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } },
+    keyScheme,
+  )
 
+  // INSERT chunks row（key_scheme=2 + last_manifest_state='planned'）
   await db.prepare(
     `INSERT OR IGNORE INTO audit_archive_chunks
       (env, table_name, cold_class, cold_class_version, archive_date,
-       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run, compression)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?, ?, ?)`
+       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id,
+       dry_run, compression, key_scheme, last_manifest_state)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?, ?, ?, ?, 'planned')`
   ).bind(envName, tableName, coldClass, COLD_CLASS_VERSION, archiveDate,
-         minId, maxId, sha, rows.length, runId, dryRun ? 1 : 0, compression).run()
+         minId, maxId, sha, rows.length, runId, dryRun ? 1 : 0, compression, keyScheme).run()
 
   report.chunks_planned = 1
 
-  // PUT data → 升 uploaded（gzip body + contentEncoding=gzip）
-  await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+  // PR 0.2c-pre-1a：INSERT 完才能 emit（chunk_id / archive_state 對齊 chunks row）；
+  // emit helper 讀的 chunkRow 用合成物件帶必要欄位即可 — 不必再 SELECT 一次。
+  const chunkRowForEmit = {
+    env: envName, table_name: tableName, cold_class: coldClass, archive_date: archiveDate,
+    min_id: minId, max_id: maxId, chunk_sha256: sha,
+    state: 'planned',
+    dry_run: dryRun ? 1 : 0,
+  }
+  await emitManifestWritten(ctx, chunkRowForEmit, 'planned', keyScheme, plannedManifestKey, plannedSkipped)
+
+  // PUT data → 升 uploaded（gzip body + contentEncoding=gzip；lock-safe HEAD 預檢）
+  await putDataLockSafe(ctx, 'data', chunkInfo, dataKey, gzBody, {
     httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
-  })
+  }, keyScheme)
 
   const uploadedManifest = appendStateHistory(plannedManifest, 'uploaded', new Date().toISOString())
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey, JSON.stringify(uploadedManifest, null, 2), {
-    httpMetadata: { contentType: 'application/json' },
-  })
+  const { skipped: uploadedSkipped } = await putManifestLockSafe(
+    ctx, 'manifest', chunkInfo, uploadedManifestKey,
+    JSON.stringify(uploadedManifest, null, 2),
+    { httpMetadata: { contentType: 'application/json' } },
+    keyScheme,
+  )
+
+  // PR 0.2c-pre-1a：bookkeep last_manifest_state='uploaded' + emit manifest_written
+  //    archive_state 仍是 pre-transition 的 'planned'（state UPDATE 在下面才升 uploaded）
+  await updateLastManifestState(db, chunkRowForEmit, 'uploaded')
+  await emitManifestWritten(ctx, chunkRowForEmit, 'uploaded', keyScheme, uploadedManifestKey, uploadedSkipped)
 
   await db.prepare(
     `UPDATE audit_archive_chunks

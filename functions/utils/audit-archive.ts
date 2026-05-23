@@ -119,6 +119,52 @@ export const NON_TERMINAL_STATES = new Set([
   'failed',  'blacklisted',
 ])
 
+// ── PR 0.2c-pre-1a：write-once R2 manifest key（lock-compat refactor）─────────
+//
+// 背景：PR 0.2c R2 retention lock 上線後，R2 同 key 不再可覆寫（lock 同時擋
+// DELETE 與同 key PUT）。legacy 單 manifest key 路徑下，cron worker 對單一
+// chunk 生命週期把同一個 manifest key PUT 3-4 次（planned → uploaded →
+// verified → marked_archived），lock 後第 2 次起整條 pipeline 卡住。
+//
+// 修法：每個 state 寫到自己的 manifest key（永遠 first PUT）。
+//
+//   key_scheme=1（legacy）：{tail}.json 單 key — 保留處理 PR 2.0 既有 dry-run
+//                          telemetry chunk（在 dryrun prefix 不受 lock 影響）
+//   key_scheme=2（write-once）：{tail}.planned.json / .uploaded.json /
+//                              .verified.json / .marked_archived.json
+//
+// 跨層 state 字串一致原則：DB chunks.state / R2 manifest key suffix / audit
+// event payload 全用同一字串（marked_archived 不縮 marked）；見
+// feedback_state_machine_naming_no_alias。
+export const KEY_SCHEME_LEGACY     = 1 as const
+export const KEY_SCHEME_WRITE_ONCE = 2 as const
+export type KeyScheme = typeof KEY_SCHEME_LEGACY | typeof KEY_SCHEME_WRITE_ONCE
+
+// 4 個有 manifest 寫入動作的 state（chunks.state 同名）。
+// purged / cold_copied / failed / blacklisted 不寫新 manifest，不在此 list。
+export const MANIFEST_STATE_FILES = Object.freeze([
+  'planned',
+  'uploaded',
+  'verified',
+  'marked_archived',
+])
+export type ManifestStateFile = (typeof MANIFEST_STATE_FILES)[number]
+
+// key_scheme=2 chunk 對 ManifestStateFile 算副檔名；keyScheme=1 走單 .json。
+// keyScheme=2 必帶 manifestState — 否則 caller 用法不對，throw 立即暴露。
+function manifestSuffix(manifestState: ManifestStateFile | undefined, keyScheme: number): string {
+  if (keyScheme === KEY_SCHEME_WRITE_ONCE) {
+    if (!manifestState) {
+      throw new Error(`audit-archive: manifestState required when keyScheme=${KEY_SCHEME_WRITE_ONCE}`)
+    }
+    if (!MANIFEST_STATE_FILES.includes(manifestState)) {
+      throw new Error(`audit-archive: unknown manifestState '${manifestState}'`)
+    }
+    return `.${manifestState}.json`
+  }
+  return '.json'
+}
+
 /**
  * 算 cursor — design doc §「Cursor 定義」/「簡化規則」
  *
@@ -230,30 +276,87 @@ export function archivePrefixes(dryRun) {
 }
 
 /**
- * 算 chunk key + manifest key（design doc §「Key 命名」）。
+ * 算 chunk data key + manifest key（design doc §「Key 命名」）。
  *
  * 格式：
  *   {data-prefix}/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}{ext}
- *   {manifest-prefix}/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}.json
+ *   {manifest-prefix}/{env}/{table}/{cold_class}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}{manifestSuffix}
  *
- * PR 2.1b：副檔名依 compression 分支 — 'gzip' → '.jsonl.gz'、'none' → '.jsonl'。
- * compression 預設 'gzip'（PR 2.1b 起新 chunk 預設值）；recovery 路徑由
- * deriveKeysFromChunk 從 row.compression 反推，確保 PR 2.0 既有 .jsonl chunk
- * 仍走原路徑。chunk_sha256 仍是 decompressed jsonl 的 sha（data identity）。
+ * PR 2.1b：data 副檔名依 compression 分支 — 'gzip' → '.jsonl.gz'、'none' → '.jsonl'。
+ *
+ * PR 0.2c-pre-1a：manifest 副檔名依 keyScheme 分支：
+ *   - keyScheme=1（legacy）：'.json' 單 key（caller 不必傳 manifestState）
+ *   - keyScheme=2（write-once）：'.{manifestState}.json'，每 state 寫到自己的 key
+ *     （manifestState 必填，throw on missing；見 manifestSuffix() 的 invariant）
+ *
+ * compression 預設 'gzip'（PR 2.1b 起新 chunk 預設值）；keyScheme 預設 LEGACY 保持
+ * 既有 caller 行為不變。recovery 路徑由 deriveKeysFromChunk 從 row.compression /
+ * row.key_scheme 反推，確保 PR 2.0 既有 chunk + PR 1a 之後的 write-once chunk 都對。
+ *
+ * chunk_sha256 仍是 decompressed jsonl 的 sha（data identity），與 manifestState
+ * 無關 — data key 寫一次，manifest key 才依 state 分支。
  *
  * @param {object} opts
  * @returns {{ dataKey: string, manifestKey: string, archiveDate: string }}
  */
-export function buildChunkKeys({ env, tableName, coldClass, minId, maxId, sha256, archiveDate, dryRun, compression = 'gzip' }) {
+export function buildChunkKeys({
+  env, tableName, coldClass, minId, maxId, sha256, archiveDate, dryRun,
+  compression = 'gzip',
+  keyScheme = KEY_SCHEME_LEGACY,
+  manifestState,
+}: {
+  env: string, tableName: string, coldClass: string,
+  minId: number, maxId: number, sha256: string, archiveDate: string, dryRun: boolean,
+  compression?: string,
+  keyScheme?: number,
+  manifestState?: ManifestStateFile,
+}) {
   const [yyyy, mm, dd] = archiveDate.split('-')
   const tail = `${minId}-${maxId}-${sha256}`
   const { data, manifest } = archivePrefixes(dryRun)
   const ext = archiveExtension(compression)
   return {
     dataKey:     `${data}/${env}/${tableName}/${coldClass}/${yyyy}/${mm}/${dd}/${tail}${ext}`,
-    manifestKey: `${manifest}/${env}/${tableName}/${coldClass}/${yyyy}/${mm}/${dd}/${tail}.json`,
+    manifestKey: `${manifest}/${env}/${tableName}/${coldClass}/${yyyy}/${mm}/${dd}/${tail}${manifestSuffix(manifestState, keyScheme)}`,
     archiveDate,
   }
+}
+
+/**
+ * 從 chunks row 算 data key — 與 manifestState 無關，per chunk 固定 1 key。
+ * PR 0.2c-pre-1a 抽出當獨立 helper：handler 在「需要 dataKey 但不確定要哪個
+ * manifestState」的場景（如 R2 HEAD pre-check 過 data 是否已寫）不必同時帶
+ * manifestState 進 deriveKeysFromChunk。
+ */
+export function deriveDataKey(row): string {
+  const dryRun = row.dry_run === 1 || row.dry_run === true
+  const compression = row.compression ?? 'none'
+  const { data } = archivePrefixes(dryRun)
+  const ext = archiveExtension(compression)
+  const [yyyy, mm, dd] = String(row.archive_date).split('-')
+  const tail = `${row.min_id}-${row.max_id}-${row.chunk_sha256}`
+  return `${data}/${row.env}/${row.table_name}/${row.cold_class}/${yyyy}/${mm}/${dd}/${tail}${ext}`
+}
+
+/**
+ * 從 chunks row 算 manifest key（state-aware）。
+ *
+ * - keyScheme=1（row.key_scheme=1 或缺欄）：回 legacy 單 .json key，manifestState 忽略
+ * - keyScheme=2：必帶 manifestState；回 .{state}.json
+ *
+ * 不在這裡偷帶 fallback state，否則 caller 用法不對會 silent 寫去錯 key。
+ */
+export function deriveManifestKey(row, manifestState?: ManifestStateFile): string {
+  const dryRun = row.dry_run === 1 || row.dry_run === true
+  const keyScheme = Number(row.key_scheme ?? KEY_SCHEME_LEGACY)
+  const { manifest } = archivePrefixes(dryRun)
+  const [yyyy, mm, dd] = String(row.archive_date).split('-')
+  const tail = `${row.min_id}-${row.max_id}-${row.chunk_sha256}`
+  const suffix = manifestSuffix(
+    keyScheme === KEY_SCHEME_WRITE_ONCE ? manifestState : undefined,
+    keyScheme,
+  )
+  return `${manifest}/${row.env}/${row.table_name}/${row.cold_class}/${yyyy}/${mm}/${dd}/${tail}${suffix}`
 }
 
 /**
@@ -266,10 +369,15 @@ export function buildChunkKeys({ env, tableName, coldClass, minId, maxId, sha256
  * PR 2.1b：compression 同邏輯由 row 自己帶（migration 0041 DEFAULT 'none'）→
  * PR 2.0 既有 .jsonl chunk 與 PR 2.1b 後 .jsonl.gz chunk 都能對到正確 key。
  *
+ * PR 0.2c-pre-1a：key_scheme 同邏輯由 row 自帶（migration 0046 DEFAULT 1）；
+ * opts.manifestState 給 key_scheme=2 用，key_scheme=1 會被忽略；key_scheme=2
+ * 且 manifestState 缺 → manifestSuffix() throw。
+ *
  * row 必須含：env, table_name, cold_class, archive_date, min_id, max_id,
- * chunk_sha256, dry_run（0039）、compression（0041）。
+ * chunk_sha256, dry_run（0039）、compression（0041）、key_scheme（0046）。
  */
-export function deriveKeysFromChunk(row) {
+export function deriveKeysFromChunk(row, opts: { manifestState?: ManifestStateFile } = {}) {
+  const keyScheme = Number(row.key_scheme ?? KEY_SCHEME_LEGACY)
   return buildChunkKeys({
     env:         row.env,
     tableName:   row.table_name,
@@ -280,6 +388,8 @@ export function deriveKeysFromChunk(row) {
     archiveDate: row.archive_date,
     dryRun:      row.dry_run === 1 || row.dry_run === true,
     compression: row.compression ?? 'none',
+    keyScheme,
+    manifestState: keyScheme === KEY_SCHEME_WRITE_ONCE ? opts.manifestState : undefined,
   })
 }
 
@@ -354,6 +464,46 @@ export function aggregateSeverities(rows) {
 export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
 
 /**
+ * PR 0.2c-pre-1a：保守 R2 lock-error detector。
+ *
+ * 用途：putWithRetry 命中 lock error 時必須**不 retry**（lock 是永久性，retry
+ * 浪費 21s wallclock + 多刷一輪 upload_failed audit event），並由呼叫端 emit
+ * audit.archive.r2_lock_detected critical。**不可把 error 視為成功** — 仍 throw
+ * 讓 chunk 進 failed state，admin 用 retry endpoint 介入。
+ *
+ * 判定：HTTP status ∈ {409 Conflict, 412 Precondition Failed} **且** error 的
+ * message / code / name 任一含 lock-related marker（lock / locked / retention /
+ * immutable / objectlocked / object locked）。兩條件**並存**才認為 lock；單獨
+ * status 4xx 或單獨 lock 字串都不算（避免污染告警語義）。
+ *
+ * 為何保守：1a 不依賴 preview fixture 凍結真實 R2 SDK error shape；1b 再用
+ * preview lock 灌錯誤、freeze shape、tighten classifier（含可能加入新 status
+ * 或 code 字符）。保守 detector 在 1a 階段最多漏判（不擋 lock → 走原 retry
+ * 路徑、最後仍以 critical upload_failed throw），不會誤判（把非 lock 錯誤當
+ * 成 lock 而提前止損 retry）。
+ *
+ * 相關 memory：feedback_r2_lock_overwrite_design（isR2LockError 不可猜，preview
+ * fixture 凍結）。
+ */
+export function isR2LockError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const err = e as Record<string, unknown>
+
+  // HTTP status — 必為 409 / 412
+  const rawStatus = err.status ?? err.httpStatus ?? err.statusCode
+  const status = Number(rawStatus)
+  if (status !== 409 && status !== 412) return false
+
+  // message / code / name 任一含 lock-related marker
+  const marker = /(?:lock|locked|retention|immutable|objectlocked|object\s*locked)/i
+  for (const k of ['message', 'code', 'name'] as const) {
+    const v = err[k]
+    if (typeof v === 'string' && marker.test(v)) return true
+  }
+  return false
+}
+
+/**
  * 包 bucket.put 加 exponential backoff retry。
  *
  * 每次 attempt 失敗會呼叫 onAttemptFailed callback；呼叫端（cron handler）
@@ -361,10 +511,16 @@ export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
  *   - willRetry=true  → severity='warn'
  *   - willRetry=false → severity='critical'（已是最後一次 attempt）
  *
+ * PR 0.2c-pre-1a：opts.isLockError 注入（預設 isR2LockError）。命中 lock：
+ *   - willRetry 立即降 false（不 retry、不 sleep、立刻 throw）
+ *   - callback info 帶 lockDetected=true 給呼叫端額外 emit r2_lock_detected critical
+ *   - 仍 throw lastError，不吞錯（feedback_stepup_atomic_consume 的「不可 fail-open」原則）
+ *
  * 為了單元測試可注入：
  *   - opts.backoffMs：覆寫 backoff schedule（預設 [1000, 4000, 16000]）
  *   - opts.sleep   ：覆寫 sleep 函式（預設 setTimeout）
  *   - opts.onAttemptFailed：失敗時 callback（async OK）
+ *   - opts.isLockError：覆寫 lock 偵測器（預設 isR2LockError；測試可注入 stub）
  *
  * 三次 backoff（1s/4s/16s）= 4 次 attempt 機會 = 累計最多 21s wait。Pages Functions
  * wallclock 在 await 期間不算 CPU，不會撞 30s 上限。
@@ -372,11 +528,13 @@ export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
 export async function putWithRetry(bucket, key, body, putOpts, opts: {
   backoffMs?: number[],
   sleep?: (_ms: number) => Promise<void>,
-  onAttemptFailed?: (_info: { attempt: number; error: unknown; willRetry: boolean; nextDelayMs: number | null; key: string }) => void | Promise<void>,
+  onAttemptFailed?: (_info: { attempt: number; error: unknown; willRetry: boolean; nextDelayMs: number | null; key: string; lockDetected: boolean }) => void | Promise<void>,
+  isLockError?: (_e: unknown) => boolean,
 } = {}) {
   const backoff = opts.backoffMs ?? DEFAULT_PUT_RETRY_BACKOFF_MS
   const sleep = opts.sleep ?? (ms => new Promise(r => setTimeout(r, ms)))
   const onAttemptFailed = opts.onAttemptFailed
+  const isLock = opts.isLockError ?? isR2LockError
   const maxAttempts = backoff.length + 1
   let lastError
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -384,11 +542,13 @@ export async function putWithRetry(bucket, key, body, putOpts, opts: {
       return await bucket.put(key, body, putOpts) // archive-put-allow: putWithRetry 是唯一合法 bare bucket.put site（PR 2.2c r1 per-kind tag）
     } catch (e) {
       lastError = e
-      const willRetry = attempt < maxAttempts
+      // PR 0.2c-pre-1a：lock-error 不 retry — lock 是永久性，多等不會解除
+      const lockDetected = isLock(e)
+      const willRetry = !lockDetected && attempt < maxAttempts
       const nextDelayMs = willRetry ? backoff[attempt - 1] : null
       if (onAttemptFailed) {
         try {
-          await onAttemptFailed({ attempt, error: e, willRetry, nextDelayMs, key })
+          await onAttemptFailed({ attempt, error: e, willRetry, nextDelayMs, key, lockDetected })
         } catch (callbackErr) {
           console.error('[putWithRetry] onAttemptFailed callback threw:', callbackErr)
         }
@@ -463,11 +623,11 @@ export async function purgeChunk({ env, db, target }) {
   const bucket = env?.AUDIT_ARCHIVE_BUCKET
   if (!bucket) throw new Error('AUDIT_ARCHIVE_BUCKET binding missing')
 
-  // 1) 從 D1 撈 chunk row，取 dry_run / compression 反推 R2 key（與 retry.ts 的
-  //    target 不必含 dry_run / compression — 那是 server side schema 細節）
+  // 1) 從 D1 撈 chunk row，取 dry_run / compression / key_scheme 反推 R2 key（與
+  //    retry.ts 的 target 不必含這些欄位 — 那是 server side schema 細節）
   const row = await db.prepare(
     `SELECT env, table_name, cold_class, archive_date,
-            min_id, max_id, chunk_sha256, state, dry_run, compression
+            min_id, max_id, chunk_sha256, state, dry_run, compression, key_scheme
        FROM audit_archive_chunks
       WHERE env = ? AND table_name = ? AND cold_class = ?
         AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
@@ -488,13 +648,27 @@ export async function purgeChunk({ env, db, target }) {
     throw e
   }
 
-  const { dataKey, manifestKey } = deriveKeysFromChunk(row)
+  const dataKey = deriveDataKey(row)
+  const keyScheme = Number(row.key_scheme ?? KEY_SCHEME_LEGACY)
+
+  // PR 0.2c-pre-1a：依 key_scheme 決定要 DELETE 幾把 manifest key。
+  //   key_scheme=1（legacy）：單 .json
+  //   key_scheme=2（write-once）：4 把（.planned / .uploaded / .verified /
+  //                              .marked_archived .json）— 一律 best-effort DELETE
+  //                              （missing 為 no-op）
+  // primary manifest_key 回傳挑「最後一態」對齊舊行為直覺：legacy = .json，
+  // write-once = .marked_archived.json（若 chunk 走完整 pipeline 寫過）。
+  const manifestKeys: string[] = keyScheme === KEY_SCHEME_WRITE_ONCE
+    ? MANIFEST_STATE_FILES.map(s => deriveManifestKey(row, s as ManifestStateFile))
+    : [deriveManifestKey(row)]
 
   // 2) R2 chunk DELETE（missing-key 為 no-op，propagate 其他 SDK exception）
   //    waiver tag 必須同行（lint per-line scan，scripts/_archive-lint-patterns.js#isWaived）
   await bucket.delete(dataKey) // archive-delete-allow: PR 2.3 force_purge chunk object
-  // 3) R2 manifest DELETE
-  await bucket.delete(manifestKey) // archive-delete-allow: PR 2.3 force_purge manifest object
+  // 3) R2 manifest DELETE — write-once chunk 走 4 把 key 全刪
+  for (const mk of manifestKeys) {
+    await bucket.delete(mk) // archive-delete-allow: PR 2.3 force_purge manifest object
+  }
 
   // 4) D1 chunks row DELETE — 嚴格 state='blacklisted' 再驗一次（race 防禦：上面
   //    SELECT 後若有 worker 升態，這裡 changes=0 就 abort，不污染 cursor 狀態）
@@ -514,6 +688,9 @@ export async function purgeChunk({ env, db, target }) {
     chunks_row_deleted:  changes === 1,
     source_rows_deleted: false,
     data_key:            dataKey,
-    manifest_key:        manifestKey,
+    // primary manifest_key（key_scheme=2 → .marked_archived.json；legacy → .json）；
+    // 全集走 manifest_keys 給 admin / forensic
+    manifest_key:        manifestKeys[manifestKeys.length - 1],
+    manifest_keys:       manifestKeys,
   }
 }

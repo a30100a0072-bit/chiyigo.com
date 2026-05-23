@@ -867,3 +867,279 @@ describe('audit-archive cron — auth + binding 防線', () => {
     expect(r.status).toBe(500)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR 0.2c-pre-1a — write-once R2 manifest key + lock-aware refactor
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('audit-archive cron — PR 0.2c-pre-1a write-once R2 key', () => {
+  async function listManifestKeysSorted() {
+    const r = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })
+    return (r.objects ?? []).map(o => o.key).sort()
+  }
+  async function selectManifestWritten() {
+    const r = await env.chiyigo_db.prepare(
+      `SELECT id, severity, event_data FROM audit_log
+        WHERE event_type = 'audit.archive.manifest_written' ORDER BY id ASC`
+    ).all()
+    return r.results ?? []
+  }
+
+  it('Fresh chunk：寫 2 個 distinct manifest key（.planned + .uploaded）+ chunks.key_scheme=2 + last_manifest_state=uploaded', async () => {
+    await seedTelemetry(2)
+    await runCron()  // → uploaded
+
+    // R2 應該有 2 個 distinct manifest key（.planned.json + .uploaded.json），不是同 key 被覆寫
+    const keys = await listManifestKeysSorted()
+    expect(keys.filter(k => k.endsWith('.planned.json'))).toHaveLength(1)
+    expect(keys.filter(k => k.endsWith('.uploaded.json'))).toHaveLength(1)
+    expect(keys).toHaveLength(2)
+    // 兩 key 共用 {tail} prefix（min-max-sha 一樣）
+    const planned = keys.find(k => k.endsWith('.planned.json'))!
+    const uploaded = keys.find(k => k.endsWith('.uploaded.json'))!
+    expect(planned.replace(/\.planned\.json$/, '')).toBe(uploaded.replace(/\.uploaded\.json$/, ''))
+
+    // chunks row 應該帶 key_scheme=2 + last_manifest_state='uploaded'
+    const [chunk] = await getChunk()
+    expect(chunk.key_scheme).toBe(2)
+    expect(chunk.last_manifest_state).toBe('uploaded')
+    expect(chunk.state).toBe('uploaded')
+
+    // 2 個 manifest_written info events（planned + uploaded）
+    const events = await selectManifestWritten()
+    expect(events).toHaveLength(2)
+    const states = events.map(e => JSON.parse(e.event_data).manifest_state)
+    expect(states).toEqual(['planned', 'uploaded'])
+    for (const ev of events) {
+      expect(ev.severity).toBe('info')
+      const data = JSON.parse(ev.event_data)
+      expect(data.key_scheme).toBe(2)
+      expect(data.skipped).toBe(false)
+      expect(data.manifest_key).toMatch(new RegExp(`\\.${data.manifest_state}\\.json$`))
+    }
+  })
+
+  it('Uploaded → verified：新增 .verified.json 第 3 把 key + last_manifest_state=verified + 1 manifest_written', async () => {
+    await seedTelemetry(2)
+    await runCron()                       // → uploaded
+    await runCron()                       // uploaded blocker → verified
+
+    const keys = await listManifestKeysSorted()
+    expect(keys).toHaveLength(3)  // planned + uploaded + verified
+    expect(keys.filter(k => k.endsWith('.verified.json'))).toHaveLength(1)
+
+    const [chunk] = await getChunk()
+    expect(chunk.last_manifest_state).toBe('verified')
+    expect(chunk.state).toBe('verified')
+
+    // 上一輪 2 個 + 這輪 1 個 = 3 個 manifest_written events
+    const events = await selectManifestWritten()
+    expect(events).toHaveLength(3)
+    expect(JSON.parse(events[2].event_data).manifest_state).toBe('verified')
+  })
+
+  it('Verified → marked_archived (live)：新增 .marked_archived.json 第 4 把 key + last_manifest_state=marked_archived', async () => {
+    await seedTelemetry(2)
+    await runCron()                       // → uploaded
+    await runCron()                       // → verified
+    const report = await runCron()        // verified → marked_archived (live)
+    expect(report.chunks_marked_archived).toBe(1)
+
+    const keys = await listManifestKeysSorted()
+    expect(keys).toHaveLength(4)  // planned + uploaded + verified + marked_archived
+    expect(keys.filter(k => k.endsWith('.marked_archived.json'))).toHaveLength(1)
+    // 不縮 marked — 跨層 state 名一致
+    expect(keys.filter(k => k.endsWith('.marked.json'))).toHaveLength(0)
+
+    const [chunk] = await getChunk()
+    expect(chunk.last_manifest_state).toBe('marked_archived')
+    expect(chunk.state).toBe('marked_archived')
+
+    // 4 個 manifest_written events 總計
+    const events = await selectManifestWritten()
+    expect(events).toHaveLength(4)
+    const states = events.map(e => JSON.parse(e.event_data).manifest_state)
+    expect(states).toEqual(['planned', 'uploaded', 'verified', 'marked_archived'])
+  })
+
+  it('handlePlannedBlocker key_scheme=2 + R2 已有 dataKey → HEAD 預檢 skip data PUT', async () => {
+    // 1) 第一輪：完整 fresh pipeline（key_scheme=2 chunk + data + 2 manifest）
+    await seedTelemetry(2)
+    await runCron()
+
+    // 2) 把 chunks.state 強行降回 'planned' + manifest_written 重置
+    //    （模擬 crash-after-data-PUT-before-D1-UPDATE 場景）
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_archive_chunks
+          SET state = 'planned', last_manifest_state = 'planned'`
+    ).run()
+    // 同時把 .uploaded.json 刪掉，模擬 prior crashed run 在 uploaded manifest PUT 前就掛了
+    const list1 = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })
+    for (const o of list1.objects ?? []) {
+      if (o.key.endsWith('.uploaded.json')) await env.AUDIT_ARCHIVE_BUCKET.delete(o.key)
+    }
+
+    // 3) spy bucket.put：用 stub 追蹤每次 put 對 key 的呼叫
+    const realBucket = env.AUDIT_ARCHIVE_BUCKET
+    const putKeys: string[] = []
+    const stub = {
+      get:    (...a) => realBucket.get(...a),
+      list:   (...a) => realBucket.list(...a),
+      delete: (...a) => realBucket.delete(...a),
+      head:   (...a) => realBucket.head(...a),
+      put:    (k, b, o) => { putKeys.push(k); return realBucket.put(k, b, o) },
+    }
+    const r2 = await cronArchive({
+      request: makeRequest(),
+      env: { ...makeEnv(), AUDIT_ARCHIVE_BUCKET: stub },
+    })
+    const report = await r2.json()
+    expect(report.ok).toBe(true)
+    expect(report.blocker_action).toBe('recovery_planned')
+
+    // 關鍵驗：dataKey（.jsonl.gz）不該再被 PUT — HEAD pre-check skip
+    const dataPuts = putKeys.filter(k => k.endsWith('.jsonl.gz'))
+    expect(dataPuts).toHaveLength(0)
+    // uploaded manifest 應被 PUT（之前已刪）
+    const uploadedPuts = putKeys.filter(k => k.endsWith('.uploaded.json'))
+    expect(uploadedPuts).toHaveLength(1)
+
+    // chunks.state 升 uploaded + last_manifest_state='uploaded'
+    const [chunk] = await getChunk()
+    expect(chunk.state).toBe('uploaded')
+    expect(chunk.last_manifest_state).toBe('uploaded')
+  })
+
+  it('Legacy key_scheme=1 chunk：仍走單一 manifest key 路徑（向下相容）', async () => {
+    // 種兩 row + 算 sha
+    await seedTelemetry(2)
+    const rowsRes = await env.chiyigo_db.prepare(
+      `SELECT id, event_type, severity, user_id, client_id, ip_hash, event_data, cold_class, created_at
+         FROM audit_log
+        WHERE event_type != 'audit.archive.manifest_written'
+        ORDER BY id ASC`
+    ).all()
+    const rows = rowsRes.results
+    const jsonl = rowsToJsonl(rows)
+    const sha = await sha256Hex(jsonl)
+    const minId = rows[0].id, maxId = rows[rows.length - 1].id
+    const archiveDate = '2026-05-11'
+
+    // 種一個 legacy chunk（key_scheme=1）+ legacy 單一 manifest key
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+        (env, table_name, cold_class, cold_class_version, archive_date,
+         min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id,
+         dry_run, compression, key_scheme)
+       VALUES (?, 'audit_log', 'telemetry', 1, ?, ?, ?, ?, 'planned', ?, 0, 'run-seed', 0, 'gzip', 1)`
+    ).bind(ARCHIVE_ENV, archiveDate, minId, maxId, sha, rows.length).run()
+
+    const { manifestKey: legacySingleKey } = buildChunkKeys({
+      env: ARCHIVE_ENV, tableName: 'audit_log', coldClass: 'telemetry',
+      minId, maxId, sha256: sha, archiveDate, dryRun: false, compression: 'gzip',
+      // 不帶 keyScheme/manifestState → 走 legacy 單 .json
+    })
+    expect(legacySingleKey.endsWith('.json')).toBe(true)
+    expect(legacySingleKey).not.toMatch(/\.(planned|uploaded|verified|marked_archived)\./)
+
+    // 種 legacy 單一 manifest 進 R2（planned state）
+    await env.AUDIT_ARCHIVE_BUCKET.put(legacySingleKey, JSON.stringify({
+      state: 'planned',
+      state_history: [{ state: 'planned', at: '2026-05-11T00:00:00Z' }],
+      compression: 'gzip',
+    }))
+
+    // 跑 cron → handlePlannedBlocker 走 legacy 路徑覆寫同一 key
+    const r = await runCron()
+    expect(r.ok).toBe(true)
+    expect(r.recovery).toBe('planned_to_uploaded')
+
+    // R2 manifest 仍只有 1 把 .json key（legacy 覆寫，不分 state suffix）
+    const list = await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })
+    const keys = (list.objects ?? []).map(o => o.key)
+    expect(keys.filter(k => k === legacySingleKey)).toHaveLength(1)
+    expect(keys.filter(k => k.endsWith('.uploaded.json'))).toHaveLength(0)
+
+    // 讀回該 key — manifest 應升 uploaded
+    const m = JSON.parse(await (await env.AUDIT_ARCHIVE_BUCKET.get(legacySingleKey)).text())
+    expect(m.state).toBe('uploaded')
+
+    // chunks last_manifest_state 仍會 bookkeeping 更新（legacy 也有 bookkeeping）
+    const [chunk] = await getChunk()
+    expect(chunk.state).toBe('uploaded')
+    expect(chunk.last_manifest_state).toBe('uploaded')
+    expect(chunk.key_scheme).toBe(1)
+  })
+
+  it('R2 lock 偵測：bucket.put throw lock-shape error → r2_lock_detected critical + chunk failed + 不 retry sleep', async () => {
+    await seedTelemetry(2)
+
+    // stub bucket：所有 put 都丟 lock-shape error（status=412 + message 含 "object locked"）
+    const realBucket = env.AUDIT_ARCHIVE_BUCKET
+    const putKeys: string[] = []
+    const stub = {
+      get:    (...a) => realBucket.get(...a),
+      list:   (...a) => realBucket.list(...a),
+      delete: (...a) => realBucket.delete(...a),
+      head:   (...a) => realBucket.head(...a),
+      put: async (k) => {
+        putKeys.push(k)
+        const e: Error & { status?: number; code?: string } = new Error('object locked by retention rule')
+        e.status = 412
+        e.code = 'ObjectLocked'
+        throw e
+      },
+    }
+
+    // 注意：不能用 AUDIT_ARCHIVE_PUT_RETRY_BACKOFF_MS=0,0,0 否則 backoff 雖然
+    // 設了還是會 sleep 0ms。改用「監控 sleep 呼叫」 — 用真實 backoff [1,2,3]ms，
+    // 然後驗 sleepCalls.length === 0（lock 不 retry，無 sleep）。
+    //
+    // 但 archivePut wrapper 在 cron handler 內走 ctx.putRetrySleep（undefined → utils 預設 setTimeout）。
+    // 想注入 sleep 觀測值，env 沒這層 hook — 改驗 r2_lock_detected count + chunk state 即可。
+
+    const r = await cronArchive({
+      request: makeRequest(),
+      env: {
+        ...makeEnv(),
+        AUDIT_ARCHIVE_BUCKET: stub,
+        AUDIT_ARCHIVE_PUT_RETRY_BACKOFF_MS: '0,0,0',
+      },
+    })
+    expect(r.status).toBe(500)
+    const report = await r.json()
+    expect(report.ok).toBe(false)
+
+    // 關鍵驗 1：lock 不 retry — bucket.put 只被呼叫 1 次（第一個 PUT 是 planned manifest）
+    // 既有 retry 路徑會在 1 次 attempt 失敗後重試 3 次（總 4 次 put）— lock 直接 throw 不 retry
+    expect(putKeys).toHaveLength(1)
+
+    // 關鍵驗 2：r2_lock_detected critical event 至少 1 筆
+    const lockEvents = await env.chiyigo_db.prepare(
+      `SELECT id, severity, event_data FROM audit_log
+        WHERE event_type = 'audit.archive.r2_lock_detected' ORDER BY id ASC`
+    ).all()
+    expect(lockEvents.results).toHaveLength(1)
+    expect(lockEvents.results![0].severity).toBe('critical')
+    const lockData = JSON.parse(lockEvents.results![0].event_data)
+    expect(lockData.status).toBe(412)
+    expect(lockData.code).toBe('ObjectLocked')
+    expect(lockData.attempt).toBe(1)
+    expect(lockData.operation).toBe('manifest')   // 第一個 PUT 是 planned manifest
+    // payload 不應含 stack 或敏感 body
+    expect(lockData.stack).toBeUndefined()
+    expect(lockData.body).toBeUndefined()
+
+    // 關鍵驗 3：upload_failed 也 emit（並存，不取代）— attempt=1 + final=true + lock_detected=true
+    const failedEvents = await env.chiyigo_db.prepare(
+      `SELECT id, severity, event_data FROM audit_log
+        WHERE event_type = 'audit.archive.upload_failed' ORDER BY id ASC`
+    ).all()
+    expect(failedEvents.results).toHaveLength(1)
+    expect(failedEvents.results![0].severity).toBe('critical')
+    const failedData = JSON.parse(failedEvents.results![0].event_data)
+    expect(failedData.final).toBe(true)
+    expect(failedData.lock_detected).toBe(true)
+    expect(failedData.attempt).toBe(1)
+  })
+})

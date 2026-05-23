@@ -79,6 +79,8 @@ import up0042 from '../../migrations/0042_payment_webhook_apply_status.sql?raw'
 import up0043 from '../../migrations/0043_payment_intents_soft_delete.sql?raw'
 import up0044 from '../../migrations/0044_audit_aggregate_archive_cols.sql?raw'
 import up0045 from '../../migrations/0045_admin_audit_unique_prev_hash.sql?raw'
+import up0046    from '../../migrations/0046_audit_archive_chunks_key_scheme.sql?raw'
+import down0046  from '../../migrations/down/0046_audit_archive_chunks_key_scheme.down.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -89,7 +91,7 @@ const ALL_UPS = [
   up0017, up0018, up0019, up0020, up0021, up0022, up0023, up0024,
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
-  up0041, up0042, up0043, up0044, up0045,
+  up0041, up0042, up0043, up0044, up0045, up0046,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -436,8 +438,8 @@ const EXPECTED_COLUMNS = {
   audit_log: ['archived_at', 'client_id', 'cold_class', 'created_at', 'event_data', 'event_type', 'id', 'ip_hash', 'severity', 'user_id'],
   // 0042 加 apply_status（Codex r1 P0-2 dedupe 三態）；其餘欄位來自 0025_payment_intents.sql
   payment_webhook_events: ['apply_status', 'event_id', 'id', 'intent_id', 'payload_hash', 'processed_at', 'status_to', 'user_id', 'vendor'],
-  // 0041 加 compression（zstd→gzip pivot）
-  audit_archive_chunks: ['archive_date', 'blacklisted_at', 'chunk_sha256', 'cold_class', 'cold_class_version', 'cold_copied_at', 'compression', 'created_at', 'dry_run', 'env', 'last_failure', 'last_failure_at', 'marked_archived_at', 'max_id', 'min_id', 'next_reminder_at', 'purge_after', 'retry_count', 'row_count', 'run_id', 'state', 'table_name', 'updated_at'],
+  // 0041 加 compression（zstd→gzip pivot）；0046 加 key_scheme + last_manifest_state（PR 0.2c-pre-1a write-once）
+  audit_archive_chunks: ['archive_date', 'blacklisted_at', 'chunk_sha256', 'cold_class', 'cold_class_version', 'cold_copied_at', 'compression', 'created_at', 'dry_run', 'env', 'key_scheme', 'last_failure', 'last_failure_at', 'last_manifest_state', 'marked_archived_at', 'max_id', 'min_id', 'next_reminder_at', 'purge_after', 'retry_count', 'row_count', 'run_id', 'state', 'table_name', 'updated_at'],
 }
 
 // 對齊後（0040 exact-parity）的 requisition 索引
@@ -644,6 +646,56 @@ describe('migrations smoke 0044 targeted (aggregate→R2 schema)', () => {
     } catch { threw = true }
     expect(threw).toBe(true)
   })
+
+  // PR 0.2c-pre-1a migration 0046 round-trip — 借用既有 0044 targeted beforeAll
+  //   的 post-ALL_UPS 狀態（state 已含 0046）；測 down → 兩欄拆掉 → 再 up → 兩欄回來。
+  //   合併進 0044 targeted describe 而不獨立新 describe 是為了避免再多一輪
+  //   dropAllTables — 加劇 user-audit / payments-ecpay / register integration
+  //   test 共用 D1 instance 的 FK race（singleWorker pool）。
+  it('0046 key_scheme + last_manifest_state 兩欄存在 + DEFAULT 行為對', async () => {
+    expect(await columnExists('audit_archive_chunks', 'key_scheme')).toBe(true)
+    expect(await columnExists('audit_archive_chunks', 'last_manifest_state')).toBe(true)
+    // 種一筆不顯式帶兩欄的 row — 確認 DEFAULT 1 + NULL 對齊 PR 0.2c-pre-1a 設計
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+         (env, table_name, cold_class, archive_date, min_id, max_id,
+          chunk_sha256, state, row_count, run_id)
+       VALUES ('test-0046', 'audit_log', 'telemetry', '2026-05-23', 100, 110, 'sha-default-0046', 'planned', 11, 'run-default')`,
+    ).run()
+    const row = await env.chiyigo_db.prepare(
+      `SELECT key_scheme, last_manifest_state FROM audit_archive_chunks WHERE chunk_sha256 = 'sha-default-0046'`,
+    ).first()
+    expect(row.key_scheme).toBe(1)
+    expect(row.last_manifest_state).toBeNull()
+  })
+
+  it('0046 顯式 INSERT key_scheme=2 + last_manifest_state 持久化', async () => {
+    await env.chiyigo_db.prepare(
+      `INSERT INTO audit_archive_chunks
+         (env, table_name, cold_class, archive_date, min_id, max_id,
+          chunk_sha256, state, row_count, run_id, key_scheme, last_manifest_state)
+       VALUES ('test-0046', 'audit_log', 'telemetry', '2026-05-23', 200, 210, 'sha-explicit-0046', 'uploaded', 11, 'run-explicit', 2, 'uploaded')`,
+    ).run()
+    const row = await env.chiyigo_db.prepare(
+      `SELECT key_scheme, last_manifest_state FROM audit_archive_chunks WHERE chunk_sha256 = 'sha-explicit-0046'`,
+    ).first()
+    expect(row.key_scheme).toBe(2)
+    expect(row.last_manifest_state).toBe('uploaded')
+  })
+
+  it('0046 down 拆兩欄 → 再 up 兩欄回來（forward idempotent；ALTER DROP COLUMN 不撞 partial index）', async () => {
+    await execAll(down0046)
+    expect(await columnExists('audit_archive_chunks', 'last_manifest_state')).toBe(false)
+    expect(await columnExists('audit_archive_chunks', 'key_scheme')).toBe(false)
+    // 表 + 其他欄 留著
+    expect(await tableExists('audit_archive_chunks')).toBe(true)
+    expect(await columnExists('audit_archive_chunks', 'dry_run')).toBe(true)
+    expect(await columnExists('audit_archive_chunks', 'compression')).toBe(true)
+
+    await execAll(up0046)
+    expect(await columnExists('audit_archive_chunks', 'key_scheme')).toBe(true)
+    expect(await columnExists('audit_archive_chunks', 'last_manifest_state')).toBe(true)
+  })
 })
 
 describe('migrations smoke 0038 targeted (audit_log Phase 2)', () => {
@@ -802,4 +854,5 @@ describe('migrations smoke 0038 targeted (audit_log Phase 2)', () => {
     expect(await columnExists('audit_log', 'cold_class')).toBe(true)
   })
 })
+
 

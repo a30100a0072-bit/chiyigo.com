@@ -226,6 +226,8 @@ CREATE TABLE IF NOT EXISTS audit_archive_chunks (
   run_id             TEXT    NOT NULL,
   dry_run            INTEGER NOT NULL DEFAULT 0,   -- PR 2.1c migration 0039：provenance
   compression        TEXT    NOT NULL DEFAULT 'none', -- PR 2.1b migration 0041：'gzip'|'none'
+  key_scheme         INTEGER NOT NULL DEFAULT 1,   -- PR 0.2c-pre-1a migration 0046：1=legacy single manifest key / 2=write-once state-suffixed
+  last_manifest_state TEXT,                         -- PR 0.2c-pre-1a migration 0046：observability bookkeeping（非 correctness source）
   created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at         TEXT    NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (env, table_name, cold_class, archive_date, min_id, max_id, chunk_sha256)

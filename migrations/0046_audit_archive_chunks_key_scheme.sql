@@ -1,0 +1,33 @@
+-- Migration 0046: F-3 Phase 2 PR 0.2c-pre-1a — audit_archive_chunks 加 key_scheme + last_manifest_state
+--
+-- 背景：PR 0.2c R2 retention lock 上線後，R2 同 key 不再可覆寫（lock 同時擋 DELETE 與
+-- 同 key PUT）。但目前 cron worker 對單一 chunk 生命週期會把同一個 manifest key PUT
+-- 3-4 次（planned → uploaded → verified → marked_archived），lock 後第 2 次起整條
+-- pipeline 卡住。
+--
+-- 修法：write-once key — 每個 manifest state 寫到自己的 key。
+--   key_scheme=1（legacy 單 manifest key）：{tail}.json（保留處理 PR 2.0 既有 dry-run
+--                                          telemetry chunk；那 1 row 在 dryrun prefix
+--                                          不受 lock 影響）
+--   key_scheme=2（write-once）：{tail}.planned.json / .uploaded.json / .verified.json /
+--                              .marked_archived.json — 每 state 一 key，永遠 first PUT
+--
+-- 為什麼欄位名 last_manifest_state 而不是 manifest_state：避免讀者以為這是 chunk 自己
+-- 的權威 state（chunks.state 才是）。last_manifest_state 是 observability/bookkeeping
+-- 欄位：「最近一次 R2 manifest PUT 成功時，那份 manifest 標的 state 是什麼」。
+-- crash recovery 仍以 chunks.state + R2 object existence 為準（key_scheme=2 走 R2
+-- HEAD 預檢 data key 是否已寫；不靠這欄推斷上次寫到哪），避免「manifest PUT 成功但
+-- D1 UPDATE 失敗」造成誤判。
+--
+-- DEFAULT 1 對齊 PR 2.0 既有行為：prod 既有 dry-run uploaded → verified telemetry
+-- chunk（row 8-922）DEFAULT key_scheme=1 走 legacy single-key 路徑直到走完（PR 2.1c
+-- endgame discard 收尾）；PR 0.2c-pre-1a deploy 之後新 INSERT 顯式帶 key_scheme=2。
+--
+-- last_manifest_state 預設 NULL：legacy chunk 不用這欄；新 chunk 在第一次 manifest
+-- PUT 後填 'planned'，每升一態 UPDATE 一次。
+--
+-- 不 backfill：既存 row 的 key_scheme=1（DEFAULT 對），last_manifest_state=NULL 也對
+-- （legacy 路徑不讀此欄）。
+
+ALTER TABLE audit_archive_chunks ADD COLUMN key_scheme INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE audit_archive_chunks ADD COLUMN last_manifest_state TEXT;

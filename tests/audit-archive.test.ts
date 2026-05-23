@@ -25,9 +25,15 @@ import {
   NON_TERMINAL_STATES,
   archivePrefixes,
   deriveKeysFromChunk,
+  deriveDataKey,
+  deriveManifestKey,
   appendStateHistory,
   aggregateSeverities,
   putWithRetry,
+  isR2LockError,
+  KEY_SCHEME_LEGACY,
+  KEY_SCHEME_WRITE_ONCE,
+  MANIFEST_STATE_FILES,
   DEFAULT_PUT_RETRY_BACKOFF_MS,
   SUPPORTED_COLD_CLASSES,
   hotRetentionDaysFor,
@@ -649,5 +655,329 @@ describe('purgeChunk — PR 2.3 manual force_purge helper', () => {
     })
     expect(r.chunks_row_deleted).toBe(false)
     expect(bucket.deleted.length).toBe(2)  // R2 已刪（不可逆）
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR 0.2c-pre-1a — write-once R2 key + lock-aware refactor
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('PR 0.2c-pre-1a：KEY_SCHEME constants + MANIFEST_STATE_FILES', () => {
+  it('KEY_SCHEME_LEGACY=1 / WRITE_ONCE=2', () => {
+    expect(KEY_SCHEME_LEGACY).toBe(1)
+    expect(KEY_SCHEME_WRITE_ONCE).toBe(2)
+  })
+
+  it('MANIFEST_STATE_FILES freezes 4 state（順序：planned/uploaded/verified/marked_archived）', () => {
+    expect(MANIFEST_STATE_FILES).toEqual(['planned', 'uploaded', 'verified', 'marked_archived'])
+    // marked_archived 不縮 marked — 跨層 state 名字一致
+    expect(MANIFEST_STATE_FILES).toContain('marked_archived')
+    expect(MANIFEST_STATE_FILES).not.toContain('marked')
+    expect(Object.isFrozen(MANIFEST_STATE_FILES)).toBe(true)
+  })
+})
+
+describe('PR 0.2c-pre-1a：buildChunkKeys + manifestState/keyScheme', () => {
+  const base = {
+    env: 'prod', tableName: 'audit_log', coldClass: 'telemetry',
+    minId: 1, maxId: 100, sha256: 'feed', archiveDate: '2026-05-23',
+  }
+
+  it('legacy (keyScheme=1 預設)：manifestKey 走單 .json，不需 manifestState', () => {
+    const k = buildChunkKeys({ ...base, dryRun: false })
+    expect(k.manifestKey.endsWith('1-100-feed.json')).toBe(true)
+    expect(k.manifestKey).not.toContain('.planned.')
+  })
+
+  it('write-once (keyScheme=2)：4 個 state 各自 distinct manifest key', () => {
+    const states: Array<'planned' | 'uploaded' | 'verified' | 'marked_archived'> =
+      ['planned', 'uploaded', 'verified', 'marked_archived']
+    const keys = states.map(s => buildChunkKeys({
+      ...base, dryRun: false, keyScheme: KEY_SCHEME_WRITE_ONCE, manifestState: s,
+    }).manifestKey)
+    // 4 keys 全 distinct
+    expect(new Set(keys).size).toBe(4)
+    // suffix 對齊跨層命名（不縮 marked_archived）
+    expect(keys[0].endsWith('1-100-feed.planned.json')).toBe(true)
+    expect(keys[1].endsWith('1-100-feed.uploaded.json')).toBe(true)
+    expect(keys[2].endsWith('1-100-feed.verified.json')).toBe(true)
+    expect(keys[3].endsWith('1-100-feed.marked_archived.json')).toBe(true)
+  })
+
+  it('write-once 但忘了帶 manifestState → throw', () => {
+    expect(() => buildChunkKeys({
+      ...base, dryRun: false, keyScheme: KEY_SCHEME_WRITE_ONCE,
+    })).toThrow(/manifestState required/)
+  })
+
+  it('write-once 帶不在 MANIFEST_STATE_FILES 的 state → throw', () => {
+    expect(() => buildChunkKeys({
+      ...base, dryRun: false, keyScheme: KEY_SCHEME_WRITE_ONCE,
+      manifestState: 'failed' as unknown as 'planned',
+    })).toThrow(/unknown manifestState/)
+  })
+
+  it('dataKey 與 keyScheme/manifestState 無關 — 跨 4 state 永遠同一把', () => {
+    const dataKeys = MANIFEST_STATE_FILES.map(s => buildChunkKeys({
+      ...base, dryRun: false, keyScheme: KEY_SCHEME_WRITE_ONCE, manifestState: s,
+    }).dataKey)
+    expect(new Set(dataKeys).size).toBe(1)
+  })
+})
+
+describe('PR 0.2c-pre-1a：deriveDataKey + deriveManifestKey', () => {
+  it('deriveDataKey 與 manifestState 無關，per chunk 固定 1 key', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-23',
+      min_id: 1, max_id: 100, chunk_sha256: 'feed',
+      dry_run: 0, compression: 'gzip', key_scheme: 2,
+    }
+    expect(deriveDataKey(row)).toBe('audit-log/prod/audit_log/telemetry/2026/05/23/1-100-feed.jsonl.gz')
+  })
+
+  it('deriveManifestKey legacy chunk：忽略 manifestState 回單 .json', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-11', min_id: 8, max_id: 922, chunk_sha256: 'abc',
+      dry_run: 1, key_scheme: 1,
+    }
+    expect(deriveManifestKey(row)).toBe('manifest-dryrun/prod/audit_log/telemetry/2026/05/11/8-922-abc.json')
+    // 即使 caller 傳 manifestState，legacy 路徑也忽略
+    expect(deriveManifestKey(row, 'uploaded')).toBe('manifest-dryrun/prod/audit_log/telemetry/2026/05/11/8-922-abc.json')
+  })
+
+  it('deriveManifestKey write-once chunk：依 manifestState 分 4 key', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-23', min_id: 1, max_id: 100, chunk_sha256: 'feed',
+      dry_run: 0, key_scheme: 2,
+    }
+    expect(deriveManifestKey(row, 'planned')).toMatch(/\.planned\.json$/)
+    expect(deriveManifestKey(row, 'uploaded')).toMatch(/\.uploaded\.json$/)
+    expect(deriveManifestKey(row, 'verified')).toMatch(/\.verified\.json$/)
+    expect(deriveManifestKey(row, 'marked_archived')).toMatch(/\.marked_archived\.json$/)
+  })
+
+  it('deriveManifestKey write-once chunk 缺 manifestState → throw', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-23', min_id: 1, max_id: 100, chunk_sha256: 'feed',
+      dry_run: 0, key_scheme: 2,
+    }
+    expect(() => deriveManifestKey(row)).toThrow(/manifestState required/)
+  })
+
+  it('deriveKeysFromChunk write-once + manifestState → manifestKey 帶 state 後綴', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-23', min_id: 1, max_id: 100, chunk_sha256: 'feed',
+      dry_run: 0, compression: 'gzip', key_scheme: 2,
+    }
+    const k = deriveKeysFromChunk(row, { manifestState: 'verified' })
+    expect(k.manifestKey).toMatch(/\.verified\.json$/)
+    expect(k.dataKey).toBe('audit-log/prod/audit_log/telemetry/2026/05/23/1-100-feed.jsonl.gz')
+  })
+
+  it('deriveKeysFromChunk key_scheme 缺欄（PR 1a 前 row）→ fallback legacy 單 .json', () => {
+    const row = {
+      env: 'prod', table_name: 'audit_log', cold_class: 'telemetry',
+      archive_date: '2026-05-11', min_id: 8, max_id: 922, chunk_sha256: 'abc',
+      dry_run: 1, compression: 'none',
+      // key_scheme 缺 → row.key_scheme ?? KEY_SCHEME_LEGACY
+    }
+    const k = deriveKeysFromChunk(row)
+    expect(k.manifestKey.endsWith('.json')).toBe(true)
+    expect(k.manifestKey).not.toContain('.planned.')
+  })
+})
+
+describe('PR 0.2c-pre-1a：isR2LockError 保守 detector', () => {
+  // Positive cases — 必須同時 (status ∈ 409/412) AND (message/code/name 含 lock marker)
+  it('positive: status=412 + message 含 "object locked"', () => {
+    expect(isR2LockError({ status: 412, message: 'The object is locked by retention rule' })).toBe(true)
+  })
+
+  it('positive: status=409 + code 含 "ObjectLocked"', () => {
+    expect(isR2LockError({ status: 409, code: 'ObjectLocked', message: 'conflict' })).toBe(true)
+  })
+
+  it('positive: status=412 + name 含 "RetentionLock"', () => {
+    expect(isR2LockError({ status: 412, name: 'R2RetentionLockError' })).toBe(true)
+  })
+
+  it('positive: httpStatus=409 + code 含 "Immutable"', () => {
+    expect(isR2LockError({ httpStatus: 409, code: 'ImmutableObjectError' })).toBe(true)
+  })
+
+  it('positive: statusCode=412 + message 含 "lock"（lowercase）', () => {
+    expect(isR2LockError({ statusCode: 412, message: 'precondition failed: lock present' })).toBe(true)
+  })
+
+  // Negative cases — 任一條件不滿足都不算 lock（保守原則）
+  it('negative: 純 message 含 lock 但無 status → 不算', () => {
+    expect(isR2LockError({ message: 'object is locked' })).toBe(false)
+  })
+
+  it('negative: status=412 但 message 無 lock marker → 不算（避免 PreconditionFailed for 非 lock 誤判）', () => {
+    expect(isR2LockError({ status: 412, message: 'etag mismatch' })).toBe(false)
+  })
+
+  it('negative: status=500（server error）+ message 含 lock → 不算', () => {
+    expect(isR2LockError({ status: 500, message: 'internal lock failure' })).toBe(false)
+  })
+
+  it('negative: undefined / null / string / number → 都 false', () => {
+    expect(isR2LockError(undefined)).toBe(false)
+    expect(isR2LockError(null)).toBe(false)
+    expect(isR2LockError('error message')).toBe(false)
+    expect(isR2LockError(412)).toBe(false)
+  })
+
+  it('negative: status=403 + message 含 lock → 不算（403 forbidden 非 lock）', () => {
+    expect(isR2LockError({ status: 403, message: 'forbidden by lock policy' })).toBe(false)
+  })
+})
+
+describe('PR 0.2c-pre-1a：putWithRetry lock-aware', () => {
+  it('lock error 命中 → 不 retry / 不 sleep / 1 次 callback willRetry=false lockDetected=true', async () => {
+    const bucket = { put: async () => {
+      const e: Error & { status?: number; code?: string } = new Error('object locked')
+      e.status = 412
+      e.code = 'ObjectLocked'
+      throw e
+    } }
+    const sleeps: number[] = []
+    const failed: Array<{ willRetry: boolean; lockDetected: boolean; attempt: number; nextDelayMs: number | null }> = []
+    await expect(putWithRetry(bucket, 'k', 'b', {}, {
+      backoffMs: [5, 10, 15],
+      sleep: ms => { sleeps.push(ms); return Promise.resolve() },
+      onAttemptFailed: e => { failed.push(e); return Promise.resolve() },
+    })).rejects.toThrow(/object locked/)
+    expect(failed).toHaveLength(1)
+    expect(failed[0].willRetry).toBe(false)
+    expect(failed[0].lockDetected).toBe(true)
+    expect(failed[0].attempt).toBe(1)
+    expect(failed[0].nextDelayMs).toBeNull()
+    expect(sleeps).toEqual([])   // 沒 sleep — lock 不 retry
+  })
+
+  it('非 lock error → 正常 retry，callback lockDetected=false 串連', async () => {
+    let n = 0
+    const bucket = { put: async () => {
+      n++
+      if (n < 4) throw new Error(`transient-${n}`)
+      return { ok: true }
+    } }
+    const failed: Array<{ lockDetected: boolean }> = []
+    await putWithRetry(bucket, 'k', 'b', {}, {
+      backoffMs: [1, 1, 1],
+      sleep: () => Promise.resolve(),
+      onAttemptFailed: e => { failed.push(e); return Promise.resolve() },
+    })
+    expect(failed).toHaveLength(3)
+    for (const f of failed) expect(f.lockDetected).toBe(false)
+  })
+
+  it('opts.isLockError 注入可覆寫 detector（測試 hook）', async () => {
+    const bucket = { put: async () => { throw new Error('any error') } }
+    const failed: Array<{ willRetry: boolean; lockDetected: boolean }> = []
+    await expect(putWithRetry(bucket, 'k', 'b', {}, {
+      backoffMs: [1],
+      sleep: () => Promise.resolve(),
+      onAttemptFailed: e => { failed.push(e); return Promise.resolve() },
+      isLockError: () => true,   // 強制所有 error 視為 lock
+    })).rejects.toThrow()
+    expect(failed).toHaveLength(1)
+    expect(failed[0].lockDetected).toBe(true)
+    expect(failed[0].willRetry).toBe(false)
+  })
+
+  it('lock error throw 後仍 propagate lastError（不可吞錯）', async () => {
+    const lockErr: Error & { status?: number } = new Error('locked-permanent')
+    lockErr.status = 412
+    const bucket = { put: async () => {
+      Object.assign(lockErr, { code: 'ObjectLocked' })
+      throw lockErr
+    } }
+    let thrown: unknown = null
+    try {
+      await putWithRetry(bucket, 'k', 'b', {}, { backoffMs: [1], sleep: () => Promise.resolve() })
+    } catch (e) { thrown = e }
+    expect(thrown).toBe(lockErr)
+  })
+})
+
+describe('PR 0.2c-pre-1a：purgeChunk write-once chunk → 1 data + 4 manifest DELETE', () => {
+  function makeBucket() {
+    const deleted: string[] = []
+    return {
+      deleted,
+      delete: async (key: string) => { deleted.push(key) },
+    }
+  }
+  function makeDb(selectRow) {
+    return {
+      prepare(sql: string) {
+        const isSelect = /^SELECT/i.test(sql.trim())
+        return {
+          bind() { return this },
+          first: async () => isSelect ? selectRow : null,
+          run:   async () => ({ meta: { changes: 1 } }),
+        }
+      },
+    }
+  }
+  const target = {
+    env: 'test', table_name: 'audit_log', cold_class: 'telemetry',
+    archive_date: '2026-05-23', min_id: 1, max_id: 100,
+    chunk_sha256: 'b'.repeat(64),
+  }
+
+  it('write-once blacklisted chunk → DELETE 1 data + 4 manifest key (all states)', async () => {
+    const bucket = makeBucket()
+    const row = {
+      env: target.env, table_name: target.table_name, cold_class: target.cold_class,
+      archive_date: target.archive_date,
+      min_id: target.min_id, max_id: target.max_id, chunk_sha256: target.chunk_sha256,
+      state: 'blacklisted', dry_run: 0, compression: 'gzip', key_scheme: 2,
+    }
+    const r = await purgeChunk({
+      env: { AUDIT_ARCHIVE_BUCKET: bucket },
+      db: makeDb(row),
+      target,
+    })
+    expect(r.chunks_row_deleted).toBe(true)
+    expect(bucket.deleted).toHaveLength(5)   // 1 data + 4 manifest
+    expect(bucket.deleted[0]).toMatch(/\.jsonl\.gz$/)  // data first
+    expect(bucket.deleted.slice(1)).toEqual([
+      expect.stringMatching(/\.planned\.json$/),
+      expect.stringMatching(/\.uploaded\.json$/),
+      expect.stringMatching(/\.verified\.json$/),
+      expect.stringMatching(/\.marked_archived\.json$/),
+    ])
+    // primary manifest_key 回 last（marked_archived）保持 backwards-compat
+    expect(r.manifest_key).toMatch(/\.marked_archived\.json$/)
+    // manifest_keys 暴露全集給 admin / forensic
+    expect(r.manifest_keys).toHaveLength(4)
+  })
+
+  it('legacy blacklisted chunk → 維持 1 data + 1 manifest DELETE（前向相容）', async () => {
+    const bucket = makeBucket()
+    const row = {
+      env: target.env, table_name: target.table_name, cold_class: target.cold_class,
+      archive_date: target.archive_date,
+      min_id: target.min_id, max_id: target.max_id, chunk_sha256: target.chunk_sha256,
+      state: 'blacklisted', dry_run: 0, compression: 'gzip', key_scheme: 1,
+    }
+    const r = await purgeChunk({
+      env: { AUDIT_ARCHIVE_BUCKET: bucket },
+      db: makeDb(row),
+      target,
+    })
+    expect(bucket.deleted).toHaveLength(2)
+    expect(r.manifest_key.endsWith('.json')).toBe(true)
+    expect(r.manifest_key).not.toContain('.marked_archived.')
+    expect(r.manifest_keys).toHaveLength(1)
   })
 })
