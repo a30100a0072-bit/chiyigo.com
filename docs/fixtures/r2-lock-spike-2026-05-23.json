@@ -1,0 +1,175 @@
+{
+  "spike_date": "2026-05-23",
+  "pr": "0.2c-pre-1b",
+  "intent": "Freeze real R2 retention lock error shape via S3 API + limited token (audit-archive-writer, Object Read & Write). Validates PR 1a isR2LockError classifier against actual R2 contract.",
+  "spike_token": {
+    "name": "audit-archive-writer",
+    "permission": "Object Read & Write",
+    "surface": "S3 sigv4 (not worker binding)"
+  },
+  "spike_target": {
+    "bucket": "chiyigo-audit-archive-preview",
+    "prefix": "spike/r2-lock/20260523-140148-d3ad83/",
+    "lock_rule": "spike-r2-lock-20260523-140148-d3ad83",
+    "retention_days": 1,
+    "lifecycle_expire_days": 2
+  },
+  "spike_runner": "scripts/spike-r2-lock.mjs (raw sigv4, zero deps)",
+  "summary": {
+    "lock_enforced": true,
+    "note": "Contradicts PR 0.2a smoke result (lock did not appear to enforce). 0.2a used wrangler r2 (account-level / owner) which may have bypassed; this spike uses limited Object Read & Write token via S3 sigv4 → lock IS enforced.",
+    "blocked_operations": [
+      "put_same_key_same_body",
+      "put_same_key_diff_body",
+      "delete_same_key"
+    ],
+    "allowed_operations": [
+      "put_new_key_locked_prefix"
+    ],
+    "blocked_http_status": 409,
+    "blocked_s3_error_code": "ObjectLockedByBucketPolicy",
+    "blocked_s3_error_message": "The object is locked by the bucket policy.",
+    "write_once_design_validated": "PUT new key in locked prefix returned 200 — write-once R2 key design (PR 1a) is sound; lock blocks same-key overwrite but allows first-PUT new keys."
+  },
+  "same_body_probe_validity": {
+    "setup_control_body_sha256": "aaf3e38401b3b7dbd6fa0c3d9144f8d110e390a7f9632598ea3adbd2b219440a",
+    "test_same_body_sha256": "aaf3e38401b3b7dbd6fa0c3d9144f8d110e390a7f9632598ea3adbd2b219440a",
+    "match": true,
+    "note": "put_same_key_same_body name-truth assertion: setup PUTs body with this sha; test PUTs identical bytes with same sha → 409 confirms idempotent overwrite also blocked."
+  },
+  "classifier_implications": {
+    "pr_1a_classifier_match": "PR 1a isR2LockError (HTTP 409/412 AND message/code/name contains lock/retention/immutable/objectlocked) covers this shape — 409 + code=ObjectLockedByBucketPolicy (matches objectlocked) + message containing locked → true match.",
+    "pr_1b_tighten_additions": [
+      "Fast-path: code=ObjectLockedByBucketPolicy → direct true (high-confidence S3 code, no status needed)",
+      "Nested check: walk e.cause one level (defensive against wrapped errors from worker binding)",
+      "Keep dual condition fallback (status + marker) per user guard rail"
+    ],
+    "binding_shape_caveat": "This spike was via S3 sigv4 (fetch); prod cron uses R2 worker binding. Binding throws exceptions (not response objects) and shape may differ. Classifier covers both via marker-string heuristic; full binding spike is follow-up (out of 1b scope)."
+  },
+  "raw": {
+    "setup": {
+      "phase": "setup",
+      "bucket": "chiyigo-audit-archive-preview",
+      "prefix": "spike/r2-lock/20260523-140148-d3ad83/",
+      "setup_at": "2026-05-23T14:01:49.846Z",
+      "control_put": {
+        "method": "PUT",
+        "bucket": "chiyigo-audit-archive-preview",
+        "key": "spike/r2-lock/20260523-140148-d3ad83/control.txt",
+        "url_path": "/chiyigo-audit-archive-preview/spike/r2-lock/20260523-140148-d3ad83/control.txt",
+        "request_body_len": 65,
+        "response": {
+          "status": 200,
+          "headers": {
+            "cf-ray": "a0049842ba7ef1c0-KHH",
+            "connection": "keep-alive",
+            "content-length": "0",
+            "content-type": "text/plain;charset=UTF-8",
+            "date": "Sat, 23 May 2026 14:01:49 GMT",
+            "etag": "\"39cdb691b8ee3bad9d41546f48650fe0\"",
+            "server": "cloudflare",
+            "x-amz-checksum-crc64nvme": "QAtdciL5mAk=",
+            "x-amz-version-id": "7e61aadb9868c639089448a7f59e0857"
+          },
+          "body": ""
+        }
+      },
+      "control_body_sha256": "aaf3e38401b3b7dbd6fa0c3d9144f8d110e390a7f9632598ea3adbd2b219440a",
+      "ready_for_lock": true,
+      "next_step": {
+        "description": "Run the wrangler lock command, wait ~10s for propagation, then run phase=test with the same --prefix. Optional: also run the lifecycle command for post-expiry cleanup.",
+        "wrangler_lock": "npx wrangler r2 bucket lock add chiyigo-audit-archive-preview spike-r2-lock-20260523-140148-d3ad83 \"spike/r2-lock/20260523-140148-d3ad83/\" --retention-days 1 -y",
+        "wrangler_lifecycle": "npx wrangler r2 bucket lifecycle add chiyigo-audit-archive-preview spike-r2-lock-20260523-140148-d3ad83-cleanup \"spike/r2-lock/20260523-140148-d3ad83/\" --expire-days 2 -y"
+      }
+    },
+    "test": {
+      "phase": "test",
+      "bucket": "chiyigo-audit-archive-preview",
+      "prefix": "spike/r2-lock/20260523-140148-d3ad83/",
+      "captured_at": "2026-05-23T14:03:29.384Z",
+      "same_body_sha256": "aaf3e38401b3b7dbd6fa0c3d9144f8d110e390a7f9632598ea3adbd2b219440a",
+      "diff_body_sha256": "4d4048a87aa812244f756548058fc25e0d6992ed393e2113d4420926ac82d233",
+      "operations": {
+        "put_same_key_same_body": {
+          "method": "PUT",
+          "bucket": "chiyigo-audit-archive-preview",
+          "key": "spike/r2-lock/20260523-140148-d3ad83/control.txt",
+          "url_path": "/chiyigo-audit-archive-preview/spike/r2-lock/20260523-140148-d3ad83/control.txt",
+          "request_body_len": 65,
+          "response": {
+            "status": 409,
+            "headers": {
+              "cf-ray": "a0049aafbeabf244-KHH",
+              "connection": "keep-alive",
+              "content-length": "153",
+              "content-type": "application/xml",
+              "date": "Sat, 23 May 2026 14:03:28 GMT",
+              "server": "cloudflare"
+            },
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>ObjectLockedByBucketPolicy</Code><Message>The object is locked by the bucket policy.</Message></Error>"
+          }
+        },
+        "put_same_key_diff_body": {
+          "method": "PUT",
+          "bucket": "chiyigo-audit-archive-preview",
+          "key": "spike/r2-lock/20260523-140148-d3ad83/control.txt",
+          "url_path": "/chiyigo-audit-archive-preview/spike/r2-lock/20260523-140148-d3ad83/control.txt",
+          "request_body_len": 84,
+          "response": {
+            "status": 409,
+            "headers": {
+              "cf-ray": "a0049ab16e18f1c8-KHH",
+              "connection": "keep-alive",
+              "content-length": "153",
+              "content-type": "application/xml",
+              "date": "Sat, 23 May 2026 14:03:28 GMT",
+              "server": "cloudflare"
+            },
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>ObjectLockedByBucketPolicy</Code><Message>The object is locked by the bucket policy.</Message></Error>"
+          }
+        },
+        "put_new_key_locked_prefix": {
+          "method": "PUT",
+          "bucket": "chiyigo-audit-archive-preview",
+          "key": "spike/r2-lock/20260523-140148-d3ad83/newkey-537845.txt",
+          "url_path": "/chiyigo-audit-archive-preview/spike/r2-lock/20260523-140148-d3ad83/newkey-537845.txt",
+          "request_body_len": 84,
+          "response": {
+            "status": 200,
+            "headers": {
+              "cf-ray": "a0049ab259a3f244-KHH",
+              "connection": "keep-alive",
+              "content-length": "0",
+              "content-type": "text/plain;charset=UTF-8",
+              "date": "Sat, 23 May 2026 14:03:29 GMT",
+              "etag": "\"2b04b64f098a9576bb1ea247d3db4633\"",
+              "server": "cloudflare",
+              "x-amz-checksum-crc64nvme": "5zsHi9G2B3k=",
+              "x-amz-version-id": "7e61aada141d9b9c86e5197f1855a1f4"
+            },
+            "body": ""
+          }
+        },
+        "delete_same_key": {
+          "method": "DELETE",
+          "bucket": "chiyigo-audit-archive-preview",
+          "key": "spike/r2-lock/20260523-140148-d3ad83/control.txt",
+          "url_path": "/chiyigo-audit-archive-preview/spike/r2-lock/20260523-140148-d3ad83/control.txt",
+          "request_body_len": 0,
+          "response": {
+            "status": 409,
+            "headers": {
+              "cf-ray": "a0049ab59a24f1c8-KHH",
+              "connection": "keep-alive",
+              "content-length": "153",
+              "content-type": "application/xml",
+              "date": "Sat, 23 May 2026 14:03:29 GMT",
+              "server": "cloudflare"
+            },
+            "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>ObjectLockedByBucketPolicy</Code><Message>The object is locked by the bucket policy.</Message></Error>"
+          }
+        }
+      }
+    }
+  }
+}

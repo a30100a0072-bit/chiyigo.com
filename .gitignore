@@ -21,3 +21,15 @@ scripts/audit-error-i18n.out.json
 
 # Stage 4.5a browser pipeline canary emit 暫存（scripts/verify-browser-pipeline.mjs 跑完即清）
 .tmp-pipeline-canary/
+
+# PR 0.2c-pre-1b spike credentials（spike-r2-lock.mjs session env source）
+# 永不 commit；ad-hoc 命名都涵蓋以防 typo（secret/secert/secrets/.env*/.*.secrets）
+secret
+secert
+secrets
+.env
+.env.local
+*.secrets
+# spike 跑完輸出（含 R2 endpoint + response data；可以提交但 fixture 走另一路徑）
+spike-setup.json
+spike-test.json

@@ -837,6 +837,50 @@ describe('PR 0.2c-pre-1a：isR2LockError 保守 detector', () => {
   it('negative: status=403 + message 含 lock → 不算（403 forbidden 非 lock）', () => {
     expect(isR2LockError({ status: 403, message: 'forbidden by lock policy' })).toBe(false)
   })
+
+  // ── PR 0.2c-pre-1b spike fixture regression (docs/fixtures/r2-lock-spike-2026-05-23.json) ──
+  it('spike fixture：S3 真實 shape — HTTP 409 + code ObjectLockedByBucketPolicy + 對應 message', () => {
+    // 直接從 spike Phase C put_same_key_same_body / put_same_key_diff_body / delete_same_key
+    // 三條 operations 拿到的真實 R2 error 形狀（XML 解析後）
+    expect(isR2LockError({
+      status: 409,
+      code: 'ObjectLockedByBucketPolicy',
+      message: 'The object is locked by the bucket policy.',
+    })).toBe(true)
+  })
+
+  it('spike fixture fast-path：知名 lock code 直 true，不必驗 status', () => {
+    // R2_LOCK_KNOWN_CODES 是 spike-frozen high-confidence S3 code；單獨 code 命中就 true
+    expect(isR2LockError({ code: 'ObjectLockedByBucketPolicy' })).toBe(true)
+    expect(isR2LockError({ code: 'ObjectLockedByBucketPolicy', status: 200 })).toBe(true)
+  })
+
+  it('nested cause：worker binding 可能 wrap 成 Error.cause，detector 走一層 cause 鏈', () => {
+    // 防 binding wrapping 場景（spike 是 fetch path 平的，binding shape 不明 → defensive）
+    const wrapped = new Error('R2 PUT failed for chunk') as Error & { cause?: unknown }
+    wrapped.cause = { status: 409, code: 'ObjectLockedByBucketPolicy', message: 'The object is locked by the bucket policy.' }
+    expect(isR2LockError(wrapped)).toBe(true)
+  })
+
+  it('nested cause fast-path：cause.code 是 known lock code 也命中', () => {
+    const wrapped = new Error('R2 binding error') as Error & { cause?: unknown }
+    wrapped.cause = { code: 'ObjectLockedByBucketPolicy' }
+    expect(isR2LockError(wrapped)).toBe(true)
+  })
+
+  it('negative：cause 沒命中 + outer 沒命中 → false（防 nested 變太寬）', () => {
+    const wrapped = new Error('some other error') as Error & { cause?: unknown }
+    wrapped.cause = { status: 500, message: 'internal server error' }
+    expect(isR2LockError(wrapped)).toBe(false)
+  })
+
+  it('negative：unknown code with 409 but no lock marker → 不算', () => {
+    expect(isR2LockError({
+      status: 409,
+      code: 'ConditionalRequestConflict',
+      message: 'request precondition failed',
+    })).toBe(false)
+  })
 })
 
 describe('PR 0.2c-pre-1a：putWithRetry lock-aware', () => {

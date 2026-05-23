@@ -464,41 +464,73 @@ export function aggregateSeverities(rows) {
 export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
 
 /**
- * PR 0.2c-pre-1a：保守 R2 lock-error detector。
+ * R2 lock-error detector — PR 0.2c-pre-1a 保守版 + PR 0.2c-pre-1b spike tighten。
  *
  * 用途：putWithRetry 命中 lock error 時必須**不 retry**（lock 是永久性，retry
  * 浪費 21s wallclock + 多刷一輪 upload_failed audit event），並由呼叫端 emit
  * audit.archive.r2_lock_detected critical。**不可把 error 視為成功** — 仍 throw
  * 讓 chunk 進 failed state，admin 用 retry endpoint 介入。
  *
- * 判定：HTTP status ∈ {409 Conflict, 412 Precondition Failed} **且** error 的
- * message / code / name 任一含 lock-related marker（lock / locked / retention /
- * immutable / objectlocked / object locked）。兩條件**並存**才認為 lock；單獨
- * status 4xx 或單獨 lock 字串都不算（避免污染告警語義）。
+ * PR 0.2c-pre-1b spike (docs/fixtures/r2-lock-spike-2026-05-23.json) 結論：
+ *   - R2 retention lock **真的 enforce**（與 0.2a smoke 結論相反 — 0.2a 用 owner/
+ *     wrangler 可能 bypass；用 limited token via S3 sigv4 lock 擋住 PUT-overwrite +
+ *     DELETE 都回 409；PUT new key 在 locked prefix 仍 200 → write-once design 成立）
+ *   - 實測 error shape：HTTP 409 + XML body {Code:'ObjectLockedByBucketPolicy',
+ *     Message:'The object is locked by the bucket policy.'}
  *
- * 為何保守：1a 不依賴 preview fixture 凍結真實 R2 SDK error shape；1b 再用
- * preview lock 灌錯誤、freeze shape、tighten classifier（含可能加入新 status
- * 或 code 字符）。保守 detector 在 1a 階段最多漏判（不擋 lock → 走原 retry
- * 路徑、最後仍以 critical upload_failed throw），不會誤判（把非 lock 錯誤當
- * 成 lock 而提前止損 retry）。
+ * Tighten 變化（依 user guard rails）：
+ *   1. 高信心 fast-path：code === 'ObjectLockedByBucketPolicy' → 直接 true
+ *      （R2 真實 S3 code，false-positive 風險極低，不必再驗 status）
+ *   2. Nested check：走一層 cause 鏈（防 worker binding 包成 wrapped Error 的場景；
+ *      spike 是 fetch path 平的，binding shape 不明 — 守一層 cause 是 belt-and-suspenders）
+ *   3. 保留 fallback dual condition：status (409/412) AND marker (message/code/name 含
+ *      lock-related 字串) — 防 status 單條件誤判 4xx 為 lock，防 marker 單條件誤判
+ *      log message 為 lock。fast-path miss 時走這條。
+ *   4. status 仍認 409 + 412：spike 真實命中 409；412 留作 defensive（其他 R2 / S3
+ *      precondition-failed 場景可能用 412，例如未來 If-Match header 整合）。
+ *
+ * 若仍不 enforce（hypothetical）：不刪 isR2LockError，freeze fixture 描述「not enforced」
+ * 並 write-once 留 defense-in-depth（user 補充 rule）。本次 spike 證實 enforce，
+ * 此條款不需觸發。
  *
  * 相關 memory：feedback_r2_lock_overwrite_design（isR2LockError 不可猜，preview
- * fixture 凍結）。
+ * fixture 凍結）；feedback_r2_lock_propagation_canary（rule API 200 ≠ 對 prefix 生效；
+ * spike script 已等 10s + 驗 canary 才跑 phase=test）。
  */
+
+// PR 0.2c-pre-1b spike fixture-frozen high-confidence S3 lock codes（真實命中過）。
+// 加新 code 必同步加 fixture 加 unit test；不可單獨 hard-code（[[feedback_r2_lock_overwrite_design]]）。
+const R2_LOCK_KNOWN_CODES = new Set(['ObjectLockedByBucketPolicy'])
+
+const R2_LOCK_MARKER = /(?:lock|locked|retention|immutable|objectlocked|object\s*locked)/i
+
 export function isR2LockError(e: unknown): boolean {
   if (!e || typeof e !== 'object') return false
-  const err = e as Record<string, unknown>
 
-  // HTTP status — 必為 409 / 412
-  const rawStatus = err.status ?? err.httpStatus ?? err.statusCode
-  const status = Number(rawStatus)
-  if (status !== 409 && status !== 412) return false
+  // Nested cause 鏈：worker binding throw 可能包 wrapped Error；走一層 cause 收 nested 路徑。
+  // 不無限遞迴（防 cyclic / 過深；fixture 顯示 R2 S3 是平的，binding 預期最多一層 wrap）。
+  const candidates: Record<string, unknown>[] = [e as Record<string, unknown>]
+  const cause = (e as { cause?: unknown }).cause
+  if (cause && typeof cause === 'object') candidates.push(cause as Record<string, unknown>)
 
-  // message / code / name 任一含 lock-related marker
-  const marker = /(?:lock|locked|retention|immutable|objectlocked|object\s*locked)/i
-  for (const k of ['message', 'code', 'name'] as const) {
-    const v = err[k]
-    if (typeof v === 'string' && marker.test(v)) return true
+  // (1) 高信心 fast-path：fixture 凍結的 S3 lock code 直接 true，不必驗 status
+  for (const c of candidates) {
+    const code = c.code
+    if (typeof code === 'string' && R2_LOCK_KNOWN_CODES.has(code)) return true
+  }
+
+  // (2) Fallback dual condition：status AND marker 兩條件並存
+  let hasStatusHit = false
+  let hasMarkerHit = false
+  for (const c of candidates) {
+    const rawStatus = c.status ?? c.httpStatus ?? c.statusCode
+    const status = Number(rawStatus)
+    if (status === 409 || status === 412) hasStatusHit = true
+    for (const k of ['message', 'code', 'name'] as const) {
+      const v = c[k]
+      if (typeof v === 'string' && R2_LOCK_MARKER.test(v)) { hasMarkerHit = true; break }
+    }
+    if (hasStatusHit && hasMarkerHit) return true
   }
   return false
 }
