@@ -1,3 +1,49 @@
+// ── Cross-script global ambient ───────────────────────
+// dashboard.ts 是 classic <script>，多項 identifier 由其他 classic script 經
+// lexical-scope / window-attachment 提供。本區段把這些 identifier 的型別補上，
+// runtime 與原 dashboard.js 等價（per [[feedback_page_entry_apifetch_window_prefix]]
+// + [[cross-script classic-global declare const pattern]] PR-5o 立樁）。
+//
+// dashboard.html 載入順序：api.js → auth-ui.js → form-enter.js (defer) → dashboard.js (defer)
+// `defer` 保證 dashboard.js 執行時 api.js / auth-ui.js 已完成 top-level decl。
+
+// auth-ui.ts top-level functions (No-IIFE per PR-5u exception — script-global scope).
+declare function logout(): void;
+declare function refreshAccessToken(): Promise<boolean>;
+declare function togglePassword(inputId: string | undefined, btnId: string | undefined): void;
+
+// Window augmentation：dashboard-only state (cache + flags) + 第三方 CDN/註入 globals.
+// 同 api.ts (line 77) 慣例：file-level `interface Window` 在 prod tsconfig
+// (module:"none" + moduleDetection:"auto") 是 declaration merging 至全域 Window。
+interface Window {
+  // dashboard render cache — applyLangD() 在語系切換時重畫各 section 用
+  _lastRequisitions?: Array<Record<string, unknown>>;
+  _lastDevices?: Array<Record<string, unknown>>;
+  _lastPasskeys?: Array<Record<string, unknown>>;
+  _lastWallets?: Array<Record<string, unknown>>;
+  _lastPayments?: Array<Record<string, unknown>>;
+  // profile flags — render*Section 重畫時當輸入
+  __hasPassword?: boolean;
+  __totpEnabled?: boolean;
+  __userEmail?: string;
+  // 第三方：QRCode CDN (cdn.jsdelivr.net qrcode@1.5.0)
+  QRCode?: {
+    toCanvas: (canvas: HTMLElement | null, text: string, opts?: Record<string, unknown>) => Promise<void>;
+  };
+  // 第三方：EIP-1193 wallet provider (MetaMask 等)
+  ethereum?: {
+    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  };
+}
+
+// TECH-DEBT: BACKEND_ERR_MAP 在整個 codebase 找不到定義（grep 全域 0 hit，仅 dashboard.js
+// 本身引用）。dashboard.ts line 1182 走 `DEL_ERR_MAP[k] || BACKEND_ERR_MAP[k]`，由於 `||`
+// 短路，僅在 DEL_ERR_MAP 沒有對應 error code AND e instanceof ApiError 時才會觸發
+// ReferenceError。為遵守 PR-5w 0 行為變更紀律（per [[feedback_security_boundary_pr_first_do_no_harm]]）
+// 保留此 bug；後續獨立 PR 修（candidate: 移除 `|| BACKEND_ERR_MAP[...]` fallback，或補 const map）。
+declare const BACKEND_ERR_MAP: Record<string, string>;
+
+;(function () {
 // ── block 1/3 ──
 // ── i18n ──────────────────────────────────────────────
 const LANGS_D = /*@i18n@*/{};
@@ -9,13 +55,13 @@ function applyLangD(lang) {
   curLangD = lang;
   localStorage.setItem('lang', lang);
   const t = LANGS_D[lang] || LANGS_D['zh-TW'];
-  document.querySelectorAll('[data-i18n]').forEach(el => {
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
     const k = el.dataset.i18n; if (t[k] !== undefined) el.textContent = t[k];
   });
-  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+  document.querySelectorAll<HTMLInputElement>('[data-i18n-ph]').forEach(el => {
     const k = el.dataset.i18nPh; if (t[k] !== undefined) el.placeholder = t[k];
   });
-  document.querySelectorAll('.db-lang-opt').forEach(btn => {
+  document.querySelectorAll<HTMLElement>('.db-lang-opt').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.lang === lang);
   });
   // re-render any already-rendered dynamic UI
@@ -56,7 +102,7 @@ dbGlobeBtn?.addEventListener('click', e => {
   dbLangDrop?.classList.toggle('open');
 });
 dbLangDrop?.addEventListener('click', e => {
-  const opt = e.target.closest('.db-lang-opt'); if (!opt) return;
+  const opt = (e.target as Element | null)?.closest('.db-lang-opt') as HTMLElement | null; if (!opt) return;
   applyLangD(opt.dataset.lang);
   dbLangDrop.classList.remove('open');
 });
@@ -217,7 +263,7 @@ async function loadProfile() {
     if (reqParam && /^\d+$/.test(reqParam)) {
       setTimeout(() => {
         openPaymentForm();
-        const reqInput = document.getElementById('payment-requisition');
+        const reqInput = document.getElementById('payment-requisition') as HTMLInputElement | null;
         if (reqInput) reqInput.value = reqParam;
         document.getElementById('payments-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 200);
@@ -255,7 +301,7 @@ loadProfile();
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 
 // tApiError 由 api.js 統一提供（window.tApiError，code-based + 4 lang 翻譯）
-// 本檔的 tApiError(...) 呼叫透過 global 解析到 window.tApiError，不需另存區域 alias
+// 本檔的 window.tApiError(...) 呼叫透過 global 解析到 window.tApiError，不需另存區域 alias
 
 // ── 需求單 ───────────────────────────────────────────────────
 
@@ -274,7 +320,7 @@ window._lastRequisitions = null;
 async function loadRequisitions() {
   if (!sessionStorage.getItem('access_token')) return
   try {
-    const { requisitions } = await apiFetch('/api/requisition/me')
+    const { requisitions } = await window.apiFetch<{ requisitions?: Array<Record<string, unknown>> }>('/api/requisition/me')
     renderRequisitions(requisitions)
   } catch { /* 非必要區塊，靜默失敗 */ }
 }
@@ -328,7 +374,7 @@ function renderRequisitions(list) {
 // 兩步撤銷：第一次點擊變成「確認撤銷」，再點才真正執行；4 秒未確認自動還原
 let _revokeArmTimer = null
 function disarmRevoke(id) {
-  const btn = document.getElementById(`revoke-btn-${id}`)
+  const btn = document.getElementById(`revoke-btn-${id}`) as HTMLButtonElement | null
   if (!btn) return
   btn.dataset.armed = '0'
   btn.textContent = T('btn_revoke')
@@ -336,14 +382,14 @@ function disarmRevoke(id) {
   if (_revokeArmTimer) { clearTimeout(_revokeArmTimer); _revokeArmTimer = null }
 }
 function armRevoke(id) {
-  const btn = document.getElementById(`revoke-btn-${id}`)
+  const btn = document.getElementById(`revoke-btn-${id}`) as HTMLButtonElement | null
   if (!btn) return
   if (btn.dataset.armed === '1') {
     revokeRequisition(id)
     return
   }
   // 先還原其他可能已 arm 的按鈕
-  document.querySelectorAll('[id^="revoke-btn-"]').forEach(b => {
+  document.querySelectorAll<HTMLElement>('[id^="revoke-btn-"]').forEach(b => {
     if (b !== btn && b.dataset.armed === '1') {
       const otherId = b.id.replace('revoke-btn-', '')
       disarmRevoke(otherId)
@@ -356,12 +402,12 @@ function armRevoke(id) {
   _revokeArmTimer = setTimeout(() => disarmRevoke(id), 4000)
 }
 
-async function revokeRequisition(id, reason) {
-  const btn = document.getElementById(`revoke-btn-${id}`)
+async function revokeRequisition(id, reason?) {
+  const btn = document.getElementById(`revoke-btn-${id}`) as HTMLButtonElement | null
   if (_revokeArmTimer) { clearTimeout(_revokeArmTimer); _revokeArmTimer = null }
   if (btn) { btn.disabled = true; btn.textContent = T('btn_processing') }
   try {
-    const r = await apiFetch('/api/requisition/revoke', {
+    const r = await window.apiFetch<{ code?: string }>('/api/requisition/revoke', {
       method: 'POST',
       body:   JSON.stringify({ requisition_id: id, reason }),
     })
@@ -389,7 +435,7 @@ async function revokeRequisition(id, reason) {
       loadRequisitions()
       return
     }
-    showBindToast(tApiError(e, T('net_err')), 'err')
+    showBindToast(window.tApiError(e, T('net_err')), 'err')
     if (btn) { btn.disabled = false; btn.textContent = T('btn_revoke') }
   }
 }
@@ -398,9 +444,9 @@ async function revokeRequisition(id, reason) {
 async function openRequisitionDetail(id) {
   let row;
   try {
-    row = await apiFetch(`/api/requisition/${id}`);
+    row = await window.apiFetch(`/api/requisition/${id}`);
   } catch (e) {
-    showBindToast(tApiError(e, T('net_err')), 'err');
+    showBindToast(window.tApiError(e, T('net_err')), 'err');
     return;
   }
   // 移除舊 modal
@@ -468,18 +514,18 @@ function closeRequisitionDetail() {
 }
 let _reqPermDelTimer = null;
 async function armOrConfirmReqPermDelete(id) {
-  const btn = document.getElementById('req-perm-del-btn');
+  const btn = document.getElementById('req-perm-del-btn') as HTMLButtonElement | null;
   if (!btn) return;
   if (btn.dataset.armed === '1') {
     if (_reqPermDelTimer) { clearTimeout(_reqPermDelTimer); _reqPermDelTimer = null; }
     btn.disabled = true; btn.textContent = '刪除中…';
     try {
-      await apiFetch(`/api/requisition/${id}`, { method: 'DELETE' });
+      await window.apiFetch(`/api/requisition/${id}`, { method: 'DELETE' });
       closeRequisitionDetail();
       showBindToast(`需求單 #${id} 已永久刪除`, 'ok');
       loadRequisitions();
     } catch (e) {
-      showBindToast(tApiError(e, T('net_err')), 'err');
+      showBindToast(window.tApiError(e, T('net_err')), 'err');
       btn.disabled = false; btn.textContent = '永久刪除'; btn.dataset.armed = '0';
     }
     return;
@@ -498,22 +544,22 @@ async function armOrConfirmReqPermDelete(id) {
 // ── List 上直接刪 revoked 需求單（兩段式）──
 let _reqListDelTimer = null;
 async function armOrConfirmReqListDelete(id) {
-  const btn = document.getElementById(`reqdel-btn-${id}`);
+  const btn = document.getElementById(`reqdel-btn-${id}`) as HTMLButtonElement | null;
   if (!btn) return;
   if (btn.dataset.armed === '1') {
     if (_reqListDelTimer) { clearTimeout(_reqListDelTimer); _reqListDelTimer = null; }
     btn.disabled = true; btn.textContent = '刪除中…';
     try {
-      await apiFetch(`/api/requisition/${id}`, { method: 'DELETE' });
+      await window.apiFetch(`/api/requisition/${id}`, { method: 'DELETE' });
       showBindToast(`需求單 #${id} 已永久刪除`, 'ok');
       loadRequisitions();
     } catch (e) {
-      showBindToast(tApiError(e, T('net_err')), 'err');
+      showBindToast(window.tApiError(e, T('net_err')), 'err');
       btn.disabled = false; btn.textContent = '永久刪除'; btn.dataset.armed = '0';
     }
     return;
   }
-  document.querySelectorAll('[data-req-del-id]').forEach(b => {
+  document.querySelectorAll<HTMLElement>('[data-req-del-id]').forEach(b => {
     if (b !== btn && b.dataset.armed === '1') {
       b.dataset.armed = '0';
       b.textContent = '永久刪除';
@@ -553,9 +599,9 @@ function openRefundReasonModal(intentId) {
     : (p.amount_raw ? `${esc(p.amount_raw)} ${esc(p.currency || '')}` : '—');
   document.getElementById('refund-reason-summary').textContent =
     `對充值 #${p.id}（${amt}）申請退款。Admin 審核通過後會原路退款，動作不可逆。`;
-  document.getElementById('refund-reason-input').value = '';
+  (document.getElementById('refund-reason-input') as HTMLInputElement).value = '';
   setRefundReasonMsg('', '');
-  document.getElementById('refund-reason-submit').disabled = false;
+  (document.getElementById('refund-reason-submit') as HTMLButtonElement).disabled = false;
   document.getElementById('refund-reason-modal').classList.remove('hidden');
   setTimeout(() => document.getElementById('refund-reason-input')?.focus(), 50);
 }
@@ -577,13 +623,13 @@ document.getElementById('refund-reason-modal')?.addEventListener('click', e => {
 document.getElementById('refund-reason-submit')?.addEventListener('click', async () => {
   const id = _refundReasonIntentId;
   if (!id) return;
-  const reason = document.getElementById('refund-reason-input').value.trim();
+  const reason = (document.getElementById('refund-reason-input') as HTMLInputElement).value.trim();
   if (!reason) { setRefundReasonMsg('請填寫退款原因', 'err'); return; }
-  const btn = document.getElementById('refund-reason-submit');
+  const btn = document.getElementById('refund-reason-submit') as HTMLButtonElement;
   btn.disabled = true;
   setRefundReasonMsg('送出中…', '');
   try {
-    const r = await apiFetch(`/api/payments/intents/${id}/refund-request`, {
+    const r = await window.apiFetch<{ requisition_id?: number }>(`/api/payments/intents/${id}/refund-request`, {
       method: 'POST',
       body:   JSON.stringify({ reason }),
     });
@@ -603,30 +649,30 @@ document.getElementById('refund-reason-submit')?.addEventListener('click', async
       setTimeout(() => { closeRefundReasonModal(); loadPayments(); }, 1200);
       return;
     }
-    setRefundReasonMsg(tApiError(e, T('net_err')), 'err');
+    setRefundReasonMsg(window.tApiError(e, T('net_err')), 'err');
   }
 });
 
 // ── Payment intent 兩段式刪除 ──
 let _payDelTimer = null;
 async function armOrConfirmPayDelete(id) {
-  const btn = document.querySelector(`[data-pay-del-id="${id}"]`);
+  const btn = document.querySelector<HTMLButtonElement>(`[data-pay-del-id="${id}"]`);
   if (!btn) return;
   if (btn.dataset.armed === '1') {
     if (_payDelTimer) { clearTimeout(_payDelTimer); _payDelTimer = null; }
     btn.disabled = true; btn.textContent = '刪除中…';
     try {
-      await apiFetch(`/api/auth/payments/intents/${id}`, { method: 'DELETE' });
+      await window.apiFetch(`/api/auth/payments/intents/${id}`, { method: 'DELETE' });
       showBindToast(`充值 #${id} 已刪除`, 'ok');
       loadPayments();
     } catch (e) {
-      showBindToast(tApiError(e, T('net_err')), 'err');
+      showBindToast(window.tApiError(e, T('net_err')), 'err');
       btn.disabled = false; btn.textContent = '刪除'; btn.dataset.armed = '0';
     }
     return;
   }
   // disarm 其他 pay-del 按鈕
-  document.querySelectorAll('[data-pay-del-id]').forEach(b => {
+  document.querySelectorAll<HTMLElement>('[data-pay-del-id]').forEach(b => {
     if (b !== btn && b.dataset.armed === '1') {
       b.dataset.armed = '0';
       b.textContent = '刪除';
@@ -710,10 +756,10 @@ function renderBindingSection(identities) {
 }
 
 async function bindProvider(provider) {
-  const btn = document.getElementById(`bind-btn-${provider}`);
+  const btn = document.getElementById(`bind-btn-${provider}`) as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
   try {
-    const data = await apiFetch(`/api/auth/oauth/${provider}/init?is_binding=true`);
+    const data = await window.apiFetch<{ redirect_url?: string }>(`/api/auth/oauth/${provider}/init?is_binding=true`);
     if (!data?.redirect_url) {
       showBindToast(T('bind_fail'), 'err');
       if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); }
@@ -721,16 +767,16 @@ async function bindProvider(provider) {
     }
     window.location.href = data.redirect_url;
   } catch (e) {
-    showBindToast(tApiError(e, T('net_err')), 'err');
+    showBindToast(window.tApiError(e, T('net_err')), 'err');
     if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); }
   }
 }
 
 async function unbindProvider(provider) {
-  const btn = document.getElementById(`unbind-btn-${provider}`);
+  const btn = document.getElementById(`unbind-btn-${provider}`) as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
   try {
-    await apiFetch('/api/auth/identity/unbind', {
+    await window.apiFetch('/api/auth/identity/unbind', {
       method: 'POST',
       body:   JSON.stringify({ provider }),
     });
@@ -741,7 +787,7 @@ async function unbindProvider(provider) {
       const msg = e.traceId ? `${T('unbind_last_method')}（#${e.traceId}）` : T('unbind_last_method');
       showBindToast(msg, 'warn');
     } else {
-      showBindToast(tApiError(e, T('net_err')), 'err');
+      showBindToast(window.tApiError(e, T('net_err')), 'err');
     }
     if (btn) { btn.disabled = false; btn.textContent = T('unbind_btn'); }
   }
@@ -763,13 +809,13 @@ function showBindToast(msg, type) {
 
 // ── 2FA 管理 ─────────────────────────────────────────────────
 
-function render2FASection(enabled, hasPw) {
+function render2FASection(enabled, hasPw?) {
   document.getElementById('tfa-section').classList.remove('hidden');
   const badge      = document.getElementById('tfa-badge');
   const text       = document.getElementById('tfa-status-text');
-  const enableBtn  = document.getElementById('tfa-enable-btn');
+  const enableBtn  = document.getElementById('tfa-enable-btn') as HTMLButtonElement;
   const enableLbl  = document.getElementById('tfa-enable-label');
-  const disableBtn = document.getElementById('tfa-disable-btn');
+  const disableBtn = document.getElementById('tfa-disable-btn') as HTMLButtonElement;
   const needPw     = document.getElementById('tfa-need-pw');
   badge.dataset.tfaState = enabled ? 'on' : 'off';
   if (enabled) {
@@ -801,39 +847,39 @@ function render2FASection(enabled, hasPw) {
 }
 
 async function startSetup2FA() {
-  const btn = document.getElementById('tfa-enable-btn');
-  btn.disabled = true; btn.querySelector('[data-i18n]').textContent = T('btn_loading');
+  const btn = document.getElementById('tfa-enable-btn') as HTMLButtonElement;
+  btn.disabled = true; btn.querySelector('[data-i18n]')!.textContent = T('btn_loading');
   try {
-    const data = await apiFetch('/api/auth/2fa/setup', { method: 'POST', body: '{}' });
-    document.getElementById('tfa-secret').textContent = data.secret;
-    await QRCode.toCanvas(document.getElementById('tfa-qr'), data.otpauth_uri, { width: 180, margin: 1 });
-    document.getElementById('tfa-setup-panel').classList.remove('hidden');
-    document.getElementById('tfa-otp-input').value = '';
-    const pwEl = document.getElementById('tfa-password-input');
+    const data = await window.apiFetch<{ secret: string; otpauth_uri: string }>('/api/auth/2fa/setup', { method: 'POST', body: '{}' });
+    document.getElementById('tfa-secret')!.textContent = data.secret;
+    await window.QRCode!.toCanvas(document.getElementById('tfa-qr'), data.otpauth_uri, { width: 180, margin: 1 });
+    document.getElementById('tfa-setup-panel')!.classList.remove('hidden');
+    (document.getElementById('tfa-otp-input') as HTMLInputElement).value = '';
+    const pwEl = document.getElementById('tfa-password-input') as HTMLInputElement | null;
     if (pwEl) pwEl.value = '';
-    document.getElementById('tfa-setup-msg').classList.add('hidden');
+    document.getElementById('tfa-setup-msg')!.classList.add('hidden');
   } catch (e) {
-    window.notify.error(tApiError(e, T('net_err')));
+    window.notify.error(window.tApiError(e, T('net_err')));
   }
-  btn.disabled = false; btn.querySelector('[data-i18n]').textContent = T('tfa_enable_btn');
+  btn.disabled = false; btn.querySelector('[data-i18n]')!.textContent = T('tfa_enable_btn');
 }
 
 async function confirmEnable2FA() {
   // P1-21：disable button 防雙擊
-  const btn = document.querySelector('#tfa-setup-panel button[data-action="confirm-enable-2fa"]');
+  const btn = document.querySelector<HTMLButtonElement>('#tfa-setup-panel button[data-action="confirm-enable-2fa"]');
   if (btn?.disabled) return;
   if (btn) btn.disabled = true;
-  const otp = document.getElementById('tfa-otp-input').value.trim();
-  const pw  = (document.getElementById('tfa-password-input')?.value ?? '');
+  const otp = (document.getElementById('tfa-otp-input') as HTMLInputElement).value.trim();
+  const pw  = ((document.getElementById('tfa-password-input') as HTMLInputElement | null)?.value ?? '');
   const msg = document.getElementById('tfa-setup-msg');
   if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); if (btn) btn.disabled = false; return; }
   if (!pw) { showTfaMsg(msg, T('tfa_pw_required') || '請輸入目前登入密碼', 'err'); if (btn) btn.disabled = false; return; }
   try {
-    const data = await apiFetch('/api/auth/2fa/activate', {
+    const data = await window.apiFetch<{ backup_codes: string[] }>('/api/auth/2fa/activate', {
       method: 'POST',
       body:   JSON.stringify({ otp_code: otp, current_password: pw }),
     });
-    const codesEl = document.getElementById('tfa-backup-codes');
+    const codesEl = document.getElementById('tfa-backup-codes') as HTMLElement;
     codesEl.innerHTML = data.backup_codes.map(c =>
       `<code class="block text-center text-xs font-mono bg-[var(--bg)] border border-[var(--border-bright)] rounded-lg px-2 py-1.5 text-[var(--text)] select-all">${c}</code>`
     ).join('');
@@ -842,7 +888,7 @@ async function confirmEnable2FA() {
     document.getElementById('tfa-setup-panel').classList.add('hidden');
     document.getElementById('tfa-backup-panel').classList.remove('hidden');
   } catch (e) {
-    showTfaMsg(msg, tApiError(e, T('net_err')), 'err');
+    showTfaMsg(msg, window.tApiError(e, T('net_err')), 'err');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -853,22 +899,22 @@ function closeTfaBackup() {
 }
 
 function showDisablePanel() {
-  document.getElementById('tfa-setup-panel').classList.add('hidden');
-  document.getElementById('tfa-disable-panel').classList.toggle('hidden');
-  document.getElementById('tfa-disable-input').value = '';
-  document.getElementById('tfa-disable-msg').classList.add('hidden');
+  document.getElementById('tfa-setup-panel')!.classList.add('hidden');
+  document.getElementById('tfa-disable-panel')!.classList.toggle('hidden');
+  (document.getElementById('tfa-disable-input') as HTMLInputElement).value = '';
+  document.getElementById('tfa-disable-msg')!.classList.add('hidden');
 }
 
 async function confirmDisable2FA() {
   // P1-21：button 防雙擊
-  const btn = document.querySelector('#tfa-disable-panel button[data-action="confirm-disable-2fa"]');
+  const btn = document.querySelector<HTMLButtonElement>('#tfa-disable-panel button[data-action="confirm-disable-2fa"]');
   if (btn?.disabled) return;
   if (btn) btn.disabled = true;
-  const otp = document.getElementById('tfa-disable-input').value.trim();
+  const otp = (document.getElementById('tfa-disable-input') as HTMLInputElement).value.trim();
   const msg = document.getElementById('tfa-disable-msg');
   if (!/^\d{6}$/.test(otp)) { showTfaMsg(msg, T('totp_err6'), 'err'); if (btn) btn.disabled = false; return; }
   try {
-    await apiFetch('/api/auth/2fa/disable', {
+    await window.apiFetch('/api/auth/2fa/disable', {
       method: 'POST',
       body:   JSON.stringify({ otp_code: otp }),
     });
@@ -885,7 +931,7 @@ async function confirmDisable2FA() {
     setTimeout(() => { location.replace('/login.html?tfa_disabled=1'); }, 1500);
     // 不解鎖 — 即將跳頁
   } catch (e) {
-    showTfaMsg(msg, tApiError(e, T('net_err')), 'err');
+    showTfaMsg(msg, window.tApiError(e, T('net_err')), 'err');
     if (btn) btn.disabled = false;
   }
 }
@@ -896,15 +942,15 @@ function showTfaMsg(el, text, type) {
 }
 
 async function sendVerification() {
-  const btn = document.getElementById('resend-btn');
+  const btn = document.getElementById('resend-btn') as HTMLButtonElement;
   if (!sessionStorage.getItem('access_token')) { window.location.href = '/login.html'; return; }
 
   btn.disabled = true;
-  btn.querySelector('[data-i18n]').textContent = T('btn_sending');
-  document.getElementById('resend-msg').className = 'hidden text-xs mt-2';
+  btn.querySelector('[data-i18n]')!.textContent = T('btn_sending');
+  document.getElementById('resend-msg')!.className = 'hidden text-xs mt-2';
 
   try {
-    await apiFetch('/api/auth/email/send-verification', { method: 'POST', body: '{}' });
+    await window.apiFetch('/api/auth/email/send-verification', { method: 'POST', body: '{}' });
     showResendMsg(T('resend_sent'), 'ok');
     startResendCooldown(60);
   } catch (e) {
@@ -914,14 +960,14 @@ async function sendVerification() {
       return;
     }
     if (e instanceof ApiError && e.status === 429) {
-      const wait = e.body?.retry_after ?? 60;
+      const wait = (e.body as { retry_after?: number } | null)?.retry_after ?? 60;
       showResendMsg(T('resend_wait'), 'warn');
       startResendCooldown(wait);
       return;
     }
-    showResendMsg(tApiError(e, T('net_err')), 'err');
+    showResendMsg(window.tApiError(e, T('net_err')), 'err');
     btn.disabled = false;
-    btn.querySelector('[data-i18n]').textContent = T('resend_btn');
+    btn.querySelector('[data-i18n]')!.textContent = T('resend_btn');
   }
 }
 
@@ -932,8 +978,8 @@ function showResendMsg(text, type) {
 }
 
 function startResendCooldown(seconds) {
-  const btn = document.getElementById('resend-btn');
-  const span = btn.querySelector('[data-i18n]');
+  const btn = document.getElementById('resend-btn') as HTMLButtonElement;
+  const span = btn.querySelector('[data-i18n]')!;
   let remaining = seconds;
   btn.disabled = true;
   span.textContent = T('resend_timer_label').replace('${s}', remaining);
@@ -987,13 +1033,13 @@ function renderSetPasswordSection(hasPw) {
   sec.classList.toggle('hidden', !!hasPw);
 }
 async function sendSetPasswordEmail() {
-  const btn = document.getElementById('setpw-btn');
-  const msg = document.getElementById('setpw-msg');
+  const btn = document.getElementById('setpw-btn') as HTMLButtonElement;
+  const msg = document.getElementById('setpw-msg') as HTMLElement;
   msg.classList.add('hidden');
   msg.textContent = '';
   btn.disabled = true;
   try {
-    await apiFetch('/api/auth/local/forgot-password', {
+    await window.apiFetch('/api/auth/local/forgot-password', {
       method: 'POST',
       body:   JSON.stringify({ email: window.__userEmail }),
     });
@@ -1003,7 +1049,7 @@ async function sendSetPasswordEmail() {
     // 60 秒冷卻保護
     setTimeout(() => { btn.disabled = false; }, 60000);
   } catch (e) {
-    msg.textContent = tApiError(e, T('net_err'));
+    msg.textContent = window.tApiError(e, T('net_err'));
     msg.className = 'text-xs text-red-400';
     msg.classList.remove('hidden');
     btn.disabled = false;
@@ -1033,11 +1079,11 @@ function renderChangePasswordSection(hasPw, totpEnabled) {
 }
 
 async function submitChangePassword() {
-  const newEl     = document.getElementById('changepw-new');
-  const confirmEl = document.getElementById('changepw-confirm');
-  const otpEl     = document.getElementById('changepw-otp');
-  const msg       = document.getElementById('changepw-msg');
-  const btn       = document.getElementById('changepw-submit');
+  const newEl     = document.getElementById('changepw-new') as HTMLInputElement;
+  const confirmEl = document.getElementById('changepw-confirm') as HTMLInputElement;
+  const otpEl     = document.getElementById('changepw-otp') as HTMLInputElement;
+  const msg       = document.getElementById('changepw-msg') as HTMLElement;
+  const btn       = document.getElementById('changepw-submit') as HTMLButtonElement;
 
   const newPw   = newEl.value;
   const confirm = confirmEl.value;
@@ -1058,7 +1104,7 @@ async function submitChangePassword() {
 
   try {
     // 1) step-up：拿 5min 短效 step_up_token
-    const stepRes = await apiFetch('/api/auth/step-up', {
+    const stepRes = await window.apiFetch<{ step_up_token?: string }>('/api/auth/step-up', {
       method: 'POST',
       body:   JSON.stringify({
         scope: 'elevated:account',
@@ -1070,7 +1116,7 @@ async function submitChangePassword() {
     if (!stepUpToken) { showMsg(T('net_err'), 'err'); btn.disabled = false; return; }
 
     // 2) change-password：用 step_up_token 換密碼
-    await apiFetch('/api/auth/account/change-password', {
+    await window.apiFetch('/api/auth/account/change-password', {
       method:  'POST',
       headers: { Authorization: 'Bearer ' + stepUpToken },
       body:    JSON.stringify({ new_password: newPw }),
@@ -1087,24 +1133,24 @@ async function submitChangePassword() {
     setTimeout(() => { location.replace('/login.html?password_reset=1'); }, 1500);
   } catch (e) {
     btn.disabled = false;
-    showMsg(tApiError(e, T('net_err')), 'err');
+    showMsg(window.tApiError(e, T('net_err')), 'err');
   }
 }
 
 // ── 刪除帳號 ─────────────────────────────────────────────
 function renderDeleteSection(hasPw) {
-  const btn   = document.getElementById('del-open-btn');
+  const btn   = document.getElementById('del-open-btn') as HTMLButtonElement | null;
   const label = document.getElementById('del-open-label');
   const hint  = document.getElementById('del-need-pw');
   if (!btn) return;
   if (hasPw) {
     btn.disabled = false;
-    label.textContent = T('del_open_btn');
-    hint.classList.add('hidden');
+    label!.textContent = T('del_open_btn');
+    hint!.classList.add('hidden');
   } else {
     btn.disabled = true;
-    label.textContent = T('del_need_pw_local');
-    hint.classList.remove('hidden');
+    label!.textContent = T('del_need_pw_local');
+    hint!.classList.remove('hidden');
   }
 }
 function showDeleteForm() {
@@ -1114,10 +1160,10 @@ function showDeleteForm() {
   document.getElementById('del-password').focus();
 }
 function hideDeleteForm() {
-  document.getElementById('del-stage2').classList.add('hidden');
-  document.getElementById('del-stage1').classList.remove('hidden');
-  document.getElementById('del-password').value = '';
-  const msg = document.getElementById('del-msg');
+  document.getElementById('del-stage2')!.classList.add('hidden');
+  document.getElementById('del-stage1')!.classList.remove('hidden');
+  (document.getElementById('del-password') as HTMLInputElement).value = '';
+  const msg = document.getElementById('del-msg') as HTMLElement;
   msg.classList.add('hidden');
   msg.textContent = '';
 }
@@ -1132,10 +1178,10 @@ const DEL_ERR_MAP = {
   'Unauthorized':                                                       'del_err_unauth',
 };
 async function submitDeleteAccount() {
-  const pw   = document.getElementById('del-password').value;
-  const otp  = (document.getElementById('del-otp')?.value ?? '').trim();
-  const msg  = document.getElementById('del-msg');
-  const btn  = document.getElementById('del-submit-btn');
+  const pw   = (document.getElementById('del-password') as HTMLInputElement).value;
+  const otp  = ((document.getElementById('del-otp') as HTMLInputElement | null)?.value ?? '').trim();
+  const msg  = document.getElementById('del-msg') as HTMLElement;
+  const btn  = document.getElementById('del-submit-btn') as HTMLButtonElement;
   msg.classList.add('hidden');
   msg.textContent = '';
   if (!pw) {
@@ -1154,7 +1200,7 @@ async function submitDeleteAccount() {
   btn.disabled = true;
   try {
     // 1) 換 step-up token（5min 短效）
-    const stepRes = await apiFetch('/api/auth/step-up', {
+    const stepRes = await window.apiFetch<{ step_up_token?: string }>('/api/auth/step-up', {
       method: 'POST',
       body:   JSON.stringify({
         scope: 'elevated:account',
@@ -1166,7 +1212,7 @@ async function submitDeleteAccount() {
     if (!stepUpToken) throw new Error('no step_up_token');
 
     // 2) 帶 step-up token + password 兩重憑證 POST 刪帳號（送 confirmation email）
-    await apiFetch('/api/auth/delete', {
+    await window.apiFetch('/api/auth/delete', {
       method:  'POST',
       headers: { Authorization: 'Bearer ' + stepUpToken },
       body:    JSON.stringify({ password: pw }),
@@ -1174,14 +1220,17 @@ async function submitDeleteAccount() {
     msg.innerHTML = T('del_sent');
     msg.className = 'text-xs text-emerald-400';
     msg.classList.remove('hidden');
-    document.getElementById('del-password').value = '';
-    if (document.getElementById('del-otp')) document.getElementById('del-otp').value = '';
+    (document.getElementById('del-password') as HTMLInputElement).value = '';
+    const delOtp = document.getElementById('del-otp') as HTMLInputElement | null;
+    if (delOtp) delOtp.value = '';
   } catch (e) {
     if (e instanceof ApiError && e.status > 0) {
-      const k = DEL_ERR_MAP[e.body?.error] || BACKEND_ERR_MAP[e.body?.error];
+      const body = e.body as { error?: string; code?: string } | null;
+      const errKey = body?.error ?? '';
+      const k = DEL_ERR_MAP[errKey] || BACKEND_ERR_MAP[errKey];
       // step-up 405/403/401 也走 generic（含 STEP_UP_REQUIRES_2FA）
       let base = k ? T(k) : T('del_err_generic').replace('${status}', e.status);
-      if (e.body?.code === 'STEP_UP_REQUIRES_2FA') base = T('del_otp_required');
+      if (body?.code === 'STEP_UP_REQUIRES_2FA') base = T('del_otp_required');
       msg.textContent = e.traceId ? `${base}（#${e.traceId}）` : base;
       console.warn('[delete-account]', e.status, e.body, 'traceId=', e.traceId);
     } else {
@@ -1196,14 +1245,14 @@ async function submitDeleteAccount() {
 // ── block 2/3 ──
 // Sidebar / mobile-overlay nav: scroll to section + active state
 (function() {
-  const sbItems = document.querySelectorAll('.sb-item[data-scroll], .m-ov-item[data-scroll]');
+  const sbItems = document.querySelectorAll<HTMLElement>('.sb-item[data-scroll], .m-ov-item[data-scroll]');
   sbItems.forEach(btn => btn.addEventListener('click', () => {
     const id = btn.dataset.scroll;
     const target = document.getElementById(id);
     if (!target) return;
     target.scrollIntoView({ behavior:'smooth', block:'start' });
-    document.querySelectorAll('.sb-item[data-scroll]').forEach(b => b.classList.toggle('active', b.dataset.scroll === id));
-    document.querySelectorAll('.m-ov-item[data-scroll]').forEach(b => b.classList.toggle('active', b.dataset.scroll === id));
+    document.querySelectorAll<HTMLElement>('.sb-item[data-scroll]').forEach(b => b.classList.toggle('active', b.dataset.scroll === id));
+    document.querySelectorAll<HTMLElement>('.m-ov-item[data-scroll]').forEach(b => b.classList.toggle('active', b.dataset.scroll === id));
   }));
 })();
 
@@ -1228,7 +1277,7 @@ async function submitDeleteAccount() {
   mTheme?.addEventListener('click', () => dbTheme?.click());
   mLang?.addEventListener('click', e => { e.stopPropagation(); mDrop?.classList.toggle('open'); });
   mDrop?.addEventListener('click', e => {
-    const opt = e.target.closest('.db-lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest('.db-lang-opt') as HTMLElement | null; if (!opt) return;
     if (typeof applyLangD === 'function') applyLangD(opt.dataset.lang);
     mDrop.classList.remove('open');
   });
@@ -1237,8 +1286,8 @@ async function submitDeleteAccount() {
   // Sync mobile theme icon with theme class
   function syncMTheme() {
     const dark = document.documentElement.classList.contains('theme-dark');
-    const sun  = mTheme?.querySelector('.icon-sun');
-    const moon = mTheme?.querySelector('.icon-moon');
+    const sun  = mTheme?.querySelector<HTMLElement>('.icon-sun');
+    const moon = mTheme?.querySelector<HTMLElement>('.icon-moon');
     if (sun)  sun.hidden = dark;
     if (moon) moon.hidden = !dark;
   }
@@ -1247,7 +1296,7 @@ async function submitDeleteAccount() {
 
   // Mobile overlay lang options
   document.getElementById('m-overlay')?.addEventListener('click', e => {
-    const opt = e.target.closest('.m-ov-lang-opt'); if (!opt) return;
+    const opt = (e.target as Element | null)?.closest('.m-ov-lang-opt') as HTMLElement | null; if (!opt) return;
     if (typeof applyLangD === 'function') applyLangD(opt.dataset.lang);
   });
 })();
@@ -1280,7 +1329,7 @@ async function submitDeleteAccount() {
 
 // ── block 3/3 ──
 (function(){
-  const canvas=document.getElementById('neural-canvas');if(!canvas)return;
+  const canvas=document.getElementById('neural-canvas') as HTMLCanvasElement | null;if(!canvas)return;
   const ctx=canvas.getContext('2d');if(!ctx)return;
   let W=0,H=0,nodes=[];const DIST=155;
   function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight}
@@ -1335,11 +1384,11 @@ async function loadDevices() {
   if (!sec || !list) return;
   sec.classList.remove('hidden');
   try {
-    const { devices } = await apiFetch('/api/auth/devices');
+    const { devices } = await window.apiFetch<{ devices?: Array<Record<string, unknown>> }>('/api/auth/devices');
     window._lastDevices = devices ?? [];
     renderDevices(window._lastDevices);
   } catch (e) {
-    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(window.tApiError(e, T('net_err')))}</p>`;
   }
 }
 
@@ -1381,12 +1430,12 @@ async function logoutDevice(deviceUuidAttr) {
   try { myUuid = localStorage.getItem('chiyigo.device_uuid'); } catch (_) {}
   const isMyOwnRow = isNullGroup || (myUuid && deviceUuidAttr === myUuid);
   try {
-    const r = await apiFetch('/api/auth/devices/logout', {
+    const r = await window.apiFetch('/api/auth/devices/logout', {
       method: 'POST',
       body:   JSON.stringify({ device_uuid }),
     });
     // race：另一個 tab 剛剛已撤完，這裡 revoked=0 → 不算成功，刷新就好
-    if (!r || r.revoked === 0) {
+    if (!r || (r as { revoked?: number }).revoked === 0) {
       showBindToast(T('device_logout_already_revoked') || '此裝置已無有效 session', 'ok');
       loadDevices();
       return;
@@ -1403,7 +1452,7 @@ async function logoutDevice(deviceUuidAttr) {
     showBindToast(T('device_logout_success_other'), 'ok');
     loadDevices();
   } catch (e) {
-    showBindToast(tApiError(e, T('net_err')), 'err');
+    showBindToast(window.tApiError(e, T('net_err')), 'err');
   }
 }
 
@@ -1415,7 +1464,7 @@ async function loadPasskeys() {
   const sec  = document.getElementById('passkeys-section');
   const list = document.getElementById('passkeys-list');
   const unsup = document.getElementById('passkey-unsupported');
-  const addBtn = document.getElementById('passkey-add-btn');
+  const addBtn = document.getElementById('passkey-add-btn') as HTMLButtonElement | null;
   if (!sec || !list) return;
   sec.classList.remove('hidden');
 
@@ -1425,11 +1474,11 @@ async function loadPasskeys() {
   }
 
   try {
-    const { credentials } = await apiFetch('/api/auth/webauthn/credentials');
+    const { credentials } = await window.apiFetch<{ credentials?: Array<Record<string, unknown>> }>('/api/auth/webauthn/credentials');
     window._lastPasskeys = credentials ?? [];
     renderPasskeys(window._lastPasskeys);
   } catch (e) {
-    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(window.tApiError(e, T('net_err')))}</p>`;
   }
 }
 
@@ -1505,7 +1554,7 @@ function openPasskeyRename(id) {
   document.getElementById(`pk-remove-${id}`)?.classList.add('hidden');
   document.getElementById(`pk-rename-${id}`)?.classList.remove('hidden');
   const inp = document.getElementById(`pk-name-${id}`);
-  if (inp) { inp.focus(); inp.select(); }
+  if (inp) { inp.focus(); (inp as HTMLInputElement).select(); }
 }
 
 function cancelPasskeyRename(id) {
@@ -1514,9 +1563,9 @@ function cancelPasskeyRename(id) {
 }
 
 async function savePasskeyRename(id) {
-  const inp = document.getElementById(`pk-name-${id}`);
+  const inp = document.getElementById(`pk-name-${id}`) as HTMLInputElement | null;
   const msg = document.getElementById(`pk-rename-msg-${id}`);
-  const btns = document.querySelectorAll(`[data-passkey-id="${id}"]`);
+  const btns = document.querySelectorAll<HTMLElement>(`[data-passkey-id="${id}"]`);
   const showMsg = (text, type) => {
     if (!msg) return;
     msg.textContent = text;
@@ -1525,9 +1574,9 @@ async function savePasskeyRename(id) {
   };
   const nickname = (inp?.value ?? '').trim();
   if (!nickname) { showMsg(T('passkey_rename_empty'), 'err'); return; }
-  btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = true; });
+  btns.forEach(b => { if (b.tagName === 'BUTTON') (b as HTMLButtonElement).disabled = true; });
   try {
-    await apiFetch(`/api/auth/webauthn/credentials/${id}`, {
+    await window.apiFetch(`/api/auth/webauthn/credentials/${id}`, {
       method: 'PATCH',
       body:   JSON.stringify({ nickname }),
     });
@@ -1538,8 +1587,8 @@ async function savePasskeyRename(id) {
     }
     showBindToast(T('passkey_rename_success'), 'ok');
   } catch (e) {
-    btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; });
-    showMsg(tApiError(e, T('passkey_rename_fail')), 'err');
+    btns.forEach(b => { if (b.tagName === 'BUTTON') (b as HTMLButtonElement).disabled = false; });
+    showMsg(window.tApiError(e, T('passkey_rename_fail')), 'err');
   }
 }
 
@@ -1558,15 +1607,15 @@ function openPasskeyRemove(id) {
 
 function cancelPasskeyRemove(id) {
   document.getElementById(`pk-remove-${id}`)?.classList.add('hidden');
-  const otp = document.getElementById(`pk-otp-${id}`);
+  const otp = document.getElementById(`pk-otp-${id}`) as HTMLInputElement | null;
   if (otp) otp.value = '';
   document.getElementById(`pk-msg-${id}`)?.classList.add('hidden');
 }
 
 async function confirmPasskeyRemove(id) {
-  const otpEl = document.getElementById(`pk-otp-${id}`);
+  const otpEl = document.getElementById(`pk-otp-${id}`) as HTMLInputElement | null;
   const msg   = document.getElementById(`pk-msg-${id}`);
-  const btns  = document.querySelectorAll(`[data-passkey-id="${id}"]`);
+  const btns  = document.querySelectorAll<HTMLElement>(`[data-passkey-id="${id}"]`);
   const otp   = (otpEl?.value || '').trim();
   const showMsg = (text, type) => {
     if (!msg) return;
@@ -1575,29 +1624,29 @@ async function confirmPasskeyRemove(id) {
     msg.classList.remove('hidden');
   };
   if (!/^\d{6}$/.test(otp)) { showMsg(T('totp_err6'), 'err'); return; }
-  btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = true; });
+  btns.forEach(b => { if (b.tagName === 'BUTTON') (b as HTMLButtonElement).disabled = true; });
   try {
-    const stepRes = await apiFetch('/api/auth/step-up', {
+    const stepRes = await window.apiFetch<{ step_up_token?: string }>('/api/auth/step-up', {
       method: 'POST',
       body: JSON.stringify({ scope: 'elevated:account', for_action: 'remove_passkey', otp_code: otp }),
     });
     const stepUpToken = stepRes?.step_up_token;
-    if (!stepUpToken) { showMsg(T('net_err'), 'err'); btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; }); return; }
-    await apiFetch(`/api/auth/webauthn/credentials/${id}`, {
+    if (!stepUpToken) { showMsg(T('net_err'), 'err'); btns.forEach(b => { if (b.tagName === 'BUTTON') (b as HTMLButtonElement).disabled = false; }); return; }
+    await window.apiFetch(`/api/auth/webauthn/credentials/${id}`, {
       method:  'DELETE',
       headers: { Authorization: 'Bearer ' + stepUpToken },
     });
     showBindToast(T('passkey_remove_success'), 'ok');
     loadPasskeys();
   } catch (e) {
-    btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; });
-    showMsg(tApiError(e, T('passkey_remove_fail')), 'err');
+    btns.forEach(b => { if (b.tagName === 'BUTTON') (b as HTMLButtonElement).disabled = false; });
+    showMsg(window.tApiError(e, T('passkey_remove_fail')), 'err');
   }
 }
 
 async function addPasskey() {
   if (!passkeySupported()) return;
-  const btn = document.getElementById('passkey-add-btn');
+  const btn = document.getElementById('passkey-add-btn') as HTMLButtonElement | null;
   const msg = document.getElementById('passkey-add-msg');
   const showMsg = (text, type) => {
     if (!msg) return;
@@ -1608,7 +1657,11 @@ async function addPasskey() {
   if (btn) btn.disabled = true;
   showMsg(T('passkey_adding'), 'ok');
   try {
-    const opts = await apiFetch('/api/auth/webauthn/register-options', { method: 'POST', body: '{}' });
+    const opts = await window.apiFetch<Record<string, unknown> & {
+      challenge: string;
+      user: { id: string } & Record<string, unknown>;
+      excludeCredentials?: Array<{ id: string } & Record<string, unknown>>;
+    }>('/api/auth/webauthn/register-options', { method: 'POST', body: '{}' });
     const publicKey = {
       ...opts,
       challenge: b64urlToBuf(opts.challenge),
@@ -1616,7 +1669,7 @@ async function addPasskey() {
       excludeCredentials: (opts.excludeCredentials ?? []).map(c => ({ ...c, id: b64urlToBuf(c.id) })),
     };
     let cred;
-    try { cred = await navigator.credentials.create({ publicKey }); }
+    try { cred = await navigator.credentials.create({ publicKey: publicKey as unknown as PublicKeyCredentialCreationOptions }); }
     catch (e) {
       if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') showMsg(T('passkey_add_cancelled'), 'err');
       else showMsg(`${T('passkey_add_fail')}：${e?.message ?? e}`, 'err');
@@ -1634,14 +1687,14 @@ async function addPasskey() {
       clientExtensionResults: typeof cred.getClientExtensionResults === 'function' ? cred.getClientExtensionResults() : {},
       authenticatorAttachment: cred.authenticatorAttachment ?? undefined,
     };
-    await apiFetch('/api/auth/webauthn/register-verify', {
+    await window.apiFetch('/api/auth/webauthn/register-verify', {
       method: 'POST',
       body:   JSON.stringify({ response: responseJson, nickname: T('passkey_default_nickname') }),
     });
     showMsg(T('passkey_add_success'), 'ok');
     loadPasskeys();
   } catch (e) {
-    showMsg(tApiError(e, T('passkey_add_fail')), 'err');
+    showMsg(window.tApiError(e, T('passkey_add_fail')), 'err');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1668,7 +1721,7 @@ async function loadWallets() {
   const sec    = document.getElementById('wallets-section');
   const list   = document.getElementById('wallets-list');
   const unsup  = document.getElementById('wallet-unsupported');
-  const addBtn = document.getElementById('wallet-add-btn');
+  const addBtn = document.getElementById('wallet-add-btn') as HTMLButtonElement | null;
   if (!sec || !list) return;
   sec.classList.remove('hidden');
 
@@ -1678,11 +1731,11 @@ async function loadWallets() {
   }
 
   try {
-    const { wallets } = await apiFetch('/api/auth/wallet');
+    const { wallets } = await window.apiFetch<{ wallets?: Array<Record<string, unknown>> }>('/api/auth/wallet');
     window._lastWallets = wallets ?? [];
     renderWallets(window._lastWallets);
   } catch (e) {
-    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(window.tApiError(e, T('net_err')))}</p>`;
   }
 }
 
@@ -1743,15 +1796,15 @@ function openWalletRemove(id) {
 
 function cancelWalletRemove(id) {
   document.getElementById(`wl-remove-${id}`)?.classList.add('hidden');
-  const otp = document.getElementById(`wl-otp-${id}`);
+  const otp = document.getElementById(`wl-otp-${id}`) as HTMLInputElement | null;
   if (otp) otp.value = '';
   document.getElementById(`wl-msg-${id}`)?.classList.add('hidden');
 }
 
 async function confirmWalletRemove(id) {
-  const otpEl = document.getElementById(`wl-otp-${id}`);
+  const otpEl = document.getElementById(`wl-otp-${id}`) as HTMLInputElement | null;
   const msg   = document.getElementById(`wl-msg-${id}`);
-  const btns  = document.querySelectorAll(`[data-wallet-id="${id}"]`);
+  const btns  = document.querySelectorAll<HTMLElement>(`[data-wallet-id="${id}"]`);
   const otp   = (otpEl?.value || '').trim();
   const showMsg = (text, type) => {
     if (!msg) return;
@@ -1760,23 +1813,23 @@ async function confirmWalletRemove(id) {
     msg.classList.remove('hidden');
   };
   if (!/^\d{6}$/.test(otp)) { showMsg(T('totp_err6'), 'err'); return; }
-  btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = true; });
+  btns.forEach(b => { if (b.tagName === 'BUTTON') (b as HTMLButtonElement).disabled = true; });
   try {
-    const stepRes = await apiFetch('/api/auth/step-up', {
+    const stepRes = await window.apiFetch<{ step_up_token?: string }>('/api/auth/step-up', {
       method: 'POST',
       body: JSON.stringify({ scope: 'elevated:account', for_action: 'unbind_wallet', otp_code: otp }),
     });
     const stepUpToken = stepRes?.step_up_token;
-    if (!stepUpToken) { showMsg(T('net_err'), 'err'); btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; }); return; }
-    await apiFetch(`/api/auth/wallet/${id}`, {
+    if (!stepUpToken) { showMsg(T('net_err'), 'err'); btns.forEach(b => { if (b.tagName === 'BUTTON') (b as HTMLButtonElement).disabled = false; }); return; }
+    await window.apiFetch(`/api/auth/wallet/${id}`, {
       method:  'DELETE',
       headers: { Authorization: 'Bearer ' + stepUpToken },
     });
     showBindToast(T('wallet_remove_success'), 'ok');
     loadWallets();
   } catch (e) {
-    btns.forEach(b => { if (b.tagName === 'BUTTON') b.disabled = false; });
-    showMsg(tApiError(e, T('wallet_remove_fail')), 'err');
+    btns.forEach(b => { if (b.tagName === 'BUTTON') (b as HTMLButtonElement).disabled = false; });
+    showMsg(window.tApiError(e, T('wallet_remove_fail')), 'err');
   }
 }
 
@@ -1806,7 +1859,7 @@ async function addWallet() {
   const provider = walletProvider();
   if (!provider) return;
 
-  const btn = document.getElementById('wallet-add-btn');
+  const btn = document.getElementById('wallet-add-btn') as HTMLButtonElement | null;
   const msg = document.getElementById('wallet-add-msg');
   const showMsg = (text, type) => {
     if (!msg) return;
@@ -1843,13 +1896,13 @@ async function addWallet() {
     // 2) 拿 nonce + server domain/uri/chain_id
     let nonceRes;
     try {
-      nonceRes = await apiFetch('/api/auth/wallet/nonce', {
+      nonceRes = await window.apiFetch('/api/auth/wallet/nonce', {
         method: 'POST',
         body:   JSON.stringify({ address }),
       });
     } catch (e) {
       if (e?.code === 'ALREADY_BOUND') showMsg(T('wallet_already_bound'), 'err');
-      else showMsg(tApiError(e, T('wallet_add_fail')), 'err');
+      else showMsg(window.tApiError(e, T('wallet_add_fail')), 'err');
       if (btn) btn.disabled = false;
       return;
     }
@@ -1882,7 +1935,7 @@ async function addWallet() {
     }
 
     // 4) verify + bind
-    await apiFetch('/api/auth/wallet/verify', {
+    await window.apiFetch('/api/auth/wallet/verify', {
       method: 'POST',
       body:   JSON.stringify({ message: messageRaw, signature }),
     });
@@ -1890,7 +1943,7 @@ async function addWallet() {
     showMsg(T('wallet_add_success'), 'ok');
     loadWallets();
   } catch (e) {
-    showMsg(tApiError(e, T('wallet_add_fail')), 'err');
+    showMsg(window.tApiError(e, T('wallet_add_fail')), 'err');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1913,7 +1966,7 @@ async function loadDeals() {
   const list = document.getElementById('deals-list');
   if (!sec || !list) return;
   try {
-    const data = await apiFetch('/api/auth/deals?limit=50');
+    const data = await window.apiFetch<{ rows?: Array<Record<string, unknown>> }>('/api/auth/deals?limit=50');
     const rows = data?.rows ?? [];
     if (!rows.length) {
       sec.classList.add('hidden');
@@ -1923,7 +1976,7 @@ async function loadDeals() {
     renderDeals(rows);
   } catch (e) {
     sec.classList.remove('hidden');
-    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(window.tApiError(e, T('net_err')))}</p>`;
   }
 }
 
@@ -1967,11 +2020,11 @@ async function loadPayments() {
   if (!sec || !list) return;
   sec.classList.remove('hidden');
   try {
-    const data = await apiFetch('/api/auth/payments/intents?limit=50');
+    const data = await window.apiFetch<{ items?: Array<Record<string, unknown>> }>('/api/auth/payments/intents?limit=50');
     window._lastPayments = data?.items ?? [];
     renderPayments(window._lastPayments);
   } catch (e) {
-    list.innerHTML = `<p class="text-xs text-red-400">${esc(tApiError(e, T('net_err')))}</p>`;
+    list.innerHTML = `<p class="text-xs text-red-400">${esc(window.tApiError(e, T('net_err')))}</p>`;
   }
 }
 
@@ -2071,22 +2124,22 @@ function openPaymentForm() {
 function cancelPaymentForm() {
   document.getElementById('payment-form')?.classList.add('hidden');
   ['payment-amount', 'payment-desc', 'payment-requisition'].forEach(id => {
-    const el = document.getElementById(id);
+    const el = document.getElementById(id) as HTMLInputElement | null;
     if (el) el.value = '';
   });
-  const methodEl = document.getElementById('payment-method');
+  const methodEl = document.getElementById('payment-method') as HTMLSelectElement | null;
   if (methodEl) methodEl.value = 'ALL';
   const msg = document.getElementById('payment-form-msg');
   if (msg) { msg.classList.add('hidden'); msg.textContent = ''; }
 }
 
 async function submitPaymentCheckout() {
-  const amountEl = document.getElementById('payment-amount');
-  const methodEl = document.getElementById('payment-method');
-  const descEl   = document.getElementById('payment-desc');
-  const reqEl    = document.getElementById('payment-requisition');
+  const amountEl = document.getElementById('payment-amount') as HTMLInputElement | null;
+  const methodEl = document.getElementById('payment-method') as HTMLSelectElement | null;
+  const descEl   = document.getElementById('payment-desc') as HTMLInputElement | null;
+  const reqEl    = document.getElementById('payment-requisition') as HTMLInputElement | null;
   const msg      = document.getElementById('payment-form-msg');
-  const btn      = document.getElementById('payment-submit-btn');
+  const btn      = document.getElementById('payment-submit-btn') as HTMLButtonElement | null;
   const label    = document.getElementById('payment-submit-label');
 
   const showMsg = (text, type) => {
@@ -2102,14 +2155,14 @@ async function submitPaymentCheckout() {
     return;
   }
 
-  const metadata = {};
+  const metadata: { requisition_id?: number } = {};
   const reqId = Number(reqEl?.value);
   if (Number.isFinite(reqId) && reqId > 0) metadata.requisition_id = reqId;
 
   if (btn) btn.disabled = true;
   if (label) label.textContent = T('payment_submitting');
   try {
-    const resp = await apiFetch('/api/auth/payments/checkout/ecpay', {
+    const resp = await window.apiFetch<{ checkout_url?: string; fields?: Record<string, unknown> }>('/api/auth/payments/checkout/ecpay', {
       method: 'POST',
       body: JSON.stringify({
         amount,
@@ -2131,7 +2184,7 @@ async function submitPaymentCheckout() {
     const fallback = e?.code === 'KYC_REQUIRED'
       ? T('payment_kyc_required')
       : T('payment_create_fail');
-    showMsg(tApiError(e, fallback), 'err');
+    showMsg(window.tApiError(e, fallback), 'err');
     if (btn) btn.disabled = false;
     if (label) label.textContent = T('payment_submit_btn');
   }
@@ -2171,10 +2224,10 @@ document.addEventListener('submit', e => {
 // 比個別 getElementById().addEventListener 穩：button 即使是動態 render 或 hidden 都 work。
 document.addEventListener('click', e => {
   // 密碼眼睛切換（最先處理；togglePassword/hidePassword 由 auth-ui.js 提供全域函式，不要重複宣告 _pwdTimers）
-  const eyeBtn = e.target.closest('[data-toggle-pwd]');
+  const eyeBtn = (e.target as Element | null)?.closest('[data-toggle-pwd]') as HTMLElement | null;
   if (eyeBtn) { togglePassword(eyeBtn.dataset.togglePwd, eyeBtn.dataset.toggleEye); return; }
 
-  const t = e.target.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-refund-intent], [data-req-open-id]');
+  const t = (e.target as Element | null)?.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-refund-intent], [data-req-open-id]') as HTMLElement | null;
   if (!t) return;
   // List 上的 revoked 永久刪除按鈕（要在 reqOpenId 之前，因為按鈕在 row 內）
   if (t.dataset.reqDelId) return armOrConfirmReqListDelete(Number(t.dataset.reqDelId));
@@ -2223,3 +2276,4 @@ document.addEventListener('click', e => {
   if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);
   if (t.dataset.bind)     return bindProvider(t.dataset.bind);
 });
+})();

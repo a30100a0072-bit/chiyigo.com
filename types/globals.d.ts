@@ -123,5 +123,24 @@ declare global {
       cancelText?: string;
       danger?: boolean;
     }) => Promise<boolean>;
+
+    // PR-5w (Stage 5)：dashboard.ts 的 render cache + profile flags + 3rd-party CDN/wallet
+    // globals。簽章與 src/js/dashboard.ts 檔首的 `interface Window` 等價（dashboard.ts
+    // 服務 prod tsconfig，types:[] 不載本檔；本宣告服務 root tsconfig 與其他 caller，
+    // 兩條 type path 等價合併，per api.ts / notify.ts 同款慣例）。
+    _lastRequisitions?: Array<Record<string, unknown>>;
+    _lastDevices?: Array<Record<string, unknown>>;
+    _lastPasskeys?: Array<Record<string, unknown>>;
+    _lastWallets?: Array<Record<string, unknown>>;
+    _lastPayments?: Array<Record<string, unknown>>;
+    __hasPassword?: boolean;
+    __totpEnabled?: boolean;
+    __userEmail?: string;
+    QRCode?: {
+      toCanvas: (canvas: HTMLElement | null, text: string, opts?: Record<string, unknown>) => Promise<void>;
+    };
+    ethereum?: {
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+    };
   }
 }
