@@ -480,12 +480,16 @@ export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
  *
  * Tighten 變化（依 user guard rails）：
  *   1. 高信心 fast-path：code === 'ObjectLockedByBucketPolicy' → 直接 true
- *      （R2 真實 S3 code，false-positive 風險極低，不必再驗 status）
+ *      （R2 真實 S3 code，false-positive 風險極低，不必再驗 status；可跨 wrapper
+ *      cause chain 任一 level 命中）
  *   2. Nested check：走一層 cause 鏈（防 worker binding 包成 wrapped Error 的場景；
  *      spike 是 fetch path 平的，binding shape 不明 — 守一層 cause 是 belt-and-suspenders）
  *   3. 保留 fallback dual condition：status (409/412) AND marker (message/code/name 含
  *      lock-related 字串) — 防 status 單條件誤判 4xx 為 lock，防 marker 單條件誤判
  *      log message 為 lock。fast-path miss 時走這條。
+ *      ⚠️ codex r1 P2：dual condition **逐 candidate 判斷**（同一 shape 同時具備
+ *      status + marker 才算）— 不可跨 outer/cause 合併 hit，否則 outer marker +
+ *      cause 非 lock 409 會誤判為 lock。
  *   4. status 仍認 409 + 412：spike 真實命中 409；412 留作 defensive（其他 R2 / S3
  *      precondition-failed 場景可能用 412，例如未來 If-Match header 整合）。
  *
@@ -519,18 +523,21 @@ export function isR2LockError(e: unknown): boolean {
     if (typeof code === 'string' && R2_LOCK_KNOWN_CODES.has(code)) return true
   }
 
-  // (2) Fallback dual condition：status AND marker 兩條件並存
-  let hasStatusHit = false
-  let hasMarkerHit = false
+  // (2) Fallback dual condition：status AND marker 兩條件並存，**逐 candidate 判斷**
+  //     codex r1 P2：不可跨 outer/cause 合併 hit（之前用全域 flag 把 outer.marker +
+  //     cause.409 加總會誤判，例：outer message 含 "locked" log 字樣 + cause 是
+  //     ConditionalRequestConflict 409 → 不是 lock 卻被當 lock）
   for (const c of candidates) {
     const rawStatus = c.status ?? c.httpStatus ?? c.statusCode
     const status = Number(rawStatus)
-    if (status === 409 || status === 412) hasStatusHit = true
+    const statusHit = (status === 409 || status === 412)
+    if (!statusHit) continue   // 此 candidate status 不符 → 不可能命中（即便 marker 命中也不算）
+    let markerHit = false
     for (const k of ['message', 'code', 'name'] as const) {
       const v = c[k]
-      if (typeof v === 'string' && R2_LOCK_MARKER.test(v)) { hasMarkerHit = true; break }
+      if (typeof v === 'string' && R2_LOCK_MARKER.test(v)) { markerHit = true; break }
     }
-    if (hasStatusHit && hasMarkerHit) return true
+    if (markerHit) return true
   }
   return false
 }

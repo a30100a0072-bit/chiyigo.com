@@ -881,6 +881,31 @@ describe('PR 0.2c-pre-1a：isR2LockError 保守 detector', () => {
       message: 'request precondition failed',
     })).toBe(false)
   })
+
+  // ── Codex r1 P2 regression：dual condition 逐 candidate 判斷，不可跨 outer/cause 合併 ──
+  it('codex r1 P2：outer 有 marker + cause 是非 lock 409 → false（不可跨 candidate 合併 status+marker）', () => {
+    // 修前 bug：outer 提供 marker、cause 提供 status，全域 flag 合在一起 return true
+    // 修後：每個 candidate 必須自己同時具備 status+marker 才算
+    const wrapped = new Error('operation locked by user policy log') as Error & { cause?: unknown }
+    wrapped.cause = { status: 409, code: 'ConditionalRequestConflict', message: 'request precondition failed' }
+    expect(isR2LockError(wrapped)).toBe(false)
+  })
+
+  it('codex r1 P2：outer 是非 lock 409 + cause 有 marker (無 status) → false', () => {
+    // 反向：status 從 outer 來、marker 從 cause 來。一樣不該命中。
+    const wrapped = new Error('Request conflict') as Error & { status?: number; cause?: unknown }
+    wrapped.status = 409
+    // outer code 不是 lock-marker，name 是 'Error' 也不是
+    wrapped.cause = { message: 'this resource is locked elsewhere by an unrelated system' }
+    expect(isR2LockError(wrapped)).toBe(false)
+  })
+
+  it('positive control：cause 自己同時具備 status+marker → true（per-candidate 不影響合法 nested 命中）', () => {
+    // 確認 P2 修法沒破合法 nested 命中：cause 自己就是完整 lock shape
+    const wrapped = new Error('R2 binding wrapper') as Error & { cause?: unknown }
+    wrapped.cause = { status: 409, code: 'ObjectLockedByBucketPolicy', message: 'locked by bucket policy' }
+    expect(isR2LockError(wrapped)).toBe(true)
+  })
 })
 
 describe('PR 0.2c-pre-1a：putWithRetry lock-aware', () => {
