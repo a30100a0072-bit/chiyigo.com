@@ -3,7 +3,7 @@ import { env } from 'cloudflare:test'
 import { jwtVerify, importJWK } from 'jose'
 import {
   resetDb, seedUser, callFunction, jsonPost, ensureJwtKeys,
-} from './_helpers.js'
+} from './_helpers'
 
 // Mock 寄信模組（hoist 以早於 register.js import）
 const sentEmails = vi.hoisted(() => [])

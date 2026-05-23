@@ -14,7 +14,7 @@ import { env } from 'cloudflare:test'
 import { TOTP, Secret } from 'otpauth'
 import {
   resetDb, seedUser, enableTotp, ensureJwtKeys, callFunction, jsonPost,
-} from './_helpers.js'
+} from './_helpers'
 import { onRequestPost as twofaVerify } from '../../functions/api/auth/2fa/verify'
 import { onRequestPost as loginPost } from '../../functions/api/auth/local/login'
 import { onRequestGet as oauthInit } from '../../functions/api/auth/oauth/[provider]/init'

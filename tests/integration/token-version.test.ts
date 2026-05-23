@@ -15,7 +15,7 @@ import { requireAuth, bumpTokenVersion } from '../../functions/utils/auth'
 import { signJwt } from '../../functions/utils/jwt'
 import {
   resetDb, seedUser, callFunction, jsonPost, ensureJwtKeys,
-} from './_helpers.js'
+} from './_helpers'
 
 const URL_LOGIN = 'http://localhost/api/auth/local/login'
 

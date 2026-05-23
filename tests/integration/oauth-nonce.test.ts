@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, appleSignIdToken, appleJwksBody } from './_helpers.js'
+import { resetDb, ensureJwtKeys, appleSignIdToken, appleJwksBody } from './_helpers'
 import {
   onRequestGet as cbGet,
 } from '../../functions/api/auth/oauth/[provider]/callback'

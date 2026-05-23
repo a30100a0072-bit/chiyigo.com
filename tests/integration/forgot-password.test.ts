@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, seedUser, seedOauthOnlyUser, callFunction, jsonPost } from './_helpers.js'
+import { resetDb, seedUser, seedOauthOnlyUser, callFunction, jsonPost } from './_helpers'
 
 // ── Mock 寄信模組（在 forgot-password.js import 之前 hoist）─────────
 const sentEmails = vi.hoisted(() => [])

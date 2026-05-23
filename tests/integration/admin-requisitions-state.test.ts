@@ -40,7 +40,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { onRequestPost as saveHandler } from '../../functions/api/admin/requisitions/[id]/save'
 import { onRequestPost as deleteHandler } from '../../functions/api/admin/requisitions/[id]/delete'

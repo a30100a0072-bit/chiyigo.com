@@ -10,7 +10,7 @@ import { env } from 'cloudflare:test'
 import { TOTP, Secret } from 'otpauth'
 import {
   resetDb, seedUser, enableTotp, ensureJwtKeys, callFunction,
-} from './_helpers.js'
+} from './_helpers'
 import { onRequestPost as twofaVerify } from '../../functions/api/auth/2fa/verify'
 import { signJwt } from '../../functions/utils/jwt'
 

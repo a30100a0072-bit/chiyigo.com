@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest'
 import { env } from 'cloudflare:test'
 import { jwtVerify, importJWK } from 'jose'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import {
   hashToken,
   generateSecureToken,

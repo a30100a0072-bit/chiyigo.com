@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb } from './_helpers.js'
+import { resetDb } from './_helpers'
 import {
   appendAuditLog,
   prepareAppendAuditLog,

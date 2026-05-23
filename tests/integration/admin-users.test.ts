@@ -44,7 +44,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { hashToken, generateSecureToken } from '../../functions/utils/crypto'
 import { onRequestGet as listHandler } from '../../functions/api/admin/users'

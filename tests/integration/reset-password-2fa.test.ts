@@ -6,7 +6,7 @@ import { env } from 'cloudflare:test'
 import {
   resetDb, seedUser, seedResetToken, seedOauthOnlyUser, enableTotp, seedBackupCode,
   callFunction, jsonPost,
-} from './_helpers.js'
+} from './_helpers'
 
 const URL_RESET = 'http://localhost/api/auth/local/reset-password'
 // 固定 base32 secret，方便用 otpauth 即時產生有效碼

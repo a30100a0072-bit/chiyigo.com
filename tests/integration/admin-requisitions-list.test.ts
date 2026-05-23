@@ -37,7 +37,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { onRequestGet as listHandler } from '../../functions/api/admin/requisitions'
 import { onRequestGet as refundListHandler } from '../../functions/api/admin/requisition-refund'

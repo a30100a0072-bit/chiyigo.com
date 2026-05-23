@@ -12,7 +12,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, callFunction, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, callFunction, seedUser } from './_helpers'
 import { onRequestGet } from '../../functions/api/auth/oauth/authorize'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 

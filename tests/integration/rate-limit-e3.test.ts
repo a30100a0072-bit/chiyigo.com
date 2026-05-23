@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh'
 import { onRequestPost as tokenHandler } from '../../functions/api/auth/oauth/token'

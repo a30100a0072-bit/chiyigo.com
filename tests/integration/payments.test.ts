@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 
 // Codex r7 P2：TOCTOU 補救分支（updatePaymentStatus no_row → re-read includeDeleted

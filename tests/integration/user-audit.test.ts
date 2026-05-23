@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser, jsonPost } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser, jsonPost } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { safeUserAudit } from '../../functions/utils/user-audit'
 import { onRequestPost as loginHandler } from '../../functions/api/auth/local/login'

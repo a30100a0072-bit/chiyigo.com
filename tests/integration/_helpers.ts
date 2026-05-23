@@ -177,7 +177,10 @@ export async function googleSignIdToken({
   const { SignJWT } = await import('jose')
   const { privateKey, privateJwk } = await ensureGoogleTestKeys()
   const now = Math.floor(Date.now() / 1000)
-  const payload = { sub, aud, iss, iat: now, exp: now + expiresIn }
+  const payload: {
+    sub: string; aud: string; iss: string; iat: number; exp: number;
+    email?: string; email_verified?: boolean; nonce?: string;
+  } = { sub, aud, iss, iat: now, exp: now + expiresIn }
   if (email != null) payload.email = email
   payload.email_verified = email_verified
   if (nonce) payload.nonce = nonce
@@ -219,7 +222,10 @@ export async function appleSignIdToken({
   const { SignJWT } = await import('jose')
   const { privateKey, privateJwk } = await ensureAppleTestKeys()
   const now = Math.floor(Date.now() / 1000)
-  const payload = { sub, aud, iss, iat: now, exp: now + expiresIn }
+  const payload: {
+    sub: string; aud: string; iss: string; iat: number; exp: number;
+    email?: string; email_verified?: string; nonce?: string;
+  } = { sub, aud, iss, iat: now, exp: now + expiresIn }
   if (email != null) payload.email = email
   payload.email_verified = email_verified
   if (nonce) payload.nonce = nonce

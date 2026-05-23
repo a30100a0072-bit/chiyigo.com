@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { verifyJwt } from '../../functions/utils/jwt'
 
 const mockState = vi.hoisted(() => ({

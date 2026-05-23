@@ -19,7 +19,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb } from './_helpers.js'
+import { resetDb } from './_helpers'
 import { onRequestPost as cronAggregateDebug } from '../../functions/api/admin/cron/audit-aggregate-debug'
 
 const CRON_SECRET = 'test-cron-secret'

@@ -16,7 +16,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys } from './_helpers.js'
+import { resetDb, ensureJwtKeys } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { onRequestPost as bindEmailPost } from '../../functions/api/auth/oauth/bind-email'
 

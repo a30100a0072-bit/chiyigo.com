@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
 import { env } from 'cloudflare:test'
-import { resetDb, ensureJwtKeys, seedUser, callFunction, jsonPost } from './_helpers.js'
+import { resetDb, ensureJwtKeys, seedUser, callFunction, jsonPost } from './_helpers'
 import {
   computeRiskScore,
   hashUa,

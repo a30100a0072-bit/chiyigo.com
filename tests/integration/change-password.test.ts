@@ -9,7 +9,7 @@ import { TOTP, Secret } from 'otpauth'
 import { env } from 'cloudflare:test'
 import {
   resetDb, ensureJwtKeys, seedUser, enableTotp,
-} from './_helpers.js'
+} from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { requireAuth } from '../../functions/utils/auth'
 import { verifyPassword } from '../../functions/utils/crypto'

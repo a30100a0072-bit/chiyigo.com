@@ -11,7 +11,7 @@ import { TOTP, Secret } from 'otpauth'
 import { env } from 'cloudflare:test'
 import {
   resetDb, ensureJwtKeys, seedUser, enableTotp, seedBackupCode,
-} from './_helpers.js'
+} from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { requireStepUp } from '../../functions/utils/auth'
 import { SCOPES } from '../../functions/utils/scopes'
