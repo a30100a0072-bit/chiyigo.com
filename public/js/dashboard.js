@@ -1304,7 +1304,7 @@
             if (e instanceof ApiError && e.status > 0) {
                 const body = e.body;
                 const errKey = body?.error ?? '';
-                const k = DEL_ERR_MAP[errKey] || BACKEND_ERR_MAP[errKey];
+                const k = DEL_ERR_MAP[errKey];
                 // step-up 405/403/401 也走 generic（含 STEP_UP_REQUIRES_2FA）
                 let base = k ? T(k) : T('del_err_generic').replace('${status}', e.status);
                 if (body?.code === 'STEP_UP_REQUIRES_2FA')

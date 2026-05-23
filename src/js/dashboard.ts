@@ -36,13 +36,6 @@ interface Window {
   };
 }
 
-// TECH-DEBT: BACKEND_ERR_MAP 在整個 codebase 找不到定義（grep 全域 0 hit，仅 dashboard.js
-// 本身引用）。dashboard.ts line 1182 走 `DEL_ERR_MAP[k] || BACKEND_ERR_MAP[k]`，由於 `||`
-// 短路，僅在 DEL_ERR_MAP 沒有對應 error code AND e instanceof ApiError 時才會觸發
-// ReferenceError。為遵守 PR-5w 0 行為變更紀律（per [[feedback_security_boundary_pr_first_do_no_harm]]）
-// 保留此 bug；後續獨立 PR 修（candidate: 移除 `|| BACKEND_ERR_MAP[...]` fallback，或補 const map）。
-declare const BACKEND_ERR_MAP: Record<string, string>;
-
 ;(function () {
 // ── block 1/3 ──
 // ── i18n ──────────────────────────────────────────────
@@ -1227,7 +1220,7 @@ async function submitDeleteAccount() {
     if (e instanceof ApiError && e.status > 0) {
       const body = e.body as { error?: string; code?: string } | null;
       const errKey = body?.error ?? '';
-      const k = DEL_ERR_MAP[errKey] || BACKEND_ERR_MAP[errKey];
+      const k = DEL_ERR_MAP[errKey];
       // step-up 405/403/401 也走 generic（含 STEP_UP_REQUIRES_2FA）
       let base = k ? T(k) : T('del_err_generic').replace('${status}', e.status);
       if (body?.code === 'STEP_UP_REQUIRES_2FA') base = T('del_otp_required');
