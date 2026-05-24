@@ -464,47 +464,73 @@ export function aggregateSeverities(rows) {
 export const DEFAULT_PUT_RETRY_BACKOFF_MS = [1000, 4000, 16000]
 
 /**
- * R2 lock-error detector — PR 0.2c-pre-1a 保守版 + PR 0.2c-pre-1b spike tighten。
+ * R2 lock-error detector — PR 0.2c-pre-1a 保守版 + PR 0.2c-pre-1b spike tighten
+ *                          + PR 0.2c-pre-1b.2 Worker binding shape extend。
  *
  * 用途：putWithRetry 命中 lock error 時必須**不 retry**（lock 是永久性，retry
  * 浪費 21s wallclock + 多刷一輪 upload_failed audit event），並由呼叫端 emit
  * audit.archive.r2_lock_detected critical。**不可把 error 視為成功** — 仍 throw
  * 讓 chunk 進 failed state，admin 用 retry endpoint 介入。
  *
- * PR 0.2c-pre-1b spike (docs/fixtures/r2-lock-spike-2026-05-23.json) 結論：
+ * PR 0.2c-pre-1b spike (docs/fixtures/r2-lock-spike-2026-05-23.json) — S3 sigv4 path：
  *   - R2 retention lock **真的 enforce**（與 0.2a smoke 結論相反 — 0.2a 用 owner/
  *     wrangler 可能 bypass；用 limited token via S3 sigv4 lock 擋住 PUT-overwrite +
  *     DELETE 都回 409；PUT new key 在 locked prefix 仍 200 → write-once design 成立）
  *   - 實測 error shape：HTTP 409 + XML body {Code:'ObjectLockedByBucketPolicy',
  *     Message:'The object is locked by the bucket policy.'}
  *
- * Tighten 變化（依 user guard rails）：
- *   1. 高信心 fast-path：code === 'ObjectLockedByBucketPolicy' → 直接 true
- *      （R2 真實 S3 code，false-positive 風險極低，不必再驗 status；可跨 wrapper
- *      cause chain 任一 level 命中）
- *   2. Nested check：走一層 cause 鏈（防 worker binding 包成 wrapped Error 的場景；
- *      spike 是 fetch path 平的，binding shape 不明 — 守一層 cause 是 belt-and-suspenders）
- *   3. 保留 fallback dual condition：status (409/412) AND marker (message/code/name 含
- *      lock-related 字串) — 防 status 單條件誤判 4xx 為 lock，防 marker 單條件誤判
- *      log message 為 lock。fast-path miss 時走這條。
- *      ⚠️ codex r1 P2：dual condition **逐 candidate 判斷**（同一 shape 同時具備
- *      status + marker 才算）— 不可跨 outer/cause 合併 hit，否則 outer marker +
- *      cause 非 lock 409 會誤判為 lock。
- *   4. status 仍認 409 + 412：spike 真實命中 409；412 留作 defensive（其他 R2 / S3
- *      precondition-failed 場景可能用 412，例如未來 If-Match header 整合）。
+ * PR 0.2c-pre-1b.1 binding canary (docs/fixtures/r2-lock-binding-canary-2026-05-24.json)
+ *   — Worker R2 binding path（prod cron 實際走的路徑）：
+ *   - Binding also enforces same-key overwrite + DELETE（write-once design 同樣成立）
+ *   - **但 error shape 顯著不同於 S3 path**：
+ *       name='Error'（generic）/ code=null / status=null / cause=null
+ *       message='{op}: The object is locked by the bucket policy. (10069)'
+ *     ↓
+ *     1b spike-tightened classifier 三路全漏判（fast-path 無 code / dual 無 status /
+ *     cause null）— PR 0.2c-pre-1b.1 gate outcome (b) 點明的 critical gap。
  *
- * 若仍不 enforce（hypothetical）：不刪 isR2LockError，freeze fixture 描述「not enforced」
- * 並 write-once 留 defense-in-depth（user 補充 rule）。本次 spike 證實 enforce，
- * 此條款不需觸發。
+ * PR 0.2c-pre-1b.2 (本檔) extend — 加 path (2) 高信心 message-pattern：
+ *   - canonical phrase /locked by the bucket policy/i 兩 path 都有（S3 XML Message
+ *     field + binding Error.message 同字串），fixture 凍結；命中即 true，無需 status
+ *   - 內嵌 numeric code 10069（Cloudflare R2 internal code "Object locked by bucket
+ *     policy"，binding 在 message 尾巴附 "(10069)"）— 雙保險，若未來 Cloudflare 改
+ *     phrase wording 仍可由 numeric code 接住
+ *   - 與 path (1) 對等信心：fast-path 是 S3 string code、path (2) 是 binding message
+ *     pattern；兩條互不取代、互為 belt-and-suspenders
  *
- * 相關 memory：feedback_r2_lock_overwrite_design（isR2LockError 不可猜，preview
- * fixture 凍結）；feedback_r2_lock_propagation_canary（rule API 200 ≠ 對 prefix 生效；
- * spike script 已等 10s + 驗 canary 才跑 phase=test）。
+ * False-positive 控制：
+ *   - canonical phrase "locked by the bucket policy" 是 Cloudflare R2 lock-error 專屬
+ *     wording，非 R2 lock 場景幾乎不會自然出現此字串
+ *   - 本函式只在 putWithRetry / archive worker 上下文呼叫，error 來源限定 R2 binding
+ *     / S3 fetch — 不會被任意 user input 字串污染
+ *   - 既有 negative tests "object is locked" / "internal lock failure" / "forbidden by
+ *     lock policy" 因不含完整 canonical phrase，仍為 false（pre-extend baseline 不破）
+ *
+ * 整體三層信心架構：
+ *   1. 高信心 fast-path (string code)：R2_LOCK_KNOWN_CODES，跨 candidate 任一 hit
+ *   2. 高信心 message-pattern (新)：canonical phrase 或 R2_LOCK_KNOWN_NUMERIC_CODES
+ *   3. Fallback dual condition：status (409/412) AND marker，逐 candidate 判斷
+ *      ⚠️ codex r1 P2 (PR 1b)：不可跨 outer/cause 合併 hit
+ *
+ * 加新 code / phrase / numeric code 紀律：必同步加 fixture + unit test
+ * （[[feedback_r2_lock_overwrite_design]]：isR2LockError 不可猜）。
+ *
+ * 相關 memory：feedback_r2_lock_overwrite_design；feedback_r2_lock_propagation_canary。
  */
 
 // PR 0.2c-pre-1b spike fixture-frozen high-confidence S3 lock codes（真實命中過）。
 // 加新 code 必同步加 fixture 加 unit test；不可單獨 hard-code（[[feedback_r2_lock_overwrite_design]]）。
 const R2_LOCK_KNOWN_CODES = new Set(['ObjectLockedByBucketPolicy'])
+
+// PR 0.2c-pre-1b.1 binding canary fixture-frozen high-confidence canonical phrase（兩
+// path 都含此字串）。比 R2_LOCK_MARKER 更具體 — marker 是寬泛詞彙 union（需 status 配合
+// 才算），canonical phrase 是 Cloudflare R2 lock-error 專屬 wording（無需 status 配合）。
+const R2_LOCK_CANONICAL_PHRASE = /locked by the bucket policy/i
+
+// PR 0.2c-pre-1b.1 binding canary fixture-frozen Cloudflare R2 internal numeric error
+// code（binding 在 message 尾巴附 "(10069)"）。獨立於 R2_LOCK_KNOWN_CODES（string 版）
+// 避免 type 混淆；加新 numeric code 必同步加 fixture + unit test。
+const R2_LOCK_KNOWN_NUMERIC_CODES = new Set([10069])
 
 const R2_LOCK_MARKER = /(?:lock|locked|retention|immutable|objectlocked|object\s*locked)/i
 
@@ -517,15 +543,32 @@ export function isR2LockError(e: unknown): boolean {
   const cause = (e as { cause?: unknown }).cause
   if (cause && typeof cause === 'object') candidates.push(cause as Record<string, unknown>)
 
-  // (1) 高信心 fast-path：fixture 凍結的 S3 lock code 直接 true，不必驗 status
+  // (1) 高信心 fast-path (string code)：fixture 凍結的 S3 lock code 直接 true，不必驗 status
   for (const c of candidates) {
     const code = c.code
     if (typeof code === 'string' && R2_LOCK_KNOWN_CODES.has(code)) return true
   }
 
-  // (2) Fallback dual condition：status AND marker 兩條件並存，**逐 candidate 判斷**
-  //     codex r1 P2：不可跨 outer/cause 合併 hit（之前用全域 flag 把 outer.marker +
-  //     cause.409 加總會誤判，例：outer message 含 "locked" log 字樣 + cause 是
+  // (2) PR 1b.2 高信心 message-pattern：Worker binding 路徑無 code/status/cause，唯一
+  //     signal 是 message 內的 canonical phrase + 尾巴 "(10069)" 數字。跨 candidate
+  //     任一 hit 即 true，與 (1) 對等不需 status 配合。
+  for (const c of candidates) {
+    const msg = c.message
+    if (typeof msg === 'string' && R2_LOCK_CANONICAL_PHRASE.test(msg)) return true
+    // 已 surfaced 的 structured numeric code 欄位（future-proof 若 binding 之後改 expose）
+    const codeNum = c.code
+    if ((typeof codeNum === 'number' || typeof codeNum === 'string')
+        && R2_LOCK_KNOWN_NUMERIC_CODES.has(Number(codeNum))) return true
+    // 從 message 尾巴 "(<digits>)" 解析（current binding shape）
+    if (typeof msg === 'string') {
+      const m = msg.match(/\((\d+)\)\s*$/)
+      if (m && m[1] != null && R2_LOCK_KNOWN_NUMERIC_CODES.has(Number(m[1]))) return true
+    }
+  }
+
+  // (3) Fallback dual condition：status AND marker 兩條件並存，**逐 candidate 判斷**
+  //     codex r1 P2 (PR 1b)：不可跨 outer/cause 合併 hit（之前用全域 flag 把 outer.marker
+  //     + cause.409 加總會誤判，例：outer message 含 "locked" log 字樣 + cause 是
   //     ConditionalRequestConflict 409 → 不是 lock 卻被當 lock）
   for (const c of candidates) {
     const rawStatus = c.status ?? c.httpStatus ?? c.statusCode

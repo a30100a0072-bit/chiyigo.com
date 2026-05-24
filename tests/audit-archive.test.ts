@@ -911,6 +911,119 @@ describe('PR 0.2c-pre-1a：isR2LockError 保守 detector', () => {
   })
 })
 
+// ── PR 0.2c-pre-1b.2：Worker binding error shape (regression for canary outcome) ──
+// docs/fixtures/r2-lock-binding-canary-2026-05-24.json gate outcome (b): binding 拋
+// generic Error 無 code/status/cause，只有 canonical phrase + 尾巴 "(10069)" 在 message。
+// 1b spike-tightened classifier 三路全漏（fast-path 無 code / dual 無 status / cause null）。
+// 本 describe 鎖住：(a) 新 message-pattern path 覆蓋 binding shape；(b) 既有 negative
+// case 不被 canonical phrase 拉成 false positive；(c) fixture 整段 ingest 防再退步。
+describe('PR 0.2c-pre-1b.2：Worker binding canonical phrase + numeric code path', () => {
+  it('binding shape (canary fixture): generic Error, no code/status/cause, canonical phrase + (10069) → true', () => {
+    // 這個 case 在 1b.2 fix 之前**必 false**（fast-path 無 code / dual 無 status /
+    // cause null）。post-fix path (2) canonical phrase 接住 → true。
+    // [[feedback_regression_test_must_lock_exact_failure]]：鎖 exact failure mode。
+    expect(isR2LockError({
+      name: 'Error',
+      message: 'put: The object is locked by the bucket policy. (10069)',
+    })).toBe(true)
+  })
+
+  it('binding shape (delete): same shape, delete op prefix → true', () => {
+    expect(isR2LockError({
+      name: 'Error',
+      message: 'delete: The object is locked by the bucket policy. (10069)',
+    })).toBe(true)
+  })
+
+  it('canonical phrase only (no numeric code suffix) → true', () => {
+    // S3 XML body Message 字面（無 numeric tail），canonical phrase 仍命中
+    expect(isR2LockError({ message: 'The object is locked by the bucket policy.' })).toBe(true)
+  })
+
+  it('numeric code 10069 from message tail (no canonical phrase) → true', () => {
+    // 若 Cloudflare 未來改 phrase wording，message 仍尾巴附 (10069) → numeric path 接住
+    expect(isR2LockError({ message: 'R2 binding error (10069)' })).toBe(true)
+  })
+
+  it('structured numeric code field 10069 (future-proof) → true', () => {
+    // 若 binding 未來把 code expose 成 structured 欄位（現行不會），仍命中
+    expect(isR2LockError({ code: 10069, message: 'opaque error' })).toBe(true)
+    expect(isR2LockError({ code: '10069', message: 'opaque error' })).toBe(true)
+  })
+
+  it('numeric code in nested cause → true (defensive nested walk)', () => {
+    const wrapped = new Error('R2 binding wrapper') as Error & { cause?: unknown }
+    wrapped.cause = { message: 'inner: The object is locked by the bucket policy. (10069)' }
+    expect(isR2LockError(wrapped)).toBe(true)
+  })
+
+  // ── Negative cases: phrase / numeric code 必須精確，不可被類似字串拉成 false positive ──
+  it('negative: similar-looking but missing canonical phrase → false', () => {
+    // "locked" 出現但無完整 phrase，且無 status → 1b 既有 negative test 行為保留
+    expect(isR2LockError({ message: 'object is locked' })).toBe(false)
+    expect(isR2LockError({ message: 'forbidden by lock policy' })).toBe(false)
+    expect(isR2LockError({ message: 'internal lock failure' })).toBe(false)
+  })
+
+  it('negative: unknown numeric code in message tail → false', () => {
+    // 例：(12345) 不在 R2_LOCK_KNOWN_NUMERIC_CODES → 不命中
+    expect(isR2LockError({ message: 'some error (12345)' })).toBe(false)
+    expect(isR2LockError({ message: 'wrap (99999)' })).toBe(false)
+  })
+
+  it('negative: numeric in message but not at tail → false', () => {
+    // (10069) 必須在 message 末尾才算 binding shape；middle 位置可能是隨機 log 數字
+    expect(isR2LockError({ message: '(10069) was logged at startup, current error: other' })).toBe(false)
+  })
+
+  it('negative: structured code as random number not in set → false', () => {
+    expect(isR2LockError({ code: 99999, message: 'opaque' })).toBe(false)
+  })
+
+  // ── Fixture 整段 ingest：兩個 thrown ops（put_overwrite + delete）原樣灌入 ──
+  // 直接從 fixture 拿 response.thrown reconstruct 成 plain object，確保未來 fixture
+  // 更新 / classifier 改動 / Cloudflare 改 message wording 任一發生，本 test 會立刻
+  // 暴露問題。
+  it('fixture wholesale: every thrown op must be detected as lock error', async () => {
+    // Dynamic import 因為 vitest-pool-workers + tsconfig resolveJsonModule 路徑解析穩定
+    const fixture = (await import('../docs/fixtures/r2-lock-binding-canary-2026-05-24.json')).default as {
+      ops: Array<{
+        step: number
+        label: string
+        expected_outcome: 'success' | 'thrown'
+        response: {
+          outcome: 'success' | 'thrown'
+          thrown: null | {
+            name: string
+            message: string
+            code: string | number | null
+            status: number | null
+            cause: unknown
+            stringified: string
+          }
+        }
+      }>
+    }
+    const thrownOps = fixture.ops.filter(o => o.expected_outcome === 'thrown')
+    expect(thrownOps.length).toBeGreaterThanOrEqual(2)   // sanity: fixture 至少 2 個 thrown ops
+    for (const op of thrownOps) {
+      expect(op.response.outcome).toBe('thrown')   // fixture 自身一致性
+      const t = op.response.thrown
+      expect(t).not.toBeNull()
+      if (!t) continue
+      // Reconstruct binding error shape from fixture's captured thrown payload
+      const errLike: Record<string, unknown> = {
+        name: t.name,
+        message: t.message,
+      }
+      if (t.code !== null) errLike['code'] = t.code
+      if (t.status !== null) errLike['status'] = t.status
+      if (t.cause !== null) errLike['cause'] = t.cause
+      expect(isR2LockError(errLike)).toBe(true)
+    }
+  })
+})
+
 describe('PR 0.2c-pre-1a：putWithRetry lock-aware', () => {
   it('lock error 命中 → 不 retry / 不 sleep / 1 次 callback willRetry=false lockDetected=true', async () => {
     const bucket = { put: async () => {

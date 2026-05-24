@@ -66,27 +66,27 @@ Blocked 操作的 XML body 完全一致：
 | `error.cause` | N/A | **`null`**（無 cause chain） |
 | `error.message` | XML body 含 `<Code>ObjectLockedByBucketPolicy</Code>` | **`"{op}: The object is locked by the bucket policy. (10069)"`** |
 
-**🔴 Classifier verdict — MISS**：
+**Classifier verdict**（時序）：
+- **1b spike-tightened (pre-1b.2)** — MISS on all three paths：
+  1. Fast-path `code === 'ObjectLockedByBucketPolicy'` → 無 code 欄位 → miss
+  2. Fallback dual condition `(status 409|412) AND (message/code/name contains lock marker)` → 無 status → miss
+  3. Nested cause walk `error.cause` → null → miss
+- **✅ PR 0.2c-pre-1b.2 extend (post)** — HIT via new path (2)：
+  - Canonical phrase path：`/locked by the bucket policy/i` 命中 message → true（無需 status）
+  - Numeric code path：message 尾巴 `(10069)` parse → match `R2_LOCK_KNOWN_NUMERIC_CODES = {10069}` → true（双保險）
+  - 既有 path (1) fast-path + path (3) dual condition 保留不動
 
-`isR2LockError(error)` 三條路徑全漏：
-1. Fast-path `code === 'ObjectLockedByBucketPolicy'` → 無 code 欄位 → miss
-2. Fallback dual condition `(status 409|412) AND (message/code/name contains lock marker)` → 無 status → miss
-3. Nested cause walk `error.cause` → null → miss
+**Pre-1b.2 後果（已被修復）**：
+- `audit.archive.upload_failed` critical 仍 emit（retry 4 次都失敗、最後一輪 final=true）— 告警保底訊號還在
+- `audit.archive.r2_lock_detected` critical **不會 emit** — forensic 語義失真 ❌
+- putWithRetry 不會 short-circuit → 浪費 21s wallclock 跑 4 次必失敗的 retry ❌
 
-→ 現行 classifier 認 binding throw **不是** lock error。後果：
-- `audit.archive.upload_failed` critical 仍會 emit（retry 4 次都失敗、最後一輪 final=true）— **告警保底訊號還在**
-- `audit.archive.r2_lock_detected` critical **不會 emit** — forensic 語義失真
-- putWithRetry 不會 short-circuit → 浪費 21s wallclock 跑 4 次必失敗的 retry
+**Post-1b.2 行為**：
+- ✅ `audit.archive.r2_lock_detected` critical emit 正確
+- ✅ putWithRetry short-circuit，不浪費 retry budget
+- ✅ Regression test 鎖住 binding shape，未來 fixture / classifier / wording 任一變動立刻暴露
 
-**Remediation 路徑（PR 0.2c-pre-1c / 1b.2）**：
-
-extend `isR2LockError` 加 message-pattern-only 分支（無 status 也算）：
-- canonical phrase：`/locked by the bucket policy/i`（必含；spike + binding canary 兩 path 都有此字串）
-- 加 numeric code set：`R2_LOCK_KNOWN_NUMERIC_CODES = new Set([10069])`（從 binding message 末尾 `(10069)` parse）
-
-對應 unit test：本 fixture 整段塞進 `tests/audit-archive.test.ts` describe `PR 0.2c-pre-1b.1：Worker binding error shape (regression)`，確保此 shape 永不再被 classifier 漏判。
-
-**Prod lock 上線決策**：classifier 補完前 **不可** proceed。本 1b.1 PR 只負責 gate + 記錄事實，**不**做 remediation（避免「測量儀器」與「修正生產路徑」混在一起 review）。
+**Prod lock 上線決策**：classifier 補完 ✅。1b.1 + 1b.2 兩個 GATE 都已 PASS，可進下一個 PR（aggregate worker write-once refactor → preview gate → prod lock）。
 
 ### 歷史：1b 設計階段的 caveat（已被本 1b.1 gate 推翻）
 
@@ -124,7 +124,7 @@ extend `isR2LockError` 加 message-pattern-only 分支（無 status 也算）：
 - [ ] 所有既存 audit_log archive chunks 都已升 `purged`（terminal）— 否則 legacy key_scheme=1 chunks 進 locked prefix 後其 single manifest key 在 state transition 會被擋住卡死
 - [ ] 所有未來 cron run 一律走 key_scheme=2（runFreshChunkPipeline 已硬寫死 `KEY_SCHEME_WRITE_ONCE`，PR 1a deploy 之後 prod 已生效）
 - [x] **🔴 Worker R2 binding canary 已親驗 enforce + capture 真實 error shape**（**PR 0.2c-pre-1b.1 完成 2026-05-24**；outcome (b) — binding enforce 但 classifier MISS，必補 message-pattern 分支才能 proceed prod lock）
-- [ ] **🔴 isR2LockError classifier 已加 message-pattern-only 分支**（**PR 0.2c-pre-1c / 1b.2 follow-up**；fixture `r2-lock-binding-canary-2026-05-24.json` 整段塞 regression test）
+- [x] **🔴 isR2LockError classifier 已加 message-pattern + numeric code 分支**（**PR 0.2c-pre-1b.2 完成 2026-05-24**；canonical phrase `/locked by the bucket policy/i` + `R2_LOCK_KNOWN_NUMERIC_CODES = {10069}`；fixture `r2-lock-binding-canary-2026-05-24.json` 整段 wholesale ingest 為 regression test，未來 fixture / classifier / Cloudflare message wording 任一變動會立刻暴露）
 - [ ] Aggregate worker (audit-aggregate-archive-runner.ts) 也已平行 write-once refactor（**PR 0.2c-pre-1c follow-up**；R2 lock 上 aggregate prefix `audit-log-aggregate-{telemetry,debug}/` 前必做）
 - [ ] force_purge endpoint 已 catch lock 423 LOCKED（**PR 0.2c-pre-2** — PR 1a 已留 placeholder catch；1b 後續完善）
 - [x] Preview bucket S3 sigv4 path lock canary 已親驗 enforce（**本 1b spike 完成** — 但只證 S3 path、不代表 binding path）
