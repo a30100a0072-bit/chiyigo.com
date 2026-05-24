@@ -526,6 +526,62 @@ describe('admin retry endpoint — force_purge（PR 2.3 真實作；step-up + en
     expect(failed[0].severity).toBe('critical')
     expect(JSON.parse(failed[0].event_data).reason).toBe('r2_or_d1_exception')
   })
+
+  // ── PR 0.2c-pre-2：R2 retention lock catch → 423 LOCKED + dedicated emit ──
+  // 鎖住兩件事：
+  //   (a) lock-shape error 走 423 R2_LOCK_DETECTED + emit `audit.archive.force_purge_blocked_by_lock`，
+  //       不再 misclassified 成 502 FORCE_PURGE_FAILED
+  //   (b) non-lock error（既有 502 path）行為不退化 — 上面那條 test 已驗，這條補對照
+  it('PR 0.2c-pre-2：R2 retention lock-shape throw → 423 R2_LOCK_DETECTED + force_purge_blocked_by_lock critical emit', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
+    const chunk = await seedChunk({ state: 'blacklisted' })
+
+    // canonical phrase + numeric code 10069 — 1b.2 classifier 接住的 binding shape
+    const lockedBucket = {
+      delete: async () => { throw new Error('delete: The object is locked by the bucket policy. (10069)') },
+    }
+    const envWithLock = { ...env, AUDIT_ARCHIVE_PURGE_ENABLED: '1', AUDIT_ARCHIVE_BUCKET: lockedBucket }
+
+    const r = await callRetryWithEnv({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) }, envObj: envWithLock })
+    expect(r.status).toBe(423)
+    expect(r.body.code).toBe('R2_LOCK_DETECTED')
+    expect(r.body.error).toMatch(/blocked by R2 retention lock/i)
+
+    // chunk row + R2 物件保持不動（admin 動作 by-policy reject，不該破壞狀態）
+    expect((await getChunkState(chunk)).state).toBe('blacklisted')
+
+    // emit 對齊：force_purge_blocked_by_lock critical（new event from PR 0.2c-pre-2）
+    const blocked = await selectAudit('audit.archive.force_purge_blocked_by_lock')
+    expect(blocked.length).toBe(1)
+    expect(blocked[0].severity).toBe('critical')
+    const data = JSON.parse(blocked[0].event_data)
+    expect(data.message).toMatch(/locked by the bucket policy/i)
+
+    // 不應 emit force_purge_failed（兩者語意分離，alerting 才能正確分流）
+    const failed = await selectAudit('audit.archive.force_purge_failed')
+    expect(failed.length).toBe(0)
+  })
+
+  it('PR 0.2c-pre-2 negative control：lock-marker 但無 status / 無 phrase → 仍走 502（避免 423 false-positive）', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_archive_force_purge')
+    const chunk = await seedChunk({ state: 'blacklisted' })
+
+    // 含 "lock" 字眼但**不**含 canonical phrase / numeric 10069 / known code → classifier 應 miss
+    const ambiguousBucket = {
+      delete: async () => { throw new Error('forbidden by lock policy') },
+    }
+    const envWithAmbig = { ...env, AUDIT_ARCHIVE_PURGE_ENABLED: '1', AUDIT_ARCHIVE_BUCKET: ambiguousBucket }
+
+    const r = await callRetryWithEnv({ token: tok, body: { action: 'force_purge', target: targetOf(chunk) }, envObj: envWithAmbig })
+    expect(r.status).toBe(502)  // 走 generic fallback
+    expect(r.body.code).toBe('FORCE_PURGE_FAILED')
+
+    // 423 路徑 NOT taken
+    const blocked = await selectAudit('audit.archive.force_purge_blocked_by_lock')
+    expect(blocked.length).toBe(0)
+  })
 })
 
 describe('admin retry endpoint — audit chain integrity', () => {

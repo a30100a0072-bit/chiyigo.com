@@ -48,7 +48,7 @@ import { requireRole } from '../../../utils/requireRole'
 import { appendAuditLog } from '../../../utils/audit-log'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
-import { SUPPORTED_COLD_CLASSES, PR20_SUPPORTED_TABLE, purgeChunk } from '../../../utils/audit-archive'
+import { SUPPORTED_COLD_CLASSES, PR20_SUPPORTED_TABLE, purgeChunk, isR2LockError } from '../../../utils/audit-archive'
 
 const VALID_ACTIONS = new Set(['re_verify', 'mark_resolved', 'force_purge'])
 
@@ -181,6 +181,10 @@ export async function onRequestPost({ request, env }) {
   })
 
   if (action === 'force_purge') {
+    // PR 0.2c-pre-2 update：retention lock 上線後，purgeChunk 拋 lock error 會被
+    //   isR2LockError 接住 → 423 R2_LOCK_DETECTED + force_purge_blocked_by_lock critical
+    //   emit；non-lock R2/D1 throw 仍走 502 FORCE_PURGE_FAILED（既有 fallback）。
+    //
     // PR 2.3 force_purge 真實作（feedback_force_purge_semantics）：
     //   - 必走 env flag AUDIT_ARCHIVE_PURGE_ENABLED='1' gate；未設回 503 + warn event
     //   - 只刪 R2 chunk + R2 manifest + D1 chunks row；audit_log raw 不刪（留 PR 4）
@@ -270,7 +274,38 @@ export async function onRequestPost({ request, env }) {
           actual_state: e.actualState,
         }, 409)
       }
-      // R2 SDK / D1 throw — 含未來 retention lock 的 403/409 路徑（lock 上後再加 423 分支）
+      // PR 0.2c-pre-2：R2 retention lock catch → 423 LOCKED + dedicated emit。
+      // 由 isR2LockError (PR 1b + 1b.2 extend) 分類 — S3 sigv4 path 或 Worker binding
+      // path 任一形狀都接得到（canonical phrase / numeric code 10069 / known S3 code）。
+      // **必須走 423**（非 502/500）— 語意上「rejected by intentional policy」而非
+      // 「server failed」。admin 看到 423 立刻知道 = 等 retention 過期 / 找 CF support
+      // 申請 lock 移除，不會誤以為 R2 短期 outage。
+      //
+      // 順位：放在 CODE 檢查之後、generic R2/D1 fallback 之前 — 確保 known-code 路徑
+      // （NOT_FOUND / STATE_MISMATCH）仍正確 short-circuit，lock 路徑優先於 generic 502。
+      if (isR2LockError(e)) {
+        const errStatus = Number(e?.status ?? e?.httpStatus ?? e?.statusCode)
+        const errCode = e?.code
+        await safeUserAudit(env, {
+          event_type: 'audit.archive.force_purge_blocked_by_lock',
+          severity:   'critical',
+          user_id:    ctxBase.admin_id,
+          request,
+          data: {
+            admin_id: ctxBase.admin_id, target, chunk_id: chunkId,
+            status: Number.isFinite(errStatus) ? errStatus : null,
+            code:   typeof errCode === 'string' || typeof errCode === 'number' ? errCode : null,
+            message: String(e?.message ?? e),
+          },
+        })
+        return res({
+          error: 'force_purge blocked by R2 retention lock (chunk objects cannot be deleted until retention period expires)',
+          code:  'R2_LOCK_DETECTED',
+          chunk_id: chunkId,
+          message: 'R2 retention lock is in effect for this chunk\'s prefix. Force-purge requires Cloudflare support intervention OR waiting for retention period to expire. Tracked via audit.archive.force_purge_blocked_by_lock critical event.',
+        }, 423)
+      }
+      // R2 SDK / D1 throw — non-lock failures fall here（網路 / 5xx / D1 throw）
       const msg = String(e?.message ?? e)
       await safeUserAudit(env, {
         event_type: 'audit.archive.force_purge_failed',

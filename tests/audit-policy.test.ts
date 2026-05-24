@@ -187,8 +187,11 @@ describe('registry coverage', () => {
     // PR 0.2c-pre-1c (2026-05-24) 加 4 個 aggregate-namespaced events × 兩 cold_class：
     //   audit.aggregate_archive.{telemetry,debug}.manifest_written（info）
     //   audit.aggregate_archive.{telemetry,debug}.r2_lock_detected（critical）→ 169。
+    // PR 0.2c-pre-2 (2026-05-24) 加 3 個 force_purge_blocked_by_lock events：
+    //   audit.archive.force_purge_blocked_by_lock（critical；raw retention lock 423 路徑）
+    //   audit.aggregate_archive.{telemetry,debug}.force_purge_blocked_by_lock（critical）→ 172。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(169)
+    expect(_registrySize).toBe(172)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

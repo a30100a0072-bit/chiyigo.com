@@ -130,6 +130,8 @@ Blocked 操作的 XML body 完全一致：
 - [ ] 所有未來 cron run 一律走 key_scheme=2（runFreshChunkPipeline 已硬寫死 `KEY_SCHEME_WRITE_ONCE`，PR 1a deploy 之後 prod 已生效）
 - [x] **🔴 Worker R2 binding canary 已親驗 enforce + capture 真實 error shape**（**PR 0.2c-pre-1b.1 完成 2026-05-24**；outcome (b) — binding enforce 但 classifier MISS，必補 message-pattern 分支才能 proceed prod lock）
 - [x] **🔴 isR2LockError classifier 已加 message-pattern + numeric code 分支**（**PR 0.2c-pre-1b.2 完成 2026-05-24**；canonical phrase `/locked by the bucket policy/i` + `R2_LOCK_KNOWN_NUMERIC_CODES = {10069}`；fixture `r2-lock-binding-canary-2026-05-24.json` 整段 wholesale ingest 為 regression test，未來 fixture / classifier / Cloudflare message wording 任一變動會立刻暴露）
+- [x] **🔴 Aggregate worker write-once parallel refactor**（**PR 0.2c-pre-1c 完成 2026-05-24**；state-suffix manifest keys + lock-aware retry + manifest_written / r2_lock_detected aggregate-namespaced emit + purge multi-manifest delete；codex r2 Approve）
+- [x] **🔴 force_purge endpoint 已 catch lock → 423 LOCKED**（**PR 0.2c-pre-2 完成 2026-05-24**；raw + aggregate retry endpoint 都加 isR2LockError 分支 → HTTP 423 + `R2_LOCK_DETECTED` + `audit.{archive,aggregate_archive.{telemetry,debug}}.force_purge_blocked_by_lock` critical emit；負控驗 non-lock R2 throw 仍走 502 FORCE_PURGE_FAILED）
 - [ ] Aggregate worker (audit-aggregate-archive-runner.ts) 也已平行 write-once refactor（**PR 0.2c-pre-1c follow-up**；R2 lock 上 aggregate prefix `audit-log-aggregate-{telemetry,debug}/` 前必做）
 - [ ] force_purge endpoint 已 catch lock 423 LOCKED（**PR 0.2c-pre-2** — PR 1a 已留 placeholder catch；1b 後續完善）
 - [x] Preview bucket S3 sigv4 path lock canary 已親驗 enforce（**本 1b spike 完成** — 但只證 S3 path、不代表 binding path）

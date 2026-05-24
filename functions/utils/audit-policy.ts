@@ -51,6 +51,11 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.archive.force_purge_succeeded',        // critical — R2 chunk+manifest+chunks row 全刪成功
   'audit.archive.force_purge_failed',           // critical — R2/D1 操作中斷（含未來 retention lock 423 路徑）
   'audit.archive.force_purge_disabled',         // warn — AUDIT_ARCHIVE_PURGE_ENABLED 未設，endpoint 拒絕
+  // PR 0.2c-pre-2：R2 retention lock 擋住 force_purge 時的 critical signal。
+  // 與 force_purge_failed 區分：blocked_by_lock 是 by-policy reject（admin 動作被
+  // 刻意拒），處置是「等 retention 過期 / 找 CF support」，不是「retry / 改 code」。
+  // alerting 規則建議分流：blocked_by_lock 進「policy notify」隊列，failed 進「on-call paging」。
+  'audit.archive.force_purge_blocked_by_lock',  // critical — retention lock active，無法 force_purge
   // PR 3.0 aggregate worker（POST /api/admin/cron/audit-aggregate, telemetry-only skeleton）
   'audit.aggregate.run_completed',              // info — 整輪成功 + summary（rows_scanned / buckets_upserted）
   'audit.aggregate.run_skipped',                // info — hot_days_disabled / no_rows_eligible 等正常 skip
@@ -99,6 +104,10 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate_archive.telemetry.force_purge_succeeded',    // critical
   'audit.aggregate_archive.telemetry.force_purge_failed',       // critical
   'audit.aggregate_archive.telemetry.force_purge_disabled',     // warn
+  // PR 0.2c-pre-2：retention lock 擋住 force_purge 時的 critical signal。
+  // 與 force_purge_failed 區分：blocked_by_lock 是 by-policy reject（admin 動作
+  // 被刻意拒），需要的處置是「等 retention 過期 / 找 CF support」，不是「retry / 改 code」
+  'audit.aggregate_archive.telemetry.force_purge_blocked_by_lock', // critical
   'audit.aggregate_archive.debug.retry_requested',              // info
   'audit.aggregate_archive.debug.retry_succeeded',              // info
   'audit.aggregate_archive.debug.retry_rejected',               // warn
@@ -106,6 +115,8 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate_archive.debug.force_purge_succeeded',        // critical
   'audit.aggregate_archive.debug.force_purge_failed',           // critical
   'audit.aggregate_archive.debug.force_purge_disabled',         // warn
+  // PR 0.2c-pre-2 (mirror telemetry above)
+  'audit.aggregate_archive.debug.force_purge_blocked_by_lock',   // critical
   // PR 0.2c-pre-1a (2026-05-23) write-once R2 key + lock-aware refactor
   //   r2_lock_detected：critical — putWithRetry 命中 isR2LockError 時 emit；
   //                     payload 帶 operation/key/attempt/status/code，不塞 stack

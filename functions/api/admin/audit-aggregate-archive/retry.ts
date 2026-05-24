@@ -73,6 +73,7 @@ import {
   AGGREGATE_TABLES,
   purgeAggregateChunk,
 } from '../../../utils/audit-aggregate-archive'
+import { isR2LockError } from '../../../utils/audit-archive'
 
 const VALID_ACTIONS = new Set(['re_verify', 'mark_resolved', 'force_purge'])
 
@@ -355,6 +356,32 @@ export async function onRequestPost({ request, env }) {
           chunk_id: chunkId,
           actual_state: e.actualState,
         }, 409)
+      }
+      // PR 0.2c-pre-2：R2 retention lock catch → 423 LOCKED + aggregate-namespaced
+      // emit。設計與 raw retry.ts 對應段對齊；event name 走 aggregate namespace 不
+      // 用 raw `audit.archive.*`（同 1c 範圍 r2_lock_detected / manifest_written 設計）。
+      // 順位：放在 CODE 檢查之後、generic R2/D1 fallback 之前。
+      if (isR2LockError(e)) {
+        const errStatus = Number(e?.status ?? e?.httpStatus ?? e?.statusCode)
+        const errCode = e?.code
+        await safeUserAudit(env, {
+          event_type: `audit.aggregate_archive.${cls}.force_purge_blocked_by_lock`,
+          severity:   'critical',
+          user_id:    ctxBase.admin_id,
+          request,
+          data: {
+            admin_id: ctxBase.admin_id, target, chunk_id: chunkId, reason_code, operator_reason,
+            status: Number.isFinite(errStatus) ? errStatus : null,
+            code:   typeof errCode === 'string' || typeof errCode === 'number' ? errCode : null,
+            message: String(e?.message ?? e),
+          },
+        })
+        return res({
+          error: 'force_purge blocked by R2 retention lock (aggregate chunk objects cannot be deleted until retention period expires)',
+          code:  'R2_LOCK_DETECTED',
+          chunk_id: chunkId,
+          message: 'R2 retention lock is in effect for this aggregate chunk\'s prefix. Force-purge requires Cloudflare support intervention OR waiting for retention period to expire. Tracked via audit.aggregate_archive.{cls}.force_purge_blocked_by_lock critical event.'.replace('{cls}', cls),
+        }, 423)
       }
       const msg = String(e?.message ?? e)
       await safeUserAudit(env, {

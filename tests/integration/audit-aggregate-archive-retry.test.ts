@@ -635,3 +635,142 @@ describe('PR 0.2c-pre-1c codex r1 P0：force_purge key_scheme=2 multi-manifest d
     expect(await env.AUDIT_ARCHIVE_BUCKET.head(legacyManifestKey)).toBeNull()
   })
 })
+
+// ── PR 0.2c-pre-2：aggregate force_purge R2 retention lock catch → 423 ──
+// 與 raw audit-archive-retry 的 PR 0.2c-pre-2 兩 test 對齊；event 走 aggregate
+// namespace（audit.aggregate_archive.telemetry|debug.force_purge_blocked_by_lock）。
+describe('PR 0.2c-pre-2：aggregate force_purge R2 lock catch → 423 LOCKED', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('telemetry lock-shape throw → 423 R2_LOCK_DETECTED + force_purge_blocked_by_lock critical emit + chunk untouched', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_aggregate_archive_force_purge')
+    const chunk = await seedAggregateChunk({ state: 'blacklisted', key_scheme: 2 })
+
+    // 真實 seed 1 把 manifest 進 R2，等下試圖 delete 時被攔截
+    const [yyyy, mm, dd] = chunk.archive_date.split('-')
+    const tail = `${chunk.min_id}-${chunk.max_id}-${chunk.chunk_sha256}`
+    const manifestKey = `manifest/${chunk.env}/${chunk.table_name}/${yyyy}/${mm}/${dd}/${tail}.planned.json`
+    await env.AUDIT_ARCHIVE_BUCKET.put(manifestKey, '{}')
+
+    // stub bucket.delete 拋 canonical phrase + (10069)
+    const realBucket = env.AUDIT_ARCHIVE_BUCKET
+    const lockedBucket: typeof env.AUDIT_ARCHIVE_BUCKET = {
+      put:    ((k: string, b: unknown, o?: unknown) => realBucket.put(k, b as ReadableStream | ArrayBuffer | string, o as Parameters<typeof realBucket.put>[2])) as typeof realBucket.put,
+      get:    ((k: string) => realBucket.get(k)) as typeof realBucket.get,
+      head:   ((k: string) => realBucket.head(k)) as typeof realBucket.head,
+      list:   ((o?: unknown) => realBucket.list(o as Parameters<typeof realBucket.list>[0])) as typeof realBucket.list,
+      delete: (async () => {
+        throw new Error('delete: The object is locked by the bucket policy. (10069)')
+      }) as typeof realBucket.delete,
+      createMultipartUpload: realBucket.createMultipartUpload.bind(realBucket),
+      resumeMultipartUpload: realBucket.resumeMultipartUpload.bind(realBucket),
+    }
+
+    const req = new Request('http://x/api/admin/audit-aggregate-archive/retry', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'force_purge', target: targetOf(chunk), ...VALID_REASON }),
+    })
+    const r = await retryHandler({
+      request: req,
+      env: { ...env, AUDIT_AGGREGATE_PURGE_ENABLED: '1', AUDIT_ARCHIVE_BUCKET: lockedBucket },
+    })
+    const body = await r.json()
+
+    expect(r.status).toBe(423)
+    expect(body.code).toBe('R2_LOCK_DETECTED')
+    expect(body.error).toMatch(/blocked by R2 retention lock/i)
+
+    // chunk row 仍在；R2 manifest 仍在
+    const after = await getChunkState(chunk)
+    expect(after.state).toBe('blacklisted')
+    expect(await realBucket.head(manifestKey)).not.toBeNull()
+
+    const blocked = await selectAudit('audit.aggregate_archive.telemetry.force_purge_blocked_by_lock')
+    expect(blocked.length).toBe(1)
+    expect(blocked[0].severity).toBe('critical')
+
+    // 不應 emit force_purge_failed（分流正確）
+    const failed = await selectAudit('audit.aggregate_archive.telemetry.force_purge_failed')
+    expect(failed.length).toBe(0)
+  })
+
+  it('debug 同 lock 場景 → 走 debug-namespaced event（不污染 telemetry namespace）', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_aggregate_archive_force_purge')
+    const chunk = await seedAggregateChunk({
+      state: 'blacklisted', key_scheme: 2,
+      table_name: 'audit_log_aggregate_debug',
+      cold_class: 'aggregate_debug',
+    })
+
+    const realBucket = env.AUDIT_ARCHIVE_BUCKET
+    const lockedBucket: typeof env.AUDIT_ARCHIVE_BUCKET = {
+      put:    realBucket.put.bind(realBucket),
+      get:    realBucket.get.bind(realBucket),
+      head:   realBucket.head.bind(realBucket),
+      list:   realBucket.list.bind(realBucket),
+      delete: (async () => {
+        throw new Error('delete: The object is locked by the bucket policy. (10069)')
+      }) as typeof realBucket.delete,
+      createMultipartUpload: realBucket.createMultipartUpload.bind(realBucket),
+      resumeMultipartUpload: realBucket.resumeMultipartUpload.bind(realBucket),
+    }
+
+    const req = new Request('http://x/api/admin/audit-aggregate-archive/retry', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'force_purge', target: targetOf(chunk), ...VALID_REASON }),
+    })
+    const r = await retryHandler({
+      request: req,
+      env: { ...env, AUDIT_AGGREGATE_PURGE_ENABLED: '1', AUDIT_ARCHIVE_BUCKET: lockedBucket },
+    })
+    expect(r.status).toBe(423)
+
+    // emit 走 debug namespace
+    const dbg = await selectAudit('audit.aggregate_archive.debug.force_purge_blocked_by_lock')
+    expect(dbg.length).toBe(1)
+    // telemetry namespace 不應有（namespace 隔離正確）
+    const tel = await selectAudit('audit.aggregate_archive.telemetry.force_purge_blocked_by_lock')
+    expect(tel.length).toBe(0)
+  })
+
+  it('non-lock R2 throw → 仍走既有 502 path（避免 423 false-positive）', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_aggregate_archive_force_purge')
+    const chunk = await seedAggregateChunk({ state: 'blacklisted', key_scheme: 2 })
+
+    const realBucket = env.AUDIT_ARCHIVE_BUCKET
+    const ambigBucket: typeof env.AUDIT_ARCHIVE_BUCKET = {
+      put:    realBucket.put.bind(realBucket),
+      get:    realBucket.get.bind(realBucket),
+      head:   realBucket.head.bind(realBucket),
+      list:   realBucket.list.bind(realBucket),
+      delete: (async () => {
+        throw new Error('R2 transient 500 — network blip')
+      }) as typeof realBucket.delete,
+      createMultipartUpload: realBucket.createMultipartUpload.bind(realBucket),
+      resumeMultipartUpload: realBucket.resumeMultipartUpload.bind(realBucket),
+    }
+
+    const req = new Request('http://x/api/admin/audit-aggregate-archive/retry', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'force_purge', target: targetOf(chunk), ...VALID_REASON }),
+    })
+    const r = await retryHandler({
+      request: req,
+      env: { ...env, AUDIT_AGGREGATE_PURGE_ENABLED: '1', AUDIT_ARCHIVE_BUCKET: ambigBucket },
+    })
+    const body = await r.json()
+
+    expect(r.status).toBe(502)
+    expect(body.code).toBe('FORCE_PURGE_FAILED')
+    // 423 路徑 NOT taken
+    const blocked = await selectAudit('audit.aggregate_archive.telemetry.force_purge_blocked_by_lock')
+    expect(blocked.length).toBe(0)
+  })
+})
