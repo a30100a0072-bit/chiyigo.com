@@ -281,9 +281,9 @@ git push
 # 跨 session 復原：S3 在 ~48hr 後跑，Step 1.1 的 PS 變數可能已隨 terminal 關閉丟失
 # （control_key / rule_name / lifecycle_name 都在 S1 fixture 內）。同 session 連續跑會 skip。
 if (-not $controlKey -or -not $ruleName -or -not $lifecycleName) {
-  $fixturePath = Read-Host "S3 vars missing. Paste path to docs/fixtures/preview-gate-layer-1-<ts>.json"
-  if (-not (Test-Path $fixturePath)) { throw "Fixture not found: $fixturePath" }
-  $fx = Get-Content -Raw -Encoding UTF8 $fixturePath | ConvertFrom-Json
+  $fixturePath = (Read-Host "S3 vars missing. Paste path to docs/fixtures/preview-gate-layer-1-<ts>.json").Trim().Trim('"', "'")
+  if (-not (Test-Path -LiteralPath $fixturePath)) { throw "Fixture not found: $fixturePath" }
+  $fx = Get-Content -Raw -Encoding UTF8 -LiteralPath $fixturePath | ConvertFrom-Json
   if (-not $fx.control_key -or -not $fx.rule_name -or -not $fx.lifecycle_name) {
     throw "Fixture missing required fields (control_key / rule_name / lifecycle_name)"
   }
