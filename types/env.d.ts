@@ -23,6 +23,11 @@ declare global {
     chiyigo_db: D1Database;
     CHIYIGO_KV: KVNamespace;
     AUDIT_ARCHIVE_BUCKET: R2Bucket;
+    // F-3 Phase 2 PR 0.2c-pre-1b.1 (TEMPORARY): preview bucket binding for
+    // the r2-binding-canary endpoint. Optional because it's removed in commit 2
+    // of the same PR alongside the canary endpoint. Only r2-binding-canary.ts
+    // and its tests may reference this binding.
+    AUDIT_ARCHIVE_BUCKET_PREVIEW?: R2Bucket;
     AI: Ai;
 
     // ── Identity / JWT (required) ──────────────────────────────────────
