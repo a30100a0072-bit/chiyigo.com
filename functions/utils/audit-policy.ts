@@ -76,6 +76,13 @@ const ARCHIVE_OPS_IMMUTABLE = [
   'audit.aggregate_archive.telemetry.upload_failed',  // warn / critical
   'audit.aggregate_archive.debug.chunk_uploaded',     // info
   'audit.aggregate_archive.debug.upload_failed',      // warn / critical
+  // PR 0.2c-pre-1c：aggregate-namespaced r2_lock_detected（mirror raw
+  // audit.archive.r2_lock_detected；**不**共用 raw event name 避免 alerting 散到
+  // raw archive namespace）。putWithRetry classifier 命中 lock 時由 callback 額外 emit
+  // （與 upload_failed 並存，不取代）。manifest_written **不**在此 list —— 那是 TELEMETRY
+  // 類（高頻 rollout signal，放 IMMUTABLE 會自我遞迴噬 archive 配額）。
+  'audit.aggregate_archive.telemetry.r2_lock_detected',   // critical
+  'audit.aggregate_archive.debug.r2_lock_detected',       // critical
   // PR 3.3 r1 codex P2-1：existing chunk row 非 'planned' 時 fresh pipeline 早退
   //   - dry-run 'verified' / live 'marked_archived' = idempotent rerun，info severity
   //   - 其他 ('uploaded' / 'failed' / 'blacklisted') = partial / admin-intervened，warn severity
@@ -227,6 +234,12 @@ const TELEMETRY = [
   //                     了避免自我遞迴噬 max_chunks_per_run 配額（細節見 audit-policy
   //                     ARCHIVE_OPS_IMMUTABLE 附近註解）。
   'audit.archive.manifest_written',             // info
+  // PR 0.2c-pre-1c：aggregate-namespaced manifest_written（mirror raw；同 self-recursion
+  // 顧慮，歸 TELEMETRY 不歸 IMMUTABLE）。Write-once 每 state manifest PUT 成功 / HEAD
+  // skip 都 emit；用來追新 chunk 走 write-once 路徑、舊 chunk 走 legacy 路徑的比例 +
+  // 各 state 推進。
+  'audit.aggregate_archive.telemetry.manifest_written',   // info
+  'audit.aggregate_archive.debug.manifest_written',       // info
 ]
 
 const READ_AUDIT = [

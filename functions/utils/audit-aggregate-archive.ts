@@ -24,7 +24,32 @@
  *    lock 擋住 → endpoint catch 後落 502 / 423；force_purge 本身的 lint 豁免不變。
  */
 
-import { ARCHIVE_SCHEMA_VERSION } from './audit-archive'
+import {
+  ARCHIVE_SCHEMA_VERSION,
+  KEY_SCHEME_LEGACY,
+  KEY_SCHEME_WRITE_ONCE,
+  MANIFEST_STATE_FILES,
+  type ManifestStateFile,
+} from './audit-archive'
+
+// PR 0.2c-pre-1c：aggregate 對應的 manifest state-suffix 規則，跨檔復用 audit-archive
+// MANIFEST_STATE_FILES 集合。aggregate 從未走 key_scheme=2，1c deploy 前 chunks 全 1；
+// 新 chunk 走 2，blocker resume 仍尊重 row.key_scheme。
+function aggregateManifestSuffix(
+  manifestState: ManifestStateFile | undefined,
+  keyScheme: number,
+): string {
+  if (keyScheme === KEY_SCHEME_WRITE_ONCE) {
+    if (!manifestState) {
+      throw new Error(`audit-aggregate-archive: manifestState required when keyScheme=${KEY_SCHEME_WRITE_ONCE}`)
+    }
+    if (!MANIFEST_STATE_FILES.includes(manifestState)) {
+      throw new Error(`audit-aggregate-archive: unknown manifestState '${manifestState}'`)
+    }
+    return `.${manifestState}.json`
+  }
+  return '.json'
+}
 
 export const AGGREGATE_WRITER         = 'cron-aggregate-archive-worker'
 export const AGGREGATE_WRITER_VERSION = '3.2.0'
@@ -166,23 +191,46 @@ export function aggregatePrefixes(dryRun, coldClass) {
  *
  * 格式：
  *   {data-prefix}/{env}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}{ext}
- *   {manifest-prefix}/{env}/{table_name}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}.json
+ *   {manifest-prefix}/{env}/{table_name}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}{manifestSuffix}
+ *
+ * PR 0.2c-pre-1c：manifest key 支援 keyScheme + manifestState（write-once 多 .{state}.json
+ * suffix；legacy keyScheme=1 仍走單 .json）。data key per chunk 固定 1 把（content-addressed
+ * by sha256），與 manifestState 無關。
  *
  * 注意：data key 不再嵌 table_name / cold_class 段（prefix 已隱含）；manifest key 走
  * 與 PR 2.x 對齊的「{env}/{table_name}」段。
  *
  * @returns {{ dataKey: string, manifestKey: string, archiveDate: string }}
  */
+interface BuildAggregateChunkKeysOpts {
+  env: string
+  tableName: string
+  coldClass: string
+  minId: number
+  maxId: number
+  sha256: string
+  archiveDate: string
+  dryRun: boolean
+  compression?: string
+  keyScheme?: number
+  manifestState?: ManifestStateFile
+}
+
 export function buildAggregateChunkKeys({
   env, tableName, coldClass, minId, maxId, sha256, archiveDate, dryRun, compression = 'gzip',
-}) {
+  keyScheme = KEY_SCHEME_LEGACY, manifestState,
+}: BuildAggregateChunkKeysOpts) {
   const [yyyy, mm, dd] = archiveDate.split('-')
   const tail = `${minId}-${maxId}-${sha256}`
   const { data, manifest } = aggregatePrefixes(dryRun, coldClass)
   const ext = compression === 'gzip' ? '.jsonl.gz' : '.jsonl'
+  const suffix = aggregateManifestSuffix(
+    Number(keyScheme) === KEY_SCHEME_WRITE_ONCE ? manifestState : undefined,
+    Number(keyScheme),
+  )
   return {
     dataKey:     `${data}/${env}/${yyyy}/${mm}/${dd}/${tail}${ext}`,
-    manifestKey: `${manifest}/${env}/${tableName}/${yyyy}/${mm}/${dd}/${tail}.json`,
+    manifestKey: `${manifest}/${env}/${tableName}/${yyyy}/${mm}/${dd}/${tail}${suffix}`,
     archiveDate,
   }
 }
@@ -190,10 +238,14 @@ export function buildAggregateChunkKeys({
 /**
  * 從 audit_archive_chunks row 反推 aggregate chunk 的 data/manifest key（recovery 路徑用）。
  *
- * 與 audit-archive `deriveKeysFromChunk` 同設計：dry_run / compression 都由 row 自身帶，
- * 不吃當前 env flag（PR 4 flip dry_run 後 state 升級用的 key 仍對齊當初 PUT 的 prefix）。
+ * 與 audit-archive `deriveKeysFromChunk` 同設計：dry_run / compression / key_scheme 都由
+ * row 自身帶，不吃當前 env flag（PR 4 flip dry_run 後 state 升級用的 key 仍對齊當初 PUT
+ * 的 prefix；1c 之後 legacy key_scheme=1 chunk resume 仍走單 .json key，不被新常數誤推）。
+ *
+ * PR 0.2c-pre-1c：opts.manifestState 給 keyScheme=2 用，keyScheme=1 會被忽略；keyScheme=2
+ * 且 manifestState 缺 → throw（caller 用法不對立即暴露）。
  */
-export function deriveAggregateKeysFromChunk(row) {
+export function deriveAggregateKeysFromChunk(row, opts: { manifestState?: ManifestStateFile } = {}) {
   return buildAggregateChunkKeys({
     env:         row.env,
     tableName:   row.table_name,
@@ -204,7 +256,27 @@ export function deriveAggregateKeysFromChunk(row) {
     archiveDate: row.archive_date,
     dryRun:      row.dry_run === 1 || row.dry_run === true,
     compression: row.compression ?? 'gzip',
+    keyScheme:   Number(row.key_scheme ?? KEY_SCHEME_LEGACY),
+    manifestState: opts.manifestState,
   })
+}
+
+/**
+ * 從 chunks row 算 aggregate data key — per chunk 固定 1 key，與 manifestState 無關。
+ * PR 0.2c-pre-1c：給 HEAD pre-check / dataKey-only 場景用，避免 caller 為了拿 dataKey
+ * 還要硬塞 manifestState 進 deriveAggregateKeysFromChunk。
+ */
+export function deriveAggregateDataKey(row): string {
+  return deriveAggregateKeysFromChunk(row, { manifestState: undefined }).dataKey
+}
+
+/**
+ * 從 chunks row 算 aggregate manifest key（state-aware）。
+ * PR 0.2c-pre-1c：keyScheme=1 → legacy 單 .json；keyScheme=2 必帶 manifestState → .{state}.json。
+ */
+export function deriveAggregateManifestKey(row, manifestState?: ManifestStateFile): string {
+  // 直接 dispatch 到 buildAggregateChunkKeys；keyScheme=2 缺 manifestState 會在 build 處 throw。
+  return deriveAggregateKeysFromChunk(row, { manifestState }).manifestKey
 }
 
 /**
@@ -336,12 +408,11 @@ export async function purgeAggregateChunk({ env, db, target }) {
 
   const expectedDryRunInt = target.dry_run ? 1 : 0
 
-  // 1) SELECT chunk row by composite key — 撈 dry_run / compression 反推 R2 key
-  //    （與 raw purgeChunk 不同：這裡 SELECT 不過濾 dry_run，先撈出來驗 expected，
-  //    錯了 throw DRY_RUN_MISMATCH，給 operator 清楚 reason）
+  // 1) SELECT chunk row by composite key — 撈 dry_run / compression / key_scheme
+  //    反推 R2 key（PR 1c：key_scheme 必撈，key_scheme=2 要刪 4 把 manifest）
   const row = await db.prepare(
     `SELECT env, table_name, cold_class, archive_date,
-            min_id, max_id, chunk_sha256, state, dry_run, compression
+            min_id, max_id, chunk_sha256, state, dry_run, compression, key_scheme
        FROM audit_archive_chunks
       WHERE env = ? AND table_name = ? AND cold_class = ?
         AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
@@ -372,14 +443,24 @@ export async function purgeAggregateChunk({ env, db, target }) {
 
   // PR 3.3：必須走 deriveAggregateKeysFromChunk（不是 raw deriveKeysFromChunk），
   //   prefix = audit-log-aggregate-{telemetry|debug}[-dryrun]/...
-  //          + manifest[-dryrun]/{env}/{table_name}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}.json
-  const { dataKey, manifestKey } = deriveAggregateKeysFromChunk(row)
+  //          + manifest[-dryrun]/{env}/{table_name}/{yyyy}/{mm}/{dd}/{min}-{max}-{sha}{suffix}
+  // PR 0.2c-pre-1c：key_scheme=2 chunk 有 4 把 manifest（.planned/.uploaded/.verified/
+  //   .marked_archived.json）— 全 best-effort DELETE（missing-key 為 no-op）。
+  //   key_scheme=1 legacy chunk 走 1 把 .json 不變（backward compat）。
+  //   不補 4-key delete 會 silent leave orphan manifests，後續 forensic / retry 漂。
+  const dataKey   = deriveAggregateDataKey(row)
+  const keyScheme = Number(row.key_scheme ?? KEY_SCHEME_LEGACY)
+  const manifestKeys: string[] = keyScheme === KEY_SCHEME_WRITE_ONCE
+    ? MANIFEST_STATE_FILES.map(s => deriveAggregateManifestKey(row, s as ManifestStateFile))
+    : [deriveAggregateManifestKey(row)]
 
   // 2) R2 chunk DELETE（missing-key 為 no-op，propagate 其他 SDK exception）
   //    waiver tag 必須同行（lint per-line scan，scripts/_archive-lint-patterns.js#isWaived）
   await bucket.delete(dataKey) // archive-delete-allow: PR 3.3 force_purge aggregate chunk object
-  // 3) R2 manifest DELETE
-  await bucket.delete(manifestKey) // archive-delete-allow: PR 3.3 force_purge aggregate manifest object
+  // 3) R2 manifest DELETE — write-once chunk 走 4 把 key 全刪
+  for (const mk of manifestKeys) {
+    await bucket.delete(mk) // archive-delete-allow: PR 3.3 force_purge aggregate manifest object
+  }
 
   // 4) D1 chunks row DELETE — 嚴格 state='blacklisted' AND dry_run=? 再驗一次
   //    SQL waiver tag 必須在 match span 內（與下方 SQL 同一行；archive-sql-allow）
@@ -395,10 +476,17 @@ export async function purgeAggregateChunk({ env, db, target }) {
   ).run()
 
   const changes = del?.meta?.changes ?? 0
+  // PR 0.2c-pre-1c：primary manifest_key 回傳挑「最後一態」對齊舊 single-key 直覺
+  //   - legacy keyScheme=1 → .json
+  //   - write-once keyScheme=2 → .marked_archived.json（若 chunk 走完整 pipeline）
+  // 同時補 manifest_keys[] 給 caller / forensic 看到全 keys，避免「dashboard 看 4 物件、
+  // log 只回 1」的 silent gap。
   return {
     chunks_row_deleted:  changes === 1,
     source_rows_deleted: false,
     data_key:            dataKey,
-    manifest_key:        manifestKey,
+    manifest_key:        manifestKeys[manifestKeys.length - 1] ?? '',
+    manifest_keys:       manifestKeys,
+    key_scheme:          keyScheme,
   }
 }

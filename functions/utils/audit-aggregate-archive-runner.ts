@@ -50,6 +50,9 @@ import {
   newRunId,
   utcDate,
   appendStateHistory,
+  KEY_SCHEME_LEGACY,
+  KEY_SCHEME_WRITE_ONCE,
+  type ManifestStateFile,
 } from './audit-archive'
 import {
   AGGREGATE_WRITER,
@@ -58,6 +61,7 @@ import {
   buildAggregateChunkKeys,
   buildAggregateManifest,
   deriveAggregateKeysFromChunk,
+  deriveAggregateManifestKey,
   splitIntoChunks,
 } from './audit-aggregate-archive'
 
@@ -98,8 +102,12 @@ function parseRetryBackoffMs(env) {
   return parts
 }
 
+// PR 0.2c-pre-1c：mirror raw audit-archive 的 lockDetected 分支（aggregate-namespaced）。
+// 與 raw 1a 對等：upload_failed 帶 lock_detected flag；lockDetected=true 額外 emit
+// `${ctx.eventPrefix}.r2_lock_detected` critical（aggregate namespace，**不**用 raw
+// audit.archive.* 避免 alert 散到 raw archive 命名空間）。
 function makePutAuditCallback(ctx, role, chunkInfo, maxAttempts) {
-  return async ({ attempt, error, willRetry, nextDelayMs, key }) => {
+  return async ({ attempt, error, willRetry, nextDelayMs, key, lockDetected }) => {
     const sev = willRetry ? 'warn' : 'critical'
     await safeUserAudit(ctx.env, {
       event_type: `${ctx.eventPrefix}.upload_failed`,
@@ -116,11 +124,41 @@ function makePutAuditCallback(ctx, role, chunkInfo, maxAttempts) {
         max_attempts:  maxAttempts,
         next_delay_ms: nextDelayMs,
         final:         !willRetry,
+        // PR 0.2c-pre-1c：標 lock_detected 給 forensic 一眼分辨「為何 final=true 在
+        // attempt=1 就觸發」— 是 lock 不 retry，不是 backoff 跑完了
+        lock_detected: lockDetected === true,
         error:         String(error?.message ?? error),
         min_id:        chunkInfo.minId,
         max_id:        chunkInfo.maxId,
       },
     })
+    if (lockDetected) {
+      const errStatus = Number(
+        (error as { status?: unknown })?.status
+        ?? (error as { httpStatus?: unknown })?.httpStatus
+        ?? (error as { statusCode?: unknown })?.statusCode,
+      )
+      const errCode = (error as { code?: unknown })?.code
+      await safeUserAudit(ctx.env, {
+        event_type: `${ctx.eventPrefix}.r2_lock_detected`,
+        severity:   'critical',
+        data: {
+          run_id:     ctx.runId,
+          dry_run:    chunkInfo.dryRun,
+          env:        ctx.envName,
+          table:      ctx.tableName,
+          cold_class: ctx.coldClass,
+          operation:  role,                         // 'data' | 'manifest'
+          key,
+          attempt,
+          // 限定欄位：避免把 error.stack / response body 塞進 audit_log
+          status:     Number.isFinite(errStatus) ? errStatus : null,
+          code:       typeof errCode === 'string' || typeof errCode === 'number' ? errCode : null,
+          min_id:     chunkInfo.minId,
+          max_id:     chunkInfo.maxId,
+        },
+      })
+    }
   }
 }
 
@@ -132,6 +170,88 @@ async function archivePut(ctx, role, chunkInfo, key, body, putOpts) {
     backoffMs,
     sleep,
     onAttemptFailed: makePutAuditCallback(ctx, role, chunkInfo, maxAttempts),
+  })
+}
+
+// ── PR 0.2c-pre-1c：write-once manifest PUT 流程（mirror raw audit-archive 1a） ──
+//
+// 對 key_scheme=2 chunk 的 manifest / data key 採 R2 HEAD 預檢（exists → skip
+// PUT），擋掉 crash-after-PUT-before-D1-UPDATE 場景下重 PUT 被 lock 擋的問題。
+//
+// key_scheme=1（legacy）chunk：直接走 archivePut（同 key 覆寫，與既有行為一致；prod
+// 既有 chunk 跑 1c deploy 後仍走此路徑）。新 chunk 由 processChunk INSERT 寫 key_scheme=2
+// → 升 manifest 走 write-once。
+//
+// HEAD missing → PUT；HEAD exists → skip。skip 不算失敗、不 emit upload_failed；
+// emit manifest_written 帶 skipped=true，forensic 可辨識 recovery 軌跡。
+//
+// (a) duplicate handler-local（不動 raw audit-archive 1a 路徑；雙份維護是技術債、
+//     列 backlog 後續另開 dedupe PR — 與 user pre-PR design call 一致)
+async function archivePutManifestWriteOnce(ctx, role, chunkInfo, key) {
+  // R2 HEAD 預檢；存在 → skip（recovery from prior crash 已寫過此 key）
+  const exists = await ctx.bucket.head(key)
+  return { skipped: !!exists }
+}
+
+// 給 key_scheme=2 aggregate chunk 用：HEAD 預檢 + (skip OR archivePut) for manifest。
+// 回 { skipped: boolean }；caller 後續走 emit + UPDATE last_manifest_state。
+async function putManifestLockSafe(ctx, role, chunkInfo, key, body, putOpts, keyScheme) {
+  if (keyScheme === KEY_SCHEME_WRITE_ONCE) {
+    const pre = await archivePutManifestWriteOnce(ctx, role, chunkInfo, key)
+    if (pre.skipped) return { skipped: true }
+  }
+  await archivePut(ctx, role, chunkInfo, key, body, putOpts)
+  return { skipped: false }
+}
+
+// 給 key_scheme=2 aggregate chunk 用：HEAD 預檢 + (skip OR archivePut) for data。
+// dataKey per chunk 固定 1 把（content-addressed by chunk_sha256），HEAD 命中
+// 意味著 prior run 已成功 PUT 但 chunks state UPDATE crash；skip 安全。
+async function putDataLockSafe(ctx, role, chunkInfo, key, body, putOpts, keyScheme) {
+  if (keyScheme === KEY_SCHEME_WRITE_ONCE) {
+    const exists = await ctx.bucket.head(key)
+    if (exists) return { skipped: true }
+  }
+  await archivePut(ctx, role, chunkInfo, key, body, putOpts)
+  return { skipped: false }
+}
+
+// UPDATE chunks.last_manifest_state — observability bookkeeping（非 correctness
+// source；crash recovery 仍以 chunks.state + R2 existence 為準）。
+async function updateLastManifestState(db, chunkRow, manifestState: ManifestStateFile) {
+  await db.prepare(
+    `UPDATE audit_archive_chunks
+        SET last_manifest_state = ?, updated_at = datetime('now')
+      WHERE env = ? AND table_name = ? AND cold_class = ?
+        AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
+  ).bind(
+    manifestState,
+    chunkRow.env, chunkRow.table_name, chunkRow.cold_class,
+    chunkRow.archive_date, chunkRow.min_id, chunkRow.max_id, chunkRow.chunk_sha256,
+  ).run()
+}
+
+// emit `${ctx.eventPrefix}.manifest_written`（aggregate-namespaced；**不**用 raw
+// audit.archive.manifest_written）。PUT 成功（或 skip-due-to-existing）後一律 emit；
+// payload 不含 error / body。
+async function emitManifestWritten(ctx, chunkRow, manifestState: ManifestStateFile, keyScheme: number, manifestKey: string, skipped: boolean) {
+  await safeUserAudit(ctx.env, {
+    event_type: `${ctx.eventPrefix}.manifest_written`,
+    severity:   'info',
+    data: {
+      run_id:         ctx.runId,
+      dry_run:        chunkRow.dry_run === 1 || chunkRow.dry_run === true,
+      env:            ctx.envName,
+      table:          ctx.tableName,
+      cold_class:     ctx.coldClass,
+      manifest_state: manifestState,
+      manifest_key:   manifestKey,
+      key_scheme:     keyScheme,
+      skipped,                                  // true = HEAD pre-check 命中 → 不重 PUT（recovery）
+      archive_state:  chunkRow.state ?? null,   // emit 點當下的 chunks.state（pre-transition）
+      min_id:         chunkRow.min_id,
+      max_id:         chunkRow.max_id,
+    },
   })
 }
 
@@ -242,7 +362,11 @@ export async function runAggregateArchive(args) {
   // 新 archive_date PK → INSERT OR IGNORE 反而插新 row 繞過 invariant 把資料 archive 掉。
   try {
     const blockerRows = await db.prepare(
-      `SELECT min_id, max_id, chunk_sha256, archive_date, state, row_count, dry_run
+      // PR 0.2c-pre-1c：補 compression / key_scheme / last_manifest_state — blocker
+      // handler 走 write-once 路徑要對的 manifest state-suffix key；之前漏 SELECT 會
+      // silently fallback 走 legacy 單 .json key，寫去舊路徑 → R2 中找不到 .verified.json
+      `SELECT min_id, max_id, chunk_sha256, archive_date, state, row_count, dry_run,
+              compression, key_scheme, last_manifest_state
          FROM audit_archive_chunks
         WHERE env = ? AND table_name = ? AND cold_class = ?
           AND state IN ('verified', 'uploaded', 'failed', 'blacklisted')
@@ -441,41 +565,37 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
   const gzBody      = await gzipCompress(jsonl)
   const sha256Gz    = await sha256Hex(gzBody)
 
-  const { dataKey, manifestKey } = buildAggregateChunkKeys({
-    env: envName, tableName, coldClass,
-    minId, maxId, sha256: sha, archiveDate, dryRun, compression,
-  })
+  // PR 0.2c-pre-1c：fresh INSERT 預設 key_scheme=2（write-once）。INSERT OR IGNORE
+  // 撞既有 legacy row（key_scheme=1）時，後續 SELECT 讀回 row.key_scheme 用 row 自身值
+  // derive key — **不**用此處常數硬推 state-suffix；否則 legacy chunk recovery 會寫去
+  // .planned.json/.uploaded.json 等不存在的 key，PUT 成功但實質「換 namespace 重寫一份」。
+  const PLANNED_KEY_SCHEME = KEY_SCHEME_WRITE_ONCE
 
-  const plannedAt = new Date().toISOString()
-  let manifest = buildAggregateManifest({
-    env: envName, tableName, coldClass, runId,
-    state: 'planned',
-    stateHistory: [{ state: 'planned', at: plannedAt }],
-    rowCount, minId, maxId, minTs, maxTs,
-    sha256Jsonl: sha, dryRun, dataKey, compression, sha256Gz, rowKind,
-  })
-  // 確保 schema_version 走 audit-archive 既有版本（buildAggregateManifest 已注入）
-  if (!manifest.schema_version) manifest.schema_version = ARCHIVE_SCHEMA_VERSION
-
+  // chunkInfo + dryRunInt 放前面：archivePut callback 和 SELECT/INSERT 都會用到
   const chunkInfo = { dryRun, minId, maxId }
   const dryRunInt = dryRun ? 1 : 0
+  const plannedAt = new Date().toISOString()
 
-  // ── a. INSERT OR IGNORE chunks row ────────────────────
+  // ── a. INSERT OR IGNORE chunks row（PR 1c：加 key_scheme + last_manifest_state） ──
   await db.prepare(
     `INSERT OR IGNORE INTO audit_archive_chunks
       (env, table_name, cold_class, cold_class_version, archive_date,
-       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run, compression)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?, ?, ?)`
+       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run,
+       compression, key_scheme, last_manifest_state)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'planned', ?, 0, ?, ?, ?, ?, NULL)`
   ).bind(envName, tableName, coldClass, COLD_CLASS_VERSION, archiveDate,
-         minId, maxId, sha, rowCount, runId, dryRunInt, compression).run()
+         minId, maxId, sha, rowCount, runId, dryRunInt, compression, PLANNED_KEY_SCHEME).run()
 
   // codex r2 H-1：dry_run 不在 PK 內。若同 (env, table, cold_class, date, min, max, sha)
   // 已存在 dry_run mismatch row（典型情境：dry-run 跑完後同日換 live rerun），INSERT OR
   // IGNORE 會 silently skip，後續 UPDATE 沒 dry_run guard 會「借殼」改該 row，最後
   // chunks.dry_run=1 但 aggregate row 已 archived → PR 4 derive key 跑回 dryrun prefix，
   // provenance 全錯。Fail-fast 防止：fetch back，驗 dry_run 對齊，否則 emit critical 中止。
+  //
+  // PR 0.2c-pre-1c：SELECT 補 key_scheme — INSERT OR IGNORE 撞到 legacy key_scheme=1 row
+  // 時，後續 derive key 必須用 existing.key_scheme 不用 PLANNED_KEY_SCHEME 常數。
   const existing = await db.prepare(
-    `SELECT dry_run, state, run_id FROM audit_archive_chunks
+    `SELECT dry_run, state, run_id, key_scheme FROM audit_archive_chunks
        WHERE env = ? AND table_name = ? AND cold_class = ?
          AND archive_date = ? AND min_id = ? AND max_id = ? AND chunk_sha256 = ?`
   ).bind(envName, tableName, coldClass, archiveDate, minId, maxId, sha).first()
@@ -529,22 +649,79 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
   }
   report.chunks_planned++
 
+  // PR 0.2c-pre-1c：state existed check 過後才確定要用哪個 key_scheme — 對 INSERT
+  // 真插的 fresh row 用 PLANNED_KEY_SCHEME，對 collide skip 的 legacy row 用 row 自身
+  // 的 key_scheme（保留 backward compat）。effectiveKeyScheme 之後 PUT / UPDATE 都用它。
+  const effectiveKeyScheme = Number(existing?.key_scheme ?? PLANNED_KEY_SCHEME)
+
+  // chunkRow 給 helper（updateLastManifestState / emitManifestWritten）用 — 帶 PK + state
+  const chunkRow = {
+    env: envName, table_name: tableName, cold_class: coldClass,
+    archive_date: archiveDate, min_id: minId, max_id: maxId, chunk_sha256: sha,
+    dry_run: dryRunInt, state: 'planned',
+  }
+
+  // ── derive R2 keys (state-aware for key_scheme=2) ──
+  const dataKey = buildAggregateChunkKeys({
+    env: envName, tableName, coldClass,
+    minId, maxId, sha256: sha, archiveDate, dryRun, compression,
+    keyScheme: effectiveKeyScheme, manifestState: 'planned',
+  }).dataKey
+  const manifestKeyPlanned = buildAggregateChunkKeys({
+    env: envName, tableName, coldClass,
+    minId, maxId, sha256: sha, archiveDate, dryRun, compression,
+    keyScheme: effectiveKeyScheme, manifestState: 'planned',
+  }).manifestKey
+  const manifestKeyUploaded = buildAggregateChunkKeys({
+    env: envName, tableName, coldClass,
+    minId, maxId, sha256: sha, archiveDate, dryRun, compression,
+    keyScheme: effectiveKeyScheme, manifestState: 'uploaded',
+  }).manifestKey
+  const manifestKeyVerified = buildAggregateChunkKeys({
+    env: envName, tableName, coldClass,
+    minId, maxId, sha256: sha, archiveDate, dryRun, compression,
+    keyScheme: effectiveKeyScheme, manifestState: 'verified',
+  }).manifestKey
+  const manifestKeyMarked = buildAggregateChunkKeys({
+    env: envName, tableName, coldClass,
+    minId, maxId, sha256: sha, archiveDate, dryRun, compression,
+    keyScheme: effectiveKeyScheme, manifestState: 'marked_archived',
+  }).manifestKey
+
+  let manifest = buildAggregateManifest({
+    env: envName, tableName, coldClass, runId,
+    state: 'planned',
+    stateHistory: [{ state: 'planned', at: plannedAt }],
+    rowCount, minId, maxId, minTs, maxTs,
+    sha256Jsonl: sha, dryRun, dataKey, compression, sha256Gz, rowKind,
+  })
+  if (!manifest.schema_version) manifest.schema_version = ARCHIVE_SCHEMA_VERSION
+
   // ── b. PUT manifest planned ───────────────────────────
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-    JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
+  // PR 0.2c-pre-1c：key_scheme=2 走 HEAD pre-check write-once；keyScheme=1 走 archivePut 覆寫
+  {
+    const r = await putManifestLockSafe(ctx, 'manifest', chunkInfo, manifestKeyPlanned,
+      JSON.stringify(manifest, null, 2),
+      { httpMetadata: { contentType: 'application/json' } }, effectiveKeyScheme)
+    await updateLastManifestState(db, chunkRow, 'planned')
+    await emitManifestWritten(ctx, chunkRow, 'planned', effectiveKeyScheme, manifestKeyPlanned, r.skipped)
+  }
 
   // ── c. PUT data (gzip) ────────────────────────────────
-  await archivePut(ctx, 'data', chunkInfo, dataKey, gzBody, {
+  await putDataLockSafe(ctx, 'data', chunkInfo, dataKey, gzBody, {
     httpMetadata: { contentType: 'application/x-ndjson', contentEncoding: 'gzip' },
-  })
+  }, effectiveKeyScheme)
 
   // ── d. PUT manifest uploaded → UPDATE chunks state=uploaded ────
   // codex r2 M-1：先 R2 後 D1。若 manifest PUT fail，chunks 留前態，下輪重跑可接續。
   manifest = appendStateHistory(manifest, 'uploaded', new Date().toISOString())
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-    JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
+  {
+    const r = await putManifestLockSafe(ctx, 'manifest', chunkInfo, manifestKeyUploaded,
+      JSON.stringify(manifest, null, 2),
+      { httpMetadata: { contentType: 'application/json' } }, effectiveKeyScheme)
+    await updateLastManifestState(db, chunkRow, 'uploaded')
+    await emitManifestWritten(ctx, chunkRow, 'uploaded', effectiveKeyScheme, manifestKeyUploaded, r.skipped)
+  }
 
   // PR 3.3：state='planned' guard + changes()===1。admin retry / force_purge
   // 可在 cron 跑同時改 chunk state（mark_resolved→blacklisted 等）；無 guard
@@ -608,9 +785,13 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
   // ── f. PUT manifest verified → UPDATE chunks state=verified ────
   // codex r2 M-1：先 R2 後 D1。
   manifest = appendStateHistory(manifest, 'verified', new Date().toISOString())
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-    JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
+  {
+    const r = await putManifestLockSafe(ctx, 'manifest', chunkInfo, manifestKeyVerified,
+      JSON.stringify(manifest, null, 2),
+      { httpMetadata: { contentType: 'application/json' } }, effectiveKeyScheme)
+    await updateLastManifestState(db, chunkRow, 'verified')
+    await emitManifestWritten(ctx, chunkRow, 'verified', effectiveKeyScheme, manifestKeyVerified, r.skipped)
+  }
 
   // PR 3.3：state='uploaded' guard + changes()===1（同 planned→uploaded 段註解）
   const updUploadedToVerified = await db.prepare(
@@ -640,7 +821,7 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
       table:        tableName,
       cold_class:   coldClass,
       chunk_key:    dataKey,
-      manifest_key: manifestKey,
+      manifest_key: manifestKeyVerified,
       row_count:    rowCount,
       min_id:       minId,
       max_id:       maxId,
@@ -666,9 +847,13 @@ async function processChunk({ ctx, chunk, archiveDate, dryRun, rowKind, report }
 
   // codex r2 M-1：先 R2 manifest 後 D1 chunks UPDATE。
   manifest = appendStateHistory(manifest, 'marked_archived', new Date().toISOString())
-  await archivePut(ctx, 'manifest', chunkInfo, manifestKey,
-    JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
+  {
+    const r = await putManifestLockSafe(ctx, 'manifest', chunkInfo, manifestKeyMarked,
+      JSON.stringify(manifest, null, 2),
+      { httpMetadata: { contentType: 'application/json' } }, effectiveKeyScheme)
+    await updateLastManifestState(db, chunkRow, 'marked_archived')
+    await emitManifestWritten(ctx, chunkRow, 'marked_archived', effectiveKeyScheme, manifestKeyMarked, r.skipped)
+  }
 
   // PR 3.3：state='verified' guard + changes()===1（同 planned→uploaded 段註解）
   const updVerifiedToMarked = await db.prepare(
@@ -820,14 +1005,22 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
   const archiveDate = blocker.archive_date  // 用 row 自帶值（**跨日 key**），不用 utcDate()
   const rowCount = blocker.row_count
 
-  // 1) 算 R2 key
-  const { dataKey, manifestKey } = deriveAggregateKeysFromChunk({
+  // PR 0.2c-pre-1c：blocker 帶 key_scheme（Step 0 SELECT 補的欄位）；legacy chunk
+  // 走 keyScheme=1 + 單 .json key；write-once chunk 走 keyScheme=2 + state-suffix。
+  // **不**用 runner 常數覆蓋 — blocker 的 key_scheme 是 PUT 當下用的 scheme，必尊重。
+  const effectiveKeyScheme = Number(blocker.key_scheme ?? KEY_SCHEME_LEGACY)
+  const blockerRow = {
     env: envName, table_name: tableName, cold_class: coldClass,
-    min_id: minId, max_id: maxId,
-    chunk_sha256: sha,
-    archive_date: archiveDate,
-    dry_run: blocker.dry_run, compression: 'gzip',
-  })
+    archive_date: archiveDate, min_id: minId, max_id: maxId, chunk_sha256: sha,
+    dry_run: blocker.dry_run, compression: blocker.compression ?? 'gzip',
+    key_scheme: effectiveKeyScheme, state: 'uploaded',
+  }
+
+  // 1) 算 R2 key — dataKey per chunk 固定 1 把；manifest 走 uploaded → verified
+  //    （resume 期間需要讀 .uploaded.json 再寫 .verified.json；key_scheme=1 兩者同 .json）
+  const dataKey            = deriveAggregateKeysFromChunk(blockerRow, { manifestState: 'uploaded' }).dataKey
+  const manifestKeyUploaded = deriveAggregateManifestKey(blockerRow, 'uploaded')
+  const manifestKeyVerified = deriveAggregateManifestKey(blockerRow, 'verified')
 
   // 2) GET + verify
   const obj = await bucket.get(dataKey)
@@ -878,7 +1071,9 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
   }
 
   // 3) PUT manifest 'verified'
-  const mObj = await bucket.get(manifestKey)
+  // PR 0.2c-pre-1c：GET 讀「上一態」manifest 拿 state_history；key_scheme=2 chunk 上一態
+  // 是 .uploaded.json，與下一態 .verified.json 不同 key。key_scheme=1 兩者同 .json，行為一致。
+  const mObj = await bucket.get(manifestKeyUploaded)
   let manifest
   if (mObj) {
     try { manifest = JSON.parse(await mObj.text()) }
@@ -887,9 +1082,13 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
     manifest = { state: 'uploaded', state_history: [{ state: 'uploaded', at: new Date().toISOString() }] }
   }
   manifest = appendStateHistory(manifest, 'verified', new Date().toISOString())
-  await archivePut(ctx, 'manifest', { dryRun: chunkDryRun, minId, maxId }, manifestKey,
-    JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
+  {
+    const r = await putManifestLockSafe(ctx, 'manifest', { dryRun: chunkDryRun, minId, maxId },
+      manifestKeyVerified, JSON.stringify(manifest, null, 2),
+      { httpMetadata: { contentType: 'application/json' } }, effectiveKeyScheme)
+    await updateLastManifestState(db, blockerRow, 'verified')
+    await emitManifestWritten(ctx, blockerRow, 'verified', effectiveKeyScheme, manifestKeyVerified, r.skipped)
+  }
 
   // 4) atomic UPDATE state='uploaded'→'verified'
   const updUploadedToVerified = await db.prepare(
@@ -918,7 +1117,7 @@ async function resumeUploadedBlocker({ ctx, blocker, report }) {
       table:        tableName,
       cold_class:   coldClass,
       chunk_key:    dataKey,
-      manifest_key: manifestKey,
+      manifest_key: manifestKeyVerified,
       row_count:    rowCount,
       min_id:       minId,
       max_id:       maxId,
@@ -973,13 +1172,16 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids = null }) {
   // && row_count 一致；不符就 throw 留 chunk 在 'verified'、不污染狀態機。
   let chunkIds = Array.isArray(ids) ? ids : null
   if (!chunkIds) {
+    // PR 0.2c-pre-1c：dataKey per chunk 固定 1 把（與 manifestState 無關），但 key_scheme=2
+    // 路徑必須帶 manifestState（任意，會被 dataKey-only 用法忽略）— 用 'verified' 配對當下狀態。
     const { dataKey: verifiedDataKey } = deriveAggregateKeysFromChunk({
       env: envName, table_name: tableName, cold_class: coldClass,
       min_id: blocker.min_id, max_id: blocker.max_id,
       chunk_sha256: blocker.chunk_sha256,
       archive_date: blocker.archive_date,
       dry_run: blocker.dry_run, compression: 'gzip',
-    })
+      key_scheme: Number(blocker.key_scheme ?? KEY_SCHEME_LEGACY),
+    }, { manifestState: 'verified' })
     const dataObj = await bucket.get(verifiedDataKey)
     if (!dataObj) {
       const e: ArchiveError = new Error('verified_blocker_resume_failed: r2_data_missing')
@@ -1033,14 +1235,20 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids = null }) {
   // 2) PUT manifest marked_archived（codex r2 M-1：先 R2 後 D1。
   //    manifest PUT 失敗 → chunks state 仍 verified，下輪 Step 0 重跑接續；
   //    aggregate row archived_at 已標但這是 idempotent；不會雙寫）
-  const { manifestKey } = deriveAggregateKeysFromChunk({
+  // PR 0.2c-pre-1c：尊重 blocker.key_scheme（Step 0 SELECT 帶的欄位）；上一態 .verified.json
+  // 或 legacy 單 .json；下一態 .marked_archived.json 或同 legacy .json。
+  const effectiveKeyScheme = Number(blocker.key_scheme ?? KEY_SCHEME_LEGACY)
+  const blockerRow = {
     env: envName, table_name: tableName, cold_class: coldClass,
-    min_id: blocker.min_id, max_id: blocker.max_id,
+    archive_date: blocker.archive_date, min_id: blocker.min_id, max_id: blocker.max_id,
     chunk_sha256: blocker.chunk_sha256,
-    archive_date: blocker.archive_date,
-    dry_run: blocker.dry_run, compression: 'gzip',
-  })
-  const obj = await bucket.get(manifestKey)
+    dry_run: blocker.dry_run, compression: blocker.compression ?? 'gzip',
+    key_scheme: effectiveKeyScheme, state: 'verified',
+  }
+  const manifestKeyVerified = deriveAggregateManifestKey(blockerRow, 'verified')
+  const manifestKeyMarked   = deriveAggregateManifestKey(blockerRow, 'marked_archived')
+
+  const obj = await bucket.get(manifestKeyVerified)
   let manifest
   if (obj) {
     try { manifest = JSON.parse(await obj.text()) }
@@ -1049,9 +1257,14 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids = null }) {
     manifest = { state: 'verified', state_history: [{ state: 'verified', at: new Date().toISOString() }] }
   }
   manifest = appendStateHistory(manifest, 'marked_archived', new Date().toISOString())
-  await archivePut(ctx, 'manifest', { dryRun: false, minId: blocker.min_id, maxId: blocker.max_id },
-    manifestKey, JSON.stringify(manifest, null, 2),
-    { httpMetadata: { contentType: 'application/json' } })
+  {
+    const r = await putManifestLockSafe(ctx, 'manifest',
+      { dryRun: false, minId: blocker.min_id, maxId: blocker.max_id },
+      manifestKeyMarked, JSON.stringify(manifest, null, 2),
+      { httpMetadata: { contentType: 'application/json' } }, effectiveKeyScheme)
+    await updateLastManifestState(db, blockerRow, 'marked_archived')
+    await emitManifestWritten(ctx, blockerRow, 'marked_archived', effectiveKeyScheme, manifestKeyMarked, r.skipped)
+  }
 
   // 3) UPDATE chunks → marked_archived + purge_after = +7d（R2 manifest 成功後才升 D1）
   // PR 3.3：state='verified' guard 已存在（atomic）+ changes()===1 check。
@@ -1088,7 +1301,7 @@ async function resumeVerifiedBlocker({ ctx, blocker, report, ids = null }) {
       env:        envName,
       table:      tableName,
       cold_class: coldClass,
-      manifest_key: manifestKey,
+      manifest_key: manifestKeyMarked,
       min_id:     blocker.min_id,
       max_id:     blocker.max_id,
       sha256_jsonl: blocker.chunk_sha256,
