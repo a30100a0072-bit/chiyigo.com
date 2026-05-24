@@ -33,3 +33,9 @@ secrets
 # spike 跑完輸出（含 R2 endpoint + response data；可以提交但 fixture 走另一路徑）
 spike-setup.json
 spike-test.json
+
+# 本機 ad-hoc secret container（user 暫存 secret 給 Claude 整理；handled via global
+# CLAUDE.md §安全要求 Secret container 紀律）。檔案存在期間禁直接 grep / cat。
+# 留 pattern 給未來臨時 secret 處理使用，user 自行決定何時 rm。
+.canary-secret-tmp
+.canary-*.tmp

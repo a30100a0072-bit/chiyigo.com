@@ -1,0 +1,135 @@
+{
+  "spike_id": "binding-canary-20260524-092748-da0565",
+  "spike_date_utc": "2026-05-24",
+  "generated_at": "2026-05-24T10:18:52.991Z",
+  "purpose": "PR 0.2c-pre-1b.1 Worker R2 binding canary — capture real binding error shape (cf S3 sigv4 spike fixture r2-lock-spike-2026-05-23.json)",
+  "bucket": "chiyigo-audit-archive-preview",
+  "prefix": "spike/binding-canary/20260524-092748-da0565/",
+  "lock_rule_name": "binding-canary-20260524-092748-da0565",
+  "lock_retention_days": 1,
+  "lifecycle_rule_name": "binding-canary-20260524-092748-da0565-cleanup",
+  "lifecycle_expire_days": 2,
+  "endpoint": "POST /api/admin/cron/r2-binding-canary (TEMPORARY, removed in commit 2 of PR 0.2c-pre-1b.1)",
+  "ops": [
+    {
+      "step": 1,
+      "label": "setup_control",
+      "expected_outcome": "success",
+      "response": {
+        "op": "setup_control",
+        "prefix": "spike/binding-canary/20260524-092748-da0565/",
+        "key": "spike/binding-canary/20260524-092748-da0565/control.txt",
+        "bucket": "chiyigo-audit-archive-preview",
+        "outcome": "success",
+        "success_meta": {
+          "etag": "9325215373a47791ef82b2c0679e2941",
+          "httpEtag": "\"9325215373a47791ef82b2c0679e2941\"",
+          "size": 18,
+          "version": "7e61a683eb7bcc93c4627fe70dced388"
+        },
+        "thrown": null,
+        "timing_ms": 526
+      }
+    },
+    {
+      "step": 2,
+      "label": "put_overwrite",
+      "expected_outcome": "thrown",
+      "response": {
+        "op": "put_overwrite",
+        "prefix": "spike/binding-canary/20260524-092748-da0565/",
+        "key": "spike/binding-canary/20260524-092748-da0565/control.txt",
+        "bucket": "chiyigo-audit-archive-preview",
+        "outcome": "thrown",
+        "success_meta": null,
+        "thrown": {
+          "name": "Error",
+          "message": "put: The object is locked by the bucket policy. (10069)",
+          "code": null,
+          "status": null,
+          "cause": null,
+          "stringified": "{\"name\":\"Error\",\"message\":\"put: The object is locked by the bucket policy. (10069)\",\"stack\":\"Error: put: The object is locked by the bucket policy. (10069)\"}"
+        },
+        "timing_ms": 420
+      }
+    },
+    {
+      "step": 3,
+      "label": "put_new",
+      "expected_outcome": "success",
+      "response": {
+        "op": "put_new",
+        "prefix": "spike/binding-canary/20260524-092748-da0565/",
+        "key": "spike/binding-canary/20260524-092748-da0565/newkey-da0565.txt",
+        "bucket": "chiyigo-audit-archive-preview",
+        "outcome": "success",
+        "success_meta": {
+          "etag": "4a45ca99292d4608f48d5286365572d7",
+          "httpEtag": "\"4a45ca99292d4608f48d5286365572d7\"",
+          "size": 15,
+          "version": "7e61a683e1eab5f2f53b08572b073bbf"
+        },
+        "thrown": null,
+        "timing_ms": 517
+      }
+    },
+    {
+      "step": 4,
+      "label": "delete",
+      "expected_outcome": "thrown",
+      "response": {
+        "op": "delete",
+        "prefix": "spike/binding-canary/20260524-092748-da0565/",
+        "key": "spike/binding-canary/20260524-092748-da0565/control.txt",
+        "bucket": "chiyigo-audit-archive-preview",
+        "outcome": "thrown",
+        "success_meta": null,
+        "thrown": {
+          "name": "Error",
+          "message": "delete: The object is locked by the bucket policy. (10069)",
+          "code": null,
+          "status": null,
+          "cause": null,
+          "stringified": "{\"name\":\"Error\",\"message\":\"delete: The object is locked by the bucket policy. (10069)\",\"stack\":\"Error: delete: The object is locked by the bucket policy. (10069)\"}"
+        },
+        "timing_ms": 46
+      }
+    },
+    {
+      "step": 5,
+      "label": "head",
+      "expected_outcome": "success",
+      "response": {
+        "op": "head",
+        "prefix": "spike/binding-canary/20260524-092748-da0565/",
+        "key": "spike/binding-canary/20260524-092748-da0565/control.txt",
+        "bucket": "chiyigo-audit-archive-preview",
+        "outcome": "success",
+        "success_meta": {
+          "etag": "9325215373a47791ef82b2c0679e2941",
+          "size": 18
+        },
+        "thrown": null,
+        "timing_ms": 429
+      }
+    }
+  ],
+  "summary": {
+    "fast_path_classifier_code": null,
+    "has_status_field": false,
+    "has_code_field_separate_from_message": false,
+    "has_cause_chain": false,
+    "error_name": "Error",
+    "lock_marker_in_message": "The object is locked by the bucket policy. (10069)",
+    "classifier_verdict": "MISS — current isR2LockError does NOT detect this shape",
+    "classifier_reasons": [
+      "Fast-path checks code === ObjectLockedByBucketPolicy → no code field, miss",
+      "Fallback dual condition needs HTTP status (409|412) → no status field, miss",
+      "Nested cause walk → no cause property, miss"
+    ],
+    "remediation_required": "Extend isR2LockError to add message-pattern-only detection branch (no status/code required). Match canonical phrase: locked by the bucket policy. Also consider adding numeric code 10069 to a separate KNOWN_NUMERIC_CODES set.",
+    "write_once_design_validated": true,
+    "write_once_evidence": "put_new (op 3) into locked prefix returned outcome=success → new key in locked prefix is allowed. Matches S3 spike result (PUT new key 200) and validates PR 1a write-once R2 key design."
+  },
+  "next_pr": "PR 0.2c-pre-1c (or 1b.2) — extend isR2LockError to cover Worker binding error shape; gate prod lock enablement until classifier covers binding throws."
+}

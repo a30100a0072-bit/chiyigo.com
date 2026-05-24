@@ -42,31 +42,6 @@ binding = "AI"
 binding     = "AUDIT_ARCHIVE_BUCKET"
 bucket_name = "chiyigo-audit-archive"
 
-# F-3 Phase 2 PR 0.2c-pre-1b.1（2026-05-24，TEMPORARY）— Worker binding canary
-#
-# 為什麼存在：PR 0.2c-pre-1b spike 用 S3 sigv4 + limited token 親驗 R2 retention
-#            lock enforce same-key PUT-overwrite + DELETE。**但 prod cron 走 worker
-#            binding（account-level），與 wrangler 同位階。spike 路徑不代表 binding
-#            路徑同樣行為**（codex r1 P1 點明的 gap）。本 binding 是給臨時
-#            /api/admin/cron/r2-binding-canary endpoint 用，對 preview bucket 跑
-#            put_overwrite / put_new / delete 三 op，捕捉真實 binding error shape
-#            並對齊 isR2LockError classifier。
-#
-# 為什麼是 preview bucket：與 1b spike 對齊（同 bucket → 同 lock 設定），且
-#            preview bucket 上的 lock 是 throwaway（1-day retention + 2-day
-#            lifecycle），不影響 prod 資料。
-#
-# 何時移除：commit 2 of PR 0.2c-pre-1b.1（一旦 canary 跑完、outcome 寫進 runbook
-#          + fixture）。此 binding 與 r2-binding-canary.ts endpoint **同 PR 一起
-#          移除**，避免 prod 殘留 R2 binding。
-#
-# 🔴 紀律：本 binding 唯一允許的 caller 是 r2-binding-canary.ts；其他 archive
-#         worker code 一律 grep AUDIT_ARCHIVE_BUCKET_PREVIEW 應為 0 hit（除本文件
-#         + types/env.d.ts + canary endpoint + canary tests）。
-[[r2_buckets]]
-binding     = "AUDIT_ARCHIVE_BUCKET_PREVIEW"
-bucket_name = "chiyigo-audit-archive-preview"
-
 # 註：Pages Direct Upload 模式不支援 wrangler.toml [observability] 區塊
 # （Workers 才有）。Pages Functions 看 console.log 的方法：
 #   1) Cloudflare Dashboard → Workers & Pages → chiyigo-com → 任一 deployment

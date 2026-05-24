@@ -42,9 +42,55 @@ Blocked 操作的 XML body 完全一致：
 
 正向 / 負向 regression：`tests/audit-archive.test.ts` describe = `PR 0.2c-pre-1a：isR2LockError 保守 detector`。
 
-### 🔴 GATE：Worker binding canary 未驗 — prod lock 上線前必補
+### ✅ GATE：Worker binding canary 已驗（2026-05-24，PR 0.2c-pre-1b.1）
 
-Spike 走 S3 sigv4 fetch（response.status 409 + XML body）。**Prod cron 走 worker binding**（`env.AUDIT_ARCHIVE_BUCKET.put(...)`），它的 enforcement 與 error shape **都尚無 direct 觀察**。
+**Outcome (b) — Binding enforce + classifier MISS**：binding 真的擋同 key PUT-overwrite + DELETE（write-once design 仍成立），**但拋的 Error shape 跟 S3 sigv4 path 完全不一樣，現行 isR2LockError classifier 漏判**。Prod lock 上線前必補 classifier message-pattern 分支（PR 0.2c-pre-1c 或 1b.2）。
+
+詳細 fixture：`docs/fixtures/r2-lock-binding-canary-2026-05-24.json`
+
+| Operation | binding outcome | Note |
+|---|---|---|
+| `PUT same key + same body` | **thrown** Error | "put: The object is locked by the bucket policy. (10069)" |
+| `PUT new key in locked prefix` | success | write-once design validated（與 S3 spike 對齊） |
+| `DELETE same key` | **thrown** Error | "delete: The object is locked by the bucket policy. (10069)" |
+| `HEAD same key` | success | control object 仍在 |
+
+**Binding error shape**（與 S3 sigv4 fixture 對照）：
+
+| 欄位 | S3 sigv4 spike (2026-05-23) | Worker binding canary (2026-05-24) |
+|---|---|---|
+| HTTP status | 409 | N/A（未透出 to error） |
+| `error.name` | （由 fetch wrapper 決定） | `"Error"`（generic） |
+| `error.code` | `"ObjectLockedByBucketPolicy"` | **`null`**（無 code 欄位） |
+| `error.status` | `409` | **`null`** |
+| `error.cause` | N/A | **`null`**（無 cause chain） |
+| `error.message` | XML body 含 `<Code>ObjectLockedByBucketPolicy</Code>` | **`"{op}: The object is locked by the bucket policy. (10069)"`** |
+
+**🔴 Classifier verdict — MISS**：
+
+`isR2LockError(error)` 三條路徑全漏：
+1. Fast-path `code === 'ObjectLockedByBucketPolicy'` → 無 code 欄位 → miss
+2. Fallback dual condition `(status 409|412) AND (message/code/name contains lock marker)` → 無 status → miss
+3. Nested cause walk `error.cause` → null → miss
+
+→ 現行 classifier 認 binding throw **不是** lock error。後果：
+- `audit.archive.upload_failed` critical 仍會 emit（retry 4 次都失敗、最後一輪 final=true）— **告警保底訊號還在**
+- `audit.archive.r2_lock_detected` critical **不會 emit** — forensic 語義失真
+- putWithRetry 不會 short-circuit → 浪費 21s wallclock 跑 4 次必失敗的 retry
+
+**Remediation 路徑（PR 0.2c-pre-1c / 1b.2）**：
+
+extend `isR2LockError` 加 message-pattern-only 分支（無 status 也算）：
+- canonical phrase：`/locked by the bucket policy/i`（必含；spike + binding canary 兩 path 都有此字串）
+- 加 numeric code set：`R2_LOCK_KNOWN_NUMERIC_CODES = new Set([10069])`（從 binding message 末尾 `(10069)` parse）
+
+對應 unit test：本 fixture 整段塞進 `tests/audit-archive.test.ts` describe `PR 0.2c-pre-1b.1：Worker binding error shape (regression)`，確保此 shape 永不再被 classifier 漏判。
+
+**Prod lock 上線決策**：classifier 補完前 **不可** proceed。本 1b.1 PR 只負責 gate + 記錄事實，**不**做 remediation（避免「測量儀器」與「修正生產路徑」混在一起 review）。
+
+### 歷史：1b 設計階段的 caveat（已被本 1b.1 gate 推翻）
+
+> 原設計階段（PR 0.2c-pre-1b 寫的）：Spike 走 S3 sigv4 fetch（response.status 409 + XML body）。Prod cron 走 worker binding 的 enforcement 與 error shape 都尚無 direct 觀察。**本 1b.1 已 direct 觀察**：binding 確實 enforce（write blocks）、但 error shape 顯著不同於 S3 path（無 status / 無 code / 無 cause），需 classifier 加分支。
 
 **Codex r1 P1 點明的關鍵 risk**：
 
@@ -52,25 +98,23 @@ Spike 走 S3 sigv4 fetch（response.status 409 + XML body）。**Prod cron 走 w
 2. **若 binding throw 但 shape 不含 marker**：classifier 漏判 → `audit.archive.upload_failed` critical 仍 emit 但 `audit.archive.r2_lock_detected` critical 不會 emit → 告警語義失真但有保底訊號。
 3. **若 binding 完全沒 throw + 也沒 propagate response error**：最糟場景 — 連 upload_failed 都不會 emit，prod 完全靜默。
 
-**Gate procedure（PR 0.2c 上 prod retention lock 前必跑）**：
+**Gate procedure（保留作歷史 — 已由 PR 0.2c-pre-1b.1 執行完）**：
 
-1. Preview bucket 仍有 active lock prefix (1b spike 留下、24-48hr 自動清前可直接用) 或重設一個 throwaway prefix
-2. 部署一個臨時 `/api/admin/cron/r2-binding-canary` Pages Function endpoint：
+1. Preview bucket 設 throwaway prefix lock + lifecycle（`spike/binding-canary/<ts>/`，1-day retention + 2-day cleanup）
+2. 部署臨時 `POST /api/admin/cron/r2-binding-canary` Pages Function endpoint（commit 1 of 1b.1）：
    - Auth: `CRON_SECRET`
-   - Body: `{ prefix, key, body, op: 'put_overwrite' | 'put_new' | 'delete' }`
-   - 用 `env.AUDIT_ARCHIVE_BUCKET.put/get/delete` 對 preview bucket 試
+   - Body: `{ prefix, key, body, op: 'setup_control' | 'put_overwrite' | 'put_new' | 'delete' | 'head' }`
+   - 用 `env.AUDIT_ARCHIVE_BUCKET_PREVIEW.put/get/delete/head`（preview-only binding，commit 2 一起移除）
    - 捕捉 binding 拋的 Error（含 name/message/code/status/cause chain）
    - 對 status=200 success / throw 的 case 都 JSON 回傳
-3. Curl 該 endpoint，跑 3 個 op，capture binding 真實 error shape（或證 binding 一樣 bypass）
-4. 結果寫進 `docs/fixtures/r2-lock-binding-canary-<date>.json`
-5. **必 1 of 2 outcome**：
+3. Curl 該 endpoint，跑 5 個 op，capture binding 真實 error shape
+4. 結果寫進 `docs/fixtures/r2-lock-binding-canary-<date>.json` ✅ 已完成
+5. **Outcome 二選一**：
    - **(a) Binding 也 enforce + classifier 命中**：proceed prod lock
-   - **(b) Binding bypass / classifier 不命中**：**reject prod lock**，先補：(i) 改 binding wrapper 加 explicit lock check（或） (ii) 改用 S3 sigv4 fetch path（cron handler 改寫，cost 大） (iii) 等 Cloudflare R2 binding 行為調整
-6. 臨時 endpoint 在 gate 完成後同 PR 移除（避免遺留 prod-touching surface）
+   - **(b) Binding enforce 但 classifier 漏判 / 或 binding bypass**：**reject prod lock**，補 classifier or binding wrapper
+6. 臨時 endpoint commit 2 of 1b.1 移除（避免遺留 prod-touching surface）✅ 已完成
 
-該 gate 由 **PR 0.2c-pre-1c**（或專屬 PR 0.2c-pre-1b.1，視 1c scope 而定）執行。
-
-**Why not now**：本 PR (1b) 範圍是 S3 limited-token spike + classifier tighten + docs；binding canary 牽涉部署臨時 prod endpoint，是不同 risk profile 的工作（user 在 1b 啟動時拍板 X 路徑 = local sigv4 script，明確 reject 了 Y endpoint）。binding canary 必走 endpoint 路徑（binding 只在 worker runtime 存在），自然落在 1c 或 1b.1 範圍。
+**Outcome 落點：(b)**。詳見上方「GATE：Worker binding canary 已驗」段。
 
 ## PR 0.2c prod lock 上線前置 checklist
 
@@ -79,7 +123,8 @@ Spike 走 S3 sigv4 fetch（response.status 409 + XML body）。**Prod cron 走 w
 ### 必驗（gate items）
 - [ ] 所有既存 audit_log archive chunks 都已升 `purged`（terminal）— 否則 legacy key_scheme=1 chunks 進 locked prefix 後其 single manifest key 在 state transition 會被擋住卡死
 - [ ] 所有未來 cron run 一律走 key_scheme=2（runFreshChunkPipeline 已硬寫死 `KEY_SCHEME_WRITE_ONCE`，PR 1a deploy 之後 prod 已生效）
-- [ ] **🔴 Worker R2 binding canary 已親驗 enforce + capture 真實 error shape**（PR 0.2c-pre-1c 或 0.2c-pre-1b.1；見上方「GATE：Worker binding canary」段 — 沒這條就不能 proceed prod lock，因為 S3 sigv4 spike 不代表 binding path 同樣行為）
+- [x] **🔴 Worker R2 binding canary 已親驗 enforce + capture 真實 error shape**（**PR 0.2c-pre-1b.1 完成 2026-05-24**；outcome (b) — binding enforce 但 classifier MISS，必補 message-pattern 分支才能 proceed prod lock）
+- [ ] **🔴 isR2LockError classifier 已加 message-pattern-only 分支**（**PR 0.2c-pre-1c / 1b.2 follow-up**；fixture `r2-lock-binding-canary-2026-05-24.json` 整段塞 regression test）
 - [ ] Aggregate worker (audit-aggregate-archive-runner.ts) 也已平行 write-once refactor（**PR 0.2c-pre-1c follow-up**；R2 lock 上 aggregate prefix `audit-log-aggregate-{telemetry,debug}/` 前必做）
 - [ ] force_purge endpoint 已 catch lock 423 LOCKED（**PR 0.2c-pre-2** — PR 1a 已留 placeholder catch；1b 後續完善）
 - [x] Preview bucket S3 sigv4 path lock canary 已親驗 enforce（**本 1b spike 完成** — 但只證 S3 path、不代表 binding path）

@@ -15,10 +15,7 @@ export default defineWorkersConfig({
           compatibilityFlags: ['nodejs_compat'],
           d1Databases: ['chiyigo_db'],
           kvNamespaces: ['CHIYIGO_KV'],
-          // AUDIT_ARCHIVE_BUCKET_PREVIEW：F-3 Phase 2 PR 0.2c-pre-1b.1 TEMPORARY —
-          // r2-binding-canary endpoint 整合測試需要 preview bucket binding。
-          // commit 2 of PR 1b.1 一起 remove。
-          r2Buckets: ['AUDIT_ARCHIVE_BUCKET', 'AUDIT_ARCHIVE_BUCKET_PREVIEW'],
+          r2Buckets: ['AUDIT_ARCHIVE_BUCKET'],
           bindings: {
             ENVIRONMENT: 'test',
             IAM_BASE_URL: 'http://localhost:8788',
