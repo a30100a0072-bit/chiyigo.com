@@ -1036,30 +1036,58 @@ describe('PR 0.2c-pre-1c：aggregate write-once + state-suffix manifest + emit',
     expect((rawLockRes.results ?? []).length).toBe(0)
   })
 
-  it('legacy key_scheme=1 collision: INSERT OR IGNORE 撞到 → 後續路徑用 row.key_scheme=1 不誤推 state-suffix', async () => {
-    // 預先 seed 一個 legacy key_scheme=1 planned chunk（模擬 1c deploy 前的 prod row）
+  it('legacy key_scheme=1 collision (codex r1 fix)：INSERT OR IGNORE 撞同 PK 1 row → 後續用 row.key_scheme=1 + 只寫 single .json', async () => {
+    // 真正模擬 1c deploy 前 prod 殘留 legacy planned row 的情境：
+    //  1. 跑一輪 fresh telemetry → 得到 chunk row + sha + source rows archived_at=NULL→ts
+    //  2. UPDATE 該 row：key_scheme=1, state='planned', last_manifest_state=NULL（變 legacy planned）
+    //  3. UPDATE source rows：archived_at=NULL（讓 row 再次 eligible）
+    //  4. 清 R2，模擬 legacy chunk 從未寫過 state-suffix manifests
+    //  5. 同 dry_run 模式再跑 → processChunk 走到 INSERT OR IGNORE 撞同 PK（**真實 collision**）
+    //     → SELECT 讀到 existing.key_scheme=1 → effectiveKeyScheme=1
+    //     → 5 PUTs 全寫 legacy 單 .json key（不 throw 'manifestState required'）
+    //     → R2 listing 對該 chunk 只有 1 把 .json（無 .{state}.json）
     await seedTelemetryRow()
-    const legacyChunk = {
-      env: ARCHIVE_ENV, table_name: 'audit_log_aggregate_telemetry',
-      cold_class: 'aggregate_telemetry', archive_date: '2026-05-01',
-    }
-    // 算正確 sha 比較複雜 — 改走「跑一輪 fresh 寫 chunk + 直接 UPDATE key_scheme back to 1」
-    // 模擬 deploy 前殘留 legacy row。然後再跑一輪同 row 集，驗 INSERT OR IGNORE 撞到後
-    // 後續 PUT 仍走 legacy single .json key（不是 state-suffix）。
-    await runTelemetry()
-    // 把唯一 chunk 強制改成 legacy key_scheme=1 + 退回 planned
+    await seedTelemetryRow({ event_type: 'auth.refresh.rate_limited' })
+
+    // (1) 跑 fresh 寫 key_scheme=2 chunk
+    const r1 = await runTelemetry()
+    expect(r1.status).toBe(200)
+    const chunksAfterFirst = await listChunks()
+    expect(chunksAfterFirst).toHaveLength(1)
+
+    // (2) UPDATE chunk → key_scheme=1, state='planned'（模擬 legacy planned 殘留）
+    //     chunks 表沒 archived_at 欄（那是 source table 的欄）；只動 state / key_scheme / last_manifest_state
     await env.chiyigo_db.prepare(
-      `UPDATE audit_archive_chunks SET key_scheme = 1, state = 'planned', last_manifest_state = NULL`
+      `UPDATE audit_archive_chunks SET key_scheme = 1, state = 'planned', last_manifest_state = NULL, marked_archived_at = NULL, purge_after = NULL`
     ).run()
-    // 清 R2，模擬 legacy chunk 沒寫過 state-suffix manifests
+    // (3) UPDATE source rows → archived_at = NULL（再次 eligible）
+    await env.chiyigo_db.prepare(
+      `UPDATE audit_log_aggregate_telemetry SET archived_at = NULL`
+    ).run()
+    // (4) 清 R2 模擬 legacy chunk 沒寫過 state-suffix manifests
     await resetR2Bucket()
-    // seed 同 row 再跑（INSERT OR IGNORE 撞到既有 row）
-    // 注意：因為 row 是新 seed 的，sha 變了 — 這裡測的是「同 PK collision」而不是「同 sha」
-    // 簡化：直接驗 chunk 行為 — re-run 時 effectiveKeyScheme 用 existing.key_scheme=1
-    const { status, body } = await runTelemetry({ AUDIT_ARCHIVE_DRY_RUN: 'true' })  // 避免動 source
-    expect(status).toBeLessThan(500)
-    // 行為驗證：runner 不 throw "manifestState required when keyScheme=2"（這就是 1c
-    // 對 legacy collision 路徑的硬性 contract — 用 row.key_scheme 不用常數）
-    expect(body.errors?.find?.(e => /manifestState required/.test(e.message ?? '')) ?? null).toBeNull()
+
+    // (5) 同 dry_run 模式 rerun → 撞同 PK → effectiveKeyScheme=1
+    const r2 = await runTelemetry()
+    expect(r2.status).toBeLessThan(500)
+    // 行為驗證 1：runner 不 throw "manifestState required"（這就是 1c 對 legacy collision 路徑的硬性 contract）
+    expect(r2.body.errors?.find?.(e => /manifestState required/.test(e.message ?? '')) ?? null).toBeNull()
+
+    // 行為驗證 2：R2 manifest listing — 該 chunk 只有 1 把 legacy .json（無 .{state}.json）
+    const ml = await env.AUDIT_ARCHIVE_BUCKET.list({
+      prefix: `manifest/${ARCHIVE_ENV}/audit_log_aggregate_telemetry/`,
+    })
+    const keys = (ml.objects ?? []).map(o => o.key)
+    expect(keys.length).toBeGreaterThan(0)
+    expect(keys.some(k => /[a-f0-9]{64}\.json$/.test(k))).toBe(true)             // legacy single .json 存在
+    expect(keys.some(k => k.endsWith('.planned.json'))).toBe(false)              // 不應寫 state-suffix
+    expect(keys.some(k => k.endsWith('.uploaded.json'))).toBe(false)
+    expect(keys.some(k => k.endsWith('.verified.json'))).toBe(false)
+    expect(keys.some(k => k.endsWith('.marked_archived.json'))).toBe(false)
+
+    // 行為驗證 3：chunk row key_scheme 仍是 1（不被新常數覆寫）
+    const chunksAfterRerun = await listChunks()
+    expect(chunksAfterRerun).toHaveLength(1)
+    expect(chunksAfterRerun[0].key_scheme).toBe(1)
   })
 })

@@ -62,7 +62,7 @@ async function callRetry({ token, body }: { token?: string; body?: unknown }) {
 }
 
 // 預設 telemetry / failed / live
-async function seedAggregateChunk(overrides = {}) {
+async function seedAggregateChunk(overrides: Record<string, unknown> = {}) {
   const t = {
     env: 'test',
     table_name: 'audit_log_aggregate_telemetry',
@@ -76,17 +76,19 @@ async function seedAggregateChunk(overrides = {}) {
     retry_count: 1,
     dry_run: 0,
     compression: 'gzip',
+    key_scheme: 1,   // PR 1c：override 為 2 給 write-once force_purge 測試用
     ...overrides,
   }
   await env.chiyigo_db.prepare(
     `INSERT INTO audit_archive_chunks
       (env, table_name, cold_class, cold_class_version, archive_date,
-       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run, compression)
-     VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 'run-seed', ?, ?)`
+       min_id, max_id, chunk_sha256, state, row_count, retry_count, run_id, dry_run,
+       compression, key_scheme)
+     VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 'run-seed', ?, ?, ?)`
   ).bind(
     t.env, t.table_name, t.cold_class, t.archive_date,
     t.min_id, t.max_id, t.chunk_sha256, t.state, t.row_count, t.retry_count,
-    t.dry_run, t.compression,
+    t.dry_run, t.compression, t.key_scheme,
   ).run()
   return t
 }
@@ -539,5 +541,97 @@ describe('PR 3.3 retry — force_purge（step-up + env flag）', () => {
     })
     const r = await retryHandler({ request: req, env: { ...env, AUDIT_AGGREGATE_PURGE_ENABLED: '1' } })
     expect(r.status).toBe(403)
+  })
+})
+
+// ── PR 0.2c-pre-1c codex r1 P0 fix：key_scheme=2 force_purge 走 4-key delete loop ──
+// 鎖住：(a) deriveAggregateDataKey 對 key_scheme=2 不 throw（fix before fix 會 throw
+// before 進 delete loop，silent leak 全部 key_scheme=2 chunk R2 物件）；(b) purge 真實
+// 刪 4 把 manifest + 1 data（用 R2 list 驗）；(c) response + audit emit 帶 manifest_keys + key_scheme。
+describe('PR 0.2c-pre-1c codex r1 P0：force_purge key_scheme=2 multi-manifest delete', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('key_scheme=2 blacklisted chunk → 200 + 4 manifest keys deleted + manifest_keys[] surfaced', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_aggregate_archive_force_purge')
+    const chunk = await seedAggregateChunk({ state: 'blacklisted', key_scheme: 2 })
+
+    // 真實 R2 PUT 4 把 state-suffix manifest + 1 把 data，模擬 1c write-once 路徑曾 PUT 過
+    const [yyyy, mm, dd] = chunk.archive_date.split('-')
+    const tail = `${chunk.min_id}-${chunk.max_id}-${chunk.chunk_sha256}`
+    const manifestBase = `manifest/${chunk.env}/${chunk.table_name}/${yyyy}/${mm}/${dd}/${tail}`
+    const states = ['planned', 'uploaded', 'verified', 'marked_archived']
+    for (const s of states) {
+      await env.AUDIT_ARCHIVE_BUCKET.put(`${manifestBase}.${s}.json`, JSON.stringify({ state: s }))
+    }
+    const dataKey = `audit-log-aggregate-telemetry/${chunk.env}/${yyyy}/${mm}/${dd}/${tail}.jsonl.gz`
+    await env.AUDIT_ARCHIVE_BUCKET.put(dataKey, new Uint8Array([1, 2, 3]))
+
+    // 驗 PUT 前確實有 5 物件
+    const beforeKeys = (await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })).objects ?? []
+    const beforeManifestCount = beforeKeys.filter(o => o.key.startsWith(manifestBase)).length
+    expect(beforeManifestCount).toBe(4)
+
+    const req = new Request('http://x/api/admin/audit-aggregate-archive/retry', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'force_purge', target: targetOf(chunk), ...VALID_REASON }),
+    })
+    const r = await retryHandler({ request: req, env: { ...env, AUDIT_AGGREGATE_PURGE_ENABLED: '1' } })
+    const body = await r.json()
+
+    expect(r.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.chunks_row_deleted).toBe(true)
+    // codex r1 P0 follow-up：response 必含 manifest_keys 全 4 把 + key_scheme=2
+    expect(Array.isArray(body.manifest_keys)).toBe(true)
+    expect(body.manifest_keys.length).toBe(4)
+    expect(body.key_scheme).toBe(2)
+    for (const s of states) {
+      expect(body.manifest_keys.some(k => k.endsWith(`.${s}.json`))).toBe(true)
+    }
+
+    // R2 driver：4 把 manifest + 1 把 data 全 gone
+    const afterKeys = (await env.AUDIT_ARCHIVE_BUCKET.list({ prefix: 'manifest/' })).objects ?? []
+    const afterManifestCount = afterKeys.filter(o => o.key.startsWith(manifestBase)).length
+    expect(afterManifestCount).toBe(0)
+    const dataAfter = await env.AUDIT_ARCHIVE_BUCKET.head(dataKey)
+    expect(dataAfter).toBeNull()
+
+    // force_purge_succeeded audit emit 也含 manifest_keys + key_scheme
+    const succ = await selectAudit('audit.aggregate_archive.telemetry.force_purge_succeeded')
+    expect(succ.length).toBe(1)
+    const succData = typeof succ[0].event_data === 'string' ? JSON.parse(succ[0].event_data) : succ[0].event_data
+    expect(succData.manifest_keys.length).toBe(4)
+    expect(succData.key_scheme).toBe(2)
+  })
+
+  it('key_scheme=1 legacy chunk → 1 manifest key delete + manifest_keys[] 含 1 把 .json (back-compat)', async () => {
+    const { id } = await seedUser({ email: 'a@x', role: 'admin' })
+    const tok = await adminStepUpToken(id, 'audit_aggregate_archive_force_purge')
+    const chunk = await seedAggregateChunk({ state: 'blacklisted', key_scheme: 1 })
+
+    const [yyyy, mm, dd] = chunk.archive_date.split('-')
+    const tail = `${chunk.min_id}-${chunk.max_id}-${chunk.chunk_sha256}`
+    const legacyManifestKey = `manifest/${chunk.env}/${chunk.table_name}/${yyyy}/${mm}/${dd}/${tail}.json`
+    await env.AUDIT_ARCHIVE_BUCKET.put(legacyManifestKey, JSON.stringify({ state: 'marked_archived' }))
+
+    const req = new Request('http://x/api/admin/audit-aggregate-archive/retry', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'force_purge', target: targetOf(chunk), ...VALID_REASON }),
+    })
+    const r = await retryHandler({ request: req, env: { ...env, AUDIT_AGGREGATE_PURGE_ENABLED: '1' } })
+    const body = await r.json()
+
+    expect(r.status).toBe(200)
+    expect(body.manifest_keys.length).toBe(1)
+    expect(body.manifest_keys[0]).toBe(legacyManifestKey)
+    expect(body.key_scheme).toBe(1)
+    expect(body.manifest_key).toBe(legacyManifestKey)   // back-compat 字段
+
+    // R2 driver：legacy manifest gone
+    expect(await env.AUDIT_ARCHIVE_BUCKET.head(legacyManifestKey)).toBeNull()
   })
 })

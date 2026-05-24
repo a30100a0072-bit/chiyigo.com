@@ -295,6 +295,9 @@ export async function onRequestPost({ request, env }) {
             admin_id: ctxBase.admin_id, target, chunk_id: chunkId, reason_code, operator_reason,
             reason: 'd1_chunks_row_delete_changes_zero',
             data_key: result.data_key, manifest_key: result.manifest_key,
+            // codex r1 P0 follow-up：surface manifest_keys + key_scheme 給 forensic
+            //   key_scheme=2 → manifest_keys 含 4 把 .{state}.json；key_scheme=1 → 1 把 .json
+            manifest_keys: result.manifest_keys, key_scheme: result.key_scheme,
           },
         })
         return res({
@@ -311,6 +314,9 @@ export async function onRequestPost({ request, env }) {
         data: {
           admin_id: ctxBase.admin_id, target, chunk_id: chunkId, reason_code, operator_reason,
           data_key: result.data_key, manifest_key: result.manifest_key,
+          // codex r1 P0 follow-up：surface manifest_keys + key_scheme 給 forensic
+          //   key_scheme=2 → manifest_keys 含 4 把 .{state}.json；key_scheme=1 → 1 把 .json
+          manifest_keys: result.manifest_keys, key_scheme: result.key_scheme,
           source_rows_deleted: false, chunks_row_deleted: true,
         },
       })
@@ -320,6 +326,9 @@ export async function onRequestPost({ request, env }) {
         source_rows_deleted: false,
         data_key:    result.data_key,
         manifest_key: result.manifest_key,
+        // codex r1 P0 follow-up：HTTP response 也回 manifest_keys + key_scheme
+        manifest_keys: result.manifest_keys,
+        key_scheme:    result.key_scheme,
         message: 'R2 aggregate chunk + manifest + D1 chunks row deleted. aggregate source rows are NOT deleted (lifecycle in PR 4).',
       })
     } catch (e) {

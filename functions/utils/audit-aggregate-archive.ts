@@ -263,11 +263,23 @@ export function deriveAggregateKeysFromChunk(row, opts: { manifestState?: Manife
 
 /**
  * 從 chunks row 算 aggregate data key — per chunk 固定 1 key，與 manifestState 無關。
- * PR 0.2c-pre-1c：給 HEAD pre-check / dataKey-only 場景用，避免 caller 為了拿 dataKey
- * 還要硬塞 manifestState 進 deriveAggregateKeysFromChunk。
+ *
+ * PR 0.2c-pre-1c：給 HEAD pre-check / dataKey-only / purgeAggregateChunk 場景用，
+ * 避免 caller 為了拿 dataKey 還要硬塞 manifestState 進 deriveAggregateKeysFromChunk。
+ *
+ * codex r1 P0 fix：直接 compute data key，**不**走 buildAggregateChunkKeys（後者
+ * 對 key_scheme=2 會 throw `manifestState required` invariant）。purgeAggregateChunk
+ * 之前因此 throw before 進 4-key delete loop，silent leak 全部 key_scheme=2 chunk
+ * 的 R2 物件。本 helper 保證 data key 計算對任何 key_scheme 都不 throw。
  */
 export function deriveAggregateDataKey(row): string {
-  return deriveAggregateKeysFromChunk(row, { manifestState: undefined }).dataKey
+  const dryRun = row.dry_run === 1 || row.dry_run === true
+  const compression = row.compression ?? 'gzip'
+  const { data } = aggregatePrefixes(dryRun, row.cold_class)
+  const [yyyy, mm, dd] = String(row.archive_date).split('-')
+  const tail = `${row.min_id}-${row.max_id}-${row.chunk_sha256}`
+  const ext = compression === 'gzip' ? '.jsonl.gz' : '.jsonl'
+  return `${data}/${row.env}/${yyyy}/${mm}/${dd}/${tail}${ext}`
 }
 
 /**
