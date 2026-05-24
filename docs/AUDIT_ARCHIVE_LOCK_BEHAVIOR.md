@@ -34,13 +34,18 @@ Blocked 操作的 XML body 完全一致：
 
 ## isR2LockError classifier 對齊狀態
 
-`functions/utils/audit-archive.ts#isR2LockError`（PR 1a + 1b tighten）：
+`functions/utils/audit-archive.ts#isR2LockError`（PR 1a + 1b tighten + **PR 1b.2 binding shape extend**）：
 
-- **Fast-path**：`code === 'ObjectLockedByBucketPolicy'` → 直接 `true`（spike-frozen high-confidence S3 code，[[feedback_r2_lock_overwrite_design]] 不可猜原則 — 加新 code 必同步加 fixture + unit test）
-- **Fallback dual condition**：HTTP status `(409|412)` AND error message/code/name 含 lock-related marker → `true`
-- **Nested**：走一層 `error.cause` 鏈（防 worker binding wrap）
+- **Path (1) String-code fast-path**：`code === 'ObjectLockedByBucketPolicy'` → 直接 `true`（spike-frozen high-confidence S3 string code，[[feedback_r2_lock_overwrite_design]] 不可猜原則 — 加新 code 必同步加 fixture + unit test）
+- **Path (2) PR 1b.2 message-pattern + numeric code**：跨 candidate 任一條件 → `true`，無需 status 配合
+  - canonical phrase `/locked by the bucket policy/i` 命中 `error.message`（S3 XML body + binding error message 共有字串，binding canary fixture 凍結）
+  - `R2_LOCK_KNOWN_NUMERIC_CODES = {10069}` 命中 structured `error.code` 欄位（future-proof）或從 message 尾巴 `(<digits>)` 解析
+- **Path (3) Fallback dual condition**：HTTP status `(409|412)` AND error message/code/name 含 lock-related marker → `true`（**逐 candidate 判斷**，codex r1 P2 規則：不可跨 outer/cause 合併）
+- **Nested 處理**：所有 path 都走一層 `error.cause` 鏈（防 worker binding wrap；fixture 顯示 R2 S3 是平的，binding 預期最多一層）
 
-正向 / 負向 regression：`tests/audit-archive.test.ts` describe = `PR 0.2c-pre-1a：isR2LockError 保守 detector`。
+正向 / 負向 regression 散在三個 describe：
+- `PR 0.2c-pre-1a：isR2LockError 保守 detector`（path 1 + 3 + nested 基線）
+- `PR 0.2c-pre-1b.2：Worker binding canonical phrase + numeric code path`（path 2 + fixture wholesale ingest，11 cases）
 
 ### ✅ GATE：Worker binding canary 已驗（2026-05-24，PR 0.2c-pre-1b.1）
 
