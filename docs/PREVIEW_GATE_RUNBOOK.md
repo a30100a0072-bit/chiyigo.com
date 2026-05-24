@@ -59,8 +59,14 @@ if ($LASTEXITCODE -ne 0 -or $whoamiText -notmatch [regex]::Escape($expectedAccou
 
 $expectedBucket = "chiyigo-audit-archive"
 $bucketList = npx wrangler r2 bucket list
-$bucketPattern = '^\s*' + [regex]::Escape($expectedBucket) + '\s*(?:$|\s)'
-if ($LASTEXITCODE -ne 0 -or -not ($bucketList | Select-String -Quiet -Pattern $bucketPattern)) {
+$bucketListExit = $LASTEXITCODE
+$bucketListText = ($bucketList | ForEach-Object { $_.ToString() }) -join "`n"
+# wrangler 4.87.0 用 labelled format（`name:  chiyigo-audit-archive`），舊版 bare-name 假設會 false-negative；
+# 同時 strip ANSI escape codes（彩色終端會打斷 regex match）
+$ansiPattern = [regex]::Escape([string][char]27) + '\[[0-9;]*m'
+$bucketListText = $bucketListText -replace $ansiPattern, ''
+$bucketPattern = '(?m)^\s*name:\s*' + [regex]::Escape($expectedBucket) + '\s*$'
+if ($bucketListExit -ne 0 -or $bucketListText -notmatch $bucketPattern) {
   throw "Prod R2 bucket '$expectedBucket' is not visible in the current Cloudflare account; stop."
 }
 ```
