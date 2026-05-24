@@ -278,6 +278,21 @@ git push
 ### S3. 24-48hr 後驗 auto-cleanup
 明天再隔一天（48hr 後）跑：
 ```powershell
+# 跨 session 復原：S3 在 ~48hr 後跑，Step 1.1 的 PS 變數可能已隨 terminal 關閉丟失
+# （control_key / rule_name / lifecycle_name 都在 S1 fixture 內）。同 session 連續跑會 skip。
+if (-not $controlKey -or -not $ruleName -or -not $lifecycleName) {
+  $fixturePath = Read-Host "S3 vars missing. Paste path to docs/fixtures/preview-gate-layer-1-<ts>.json"
+  if (-not (Test-Path $fixturePath)) { throw "Fixture not found: $fixturePath" }
+  $fx = Get-Content -Raw -Encoding UTF8 $fixturePath | ConvertFrom-Json
+  if (-not $fx.control_key -or -not $fx.rule_name -or -not $fx.lifecycle_name) {
+    throw "Fixture missing required fields (control_key / rule_name / lifecycle_name)"
+  }
+  $controlKey    = $fx.control_key
+  $ruleName      = $fx.rule_name
+  $lifecycleName = $fx.lifecycle_name
+  "Recovered from fixture: rule=$ruleName lifecycle=$lifecycleName control=$controlKey"
+}
+
 # Object retention 應在 ts+24h 後過期；bucket lock/lifecycle **rules** 不會自動移除
 # （只是 object 解鎖、lifecycle 仍會 trigger expire object，但 rule entry 還掛 bucket config）。
 # 流程：先驗 control object 已被 lifecycle 清掉 → 再手動移 sacrificial rules。
