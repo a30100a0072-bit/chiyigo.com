@@ -43,8 +43,26 @@ $env:CLOUDFLARE_API_TOKEN
 # 應印空白；若有值 → Remove-Item Env:CLOUDFLARE_API_TOKEN
 
 npx wrangler whoami
-# 應印 a30100a0072@gmail.com + Account ID
+# 應印正確 Cloudflare login email + Account ID；執行前從 `npx wrangler whoami` / CF dashboard 填入下方 expected 值
 # 若 9109 invalid token → npx wrangler login（瀏覽器 OAuth flow）
+
+# 機器化 sanity check（防 OAuth 切到別的 cached account）
+# 兩個 placeholder 都 fail-closed：執行前必填，避免硬編 email 反而誤擋
+$expectedAccountEmail = "<PASTE_EXPECTED_CF_EMAIL_HERE>"
+$expectedAccountId    = "<PASTE_EXPECTED_ACCOUNT_ID_HERE>"
+if ($expectedAccountEmail -like "<*") { throw "Set expectedAccountEmail before running the prod preview gate." }
+if ($expectedAccountId    -like "<*") { throw "Set expectedAccountId before running the prod preview gate." }
+$whoamiText = (npx wrangler whoami) -join "`n"
+if ($LASTEXITCODE -ne 0 -or $whoamiText -notmatch [regex]::Escape($expectedAccountEmail) -or $whoamiText -notmatch [regex]::Escape($expectedAccountId)) {
+  throw "Wrong Wrangler identity/account; stop before touching R2."
+}
+
+$expectedBucket = "chiyigo-audit-archive"
+$bucketList = npx wrangler r2 bucket list
+$bucketPattern = '^\s*' + [regex]::Escape($expectedBucket) + '\s*(?:$|\s)'
+if ($LASTEXITCODE -ne 0 -or -not ($bucketList | Select-String -Quiet -Pattern $bucketPattern)) {
+  throw "Prod R2 bucket '$expectedBucket' is not visible in the current Cloudflare account; stop."
+}
 ```
 
 ### A2. CRON_SECRET 可取（Layer 2 才需）
@@ -94,7 +112,8 @@ $lifecycleName = "$ruleName-cleanup"
 
 ```powershell
 # 先設 lifecycle（安全，無 retention 強制；只是過期清理）
-npx wrangler r2 bucket lifecycle add chiyigo-audit-archive --id $lifecycleName --prefix $prefix --expire-days 2
+# 注意：wrangler r2 bucket lifecycle add 是 positional [BUCKET] [NAME] [PREFIX]（與 1b spike scripts/spike-r2-lock.mjs:273 對齊）
+npx wrangler r2 bucket lifecycle add chiyigo-audit-archive $lifecycleName $prefix --expire-days 2 -y
 
 # 後設 lock（**不可逆 24h**）
 npx wrangler r2 bucket lock add chiyigo-audit-archive $ruleName $prefix --retention-days 1 -y
@@ -128,10 +147,23 @@ $controlKey = "${prefix}control-$rand.txt"
 ### Step 1.4：嘗試 overwrite control key（**應被擋**）
 
 ```powershell
-"overwrite attempt — should fail" | npx wrangler r2 object put "chiyigo-audit-archive/$controlKey" --pipe --content-type text/plain
+# 一次性 helper：lock-fail marker regex（取自 1b spike fixture 真實 wrangler error 字串）
+$lockErrPattern = '(?i)(ObjectLockedByBucketPolicy|locked by the bucket policy|RetentionPolicyViolated|retention|immutable|HTTP\s*(409|412)|status(?:Code)?\s*[:=]?\s*(409|412)|precondition failed|\b10069\b)'
+
+function Assert-ExpectedLockFailure([string]$label, [int]$exitCode, [string]$text) {
+  if ($exitCode -eq 0) { throw "$label FAIL CRITICAL: command succeeded; lock did not block." }
+  if ($text -notmatch $lockErrPattern) { throw "$label UNKNOWN: command failed, but not with a known R2 lock marker: $text" }
+  "$label PASS: blocked by R2 lock"
+}
+
+$overwriteOutput = "overwrite attempt - should fail" | npx wrangler r2 object put "chiyigo-audit-archive/$controlKey" --pipe --content-type text/plain 2>&1
+$overwriteExit = $LASTEXITCODE
+$overwriteText = ($overwriteOutput | ForEach-Object { $_.ToString() }) -join "`n"
+Assert-ExpectedLockFailure "Step 1.4 overwrite" $overwriteExit $overwriteText
 ```
 
-**預期**：指令 fail，回 error 含 `lock` / `bucket policy` 字眼（HTTP 409 + ObjectLockedByBucketPolicy；wrangler 可能換成自己的 error message wrap）。
+**預期**：`Assert-ExpectedLockFailure` 印 `Step 1.4 overwrite PASS: blocked by R2 lock`。
+任何 throw（`FAIL CRITICAL` 或 `UNKNOWN`）→ stop，通報 Claude。`$lockErrPattern` 覆蓋 wrangler 已知 wrap 變體（ObjectLockedByBucketPolicy / 10069 numeric code / HTTP 409 / 412 / precondition / retention / immutable）。
 
 **對照預期**：
 - ✅ 指令 fail + 含 lock 字眼 → **Layer 1 PASS**：CF R2 lock 平台對 prod bucket 行為與 preview bucket 一致
@@ -144,22 +176,30 @@ $controlKey = "${prefix}control-$rand.txt"
 ### Step 1.5：嘗試 DELETE control key（**應被擋**）
 
 ```powershell
-npx wrangler r2 object delete "chiyigo-audit-archive/$controlKey"
+$deleteOutput = npx wrangler r2 object delete "chiyigo-audit-archive/$controlKey" 2>&1
+$deleteExit = $LASTEXITCODE
+$deleteText = ($deleteOutput | ForEach-Object { $_.ToString() }) -join "`n"
+Assert-ExpectedLockFailure "Step 1.5 delete" $deleteExit $deleteText
 ```
 
-**預期**：同 1.4 — fail + lock 字眼。
-- ✅ fail → PASS
-- ❌ success → FAIL CRITICAL，同 1.4 處理
+**預期**：印 `Step 1.5 delete PASS: blocked by R2 lock`。
+任何 throw（`FAIL CRITICAL` 或 `UNKNOWN`）→ stop，同 1.4 處理（不 proceed / 通報 / 不 prod lock 上線 / 開 CF support ticket）。
 
 ### Step 1.6：驗 control 物件仍在
 
 ```powershell
+$expectedControl = "sacrificial control object for preview gate $ts"
+Remove-Item temp-canary.txt -ErrorAction SilentlyContinue   # 防上一輪殘留 stale file 偽通過
 npx wrangler r2 object get "chiyigo-audit-archive/$controlKey" --file=temp-canary.txt
-Get-Content temp-canary.txt
+if ($LASTEXITCODE -ne 0) { throw "Step 1.6 FAIL: GET control object failed." }
+$actualControl = (Get-Content -Raw -Encoding UTF8 temp-canary.txt) -replace "\r?\n$",""
 Remove-Item temp-canary.txt
+if ($actualControl -ne $expectedControl) { throw "Step 1.6 FAIL: control body mismatch: $actualControl" }
+"Step 1.6 PASS: control body matches"
 ```
 
-**預期**：印出 step 1.3 的內容 `sacrificial control object for preview gate ...`，證明 control 物件沒被 1.4/1.5 動到。
+**預期**：印 `Step 1.6 PASS: control body matches`，證明 control 物件沒被 1.4/1.5 動到。
+任何 throw（GET 失敗 / body mismatch）→ stop。
 
 ---
 
@@ -198,9 +238,12 @@ Remove-Item temp-canary.txt
 ### S1. 紀錄 Layer 1 結果
 ```powershell
 # 把這次 sacrificial run 的 metadata 寫進 fixture（給未來 forensic 比對）
-$fixtureBody = @{
+# [ordered]@{}：保 key 順序穩定，diff-friendly
+# date_utc：強制 UTC（runbook 跨時區也對齊 fixture 命名）
+# UTF8 no-BOM：對齊既有 docs/fixtures/*.json（Out-File -Encoding utf8 在 PS 5.1 會吐 BOM，故繞道）
+$fixtureBody = [ordered]@{
   gate           = "preview-gate-layer-1"
-  date_utc       = (Get-Date -Format "yyyy-MM-dd")
+  date_utc       = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
   ts             = $ts
   prefix         = $prefix
   rule_name      = $ruleName
@@ -209,8 +252,10 @@ $fixtureBody = @{
   control_key    = $controlKey
   notes          = "Layer 1 4/4 steps PASS — CF R2 lock enforces PUT-overwrite + DELETE on prod bucket chiyigo-audit-archive, behavior matches preview bucket 1b spike fixture."
 } | ConvertTo-Json -Depth 5
-$fixtureBody | Out-File -FilePath "docs/fixtures/preview-gate-layer-1-$ts.json" -Encoding utf8
-git add "docs/fixtures/preview-gate-layer-1-$ts.json"
+$fixturePath = "docs/fixtures/preview-gate-layer-1-$ts.json"
+$utf8NoBom   = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText((Join-Path (Get-Location) $fixturePath), $fixtureBody + [Environment]::NewLine, $utf8NoBom)
+git add $fixturePath
 git commit -m "docs(audit-archive): preview gate Layer 1 PASS fixture ($ts)"
 git push
 ```
@@ -227,16 +272,21 @@ git push
 ### S3. 24-48hr 後驗 auto-cleanup
 明天再隔一天（48hr 後）跑：
 ```powershell
-# Lock 應該在 ts+24h 後過期；lifecycle 應在 ts+48h 後 auto-delete control object
-npx wrangler r2 bucket lock list chiyigo-audit-archive | Select-String "preview-gate-$ts"
-# 應該看不到 rule（lock 已 expire + 可能被 CF 自動清）
-# 若 rule 仍在 → 手動移：
-# npx wrangler r2 bucket lock remove chiyigo-audit-archive $ruleName
-# npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive $lifecycleName
+# Object retention 應在 ts+24h 後過期；bucket lock/lifecycle **rules** 不會自動移除
+# （只是 object 解鎖、lifecycle 仍會 trigger expire object，但 rule entry 還掛 bucket config）。
+# 流程：先驗 control object 已被 lifecycle 清掉 → 再手動移 sacrificial rules。
+$cleanupOutput = npx wrangler r2 object get "chiyigo-audit-archive/$controlKey" --file=temp-cleanup-canary.txt 2>&1
+$cleanupExit   = $LASTEXITCODE
+$cleanupText   = ($cleanupOutput | ForEach-Object { $_.ToString() }) -join "`n"
+Remove-Item temp-cleanup-canary.txt -ErrorAction SilentlyContinue
+if ($cleanupExit -eq 0) { throw "S3 FAIL: control object still exists; keep lifecycle rule and recheck later." }
+if ($cleanupText -notmatch '(?i)(does not exist|not found|NoSuchKey|404)') { throw "S3 UNKNOWN: GET failed, but not as missing-object: $cleanupText" }
+"S3 PASS: control object is gone"
 
-# Control 物件應該被 lifecycle expire 清掉
-npx wrangler r2 object get "chiyigo-audit-archive/$controlKey" 2>&1 | Select-String "exist"
-# 應該 fail with "does not exist"
+# 驗 rule 仍在 → 移除
+npx wrangler r2 bucket lock list chiyigo-audit-archive | Select-String $ruleName
+npx wrangler r2 bucket lock remove chiyigo-audit-archive --id $ruleName
+npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive --id $lifecycleName
 ```
 
 ---
@@ -257,7 +307,7 @@ npx wrangler r2 object get "chiyigo-audit-archive/$controlKey" 2>&1 | Select-Str
 
 ### Lifecycle 設失敗但 lock 已成
 - Lock 已生效，control 物件 24hr 內無法刪
-- Lifecycle 可以晚補：`npx wrangler r2 bucket lifecycle add ...`
+- Lifecycle 可以晚補：`npx wrangler r2 bucket lifecycle add chiyigo-audit-archive $lifecycleName $prefix --expire-days 2 -y`
 - 不影響 Layer 1 驗證；只影響 auto-cleanup 窗口
 
 ### 打字錯把 retention 設成 7yr（unrecoverable）
