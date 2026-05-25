@@ -1,0 +1,191 @@
+{
+  "gate": "preview-gate-binding-canary-prod",
+  "date_utc": "2026-05-25",
+  "ts": "20260525-131627",
+  "pr": "0.2c-pre-3",
+  "bucket": "chiyigo-audit-archive",
+  "prefix": "sacrificial/preview-gate-binding/20260525-131627-9416db/",
+  "lock_rule_name": "preview-gate-binding-20260525-131627-9416db",
+  "lifecycle_rule_name": "preview-gate-binding-20260525-131627-9416db-cleanup",
+  "retention_days": 1,
+  "lifecycle_expire_days": 2,
+  "outcome": "PASS",
+  "verdict_reason": "All 7 HARD AND conditions satisfied: (1) setup_control_success, (2) overwrite_blocked, (3) overwrite_classifier_hit, (4) put_new_success, (5) delete_blocked, (6) delete_classifier_hit, (7) get_control_body_match. Prod bucket binding enforces R2 retention lock identically to preview bucket: blocks PUT-overwrite + DELETE on locked-prefix existing key (with canonical phrase + 10069 numeric code in throw shape), allows PUT new key (write-once design holds), preserves body integrity (overwrite attempt did not mutate control body). classifyR2LockError diagnostic helper hits canonical_phrase + numeric_code paths on both op 2 and op 4 throws. Binding throw shape exactly matches 1b.1 preview fixture (r2-lock-binding-canary-2026-05-24.json): name=Error, message=<op>: The object is locked by the bucket policy. (10069), code/status/cause all null.",
+  "wrangler_version": "4.87.0",
+  "cf_account_id": "2d2c4b4d...",
+  "cf_account_email": "<masked>",
+  "ops": [
+    {
+      "step": 1,
+      "label": "setup_control",
+      "expected_outcome": "success",
+      "actual_outcome": "success",
+      "response_body": {
+        "op": "setup_control",
+        "prefix": "sacrificial/preview-gate-binding/20260525-131627-9416db/",
+        "key": "sacrificial/preview-gate-binding/20260525-131627-9416db/control.txt",
+        "bucket": "chiyigo-audit-archive",
+        "outcome": "success",
+        "success_meta": {
+          "etag": "cb8002c051a9a51be6f86bb8ece0bb92",
+          "httpEtag": "\"cb8002c051a9a51be6f86bb8ece0bb92\"",
+          "size": 84,
+          "version": "7e61a0aec3f70e98c1f1edd405503931"
+        },
+        "thrown": null,
+        "classifier_verdict": null,
+        "classifier_paths_hit": null,
+        "timing_ms": 545
+      }
+    },
+    {
+      "step": 2,
+      "label": "put_overwrite",
+      "expected_outcome": "thrown",
+      "actual_outcome": "thrown",
+      "response_body": {
+        "op": "put_overwrite",
+        "prefix": "sacrificial/preview-gate-binding/20260525-131627-9416db/",
+        "key": "sacrificial/preview-gate-binding/20260525-131627-9416db/control.txt",
+        "bucket": "chiyigo-audit-archive",
+        "outcome": "thrown",
+        "success_meta": null,
+        "thrown": {
+          "name": "Error",
+          "message": "put: The object is locked by the bucket policy. (10069)",
+          "code": null,
+          "status": null,
+          "cause": null,
+          "stringified": "{\"name\":\"Error\",\"message\":\"put: The object is locked by the bucket policy. (10069)\",\"stack\":\"Error: put: The object is locked by the bucket policy. (10069)\"}"
+        },
+        "classifier_verdict": true,
+        "classifier_paths_hit": ["canonical_phrase", "numeric_code"],
+        "timing_ms": 458
+      }
+    },
+    {
+      "step": 3,
+      "label": "put_new",
+      "expected_outcome": "success",
+      "actual_outcome": "success",
+      "response_body": {
+        "op": "put_new",
+        "prefix": "sacrificial/preview-gate-binding/20260525-131627-9416db/",
+        "key": "sacrificial/preview-gate-binding/20260525-131627-9416db/newkey-e0a.txt",
+        "bucket": "chiyigo-audit-archive",
+        "outcome": "success",
+        "success_meta": {
+          "etag": "a42b08e8c15d5a4e2b38bf894a499104",
+          "httpEtag": "\"a42b08e8c15d5a4e2b38bf894a499104\"",
+          "size": 78,
+          "version": "7e61a0aa6819e77849ef12b1697e0bfd"
+        },
+        "thrown": null,
+        "classifier_verdict": null,
+        "classifier_paths_hit": null,
+        "timing_ms": 999
+      }
+    },
+    {
+      "step": 4,
+      "label": "delete",
+      "expected_outcome": "thrown",
+      "actual_outcome": "thrown",
+      "response_body": {
+        "op": "delete",
+        "prefix": "sacrificial/preview-gate-binding/20260525-131627-9416db/",
+        "key": "sacrificial/preview-gate-binding/20260525-131627-9416db/control.txt",
+        "bucket": "chiyigo-audit-archive",
+        "outcome": "thrown",
+        "success_meta": null,
+        "thrown": {
+          "name": "Error",
+          "message": "delete: The object is locked by the bucket policy. (10069)",
+          "code": null,
+          "status": null,
+          "cause": null,
+          "stringified": "{\"name\":\"Error\",\"message\":\"delete: The object is locked by the bucket policy. (10069)\",\"stack\":\"Error: delete: The object is locked by the bucket policy. (10069)\"}"
+        },
+        "classifier_verdict": true,
+        "classifier_paths_hit": ["canonical_phrase", "numeric_code"],
+        "timing_ms": 495
+      }
+    },
+    {
+      "step": 5,
+      "label": "head",
+      "expected_outcome": "success",
+      "actual_outcome": "success",
+      "response_body": {
+        "op": "head",
+        "prefix": "sacrificial/preview-gate-binding/20260525-131627-9416db/",
+        "key": "sacrificial/preview-gate-binding/20260525-131627-9416db/control.txt",
+        "bucket": "chiyigo-audit-archive",
+        "outcome": "success",
+        "success_meta": {
+          "etag": "cb8002c051a9a51be6f86bb8ece0bb92",
+          "size": 84
+        },
+        "thrown": null,
+        "classifier_verdict": null,
+        "classifier_paths_hit": null,
+        "timing_ms": 403
+      }
+    },
+    {
+      "step": 6,
+      "label": "get_control",
+      "expected_outcome": "success",
+      "actual_outcome": "success",
+      "response_body": {
+        "op": "get_control",
+        "prefix": "sacrificial/preview-gate-binding/20260525-131627-9416db/",
+        "key": "sacrificial/preview-gate-binding/20260525-131627-9416db/control.txt",
+        "bucket": "chiyigo-audit-archive",
+        "outcome": "success",
+        "success_meta": {
+          "body_sha256": "8f2c3af15642791e79614643413cb2f63b93eb8fe035a343fc67f28f101a100d",
+          "size": 84
+        },
+        "thrown": null,
+        "classifier_verdict": null,
+        "classifier_paths_hit": null,
+        "timing_ms": 76
+      }
+    }
+  ],
+  "control_object": {
+    "key": "sacrificial/preview-gate-binding/20260525-131627-9416db/control.txt",
+    "expected_body_sha256": "8f2c3af15642791e79614643413cb2f63b93eb8fe035a343fc67f28f101a100d",
+    "head_after_delete_attempt": {
+      "outcome": "success",
+      "etag": "cb8002c051a9a51be6f86bb8ece0bb92",
+      "size": 84
+    },
+    "get_body_sha256": "8f2c3af15642791e79614643413cb2f63b93eb8fe035a343fc67f28f101a100d"
+  },
+  "summary": {
+    "setup_control_success": true,
+    "overwrite_blocked": true,
+    "overwrite_classifier_hit": true,
+    "overwrite_paths_hit": ["canonical_phrase", "numeric_code"],
+    "put_new_success": true,
+    "delete_blocked": true,
+    "delete_classifier_hit": true,
+    "delete_paths_hit": ["canonical_phrase", "numeric_code"],
+    "head_after_delete_intact": true,
+    "get_control_body_match": true,
+    "binding_throw_shape_matches_1b1": true,
+    "binding_throw_shape_diff": null
+  },
+  "cleanup_status": "auto_via_lifecycle",
+  "cleanup_deadline_utc": "2026-05-27T13:16:27Z",
+  "next_steps_if_pass": [
+    "proceed to PR 0.2c full prod lock -- 18+18=36 rules (per docs/AUDIT_RETENTION_PLAN.md line 906 SoT)",
+    "after 2026-05-27T13:16:27Z: verify sacrificial objects auto-removed by lifecycle, then manually remove lock + lifecycle rule entries via: npx wrangler r2 bucket lock remove chiyigo-audit-archive --id preview-gate-binding-20260525-131627-9416db; npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive --id preview-gate-binding-20260525-131627-9416db-cleanup"
+  ],
+  "next_steps_if_fail": [
+    "N/A — outcome is PASS"
+  ],
+  "notes": "Stage A r4 + Stage B r4 codex-approved. Stage B atomic-replaced initial in_progress fixture; Stage C ops 1-6 then driven by Claude per-op atomic-replace via Write tool (single-writer, sync-write). cleanup_status='auto_via_lifecycle' indicates sacrificial objects will be auto-cleaned by lifecycle rule by cleanup_deadline_utc; lock + lifecycle rule entries themselves still require manual --id remove after retention expiry."
+}

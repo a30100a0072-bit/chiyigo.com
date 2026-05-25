@@ -1,0 +1,455 @@
+# preview-gate-binding-canary-stage-b.ps1
+# F-3 Phase 2 PR 0.2c-pre-3 -- Stage B (24h IRREVERSIBLE retention lock on prod bucket)
+#
+# Run via dot-source AFTER Stage A passed green in the same PS session:
+#   . .\scripts\preview-gate-binding-canary-stage-b.ps1
+#
+# Prerequisites (verified in [2/7]):
+#   - Stage A dot-sourced in this same PS session
+#   - Required vars set: $ts, $rand, $prefix, $ruleName, $lifeName, $controlKey, $newKey,
+#                        $controlBody, $diffBody, $newBody, $expectedSha, $fixturePath,
+#                        $cronSecret, $endpointUrl
+#
+# What this does (in strict order):
+#   1. **Replay Stage A identity gate at the moment of irreversible action** (codex r1 P0)
+#      - 8 banned env vars re-check
+#      - wrangler whoami email + Account ID exact
+#      - r2 bucket list contains chiyigo-audit-archive
+#   2. **Derivation-closed Stage A variable validation** (codex r1 P1/P2)
+#      - re-derive prefix/ruleName/lifeName/controlKey/fixturePath/endpoint/body templates from ts+rand
+#      - recompute SHA-256(controlBody) == $expectedSha
+#   3. Fail-closed confirmation gate (user types bucket + prefix + retention=1 EXACT)
+#   4. wrangler r2 bucket lifecycle add (expire-days=2; NOT yet irreversible)
+#      - on nonzero: reconcile with `wrangler r2 bucket lifecycle list` (codex r1 P1)
+#   5. wrangler r2 bucket lock add (retention-days=1; **24h IRREVERSIBLE**)
+#      - on nonzero: reconcile with `wrangler r2 bucket lock list` (codex r1 P1)
+#      - if reconcile shows rule live -> enter LOCK_LIVE recovery path
+#   6. atomic-replace initial fixture (outcome=in_progress; full recovery metadata)
+#      - **wrapped in try/catch** with recovery block + emergency .emergency file fallback (codex r1 P1)
+#   7. Sleep 10s for lock rule propagation (feedback_r2_lock_propagation_canary)
+#
+# After completion: paste full output back to Claude; he drives Stage C (6 ops + per-op fixture).
+#
+# r1 codex fixes:
+#   P0: Stage B replays env/whoami/account/bucket-list gate (was Stage A-only)
+#   P1: wrangler add exit nonzero now reconciles via list subcommand before deciding state
+#   P1: fixture write wrapped in try/catch with operational recovery block + emergency fallback
+#   P1/P2: Stage A vars validated by derivation, not just shape; SHA recomputed
+#   P2: $WRANGLER_VERSION derived from `wrangler --version`, not hardcoded;
+#       fixture adds cleanup_status + cleanup_deadline_utc per plan §6
+#
+# r2 codex fix:
+#   P0: line 209 backtick-quote parse trap removed; non-blocking polish on \$ -> `$ in
+#       Stage C guidance echoes (literal $prefix now printed correctly)
+#
+# r3 codex fix (this version):
+#   P1: lock list_failed branch now calls Write-LockLiveRecoveryBlock before throw -- state
+#       is unknown, INCLUDES "lock may already be live", so full recovery metadata must print
+
+$origEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Stop'
+
+# Pinned baseline values (must match Stage A + plan §6)
+$EXPECTED_EMAIL                 = 'a30100a0072@gmail.com'
+$EXPECTED_ACCOUNT_ID            = '2d2c4b4ddbddec1a5d045533c01d715f'
+$EXPECTED_BUCKET                = 'chiyigo-audit-archive'
+$EXPECTED_ENDPOINT_URL          = 'https://chiyigo.com/api/admin/cron/r2-preview-gate-binding-canary'
+$EXPECTED_RETENTION_DAYS        = 1
+$EXPECTED_LIFECYCLE_EXPIRE_DAYS = 2
+
+# Helper: reconcile wrangler rule existence after a failed add (codex r1 P1)
+function Test-WranglerRuleExists {
+  param(
+    [Parameter(Mandatory)][string]$Bucket,
+    [Parameter(Mandatory)][string]$RuleId,
+    [Parameter(Mandatory)][ValidateSet('lock', 'lifecycle')][string]$Kind
+  )
+  $listOut = (& npx wrangler r2 bucket $Kind list $Bucket 2>$null) | Out-String
+  if ($LASTEXITCODE -ne 0) {
+    return @{ status = 'list_failed'; exists = $null; raw = $listOut }
+  }
+  # Strip ANSI
+  $stripped = [regex]::Replace($listOut, '\x1B\[[0-9;]*[a-zA-Z]', '')
+  # Conservative: rule id must appear as a complete token (word boundary on hyphen-delimited name)
+  $rulePattern = [regex]::Escape($RuleId)
+  $exists = $stripped -match $rulePattern
+  return @{ status = 'list_ok'; exists = $exists; raw = $stripped }
+}
+
+# Helper: print full recovery block when something goes wrong post-lock-live (codex r1 P1)
+function Write-LockLiveRecoveryBlock {
+  param(
+    [string]$Bucket, [string]$Prefix, [string]$RuleName, [string]$LifeName,
+    [string]$ControlKey, [string]$NewKey, [string]$ExpectedSha, [string]$FixturePath,
+    [string]$Ts, [string]$Reason
+  )
+  Write-Host ""
+  Write-Host "*** LOCK LIVE RECOVERY BLOCK -- SAVE THIS ***" -ForegroundColor Red
+  Write-Host "    reason            : $Reason"
+  Write-Host "    bucket            : $Bucket"
+  Write-Host "    prefix            : $Prefix"
+  Write-Host "    lock_rule_name    : $RuleName"
+  Write-Host "    lifecycle_rule    : $LifeName"
+  Write-Host "    control_key       : $ControlKey"
+  Write-Host "    new_key           : $NewKey"
+  Write-Host "    expected_sha256   : $ExpectedSha"
+  Write-Host "    fixture_path      : $FixturePath"
+  Write-Host "    ts                : $Ts"
+  Write-Host ""
+  Write-Host "    Cleanup commands (lock is 24h IRREVERSIBLE; rule entries can still be removed after expiry):"
+  Write-Host "      npx wrangler r2 bucket lock      remove $Bucket --id $RuleName"
+  Write-Host "      npx wrangler r2 bucket lifecycle remove $Bucket --id $LifeName"
+  Write-Host ""
+}
+
+try {
+  Write-Host ""
+  Write-Host "================================================================" -ForegroundColor Red
+  Write-Host "=== Stage B: 24H IRREVERSIBLE LOCK on prod bucket ============" -ForegroundColor Red
+  Write-Host "================================================================" -ForegroundColor Red
+  Write-Host ""
+
+  # ============================================================
+  # [1/7] Replay Stage A identity gate (codex r1 P0)
+  # ============================================================
+  Write-Host "[1/7] Replay Stage A identity gate at irreversible-action point (codex r1 P0)..." -ForegroundColor Yellow
+
+  # 1a: env var purity (same 8 vars as Stage A)
+  $bannedWranglerEnvVars = @(
+    'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY', 'CLOUDFLARE_EMAIL', 'CLOUDFLARE_ACCOUNT_ID',
+    'CF_API_TOKEN', 'CF_API_KEY', 'CF_EMAIL', 'CF_ACCOUNT_ID'
+  )
+  foreach ($v in $bannedWranglerEnvVars) {
+    $val = [Environment]::GetEnvironmentVariable($v)
+    if ($val) {
+      throw "$v env var is set; this breaks the OAuth-only / dashboard-selected-account gate. Unset: `$env:$v=`$null  (then retry)"
+    }
+  }
+  Write-Host "      OK 8 CLOUDFLARE_*/CF_* auth/account env vars all unset"
+
+  # 1b: wrangler whoami email + Account ID
+  $whoamiOut = (& npx wrangler whoami) | Out-String
+  if ($LASTEXITCODE -ne 0) {
+    throw "wrangler whoami failed (exit $LASTEXITCODE). OAuth session may have expired."
+  }
+  if ($whoamiOut -notmatch [regex]::Escape($EXPECTED_EMAIL)) {
+    throw "wrangler whoami email mismatch (expected $EXPECTED_EMAIL)"
+  }
+  $accountIdMatch = [regex]::Match($whoamiOut, '\b([a-f0-9]{32})\b')
+  if (-not $accountIdMatch.Success) {
+    throw "could not extract 32-char Account ID from wrangler whoami output"
+  }
+  $actualAccountId = $accountIdMatch.Groups[1].Value
+  if ($actualAccountId -ne $EXPECTED_ACCOUNT_ID) {
+    throw "Account ID mismatch: expected $EXPECTED_ACCOUNT_ID, got $actualAccountId"
+  }
+  Write-Host "      OK email matches + Account ID = $($EXPECTED_ACCOUNT_ID.Substring(0, 8))..."
+
+  # 1c: r2 bucket list contains chiyigo-audit-archive (labelled)
+  $bucketListOut = (& npx wrangler r2 bucket list) | Out-String
+  if ($LASTEXITCODE -ne 0) {
+    throw "wrangler r2 bucket list failed (exit $LASTEXITCODE)"
+  }
+  $bucketListStripped = [regex]::Replace($bucketListOut, '\x1B\[[0-9;]*[a-zA-Z]', '')
+  $bucketPattern = '(?m)^\s*name:\s*' + [regex]::Escape($EXPECTED_BUCKET) + '\s*$'
+  if ($bucketListStripped -notmatch $bucketPattern) {
+    throw "bucket '$EXPECTED_BUCKET' not visible in 'wrangler r2 bucket list' (account selection drift?)"
+  }
+  Write-Host "      OK 'wrangler r2 bucket list' contains $EXPECTED_BUCKET (labelled match)"
+
+  # 1d: derive wrangler version dynamically (codex r1 P2 — was hardcoded 4.80.0)
+  $wranglerVerOut = (& npx wrangler --version) | Out-String
+  $wranglerVerStripped = [regex]::Replace($wranglerVerOut, '\x1B\[[0-9;]*[a-zA-Z]', '')
+  $wranglerVerMatch = [regex]::Match($wranglerVerStripped, '\b(\d+\.\d+\.\d+)\b')
+  if (-not $wranglerVerMatch.Success) {
+    throw "could not parse wrangler version from `npx wrangler --version` output"
+  }
+  $WRANGLER_VERSION = $wranglerVerMatch.Groups[1].Value
+  Write-Host "      OK wrangler version derived dynamically: $WRANGLER_VERSION"
+  Write-Host ""
+
+  # ============================================================
+  # [2/7] Derivation-closed Stage A variable validation (codex r1 P1/P2)
+  # ============================================================
+  Write-Host "[2/7] Derivation-closed Stage A variable validation (codex r1 P1/P2)..." -ForegroundColor Yellow
+
+  # 2a: required vars all set
+  $requiredVars = @(
+    'ts', 'rand', 'prefix', 'ruleName', 'lifeName',
+    'controlKey', 'newKey',
+    'controlBody', 'diffBody', 'newBody',
+    'expectedSha', 'fixturePath', 'cronSecret', 'endpointUrl'
+  )
+  $missing = @()
+  foreach ($v in $requiredVars) {
+    $val = Get-Variable -Name $v -ValueOnly -ErrorAction SilentlyContinue
+    if (-not $val) { $missing += $v }
+  }
+  if ($missing.Count -gt 0) {
+    throw "Required Stage A vars missing: $($missing -join ', '). Re-run: . .\scripts\preview-gate-binding-canary-stage-a.ps1"
+  }
+  Write-Host "      OK 14 Stage A vars present"
+
+  # 2b: shape validation
+  if ($ts -notmatch '^\d{8}-\d{6}$') { throw "ts shape drift: '$ts' (expected yyyyMMdd-HHmmss)" }
+  if ($rand -notmatch '^[0-9a-f]{6}$') { throw "rand shape drift: '$rand' (expected 6 hex)" }
+  if ($expectedSha -notmatch '^[0-9a-f]{64}$') { throw "expectedSha not a valid SHA-256 hex" }
+  Write-Host "      OK ts/rand/expectedSha shapes valid"
+
+  # 2c: derivation match (codex r1 P1/P2)
+  # Re-derive what Stage A line 144-156 would produce from ts/rand, compare with current vars
+  $expectedPrefix     = "sacrificial/preview-gate-binding/$ts-$rand/"
+  $expectedRuleName   = "preview-gate-binding-$ts-$rand"
+  $expectedLifeName   = "preview-gate-binding-$ts-$rand-cleanup"
+  $expectedControlKey = "${expectedPrefix}control.txt"
+  $expectedFixture    = "docs/fixtures/preview-gate-binding-canary-$ts.json"
+
+  if ($prefix -ne $expectedPrefix)         { throw "prefix derivation drift: got '$prefix', expected '$expectedPrefix'" }
+  if ($ruleName -ne $expectedRuleName)     { throw "ruleName derivation drift: got '$ruleName', expected '$expectedRuleName'" }
+  if ($lifeName -ne $expectedLifeName)     { throw "lifeName derivation drift: got '$lifeName', expected '$expectedLifeName'" }
+  if ($controlKey -ne $expectedControlKey) { throw "controlKey derivation drift: got '$controlKey', expected '$expectedControlKey'" }
+  if ($fixturePath -ne $expectedFixture)   { throw "fixturePath derivation drift: got '$fixturePath', expected '$expectedFixture'" }
+  if ($endpointUrl -ne $EXPECTED_ENDPOINT_URL) { throw "endpointUrl drift: got '$endpointUrl', expected '$EXPECTED_ENDPOINT_URL'" }
+
+  # newKey has dynamic 3-hex suffix; verify shape only (newKeyRand not preserved by Stage A)
+  $newKeyPattern = '^' + [regex]::Escape($expectedPrefix) + 'newkey-[0-9a-f]{3}\.txt$'
+  if ($newKey -notmatch $newKeyPattern) {
+    throw "newKey shape drift: got '$newKey', expected `$prefix + 'newkey-<3hex>.txt' shape"
+  }
+  Write-Host "      OK prefix/ruleName/lifeName/controlKey/fixturePath/endpointUrl/newKey all derivation-match"
+
+  # 2d: body template derivation
+  $expectedControlBody = "phase=setup`nprefix=$prefix`nbody=v1`n"
+  $expectedDiffBody    = "phase=test-overwrite-different`nprefix=$prefix`nbody=v2`n"
+  $expectedNewBody     = "phase=put-new`nprefix=$prefix`n"
+  if ($controlBody -ne $expectedControlBody) { throw "controlBody derivation drift" }
+  if ($diffBody    -ne $expectedDiffBody)    { throw "diffBody derivation drift" }
+  if ($newBody     -ne $expectedNewBody)     { throw "newBody derivation drift" }
+  Write-Host "      OK controlBody/diffBody/newBody all derivation-match"
+
+  # 2e: SHA-256 recompute (codex r1 P1/P2 — proves expectedSha matches current controlBody)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $h = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($controlBody))
+  $recomputedSha = ($h | ForEach-Object { '{0:x2}' -f $_ }) -join ''
+  $sha.Dispose()
+  if ($recomputedSha -ne $expectedSha) {
+    throw "expectedSha != recomputed sha256(`$controlBody): expected '$expectedSha', recomputed '$recomputedSha'"
+  }
+  Write-Host "      OK SHA-256(`$controlBody) recomputes to expectedSha"
+  Write-Host ""
+
+  # ============================================================
+  # [3/7] Fail-closed confirmation gate
+  # ============================================================
+  Write-Host "[3/7] Fail-closed confirmation gate (type each value EXACTLY)..." -ForegroundColor Yellow
+  Write-Host ""
+  Write-Host "  *** 24H IRREVERSIBLE LOCK ABOUT TO BE SET ON PROD BUCKET ***" -ForegroundColor Red
+  Write-Host ""
+  Write-Host "  Expected setup:"
+  Write-Host "    Bucket           : $EXPECTED_BUCKET"
+  Write-Host "    Prefix           : $prefix"
+  Write-Host "    Lock rule        : $ruleName"
+  Write-Host "    Lifecycle rule   : $lifeName"
+  Write-Host "    Retention        : $EXPECTED_RETENTION_DAYS day (24h IRREVERSIBLE)"
+  Write-Host "    Lifecycle expire : $EXPECTED_LIFECYCLE_EXPIRE_DAYS days (sacrificial auto-cleanup)"
+  Write-Host ""
+
+  $cBucket = (Read-Host "  Type bucket name EXACTLY").Trim().Trim('"', "'")
+  if ($cBucket -ne $EXPECTED_BUCKET) {
+    throw "ABORT: bucket mismatch -- typed '$cBucket', expected '$EXPECTED_BUCKET'"
+  }
+  $cPrefix = (Read-Host "  Type the full prefix EXACTLY (with trailing /)").Trim().Trim('"', "'")
+  if ($cPrefix -ne $prefix) {
+    throw "ABORT: prefix mismatch -- typed '$cPrefix', expected '$prefix'"
+  }
+  $cRet = (Read-Host "  Type retention days (numeric, no units)").Trim().Trim('"', "'")
+  if ($cRet -ne "$EXPECTED_RETENTION_DAYS") {
+    throw "ABORT: retention mismatch -- typed '$cRet', expected '$EXPECTED_RETENTION_DAYS'"
+  }
+  Write-Host "      OK confirmation gate passed (bucket + prefix + retention=$EXPECTED_RETENTION_DAYS all match)"
+  Write-Host ""
+
+  # ============================================================
+  # [4/7] wrangler r2 bucket lifecycle add (with reconcile on failure, codex r1 P1)
+  # ============================================================
+  Write-Host "[4/7] wrangler r2 bucket lifecycle add..." -ForegroundColor Yellow
+  Write-Host "      cmd: npx wrangler r2 bucket lifecycle add $EXPECTED_BUCKET $lifeName ""$prefix"" --expire-days $EXPECTED_LIFECYCLE_EXPIRE_DAYS -y"
+  & npx wrangler r2 bucket lifecycle add $EXPECTED_BUCKET $lifeName $prefix --expire-days $EXPECTED_LIFECYCLE_EXPIRE_DAYS -y
+  $lifecycleExit = $LASTEXITCODE
+  if ($lifecycleExit -ne 0) {
+    Write-Host "      lifecycle add returned nonzero ($lifecycleExit). Reconciling with `wrangler r2 bucket lifecycle list`..." -ForegroundColor Yellow
+    $lifeRecon = Test-WranglerRuleExists -Bucket $EXPECTED_BUCKET -RuleId $lifeName -Kind 'lifecycle'
+    if ($lifeRecon.status -eq 'list_failed') {
+      throw "lifecycle add exit=$lifecycleExit; reconcile via 'lifecycle list' also failed. State unknown -- check CF dashboard manually."
+    }
+    if ($lifeRecon.exists) {
+      Write-Host "      Reconcile shows lifecycle rule '$lifeName' DOES exist despite nonzero exit. Treating as success." -ForegroundColor Yellow
+      # Proceed to lock add (no rollback needed)
+    } else {
+      throw "lifecycle add exit=$lifecycleExit; reconcile confirms rule NOT created. No cleanup needed."
+    }
+  }
+  Write-Host "      OK lifecycle rule '$lifeName' confirmed live (expire-days=$EXPECTED_LIFECYCLE_EXPIRE_DAYS)"
+  Write-Host ""
+
+  # ============================================================
+  # [5/7] wrangler r2 bucket lock add (24h IRREVERSIBLE; reconcile on failure)
+  # ============================================================
+  Write-Host "[5/7] wrangler r2 bucket lock add (24H IRREVERSIBLE -- POINT OF NO RETURN)..." -ForegroundColor Red
+  Write-Host "      cmd: npx wrangler r2 bucket lock add $EXPECTED_BUCKET $ruleName ""$prefix"" --retention-days $EXPECTED_RETENTION_DAYS -y"
+  & npx wrangler r2 bucket lock add $EXPECTED_BUCKET $ruleName $prefix --retention-days $EXPECTED_RETENTION_DAYS -y
+  $lockExit = $LASTEXITCODE
+
+  $lockReallyLive = $false
+  if ($lockExit -eq 0) {
+    $lockReallyLive = $true
+  } else {
+    Write-Host "      lock add returned nonzero ($lockExit). Reconciling with `wrangler r2 bucket lock list`..." -ForegroundColor Yellow
+    $lockRecon = Test-WranglerRuleExists -Bucket $EXPECTED_BUCKET -RuleId $ruleName -Kind 'lock'
+    if ($lockRecon.status -eq 'list_failed') {
+      # codex r3 P1: state is unknown -- INCLUDES "lock may be live". Must print full recovery
+      # block (not just lifecycle cleanup), so dashboard investigation has full metadata.
+      Write-Host ""
+      Write-Host "  *** LOCK ADD EXIT NONZERO + RECONCILE LIST ALSO FAILED ***" -ForegroundColor Red
+      Write-Host "      State UNKNOWN -- lock rule MAY ALREADY BE LIVE on prod bucket."
+      Write-Host "      CHECK CF DASHBOARD MANUALLY before retry."
+      Write-Host ""
+      Write-LockLiveRecoveryBlock -Bucket $EXPECTED_BUCKET -Prefix $prefix `
+        -RuleName $ruleName -LifeName $lifeName `
+        -ControlKey $controlKey -NewKey $newKey `
+        -ExpectedSha $expectedSha -FixturePath $fixturePath `
+        -Ts $ts -Reason 'lock add exit nonzero AND lock list failed; state unknown'
+      throw "lock add exit=$lockExit; reconcile inconclusive. Manual investigation required (recovery block printed above)."
+    }
+    if ($lockRecon.exists) {
+      Write-Host "      Reconcile shows lock rule '$ruleName' DOES exist despite nonzero exit. Treating as LOCK LIVE." -ForegroundColor Red
+      $lockReallyLive = $true
+      # Continue to fixture write (lock is live, must capture metadata)
+    } else {
+      Write-Host ""
+      Write-Host "      Reconcile confirms lock rule NOT created. lifecycle rule '$lifeName' is in place." -ForegroundColor Yellow
+      Write-Host "      Clean it up:"
+      Write-Host "        npx wrangler r2 bucket lifecycle remove $EXPECTED_BUCKET --id $lifeName"
+      Write-Host ""
+      throw "lock add exit=$lockExit; reconcile confirms rule NOT created"
+    }
+  }
+  Write-Host "      OK lock rule '$ruleName' confirmed live (retention-days=$EXPECTED_RETENTION_DAYS) -- 24H IRREVERSIBLE" -ForegroundColor Red
+  Write-Host ""
+
+  # ============================================================
+  # [6/7] atomic-replace initial fixture (try/catch with recovery, codex r1 P1)
+  # ============================================================
+  Write-Host "[6/7] Initial fixture atomic-replace (outcome=in_progress)..." -ForegroundColor Yellow
+
+  # Derive cleanup deadline (ts UTC + 48h; lifecycle auto-expires sacrificial objects)
+  $tsParsed = [DateTime]::ParseExact($ts, 'yyyyMMdd-HHmmss', [System.Globalization.CultureInfo]::InvariantCulture)
+  $tsUtc = [DateTime]::SpecifyKind($tsParsed, [DateTimeKind]::Utc)
+  $cleanupDeadlineUtc = $tsUtc.AddHours(48).ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
+
+  $fixture = [ordered]@{
+    gate                  = 'preview-gate-binding-canary-prod'
+    date_utc              = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
+    ts                    = $ts
+    pr                    = '0.2c-pre-3'
+    bucket                = $EXPECTED_BUCKET
+    prefix                = $prefix
+    lock_rule_name        = $ruleName
+    lifecycle_rule_name   = $lifeName
+    retention_days        = $EXPECTED_RETENTION_DAYS
+    lifecycle_expire_days = $EXPECTED_LIFECYCLE_EXPIRE_DAYS
+    outcome               = 'in_progress'
+    verdict_reason        = ''
+    wrangler_version      = $WRANGLER_VERSION
+    cf_account_id         = '2d2c4b4d...'
+    cf_account_email      = '<masked>'
+    ops                   = @()
+    control_object        = [ordered]@{
+      key                       = $controlKey
+      expected_body_sha256      = $expectedSha
+      head_after_delete_attempt = $null
+      get_body_sha256           = ''
+    }
+    summary               = [ordered]@{}
+    cleanup_status        = 'pending'
+    cleanup_deadline_utc  = $cleanupDeadlineUtc
+    next_steps_if_pass    = @('proceed to PR 0.2c full prod lock -- 18+18=36 rules')
+    next_steps_if_fail    = @('see plan §7 FAIL classification + §8 failure handling')
+    notes                 = ''
+  }
+
+  $finalAbs = Join-Path (Get-Location) $fixturePath
+  $tmpAbs   = "$finalAbs.tmp"
+  $jsonText = $fixture | ConvertTo-Json -Depth 8
+
+  try {
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $bytes = $utf8NoBom.GetBytes($jsonText + [Environment]::NewLine)
+    $fs = [System.IO.File]::Open($tmpAbs, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+    try { $fs.Write($bytes, 0, $bytes.Length); $fs.Flush($true) } finally { $fs.Dispose() }
+    Move-Item -LiteralPath $tmpAbs -Destination $finalAbs -Force
+    if (-not (Test-Path -LiteralPath $finalAbs)) {
+      throw "fixture file not present after atomic-replace: $finalAbs"
+    }
+    Write-Host "      OK initial fixture written to $fixturePath (outcome=in_progress)"
+    Write-Host "         lock_rule_name + lifecycle_rule_name + prefix + control_key + expected_body_sha256 + cleanup_status/deadline all persisted"
+  } catch {
+    # codex r1 P1: lock is LIVE but fixture write failed. Print operational recovery block.
+    $catchMsg = $_.Exception.Message
+    Write-Host ""
+    Write-Host "    *** CRITICAL: LOCK IS LIVE BUT FIXTURE WRITE FAILED ***" -ForegroundColor Red
+    Write-Host "        Reason: $catchMsg"
+    Write-Host ""
+    # Emergency fallback: try simple Out-File (UTF-8 with BOM in PS 5.1; acceptable for emergency)
+    $emergencyPath = "$fixturePath.emergency"
+    try {
+      $jsonText | Out-File -FilePath $emergencyPath -Encoding utf8 -ErrorAction Stop
+      Write-Host "        Emergency fixture written to: $emergencyPath" -ForegroundColor Green
+      Write-Host "        Once safe, manually atomic-rename to: $fixturePath"
+    } catch {
+      Write-Host "        Emergency fallback ALSO failed: $($_.Exception.Message)" -ForegroundColor Red
+      Write-Host "        Save the metadata block below to a safe location MANUALLY."
+    }
+    Write-LockLiveRecoveryBlock -Bucket $EXPECTED_BUCKET -Prefix $prefix `
+      -RuleName $ruleName -LifeName $lifeName `
+      -ControlKey $controlKey -NewKey $newKey `
+      -ExpectedSha $expectedSha -FixturePath $fixturePath `
+      -Ts $ts -Reason 'fixture write failed after lock live'
+    throw
+  } finally {
+    # Cleanup leftover tmp if it survived (rare; Move-Item -Force should consume it)
+    if (Test-Path -LiteralPath $tmpAbs) {
+      Remove-Item -LiteralPath $tmpAbs -Force -ErrorAction SilentlyContinue
+    }
+  }
+  Write-Host ""
+
+  # ============================================================
+  # [7/7] Sleep 10s for lock rule propagation
+  # ============================================================
+  Write-Host "[7/7] Sleep 10s for lock rule propagation (feedback_r2_lock_propagation_canary)..." -ForegroundColor Yellow
+  Start-Sleep -Seconds 10
+  Write-Host "      OK 10s elapsed; lock rule should be propagated to prefix"
+  Write-Host ""
+
+  Write-Host "================================================================" -ForegroundColor Green
+  Write-Host "=== Stage B: DONE -- LOCK IS LIVE ============================" -ForegroundColor Green
+  Write-Host "================================================================" -ForegroundColor Green
+  Write-Host ""
+  Write-Host "State recap:"
+  Write-Host "  - Lock rule '$ruleName' is LIVE on prefix '$prefix' (24h IRREVERSIBLE)"
+  Write-Host "  - Lifecycle rule '$lifeName' will expire sacrificial objects after $EXPECTED_LIFECYCLE_EXPIRE_DAYS days"
+  Write-Host "  - Initial fixture: $fixturePath (outcome=in_progress, cleanup_deadline_utc=$cleanupDeadlineUtc)"
+  Write-Host "  - wrangler_version captured: $WRANGLER_VERSION (dynamic from --version)"
+  Write-Host ""
+  Write-Host "Next steps:" -ForegroundColor Cyan
+  Write-Host "  1. Paste this entire Stage B output to Claude."
+  Write-Host "  2. Claude will guide Stage C (6 ops single-line); he drives per-op fixture atomic-replace from his side."
+  Write-Host "  3. KEEP THIS PS SESSION ALIVE -- variables `$prefix / `$controlKey / `$newKey /"
+  Write-Host "     `$controlBody / `$diffBody / `$newBody / `$cronSecret / `$endpointUrl /"
+  Write-Host "     `$expectedSha / `$fixturePath / `$ruleName / `$lifeName must remain set for Stage C."
+  Write-Host ""
+
+} finally {
+  $ErrorActionPreference = $origEAP
+}
