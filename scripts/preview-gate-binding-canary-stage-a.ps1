@@ -1,3 +1,38 @@
+# ============================================================================
+# 🛑 DO NOT RUN AS-IS -- historical replay artifact (PR 0.2c-pre-3, PASS 2026-05-25)
+# ============================================================================
+#
+# This .ps1 was the Stage A dry-run that gated PR 0.2c-pre-3 preview gate
+# binding canary, which completed PASS on 2026-05-25 (fixture
+# `docs/fixtures/preview-gate-binding-canary-20260525-131627.json`). It is
+# preserved in the repo as a forensic artifact paired with stage-b.ps1.
+#
+# Why this script will fail-closed as-is:
+#   - $EXPECTED_PAGES_HASH = 'd11962b' (see "Pinned baseline values" block below)
+#     is hardcoded to the PR 0.2c-pre-3 commit 1 Pages deploy hash. Pages
+#     production HEAD has since moved (commit 2 endpoint removal + cache-bust
+#     pushed; current origin/main = 8e31fc1 or later). Step [2/7] Pages hash
+#     gate (Read-Host) will fail-closed throw when typed value does not match
+#     dashboard.
+#   - $EXPECTED_ACCOUNT_ID / $EXPECTED_BUCKET / $EXPECTED_EMAIL (same block) are
+#     pinned to the same 2026-05-25 run baseline (chiyigo-audit-archive +
+#     a30100a0072@gmail.com); update if account/bucket scope changes.
+#
+# To re-spike with this pattern (e.g. R2 platform behavior suspected drift):
+#   1. Update $EXPECTED_PAGES_HASH ("Pinned baseline values" block) to current
+#      Pages production hash
+#   2. Update other $EXPECTED_* pinned values if account/bucket/email scope changed
+#   3. Update wrangler.toml binding name if changed
+#   4. Bump banner version + add new codex review trail
+#   5. Both stage-a.ps1 and stage-b.ps1 should be re-baselined together
+#
+# Related forensic / design history:
+#   - docs/AUDIT_ARCHIVE_LOCK_BEHAVIOR.md § Prod bucket gate: PR 0.2c-pre-3 PASS
+#   - docs/reviews/preview-gate-binding-canary-pr-plan-2026-05-25.md (plan r4)
+#   - scripts/preview-gate-binding-canary-stage-b.ps1 (paired Stage B; same banner)
+#   - scripts/spike-r2-lock.mjs (same forensic pattern for S3 sigv4 spike)
+# ============================================================================
+
 # preview-gate-binding-canary-stage-a.ps1
 # F-3 Phase 2 PR 0.2c-pre-3 -- Stage A (dry-run, zero side effect)
 #
