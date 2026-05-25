@@ -1,6 +1,20 @@
-# F-3 Phase 2 — Preview Gate Runbook（prod lock 上線前最後一關）
+> # 🛑 DO NOT RUN — SUPERSEDED
+>
+> **Status**: REJECTED 2026-05-25（codex verdict on `docs/reviews/preview-gate-runbook-design-concern-2026-05-25.md`）
+>
+> **理由**：Layer 1 用 `npx wrangler r2 object put/delete` 跑 PUT-overwrite / DELETE 測試。Wrangler OAuth 是 bucket owner 等級，會 **bypass R2 retention lock**（`docs/AUDIT_RETENTION_PLAN.md` v11 line 14–22 + `docs/fixtures/r2-lock-spike-2026-05-23.json` line 20 + `docs/AUDIT_ARCHIVE_LOCK_BEHAVIOR.md` line 102 三處證據一致）。照跑高機率產生 false-positive `Layer 1 FAIL CRITICAL` 訊號 + 阻擋 prod lock 上線 + 開錯誤的 CF support ticket。
+>
+> 另外即使 Layer 1 PASS，wrangler test 也沒驗到 `env.AUDIT_ARCHIVE_BUCKET` binding、`isR2LockError` classifier、423 endpoint 等 prod cron 真實 code path，PASS 訊號會 overclaim。
+>
+> **取代方案**：(b) 重寫成 worker R2 binding canary，指向 prod bucket，對齊 1b.1 pattern。Plan 在 `docs/reviews/preview-gate-binding-canary-pr-plan-2026-05-25.md`。
+>
+> **不要動本文 Layer 1 任何指令**。若 fresh session 接到「跑 preview gate」這類指令，**stop**，refer 上述兩 doc，先把 binding canary endpoint deploy + canary run + fixture commit 跑完才有意義。
+
+# F-3 Phase 2 — Preview Gate Runbook（prod lock 上線前最後一關）— ⛔ DEPRECATED
 
 **目的**：在 prod bucket `chiyigo-audit-archive` 真實驗證 R2 retention lock 平台行為 + 完整 code path（lock + binding + classifier + 423 endpoint），給 prod lock 上線（不可逆 7yr retention）綠燈或紅燈訊號。
+
+> ⚠️ 本文僅作 design history 保留。**任何指令都不要跑**；見上方 DO NOT RUN banner。
 
 **作者**：Claude（PR 0.2c-pre-2 codex r2 Approve 後產出，2026-05-24）
 **執行**：明天（或之後 fresh session）由 user + Claude collab。
@@ -343,7 +357,7 @@ npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive --id $lifecycleNam
 ## 完整流程結束後
 
 1. Layer 1 PASS → 通報 Claude，update memory `project_audit_phase2.md` 記 preview gate PASS + fixture 路徑
-2. Next PR = **prod lock 上線**（PR 0.2c 真正執行體；36 lock + 36 lifecycle，按 `docs/AUDIT_RETENTION_PLAN.md` PR 0.2c runbook v8.3 Step 0.2c）
+2. Next PR = **prod lock 上線**（PR 0.2c 真正執行體；**18 lock + 18 lifecycle = 36 rules total**，按 `docs/AUDIT_RETENTION_PLAN.md` PR 0.2c runbook v8.3 Step 0.2c — 對齊 line 906 SoT）
 3. Prod lock 上線後 24hr watch：監控 `audit.archive.r2_lock_detected` + `audit.aggregate_archive.*.r2_lock_detected` + `*.force_purge_blocked_by_lock` 任一非零 emit
 4. 連續 14 天 no incident → next PR = 2.1c endgame discard / 4a live flip
 
