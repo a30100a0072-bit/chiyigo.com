@@ -549,7 +549,8 @@ export type R2LockClassifierPath =
   | 'dual_condition'
 
 /**
- * R2 lock-error classifier（diagnostic 版 — PR 0.2c-pre-3 抽出）。
+ * Diagnostic R2 lock-error classifier — exposes which path(s) inside the
+ * detector actually fired on a given throw shape.
  *
  * 回傳 `{ matched, paths }`：
  *   - matched: paths.length > 0 — 等價於 isR2LockError(e)（plan §14c parity tests
@@ -563,9 +564,11 @@ export type R2LockClassifierPath =
  * 因此 paths 可能含多個元素（例：S3 真實 shape 同時命中 fast_path_code + dual_condition）。
  * 對 matched boolean 結果無影響（True is True 不論幾條路命中）。
  *
- * Commit 2 of PR 0.2c-pre-3 endpoint 移除後本 helper **保留**（plan §9 codex r1
- * answer 4 — 升「diagnostic classifier」非 canary 專用），給未來 R2 throw shape
- * 改變時 forensic 快速比對。
+ * 歷史 + 保留理由：本 helper 由 PR 0.2c-pre-3 從原單體 isR2LockError 抽出，
+ * 暴露 paths-list 用於 preview gate binding canary 的 forensic 比對；canary
+ * endpoint 在同 PR commit 2 移除後本 helper 保留，作為通用 diagnostic 給未來
+ * R2 throw shape 改變或新 forensic gate 重用（plan §9 codex r1 answer 4，
+ * 非 canary 專用命名）。
  */
 export function classifyR2LockError(e: unknown): { matched: boolean; paths: R2LockClassifierPath[] } {
   const paths: R2LockClassifierPath[] = []

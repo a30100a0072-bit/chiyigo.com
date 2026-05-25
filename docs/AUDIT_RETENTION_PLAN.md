@@ -79,7 +79,7 @@ R2 retention lock 不可逆 — 一旦 `--retention-days 2555` 設下去，該 p
 |---|---|---|
 | **0.2a** | 建 preview bucket + 指令 / IAM / key layout 驗證；正式 prefix 不鎖 | 立即可動，無風險 |
 | **0.2b** | prod versioning + 最小權限 archive token（無 Delete）+ lock/lifecycle 寫 runbook **不執行** | 立即可動，無風險 |
-| **0.2c** | prod 正式 36 條 lock + 36 條 lifecycle | **PR 2 dry-run 過關後才動** |
+| **0.2c** | prod 正式 18 條 lock + 18 條 lifecycle (= 36 條規則) | **PR 2 dry-run 過關後才動** |
 
 **前置 PR 1 仍可平行**：D1 schema migration / classifyForCold / safeUserAudit 寫 cold_class / backfill 都沒有不可逆操作，可在 0.2a/b 同時推。
 
@@ -770,7 +770,7 @@ Phase 3 加：
 - prod bucket `chiyigo-audit-archive` 已存在（commit ebd44d2，object_count=0），只需：
   1. 開 versioning（dashboard 或 API；wrangler 4.87 沒 versioning 子命令）
   2. 建立最小權限 archive token：`Object Read & Write` only（**不給 Delete**），bucket-scope `chiyigo-audit-archive` + preview
-  3. 把下方 36 條 lock + 36 條 lifecycle 寫成 **runbook**（不執行）
+  3. 把下方 18 條 lock + 18 條 lifecycle (= 36 條規則) 寫成 **runbook**（不執行）
 - prod `object_count` 維持 0；只允許人工測試用非正式 prefix（如 `_admin-smoke/`）
 - `wrangler.toml` 已有 `AUDIT_ARCHIVE_BUCKET` binding（commit ebd44d2 已 deploy）— 不需再動
 
@@ -783,8 +783,9 @@ Phase 3 加：
 > - dry-run 期間驗證通過：classify / chunk key / manifest / retry / cursor / month finalize 全綠
 > - dry-run **沒**寫進正式 cold_class prefix（最多寫 `audit-log-dryrun/` 或 preview）
 > - admin 確認啟動指令、無需回退
+> - ✅ **Preview gate binding canary on prod bucket PASS** (PR 0.2c-pre-3 完成 2026-05-25；fixture `docs/fixtures/preview-gate-binding-canary-20260525-131627.json`；details in `docs/AUDIT_ARCHIVE_LOCK_BEHAVIOR.md` § Prod bucket gate)
 
-執行下方 36 條 lock + 36 條 lifecycle 命令。**完成後 7 年內 prefix DELETE 全部失敗**。
+執行下方 18 條 lock + 18 條 lifecycle (= 36 條規則) 命令。**完成後 7 年內 prefix DELETE 全部失敗**。
 
 ---
 

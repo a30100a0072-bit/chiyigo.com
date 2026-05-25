@@ -93,6 +93,42 @@ Blocked 操作的 XML body 完全一致：
 
 **Prod lock 上線決策**：classifier 補完 ✅。1b.1 + 1b.2 兩個 GATE 都已 PASS，可進下一個 PR（aggregate worker write-once refactor → preview gate → prod lock）。
 
+### ✅ Prod bucket gate: PR 0.2c-pre-3 preview-gate-binding-canary PASS (2026-05-25)
+
+接 1b.1/1b.2 outcome (b) classifier extend + 1c aggregate refactor + pre-2 force_purge 423 catch 收尾後，prod lock 上線前**最後一道 mandatory gate**：直接對 **prod bucket `chiyigo-audit-archive`** 的 binding 跑 6-op sacrificial canary，驗 prod bucket binding 與 preview bucket binding 行為一致（不外推、真實 prod-bucket-specific 驗證）。Plan: `docs/reviews/preview-gate-binding-canary-pr-plan-2026-05-25.md` r4 (codex r4 Approved)。
+
+詳細 fixture: `docs/fixtures/preview-gate-binding-canary-20260525-131627.json`
+
+**Run 概要**：
+- 24h IRREVERSIBLE lock 設在 prod bucket sacrificial prefix `sacrificial/preview-gate-binding/20260525-131627-9416db/`
+- Lock rule: `preview-gate-binding-20260525-131627-9416db` (retention-days=1)
+- Lifecycle rule: `preview-gate-binding-20260525-131627-9416db-cleanup` (expire-days=2)
+- cleanup_deadline_utc: 2026-05-27T13:16:27Z
+- Wrangler version captured: 4.87.0
+
+**Verdict: PASS** — 全 7 HARD AND 條件達成（plan §7）：
+
+| # | Condition | Result |
+|---|---|---|
+| 1 | setup_control_success | ✅ op 1 PUT new control key into locked prefix → 200 |
+| 2 | overwrite_blocked | ✅ op 2 PUT same key + diff body → thrown |
+| 3 | overwrite_classifier_hit | ✅ classifier_verdict=true; paths=[canonical_phrase, numeric_code] |
+| 4 | put_new_success | ✅ op 3 PUT new key in locked prefix → 200 (write-once design holds on prod) |
+| 5 | delete_blocked | ✅ op 4 DELETE same key → thrown |
+| 6 | delete_classifier_hit | ✅ classifier_verdict=true; paths=[canonical_phrase, numeric_code] |
+| 7 | get_control_body_match | ✅ op 6 body_sha256 === expected (state integrity preserved) |
+
+**Forensic 訊號**:
+- `binding_throw_shape_matches_1b1 = true` — prod bucket binding emits **完全相同**的 Error shape 與 1b.1 preview fixture (`r2-lock-binding-canary-2026-05-24.json`)：name=Error, message=`"<op>: The object is locked by the bucket policy. (10069)"`, code/status/cause 全 null, 同時命中 canonical_phrase + numeric_code 兩 classifier paths
+- 確認 prod 行為 = preview 行為，preview bucket fixture 可作為 future regression baseline
+- head_after_delete_intact = true (op 5 etag/size === op 1 setup_control)
+
+**Endpoint**: 移除（同 PR commit 2 — `functions/api/admin/cron/r2-preview-gate-binding-canary.ts` + 2 test files；避免 prod-touching surface 殘留；`classifyR2LockError` diagnostic helper 保留作為 forensic/regression baseline）。
+
+**Stage A/B ops .ps1**: 保留在 `scripts/preview-gate-binding-canary-stage-{a,b}.ps1`（forensic artifacts；同 spike-r2-lock.mjs pattern；codex r3/r4 Approved）。
+
+**結論**: prod bucket binding 已驗 lock enforcement 與 preview 一致 → **PR 0.2c full prod lock (18+18=36 rules per `docs/AUDIT_RETENTION_PLAN.md` line 906) 可進**。
+
 ### 歷史：1b 設計階段的 caveat（已被本 1b.1 gate 推翻）
 
 > 原設計階段（PR 0.2c-pre-1b 寫的）：Spike 走 S3 sigv4 fetch（response.status 409 + XML body）。Prod cron 走 worker binding 的 enforcement 與 error shape 都尚無 direct 觀察。**本 1b.1 已 direct 觀察**：binding 確實 enforce（write blocks）、但 error shape 顯著不同於 S3 path（無 status / 無 code / 無 cause），需 classifier 加分支。
@@ -132,13 +168,14 @@ Blocked 操作的 XML body 完全一致：
 - [x] **🔴 isR2LockError classifier 已加 message-pattern + numeric code 分支**（**PR 0.2c-pre-1b.2 完成 2026-05-24**；canonical phrase `/locked by the bucket policy/i` + `R2_LOCK_KNOWN_NUMERIC_CODES = {10069}`；fixture `r2-lock-binding-canary-2026-05-24.json` 整段 wholesale ingest 為 regression test，未來 fixture / classifier / Cloudflare message wording 任一變動會立刻暴露）
 - [x] **🔴 Aggregate worker write-once parallel refactor**（**PR 0.2c-pre-1c 完成 2026-05-24**；state-suffix manifest keys + lock-aware retry + manifest_written / r2_lock_detected aggregate-namespaced emit + purge multi-manifest delete；codex r2 Approve）
 - [x] **🔴 force_purge endpoint 已 catch lock → 423 LOCKED**（**PR 0.2c-pre-2 完成 2026-05-24**；raw + aggregate retry endpoint 都加 isR2LockError 分支 → HTTP 423 + `R2_LOCK_DETECTED` + `audit.{archive,aggregate_archive.{telemetry,debug}}.force_purge_blocked_by_lock` critical emit；負控驗 non-lock R2 throw 仍走 502 FORCE_PURGE_FAILED）
+- [x] **🔴 Preview gate binding canary on prod bucket PASS**（**PR 0.2c-pre-3 完成 2026-05-25**；6-op sacrificial canary 直接對 prod bucket `chiyigo-audit-archive` 跑，全 7 HARD AND 條件達成；prod binding throw shape 完全對齊 1b.1 preview fixture，state integrity preserved；fixture `docs/fixtures/preview-gate-binding-canary-20260525-131627.json`；endpoint + tests 同 PR commit 2 移除，diagnostic classifier helper 保留）
 - [x] Preview bucket S3 sigv4 path lock canary 已親驗 enforce（**本 1b spike 完成** — 但只證 S3 path、不代表 binding path）
 - [ ] 演練 break-glass：spike prefix 在 retention 過期後 wrangler 移 lock + DELETE 路徑
 - [ ] 1b spike 期間 leaked `cfat_*` Bearer token 已 Rolled 失效（[[user 補做]]；audit-archive-writer Pages secret 同步更新）
 
 ### Lock rule 指令清單
 
-詳細 36 條 lock + 36 條 lifecycle 指令在 `docs/AUDIT_RETENTION_PLAN.md` PR 0.2c runbook 段（v8.3 Step 0.2c）。執行順序原則：
+詳細 18 條 lock + 18 條 lifecycle (= 36 條規則) 指令在 `docs/AUDIT_RETENTION_PLAN.md` PR 0.2c runbook 段（v8.3 Step 0.2c）。執行順序原則：
 1. 先設 lifecycle（無 retention enforce，只是過期清理）
 2. 後設 lock（不可逆）
 3. 每組 lock 設完 sleep 10s + canary PUT 驗 propagation（[[feedback_r2_lock_propagation_canary]]）
