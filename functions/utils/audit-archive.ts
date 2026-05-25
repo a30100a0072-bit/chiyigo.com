@@ -534,8 +534,42 @@ const R2_LOCK_KNOWN_NUMERIC_CODES = new Set([10069])
 
 const R2_LOCK_MARKER = /(?:lock|locked|retention|immutable|objectlocked|object\s*locked)/i
 
-export function isR2LockError(e: unknown): boolean {
-  if (!e || typeof e !== 'object') return false
+// PR 0.2c-pre-3：classifier path 列舉（plan §4 — 給 r2-preview-gate-binding-canary
+// endpoint 在 thrown response 帶回 classifier_paths_hit 做 forensic 比對；對外 SoT）。
+//   - fast_path_code:    R2_LOCK_KNOWN_CODES（S3 string code）命中
+//   - canonical_phrase:  R2_LOCK_CANONICAL_PHRASE 在 message 命中
+//   - numeric_code:      R2_LOCK_KNOWN_NUMERIC_CODES 在 structured code 欄位或
+//                        message tail "(<digits>)" 命中
+//   - dual_condition:    status ∈ {409,412} AND marker 在 message/code/name
+//                        命中（同 candidate 內）
+export type R2LockClassifierPath =
+  | 'fast_path_code'
+  | 'canonical_phrase'
+  | 'numeric_code'
+  | 'dual_condition'
+
+/**
+ * R2 lock-error classifier（diagnostic 版 — PR 0.2c-pre-3 抽出）。
+ *
+ * 回傳 `{ matched, paths }`：
+ *   - matched: paths.length > 0 — 等價於 isR2LockError(e)（plan §14c parity tests
+ *              鎖死兩函式語意一致；任一 mismatch 即 fail）
+ *   - paths:   命中的 classifier path 集合（subset of R2LockClassifierPath）；
+ *              便於 fixture 比對 S3 / preview bucket / prod bucket 三路真實 throw
+ *              shape 命中差異
+ *
+ * 行為與舊單體 isR2LockError 對齊（同樣 candidate 列舉 + 同樣 path 條件）；唯一
+ * 差別：把舊「early return on first match」改成「四 path 全跑、collect 命中」，
+ * 因此 paths 可能含多個元素（例：S3 真實 shape 同時命中 fast_path_code + dual_condition）。
+ * 對 matched boolean 結果無影響（True is True 不論幾條路命中）。
+ *
+ * Commit 2 of PR 0.2c-pre-3 endpoint 移除後本 helper **保留**（plan §9 codex r1
+ * answer 4 — 升「diagnostic classifier」非 canary 專用），給未來 R2 throw shape
+ * 改變時 forensic 快速比對。
+ */
+export function classifyR2LockError(e: unknown): { matched: boolean; paths: R2LockClassifierPath[] } {
+  const paths: R2LockClassifierPath[] = []
+  if (!e || typeof e !== 'object') return { matched: false, paths }
 
   // Nested cause 鏈：worker binding throw 可能包 wrapped Error；走一層 cause 收 nested 路徑。
   // 不無限遞迴（防 cyclic / 過深；fixture 顯示 R2 S3 是平的，binding 預期最多一層 wrap）。
@@ -543,26 +577,43 @@ export function isR2LockError(e: unknown): boolean {
   const cause = (e as { cause?: unknown }).cause
   if (cause && typeof cause === 'object') candidates.push(cause as Record<string, unknown>)
 
-  // (1) 高信心 fast-path (string code)：fixture 凍結的 S3 lock code 直接 true，不必驗 status
+  // (1) 高信心 fast-path (string code)：fixture 凍結的 S3 lock code 直接 hit，不必驗 status
   for (const c of candidates) {
     const code = c.code
-    if (typeof code === 'string' && R2_LOCK_KNOWN_CODES.has(code)) return true
+    if (typeof code === 'string' && R2_LOCK_KNOWN_CODES.has(code)) {
+      paths.push('fast_path_code')
+      break
+    }
   }
 
-  // (2) PR 1b.2 高信心 message-pattern：Worker binding 路徑無 code/status/cause，唯一
-  //     signal 是 message 內的 canonical phrase + 尾巴 "(10069)" 數字。跨 candidate
-  //     任一 hit 即 true，與 (1) 對等不需 status 配合。
+  // (2a) PR 1b.2 canonical phrase：Worker binding 路徑無 code/status/cause，唯一
+  //      signal 是 message 內的 canonical phrase（"locked by the bucket policy"）。
+  //      跨 candidate 任一 hit 即 path 命中。
   for (const c of candidates) {
     const msg = c.message
-    if (typeof msg === 'string' && R2_LOCK_CANONICAL_PHRASE.test(msg)) return true
-    // 已 surfaced 的 structured numeric code 欄位（future-proof 若 binding 之後改 expose）
+    if (typeof msg === 'string' && R2_LOCK_CANONICAL_PHRASE.test(msg)) {
+      paths.push('canonical_phrase')
+      break
+    }
+  }
+
+  // (2b) PR 1b.2 numeric code：structured code 欄位或 message tail "(<digits>)"
+  //      命中 R2_LOCK_KNOWN_NUMERIC_CODES（current binding shape 走 tail；structured
+  //      欄位 future-proof 若 binding 之後改 expose）
+  for (const c of candidates) {
     const codeNum = c.code
     if ((typeof codeNum === 'number' || typeof codeNum === 'string')
-        && R2_LOCK_KNOWN_NUMERIC_CODES.has(Number(codeNum))) return true
-    // 從 message 尾巴 "(<digits>)" 解析（current binding shape）
+        && R2_LOCK_KNOWN_NUMERIC_CODES.has(Number(codeNum))) {
+      paths.push('numeric_code')
+      break
+    }
+    const msg = c.message
     if (typeof msg === 'string') {
       const m = msg.match(/\((\d+)\)\s*$/)
-      if (m && m[1] != null && R2_LOCK_KNOWN_NUMERIC_CODES.has(Number(m[1]))) return true
+      if (m && m[1] != null && R2_LOCK_KNOWN_NUMERIC_CODES.has(Number(m[1]))) {
+        paths.push('numeric_code')
+        break
+      }
     }
   }
 
@@ -580,9 +631,21 @@ export function isR2LockError(e: unknown): boolean {
       const v = c[k]
       if (typeof v === 'string' && R2_LOCK_MARKER.test(v)) { markerHit = true; break }
     }
-    if (markerHit) return true
+    if (markerHit) {
+      paths.push('dual_condition')
+      break
+    }
   }
-  return false
+
+  return { matched: paths.length > 0, paths }
+}
+
+// 對外 boolean signature 保留不變（plan §14 codex r1 answer 3 — 11 binding fixture
+// wholesale regression + 26+ existing positive/negative test cases 不破）。內部委派
+// classifyR2LockError(...).matched；parity tests（tests/audit-archive.test.ts 新
+// describe）強制鎖死兩函式語意永遠一致。
+export function isR2LockError(e: unknown): boolean {
+  return classifyR2LockError(e).matched
 }
 
 /**

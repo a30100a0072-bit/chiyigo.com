@@ -31,6 +31,7 @@ import {
   aggregateSeverities,
   putWithRetry,
   isR2LockError,
+  classifyR2LockError,
   KEY_SCHEME_LEGACY,
   KEY_SCHEME_WRITE_ONCE,
   MANIFEST_STATE_FILES,
@@ -1164,5 +1165,350 @@ describe('PR 0.2c-pre-1a：purgeChunk write-once chunk → 1 data + 4 manifest D
     expect(r.manifest_key.endsWith('.json')).toBe(true)
     expect(r.manifest_key).not.toContain('.marked_archived.')
     expect(r.manifest_keys).toHaveLength(1)
+  })
+})
+
+// ── PR 0.2c-pre-3：classifyR2LockError parity (plan §14c) ───────────────────
+//
+// 強制鎖死 classifyR2LockError(e).matched === isR2LockError(e) 對所有既有 fixture。
+// 任何單一 mismatch → test fail（plan §14c）。同時對部分高知名度 shape 驗
+// classifier_paths_hit 內容（fast_path_code / canonical_phrase / numeric_code /
+// dual_condition），鎖死 path 拆分穩定（plan §4 — endpoint thrown response 帶這
+// 些 paths 給 fixture 比對）。
+describe('PR 0.2c-pre-3 classifyR2LockError parity (plan §14c)', () => {
+  // 30+ existing fixtures — 每個都跑兩遍對齊
+  type ParityCase = {
+    label: string
+    input: unknown
+    expected: boolean
+    // Optional: 若提供，assert classifier_paths_hit 必含這些 paths（subset 檢查）
+    expectedPathsIncludes?: ReadonlyArray<string>
+    // Optional: 若提供，assert classifier_paths_hit 不可含這些 paths
+    expectedPathsExcludes?: ReadonlyArray<string>
+  }
+
+  const cases: ParityCase[] = [
+    // ── 保守 detector positives（fallback dual condition path） ──────────────
+    {
+      label: 'positive: status=412 + message 含 "object locked"',
+      input: { status: 412, message: 'The object is locked by retention rule' },
+      expected: true,
+      expectedPathsIncludes: ['dual_condition'],
+    },
+    {
+      label: 'positive: status=409 + code 含 "ObjectLocked"',
+      input: { status: 409, code: 'ObjectLocked', message: 'conflict' },
+      expected: true,
+      expectedPathsIncludes: ['dual_condition'],
+    },
+    {
+      label: 'positive: status=412 + name 含 "RetentionLock"',
+      input: { status: 412, name: 'R2RetentionLockError' },
+      expected: true,
+      expectedPathsIncludes: ['dual_condition'],
+    },
+    {
+      label: 'positive: httpStatus=409 + code 含 "Immutable"',
+      input: { httpStatus: 409, code: 'ImmutableObjectError' },
+      expected: true,
+      expectedPathsIncludes: ['dual_condition'],
+    },
+    {
+      label: 'positive: statusCode=412 + message 含 "lock"',
+      input: { statusCode: 412, message: 'precondition failed: lock present' },
+      expected: true,
+      expectedPathsIncludes: ['dual_condition'],
+    },
+
+    // ── 保守 detector negatives ─────────────────────────────────────────────
+    {
+      label: 'negative: 純 message 含 lock 但無 status',
+      input: { message: 'object is locked' },
+      expected: false,
+    },
+    {
+      label: 'negative: status=412 但 message 無 lock marker',
+      input: { status: 412, message: 'etag mismatch' },
+      expected: false,
+    },
+    {
+      label: 'negative: status=500 + message 含 lock',
+      input: { status: 500, message: 'internal lock failure' },
+      expected: false,
+    },
+    { label: 'negative: undefined', input: undefined, expected: false },
+    { label: 'negative: null', input: null, expected: false },
+    { label: 'negative: string', input: 'error message', expected: false },
+    { label: 'negative: number', input: 412, expected: false },
+    {
+      label: 'negative: status=403 + message lock',
+      input: { status: 403, message: 'forbidden by lock policy' },
+      expected: false,
+    },
+
+    // ── PR 1b spike fixture（S3 真實 shape） ───────────────────────────────
+    {
+      label: 'spike S3 fixture: 409 + ObjectLockedByBucketPolicy + canonical msg',
+      input: {
+        status: 409,
+        code: 'ObjectLockedByBucketPolicy',
+        message: 'The object is locked by the bucket policy.',
+      },
+      expected: true,
+      expectedPathsIncludes: ['fast_path_code', 'canonical_phrase', 'dual_condition'],
+    },
+    {
+      label: 'fast-path: code-only',
+      input: { code: 'ObjectLockedByBucketPolicy' },
+      expected: true,
+      expectedPathsIncludes: ['fast_path_code'],
+      expectedPathsExcludes: ['dual_condition'],
+    },
+    {
+      label: 'fast-path: code + irrelevant status=200',
+      input: { code: 'ObjectLockedByBucketPolicy', status: 200 },
+      expected: true,
+      expectedPathsIncludes: ['fast_path_code'],
+      expectedPathsExcludes: ['dual_condition'],
+    },
+
+    // ── Nested cause ─────────────────────────────────────────────────────
+    {
+      label: 'nested cause: full S3 shape',
+      input: (() => {
+        const w = new Error('R2 PUT failed for chunk') as Error & { cause?: unknown }
+        w.cause = {
+          status: 409,
+          code: 'ObjectLockedByBucketPolicy',
+          message: 'The object is locked by the bucket policy.',
+        }
+        return w
+      })(),
+      expected: true,
+      expectedPathsIncludes: ['fast_path_code', 'canonical_phrase', 'dual_condition'],
+    },
+    {
+      label: 'nested cause: fast-path code only',
+      input: (() => {
+        const w = new Error('R2 binding error') as Error & { cause?: unknown }
+        w.cause = { code: 'ObjectLockedByBucketPolicy' }
+        return w
+      })(),
+      expected: true,
+      expectedPathsIncludes: ['fast_path_code'],
+    },
+    {
+      label: 'negative: nested both unrelated',
+      input: (() => {
+        const w = new Error('some other error') as Error & { cause?: unknown }
+        w.cause = { status: 500, message: 'internal server error' }
+        return w
+      })(),
+      expected: false,
+    },
+    {
+      label: 'negative: unknown code with 409 no marker',
+      input: { status: 409, code: 'ConditionalRequestConflict', message: 'request precondition failed' },
+      expected: false,
+    },
+
+    // ── Codex r1 P2 regression: 不可跨 candidate 合併 ────────────────────
+    {
+      label: 'codex r1 P2: outer marker (no status) + cause 409 no marker',
+      input: (() => {
+        const w = new Error('operation locked by user policy log') as Error & { cause?: unknown }
+        w.cause = { status: 409, code: 'ConditionalRequestConflict', message: 'request precondition failed' }
+        return w
+      })(),
+      expected: false,
+    },
+    {
+      label: 'codex r1 P2: outer 409 no marker + cause marker no status',
+      input: (() => {
+        const w = new Error('Request conflict') as Error & { status?: number; cause?: unknown }
+        w.status = 409
+        w.cause = { message: 'this resource is locked elsewhere by an unrelated system' }
+        return w
+      })(),
+      expected: false,
+    },
+    {
+      // Note: cause message 故意寫 'locked by bucket policy'（少 "the"）→ 不命中
+      // canonical phrase regex `/locked by the bucket policy/i`，僅靠 dual_condition
+      // 通過。對齊既有 test line 903-911 鎖住 fallback dual-condition nested path。
+      label: 'positive control: cause status+marker no known code (fallback dual nested)',
+      input: (() => {
+        const w = new Error('R2 binding wrapper') as Error & { cause?: unknown }
+        w.cause = { status: 409, message: 'locked by bucket policy' }
+        return w
+      })(),
+      expected: true,
+      expectedPathsIncludes: ['dual_condition'],
+      expectedPathsExcludes: ['canonical_phrase', 'fast_path_code', 'numeric_code'],
+    },
+
+    // ── PR 1b.2 Worker binding shape (canary fixture frozen) ──────────────
+    {
+      label: 'binding shape (put): canonical phrase + (10069) tail',
+      input: {
+        name: 'Error',
+        message: 'put: The object is locked by the bucket policy. (10069)',
+      },
+      expected: true,
+      expectedPathsIncludes: ['canonical_phrase', 'numeric_code'],
+      expectedPathsExcludes: ['fast_path_code', 'dual_condition'],
+    },
+    {
+      label: 'binding shape (delete): canonical phrase + (10069) tail',
+      input: {
+        name: 'Error',
+        message: 'delete: The object is locked by the bucket policy. (10069)',
+      },
+      expected: true,
+      expectedPathsIncludes: ['canonical_phrase', 'numeric_code'],
+    },
+    {
+      label: 'canonical phrase only (no numeric tail)',
+      input: { message: 'The object is locked by the bucket policy.' },
+      expected: true,
+      expectedPathsIncludes: ['canonical_phrase'],
+      expectedPathsExcludes: ['numeric_code'],
+    },
+    {
+      label: 'numeric code 10069 from message tail (no canonical phrase)',
+      input: { message: 'R2 binding error (10069)' },
+      expected: true,
+      expectedPathsIncludes: ['numeric_code'],
+      expectedPathsExcludes: ['canonical_phrase'],
+    },
+    {
+      label: 'structured numeric code (future-proof int)',
+      input: { code: 10069, message: 'opaque error' },
+      expected: true,
+      expectedPathsIncludes: ['numeric_code'],
+    },
+    {
+      label: 'structured numeric code (future-proof str)',
+      input: { code: '10069', message: 'opaque error' },
+      expected: true,
+      expectedPathsIncludes: ['numeric_code'],
+    },
+    {
+      label: 'nested cause: numeric code in cause message tail',
+      input: (() => {
+        const w = new Error('R2 binding wrapper') as Error & { cause?: unknown }
+        w.cause = { message: 'inner: The object is locked by the bucket policy. (10069)' }
+        return w
+      })(),
+      expected: true,
+      expectedPathsIncludes: ['canonical_phrase', 'numeric_code'],
+    },
+
+    // ── PR 1b.2 negatives ──────────────────────────────────────────────────
+    {
+      label: 'negative: similar but missing canonical phrase (locked w/o full phrase)',
+      input: { message: 'object is locked' },
+      expected: false,
+    },
+    {
+      label: 'negative: similar but missing canonical phrase (forbidden by lock policy)',
+      input: { message: 'forbidden by lock policy' },
+      expected: false,
+    },
+    {
+      label: 'negative: similar but missing canonical phrase (internal lock failure)',
+      input: { message: 'internal lock failure' },
+      expected: false,
+    },
+    {
+      label: 'negative: unknown numeric code in message tail (12345)',
+      input: { message: 'some error (12345)' },
+      expected: false,
+    },
+    {
+      label: 'negative: unknown numeric code in message tail (99999)',
+      input: { message: 'wrap (99999)' },
+      expected: false,
+    },
+    {
+      label: 'negative: numeric in message but not at tail',
+      input: { message: '(10069) was logged at startup, current error: other' },
+      expected: false,
+    },
+    {
+      label: 'negative: structured code 99999 not in set',
+      input: { code: 99999, message: 'opaque' },
+      expected: false,
+    },
+  ]
+
+  for (const fx of cases) {
+    it(`parity: ${fx.label}`, () => {
+      const classified = classifyR2LockError(fx.input)
+      const flat = isR2LockError(fx.input)
+      // 1) parity: classify.matched 必須等於 isR2LockError 結果（plan §14c 鎖死語意）
+      expect(classified.matched).toBe(flat)
+      // 2) ground truth: 兩者都對齊 expected（防 fixture 寫錯或 classifier 退步）
+      expect(flat).toBe(fx.expected)
+      // 3) path 內容（若 case 提供）
+      if (fx.expectedPathsIncludes) {
+        for (const p of fx.expectedPathsIncludes) {
+          expect(classified.paths, `expected path '${p}' in [${classified.paths.join(',')}]`)
+            .toContain(p)
+        }
+      }
+      if (fx.expectedPathsExcludes) {
+        for (const p of fx.expectedPathsExcludes) {
+          expect(classified.paths, `path '${p}' should NOT be in [${classified.paths.join(',')}]`)
+            .not.toContain(p)
+        }
+      }
+      // 4) negative case：paths 必為空陣列
+      if (!fx.expected) {
+        expect(classified.paths).toEqual([])
+      } else {
+        expect(classified.paths.length).toBeGreaterThan(0)
+      }
+    })
+  }
+
+  // 5) wholesale fixture parity：r2-lock-binding-canary 1b.1 fixture 整批跑兩遍
+  // 這對齊 tests/audit-archive.test.ts line 987-1023 既有 isR2LockError 寫法，
+  // 但驗到 classifyR2LockError 也要每條都 matched + paths 至少含 canonical_phrase 或
+  // numeric_code 之一（binding shape 必命中此兩 path 之一）
+  it('parity wholesale: fixture binding thrown ops — classify.matched === isR2LockError + path includes binding signal', async () => {
+    const fixture = (await import('../docs/fixtures/r2-lock-binding-canary-2026-05-24.json')).default as {
+      ops: Array<{
+        expected_outcome: 'success' | 'thrown'
+        response: {
+          outcome: 'success' | 'thrown'
+          thrown: null | {
+            name: string
+            message: string
+            code: string | number | null
+            status: number | null
+            cause: unknown
+          }
+        }
+      }>
+    }
+    const thrownOps = fixture.ops.filter(o => o.expected_outcome === 'thrown')
+    expect(thrownOps.length).toBeGreaterThanOrEqual(2)
+    for (const op of thrownOps) {
+      const t = op.response.thrown
+      expect(t).not.toBeNull()
+      if (!t) continue
+      const errLike: Record<string, unknown> = { name: t.name, message: t.message }
+      if (t.code !== null) errLike['code'] = t.code
+      if (t.status !== null) errLike['status'] = t.status
+      if (t.cause !== null) errLike['cause'] = t.cause
+      const cl = classifyR2LockError(errLike)
+      expect(cl.matched).toBe(isR2LockError(errLike))
+      expect(cl.matched).toBe(true)
+      // binding shape 必命中 canonical_phrase 或 numeric_code 之一（fixture 凍結）
+      const hitsBindingSignal =
+        cl.paths.includes('canonical_phrase') || cl.paths.includes('numeric_code')
+      expect(hitsBindingSignal).toBe(true)
+    }
   })
 })
