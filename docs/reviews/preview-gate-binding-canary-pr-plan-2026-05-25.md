@@ -1,7 +1,7 @@
 # Preview Gate (b) PR Plan — Worker R2 Binding Canary on Prod Bucket
 
-**狀態**：**r4 — applies codex r3 3 PS 5.1 API + minor nit fixes**（2026-05-26 凌晨）
-**作者**：Claude（main HEAD `1bcf73b`，2026-05-25）
+**狀態**：**r4 — APPROVED by codex r4 (2026-05-26)**；applies codex r1 7 + r2 5 + r3 3 fixes（rounds 1→4 全收）
+**作者**：Claude（plan first written at main HEAD `1bcf73b`，r4 fix landed at `41525a1`，2026-05-25 → 2026-05-26）
 **為何存在**：`docs/reviews/preview-gate-runbook-design-concern-2026-05-25.md` 經 codex review 後 verdict = **設計疑慮成立、選 (b) 並升格為 mandatory replacement**。本檔是 (b) PR 的完整 plan，給 codex 在 implementation 前先 review，避免實作中發現 gate semantics 還在變。
 **範圍**：替換 wrangler-based Layer 1 為 worker R2 binding canary，指向 prod bucket。
 **不可逆度**：執行階段（user 真跑 canary）會在 prod bucket `chiyigo-audit-archive` 設 24h sacrificial lock + control object。本 plan + 接續 PR code 都不會自動執行；明天 user 走完 walk-through 才動。
