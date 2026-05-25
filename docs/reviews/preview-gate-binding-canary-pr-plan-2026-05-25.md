@@ -1,6 +1,6 @@
 # Preview Gate (b) PR Plan — Worker R2 Binding Canary on Prod Bucket
 
-**狀態**：**r3 — applies codex r2 5 doc-consistency fixes**（2026-05-25 深夜）
+**狀態**：**r4 — applies codex r3 3 PS 5.1 API + minor nit fixes**（2026-05-26 凌晨）
 **作者**：Claude（main HEAD `1bcf73b`，2026-05-25）
 **為何存在**：`docs/reviews/preview-gate-runbook-design-concern-2026-05-25.md` 經 codex review 後 verdict = **設計疑慮成立、選 (b) 並升格為 mandatory replacement**。本檔是 (b) PR 的完整 plan，給 codex 在 implementation 前先 review，避免實作中發現 gate semantics 還在變。
 **範圍**：替換 wrangler-based Layer 1 為 worker R2 binding canary，指向 prod bucket。
@@ -49,6 +49,30 @@ Codex r2 verdict = **Reject as written, approve after small r3 patch**。5 個 d
 | 5 | §13 risk table propagation mitigation 把 op 1 失敗 retry 成普通延遲、與 FAIL_WRITE_BLOCKED 語意衝突 | §13 改寫：op 1 thrown = FAIL_WRITE_BLOCKED 真實 bug、不 retry；若要 propagation probe 獨立加 step 0.4b（**不啟用，但留 plan 給未來**），與 op 1 流程分離 |
 
 **請 codex r3 驗**：5 doc-consistency fix 是否正確收進 plan；plan 整體無自我矛盾、無新假設、無漏掉 invariant。
+
+---
+
+## Changelog: r3 → r4（2026-05-26 凌晨）
+
+Codex r3 verdict = **Reject as written; approve after one r4 tiny patch**。3 fix 已套用：
+
+| # | r3 finding | 落實位置 |
+|---|---|---|
+| 1 | **Critical**: §10 atomic sample 用 `[System.IO.File]::Move($tmp, $final, $true)` — 此 3-arg overload 不存在於本機 PS 5.1.19041.6328 / .NET Framework 4.0.30319.42000（codex 親驗），runbook 照跑會在 lock 已設、寫 fixture 時 throw `Method not found` → 命中「不可逆 state 已產生但正式 fixture 沒落地」最怕場景 | §10 PowerShell 樣板重寫；**Claude r4 親跑驗證額外發現** `File.Replace($tmp, $final, $null, $true)` 在 PS 5.1 也炸（`$null` / `[System.String]$null` 第三 arg 都被解釋成 illegal path string，throw `ArgumentException: The path is not of a legal form.`）→ 最終 landing 用 `Move-Item -LiteralPath $tmpAbs -Destination $finalAbs -Force`（PS-idiomatic + NTFS atomic via Windows MoveFileEx + MOVEFILE_REPLACE_EXISTING + 不污染 backup file）；fsync 升真正 `FileStream.Flush($true)` flushToDisk=true（不是 buffer-only flush） |
+| 2 | Minor: line 164 `control_object_body_matches` 與 schema/PASS 用的 `get_control_body_match` 命名不一致 | §4 line 164 改 `get_control_body_match`，全 plan 命名統一 |
+| 3 | Minor: §15 動工順序仍寫「讀 r2 版本」應改 r3 | §15 改「**r4 版本，含 codex r1 7 + r2 5 + r3 3 全部 fix**」 |
+
+**§14 answer 對應**：
+- 第 6 個 answer 已在 r2 升 atomic write；r4 補完「atomic write 在本機 PS 5.1 真實可行」最後一哩 — Claude 親跑 3 步連續 atomic-replace 驗證綠（正式 fixture 對齊最後一步、無 tmp 殘留），API 可用性真 PASS。
+
+**親驗紀錄（Claude r4，PS 5.1.19041.6328 / .NET Fx 4.0.30319.42000）**：
+- `File.Move(string, string, bool)` 三-arg overload **不存在**（與 codex r3 一致）
+- `File.Replace(string, string, string, bool)` 四-arg overload **存在** but 第三 arg `$null` runtime 炸 `ArgumentException`
+- `File.Move(string, string)` 兩-arg overload 存在 + work
+- `FileStream.Flush(bool)` overload **存在** + flush=true 真 fsync
+- `Move-Item -LiteralPath ... -Destination ... -Force` **work** + 3 步連跑 + 無殘留
+
+**請 codex r4 驗**：3 fix 是否套到位；`Move-Item -Force` 在 NTFS 上的 atomicity 是否符合 plan 宣告（同 volume rename atomic via MoveFileEx）；plan 整體無自我矛盾、無未驗證 API。
 
 ---
 
@@ -161,7 +185,7 @@ Codex r2 verdict = **Reject as written, approve after small r3 patch**。5 個 d
 
 `ThrownShape` 同 1b.1（`name / message / code / status / cause / stringified`）— fixture 比對相容。
 
-**`get_control` 設計（升 r2，codex finding 2）**：endpoint 走 binding `.get(key)` 讀回小型 canary body（setup_control 預先 PUT 已知 sha256 的 byte string；建議 64-byte 含 ts + rand），**internal compute `sha256(arrayBuffer)` + return `{ body_sha256: <hex>, size }`**。`get_control` response **絕不**含 raw body bytes（避免 fixture 落地的位元組成為 leak surface 或 git 體積 bloat；fixture 比對 hash 即可）。對應 fixture summary 加 `control_object_body_matches`（hash 比對 setup_control 階段預先計算的 expected sha256）作 hard PASS 條件。
+**`get_control` 設計（升 r2，codex finding 2）**：endpoint 走 binding `.get(key)` 讀回小型 canary body（setup_control 預先 PUT 已知 sha256 的 byte string；建議 64-byte 含 ts + rand），**internal compute `sha256(arrayBuffer)` + return `{ body_sha256: <hex>, size }`**。`get_control` response **絕不**含 raw body bytes（避免 fixture 落地的位元組成為 leak surface 或 git 體積 bloat；fixture 比對 hash 即可）。對應 fixture summary 加 `get_control_body_match`（升 r4，codex r3 minor nit — 與 §6 schema + §7 PASS 命名一致）（hash 比對 setup_control 階段預先計算的 expected sha256）作 hard PASS 條件。
 
 **`classifier_paths_hit` 設計考量**：codex 強調「response 同時回 raw thrown shape + isR2LockError(thrown) verdict」。光是 boolean 不夠 forensic — 要知道是哪條 path 命中才能比對 S3 vs binding shape 差異。但 `isR2LockError` 目前只回 boolean，**需擴展 helper**（暴露 `classifyR2LockError(): { matched: boolean, paths: string[] }`，原 `isR2LockError` 內部呼叫之 + 對外保留 boolean signature 不破 caller）。
 
@@ -301,7 +325,7 @@ Codex r2 verdict = **Reject as written, approve after small r3 patch**。5 個 d
 ### Runbook 強制順序
 1. 設 lifecycle add（先設無 retention enforce，安全）
 2. 設 lock add（不可逆 24h）
-3. **立刻** atomic-replace 正式 fixture（`outcome: "in_progress"`、含 prefix / lock_rule_name / lifecycle_rule_name；空 ops + 空 summary）— 在跑任何 op 前；寫 sibling `<fixture>.tmp` → `[System.IO.File]::Move(<tmp>, <final>, overwrite=true)`
+3. **立刻** atomic-replace 正式 fixture（`outcome: "in_progress"`、含 prefix / lock_rule_name / lifecycle_rule_name；空 ops + 空 summary）— 在跑任何 op 前；寫 sibling `<fixture>.tmp` + `FileStream.Flush($true)` 真正 fsync → `Move-Item -LiteralPath $tmpAbs -Destination $finalAbs -Force`（PS 5.1 / .NET Fx 4.0 親驗綠，NTFS atomic；詳 §10 PowerShell 樣板）
 4. 跑 6 個 op（升 r3，codex r2 finding 3 — get_control 是 op 6），**每跑完一條** atomic-replace 正式 fixture，正式 path 上的 JSON 一直是當下最完整狀態（outcome 仍 `in_progress`、ops 已含已跑完的 N entry / partial summary）
 5. 6 個 op 結束後 finalize：算 summary + outcome verdict（PASS / 5 種 FAIL 之一）→ atomic-replace 正式 fixture 最後一次
 6. 不論 PASS / FAIL 都 `git add` + commit + push
@@ -311,7 +335,7 @@ Codex r2 verdict = **Reject as written, approve after small r3 patch**。5 個 d
 - **r2 寫法**「全程 .tmp、最後才 move」→ 正式 fixture 路徑可能還不存在，metadata 只在 `.tmp`（容易被 user 誤刪、不在 git working tree 預期位置、cleanup 流程找不到）
 - **r3 寫法**「每步 atomic replace 正式 path」→ 正式 fixture 永遠是 disk truth；mid-run crash 後最壞情況是「partial outcome 留在正式 JSON、outcome 仍 in_progress」，但 prefix + rule names + control_key + 已跑 op 的 entries 都齊全 → S3 cleanup 可從正式 path 直接 recover
 
-`<fixture>.tmp` 是寫入過程的 race-safe staging file，**不**作為 long-lived state。完整流程：write tmp → fsync → atomic move → tmp 消失。
+`<fixture>.tmp` 是寫入過程的 race-safe staging file，**不**作為 long-lived state。完整流程：write tmp bytes → `FileStream.Flush($true)` 真正 fsync（flushToDisk=true）→ `Move-Item -Force` atomic-replace 正式 path → tmp 消失。
 
 ### S3 後 48hr 自動 cleanup
 1b spike S3 段已驗 lifecycle `--expire-days 2` 真的會清 sacrificial object。但 **lock rule + lifecycle rule entry 不會自動消** — 仍要手動移除（升 r2，codex finding 3 — wrangler 4.x 規定 `--id` 必填）：
@@ -420,17 +444,44 @@ if ($status -ne 404 -and $status -ne 405) {
    - Step 0.10 op 6 **get_control** → atomic-replace 正式 fixture（ops[5] 入、control_object.get_body_sha256 入；**HARD PASS**：sha 不對齊 expected 表示 FAIL_STATE_BREACH）
    - Step 0.11 finalize：算 summary + 從 §7 verdict matrix 算 outcome（`PASS` / 5 個 `FAIL_*` 之一）→ atomic-replace 正式 fixture 最後一次（outcome 升、verdict_reason 填、summary 完整）
 
-**PowerShell atomic replace 樣板**（每步重用）：
+**PowerShell atomic replace 樣板**（每步重用；升 r4，codex r3 critical — 本機 PS 5.1.19041.6328 / .NET Fx 4.0.30319.42000 沒有 `File.Move(string,string,bool)` 三-arg overload；**且 Claude 親跑驗證 `File.Replace($tmp, $final, $null, $true)` 也炸 `The path is not of a legal form.`**（PS `$null` 第三 arg 被解釋成 illegal string path）。最後 landing 用 `Move-Item -Force` cmdlet，PS-idiomatic、NTFS 同 volume rename atomic（Windows `MoveFileEx` + `MOVEFILE_REPLACE_EXISTING`），不留 backup file 污染：
+
 ```powershell
-# $finalPath = docs/fixtures/preview-gate-binding-canary-<ts>.json
-$tmpPath  = "$finalPath.tmp"
+# $finalPath = docs/fixtures/preview-gate-binding-canary-<ts>.json（repo-relative）
+$finalAbs  = Join-Path (Get-Location) $finalPath
+$tmpAbs    = Join-Path (Get-Location) "$finalPath.tmp"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $jsonBody  = $fixture | ConvertTo-Json -Depth 6
-[System.IO.File]::WriteAllText((Join-Path (Get-Location) $tmpPath), $jsonBody + [Environment]::NewLine, $utf8NoBom)
-[System.IO.File]::Move((Join-Path (Get-Location) $tmpPath), (Join-Path (Get-Location) $finalPath), $true)  # overwrite=true，atomic on NTFS
+
+# Write tmp + 真正 fsync（FileStream.Flush(bool) flushToDisk=true，PS 5.1 / .NET Fx 4.0 親驗綠）
+$bytes = $utf8NoBom.GetBytes($jsonBody + [Environment]::NewLine)
+$fs = [System.IO.File]::Open($tmpAbs, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+try {
+  $fs.Write($bytes, 0, $bytes.Length)
+  $fs.Flush($true)        # flushToDisk=true → 真 fsync（不是只刷 OS write-back cache）
+} finally {
+  $fs.Dispose()
+}
+
+# Atomic-replace 正式 path 用 Move-Item -Force（PS-idiomatic，NTFS atomic）：
+#   - 首次（step 0.3，final 不存在）+ 後續（step 0.5+，final 已存在）路徑統一
+#   - -Force 在 destination 已存在時 overwrite；不存在時等同 plain Move
+#   - 內部走 Windows MoveFileEx + MOVEFILE_REPLACE_EXISTING → 同 volume NTFS 原生 atomic
+Move-Item -LiteralPath $tmpAbs -Destination $finalAbs -Force
 ```
 
-正式 fixture 路徑**永遠**是 disk truth；`.tmp` 只在每步寫入過程短暫存在，正常路徑下不應殘留。若 PowerShell crash 在 `.tmp` 寫入後但 `.Move` 之前 → 下一次 user 進來看到 stale `.tmp` + 正式 fixture 還在上一步狀態 → 安全（正式 path 是 SoT）。
+**為何**最終 landing 不用 `File.Replace` 或 `File.Move`（即便它們 method overload 都在）：
+- `File.Move(string, string, bool overwrite)` 是 .NET Core / .NET 5+ 才有的 overload；PS 5.1 跑在 .NET Framework 4.x，**沒這支 overload**（codex r3 親驗 + Claude r4 親驗）
+- `File.Replace(string, string, string destinationBackupFileName, bool ignoreMetadataErrors)` **理論支援** `destinationBackupFileName=null`，但在 PowerShell 5.1 把 `$null` 傳入 string arg 會被解釋成 illegal path string，runtime throw `ArgumentException: The path is not of a legal form.`（Claude r4 親跑驗證兩種 `$null` 寫法都炸；若硬要用 `File.Replace` 必須給 explicit backup file path + 立刻刪掉，污染 tmp folder）
+- `Move-Item -LiteralPath ... -Destination ... -Force` 是 PS 內建 cmdlet，行為穩定、不污染、與 user 既有 S3 cleanup 段（`Remove-Item -LiteralPath`）命名風格一致
+
+**正式 fixture 路徑永遠是 disk truth**；`.tmp` 只在每步寫入過程短暫存在（PowerShell crash 在 `Open/Write/Flush` 中可能殘留，但下一次 user 進來 `.tmp` 在 + 正式 fixture 仍是上一步狀態 → safe，正式 path 是 SoT）。`FileStream.Flush($true)` 確保 OS write-back cache 也刷到 disk（不只進 buffer），power outage 場景 fixture 不會 lose write-through。
+
+**親驗結果（Claude r4 本機跑，PS 5.1.19041.6328 / .NET Fx 4.0.30319.42000）**：
+- 連續 3 步 `Write-Atomic` 不同 body → 正式 fixture 內容對齊最後一步 ✓
+- 沒 tmp 殘留 ✓
+- `File.Replace` 第三 arg `$null` / `[System.String]$null` 都 throw ✗（已替換）
+- `Move-Item -Force` 路徑統一首次 + 後續，最簡 ✓
 4. **PASS/FAIL judgment**（§7 完整搬入）
 5. **成功收尾**（S1 fixture commit + push、S2 update GATE checklist `docs/AUDIT_ARCHIVE_LOCK_BEHAVIOR.md`、S3 48hr 後驗 lifecycle 自動清 + manual rule remove — 跨 session 從 fixture path recover）
 6. **失敗處理**（§7 三種 FAIL 分類各自的處置）
@@ -520,9 +571,9 @@ $jsonBody  = $fixture | ConvertTo-Json -Depth 6
 
 ---
 
-## 15. Tomorrow 動工順序（升 r2）
+## 15. Tomorrow 動工順序（升 r4）
 
-1. Fresh session 開始 → 讀 `MEMORY.md` + 本 plan（**r2 版本含 codex 7 fix**） + commit 1 task 細節
+1. Fresh session 開始 → 讀 `MEMORY.md` + 本 plan（**r4 版本，含 codex r1 7 + r2 5 + r3 3 全部 fix**）+ commit 1 task 細節
 2. 寫 `r2-preview-gate-binding-canary.ts`（copy 1b.1 + §3 6 點 diff + §4 op-specific validation + regex prefix + get_control）
 3. 寫 `classifyR2LockError` helper extension + 暴露 `{ matched, paths }`；對外保留 `isR2LockError(e: unknown): boolean` 不變
 4. 寫 unit tests（21+ cases — 多 get_control / body validation / prefix regex 邊界 case）+ int tests（5+ cases — 多 get_control round-trip）+ classifier regression parity（既有 + ~30 parity cases）
@@ -530,8 +581,8 @@ $jsonBody  = $fixture | ConvertTo-Json -Depth 6
 6. Commit 1 + push
 7. 等 codex review commit 1
 8. Codex Approve 後 deploy + 對齊 Pages prod commit hash
-9. User 走 walk-through 跑 canary（fresh session 接手 — Claude 帶 user 過 §10 runbook）
-10. Fixture finalize（atomic write `.tmp` → final）+ commit + push
+9. User 走 walk-through 跑 canary（fresh session 接手 — Claude 帶 user 過 §10 runbook，用 §10 atomic-replace 樣板）
+10. Fixture finalize（每步 atomic-replace 正式 path；最後一次寫 outcome + verdict）+ commit + push
 11. Codex review fixture（PASS / 5 FAIL 分類 verdict 判定）
 12. Commit 2（PASS / FAIL 都做）+ §9 Step A + B prod removal verified
 13. 等 codex review commit 2
@@ -539,4 +590,4 @@ $jsonBody  = $fixture | ConvertTo-Json -Depth 6
 
 ---
 
-**請 codex r2 給 verdict**：7 個 blocking fix 是否凍結到位？§14b 七 fix 落實位置正確？§14c parity tests 範圍是否合理？有沒有新假設被寫進 plan？
+**請 codex r4 給 verdict**：r3 3 fix 是否全收進 plan？PS 5.1 / .NET Fx 4.0 相容性樣板是否仍有未驗證 API？plan 整體無自我矛盾、無未實際驗證的假設？
