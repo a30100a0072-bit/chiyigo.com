@@ -1,6 +1,6 @@
 # Preview Gate (b) PR Plan — Worker R2 Binding Canary on Prod Bucket
 
-**狀態**：**r2 — applies codex r1 7 blocking fixes**（2026-05-25 晚間）
+**狀態**：**r3 — applies codex r2 5 doc-consistency fixes**（2026-05-25 深夜）
 **作者**：Claude（main HEAD `1bcf73b`，2026-05-25）
 **為何存在**：`docs/reviews/preview-gate-runbook-design-concern-2026-05-25.md` 經 codex review 後 verdict = **設計疑慮成立、選 (b) 並升格為 mandatory replacement**。本檔是 (b) PR 的完整 plan，給 codex 在 implementation 前先 review，避免實作中發現 gate semantics 還在變。
 **範圍**：替換 wrangler-based Layer 1 為 worker R2 binding canary，指向 prod bucket。
@@ -33,6 +33,22 @@ Codex r1 verdict = **Reject plan as written; approve direction after below 7 fix
 - wrangler.toml / types/env.d.ts 不動 OK
 
 **請 codex r2 驗**：7 fix 是否每條都正確收進 plan；§14b/14c 新章 + §15 動工順序對齊 r2 spec 是否漏 invariant。
+
+---
+
+## Changelog: r2 → r3（2026-05-25 深夜）
+
+Codex r2 verdict = **Reject as written, approve after small r3 patch**。5 個 doc-consistency fix 已套用：
+
+| # | r2 finding | 落實位置 |
+|---|---|---|
+| 1 | §10 step 0.3-0.11「全程 .tmp、最後才 move」與 §14 answer「每次 atomic replace final fixture」自我矛盾 | §10 改寫：**每步**寫 sibling `<fixture>.tmp` → `[System.IO.File]::Move(tmp, final, overwrite=true)` atomic-replace 正式 path；正式 fixture 永遠是 disk truth、中間狀態 `outcome: "in_progress"`；§8「Runbook 強制順序」段同步重寫 + 增「為什麼每步都 atomic replace」說明 |
+| 2 | Fixture schema outcome enum 沒包含 in_progress + 沒加新 FAIL_WRITE_BLOCKED / FAIL_STATE_BREACH | §6 outcome enum 升 `"in_progress" \| "PASS" \| "FAIL_CRITICAL" \| "FAIL_CLASSIFIER_MISS" \| "FAIL_WRITE_BLOCKED" \| "FAIL_STATE_BREACH" \| "FAIL_UNEXPECTED"`（與 §7 verdict matrix 同步）|
+| 3 | §8 Runbook 強制順序仍寫「5 個 op」但 r2 已是 6 ops | §8 step 4 改 6 個 op；step 5 同步；§10 step 0.10 已是 op 6（不變） |
+| 4 | §4 bucket field validation 寫「truthy 值」才 reject，應 reject property presence | §4 改 `Object.hasOwn(body, 'bucket')` 判斷，命中即 400，**不管值** |
+| 5 | §13 risk table propagation mitigation 把 op 1 失敗 retry 成普通延遲、與 FAIL_WRITE_BLOCKED 語意衝突 | §13 改寫：op 1 thrown = FAIL_WRITE_BLOCKED 真實 bug、不 retry；若要 propagation probe 獨立加 step 0.4b（**不啟用，但留 plan 給未來**），與 op 1 流程分離 |
+
+**請 codex r3 驗**：5 doc-consistency fix 是否正確收進 plan；plan 整體無自我矛盾、無新假設、無漏掉 invariant。
 
 ---
 
@@ -114,7 +130,7 @@ Codex r1 verdict = **Reject plan as written; approve direction after below 7 fix
 - **Op-specific body validation**（升 r2，codex finding 2）：
   - put-class（`setup_control` / `put_overwrite` / `put_new`）：`body` 必填且非空 string → 否則 `400 PUT_BODY_REQUIRED`
   - 非 put-class（`delete` / `head` / `get_control`）：`body` 必須 absent / null / `''` → 否則 `400 NON_PUT_REJECT_BODY`
-- **Body 出現 `bucket` 欄位（任何 truthy 值）**→ `400 BUCKET_FIELD_FORBIDDEN`（不只「不接受」更要主動 reject — fail-closed；binding 由 server-side 硬寫 `env.AUDIT_ARCHIVE_BUCKET`）
+- **Body 出現 `bucket` 欄位**（升 r3，codex r2 finding 4 — reject property presence 不看值）→ `400 BUCKET_FIELD_FORBIDDEN`：用 `Object.hasOwn(body, 'bucket')` 判斷，命中即 400，**不管值是 null / '' / false / undefined / 任何 truthy**（fail-closed；防止用 `bucket: null` 之類繞過）；binding 由 server-side 硬寫 `env.AUDIT_ARCHIVE_BUCKET`
 - 不存在 query string / URL param 注入路徑
 
 ### Lint / discipline 互動
@@ -198,7 +214,7 @@ Codex r1 verdict = **Reject plan as written; approve direction after below 7 fix
   "lifecycle_rule_name": "preview-gate-binding-<ts>-<rand>-cleanup",
   "retention_days": 1,
   "lifecycle_expire_days": 2,
-  "outcome": "PASS" | "FAIL_CRITICAL" | "FAIL_CLASSIFIER_MISS" | "FAIL_UNEXPECTED",
+  "outcome": "in_progress" | "PASS" | "FAIL_CRITICAL" | "FAIL_CLASSIFIER_MISS" | "FAIL_WRITE_BLOCKED" | "FAIL_STATE_BREACH" | "FAIL_UNEXPECTED",  // r3：與 §7 verdict 列舉同步 + 加 in_progress 對應 step 3 / 4 partial state
   "verdict_reason": "string — 人類可讀；對應下方 PASS/FAIL judgment",
   "wrangler_version": "4.87.0",
   "cf_account_id": "<masked first 8>...",
@@ -285,13 +301,17 @@ Codex r1 verdict = **Reject plan as written; approve direction after below 7 fix
 ### Runbook 強制順序
 1. 設 lifecycle add（先設無 retention enforce，安全）
 2. 設 lock add（不可逆 24h）
-3. **立刻** 寫初始 fixture entry（`outcome: "in_progress"`、含 prefix / lock_rule_name / lifecycle_rule_name）— 在跑任何 op 前
-4. 跑 5 個 op，每跑完一條更新對應 entry
-5. 5 個 op 結束後 finalize fixture（寫 summary / outcome / verdict_reason）
+3. **立刻** atomic-replace 正式 fixture（`outcome: "in_progress"`、含 prefix / lock_rule_name / lifecycle_rule_name；空 ops + 空 summary）— 在跑任何 op 前；寫 sibling `<fixture>.tmp` → `[System.IO.File]::Move(<tmp>, <final>, overwrite=true)`
+4. 跑 6 個 op（升 r3，codex r2 finding 3 — get_control 是 op 6），**每跑完一條** atomic-replace 正式 fixture，正式 path 上的 JSON 一直是當下最完整狀態（outcome 仍 `in_progress`、ops 已含已跑完的 N entry / partial summary）
+5. 6 個 op 結束後 finalize：算 summary + outcome verdict（PASS / 5 種 FAIL 之一）→ atomic-replace 正式 fixture 最後一次
 6. 不論 PASS / FAIL 都 `git add` + commit + push
 
-### 為什麼 step 3 必須立刻寫
-若 step 4 在跑 op 時 PowerShell session 掛掉 / network error / 中斷，sacrificial prefix 已設但 metadata 全在 terminal scrollback。Step 3 立刻寫 fixture（含 prefix + rule names）後就算 session 完全沒了，metadata 也在 disk + git working tree（即便沒 commit）。
+### 為什麼每步都 atomic replace 正式 fixture（升 r3，codex r2 finding 1）
+若 step 4 在跑 op 時 PowerShell session 掛掉 / network error / 中斷：
+- **r2 寫法**「全程 .tmp、最後才 move」→ 正式 fixture 路徑可能還不存在，metadata 只在 `.tmp`（容易被 user 誤刪、不在 git working tree 預期位置、cleanup 流程找不到）
+- **r3 寫法**「每步 atomic replace 正式 path」→ 正式 fixture 永遠是 disk truth；mid-run crash 後最壞情況是「partial outcome 留在正式 JSON、outcome 仍 in_progress」，但 prefix + rule names + control_key + 已跑 op 的 entries 都齊全 → S3 cleanup 可從正式 path 直接 recover
+
+`<fixture>.tmp` 是寫入過程的 race-safe staging file，**不**作為 long-lived state。完整流程：write tmp → fsync → atomic move → tmp 消失。
 
 ### S3 後 48hr 自動 cleanup
 1b spike S3 段已驗 lifecycle `--expire-days 2` 真的會清 sacrificial object。但 **lock rule + lifecycle rule entry 不會自動消** — 仍要手動移除（升 r2，codex finding 3 — wrangler 4.x 規定 `--id` 必填）：
@@ -390,15 +410,27 @@ if ($status -ne 404 -and $status -ne 405) {
 3. **執行步驟（Layer 0 — 對齊 binding canary outcome 不是 wrangler lock semantics）**
    - Step 0.1 生 prefix `sacrificial/preview-gate-binding/<ts>-<rand>/`（必符 PREFIX_REGEX `^sacrificial\/preview-gate-binding\/\d{8}-\d{6}-[0-9a-f]{6}\/$`） + lock_rule_name + lifecycle_rule_name
    - Step 0.2 lifecycle add → lock add（用 wrangler；這部分 wrangler owner privilege 不影響）
-   - Step 0.3 **立刻寫初始 fixture .tmp 檔**（atomic write — 寫 `<fixture>.tmp`，含 prefix / rule names / control_key tentative）
+   - Step 0.3 **atomic-replace 正式 fixture**（升 r3，codex r2 finding 1 — 不是「全程寫 tmp」）：寫 `<fixture>.tmp` → atomic move 到正式 path `docs/fixtures/preview-gate-binding-canary-<ts>.json`，內容 `outcome: "in_progress"` + prefix + lock_rule_name + lifecycle_rule_name + control_key + 空 ops[]
    - Step 0.4 lock propagation wait 10s（[[feedback_r2_lock_propagation_canary]]）
-   - Step 0.5 `Invoke-RestMethod` op 1 setup_control（POST endpoint）→ 補 fixture .tmp + 算 `expected_body_sha256`
-   - Step 0.6 op 2 put_overwrite → 補 fixture .tmp（驗 thrown + classifier_verdict）
-   - Step 0.7 op 3 put_new → 補 fixture .tmp（write-once design proof — **HARD PASS**：若 thrown 表示 FAIL_WRITE_BLOCKED）
-   - Step 0.8 op 4 delete → 補 fixture .tmp（驗 thrown + classifier_verdict）
-   - Step 0.9 op 5 head → 補 fixture .tmp（驗 control object 仍 routable）
-   - Step 0.10 op 6 **get_control** → 補 fixture .tmp（取 body_sha256；**HARD PASS**：sha 不對齊 expected 表示 FAIL_STATE_BREACH）
-   - Step 0.11 finalize fixture：算 summary + outcome verdict → atomic move `.tmp` 到正式 fixture path（PowerShell `Move-Item -LiteralPath -Force` 或 `[System.IO.File]::Move(src, dst)`；codex §14 answer — 寫 .tmp，成功後 replace 到正式 JSON）
+   - Step 0.5 `Invoke-RestMethod` op 1 setup_control（POST endpoint）→ 算 `expected_body_sha256` + atomic-replace 正式 fixture（ops[0] 入 + control_object.expected_body_sha256 入；outcome 仍 `in_progress`）
+   - Step 0.6 op 2 put_overwrite → atomic-replace 正式 fixture（ops[1] 入）
+   - Step 0.7 op 3 put_new → atomic-replace 正式 fixture（ops[2] 入；write-once design proof — **HARD PASS**：若 thrown 表示 FAIL_WRITE_BLOCKED，正式 fixture 仍 `in_progress` 直到 step 0.11 才升）
+   - Step 0.8 op 4 delete → atomic-replace 正式 fixture（ops[3] 入）
+   - Step 0.9 op 5 head → atomic-replace 正式 fixture（ops[4] 入）
+   - Step 0.10 op 6 **get_control** → atomic-replace 正式 fixture（ops[5] 入、control_object.get_body_sha256 入；**HARD PASS**：sha 不對齊 expected 表示 FAIL_STATE_BREACH）
+   - Step 0.11 finalize：算 summary + 從 §7 verdict matrix 算 outcome（`PASS` / 5 個 `FAIL_*` 之一）→ atomic-replace 正式 fixture 最後一次（outcome 升、verdict_reason 填、summary 完整）
+
+**PowerShell atomic replace 樣板**（每步重用）：
+```powershell
+# $finalPath = docs/fixtures/preview-gate-binding-canary-<ts>.json
+$tmpPath  = "$finalPath.tmp"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$jsonBody  = $fixture | ConvertTo-Json -Depth 6
+[System.IO.File]::WriteAllText((Join-Path (Get-Location) $tmpPath), $jsonBody + [Environment]::NewLine, $utf8NoBom)
+[System.IO.File]::Move((Join-Path (Get-Location) $tmpPath), (Join-Path (Get-Location) $finalPath), $true)  # overwrite=true，atomic on NTFS
+```
+
+正式 fixture 路徑**永遠**是 disk truth；`.tmp` 只在每步寫入過程短暫存在，正常路徑下不應殘留。若 PowerShell crash 在 `.tmp` 寫入後但 `.Move` 之前 → 下一次 user 進來看到 stale `.tmp` + 正式 fixture 還在上一步狀態 → 安全（正式 path 是 SoT）。
 4. **PASS/FAIL judgment**（§7 完整搬入）
 5. **成功收尾**（S1 fixture commit + push、S2 update GATE checklist `docs/AUDIT_ARCHIVE_LOCK_BEHAVIOR.md`、S3 48hr 後驗 lifecycle 自動清 + manual rule remove — 跨 session 從 fixture path recover）
 6. **失敗處理**（§7 三種 FAIL 分類各自的處置）
@@ -443,7 +475,7 @@ if ($status -ne 404 -and $status -ne 405) {
 | 跑 op 時 PowerShell session 中斷 | 中 | Medium（metadata 散落） | Step 0.3 立刻寫初始 fixture entry；S3 段跨 session recovery 已 codex r4/r5 補完 |
 | classifier_paths_hit helper extension 破 isR2LockError existing 11 binding fixture cases | 低 | High（baseline 退步） | 內部 helper 抽出後對外 boolean signature 不變；wholesale fixture regression 仍跑 |
 | Endpoint URL 撞既有 cron alphabet collision | 低 | Medium | grep `r2-preview-gate-binding-canary` 確認新名；既有 cron 命名 audit-archive-* 為主 |
-| Lock propagation 超過 10s | 中 | Low | Sleep 10s 後若 op 1 setup 失敗 reason=lock blocking，poll 多 10s 重試一次 |
+| Lock propagation 超過 10s | 中 | Low | 升 r3（codex r2 finding 5）：**不把 op 1 失敗當 propagation 延遲處理** — op 1 setup_control 寫 new key 進 locked prefix，按設計應 success（write-once），若 thrown 就是 FAIL_WRITE_BLOCKED 真實 bug、不該 retry；若擔心 propagation，獨立加 step 0.4b 走 `Invoke-RestMethod` head/get_control 對既不存在的 key 做 propagation probe，與 op 1 流程分離 — 但 1b spike + 1b.1 canary 已驗 10s sleep 足夠，此 mitigation 預設不啟用 |
 | Prod bucket binding 與 preview bucket binding 平台行為不一致 | 低 | High（gate 真正要驗的事） | 這是 gate 存在的意義；FAIL_CRITICAL 流程處理 |
 
 ---
