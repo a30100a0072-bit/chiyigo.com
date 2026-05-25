@@ -1,10 +1,38 @@
 # Preview Gate (b) PR Plan — Worker R2 Binding Canary on Prod Bucket
 
-**作者**：Claude（main HEAD `6945000`，2026-05-25，fresh session deep review）
+**狀態**：**r2 — applies codex r1 7 blocking fixes**（2026-05-25 晚間）
+**作者**：Claude（main HEAD `1bcf73b`，2026-05-25）
 **為何存在**：`docs/reviews/preview-gate-runbook-design-concern-2026-05-25.md` 經 codex review 後 verdict = **設計疑慮成立、選 (b) 並升格為 mandatory replacement**。本檔是 (b) PR 的完整 plan，給 codex 在 implementation 前先 review，避免實作中發現 gate semantics 還在變。
 **範圍**：替換 wrangler-based Layer 1 為 worker R2 binding canary，指向 prod bucket。
 **不可逆度**：執行階段（user 真跑 canary）會在 prod bucket `chiyigo-audit-archive` 設 24h sacrificial lock + control object。本 plan + 接續 PR code 都不會自動執行；明天 user 走完 walk-through 才動。
 **請 codex review**：endpoint contract / fixture schema / PASS+FAIL judgment / cleanup / two-commit chain 是否凍結得夠緊；有沒有寫進新假設、漏掉 invariant、或 prod-touching surface 殘留風險。
+
+---
+
+## Changelog: r1 → r2（2026-05-25 晚間）
+
+Codex r1 verdict = **Reject plan as written; approve direction after below 7 fixes**。全 7 fix 已套用：
+
+| # | r1 finding | 落實位置 |
+|---|---|---|
+| 1 | §7 PASS: `new_key_allowed` + `control_object_intact` 應 hard 不是 non-blocking | §7 升 7 條 HARD AND；fixture summary（§6）增 `setup_control_success` / `put_new_success` / `get_control_body_match` boolean；新增 FAIL_WRITE_BLOCKED + FAIL_STATE_BREACH 兩 FAIL 分類 |
+| 2 | Fixture 寫 `expected_body_sha256` 但 ops 只有 head 無法驗 — 缺 `get_control` op | §4 op enum 加第 6 個 `get_control`；response shape 含 `body_sha256 + size`（**NEVER raw body**）；§6 fixture 加 op 6；§10 runbook step 0.10 加 |
+| 3 | Cleanup commands 少 `--id` flag | §8 cleanup 兩條指令補 `--id` |
+| 4 | Prefix guard 只 `startsWith` 太寬 → 升完整 regex | §4 升 `PREFIX_REGEX = /^sacrificial\/preview-gate-binding\/\d{8}-\d{6}-[0-9a-f]{6}\/$/`；§10 step 0.1 同步 |
+| 4b | Op-specific body validation 漏 | §4 加 PUT_BODY_REQUIRED / NON_PUT_REJECT_BODY；body 出現 `bucket` 欄位升 fail-closed 400 BUCKET_FIELD_FORBIDDEN |
+| 5 | Two-commit chain 缺「commit 2 deploy removal verified」 | §9 加完整 Step A + B（等 Pages deployment hash 對齊 commit 2 + curl endpoint 預期 404/405）|
+| 6 | §11 non-goals 殘留「36 lock + 36 lifecycle」mismatch | §11 改 **18 lock + 18 lifecycle = 36 rules total**；§12 memory update 同步 |
+
+**§14 codex 7 answers 已內嵌進 plan**（取代原 open questions）：
+- PASS hard conditions 加 setup_control + put_new + get_control body match
+- 檔名保留 `r2-preview-gate-binding-canary.ts`
+- classifyR2LockError 加 **parity tests**（既有 isR2LockError 全 case 對齊）— §14c 新章
+- Commit 2 保留 helper，註解升「diagnostic classifier」非 canary-專用
+- 新檔名 `PREVIEW_GATE_RUNBOOK_BINDING.md`，舊文保留 DO NOT RUN
+- Fixture 走 atomic write `.tmp` → 正式 path（§10 step 0.3-0.11 多次 move）
+- wrangler.toml / types/env.d.ts 不動 OK
+
+**請 codex r2 驗**：7 fix 是否每條都正確收進 plan；§14b/14c 新章 + §15 動工順序對齊 r2 spec 是否漏 invariant。
 
 ---
 
@@ -68,19 +96,25 @@
 ### Request body
 ```typescript
 {
-  op: 'setup_control' | 'put_overwrite' | 'put_new' | 'delete' | 'head',
-  prefix: string,    // MUST start with PREFIX_GUARD
+  op: 'setup_control' | 'put_overwrite' | 'put_new' | 'delete' | 'head' | 'get_control',
+  prefix: string,    // MUST match PREFIX_REGEX
   key: string,       // MUST start with prefix
-  body?: string,     // 對 setup_control / put_overwrite / put_new 才有意義
+  body?: string,     // 對 put-class ops（setup_control / put_overwrite / put_new）必填 non-empty；其他 op reject
 }
 ```
 
-### 強制 invariant
-- `PREFIX_GUARD = 'sacrificial/preview-gate-binding/'`（與 wrangler runbook 的 `sacrificial/preview-gate/` 不同字串）
-- `prefix.startsWith(PREFIX_GUARD)` → 否則 `400 BAD_PREFIX`
+### 強制 invariant（fail-closed）
+- **Prefix regex**（升 r2，codex finding 2 — startsWith 太寬）：
+  ```
+  PREFIX_REGEX = /^sacrificial\/preview-gate-binding\/\d{8}-\d{6}-[0-9a-f]{6}\/$/
+  ```
+  → 不符 → `400 BAD_PREFIX`（reject `sacrificial/preview-gate-binding/xxx/`、`sacrificial/preview-gate-binding/2026-05-25/` 等任何不對齊 `<yyyymmdd>-<hhmmss>-<6hex>/` 結構的字串）
 - `key.startsWith(prefix)` → 否則 `400 BAD_KEY`
-- `op` 限定 5 個 → 否則 `400 BAD_OP`
-- **`body` 不接受 `bucket` 欄位**（codex 強調）— 任意 bucket 不可注入；binding 由 server-side 硬寫 `env.AUDIT_ARCHIVE_BUCKET`
+- `op` 限定 6 個 enum → 否則 `400 BAD_OP`
+- **Op-specific body validation**（升 r2，codex finding 2）：
+  - put-class（`setup_control` / `put_overwrite` / `put_new`）：`body` 必填且非空 string → 否則 `400 PUT_BODY_REQUIRED`
+  - 非 put-class（`delete` / `head` / `get_control`）：`body` 必須 absent / null / `''` → 否則 `400 NON_PUT_REJECT_BODY`
+- **Body 出現 `bucket` 欄位（任何 truthy 值）**→ `400 BUCKET_FIELD_FORBIDDEN`（不只「不接受」更要主動 reject — fail-closed；binding 由 server-side 硬寫 `env.AUDIT_ARCHIVE_BUCKET`）
 - 不存在 query string / URL param 注入路徑
 
 ### Lint / discipline 互動
@@ -96,7 +130,12 @@
   key: string,
   bucket: 'chiyigo-audit-archive',   // hardcoded (not from body)
   outcome: 'success' | 'thrown',
-  success_meta: { etag, httpEtag, size, version } | { deleted: true } | { etag, size } | null,
+  success_meta:
+    | { etag, httpEtag, size, version }       // put-class success
+    | { deleted: true }                        // delete success
+    | { etag, size }                           // head success
+    | { body_sha256: string, size: number }    // get_control success (r2: hash-only, NEVER raw body)
+    | null,
   thrown: ThrownShape | null,
   classifier_verdict: boolean | null,  // null when outcome === 'success'; boolean when 'thrown'
   classifier_paths_hit: string[] | null, // null when success; subset of ['fast_path_code', 'canonical_phrase', 'numeric_code', 'dual_condition'] when thrown — 跟 isR2LockError 三路對齊（debug 用）
@@ -105,6 +144,8 @@
 ```
 
 `ThrownShape` 同 1b.1（`name / message / code / status / cause / stringified`）— fixture 比對相容。
+
+**`get_control` 設計（升 r2，codex finding 2）**：endpoint 走 binding `.get(key)` 讀回小型 canary body（setup_control 預先 PUT 已知 sha256 的 byte string；建議 64-byte 含 ts + rand），**internal compute `sha256(arrayBuffer)` + return `{ body_sha256: <hex>, size }`**。`get_control` response **絕不**含 raw body bytes（避免 fixture 落地的位元組成為 leak surface 或 git 體積 bloat；fixture 比對 hash 即可）。對應 fixture summary 加 `control_object_body_matches`（hash 比對 setup_control 階段預先計算的 expected sha256）作 hard PASS 條件。
 
 **`classifier_paths_hit` 設計考量**：codex 強調「response 同時回 raw thrown shape + isR2LockError(thrown) verdict」。光是 boolean 不夠 forensic — 要知道是哪條 path 命中才能比對 S3 vs binding shape 差異。但 `isR2LockError` 目前只回 boolean，**需擴展 helper**（暴露 `classifyR2LockError(): { matched: boolean, paths: string[] }`，原 `isR2LockError` 內部呼叫之 + 對外保留 boolean signature 不破 caller）。
 
@@ -171,26 +212,29 @@
       "actual_outcome": "success" | "thrown",
       "response_body": { /* full endpoint response */ }
     },
-    /* step 2 put_overwrite, 3 put_new, 4 delete, 5 head — 同 1b.1 順序 */
+    /* step 2 put_overwrite, 3 put_new, 4 delete, 5 head, 6 get_control — 6 ops 順序固定 */
   ],
 
   "control_object": {
     "key": "<full key>",
-    "expected_body_sha256": "<sha256 hex>",
-    "head_after_delete": { /* op 5 response */ }
+    "expected_body_sha256": "<sha256 hex — setup_control 階段預先計算>",
+    "head_after_delete_attempt": { /* op 5 head response */ },
+    "get_body_sha256": "<sha256 hex — op 6 get_control 回的；PASS 必須與 expected 完全一致>"
   },
 
   "summary": {
-    "overwrite_blocked": boolean,        // op 2 outcome === 'thrown'
-    "overwrite_classifier_hit": boolean, // op 2 classifier_verdict === true
-    "overwrite_paths_hit": string[],     // op 2 classifier_paths_hit
-    "delete_blocked": boolean,           // op 4 outcome === 'thrown'
-    "delete_classifier_hit": boolean,    // op 4 classifier_verdict === true
-    "delete_paths_hit": string[],        // op 4 classifier_paths_hit
-    "new_key_allowed": boolean,          // op 3 outcome === 'success'
-    "control_object_intact": boolean,    // op 5 size matches control_body_sha256 expected
-    "binding_throw_shape_matches_1b1": boolean,  // diff against r2-lock-binding-canary-2026-05-24.json
-    "binding_throw_shape_diff": object | null    // if !matches: diff summary
+    "setup_control_success": boolean,        // op 1 outcome === 'success'（HARD PASS）
+    "overwrite_blocked": boolean,            // op 2 outcome === 'thrown'（HARD PASS）
+    "overwrite_classifier_hit": boolean,     // op 2 classifier_verdict === true（HARD PASS）
+    "overwrite_paths_hit": string[],         // op 2 classifier_paths_hit
+    "put_new_success": boolean,              // op 3 outcome === 'success'（HARD PASS — write-once design 仰賴此；若 false 表示 prod lock 上線後新 chunk/manifest 寫不進）
+    "delete_blocked": boolean,               // op 4 outcome === 'thrown'（HARD PASS）
+    "delete_classifier_hit": boolean,        // op 4 classifier_verdict === true（HARD PASS）
+    "delete_paths_hit": string[],            // op 4 classifier_paths_hit
+    "head_after_delete_intact": boolean,     // op 5 outcome === 'success'（control object 未被 op 4 動到）
+    "get_control_body_match": boolean,       // op 6 body_sha256 === expected_body_sha256（HARD PASS — overwrite/delete 沒造成狀態破壞的最終證明）
+    "binding_throw_shape_matches_1b1": boolean,  // diff against r2-lock-binding-canary-2026-05-24.json（non-blocking record）
+    "binding_throw_shape_diff": object | null    // if !matches: diff summary（forensic only）
   },
 
   "next_steps_if_pass": ["proceed to PR 0.2c full prod lock — 18+18=36 rules"],
@@ -207,26 +251,30 @@
 
 ---
 
-## 7. PASS/FAIL judgment（嚴格）
+## 7. PASS/FAIL judgment（嚴格 — 升 r2，codex finding 1）
 
-### PASS（全 4 條 AND）
-1. `overwrite_blocked === true` （op 2 thrown）
-2. `overwrite_classifier_hit === true` （isR2LockError 命中）
-3. `delete_blocked === true` （op 4 thrown）
-4. `delete_classifier_hit === true` （isR2LockError 命中）
+### PASS（全 7 條 HARD AND）
+1. `setup_control_success === true` （op 1 PUT new key 進 locked prefix 必過；若 false 表示 write-once design 在 prod bucket 不成立）
+2. `overwrite_blocked === true` （op 2 thrown）
+3. `overwrite_classifier_hit === true` （isR2LockError 命中 op 2）
+4. `put_new_success === true` （op 3 PUT new key 進已 locked prefix 必過；**HARD** — 若 false 表示 lock 連合法 new key 也擋，prod lock 上線後新 chunk/manifest 寫不進、archive 流程整個 break；Cloudflare bucket lock docs 定義 lock 防 deletion/overwrite，**不**防新物件寫入，若擋是真實 bug）
+5. `delete_blocked === true` （op 4 thrown）
+6. `delete_classifier_hit === true` （isR2LockError 命中 op 4）
+7. `get_control_body_match === true` （op 6 sha256 等於 setup_control 階段的 expected_body_sha256；**HARD** — overwrite/delete 沒造成 state 破壞的最終證明；codex finding 1 強調沒這條 gate 沒證明完整）
 
-附加（**non-blocking 但記錄**）：
-- `new_key_allowed === true`（op 3 success；若 false 表示 lock 連 new key 也擋，超出設計預期，但不 block PASS — 反向更安全）
-- `control_object_intact === true`（op 5 head 仍回 success 且 etag 對齊 setup）
-- `binding_throw_shape_matches_1b1 === true`（与 1b.1 preview fixture 對齊）
+**Non-blocking 但記錄**（forensic only）：
+- `head_after_delete_intact === true`（op 5 head 仍回 success；冗餘訊號，肯定 control 物件被 op 4 嘗試 DELETE 失敗 + body 沒被改）
+- `binding_throw_shape_matches_1b1 === true`（与 1b.1 preview fixture diff 對齊；若不同記 diff 但不 block — 真實平台行為 drift 才是新 issue）
 
 ### FAIL 分類
 
 | outcome 字串 | 觸發條件 | 處理 |
 |---|---|---|
-| `FAIL_CRITICAL` | op 2 OR op 4 `outcome === 'success'`（binding 真的沒擋）| **prod lock 上線 BLOCKED**；開 CF support ticket 問 prod bucket binding 與 preview bucket 是否平台行為不同；保留 sacrificial prefix 24h 作 forensic |
+| `FAIL_CRITICAL` | op 2 OR op 4 `outcome === 'success'`（binding 真的沒擋 overwrite/delete）| **prod lock 上線 BLOCKED**；開 CF support ticket 問 prod bucket binding 與 preview bucket 是否平台行為不同；保留 sacrificial prefix 24h 作 forensic |
 | `FAIL_CLASSIFIER_MISS` | op 2 / op 4 thrown 但 classifier_verdict === false（binding 擋了但 classifier 漏判） | **prod lock 上線 BLOCKED**；classifier extend PR + 補 fixture wholesale regression；保留 fixture forensic |
-| `FAIL_UNEXPECTED` | endpoint 回 4xx/5xx (auth / validation / binding missing) / op 1 setup_control thrown | **prod lock 上線 BLOCKED**；停下 debug；保留 fixture |
+| `FAIL_WRITE_BLOCKED` | op 1 setup_control OR op 3 put_new `outcome === 'thrown'`（lock 連新物件都擋；違反 Cloudflare bucket lock 設計）| **prod lock 上線 BLOCKED**；CF support 確認 bucket lock 真實平台行為；archive write-once design 重新設計 |
+| `FAIL_STATE_BREACH` | op 6 get_control body_sha256 !== expected_body_sha256（overwrite 嘗試實際改成了 body）| **prod lock 上線 BLOCKED + CRITICAL**：lock 沒 enforce 寫入完整性；同 FAIL_CRITICAL 嚴重度但獨立分類便於 forensic 區分 |
+| `FAIL_UNEXPECTED` | endpoint 回 4xx/5xx (auth / validation / binding missing) | **prod lock 上線 BLOCKED**；停下 debug；保留 fixture |
 
 ---
 
@@ -246,10 +294,10 @@
 若 step 4 在跑 op 時 PowerShell session 掛掉 / network error / 中斷，sacrificial prefix 已設但 metadata 全在 terminal scrollback。Step 3 立刻寫 fixture（含 prefix + rule names）後就算 session 完全沒了，metadata 也在 disk + git working tree（即便沒 commit）。
 
 ### S3 後 48hr 自動 cleanup
-1b spike S3 段已驗 lifecycle `--expire-days 2` 真的會清 sacrificial object。但 **lock rule + lifecycle rule entry 不會自動消** — 仍要手動移除：
+1b spike S3 段已驗 lifecycle `--expire-days 2` 真的會清 sacrificial object。但 **lock rule + lifecycle rule entry 不會自動消** — 仍要手動移除（升 r2，codex finding 3 — wrangler 4.x 規定 `--id` 必填）：
 ```powershell
-npx wrangler r2 bucket lock remove chiyigo-audit-archive $lock_rule_name
-npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive $lifecycle_rule_name
+npx wrangler r2 bucket lock remove chiyigo-audit-archive --id $lock_rule_name
+npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive --id $lifecycle_rule_name
 ```
 
 新 runbook S3 段加 **fixture path Read-Host fallback**（與 current runbook codex r4/r5 補完同 pattern）：
@@ -283,7 +331,7 @@ npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive $lifecycle_rule_na
 1. Pages deploy 完成 + 同步 deploy commit hash 對齊
 2. user 跑 walk-through（fresh session 接手）
 3. user 設 `wrangler r2 bucket lifecycle add` + `lock add`（沿用 wrangler，因為 setup 不在 lock semantics gate scope）
-4. user `Invoke-RestMethod` 5 ops，每 op 立刻寫 fixture entry
+4. user `Invoke-RestMethod` 6 ops，每 op 立刻寫 fixture entry（atomic write — §6 細節）
 5. fixture finalize + commit + push（這個 commit 是 plan 第三個，**不在 two-commit chain 內**，是 between-commits 的 forensic artifact）
 
 ### Commit 2 — Remove endpoint
@@ -295,13 +343,39 @@ npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive $lifecycle_rule_na
 - 刪 `tests/integration/r2-preview-gate-binding-canary.test.ts`
 - 改 `docs/AUDIT_ARCHIVE_LOCK_BEHAVIOR.md`（紀錄 PR 0.2c-pre-3 outcome）
 - 改 `docs/AUDIT_RETENTION_PLAN.md`（gate checklist tick / cross-tick）
-- **保留**：`functions/utils/audit-archive.ts` 的 `classifyR2LockError` helper（給未來 forensic / debug 用，不算 prod-touching surface）
+- **保留**：`functions/utils/audit-archive.ts` 的 `classifyR2LockError` helper — 升級為 **「diagnostic classifier 」**（codex §14 answer，非 canary-專用命名；給未來 forensic / debug 用）；註解段加「為何留：暴露 isR2LockError 內部 path 命中情形，便於將來 binding/S3 throw shape 改變時快速比對」
 
 **Baseline 要求**：
 - 同 commit 1 baseline
 - test count 回到 commit 1 之前 + classifier regression（5 ish 增量留）
 
 **重要**：commit 2 把臨時 prod-touching endpoint 從 prod 移除，避免遺留 surface（與 1b.1 commit 2 一致）。
+
+### Commit 2 deploy removal verified（升 r2，codex finding 4）
+
+**`git push commit 2 ≠ prod endpoint 已消失`**。Pages auto-deploy 有 ~30-90s 延遲；commit 2 推完到 endpoint 真正從 prod 消失之間有 race window。本步驟在 commit 2 push 後**強制執行**才能宣稱 prod-touching surface removed：
+
+```powershell
+# Step A: 等 Pages production deployment hash 對齊 commit 2
+# 開 CF dashboard → Workers & Pages → chiyigo-com → Deployments
+# 等最新 Production deployment commit = <commit-2-short-hash>
+# 或 wrangler CLI:
+$expectedHash = (git rev-parse --short=8 HEAD)
+# poll Pages deployments API（或人眼盯 dashboard）
+
+# Step B: curl endpoint 預期 404 / 405 / Method Not Allowed
+$endpointUrl = 'https://chiyigo.com/api/admin/cron/r2-preview-gate-binding-canary'
+$probe = try { Invoke-WebRequest -Uri $endpointUrl -Method POST -Headers @{'Authorization' = 'Bearer fake-for-removal-check'} -Body '{}' -ContentType 'application/json' -ErrorAction Stop } catch { $_.Exception.Response }
+$status = [int]$probe.StatusCode
+
+# 預期 status 是 404（Pages function 已移除）或 405（route 不在）
+if ($status -ne 404 -and $status -ne 405) {
+  throw "Endpoint removal verify FAIL: got status $status; commit 2 may not have deployed yet, OR endpoint still routable on prod"
+}
+"Endpoint removal verified: status=$status (404/405 expected)"
+```
+
+**只有 Step A + B 都過**才可結案 PR 0.2c-pre-3 + memory 標 prod-touching surface removed。若 Step B 拿到 401 / 200 表示 endpoint 仍然 routable — 立刻檢查 Pages deployment 是否真換到 commit 2、必要時 redeploy。
 
 ---
 
@@ -314,16 +388,17 @@ npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive $lifecycle_rule_na
 1. **🔴 安全護欄**（不可逆度 + prefix 強制 + retention 上限 + 不做的事 — 對齊舊 runbook §安全護欄）
 2. **預備檢查** A1–A4（OAuth identity + CRON_SECRET 取得 + main HEAD 對齊 + Pages prod deploy 對齊）
 3. **執行步驟（Layer 0 — 對齊 binding canary outcome 不是 wrangler lock semantics）**
-   - Step 0.1 生 prefix + lock_rule_name + lifecycle_rule_name
+   - Step 0.1 生 prefix `sacrificial/preview-gate-binding/<ts>-<rand>/`（必符 PREFIX_REGEX `^sacrificial\/preview-gate-binding\/\d{8}-\d{6}-[0-9a-f]{6}\/$`） + lock_rule_name + lifecycle_rule_name
    - Step 0.2 lifecycle add → lock add（用 wrangler；這部分 wrangler owner privilege 不影響）
-   - Step 0.3 **立刻寫初始 fixture entry**（含 prefix / rule names / control_key tentative）
+   - Step 0.3 **立刻寫初始 fixture .tmp 檔**（atomic write — 寫 `<fixture>.tmp`，含 prefix / rule names / control_key tentative）
    - Step 0.4 lock propagation wait 10s（[[feedback_r2_lock_propagation_canary]]）
-   - Step 0.5 `Invoke-RestMethod` op 1 setup_control（POST endpoint）→ 寫 fixture
-   - Step 0.6 op 2 put_overwrite → 寫 fixture（驗 thrown + classifier_verdict）
-   - Step 0.7 op 3 put_new → 寫 fixture（write-once design proof）
-   - Step 0.8 op 4 delete → 寫 fixture（驗 thrown + classifier_verdict）
-   - Step 0.9 op 5 head → 寫 fixture（驗 control intact）
-   - Step 0.10 finalize fixture summary + outcome verdict
+   - Step 0.5 `Invoke-RestMethod` op 1 setup_control（POST endpoint）→ 補 fixture .tmp + 算 `expected_body_sha256`
+   - Step 0.6 op 2 put_overwrite → 補 fixture .tmp（驗 thrown + classifier_verdict）
+   - Step 0.7 op 3 put_new → 補 fixture .tmp（write-once design proof — **HARD PASS**：若 thrown 表示 FAIL_WRITE_BLOCKED）
+   - Step 0.8 op 4 delete → 補 fixture .tmp（驗 thrown + classifier_verdict）
+   - Step 0.9 op 5 head → 補 fixture .tmp（驗 control object 仍 routable）
+   - Step 0.10 op 6 **get_control** → 補 fixture .tmp（取 body_sha256；**HARD PASS**：sha 不對齊 expected 表示 FAIL_STATE_BREACH）
+   - Step 0.11 finalize fixture：算 summary + outcome verdict → atomic move `.tmp` 到正式 fixture path（PowerShell `Move-Item -LiteralPath -Force` 或 `[System.IO.File]::Move(src, dst)`；codex §14 answer — 寫 .tmp，成功後 replace 到正式 JSON）
 4. **PASS/FAIL judgment**（§7 完整搬入）
 5. **成功收尾**（S1 fixture commit + push、S2 update GATE checklist `docs/AUDIT_ARCHIVE_LOCK_BEHAVIOR.md`、S3 48hr 後驗 lifecycle 自動清 + manual rule remove — 跨 session 從 fixture path recover）
 6. **失敗處理**（§7 三種 FAIL 分類各自的處置）
@@ -338,7 +413,7 @@ npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive $lifecycle_rule_na
 - (a) 「直接信 preview binding fixture 外推 prod bucket」— 跳過一層 prod bucket-specific 驗證；codex 不建議
 - (c) S3 sigv4 + limited token 路徑 — auxiliary 可用，但 **本 PR 不實作**；若未來 binding 路徑出問題 + S3 也想驗，獨立 PR 處理
 - prod cron behavior change：本 PR **完全不動** archive worker / aggregate worker / force_purge endpoint 邏輯
-- prod bucket 36 lock + 36 lifecycle 上線：本 PR PASS 後，才 plan 下一個 PR 0.2c 真上線
+- prod bucket **18 lock + 18 lifecycle = 36 rules total** 上線（升 r2，codex finding 5 — 對齊 `docs/AUDIT_RETENTION_PLAN.md` line 906 SoT）：本 PR PASS 後，才 plan 下一個 PR 0.2c 真上線
 - wrangler OAuth scope rotate / token 更換：與 gate semantics 無關
 
 ---
@@ -350,7 +425,7 @@ npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive $lifecycle_rule_na
 - 新增 [[reference_r2_lock_gate_design_evolution]]：紀錄 wrangler-based → binding-based 設計演進 + 為何 0.2a/wrangler 路徑被拒；給未來類似 gate 設計參考
 
 ### Update after commit 2（PASS path）
-- `project_audit_phase2.md`：「preview gate PASS + fixture 路徑」+ 「下一步 PR 0.2c 36 rules 上線」
+- `project_audit_phase2.md`：「preview gate PASS + fixture 路徑」+ 「下一步 PR 0.2c 18+18=36 rules total 上線」
 - `docs/AUDIT_ARCHIVE_LOCK_BEHAVIOR.md` checklist 加新 tick
 
 ### Update after commit 2（FAIL path）
@@ -373,35 +448,63 @@ npx wrangler r2 bucket lifecycle remove chiyigo-audit-archive $lifecycle_rule_na
 
 ---
 
-## 14. Open questions for codex
+## 14. Open questions — codex r1 answers（已收，2026-05-25）
 
-1. **PASS 判定是否漏了某條**：4 條 AND 是否夠？應該加 `binding_throw_shape_matches_1b1`（與 1b.1 preview fixture 形狀對齊）作硬性 PASS 條件？或保持為「non-blocking 但記錄」？
-2. **新檔名是否 OK**：`r2-preview-gate-binding-canary.ts` 與 1b.1 `r2-binding-canary.ts`（已刪）名稱長近一倍，但意圖明確；codex 偏好較短名（e.g. `prod-gate-canary.ts`）還是現用？
-3. **classifyR2LockError helper 抽法**：暴露 `paths: string[]` 給 endpoint 是否破 existing 11 cases wholesale regression？或要為新 helper 加額外 fixture entry？
-4. **Commit 2 是否該保留 `classifyR2LockError` helper**：我 plan 保留作 forensic helper；codex 是否認為應該移除避免「extracted-for-canary-but-never-used」未來疑問？
-5. **新 runbook 取名 `PREVIEW_GATE_RUNBOOK_BINDING.md`**：是否該直接覆寫舊 `PREVIEW_GATE_RUNBOOK.md`（保留 git history 即可）而非開新檔？
-6. **Step 0.3 fixture early-write**：是否要寫 partial JSON 進 disk（git working tree 但未 commit），還是寫進獨立 `.tmp.json` 然後 finalize 時 rename？前者 simpler、後者 atomic（但 user 通常不會 mid-run crash）
-7. **wrangler.toml 不動 / types/env.d.ts 不動的假設**：`env.AUDIT_ARCHIVE_BUCKET` binding 在 wrangler.toml 已配；本 PR 沒 binding 變動；type definition 也已存在。請 codex 確認無漏掉 contract 動作。
+| # | Question | Codex answer | 落實位置 |
+|---|---|---|---|
+| 1 | PASS 條件是否漏 | 加硬條件：setup_control success + put_new success + get_control body_sha256 match；binding_throw_shape_matches_1b1 保持 non-blocking record | §7 升 7 條 HARD AND；§6 fixture summary 增 6 個 boolean key |
+| 2 | 檔名 | OK，長但清楚；保留 `r2-preview-gate-binding-canary.ts` | §3 維持 |
+| 3 | classifyR2LockError 抽法 | 可抽，但加 **parity tests**：所有既有 isR2LockError cases 都要等於 `classify(...).matched` | §11 test 段加 parity 要求 |
+| 4 | Commit 2 保留 helper | 保留，加註「**diagnostic classifier**」，不留 canary 專用命名 | §9 commit 2 段已修 |
+| 5 | 新 runbook 命名 | `PREVIEW_GATE_RUNBOOK_BINDING.md` OK；舊文保留 DO NOT RUN + 指向新檔 | §10 維持，舊文已 safety patch |
+| 6 | Fixture early-write | 用 final fixture path，每次更新走 **atomic write**：寫 `.tmp`，成功後 replace/move 到正式 JSON；不要只寫 tmp 到 finalize | §10 step 0.3-0.11 升 atomic 多次 move；§13 風險表更新 |
+| 7 | wrangler.toml / types/env.d.ts 不動的假設 | 確認 OK；`AUDIT_ARCHIVE_BUCKET` 已存在 | §4 file 觸點維持 |
 
 ---
 
-## 15. Tomorrow 動工順序
+## 14b. Codex r1 blocking findings — 7 fix 已套用（2026-05-25）
 
-1. Fresh session 開始 → 讀 `MEMORY.md` + 本 plan + commit 1 task 細節
-2. 寫 `r2-preview-gate-binding-canary.ts`（copy 1b.1 + §3 6 點 diff）
-3. 寫 `classifyR2LockError` helper extension + 暴露 paths
-4. 寫 unit tests（19+ cases）+ int tests（4+ cases）+ classifier regression（5+ cases）
+| # | Finding | Fix 位置 |
+|---|---|---|
+| 1 | §7 PASS 應升 hard：new_key + control body match 不是 non-blocking | §7 升 7 條 HARD AND + 新增 FAIL_WRITE_BLOCKED / FAIL_STATE_BREACH 兩 FAIL 分類 |
+| 2 | Fixture 寫 expected_body_sha256 但 ops 沒驗 — 缺 `get_control` op，head 不夠 | §4 op enum 加 `get_control`；response shape 含 `body_sha256 + size`（NEVER raw body）；§6 fixture 加 op 6；§10 runbook step 0.10 加 op 6 |
+| 3 | Cleanup commands 少 `--id` flag | §8 cleanup 兩條指令補 `--id` |
+| 4 | Prefix guard 只 startsWith 太寬 | §4 升完整 regex `^sacrificial\/preview-gate-binding\/\d{8}-\d{6}-[0-9a-f]{6}\/$`；§10 step 0.1 也補上 |
+| 4b | Op-specific body validation 漏 | §4 加 PUT_BODY_REQUIRED / NON_PUT_REJECT_BODY；body bucket field 改 fail-closed 400 BUCKET_FIELD_FORBIDDEN |
+| 5 | Two-commit chain 缺「commit 2 deploy removal verified」步驟 | §9 加完整 Step A + B（等 Pages deployment 對齊 commit 2 hash + curl endpoint 預期 404/405）|
+| 6 | §11 non-goals 殘留「36 lock + 36 lifecycle」 mismatch | §11 改 **18 lock + 18 lifecycle = 36 rules total**；§12 memory update 同步 |
+
+---
+
+## 14c. Codex r1 衍生新 test 要求（§14 answer 3）
+
+**Parity tests for `classifyR2LockError`**：
+- 既有 isR2LockError test cases 全跑兩遍（透過 helper 暴露 `classify(...).matched === isR2LockError(...)` 對齊）
+- 任何單一 mismatch → test fail
+- 落實位置：`tests/audit-archive.test.ts` 新 describe `PR 0.2c-pre-3 classifyR2LockError parity`，逐 case 走原 isR2LockError test fixtures，assert 兩函式結果同步
+- 預估 +existing cases 數量（PR 1b spike-tightened + 1b.2 binding extend cases，合計約 25-30 個 case）
+
+加進 §9 commit 1 baseline 要求：classifier regression 從 5 ish → ~30 cases（parity 全跑一遍）。
+
+---
+
+## 15. Tomorrow 動工順序（升 r2）
+
+1. Fresh session 開始 → 讀 `MEMORY.md` + 本 plan（**r2 版本含 codex 7 fix**） + commit 1 task 細節
+2. 寫 `r2-preview-gate-binding-canary.ts`（copy 1b.1 + §3 6 點 diff + §4 op-specific validation + regex prefix + get_control）
+3. 寫 `classifyR2LockError` helper extension + 暴露 `{ matched, paths }`；對外保留 `isR2LockError(e: unknown): boolean` 不變
+4. 寫 unit tests（21+ cases — 多 get_control / body validation / prefix regex 邊界 case）+ int tests（5+ cases — 多 get_control round-trip）+ classifier regression parity（既有 + ~30 parity cases）
 5. typecheck / npm test / npm test:int / build / lint:handlers / lint:archive-no-delete / ratchet:report 全綠
 6. Commit 1 + push
 7. 等 codex review commit 1
 8. Codex Approve 後 deploy + 對齊 Pages prod commit hash
 9. User 走 walk-through 跑 canary（fresh session 接手 — Claude 帶 user 過 §10 runbook）
-10. Fixture finalize + commit
-11. Codex review fixture（PASS/FAIL outcome 判定）
-12. Commit 2（PASS / FAIL 都做）
+10. Fixture finalize（atomic write `.tmp` → final）+ commit + push
+11. Codex review fixture（PASS / 5 FAIL 分類 verdict 判定）
+12. Commit 2（PASS / FAIL 都做）+ §9 Step A + B prod removal verified
 13. 等 codex review commit 2
 14. Memory update + 結案
 
 ---
 
-**請 codex 給 verdict**：本 plan 是否凍結得夠緊？§14 七個 open question 給答案？有沒有漏掉 invariant / 漏掉 prod-touching surface 風險 / 漏掉 cleanup 步驟？
+**請 codex r2 給 verdict**：7 個 blocking fix 是否凍結到位？§14b 七 fix 落實位置正確？§14c parity tests 範圍是否合理？有沒有新假設被寫進 plan？
