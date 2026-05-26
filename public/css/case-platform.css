@@ -91,21 +91,17 @@
 .cp-stack-h{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.05em;color:var(--accent);text-transform:uppercase;margin-bottom:10px;font-weight:600}
 .cp-stack-l{font-size:13px;line-height:1.65;color:var(--text-muted)}
 
-/* ── Light mode overrides ── */
-:root.theme-light .cp-stat{background:#fff;border-color:rgba(15,17,30,.08)}
-:root.theme-light .cp-arch{background:#fff;border-color:rgba(15,17,30,.08)}
-:root.theme-light .cp-node{background:#fff;border-color:rgba(15,17,30,.1);color:#1a1d2b}
-:root.theme-light .cp-node:hover{border-color:var(--accent);box-shadow:0 0 0 4px rgba(108,110,229,.1)}
-:root.theme-light .cp-panel{background:#fff;border-color:rgba(15,17,30,.08)}
-:root.theme-light .cp-panel-close{border-color:rgba(15,17,30,.1)}
-:root.theme-light .cp-panel-close:hover{background:rgba(15,17,30,.04)}
-:root.theme-light .cp-stack-col{background:#fff;border-color:rgba(15,17,30,.08)}
-:root.theme-light .cp-stage{background:radial-gradient(circle at 50% 50%,rgba(108,110,229,.06),transparent 65%)}
-:root.theme-light .cp-panel-head{border-bottom-color:rgba(15,17,30,.1)}
-:root.theme-light .cp-mono{color:#3a3f55}
-:root.theme-light .cp-panel-select{background-color:#f5f6fb;border-color:rgba(15,17,30,.1);color:#1a1d2b}
+/* ── Light mode overrides ──
+   多數 cascade 已交給 _tokens.css 的 light root + 新 token swap 處理；
+   這裡只保留 token 系統無法表達的兩項設計意圖：
+   1. .cp-node / .cp-panel 在 light 模式用 surface/elevated tier 的「白卡」
+      跳出 page bg（var(--bg) light = #F0F2FA，會跟 page 重疊）
+   2. <option> 元素 Chrome on Windows 不繼承 select color 也不解析 var()，
+      必須 hardcoded hex（per [[feedback_select_option_explicit_colors]]）
+*/
+:root.theme-light .cp-node{background:var(--bg-surface);border-color:var(--border-mid);color:var(--text)}
+:root.theme-light .cp-panel{background:var(--bg-elevated);border-color:var(--border)}
 :root.theme-light .cp-panel-select option{background:#fff;color:#1a1d2b}
-:root.theme-light .cp-panel-picker{border-bottom-color:rgba(15,17,30,.1)}
 
 /* ── Mobile ── */
 @media (max-width:960px){

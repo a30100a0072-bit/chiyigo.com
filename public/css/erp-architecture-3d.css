@@ -35,9 +35,6 @@
 .erp3-chain-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(108,110,229,.32)}
 .erp3-chain-note{font-size:12.5px;line-height:1.65;color:var(--text-muted);background:rgba(108,110,229,.06);border:1px dashed rgba(108,110,229,.28);border-radius:10px;padding:10px 14px;margin:0}
 .erp3-chain-note[hidden]{display:none !important}
-:root.theme-light .erp3-chain-btn{border-color:rgba(15,17,30,.12);color:#3a3f55}
-:root.theme-light .erp3-chain-btn:hover{color:#1a1d2b}
-:root.theme-light .erp3-chain-note{background:rgba(108,110,229,.05);color:#3a3f55}
 
 .erp3-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:24px;align-items:start}
 
@@ -113,12 +110,12 @@
 .erp3-panel-tags{display:flex;flex-wrap:wrap;gap:6px}
 .erp3-panel-tags span{padding:4px 10px;background:rgba(108,110,229,.1);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;border-radius:6px;border:1px solid rgba(108,110,229,.2)}
 
-/* ── Light mode overrides ── */
-:root.theme-light .erp3-frame{background:#fff;border-color:rgba(15,17,30,.08)}
-:root.theme-light .erp3-scene{background:radial-gradient(ellipse at 50% 60%,rgba(108,110,229,.08),transparent 65%),radial-gradient(ellipse at 50% 85%,rgba(108,110,229,.04),transparent 50%)}
-:root.theme-light .erp3-panel{background:#fff;border-color:rgba(15,17,30,.08)}
-:root.theme-light .erp3-panel-head{border-bottom-color:rgba(15,17,30,.1)}
-:root.theme-light .erp3-btn{border-color:rgba(15,17,30,.12);color:#3a3f55}
+/* ── Light mode overrides ──
+   多數 cascade 已交給 _tokens.css 的 light root + 新 token swap 處理；
+   這裡只保留 .erp3-panel 的「白卡」設計意圖：base 用 var(--bg) light = #F0F2FA
+   會跟 page bg 重疊，需 raise 到 --bg-elevated tier。
+*/
+:root.theme-light .erp3-panel{background:var(--bg-elevated);border-color:var(--border)}
 
 /* ── Mobile / narrow ── */
 @media (max-width:960px){
