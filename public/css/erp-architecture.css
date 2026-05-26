@@ -25,6 +25,11 @@
 .erp-arch-title{font-family:'DM Mono',monospace;font-size:14px;color:var(--accent);letter-spacing:.04em;font-weight:500;margin:0 0 6px}
 .erp-arch-hint{font-size:13px;color:var(--text-2,#9aa1b3);margin:0}
 
+.erp-arch-cover{display:block;width:100%;aspect-ratio:16/9;margin:0 0 18px;border-radius:14px;overflow:hidden;border:1px solid var(--bd,rgba(255,255,255,.08));background:var(--bg-2,rgba(255,255,255,.02));position:relative}
+.erp-arch-cover img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s ease}
+.erp-arch-cover:hover img{transform:scale(1.03)}
+.erp-arch-cover:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
 /* ── Event-chain selector bar ── */
 .erp-chain-wrap{margin:0 0 20px;display:flex;flex-direction:column;gap:10px}
 .erp-chain-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -164,5 +169,7 @@
   #neural-canvas{display:none}
   .erp-node,.erp-lines line{transition:none;animation:none !important}
   .erp-node:hover{transform:translate(-50%,-50%)}
+  .erp-arch-cover img{transition:none}
+  .erp-arch-cover:hover img{transform:none}
   [data-reveal]{opacity:1;transform:none}
 }
