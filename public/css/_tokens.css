@@ -31,7 +31,7 @@ img { max-width: 100%; height: auto; display: block; }
 
   /* text */
   --text:          #1A1B2E;
-  --text-muted:    rgba(26,27,46,.60);
+  --text-muted:    rgba(26,27,46,.62);
   --text-dim:      rgba(26,27,46,.38);
 
   /* accent */
