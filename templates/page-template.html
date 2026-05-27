@@ -66,8 +66,10 @@
       --font-display:var(--font-sans);--font-mono:"DM Mono","Courier New",monospace;
       --font-body:var(--font-sans);
       --max-w:1200px;--pad-x:2rem;--sidebar-w:220px;
-      /* OS-window hook 移除：--titlebar-h:60px — 僅 src/css/index.css 使用（配 --os-content-h:calc(100svh - var(--titlebar-h))）；
-         未來新頁如需 fullscreen hero pattern，加回此宣告 + 補 --os-content-h + .hero{min-height:var(--os-content-h)}。 */
+      /* OS-window hook 移除 — 原在此指定 macOS-style window
+         chrome 的 titlebar 高度，配 100svh 扣高連鎖給 fullscreen
+         hero min-height 使用。僅首頁 src/css/index.css 落實此 pattern。
+         未來新頁如需 fullscreen hero，參考 src/css/index.css 重建。 */
     }
     .theme-dark{
       --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
