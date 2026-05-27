@@ -1,13 +1,13 @@
 {
-  "baselineSha": "2bdee5d",
-  "cleanFiles": 255,
-  "createdAt": "2026-05-23",
+  "baselineSha": "31f0df1",
+  "cleanFiles": 257,
+  "createdAt": "2026-05-27",
   "errorCount": 0,
   "errorFiles": 0,
   "errorsByFile": {},
   "fileErrors": 0,
   "globalErrors": 0,
-  "sourceFilesTotal": 255,
+  "sourceFilesTotal": 257,
   "stage": 1,
   "tsconfigSnapshot": {
     "tsconfig.browser-classic.json": {
@@ -49,6 +49,7 @@
         "src/js/forgot-password.ts",
         "src/js/form-enter.ts",
         "src/js/index.ts",
+        "src/js/login-boot.ts",
         "src/js/login.ts",
         "src/js/meeting-system.ts",
         "src/js/notify.ts",
@@ -58,7 +59,8 @@
         "src/js/reset-password.ts",
         "src/js/sidebar-auth.ts",
         "src/js/verify-email.ts"
-      ]
+      ],
+      "references": []
     },
     "tsconfig.browser-classic.prod.json": {
       "compilerOptions": {
@@ -98,6 +100,7 @@
         "src/js/forgot-password.ts",
         "src/js/form-enter.ts",
         "src/js/index.ts",
+        "src/js/login-boot.ts",
         "src/js/login.ts",
         "src/js/meeting-system.ts",
         "src/js/notify.ts",
@@ -107,7 +110,8 @@
         "src/js/reset-password.ts",
         "src/js/sidebar-auth.ts",
         "src/js/verify-email.ts"
-      ]
+      ],
+      "references": []
     },
     "tsconfig.browser-module.json": {
       "compilerOptions": {
@@ -127,7 +131,8 @@
       "include": [
         "scripts/fixtures/pipeline-canary-module.ts",
         "src/js/erp-architecture-3d.ts"
-      ]
+      ],
+      "references": []
     },
     "tsconfig.browser-module.prod.json": {
       "compilerOptions": {
@@ -146,7 +151,73 @@
       "exclude": [],
       "include": [
         "src/js/erp-architecture-3d.ts"
-      ]
+      ],
+      "references": []
+    },
+    "tsconfig.browser-typecheck.json": {
+      "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "isolatedModules": true,
+        "lib": [
+          "DOM",
+          "DOM.Iterable",
+          "ES2022"
+        ],
+        "module": "ESNext",
+        "moduleDetection": "force",
+        "moduleResolution": "Bundler",
+        "noEmit": true,
+        "noImplicitAny": false,
+        "outDir": ".tscache/browser-typecheck",
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "strict": false,
+        "types": []
+      },
+      "exclude": [],
+      "include": [
+        "src/js/**/*.js",
+        "src/js/**/*.ts",
+        "types/globals.d.ts",
+        "types/raw-imports.d.ts",
+        "types/three.d.ts"
+      ],
+      "references": []
+    },
+    "tsconfig.functions.json": {
+      "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "isolatedModules": true,
+        "lib": [
+          "ES2022",
+          "WebWorker",
+          "WebWorker.Iterable"
+        ],
+        "module": "ESNext",
+        "moduleDetection": "force",
+        "moduleResolution": "Bundler",
+        "noEmit": true,
+        "noImplicitAny": false,
+        "outDir": ".tscache/functions",
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "strict": false,
+        "types": [
+          "@cloudflare/vitest-pool-workers"
+        ]
+      },
+      "exclude": [],
+      "include": [
+        "functions/**/*.js",
+        "functions/**/*.ts",
+        "functions/.well-known/**/*.js",
+        "functions/.well-known/**/*.ts",
+        "types/env.d.ts",
+        "types/raw-imports.d.ts"
+      ],
+      "references": []
     },
     "tsconfig.json": {
       "compilerOptions": {
@@ -189,7 +260,86 @@
         "tests/**/*.js",
         "tests/**/*.ts",
         "types/**/*.d.ts"
+      ],
+      "references": []
+    },
+    "tsconfig.scripts.json": {
+      "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "isolatedModules": true,
+        "lib": [
+          "ES2022"
+        ],
+        "module": "ESNext",
+        "moduleDetection": "force",
+        "moduleResolution": "Bundler",
+        "noEmit": true,
+        "noImplicitAny": false,
+        "outDir": ".tscache/scripts",
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "strict": false,
+        "types": [
+          "node"
+        ]
+      },
+      "exclude": [
+        "scripts/fixtures/**"
+      ],
+      "include": [
+        "scripts/**/*.js",
+        "scripts/**/*.ts"
+      ],
+      "references": []
+    },
+    "tsconfig.solution.json": {
+      "compilerOptions": {},
+      "exclude": [],
+      "include": [],
+      "references": [
+        "tsconfig.browser-typecheck.json",
+        "tsconfig.functions.json",
+        "tsconfig.scripts.json",
+        "tsconfig.tests.json"
       ]
+    },
+    "tsconfig.tests.json": {
+      "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "isolatedModules": true,
+        "lib": [
+          "ES2022",
+          "WebWorker",
+          "WebWorker.Iterable"
+        ],
+        "module": "ESNext",
+        "moduleDetection": "force",
+        "moduleResolution": "Bundler",
+        "noEmit": true,
+        "noImplicitAny": false,
+        "outDir": ".tscache/tests",
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "strict": false,
+        "types": [
+          "@cloudflare/vitest-pool-workers"
+        ]
+      },
+      "exclude": [],
+      "include": [
+        "docs/fixtures/**/*.json",
+        "functions/**/*.js",
+        "functions/**/*.ts",
+        "functions/.well-known/**/*.js",
+        "functions/.well-known/**/*.ts",
+        "tests/**/*.js",
+        "tests/**/*.ts",
+        "types/env.d.ts",
+        "types/raw-imports.d.ts"
+      ],
+      "references": []
     }
   }
 }
