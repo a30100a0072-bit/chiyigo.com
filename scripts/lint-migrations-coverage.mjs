@@ -118,7 +118,14 @@ if (!fs.existsSync(TEST_FILE)) {
 
 const src = fs.readFileSync(TEST_FILE, 'utf8')
 
-const importMatches = [...src.matchAll(/^import\s+up(\d{4})\b/gm)]
+// Comment-stripped view: rules A/B/C must ignore commented tokens / titles
+// (codex r1 medium + low). Replace with spaces to preserve indices for
+// lineOf reporting. Rule D keeps raw src — it exists to catch comment drift.
+const srcCode = src
+  .replace(/\/\*[\s\S]*?\*\//g, m => ' '.repeat(m.length))
+  .replace(/\/\/[^\n]*/g, m => ' '.repeat(m.length))
+
+const importMatches = [...srcCode.matchAll(/^import\s+up(\d{4})\b/gm)]
 const importNums = []
 const importLineByNum = new Map()
 for (const match of importMatches) {
@@ -128,7 +135,7 @@ for (const match of importMatches) {
 }
 compareNumberSet('A', importNums, expectedNums, importLineByNum)
 
-const allUpsMatch = /const\s+ALL_UPS\s*=\s*\[([\s\S]*?)\]/.exec(src)
+const allUpsMatch = /const\s+ALL_UPS\s*=\s*\[([\s\S]*?)\]/.exec(srcCode)
 if (!allUpsMatch) {
   fail('B', {
     expected: 'const ALL_UPS = [...] block exists',
@@ -138,30 +145,46 @@ if (!allUpsMatch) {
   const blockStart = allUpsMatch.index
   const bodyStart = blockStart + allUpsMatch[0].indexOf('[') + 1
   const tokenMatches = [...allUpsMatch[1].matchAll(/\bup(\d{4})\b/g)]
-  const tokens = tokenMatches.map(match => ({
-    name: `up${match[1]}`,
-    line: lineOf(src, bodyStart + match.index),
-  }))
-  const last = tokens.at(-1)
+  const actualSeq = tokenMatches.map(m => m[1])
+  const expectedSeq = expectedNums.map(pad)
 
-  if (tokens.length !== N || last?.name !== `up${NNNN}`) {
+  // Strict in-order sequence: ALL_UPS drives the forward chain test, so order
+  // matters (FK / schema dependencies). Length check alone misses a swap or
+  // a "delete real + comment slot" pattern that nets to the same count.
+  const sequenceOK =
+    actualSeq.length === expectedSeq.length &&
+    actualSeq.every((s, i) => s === expectedSeq[i])
+
+  if (!sequenceOK) {
+    let i = 0
+    const maxLen = Math.max(actualSeq.length, expectedSeq.length)
+    while (i < maxLen && actualSeq[i] === expectedSeq[i]) i++
+    const tm = tokenMatches[i]
+    const divergeLine = tm
+      ? lineOf(src, bodyStart + tm.index)
+      : lineOf(src, blockStart + allUpsMatch[0].lastIndexOf(']'))
+    const got = actualSeq[i] != null ? `up${actualSeq[i]}` : '(end)'
+    const want = expectedSeq[i] != null ? `up${expectedSeq[i]}` : '(end)'
     fail('B', {
-      line: last?.line ?? lineOf(src, blockStart),
-      expected: `ALL_UPS has ${N} token(s) and ends with up${NNNN}`,
-      actual: `ALL_UPS has ${tokens.length} token(s) and ends with ${last?.name ?? '(none)'}`,
+      line: divergeLine,
+      expected: `ALL_UPS strict sequence up0001..up${NNNN} (${N} tokens, in order)`,
+      actual: `${actualSeq.length} token(s); first divergence at index ${i}: expected ${want}, got ${got}`,
     })
   }
 }
 
-const expectedTitle = `'full forward chain 0001..${NNNN} vs prod snapshot'`
-if (!src.includes(expectedTitle)) {
-  const titleMatches = [...src.matchAll(/describe\('full forward chain 0001\.\.(\d{4}) vs prod snapshot'/g)]
+// Anchor to actual describe(...) call — src.includes() lets a commented or
+// stringified title pass while the real describe is renamed / deleted.
+const titleRegex = /describe\s*\(\s*'full forward chain 0001\.\.(\d{4}) vs prod snapshot'/g
+const titleMatches = [...srcCode.matchAll(titleRegex)]
+const matchingTitle = titleMatches.find(m => m[1] === NNNN)
+if (!matchingTitle) {
   fail('C', {
     line: titleMatches[0] ? lineOf(src, titleMatches[0].index) : null,
-    expected: expectedTitle,
+    expected: `describe('full forward chain 0001..${NNNN} vs prod snapshot', ...)`,
     actual: titleMatches.length
-      ? summarize(titleMatches.map(match => `'full forward chain 0001..${match[1]} vs prod snapshot'`))
-      : '(missing)',
+      ? summarize(titleMatches.map(m => `0001..${m[1]}`))
+      : '(no describe(...) with full forward chain title found)',
   })
 }
 
