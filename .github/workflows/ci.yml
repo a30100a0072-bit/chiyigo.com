@@ -17,7 +17,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # wrangler 4.87.0 engines.node >=22.0.0；20 觸發 build:functions step
+          # "Wrangler requires at least Node.js v22.0.0"。其他 workflow（deploy/
+          # cron/cleanup）不走 setup-node 不受影響。
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
