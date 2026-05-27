@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+
+    "lib": ["ES2022", "WebWorker", "WebWorker.Iterable"],
+    "types": ["@cloudflare/vitest-pool-workers"],
+
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": false,
+
+    "composite": true,
+    "noEmit": true,
+    "outDir": ".tscache/tests"
+  },
+  "include": [
+    "tests/**/*.js",
+    "tests/**/*.ts",
+    "functions/**/*.js",
+    "functions/**/*.ts",
+    "functions/.well-known/**/*.js",
+    "functions/.well-known/**/*.ts",
+    "docs/fixtures/**/*.json",
+    "types/env.d.ts",
+    "types/raw-imports.d.ts"
+  ]
+}

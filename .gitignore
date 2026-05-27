@@ -19,6 +19,10 @@ scripts/audit-error-i18n.out.json
 *.tsbuildinfo
 .tmp-pages-functions-build/
 
+# Stage 6.1 multi-project references 各 leaf 的 .tsbuildinfo 收納位置
+# (tsc -b tsconfig.solution.json 增量 cache；composite 即使 noEmit:true 仍需 outDir)
+.tscache/
+
 # Stage 4.5a browser pipeline canary emit 暫存（scripts/verify-browser-pipeline.mjs 跑完即清）
 .tmp-pipeline-canary/
 

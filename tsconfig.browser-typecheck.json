@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "moduleDetection": "force",
+
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": false,
+
+    "composite": true,
+    "noEmit": true,
+    "outDir": ".tscache/browser-typecheck"
+  },
+  "include": [
+    "src/js/**/*.js",
+    "src/js/**/*.ts",
+    "types/globals.d.ts",
+    "types/raw-imports.d.ts",
+    "types/three.d.ts"
+  ]
+}
