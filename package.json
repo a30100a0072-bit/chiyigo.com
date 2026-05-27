@@ -19,7 +19,7 @@
     "lint:archive-no-delete": "node scripts/lint-archive-no-delete.js",
     "lint:migrations": "node scripts/lint-migrations-coverage.mjs",
     "lint:compat-date": "node scripts/lint-compat-date.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b tsconfig.solution.json",
     "typecheck:ratchet": "node scripts/typecheck-ratchet.mjs",
     "typecheck:ratchet:report": "node scripts/typecheck-ratchet.mjs --report",
     "typecheck:baseline:update": "node scripts/typecheck-ratchet.mjs --update",

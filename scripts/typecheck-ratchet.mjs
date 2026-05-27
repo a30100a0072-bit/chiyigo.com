@@ -166,9 +166,12 @@ function refResolve(ref) {
 // ─── 1. 跑 tsc 並 parse error 行 ────────────────────────────────────────
 
 function runTypecheck() {
-  // tsc 有錯回 exit 1 — try/catch 吃 exit code，並記下來供 fail-safe 判斷
+  // Stage 6.1：改走 `tsc -b tsconfig.solution.json`（multi-project references aggregate）。
+  // 每個 leaf composite + noEmit；錯誤 per-file 格式 `path(line,col): error TSxxxx: ...` 不變，
+  // TS_FILE_ERROR_RE / TS_GLOBAL_ERROR_RE 不動。tsc -b 在 0 error 無 stdout；error 時走 stdout
+  // 同 single-project 行為。tsc 有錯回 exit 1 — try/catch 吃 exit code，並記下來供 fail-safe 判斷
   try {
-    const out = execSync('npx tsc --noEmit --pretty false', {
+    const out = execSync('npx tsc -b tsconfig.solution.json --pretty false', {
       cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
     })
     return { output: out, exitCode: 0 }
@@ -514,10 +517,19 @@ function normalizeTsconfigParsed(parsed) {
       compilerOptions[key] = Array.isArray(v) ? [...v].sort() : v
     }
   }
+  // Stage 6.1 (codex r1 F1 + r3 H3)：references set 守備（不守順序）。
+  // path 先 normalize：\ → /、去 ./ prefix；sort 後寫入；compare 用 set 不用 array。
+  const references = Array.isArray(parsed.references)
+    ? parsed.references
+        .map((r) => (r && typeof r.path === 'string' ? r.path.replace(/\\/g, '/').replace(/^\.\//, '') : null))
+        .filter((p) => p !== null)
+        .sort()
+    : []
   return {
     include: Array.isArray(parsed.include) ? [...parsed.include].sort() : [],
     exclude: Array.isArray(parsed.exclude) ? [...parsed.exclude].sort() : [],
     compilerOptions,
+    references,
   }
 }
 
@@ -574,12 +586,38 @@ function loadTsconfigsSnapshotFromRef(baseRef) {
   return snapshot
 }
 
-function compareTsconfigSnapshot(baselineSnap, currentSnap, label = 'D-tsconfig') {
-  // 規則 D（F4）：include 不得縮小、exclude 不得擴大；新增 tsconfig 視為擴展（允許）；
-  // 刪除 baseline 已有的 tsconfig 視為縮小掃描面（不允許）。
+function compareTsconfigSnapshot(baselineSnap, currentSnap, label = 'D-tsconfig', opts = {}) {
+  // 規則 D（F4 / Stage 6.1 升級）：
+  //   既有：include 不得縮小、exclude 不得擴大、compilerOptions 守備欄位不得弱化、
+  //         baseline 已有的 tsconfig 不得在 current 被刪除。
+  //   Stage 6.1 (codex r1 F1 + r3 H1 + r4 H1) 新增：
+  //     - references set 比對（不守順序；新增 / 缺少 path 都 violation）
+  //     - tsconfig 檔案 key set 雙向比對：
+  //         baseline-only（current 缺檔）：一律 violation
+  //         current-only（新加 tsconfig*.json）：依 opts.allowCurrentOnly 決定
   // label：違規 prefix（PR branch baseline = 'D-tsconfig'；base ref baseline = 'BASE-D-tsconfig'）
+  // opts.allowCurrentOnly（codex r4 H1）：
+  //   false（D-tsconfig 預設）：current-only 新加 tsconfig 也是 violation，必走
+  //                            baseline:update 收編；防後續 PR 新增 tsconfig*.json 不察。
+  //   true （BASE-D-tsconfig 用）：允許 current-only。理由：base ref live read 是「base
+  //                              已有的 tsconfig 是否被弱化」守備；本 PR 自身新增的
+  //                              tsconfig 在 base ref 上不存在，會永遠 fail 且
+  //                              baseline:update 救不了（它寫 baseline file 不寫 base ref）。
+  //                              新增檔案的守備由 D-tsconfig（branch baseline）在 commit 3
+  //                              baseline:update 後接手。
+  const { allowCurrentOnly = false } = opts
   const violations = []
   if (!baselineSnap || typeof baselineSnap !== 'object') return violations  // bootstrap：跳過
+
+  // current-only 檔案（依 opts 決定是否擋）
+  if (!allowCurrentOnly) {
+    for (const f of Object.keys(currentSnap)) {
+      if (!(f in baselineSnap)) {
+        violations.push(`[${label}] ${f} 在 current 新增（baseline 沒此 tsconfig；新加必走 baseline:update 收編，避免擴展掃描面而 ratchet 不察）`)
+      }
+    }
+  }
+
   for (const f of Object.keys(baselineSnap)) {
     if (!(f in currentSnap)) {
       violations.push(`[${label}] ${f} 在 current 被刪除（baseline 有此 tsconfig；刪除 = 縮小掃描面）`)
@@ -607,6 +645,15 @@ function compareTsconfigSnapshot(baselineSnap, currentSnap, label = 'D-tsconfig'
       if (bv !== cv) {
         violations.push(`[${label}] ${f} compilerOptions.${key} 變更：${bv} → ${cv}（影響 typecheck 強度；升級走 governance review）`)
       }
+    }
+    // Stage 6.1 (codex r1 F1 + r3 H3)：references set 比對（順序 normalize 後不觸發）
+    const bRefs = new Set(baselineSnap[f].references || [])
+    const cRefs = new Set(currentSnap[f].references || [])
+    for (const r of bRefs) {
+      if (!cRefs.has(r)) violations.push(`[${label}] ${f} references 缺 "${r}"（刪除 reference = 縮小 typecheck graph）`)
+    }
+    for (const r of cRefs) {
+      if (!bRefs.has(r)) violations.push(`[${label}] ${f} references 新增 "${r}"（變更 typecheck graph；走 baseline:update 收編）`)
     }
   }
   return violations
@@ -996,7 +1043,10 @@ function main() {
     failures.push(v)
   }
   const baseTsconfigSnap = loadTsconfigsSnapshotFromRef(baseRef)
-  for (const v of compareTsconfigSnapshot(baseTsconfigSnap, currentTsconfigSnap, 'BASE-D-tsconfig')) {
+  // codex r4 H1：BASE-D 用 allowCurrentOnly:true，允許本 PR 自身新增的 tsconfig 跨 gate
+  // (base ref 沒此檔 + baseline:update 救不了 base ref)。新檔守備由 D-tsconfig (L995)
+  // 在 commit 3 baseline:update 後接手。BASE-D 只擋 base-existing tsconfig 被刪/弱化。
+  for (const v of compareTsconfigSnapshot(baseTsconfigSnap, currentTsconfigSnap, 'BASE-D-tsconfig', { allowCurrentOnly: true })) {
     failures.push(v)
   }
 
