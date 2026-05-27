@@ -9,9 +9,9 @@
 // aggPeriod / loadAgg / hamBtn / overlay / mTopbar / openMenu / closeMenu /
 // mTopLangDrop）在同 tsc program 全域 scope 撞名 → TS2393。內層既有 mobile
 // hamburger / aggregate 已扁平，無 nested IIFE 需保留。
-// 對 apiFetch 改走 window.apiFetch — prod tsconfig (types:[] + 不載 globals.d.ts)
+// 對 apiFetch 改走 window.apiFetch — prod tsconfig (types:[] + 不載 types/api-globals.d.ts)
 // 下 api.ts 的 script-scope `interface Window { apiFetch }` 是唯一 ambient
-// 來源；root tsconfig 透過 globals.d.ts 雙向覆蓋。runtime 等價：admin-deals.html
+// 來源；root tsconfig 透過 types/api-globals.d.ts 雙向覆蓋。runtime 等價：admin-deals.html
 // 已 `<script src="/js/api.js"></script>` 先載，apiFetch === window.apiFetch。
 ;(function () {
 

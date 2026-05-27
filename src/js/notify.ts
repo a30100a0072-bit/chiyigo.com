@@ -16,7 +16,7 @@
 
 // 本檔為 classic <script> 來源（tsconfig.browser-classic.prod.json module:"none"），
 // 不可加 `export {}`/`import` 變 ESM module；因此用 script-scope `interface Window` 直接
-// 合併全域 Window 型別。root tsconfig 透過 types/globals.d.ts 提供相同 signature。
+// 合併全域 Window 型別。root tsconfig 透過 types/notify-globals.d.ts 提供相同 signature。
 type NotifyLevel = 'success' | 'error' | 'warning' | 'info'
 interface NotifyOpts {
   duration?: number

@@ -22,7 +22,7 @@
  */
 
 // classic <script> 來源；不可加 export {}/import。script-scope `interface Window`
-// 與 types/globals.d.ts 同 signature 合併（prod tsconfig 不載 globals.d.ts）。
+// 與 types/confirm-dialog-globals.d.ts 同 signature 合併（prod tsconfig 不載 types/confirm-dialog-globals.d.ts）。
 interface ConfirmDialogOpts {
   title?: string
   message?: string

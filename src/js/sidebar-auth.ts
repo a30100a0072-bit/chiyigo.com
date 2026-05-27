@@ -16,7 +16,7 @@
  */
 // PR-58 (Stage 4.5b-3)：原 PR-57 本檔的 `interface Window { silentRefresh, __chiyigoMemoryDeviceUuid }`
 // 全域 augmentation 已搬到 src/js/api.ts top-level（api.ts 進 manifest.classic 後同 canary/prod
-// 編譯單元載入，augmentation 對本檔自動可見）；root tsconfig 仍由 types/globals.d.ts 提供。
+// 編譯單元載入，augmentation 對本檔自動可見）；root tsconfig 仍由 types/api-globals.d.ts 提供。
 // 此處不再內嵌 augmentation，避免雙處維護。
 type AuthBroadcast =
   | { type: 'login'; token: string }

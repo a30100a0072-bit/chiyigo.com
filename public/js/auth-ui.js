@@ -19,8 +19,8 @@
  *   - window-attached 屬性（Turnstile / silentRefresh / PublicKeyCredential /
  *     __chiyigoMemoryDeviceUuid / tApiErrorData / __apiErrorI18n）走
  *     WindowWithAuth type-alias cast pattern（per PR-5p WindowWithAi / PR-5q
- *     WindowWithArchEmbed 立樁），保留 globals.d.ts 中既有的 root-tsconfig
- *     ambient declaration 同時補 prod tsconfig (types:[] 不載 globals.d.ts)
+ *     WindowWithArchEmbed 立樁），保留 types/api-globals.d.ts 中既有的 root-tsconfig
+ *     ambient declaration 同時補 prod tsconfig (types:[] 不載 types/api-globals.d.ts)
  *     需要的型別洞。
  *   - DOM narrow：HTMLInputElement / HTMLButtonElement / HTMLAnchorElement 等
  *     cast 保留原 .js throw-on-null 語意（zero-drift；per

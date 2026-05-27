@@ -9,7 +9,7 @@
 // openMenu / closeMenu / mTopLangDrop）。
 // 對 apiFetch 改走 window.apiFetch — 同 PR-5j/5k（per
 // [[feedback_page_entry_apifetch_window_prefix]]）：prod tsconfig (types:[]
-// 不載 globals.d.ts) 下 api.ts 的 script-scope `interface Window { apiFetch }`
+// 不載 types/api-globals.d.ts) 下 api.ts 的 script-scope `interface Window { apiFetch }`
 // 是唯一 ambient 來源；runtime 等價，admin-refund-requests.html 已先載 api.js。
 ;
 (function () {

@@ -24,15 +24,15 @@
  *
  * 設計：
  *   - root tsconfig.json `moduleDetection: "force"` 把 api.ts 當 module → top-level
- *     `class ApiError` 是 module-scoped（**不**註冊全域），不與 types/globals.d.ts 的
+ *     `class ApiError` 是 module-scoped（**不**註冊全域），不與 types/api-globals.d.ts 的
  *     ambient `declare class ApiError` 衝突（commit-1 顧慮的「duplicate identifier」
  *     在 force 模式下不成立 — codex r1 critical risk 揭示）。
- *   - globals.d.ts 的 `declare class ApiError` 為 root tsconfig 下 dashboard.js 等
+ *   - types/api-globals.d.ts 的 `declare class ApiError` 為 root tsconfig 下 dashboard.js 等
  *     bare `instanceof ApiError` caller 的 typing 來源；本檔的 top-level class 是
- *     module-internal 實作 + 給 canary/prod tsconfig（不載 globals.d.ts）的 Window
+ *     module-internal 實作 + 給 canary/prod tsconfig（不載 types/api-globals.d.ts）的 Window
  *     surface 用 `typeof ApiError`。
  *   - 其餘 surface（apiFetch / formatApiError / tApiError / tApiErrorData / silentRefresh）
- *     IIFE-private + `window.X = X` 對外。globals.d.ts 保留它們的 declare function。
+ *     IIFE-private + `window.X = X` 對外。types/api-globals.d.ts 保留它們的 declare function。
  *   - silentRefresh 為 optional 反映 runtime（api.js 未 load 即 undefined）；
  *     caller 必走 `typeof window.silentRefresh === 'function'` narrow。
  */
@@ -71,9 +71,9 @@ type ApiFetchFn = <T = unknown>(
   init?: RequestInit & { skipRefresh?: boolean }
 ) => Promise<T>
 
-// Top-level Window augmentation 給 canary/prod tsconfig（不載 types/globals.d.ts）用；
+// Top-level Window augmentation 給 canary/prod tsconfig（不載 types/api-globals.d.ts）用；
 // 同 PR 其他 classic entry 透過此 interface 看到 api.ts 對外暴露的 surface。root tsconfig
-// 載入時，與 globals.d.ts 的同名 interface 合併（同 signature 兼容）。
+// 載入時，與 types/api-globals.d.ts 的同名 interface 合併（同 signature 兼容）。
 interface Window {
   apiFetch: ApiFetchFn
   ApiError: typeof ApiError
