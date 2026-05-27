@@ -140,6 +140,7 @@ wrangler pages secret put ECPAY_MODE         --project-name chiyigo-com   # 填 
 ## 7. （選擇性、有支出）規模到達才做
 
 > **原則**：$0 成本最大化。下列項目**有金錢成本或公司流程成本**，等真規模到了才動。
+> **Tier guardrail**：$0 成本是採購 / 流程排序原則，不得延後 Tier 0（Security / Isolation / Correctness / Stability）所需的安全、隔離、正確性、穩定性或 Tier 0 證據要求。
 
 ### 7.1 Stripe Atlas — 海外公司（500 USD 一次性）
 
