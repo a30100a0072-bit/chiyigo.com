@@ -22,6 +22,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // scripts/lib/ → repo root
 const ROOT = path.resolve(__dirname, '..', '..')
 const SRC_I18N = path.join(ROOT, 'src', 'i18n')
+const SRC_JS = path.join(ROOT, 'src', 'js')
 
 // 寬版 replacement regex（codex Stage 5 prep r1 拍板 2026-05-21）：
 //   TS emit 在 `*\/` 與 `{}` 中間補空白，例：`const D = /*@i18n:x@*\/ {};`
@@ -45,6 +46,22 @@ export async function injectI18n(filename, content) {
   // 收集所有 sentinel 出現（一頁可能有多個字典，例如 LANGS_I18N + LANGS_D）
   const matches = [...content.matchAll(I18N_SENTINEL)]
   if (!matches.length) {
+    if (filename.endsWith('.html')) {
+      // .html 自身不寫 sentinel — sentinel 寫在對應 src/js/<name>.{ts,js} 內，runtime
+      // 才把 dict 套到 [data-i18n] element。對 .html 跑「自身找 sentinel」是邏輯錯位，
+      // 改檢「對應 JS 是否有 sentinel」：有 → 正常；缺 → 真有問題；無對應 JS → 純靜態頁不警告。
+      const base = filename.slice(0, -'.html'.length)
+      const candidates = [path.join(SRC_JS, base + '.ts'), path.join(SRC_JS, base + '.js')]
+      let jsContent = null
+      for (const p of candidates) {
+        try { jsContent = await fs.readFile(p, 'utf8'); break }
+        catch (e) { if (e.code !== 'ENOENT') throw e }
+      }
+      if (jsContent !== null && !I18N_RESIDUAL.test(jsContent)) {
+        console.warn(`[warn] ${filename}: 對應 src/js/${base}.{ts,js} 缺 @i18n@ sentinel（dict 不會被注入到 runtime）`)
+      }
+      return content
+    }
     const defaultJson = path.join(SRC_I18N, filename.replace(/\.(html|js)$/, '.json'))
     try { await fs.access(defaultJson); console.warn(`[warn] ${path.relative(ROOT, defaultJson)} exists but ${filename} has no @i18n@ sentinel`) }
     catch {}
