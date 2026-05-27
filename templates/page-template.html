@@ -65,7 +65,9 @@
       --font-sans:"Inter","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
       --font-display:var(--font-sans);--font-mono:"DM Mono","Courier New",monospace;
       --font-body:var(--font-sans);
-      --max-w:1200px;--pad-x:2rem;--sidebar-w:220px;--titlebar-h:60px;
+      --max-w:1200px;--pad-x:2rem;--sidebar-w:220px;
+      /* OS-window hook 移除：--titlebar-h:60px — 僅 src/css/index.css 使用（配 --os-content-h:calc(100svh - var(--titlebar-h))）；
+         未來新頁如需 fullscreen hero pattern，加回此宣告 + 補 --os-content-h + .hero{min-height:var(--os-content-h)}。 */
     }
     .theme-dark{
       --bg:#0B0F1A;--bg-surface:#151B2C;--bg-elevated:#1A2136;
@@ -78,7 +80,7 @@
       --neural-r:123;--neural-g:108;--neural-b:255;
       --neural-node-opacity:.4;--neural-line-opacity:.15;
     }
-    @media(max-width:768px){:root{--sidebar-w:0px;--titlebar-h:0px;--pad-x:1.25rem}}
+    @media(max-width:768px){:root{--sidebar-w:0px;--pad-x:1.25rem}}
 
     html{font-family:var(--font-sans);background-color:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background-color .3s ease,color .3s ease}
     body{min-height:100vh;overflow:hidden}

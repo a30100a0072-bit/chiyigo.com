@@ -1,6 +1,6 @@
 /* Page layout vars（design token 已抽到 _tokens.css） */
-:root{--max-w:1200px;--pad-x:2rem;--sidebar-w:220px;--titlebar-h:60px}
-@media(max-width:768px){:root{--sidebar-w:0px;--titlebar-h:0px;--pad-x:1.25rem}}
+:root{--max-w:1200px;--pad-x:2rem;--sidebar-w:220px}
+@media(max-width:768px){:root{--sidebar-w:0px;--pad-x:1.25rem}}
 
 body{min-height:100vh;overflow:hidden}
 @media(max-width:768px){body{overflow:auto}}
