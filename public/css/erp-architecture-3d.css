@@ -26,6 +26,12 @@
 .erp3-btn[aria-pressed="true"] .erp3-btn-dot{background:var(--accent);box-shadow:0 0 8px var(--accent),0 0 0 2px rgba(108,110,229,.18);animation:erp3-pulse 1.8s ease-in-out infinite}
 @keyframes erp3-pulse{0%,100%{box-shadow:0 0 8px var(--accent),0 0 0 2px rgba(108,110,229,.18)}50%{box-shadow:0 0 14px var(--accent),0 0 0 5px rgba(108,110,229,.06)}}
 
+/* Cover (靜態預覽圖；hover scale 同 .cp-arch-cover / .erp-arch-cover) */
+.erp3-cover{display:block;width:100%;aspect-ratio:16/9;margin:0 0 18px;border-radius:14px;overflow:hidden;border:1px solid var(--border);background:var(--bg-elevated);position:relative}
+.erp3-cover img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s ease}
+.erp3-cover:hover img{transform:scale(1.03)}
+.erp3-cover:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
 /* Event Chain selector */
 .erp3-chain-wrap{margin:0 0 18px;display:flex;flex-direction:column;gap:10px}
 .erp3-chain-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -133,5 +139,7 @@
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion:reduce){
   #neural-canvas{display:none}
+  .erp3-cover img{transition:none}
+  .erp3-cover:hover img{transform:none}
   [data-reveal]{opacity:1;transform:none}
 }
