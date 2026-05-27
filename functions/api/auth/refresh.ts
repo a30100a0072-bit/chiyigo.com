@@ -44,8 +44,9 @@ export async function onRequestPost({ request, env }) {
   const cookieToken = parseCookieHeader(request.headers.get('Cookie'), 'chiyigo_refresh')
 
   let body
+  let jsonParseOk = true
   try { body = await request.json() }
-  catch { body = {} }
+  catch { body = {}; jsonParseOk = false }
 
   const { aud } = body ?? {}
   // Phase D1：header 優先，body 保留向後相容（舊 App build 還在送 body.device_uuid）
@@ -58,6 +59,31 @@ export async function onRequestPost({ request, env }) {
   // 對 sport-app/mbti/talo 用戶（issued_aud 非 chiyigo）會誤報 mismatch。
   const rawAudProvided  = typeof aud === 'string' && aud.trim() !== ''
   const requestedAud    = rawAudProvided ? resolveAud(aud) : null
+
+  // chiyigo.com 主站 anonymous silent probe：cold visit / incognito / 多分頁進站，
+  // sidebar-auth.ts 會以 body:'{}' 試 refresh。原本 400 會在 Console 噪音化 — 回 204 消噪。
+  // 收窄到「主站 origin + 完全空 body」單一場景，避免靜默吞掉 App / OAuth client / malformed 的真正錯誤。
+  const origin = request.headers.get('Origin') ?? ''
+  const isChiyigoMainOrigin =
+    origin === 'https://chiyigo.com'
+    || (env.ENVIRONMENT === 'development'
+        && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
+
+  const isWebProbe =
+    isChiyigoMainOrigin
+    && !cookieToken
+    && jsonParseOk
+    && body !== null
+    && typeof body === 'object'
+    && !Array.isArray(body)
+    && Object.keys(body).length === 0
+
+  if (isWebProbe) {
+    return new Response(null, {
+      status: 204,
+      headers: { ...cors, 'Cache-Control': 'no-store' },
+    })
+  }
 
   if (!refresh_token || typeof refresh_token !== 'string')
     return res({ error: 'refresh_token is required', code: 'REFRESH_TOKEN_REQUIRED' }, 400, cors)

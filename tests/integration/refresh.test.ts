@@ -224,3 +224,113 @@ describe('POST /api/auth/refresh — F-2 audience binding', () => {
     expect(rows.results[1].issued_aud).toBe('sport-app')  // 不被 body.aud='chiyigo' 改
   })
 })
+
+// helper：以 raw body string 構造 refresh request（避開 refreshReq 的 JSON.stringify）
+function rawRefreshReq(origin: string | null, rawBody: string) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (origin) headers['Origin'] = origin
+  return new Request('http://x/api/auth/refresh', {
+    method: 'POST',
+    headers,
+    body: rawBody,
+  })
+}
+
+describe('POST /api/auth/refresh — anonymous web probe (P3 noise reduction)', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('chiyigo.com 主站 + 無 cookie + body {} → 204 + 不寫 audit / 不消 rate-limit', async () => {
+    const req = rawRefreshReq('https://chiyigo.com', '{}')
+    const resp = await refreshHandler({ request: req, env })
+    expect(resp.status).toBe(204)
+    expect(resp.headers.get('Cache-Control')).toBe('no-store')
+
+    // observability invariant 1：probe 不污染 audit log
+    const audit = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE event_type LIKE 'auth.refresh%'`)
+      .first<{ n: number }>()
+    expect(audit?.n).toBe(0)
+
+    // observability invariant 2：probe 不消 rate-limit quota
+    // 鎖 gate 必須在 checkRateLimit / recordRateLimit 之前；防未來 refactor 偷消 quota
+    const rl = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM login_attempts WHERE kind = 'refresh'`)
+      .first<{ n: number }>()
+    expect(rl?.n).toBe(0)
+  })
+
+  it('chiyigo.com + body {refresh_token: ""} → 400（空字串不是 probe）', async () => {
+    const r = await call(refreshReq({
+      headers: { 'Origin': 'https://chiyigo.com' },
+      body: { refresh_token: '' },
+    }))
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('chiyigo.com + malformed JSON body → 400（parse fail 不是 probe）', async () => {
+    const req = rawRefreshReq('https://chiyigo.com', 'not-json')
+    const r = await call(req)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('chiyigo.com + body {refresh_token: 123} → 400（非 string field 不是 probe）', async () => {
+    const r = await call(refreshReq({
+      headers: { 'Origin': 'https://chiyigo.com' },
+      body: { refresh_token: 123 as unknown as string },
+    }))
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('chiyigo.com + body {"foo":"bar"} → 400（non-empty object 不是 probe）', async () => {
+    const req = rawRefreshReq('https://chiyigo.com', '{"foo":"bar"}')
+    const r = await call(req)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('chiyigo.com + body [] → 400（array 不是 probe）', async () => {
+    const req = rawRefreshReq('https://chiyigo.com', '[]')
+    const r = await call(req)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('無 Origin（App caller）+ body {} → 400（不改 App 行為）', async () => {
+    const req = rawRefreshReq(null, '{}')
+    const r = await call(req)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('evil.com（非 allowlist）+ body {} → 400', async () => {
+    const req = rawRefreshReq('https://evil.com', '{}')
+    const r = await call(req)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('sport-app-web.pages.dev（allowlist 非 chiyigo）+ body {} → 400', async () => {
+    const req = rawRefreshReq('https://sport-app-web.pages.dev', '{}')
+    const r = await call(req)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('mbti.chiyigo.com（chiyigo subdomain 非主站）+ body {} → 400', async () => {
+    const req = rawRefreshReq('https://mbti.chiyigo.com', '{}')
+    const r = await call(req)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+
+  it('talo.chiyigo.com（chiyigo subdomain 非主站）+ body {} → 400', async () => {
+    const req = rawRefreshReq('https://talo.chiyigo.com', '{}')
+    const r = await call(req)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+})
