@@ -27,6 +27,11 @@
     "src/js/**/*.js",
     "src/js/**/*.ts",
     "types/globals.d.ts",
+    "types/api-globals.d.ts",
+    "types/notify-globals.d.ts",
+    "types/confirm-dialog-globals.d.ts",
+    "types/dashboard-globals.d.ts",
+    "types/auth-ui-globals.d.ts",
     "types/raw-imports.d.ts",
     "types/three.d.ts"
   ]

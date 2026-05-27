@@ -1,5 +1,5 @@
 {
-  "baselineSha": "31f0df1",
+  "baselineSha": "b63d971",
   "cleanFiles": 257,
   "createdAt": "2026-05-27",
   "errorCount": 0,
@@ -179,7 +179,12 @@
       "include": [
         "src/js/**/*.js",
         "src/js/**/*.ts",
+        "types/api-globals.d.ts",
+        "types/auth-ui-globals.d.ts",
+        "types/confirm-dialog-globals.d.ts",
+        "types/dashboard-globals.d.ts",
         "types/globals.d.ts",
+        "types/notify-globals.d.ts",
         "types/raw-imports.d.ts",
         "types/three.d.ts"
       ],
