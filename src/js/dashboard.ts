@@ -1170,6 +1170,20 @@ const DEL_ERR_MAP = {
   'password is required':                                               'del_pw_required',
   'Unauthorized':                                                       'del_err_unauth',
 };
+// requireAuth / requireStepUp middleware error code → i18n key。
+// code 是 stable contract（error 字串隨 i18n 化會改）；優先比 code，找不到再 fallback 到 DEL_ERR_MAP。
+const DEL_ERR_CODE_MAP = {
+  ACCOUNT_BANNED:           'del_err_banned',
+  TOKEN_REVOKED:            'del_err_session_revoked',
+  STEP_UP_ROLE_DRIFT:       'del_err_session_revoked',
+  STEP_UP_USER_GONE:        'del_err_account',
+  STEP_UP_REVOKED:          'del_err_stepup_revoked',
+  STEP_UP_REQUIRED:         'del_err_stepup_revoked',
+  STEP_UP_ACTION_MISMATCH:  'del_err_stepup_mismatch',
+  STEP_UP_TOKEN_CONSUMED:   'del_err_stepup_used',
+  // step-up endpoint 也吐 RATE_LIMITED（OTP brute-force 防護），共用 del_err_rate 既有文案
+  RATE_LIMITED:             'del_err_rate',
+};
 async function submitDeleteAccount() {
   const pw   = (document.getElementById('del-password') as HTMLInputElement).value;
   const otp  = ((document.getElementById('del-otp') as HTMLInputElement | null)?.value ?? '').trim();
@@ -1219,10 +1233,13 @@ async function submitDeleteAccount() {
   } catch (e) {
     if (e instanceof ApiError && e.status > 0) {
       const body = e.body as { error?: string; code?: string } | null;
-      const errKey = body?.error ?? '';
-      const k = DEL_ERR_MAP[errKey];
-      // step-up 405/403/401 也走 generic（含 STEP_UP_REQUIRES_2FA）
+      const errKey  = body?.error ?? '';
+      const errCode = body?.code  ?? '';
+      // 優先 code（middleware 統一吐 stable code），找不到才比 error 字串
+      const k = DEL_ERR_CODE_MAP[errCode] ?? DEL_ERR_MAP[errKey];
       let base = k ? T(k) : T('del_err_generic').replace('${status}', e.status);
+      // STEP_UP_REQUIRES_2FA 是 step-up endpoint 自己（非 middleware）噴的特例：
+      // user 沒啟用 2FA 就請求 step-up → 走「請先啟用 2FA」訊息而非通用錯誤。
       if (body?.code === 'STEP_UP_REQUIRES_2FA') base = T('del_otp_required');
       msg.textContent = e.traceId ? `${base}（#${e.traceId}）` : base;
       console.warn('[delete-account]', e.status, e.body, 'traceId=', e.traceId);
