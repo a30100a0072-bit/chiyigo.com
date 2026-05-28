@@ -18,6 +18,7 @@
 
 import { jwtVerify, createRemoteJWKSet } from 'jose'
 import { signJwt } from '../../../../utils/jwt'
+import { resolveActiveTenantClaims } from '../../../../utils/tenant-context'
 import { generateSecureToken, hashToken } from '../../../../utils/crypto'
 import { getProvider } from '../../../../utils/oauth-providers'
 import { resolveAud } from '../../../../utils/cors'
@@ -286,7 +287,9 @@ async function handle(context) {
   const audience = storedAud
     ? resolveAud(storedAud)
     : ((platform === 'pc' && client_callback) ? resolveAud(client_callback) : 'chiyigo')
+  const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
+    ...tenantClaims,
     sub:            String(userId),
     email:          userRow.email,
     email_verified: userRow.email_verified === 1,

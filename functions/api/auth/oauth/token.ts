@@ -24,6 +24,7 @@
 
 import { hashToken, pkceVerify, generateSecureToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt'
+import { resolveActiveTenantClaims } from '../../../utils/tenant-context'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth'
 import { refreshCookie, isWebClient } from '../../../utils/cookies'
@@ -140,7 +141,9 @@ export async function onRequestPost({ request, env }) {
     .run()
 
   // 簽發 Access Token（ES256，15 分鐘） — 用上面決定好的 aud
+  const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(user.id))
   const accessToken = await signJwt({
+    ...tenantClaims,
     sub:            String(user.id),
     email:          user.email,
     email_verified: user.email_verified === 1,
