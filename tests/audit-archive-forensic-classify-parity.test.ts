@@ -22,8 +22,10 @@ import {
 import { deriveAggregateKeysFromChunk } from '../functions/utils/audit-aggregate-archive'
 import { deriveAllKeysForRow } from '../scripts/audit-archive-forensic-classify.mjs'
 
-// ── Fixtures：cover 4 axis × 2 keyScheme × 2 dryRun × 2 compression ─────────
-// 對應 §2 manifest 18 prefix 的所有 sub-shape
+// ── Fixtures：representative branch coverage across 4 key-shape axes ───────
+// 覆蓋 raw / aggregate × keyScheme 1 / 2 × dry-run / live × gzip / none 四維
+// 的代表性 branch（非 full cartesian 32 combos；每條 branch 都有至少 1 fixture
+// 命中，配 canonical parity 對齊保證任一公式 drift 立刻紅燈）。
 const FIXTURES = [
   // ── Raw audit_log / immutable / 7y, key_scheme=1 legacy, live, gzip ──
   {

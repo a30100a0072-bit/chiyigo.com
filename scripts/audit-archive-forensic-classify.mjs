@@ -9,9 +9,10 @@
 // **inline-port** of:
 //   - functions/utils/audit-archive.ts#deriveKeysFromChunk + archivePrefixes + manifestSuffix + archiveExtension
 //   - functions/utils/audit-aggregate-archive.ts#deriveAggregateKeysFromChunk + aggregatePrefixes + aggregateManifestSuffix
+// 覆蓋 raw / aggregate × keyScheme 1/2 × dry-run/live × gzip/none 四 key-shape 維所有 branches。
 //
 // **drift 防護**：tests/audit-archive-forensic-classify-parity.test.ts 對齊 canonical TS function
-//   多筆 fixture，任一公式 drift → CI 紅燈。本檔修改必同步更新該 parity test。
+//   representative fixture（每條 branch ≥1 case），任一公式 drift → CI 紅燈。本檔修改必同步更新該 parity test。
 //
 // CLI:
 //   node scripts/audit-archive-forensic-classify.mjs \
