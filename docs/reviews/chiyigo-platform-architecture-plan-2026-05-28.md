@@ -1,4 +1,4 @@
-# Chiyigo Platform — Production SaaS Ecosystem Core 架構規劃（待 codex review）
+# Chiyigo Platform — Production SaaS Ecosystem Core 架構規劃（✅ codex APPROVED 2026-05-28）
 
 - **建立日期**：2026-05-28
 - **狀態**：✅ **codex r5 APPROVED — full design gate passed**（architecture/doc level，2026-05-28）。r1–r4 findings 全修。**PR1 Tenant Foundation 可開工**；**PR3 wallet 設計放行但實作前必跑 D1 batch rollback spike（§5）**。§0.2 五項已 user 拍板。
