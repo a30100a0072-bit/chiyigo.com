@@ -225,6 +225,8 @@ const SECURITY_SIGNAL = [
   'payment.webhook.status_cas_lost',
   'payment.webhook.psp_direct_blocked',
   'register.guest_id_invalid_format',
+  'tenant.switch.deny',                          // PR1 Tenant Foundation：org-switch 被拒（越權/失效嘗試信號；deny 率異常 = 可能越權）
+  'tenant.switch.success',                       // PR1 Tenant Foundation：active tenant 切換成功（auth-context 變更信號）
   'wallet.bind.fail',
   'webauthn.register.fail',
 ]

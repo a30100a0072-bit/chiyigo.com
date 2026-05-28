@@ -282,6 +282,45 @@ export async function requireStepUp(
   return { user, error: null }
 }
 
+/**
+ * Tenant-scoped endpoint 入口守門（PR1 Tenant Foundation）。
+ *
+ * requireAuth 只擋 pre_auth；但 temp_bind（OAuth 補 email 過渡 token，scope='temp_bind'、
+ * sub=provider_id、aud 預設 chiyigo 會過 aud gate）與 step-up（elevated:* scope）token 都會
+ * 通過 requireAuth。tenant 解析路徑必須只接受「一般 access token」，否則非登入完成 /
+ * 高權限一次性 token 可能滲進 tenant resolution（最糟：temp_bind 的 numeric provider_id
+ * 撞真實 users.id）。
+ *
+ * 在 requireAuth 之上再拒：pre_auth（defense-in-depth）/ temp_bind / 任何 elevated:* /
+ * 非正整數 sub（fail-closed）。回傳已驗證的整數 userId 供 tenant resolver 使用，
+ * caller 一律傳此 userId 而非 raw user.sub（codex r3）。
+ */
+export async function requireRegularAccessToken(request: Request, env: Env) {
+  const { user, error } = await requireAuth(request, env)
+  if (error) return { user: null, userId: null, error }
+
+  const scope = typeof user.scope === 'string' ? user.scope : ''
+  // defense-in-depth：requireAuth 已擋 pre_auth，這裡再擋一次
+  if (scope === 'pre_auth') {
+    return { user: null, userId: null, error: res({ error: 'Forbidden: pre_auth token cannot access this resource', code: 'PRE_AUTH_TOKEN_FORBIDDEN' }, 403) }
+  }
+  // temp_bind：OAuth 補 email 前的過渡 token（sub=provider_id 非 user id），必顯式擋
+  if (scope === 'temp_bind') {
+    return { user: null, userId: null, error: res({ error: 'Forbidden: not a regular access token', code: 'NOT_A_REGULAR_TOKEN' }, 403) }
+  }
+  // step-up token 帶 elevated:* scope；嚴格看 token scope claim（不走 role fallback）
+  if (scope.split(/\s+/).filter(Boolean).some(isElevatedScope)) {
+    return { user: null, userId: null, error: res({ error: 'Forbidden: not a regular access token', code: 'NOT_A_REGULAR_TOKEN' }, 403) }
+  }
+  // sub 必為正整數 user id（temp_bind 的 provider_id 可能 numeric 撞 users.id → fail-closed）
+  const userId = Number(user.sub)
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return { user: null, userId: null, error: res({ error: 'Unauthorized', code: 'INVALID_SUBJECT' }, 401) }
+  }
+
+  return { user, userId, error: null }
+}
+
 export function res(
   data: unknown,
   status: number = 200,
