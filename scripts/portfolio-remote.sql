@@ -36,3 +36,9 @@
 -- 2026-05-10：刪掉舊的「健身紀錄 APP」(id=8，無圖無連結，被新的運動減重 APP 取代)
 -- ─────────────────────────────────────────────────────────────
 DELETE FROM portfolio WHERE id = 8 AND title = '健身紀錄 APP';
+
+-- ─────────────────────────────────────────────────────────────
+-- 2026-05-28：會員系統封面對齊全站格式（commit 098f392 已把全站 og 圖 jpg→webp，
+--             唯獨此 DB row 漏改，仍指向已從 repo 移除的孤兒 .jpg）→ 已 apply (remote)
+-- ─────────────────────────────────────────────────────────────
+UPDATE portfolio SET image_url = '/images/portfolio/og-case-platform.webp' WHERE id = 6 AND title = 'CHIYIGO 會員系統';
