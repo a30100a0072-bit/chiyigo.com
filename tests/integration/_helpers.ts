@@ -95,6 +95,9 @@ export async function resetDb() {
     try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
   }
   await env.chiyigo_db.batch([
+    // migration 0047 tenant 表先刪（FK 指向 users / tenants，須早於 users 清空）
+    env.chiyigo_db.prepare('DELETE FROM organization_members'),
+    env.chiyigo_db.prepare('DELETE FROM tenants'),
     env.chiyigo_db.prepare('DELETE FROM refresh_tokens'),
     env.chiyigo_db.prepare('DELETE FROM email_verifications'),
     env.chiyigo_db.prepare('DELETE FROM backup_codes'),
@@ -361,4 +364,37 @@ export async function seedBackupCode(userId, { used = false } = {}) {
     .prepare('INSERT INTO backup_codes (user_id, code_hash, used_at) VALUES (?, ?, ?)')
     .bind(userId, codeHash, usedAt).run()
   return hex
+}
+
+/**
+ * Insert a tenant row (migration 0047).
+ * - type='personal' → ownerUserId 必填（寫入 personal_owner_user_id；schema CHECK 強制）。
+ * - type='organization' → ownerUserId 須為 null（schema CHECK 強制）。
+ * Returns { id }.
+ */
+export async function seedTenant(
+  opts: { type?: 'personal' | 'organization'; name?: string; status?: string; ownerUserId?: number | null } = {},
+) {
+  const { type = 'organization', name = 'Acme', status = 'active', ownerUserId = null } = opts
+  const r = await env.chiyigo_db
+    .prepare('INSERT INTO tenants (type, name, status, personal_owner_user_id) VALUES (?, ?, ?, ?)')
+    .bind(type, name, status, ownerUserId)
+    .run()
+  return { id: r.meta.last_row_id }
+}
+
+/**
+ * Insert an organization_members row（low-level）。
+ * 刻意允許建出「錯誤 row」（如非 owner 的 member 指向他人 personal tenant），
+ * 以驗證 tenant resolver / GET tenants 的 personal-tenant owner guard（codex r1 Finding 1）。
+ */
+export async function seedMembership(
+  opts: { tenantId: number; userId: number; role?: string; status?: string },
+) {
+  const { tenantId, userId, role = 'member', status = 'active' } = opts
+  await env.chiyigo_db
+    .prepare(`INSERT INTO organization_members (tenant_id, user_id, platform_role, status)
+              VALUES (?, ?, ?, ?)`)
+    .bind(tenantId, userId, role, status)
+    .run()
 }

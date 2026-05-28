@@ -485,3 +485,39 @@ CREATE TABLE IF NOT EXISTS auth_codes (
   expires_at      TEXT    NOT NULL,
   created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+-- migration 0047: Tenant Foundation（B2B 多租戶平台 PR1）
+CREATE TABLE IF NOT EXISTS tenants (
+  id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  type                   TEXT    NOT NULL CHECK(type IN ('personal','organization')),
+  name                   TEXT    NOT NULL,
+  status                 TEXT    NOT NULL DEFAULT 'active'
+                                 CHECK(status IN ('active','suspended','closed')),
+  personal_owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  created_at             TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at             TEXT    NOT NULL DEFAULT (datetime('now')),
+  deleted_at             TEXT,
+  CHECK( (type = 'personal'     AND personal_owner_user_id IS NOT NULL)
+      OR (type = 'organization' AND personal_owner_user_id IS NULL) ),
+  CHECK( type <> 'personal' OR (status = 'active' AND deleted_at IS NULL) )
+);
+CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
+CREATE INDEX IF NOT EXISTS idx_tenants_type   ON tenants(type);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_personal_owner
+  ON tenants(personal_owner_user_id)
+  WHERE type = 'personal';
+
+CREATE TABLE IF NOT EXISTS organization_members (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id     INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  user_id       INTEGER NOT NULL REFERENCES users(id)   ON DELETE CASCADE,
+  platform_role TEXT    NOT NULL DEFAULT 'member'
+                        CHECK(platform_role IN ('tenant_owner','tenant_admin','billing_admin','member')),
+  status        TEXT    NOT NULL DEFAULT 'active'
+                        CHECK(status IN ('active','invited','suspended')),
+  joined_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(tenant_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_org_members_user        ON organization_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_org_members_tenant_role ON organization_members(tenant_id, platform_role);
