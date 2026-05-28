@@ -791,6 +791,19 @@ Phase 3 加：
 
 **完整 lock + lifecycle 命令（runbook，Step 0.2c 才跑）**
 
+> 🛑 **DO NOT EXECUTE this section's command sequence as-is**
+>
+> 下方 lock + lifecycle cmd block 仍保留為 **rule name / prefix / retention-days SoT**，但**執行順序與執行方式 superseded by** `docs/reviews/pr-0-2c-full-prod-lock-plan-2026-05-28.md` §3.3：
+> - **新執行序**：Phase α 18 lifecycle 先（reversible setup）→ Phase β 18 lock 後依 1y → 3y → 7y order（partial-fail blast radius ascending）
+> - **新 runner**：`& "$PWD\node_modules\.bin\wrangler.cmd"`（lockfile-pinned `npm ci` exact 4.87.0；不用 `npx wrangler`）
+> - **新 preflight**：S3 sigv4 ListObjectsV2 per 18 prefix → raw output 存 fixture（mandatory gating）
+> - **新 forensic**：formal-prefix object found = hard-stop SOP（**禁** 看到就 delete）+ D1 cross-reference + user explicit approval
+> - **新 observability**：4 milestone checkpoints（after lifecycle / after 1y locks / after 3y locks / after 7y locks final），每點 fixture 抓 whoami + version + lock list + lifecycle list + timestamp
+>
+> 走本段 cmd 直接執行 = **未套用 codex r1+r2 全 10 件 finding**，會撞 7yr 不可逆風險。Phase 3 動工請對著 plan doc §3.3 跑，不對著本段。
+>
+> Origin: codex r2 review of PR 0.2c full prod lock plan（finding 10）— `docs/reviews/pr-0-2c-full-prod-lock-plan-2026-05-28.md` 為 r2 落地 + r3 套用 r2 全 4 件 finding。
+
 **Bucket**
 - prod `chiyigo-audit-archive` 已存在（commit ebd44d2，object_count=0）
 - 建 preview bucket：`wrangler r2 bucket create chiyigo-audit-archive-preview`
