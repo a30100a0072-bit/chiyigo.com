@@ -1,7 +1,7 @@
 # Chiyigo Platform — Production SaaS Ecosystem Core 架構規劃（待 codex review）
 
 - **建立日期**：2026-05-28
-- **狀態**：DRAFT — 待 codex review（design / plan gate，**尚未動工、未寫任何 code**）；§0.2 五項已 user 拍板（2026-05-28）
+- **狀態**：DRAFT — codex r1 Reject（design gate）→ 7 findings 已 patch，待 codex r2（**尚未動工、未寫任何 code**）；§0.2 五項已 user 拍板（2026-05-28）
 - **動工分級**：L3（新系統 / 新 bounded context / 安全模型變更）
 - **規劃前提**：Production SaaS Ecosystem Core（非 demo / 非教學 / 非一次性 / 非單體會員系統）
 - **優先順序**：安全 > Tenant Isolation > 可維護 > 擴展 > 觀測 > 效能 > 開發速度
@@ -25,6 +25,22 @@
 ---
 
 # 0. 需求修正與風險分析
+
+## 0.0 Codex review 紀錄
+
+**r1（`a151a88`，2026-05-28）→ Reject at design gate**（方向 OK，Tier 0/1 語意需精確化）。7 findings 已 patch：
+
+| # | Finding | 處理 | 章節 |
+|---|---|---|---|
+| 1 | 產品端 token 撤銷被高估（本地 JWKS 看不到 version bump） | 定義 soft / hard revoke 兩級 + 產品 deny-state / 即時查 | §6、§12 |
+| 2 | per-tenant rate limit 不能延後 | write paths per-tenant + per-user 限流納 MVP | §13、§18 |
+| 3 | 扣點原子性 / quota CAS / 財務 idempotency 永久性 | `deductCredits` 條件式序列 + quota version + 永久 idempotency + request_hash | §5、§10 |
+| 4 | grantPlan 需 durable 狀態機 | `grant_plan_operations` ledger + 單調轉移 + 去重 + 對帳 | §5、§7 |
+| 5 | D1 outbox 缺 lease / retry / crash recovery | outbox 完整欄位 + claim/lease + replay SOP | §5、§11 |
+| 6 | elder 跨租戶 vs tenant_id-from-token | Delegated-Access Context（server-resolved resourceTenantId）+ negative test | §8 |
+| 7 | 觀測太籠統 | 新風險專屬事件 / 指標 | §14 |
+
+**首個實作 PR 收斂為 tenant foundation only**（見 §20）；wallet / grantPlan / elder delegation 在不變式明確前不動工。
 
 ## 0.1 必須先拍板的架構衝突（我提出的修正）
 
@@ -161,7 +177,7 @@ ERP（資料面 — Source of Truth：員工業務資料）
 銀髮族 App（資料面 — B2B + B2C 混搭）
 ├─（B2B）機構 tenant + 住民/員工 member + 產品角色
 ├─（B2C）個人 personal tenant + 自用
-├─（待決）Guardian / 家屬代管關係
+├─ Elder-Caregiver（elder_relationships，受控跨租戶 delegated-access，§8）
 └─ Business Data（帶 tenant_id）
 
 Shared Services（共用基礎設施 — 純 infra，無業務）
@@ -223,21 +239,37 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
   - unique：`(tenant_id, user_id)`；index：`(user_id)`、`(tenant_id, platform_role)`
   - 多對多：支援一人多 tenant（顧問）；personal tenant 則一筆 owner
 - `products`（新）：`id(erp|senior-app|crm…)`、`name`、`is_active`
-- `subscriptions` / `tenant_product_access`（新）：`tenant_id`、`product_id`、`plan_id`、`status(active|pending|expired)`、`period_start/end`、`granted_via(payment|manual)`、`granted_by`、`payment_ref`
+- `subscriptions` / `tenant_product_access`（新，**投影表**）：`tenant_id`、`product_id`、`plan_id`、`status(active|pending|expired|revoked)`、`period_start/end`、`granted_via(payment|manual)`、`granted_by`、`payment_ref`
   - unique：`(tenant_id, product_id)`（同產品一筆有效）；index：status
+  - SoT 是下方 `grant_plan_operations` ledger；本表是當前狀態投影
+- `grant_plan_operations`（新，entitlement ledger，修正 codex r1 finding 4）：`id`、`tenant_id`、`product_id`、`plan_id`、`trigger(payment|manual)`、`provider_event_id`(payment)、`admin_idempotency_key`(manual)、`from_status`、`to_status`、`audit_id`、`occurred_at`、`reconciled_at`、`created_at`
+  - unique：`provider_event_id`（webhook 去重，**拒 stale/replay**）、`admin_idempotency_key`（manual 去重，手滑不重開）
+  - **每筆 grant / 狀態變更都落一筆**（不可變歷史）
 - `plans`（新）：`id`、`product_id`、`features(JSON)`、`included_credits`、`price_subunit`、`currency`、`is_active`
 - `credit_wallets`（新，**單 tenant 一個錢包，決策③**）：`tenant_id(PK)`、`balance(int≥0)`、`version(CAS)`、`updated_at`
-- `product_usage_quota`（新，決策③）：`tenant_id`、`product_id`、`quota_limit(int)`、`quota_used(int)`、`period`、`updated_at`
-  - unique：`(tenant_id, product_id, period)`；扣點時同時檢查「tenant 餘額足夠 **AND** 該 product quota 未超」
+- `product_usage_quota`（新，決策③）：`tenant_id`、`product_id`、`quota_limit(int)`、`quota_used(int)`、`period`、`version(CAS)`、`updated_at`
+  - unique：`(tenant_id, product_id, period)`；**conditional update**：`WHERE quota_used + ? <= quota_limit AND version = ?`（修正 codex r1 finding 3）
   - **不做 per-product wallet**（避免 wallet fragmentation、refund/bundle 複雜）—— 除非未來某產品完全獨立營運
-- `credit_ledger`（新，append-only）：`id`、`tenant_id`、`product_id`、`entry_type(topup|deduct|refund|adjust)`、`amount(signed)`、`balance_after`、`idempotency_key`、`ref`、`prev_hash`、`this_hash`、`created_at`
+- `credit_ledger`（新，append-only）：`id`、`tenant_id`、`product_id`、`entry_type(topup|deduct|refund|adjust)`、`amount(signed)`、`balance_after`、`idempotency_key`、`request_hash`、`ref`、`prev_hash`、`this_hash`、`created_at`
   - unique：`(tenant_id, idempotency_key)`；trigger 擋 UPDATE/DELETE
+  - **財務 idempotency 永久保存（無 TTL，修正 codex r1 finding 3）**：重送同 key → 回上次結果；同 key 但 `request_hash` 不符（參數不同）→ **409 IDEMPOTENCY_CONFLICT**，不執行
+
+**扣點原子模型 `deductCredits`（修正 codex r1 finding 3）** — 單一條件式寫入序列，全程對同一 tenant：
+1. 查 `credit_ledger` 是否已有 `(tenant_id, idempotency_key)` → 有則回上次結果（`request_hash` 不符回 409）。
+2. **條件式扣 quota**：`UPDATE product_usage_quota SET quota_used=quota_used+?, version=version+1 WHERE tenant_id=? AND product_id=? AND period=? AND quota_used+? <= quota_limit AND version=?`；`changes()=0` → 超配額或 race → bounded retry 或回 402。
+3. **條件式扣 wallet**：`UPDATE credit_wallets SET balance=balance-?, version=version+1 WHERE tenant_id=? AND balance>=? AND version=?`；`changes()=0` → 同上。
+4. **寫 ledger**（unique idempotency_key 為最終正確性錨點，含 balance_after + request_hash + prev/this_hash）。
+- 任一步 `changes()=0` 即中止並回明確錯誤，不留半完成狀態。
+- **必測**：並發雙扣同 key（只成功一次）、餘額/配額剛好邊界、quota 超限擋下、wallet 不可為負。
 - `invitations`（新）：`id`、`tenant_id`、`email`、`platform_role`、`token_hash`、`status(pending|accepted|revoked|expired)`、`expires_at`、`invited_by`、`accepted_user_id`
   - unique：`token_hash`、`(tenant_id, email, status=pending)`；index：expires_at
 - `sessions` ≈ `refresh_tokens`（既有）：含 `device_uuid`、`auth_time`、`revoked_at`
 - `token_versions` ≈ 既有 token version 機制（per-user `ver`；可評估擴 per-device）
 - `oauth_accounts` ≈ `user_identities`（既有）：`(provider, provider_id)` unique
 - `audit_logs`（既有）：hash-chain，append-only
+- `event_outbox`（新，修正 codex r1 finding 5）：`id`、`event_id`(unique)、`event_type`、`payload`、`payload_hash`、`status(pending|processing|done|dead)`、`attempts`、`next_attempt_at`、`lease_until`、`locked_by`、`last_error`、`processed_at`、`created_at`
+  - index：`(status, next_attempt_at)`、`lease_until`
+- `event_dlq`（新）：`id`、`event_id`、`event_type`、`payload`、`dlq_reason`、`attempts`、`failed_at`
 
 **ERP 擁有（在 ERP DB，不在 chiyigo）：**
 - `erp_employees`：`chiyigo_sub(FK 概念)`、`tenant_id`、`employee_no`、`title`、`department_id`、`status`
@@ -274,6 +306,15 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 - product_access 摘要放 token（慢變，快取）；點數即時查（精確）。
 - B2C：active tenant = personal tenant。
 
+**撤銷模型（對產品，修正 codex r1 finding 1）— 兩級明確分界**：
+產品端對 access_token 走本地 JWKS 驗章，**看不到** chiyigo DB 的 token-version bump。故 token-version bump 只對 **chiyigo 自家 endpoint + refresh 流程**即時，**不自動傳達到產品**。撤銷分兩級：
+- **Soft revoke（≤15min stale 可接受）**：一般權限調整 / 角色變更 / 降級 → 靠 access_token 自然過期（≤15min），下次 refresh 換新狀態。產品本地驗章即可。
+- **Hard revoke（需即時生效）**：member 停權 / 帳號停用 / product access 撤銷 / 安全事件 → 產品**不能只靠本地驗章**，二選一（或併用）：
+  - (a) 產品消費 `member.suspended` / `product_access.revoked` / `session.revoked` 事件，寫入產品本地 **deny-state**（D1/KV），每請求查 deny-state 攔截；
+  - (b) 對**敏感/高權限操作**（金流 / admin / 刪除）即時呼叫中央 **Access/Introspection API** 確認 token 未撤、member active、access valid。
+- **產品最低要求**：一般讀寫 → 本地驗章（接受 ≤15min stale）；敏感操作 → 即時查中央或查已同步 deny-state。
+- **必測**：member 停權後、**未過期** access_token 對產品敏感 endpoint → 必被擋；對一般 endpoint → 至多 stale 15min（記為已知行為）。
+
 ---
 
 # 7. Tenant 與 ERP 整合流程
@@ -294,6 +335,13 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 10. 員工操作 → ERP permission check（自管 RBAC + data scope + tenant 隔離）。
 
 **Data flow**：identity/tenant/access 由 chiyigo 經 token 單向流入 ERP；ERP 只回報 usage（扣點）。
+
+**grantPlan 狀態機（修正 codex r1 finding 4）**：
+- 狀態：`none → pending → active → (expired | revoked)`；**單調轉移，禁倒退**（如 active→pending 拒絕）。
+- **payment 觸發**：webhook 必驗簽 + `provider_event_id` 去重（收過 → no-op）；**stale/亂序 webhook**（event 時間早於目前狀態）→ 拒絕，不回滾 active。
+- **manual 觸發**：admin 帶 `admin_idempotency_key`（unique 擋重複開通）；必過 step-up + 寫 audit。
+- 每次轉移寫 `grant_plan_operations`（含 `audit_id`）；`tenant_product_access` 為投影。
+- **對帳路徑**：每日比對 provider 流水 vs `grant_plan_operations`（payment）+ 匯款回執 vs manual；差異告警。
 
 **Failure handling**：
 - 邀請過期/被撤 → 接受失敗，狀態明確。
@@ -327,6 +375,15 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 - 關閉公司 → tenant status=closed + member 停用，**user 帳號只解 tenant 連結、不刪**（同一人可能 B2C 自用或屬他 tenant）。
 - 員工**自管憑證**（密碼/2FA）；owner 管成員資格/角色，**碰不到憑證**。初始密碼走邀請連結自設。
 - **Elder-Caregiver（銀髮 App 專用，決策②）**：家屬/照護者代管長輩走銀髮 App 自有 `elder_relationships`，**不做通用 delegation**。它是「caregiver 存取 elder 所屬 tenant 資料」的**受控跨租戶存取**：必須顯式關係、限定 scope（view_health/manage_schedule/emergency_contact）、可過期（`expires_at`）、全程 audit、可即時 revoke。**禁** generic delegation / nested delegation / impersonation / universal proxy。等 CRM/ERP/POS 都需要再抽象化。
+
+**Delegated-Access Context（受控跨租戶存取的精確機制，修正 codex r1 finding 6）**：
+caregiver 的 active token `tenant_id` = 自己的（多半 personal tenant），**與 elder 資源所屬 tenant 不同**。故跨租戶存取**不可**走「tenant_id 來自 token」的正常 repository guard，必走專屬路徑：
+1. 請求帶 `elderUserId`（目標長輩）。
+2. server **解析** `resourceTenantId`（由 elder 的 membership / personal tenant，**非** token tenant_id）。
+3. 查 `elder_relationships`：`(resourceTenantId, elderUserId, caregiverSub=token.sub)` 必須 active、未過期、未撤、`scope` 涵蓋本操作。
+4. 通過 → repository 進入 **delegated guard mode**：以 server-resolved `resourceTenantId` 為隔離鍵（非 token tenant_id），且**只允許** scope 內操作。
+5. 全程寫 audit `delegated.access`（actorSub=caregiver、elderUserId、resourceTenantId、scope、allow/deny、traceId）。
+- **必測（negative）**：無關係 / 已過期 / 已撤 / scope 不符 / 換別的 elderUserId → 一律 deny；caregiver 不得用此路徑讀關係外任何 tenant 資料。
 
 ---
 
@@ -363,7 +420,7 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 - **Response**：DTO/serializer，禁 dump DB row。
 - **Error envelope**（既有）：`{ error: { code, message, traceId } }`；區分 BusinessError(4xx) / SystemError(5xx)。
 - **Pagination**：>10k 用 cursor-based。
-- **Idempotency**：寫入/金流帶 idempotency key，持久化 D1 + TTL。
+- **Idempotency**：分兩類（修正 codex r1 finding 3）——(1) **一般請求**：D1 持久化 + TTL 可接受；(2) **財務 / ledger / entitlement**：**永久保存、無 TTL**，且記 `request_hash` 做衝突偵測（同 key 不同參數 → 409 IDEMPOTENCY_CONFLICT）。
 - **Versioning**：路徑 `/v1/`；breaking change 升版 + 舊版保留 ≥1 cycle。
 
 **禁止**：Internal DB coupling、Shared ORM Model、把產品業務邏輯塞進中央 API。
@@ -376,13 +433,15 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 
 **Payload 規範**：`{ v:1, eventId, eventType, occurredAt, tenantId, actorSub, data:{...} }`（schema 同源、版本顯式）。
 
-**機制（$0）**：
-- **outbox**：寫業務變更同 transaction 寫 `event_outbox`（D1）。
-- **consumer**：cron 輪詢 outbox → 推送/處理 → 標 processed。
-- **DLQ**：失敗 N 次 → 落 `event_dlq`（D1）+ 告警；復原 SOP 進 runbook。
-- **idempotent consumer**：以 `eventId` 去重表。
-- **ordering risk**：不保證全序；消費端設計為可亂序 + idempotent；需要順序的用 `(aggregateId, seq)`。
-- **eventual consistency**：跨服務狀態最終一致；UI 標示「處理中」；critical 路徑（計費）用同步 API 不靠事件。
+**機制（$0，修正 codex r1 finding 5）**：
+- **outbox**：寫業務變更同 transaction 寫 `event_outbox`（D1，欄位見 §5）。
+- **claim/lease（防 cron overlap 雙處理）**：consumer 條件式搶租 `UPDATE ... SET status='processing', locked_by=?, lease_until=now+T WHERE (status='pending' OR (status='processing' AND lease_until < now)) AND ...`；只處理搶到的 row。
+- **retry**：失敗 → `attempts+1`、設 `next_attempt_at=now+backoff(attempts)`、釋放 lease、寫 `last_error`；`attempts >= N` → 移 `event_dlq`（記 `dlq_reason`）+ 告警。
+- **crash recovery**：consumer 中途死 → `lease_until` 過期後該 row 自動可被重搶（不卡死 processing）。
+- **processed-after-side-effect**：side effect 成功**後**才 `status='done' + processed_at` → **at-least-once**，消費端必 idempotent（以 `event_id` 去重表）。
+- **ordering risk**：不保證全序；消費端可亂序 + idempotent；需順序用 `(aggregateId, seq)`。
+- **eventual consistency**：跨服務最終一致；UI 標「處理中」；critical 路徑（計費）走同步 API 不靠事件。
+- **replay SOP**：DLQ row 修因後 → reset 回 outbox（`status=pending, attempts=0`）重放；SOP 進 runbook。
 
 > CF Queues = 付費，現階段不用（§0.1-B）。
 
@@ -392,7 +451,7 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 
 - **JWT claim**：放慢變的 `platform_role` + `product_access 摘要`（access_token ≤15min 即天然 TTL）。
 - **Permission cache**：產品端 role→permission 對應可 KV/記憶體快取（TTL 短）。
-- **Stale 處理**：權限調降需快生效者（停權/降級）→ bump token version 立即失效 + 短 TTL；一般調整接受 ≤15min 延遲。
+- **Stale 處理（修正 codex r1 finding 1）**：token-version bump 只對 chiyigo 自家 endpoint + refresh 即時，**產品本地驗章看不到**。故一般調整 → 接受 ≤15min stale（access_token 自然過期）；需即時生效者（停權/降級/撤 access）→ 走 §6「Hard revoke」（產品消費撤銷事件寫 deny-state，或敏感操作即時查中央 Access API）。**不可假設產品會看到 token-version**。
 - **Invalidation**：role/access 改 → 發 event + bump 相關 cache key；token version 撤舊 token。
 - **Distributed cache**：現階段 KV（eventual）夠；強一致需求走 D1 即時查（如扣點），不靠 cache。
 
@@ -414,11 +473,12 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 | SSRF | ✅ | 外呼白名單 + 不接受 client 提供 URL | — |
 | SQL Injection | ✅ | prepared statement / 參數化（D1） | — |
 | Audit Log | ✅ | hash-chain append-only（既有） | — |
-| Rate Limit | ✅ | 既有（login/refresh/token/step-up） | per-tenant 限流 = delta 待補 |
+| Rate Limit（IP/user，auth 路徑） | ✅ | 既有（login/refresh/token/step-up） | — |
+| per-tenant + per-user rate limit（write paths，修正 codex r1 finding 2） | ✅ **MVP 必做** | 用既有 rate-limit infra（D1 bucket）對 write/expensive endpoint 加寬鬆 per-tenant + per-user 上限：**invite / org-switch / credit consume / product-access / admin grant** | — |
 | Brute Force | ✅ | 既有（cooldown + IP 黑名單） | — |
 | Secret Management | ✅ | Cloudflare Secrets / wrangler；禁 hardcode（既有） | — |
 | Personal Tenant 隔離 | 🆕 | B2C 走同一 tenant isolation 路徑 | 新增 |
-| per-tenant rate limit | ⏳ | 規劃中 | 流量起來再做 |
+| Delegated cross-tenant（elder） | 🆕 | server-resolved resourceTenantId + 關係驗證 + audit（§8） | 新增 |
 
 ---
 
@@ -428,6 +488,7 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 - **Audit Trail**：身份/計費/權限變更/刪除 → hash-chain（既有）。
 - **Monitoring/Metrics**：API latency p50/95/99 by endpoint、auth failure、rate limit、扣點失敗。
 - **Alerting**：critical → Discord（既有）。
+- **新風險專屬事件/指標（修正 codex r1 finding 7）**：entitlement grant/revoke、credit idempotency 衝突(409)、quota reject(402)、elder delegated-access allow/deny、outbox retry / DLQ 深度、**product revocation 傳達延遲**（hard-revoke 事件發出 → 產品 deny-state 生效的 lag）。
 - **Log ownership**：各服務自留 app log；身份/計費 audit 歸 chiyigo。
 - **Retention**：audit 依法遵長期（cold archive 已建）；一般 log 短期。
 - **Security logging**：敏感欄位 redact（PII/token allowlist）。
@@ -487,7 +548,8 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 | Elder-Caregiver（銀髮，決策②） | ✅ 垂直場景版 | | | generic delegation / impersonation / nested |
 | federation（企業 SSO）/ SCIM | ❌ | | | ✅ 客戶要求才做 |
 | API Gateway / 微服務 / Read Replica | ❌ | | | ✅ |
-| per-tenant rate limit / distributed cache | ❌ | | 流量起來 | |
+| per-tenant + per-user rate limit（write paths） | ✅ MVP（修正 codex r1 finding 2） | | 全 endpoint 細緻限流 | |
+| distributed cache | ❌ | | 流量起來 | |
 
 **現在明確不該做**：微服務拆分、API/Permission Gateway、Event Bus、Read Replica、federation/SCIM、ABAC、per-product 錢包、distributed cache、CF Queues/DO（付費）。
 
@@ -516,7 +578,32 @@ Shared Services（共用基礎設施 — 純 infra，無業務）
 
 ---
 
+# 20. 實作順序（codex r1 採納）
+
+**首個 PR = Tenant Foundation only**（codex r1 Minimal Safe Fix）。在以下不變式明確且有測試前，**不動** wallet / grantPlan / elder delegation：
+
+- `tenants`（含 personal tenant）+ `organization_members`（多對多）
+- active tenant context + token claim delta（`tenant_id` / `platform_role`）
+- repository tenant guard（強制 `WHERE tenant_id`，tenant_id 取自 token）
+- org switch（切 active tenant → 重發 token）
+- **cross-tenant negative tests**（核心驗收門）
+
+後續 PR 順序（每個都先把對應不變式測起來）：
+1. Tenant Foundation（上述）
+2. Subscription / Product Access + grantPlan 狀態機（payment/manual 去重 + 對帳）
+3. Credit Wallet + Quota + Ledger（`deductCredits` 原子 + 並發雙扣測試）
+4. Invitation + Member lifecycle（含 hard-revoke deny-state）
+5. Event outbox + consumer（lease / retry / DLQ / replay）
+6. Product 整合（ERP 先）：employee mapping + product RBAC + 本地 deny-state
+7. 銀髮 App + Elder Delegated-Access Context（含 negative tests）
+
+---
+
 # 給 codex 的問題
+
+> **r2 焦點**：r1 七項 findings 已 patch（見 §0.0 對照表）。請先複驗下列 r1 修補是否達 implementation gate，再看其餘設計問題。
+
+**r1 複驗點**：§6 撤銷兩級（soft/hard + 產品 deny-state）/ §5 `deductCredits` 原子序列 + 永久財務 idempotency + request_hash / §5+§7 grantPlan 狀態機 / §5+§11 outbox lease+retry+crash recovery+replay / §8 Delegated-Access Context + negative tests / §13 per-tenant+per-user write 限流 / §14 新風險觀測。
 
 1. **§0.1-A Personal Tenant**：用「個人租戶」統一 B2C/B2B、消除 nullable tenant_id 是否最佳？或 nullable 多型擁有者更務實？
 2. **§0.2 五項已定案**（Personal Tenant 採用 / Elder-Caregiver 垂直版 / 單 wallet + per-product quota / 文件 role convention / 多對多 membership）—— 請 validate 風險邊界，特別是：(a) 單 wallet + quota 並發扣點 race / 對帳；(b) `elder_relationships` 受控跨租戶存取的隔離正確性。
