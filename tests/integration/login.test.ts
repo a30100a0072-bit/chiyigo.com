@@ -49,6 +49,9 @@ describe('POST /api/auth/local/login — happy path & failures', () => {
     // Phase C-2 regression：access_token 必有 scope claim（role 推導出來）
     expect(payload.scope).toBeTypeOf('string')
     expect((payload.scope as string).split(' ')).toContain('read:profile')
+    // PR1 tenant claim wiring：login 簽出的 token 帶 active personal tenant
+    expect(typeof payload.tenant_id).toBe('number')
+    expect(payload.platform_role).toBe('tenant_owner')
 
     // refresh_tokens DB row 存在
     const rt = await env.chiyigo_db.prepare(
