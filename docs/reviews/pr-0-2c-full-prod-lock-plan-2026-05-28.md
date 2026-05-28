@@ -1,11 +1,28 @@
 # PR 0.2c Full Prod Lock — Execution Plan
 
-**狀態**：draft v1 — 待 codex review
-**作者**：Claude（plan first written at main HEAD `4a1be03`，2026-05-28）
+**狀態**：r2 — 套用 codex r1 全 6 件 finding（2 blocker + 2 high + 1 state consistency + 1 observability），待 codex r2 review
+**作者**：Claude（plan first written at main HEAD `4a1be03`，2026-05-28；r2 patch at `<commit-pending>`）
 **為何存在**：PR 0.2c-pre-3 全段結（preview-gate-binding-canary PASS，HEAD `830b5d2`）+ sacrificial cleanup 完成（2026-05-28 ~08:00 local Taipei）後，prod lock 18+18=36 rules 是 F-3 Phase 2 cold archive 最後一道**不可逆 7yr** gate。本檔是 Phase 1 prep — 給 codex 在 user 走 walk-through 前 review 完整 36-cmd 序列、失敗劇本、open question。Codex Approve 後 user 才會親自走 Phase 2 walk-through 與 Phase 3 execute；本 session 不會 fire 任何 prod-touching cmd（含 read-only list）。
 **範圍**：對 prod bucket `chiyigo-audit-archive` 一次性執行 18 條 `r2 bucket lock add` + 18 條 `r2 bucket lifecycle add`，依 `docs/AUDIT_RETENTION_PLAN.md` line 906 SoT。
 **不可逆度**：**最大** — `retention-days` 從 365 / 1095 / 2555 設下去後，對應 prefix 7 年內無 `DELETE` 路徑（admin / root token 都不行）；rollback 只剩「等過期」/「CF support compliance ticket」/「改 cold_class 走新 prefix 棄舊」三條（皆遠高於多花 30 min walk-through）。
-**請 codex review**：（a）36 rules manifest 與 line 906 SoT 是否 1:1 對齊；（b）wrangler cmd shape 是否與 `scripts/spike-r2-lock.mjs:270/273` 既有 pattern 一致；（c）partial state 處理是否考慮周全；（d）lock 與 lifecycle 上序、aggregate vs raw 上序是否最小化爆炸半徑；（e）失敗劇本是否漏掉真實場景。
+**請 codex r2 review**：（a）r1 全 6 件 finding 是否每條都正確套到位；（b）新「lifecycle-first → lock 1y→3y→7y」執行序是否真的最小化 partial-state blast radius；（c）§4.3 object emptiness preflight 三 method 是否覆蓋；（d）§5.1/§5.4 strict already-exists handling 是否堵死誤 skip 漏洞；（e）§6.1 4-checkpoint observability 是否足夠 forensic。
+
+---
+
+## Changelog: r1 → r2（2026-05-28）
+
+Codex r1 verdict = **Reject until revised**。6 件 finding 全收：
+
+| # | Finding 等級 | r1 抓到 | r2 修法 |
+|---|---|---|---|
+| 1 | **Blocker** | executable order self-contradictory：§3.3 是 A lock → A lifecycle → B lock → B lifecycle → C lock → C lifecycle，但 §3.4 寫「全 lock 跑完才跑 lifecycle」+ §7 Q1 未 resolved；CF docs 確認 bucket locks > lifecycle rules，所以 lifecycle 先設下去也不會誤刪 | §3 完全重寫：**Phase α 全 18 lifecycle 先（reversible）→ Phase β 18 lock 後依 1y→3y→7y order（partial-fail blast radius ascending）**；§3.4 改寫「為何 lifecycle-first」rationale；§7 Q1 升 **RESOLVED** |
+| 2 | **Blocker** | §4 preflight 只檢查 lock/lifecycle 規則表，沒驗 18 個 prefix 真的是 0 objects — bucket lock 對 new + existing objects 都 apply，殘留 canary/誤觸物件會被 1/3/7yr 鎖死 | §4 新增 §4.3 object emptiness check（**3 method 並行**：CF dashboard 視覺 visual confirm 為 primary、S3 sigv4 ListObjectsV2 為 backup、`wrangler r2 bucket info` 為 sampled yardstick）+ explicit gating；§4 原 .3/.4 順移至 .4/.5 |
+| 3 | **High** | §5.1 / §5.4 對 4xx already-exists 直接 skip 太寬，可能在 (name) 撞但 (prefix/days) 不對的情況下漏掉一條真正錯誤的 rule | §5.1 / §5.4 改 **strict match-then-skip**：必先 list confirm exact (name, prefix, days, enabled) 4 欄全 match，才可 skip；任何 mismatch / 任何 非-already-exists 4xx = stop run |
+| 4 | **High** | wrangler version pin 未 resolved；`package.json:48` `^4.87.0` 允許 minor bump | §3.1 / §4.2 改用 **lockfile-pinned binary**：`npm ci`（pin 至 lockfile 4.87.0 exact）→ `& "$PWD\node_modules\.bin\wrangler.cmd" ...`；§7 Q6 升 RESOLVED |
+| 5 | **State Consistency** | per-rule canary on formal prefixes 應 reject — PUT canary after lock 會建立 locked objects 在 prefix 內 1/3/7yr 無法刪；sacrificial 0.2c-pre-3 已 cover propagation enforcement | §3.4 / §7 Q2 升 **REJECTED**：formal prefix 上**禁** per-rule PUT canary；validation 限定 config-list diffing |
+| 6 | **Observability** | progress log 缺 milestone checkpoint snapshots，4-tier 跑完無 forensic 證據 | §6.1 新增 **4 milestone checkpoints**（after 18 lifecycle / after 8 × 1y lock / after 12-cumulative × 3y lock / after 18-cumulative × 7y lock final）；每點抓 whoami + version + lock list + lifecycle list + timestamp |
+
+**請 codex r2 驗**：6 件 finding 是否每條都正確收進 r2；新執行序是否無新假設、無漏掉 invariant、無自我矛盾。
 
 ---
 
@@ -91,7 +108,7 @@ PR 0.2c **完成後**才開始 14-day no-incident watch（監控 `audit.archive.
 
 ---
 
-## §3 wrangler cmd 序列（36 條）
+## §3 wrangler cmd 序列（36 條；新執行序：α lifecycle-first → β lock 1y→3y→7y）
 
 ### 3.1 Shape 驗證（已對 `--help` 跑過，本 session 2026-05-28）
 
@@ -115,265 +132,307 @@ wrangler r2 bucket lifecycle add <bucket> [name] [prefix]
   NOTE:        無 --remote flag（同上）
 ```
 
-兩條 shape **完全對齊** `scripts/spike-r2-lock.mjs:270`（lock）+ `:273`（lifecycle）既有 pattern：
-```js
-`npx wrangler r2 bucket lock add ${REQUIRED_BUCKET} ${ruleName} "${prefix}" --retention-days ${RETENTION_DAYS} -y`
-`npx wrangler r2 bucket lifecycle add ${REQUIRED_BUCKET} ${ruleName}-cleanup "${prefix}" --expire-days ${RETENTION_DAYS + 1} -y`
+兩條 shape **完全對齊** `scripts/spike-r2-lock.mjs:270`（lock）+ `:273`（lifecycle）既有 pattern：`<bucket> <name> "<prefix>" --(retention|expire)-days <N> -y`。
+
+**Wrangler runner — lockfile-pinned binary**（codex r1 finding 4 套用）：
+
+```powershell
+# Phase 3 動工前一次性 setup（在 chiyigo.com 工作目錄）
+npm ci                                                  # 依 package-lock.json 安裝 wrangler exact 4.87.0（lockfile 已 pin）
+& "$PWD\node_modules\.bin\wrangler.cmd" --version       # 預期回 "4.87.0"，不接受 4.87.x 之外
+$wrangler = "$PWD\node_modules\.bin\wrangler.cmd"       # 絕對路徑、避免 cwd 漂移
 ```
 
-→ 本 PR 36 cmd 全部沿用此 shape：`<bucket> <name> "<prefix>" --(retention|expire)-days <N> -y`。
+每條 cmd **改用 `& $wrangler` 取代 `npx wrangler`**（不走 npx，避免 `^4.87.0` caret 漏 minor bump）：
+
+```powershell
+$BUCKET = 'chiyigo-audit-archive'
+$NAME   = '<rule name>'
+$PREFIX = '<prefix value>'
+& $wrangler r2 bucket (lock|lifecycle) add $BUCKET $NAME $PREFIX --(retention|expire)-days <N> -y
+```
+
+備案（若 `npm ci` 不可行）：`npx --yes wrangler@4.87.0 ...` — 但 codex 推薦 lockfile-pinned binary 為主路徑。
 
 ### 3.2 Windows quirks 對齊（per [[reference_wrangler_r2_windows_quirk]]）
 
 | Quirk | 本 PR 適用？ | 因應 |
 |---|---|---|
 | Q1 (深巢 key get 假陰性) | 否 | 本 PR 不打 `r2 object get` |
-| Q2 (`r2 object list` 不存在於 4.87) | 否 | 本 PR 不打 `r2 object list` |
-| Q3 (`r2 object *` 預設打 local miniflare) | 否 | 本 PR 不打 `r2 object *`；如有 post-monitor probe 必加 `--remote` |
+| Q2 (`r2 object list` 不存在於 4.87) | **是**（§4.3 emptiness check） | 不走 wrangler list；改 CF dashboard / S3 sigv4 / `bucket info` 三 method |
+| Q3 (`r2 object *` 預設打 local miniflare) | 否 | 本 PR 不打 `r2 object *`；若 §4.3 走 S3 sigv4 path 不經 wrangler |
 | **Q4** (`r2 bucket lock/lifecycle` 拒 `--remote`) | **是** | 36 條 cmd 全部**不加** `--remote` |
 | **Q5** (PowerShell 行寬切長 key) | **是** | 全部 prefix + rule name 走 `$VAR='...'` 賦值再餵 cmd，**禁直接內聯** |
 | Q6 (libuv exit-crash benign noise) | 是 | 看到忽略，不影響 cmd outcome |
 
-### 3.3 36 cmd block（依 2.1 / 2.2 / 2.3 順序，每條附預期 success 訊息）
+### 3.3 36 cmd 執行序（α lifecycle-first → β lock 1y → 3y → 7y）
 
-**每條 cmd 的執行樣板（PowerShell）**：
+**新執行序 rationale**（codex r1 finding 1 套用，取代 r1 之前的 「all lock → all lifecycle」 default）：
+
+| Phase | Rules | 為什麼這順序最小化 blast radius |
+|---|---|---|
+| **α — 18 lifecycle first** | reversible setup | lifecycle rule 可 `bucket lifecycle remove` unwind；先設可 verify list 完整 → 才進不可逆 lock |
+| **β.1 — 8 × 1y locks** | irreversible，~1y to remediate | 中途 fail：已成 1y locks，~1y 後 retention 過期可解 |
+| **β.2 — 4 × 3y locks** | irreversible，~3y to remediate | 中途 fail：β.1 全成 + 部分 3y，blast radius +3y |
+| **β.3 — 6 × 7y locks（final）** | irreversible，~7y to remediate | 中途 fail：β.1+β.2 全成 + 部分 7y，半數 7y 比「all 18 一鼓作氣」7y 全爆好 |
+
+**CF docs 證據**：「bucket locks take precedence over lifecycle rules」— lifecycle 先設不會誤刪資料（lock 上線後會 override lifecycle expire），所以 lifecycle 先設**不增加風險**，反而讓 phase α 全 reversible，blast radius 真正最小化。
+
+**每條 cmd 執行樣板**（PowerShell；§3.1 runner setup 已跑完）：
 ```powershell
 $BUCKET = 'chiyigo-audit-archive'
 $NAME   = '<rule name>'
 $PREFIX = '<prefix value>'
-$DAYS   = <N>
-npx wrangler r2 bucket (lock|lifecycle) add $BUCKET $NAME $PREFIX --(retention|expire)-days $DAYS -y
+& $wrangler r2 bucket (lock|lifecycle) add $BUCKET $NAME $PREFIX --(retention|expire)-days <N> -y
 ```
-（`$VAR` 不直接內聯到 cmd 一行，per Q5）
 
 **預期 success 訊息形態**（codex r? 親跑 0.2c-pre-3 對 prod bucket 已驗）：
 - Lock add: `Added bucket lock rule '<name>' to bucket '<bucket>'.`（或 `✅` 開頭、wrangler 4.87 文字）
 - Lifecycle add: `Added lifecycle rule '<name>' to bucket '<bucket>'.`（同上）
-- Walk-through 時對「Added」字串 + rule name + bucket name 三段對得起來就算 success；libuv exit-crash 行（`Assertion failed: ...async.c, line 76`）忽略
-
-**Pairing principle（本 plan 偏離 SoT 順序的明示說明）**：本 plan §3.3 每個 lock cmd 的後面 (lock #N) 與 lifecycle cmd (lifecycle #N) **同 prefix 同 sub-position**（A.3 lock-admin-immutable ↔ A.10 expire-admin-immutable），方便 walk-through 一對一心智配對 + progress log 對位。
-
-`docs/AUDIT_RETENTION_PLAN.md` SoT lifecycle 區塊本身**內部不一致**：line 856-869 audit-log/ lifecycle 把 `expire-admin-immutable` 排在第 7 條（線下方），但 line 802-822 lock 區塊把 `lock-admin-immutable` 排在第 3 條（線上方）。manifest/ block 則內部一致（lock 與 lifecycle 都把 admin 排在第 3）。本 plan 統一採 lock-position 為配對基準，與 manifest/ block 的 SoT 行為一致 — 只在 audit-log/ lifecycle 順序上偏離 SoT。
-
-如果 codex 認為應該嚴格鏡像 SoT 順序而非配對性原則，請於 §7 Q3 額外列回，並建議是否同步修 SoT line 860/868 達內部一致。
+- Walk-through 時對「Added」字串 + rule name + bucket name 三段對得起來才算 success；libuv exit-crash 行（`Assertion failed: ...async.c, line 76`）忽略
 
 ---
 
-**Block A — Raw `audit-log/` 7 lock + 7 lifecycle = 14 cmd**
+#### Phase α — 18 lifecycle adds（reversible，可任何 sub-order 跑；本 plan 依 raw → manifest → aggregate 對齊 SoT lifecycle block line 856-897）
 
 ```powershell
-# ── A.1 (rule #1) audit_log/immutable — 7y ────────────────────────────────
-$BUCKET = 'chiyigo-audit-archive'
-$NAME   = 'lock-immutable'
-$PREFIX = 'audit-log/prod/audit_log/immutable/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
-
-# ── A.2 (rule #2) audit_log/security_critical — 7y ────────────────────────
-$NAME   = 'lock-sec-critical'
-$PREFIX = 'audit-log/prod/audit_log/security_critical/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
-
-# ── A.3 (rule #3) admin_audit_log/immutable — 7y ──────────────────────────
-$NAME   = 'lock-admin-immutable'
-$PREFIX = 'audit-log/prod/admin_audit_log/immutable/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
-
-# ── A.4 (rule #4) audit_log/security_warn — 3y ────────────────────────────
-$NAME   = 'lock-sec-warn'
-$PREFIX = 'audit-log/prod/audit_log/security_warn/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 1095 -y
-
-# ── A.5 (rule #5) audit_log/read_audit — 3y ───────────────────────────────
-$NAME   = 'lock-read-audit'
-$PREFIX = 'audit-log/prod/audit_log/read_audit/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 1095 -y
-
-# ── A.6 (rule #6) audit_log/telemetry — 1y ────────────────────────────────
-$NAME   = 'lock-telemetry'
-$PREFIX = 'audit-log/prod/audit_log/telemetry/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
-
-# ── A.7 (rule #7) audit_log/debug_failure — 1y ────────────────────────────
-$NAME   = 'lock-debug'
-$PREFIX = 'audit-log/prod/audit_log/debug_failure/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
-
-# ── A.8 (rule #1 lifecycle) audit_log/immutable — 2557d ───────────────────
+# ── α.1 audit_log/immutable lifecycle — 2557d ─────────────────────────────
 $NAME   = 'expire-immutable'
 $PREFIX = 'audit-log/prod/audit_log/immutable/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
 
-# ── A.9 audit_log/security_critical — 2557d ───────────────────────────────
+# ── α.2 audit_log/security_critical lifecycle — 2557d ─────────────────────
 $NAME   = 'expire-sec-critical'
 $PREFIX = 'audit-log/prod/audit_log/security_critical/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
 
-# ── A.10 admin_audit_log/immutable — 2557d ────────────────────────────────
-$NAME   = 'expire-admin-immutable'
-$PREFIX = 'audit-log/prod/admin_audit_log/immutable/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
-
-# ── A.11 audit_log/security_warn — 1097d ──────────────────────────────────
+# ── α.3 audit_log/security_warn lifecycle — 1097d ─────────────────────────
 $NAME   = 'expire-sec-warn'
 $PREFIX = 'audit-log/prod/audit_log/security_warn/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 1097 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 1097 -y
 
-# ── A.12 audit_log/read_audit — 1097d ─────────────────────────────────────
+# ── α.4 audit_log/read_audit lifecycle — 1097d ────────────────────────────
 $NAME   = 'expire-read-audit'
 $PREFIX = 'audit-log/prod/audit_log/read_audit/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 1097 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 1097 -y
 
-# ── A.13 audit_log/telemetry — 367d ───────────────────────────────────────
+# ── α.5 audit_log/telemetry lifecycle — 367d ──────────────────────────────
 $NAME   = 'expire-telemetry'
 $PREFIX = 'audit-log/prod/audit_log/telemetry/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
 
-# ── A.14 audit_log/debug_failure — 367d ───────────────────────────────────
+# ── α.6 audit_log/debug_failure lifecycle — 367d ──────────────────────────
 $NAME   = 'expire-debug'
 $PREFIX = 'audit-log/prod/audit_log/debug_failure/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
-```
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
 
-**Block B — `manifest/` 7 lock + 7 lifecycle = 14 cmd**
+# ── α.7 admin_audit_log/immutable lifecycle — 2557d ───────────────────────
+$NAME   = 'expire-admin-immutable'
+$PREFIX = 'audit-log/prod/admin_audit_log/immutable/'
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
 
-```powershell
-# ── B.1 (rule #8) manifest/audit_log/immutable — 7y ───────────────────────
-$NAME   = 'lock-manifest-immutable'
-$PREFIX = 'manifest/prod/audit_log/immutable/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
-
-# ── B.2 manifest/audit_log/security_critical — 7y ─────────────────────────
-$NAME   = 'lock-manifest-sec-critical'
-$PREFIX = 'manifest/prod/audit_log/security_critical/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
-
-# ── B.3 manifest/admin_audit_log/immutable — 7y ───────────────────────────
-$NAME   = 'lock-manifest-admin'
-$PREFIX = 'manifest/prod/admin_audit_log/immutable/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
-
-# ── B.4 manifest/audit_log/security_warn — 3y ─────────────────────────────
-$NAME   = 'lock-manifest-sec-warn'
-$PREFIX = 'manifest/prod/audit_log/security_warn/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 1095 -y
-
-# ── B.5 manifest/audit_log/read_audit — 3y ────────────────────────────────
-$NAME   = 'lock-manifest-read'
-$PREFIX = 'manifest/prod/audit_log/read_audit/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 1095 -y
-
-# ── B.6 manifest/audit_log/telemetry — 1y ─────────────────────────────────
-$NAME   = 'lock-manifest-tele'
-$PREFIX = 'manifest/prod/audit_log/telemetry/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
-
-# ── B.7 manifest/audit_log/debug_failure — 1y ─────────────────────────────
-$NAME   = 'lock-manifest-debug'
-$PREFIX = 'manifest/prod/audit_log/debug_failure/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
-
-# ── B.8 manifest/audit_log/immutable lifecycle — 2557d ────────────────────
+# ── α.8 manifest/audit_log/immutable lifecycle — 2557d ────────────────────
 $NAME   = 'expire-manifest-immutable'
 $PREFIX = 'manifest/prod/audit_log/immutable/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
 
-# ── B.9 manifest/audit_log/security_critical lifecycle — 2557d ────────────
+# ── α.9 manifest/audit_log/security_critical lifecycle — 2557d ────────────
 $NAME   = 'expire-manifest-sec-critical'
 $PREFIX = 'manifest/prod/audit_log/security_critical/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
 
-# ── B.10 manifest/admin_audit_log/immutable lifecycle — 2557d ─────────────
+# ── α.10 manifest/admin_audit_log/immutable lifecycle — 2557d ─────────────
 $NAME   = 'expire-manifest-admin'
 $PREFIX = 'manifest/prod/admin_audit_log/immutable/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 2557 -y
 
-# ── B.11 manifest/audit_log/security_warn lifecycle — 1097d ───────────────
+# ── α.11 manifest/audit_log/security_warn lifecycle — 1097d ───────────────
 $NAME   = 'expire-manifest-sec-warn'
 $PREFIX = 'manifest/prod/audit_log/security_warn/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 1097 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 1097 -y
 
-# ── B.12 manifest/audit_log/read_audit lifecycle — 1097d ──────────────────
+# ── α.12 manifest/audit_log/read_audit lifecycle — 1097d ──────────────────
 $NAME   = 'expire-manifest-read'
 $PREFIX = 'manifest/prod/audit_log/read_audit/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 1097 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 1097 -y
 
-# ── B.13 manifest/audit_log/telemetry lifecycle — 367d ────────────────────
+# ── α.13 manifest/audit_log/telemetry lifecycle — 367d ────────────────────
 $NAME   = 'expire-manifest-tele'
 $PREFIX = 'manifest/prod/audit_log/telemetry/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
 
-# ── B.14 manifest/audit_log/debug_failure lifecycle — 367d ────────────────
+# ── α.14 manifest/audit_log/debug_failure lifecycle — 367d ────────────────
 $NAME   = 'expire-manifest-debug'
 $PREFIX = 'manifest/prod/audit_log/debug_failure/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
-```
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
 
-**Block C — Aggregate 4 lock + 4 lifecycle = 8 cmd**
-
-```powershell
-# ── C.1 (rule #15) audit-log-aggregate-telemetry/prod/ — 1y ───────────────
-$NAME   = 'lock-agg-tele'
-$PREFIX = 'audit-log-aggregate-telemetry/prod/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
-
-# ── C.2 audit-log-aggregate-debug/prod/ — 1y ──────────────────────────────
-$NAME   = 'lock-agg-debug'
-$PREFIX = 'audit-log-aggregate-debug/prod/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
-
-# ── C.3 manifest/audit_log_aggregate_telemetry/ — 1y ──────────────────────
-$NAME   = 'lock-agg-manifest-tele'
-$PREFIX = 'manifest/prod/audit_log_aggregate_telemetry/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
-
-# ── C.4 manifest/audit_log_aggregate_debug/ — 1y ──────────────────────────
-$NAME   = 'lock-agg-manifest-debug'
-$PREFIX = 'manifest/prod/audit_log_aggregate_debug/'
-npx wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
-
-# ── C.5 audit-log-aggregate-telemetry/prod/ lifecycle — 367d ──────────────
+# ── α.15 audit-log-aggregate-telemetry/prod/ lifecycle — 367d ─────────────
 $NAME   = 'expire-agg-tele'
 $PREFIX = 'audit-log-aggregate-telemetry/prod/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
 
-# ── C.6 audit-log-aggregate-debug/prod/ lifecycle — 367d ──────────────────
+# ── α.16 audit-log-aggregate-debug/prod/ lifecycle — 367d ─────────────────
 $NAME   = 'expire-agg-debug'
 $PREFIX = 'audit-log-aggregate-debug/prod/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
 
-# ── C.7 manifest/audit_log_aggregate_telemetry/ lifecycle — 367d ──────────
+# ── α.17 manifest/audit_log_aggregate_telemetry/ lifecycle — 367d ─────────
 $NAME   = 'expire-agg-manifest-tele'
 $PREFIX = 'manifest/prod/audit_log_aggregate_telemetry/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
 
-# ── C.8 manifest/audit_log_aggregate_debug/ lifecycle — 367d ──────────────
+# ── α.18 manifest/audit_log_aggregate_debug/ lifecycle — 367d ─────────────
 $NAME   = 'expire-agg-manifest-debug'
 $PREFIX = 'manifest/prod/audit_log_aggregate_debug/'
-npx wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
+& $wrangler r2 bucket lifecycle add $BUCKET $NAME $PREFIX --expire-days 367 -y
 ```
 
-**合計：A.14 + B.14 + C.8 = 36 cmd。**
+**Phase α 收尾 → §6.1 Checkpoint #1**（18 lifecycle 列表完整 confirmation；strict diff 對齊 §2 manifest）。
 
-### 3.4 上序選擇（**待 codex 決**，先寫 default — 見 §7 Q1）
+---
 
-Default proposal：**全 lock 跑完才跑 lifecycle**（block A → block B → block C 都是「先全 lock、後全 lifecycle」），sub-block 內 raw → manifest → aggregate。理由：
+#### Phase β.1 — 8 × 1y locks（lowest blast radius，~1y to remediate）
 
-- 1 = **failure-mode 一致性**：若中途 fail，已成部分全是 lock（最不可逆的那種），lifecycle 缺失等同沒設過期清理 — 影響等同 lock 設完但忘了 lifecycle，**不會出現「lifecycle 已設但 lock 未設」的奇怪中間態**
-- 2 = SoT runbook（`docs/AUDIT_RETENTION_PLAN.md` line 802-897）就是按這順序排
-- 3 = `spike-r2-lock.mjs:270/273` 也是 lock 先輸出、lifecycle 後
+```powershell
+# ── β.1.1 audit_log/telemetry lock — 1y ───────────────────────────────────
+$NAME   = 'lock-telemetry'
+$PREFIX = 'audit-log/prod/audit_log/telemetry/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
 
-**競爭順序**（同檔 line 180-181「先 lifecycle、後 lock + 每組 sleep 10s + canary」與 default 衝突）— 列 §7 Q1 給 codex 決，**Phase 1 不強行擇一**。
+# ── β.1.2 audit_log/debug_failure lock — 1y ───────────────────────────────
+$NAME   = 'lock-debug'
+$PREFIX = 'audit-log/prod/audit_log/debug_failure/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
+
+# ── β.1.3 manifest/audit_log/telemetry lock — 1y ──────────────────────────
+$NAME   = 'lock-manifest-tele'
+$PREFIX = 'manifest/prod/audit_log/telemetry/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
+
+# ── β.1.4 manifest/audit_log/debug_failure lock — 1y ──────────────────────
+$NAME   = 'lock-manifest-debug'
+$PREFIX = 'manifest/prod/audit_log/debug_failure/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
+
+# ── β.1.5 audit-log-aggregate-telemetry/prod/ lock — 1y ───────────────────
+$NAME   = 'lock-agg-tele'
+$PREFIX = 'audit-log-aggregate-telemetry/prod/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
+
+# ── β.1.6 audit-log-aggregate-debug/prod/ lock — 1y ───────────────────────
+$NAME   = 'lock-agg-debug'
+$PREFIX = 'audit-log-aggregate-debug/prod/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
+
+# ── β.1.7 manifest/audit_log_aggregate_telemetry/ lock — 1y ───────────────
+$NAME   = 'lock-agg-manifest-tele'
+$PREFIX = 'manifest/prod/audit_log_aggregate_telemetry/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
+
+# ── β.1.8 manifest/audit_log_aggregate_debug/ lock — 1y ───────────────────
+$NAME   = 'lock-agg-manifest-debug'
+$PREFIX = 'manifest/prod/audit_log_aggregate_debug/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 365 -y
+```
+
+**Phase β.1 收尾 → §6.1 Checkpoint #2**（lock list count = 8，rule name 對齊；後續任何 fail 已成 1y blast）。
+
+---
+
+#### Phase β.2 — 4 × 3y locks
+
+```powershell
+# ── β.2.1 audit_log/security_warn lock — 3y ───────────────────────────────
+$NAME   = 'lock-sec-warn'
+$PREFIX = 'audit-log/prod/audit_log/security_warn/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 1095 -y
+
+# ── β.2.2 audit_log/read_audit lock — 3y ──────────────────────────────────
+$NAME   = 'lock-read-audit'
+$PREFIX = 'audit-log/prod/audit_log/read_audit/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 1095 -y
+
+# ── β.2.3 manifest/audit_log/security_warn lock — 3y ──────────────────────
+$NAME   = 'lock-manifest-sec-warn'
+$PREFIX = 'manifest/prod/audit_log/security_warn/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 1095 -y
+
+# ── β.2.4 manifest/audit_log/read_audit lock — 3y ─────────────────────────
+$NAME   = 'lock-manifest-read'
+$PREFIX = 'manifest/prod/audit_log/read_audit/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 1095 -y
+```
+
+**Phase β.2 收尾 → §6.1 Checkpoint #3**（lock list count = 12，rule name 對齊；後續 fail 已成 1y + 3y blast）。
+
+---
+
+#### Phase β.3 — 6 × 7y locks（**最後也最不可逆**；跑完前最後一個 mental walk-through）
+
+```powershell
+# ── β.3.1 audit_log/immutable lock — 7y ───────────────────────────────────
+$NAME   = 'lock-immutable'
+$PREFIX = 'audit-log/prod/audit_log/immutable/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
+
+# ── β.3.2 audit_log/security_critical lock — 7y ───────────────────────────
+$NAME   = 'lock-sec-critical'
+$PREFIX = 'audit-log/prod/audit_log/security_critical/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
+
+# ── β.3.3 admin_audit_log/immutable lock — 7y ─────────────────────────────
+$NAME   = 'lock-admin-immutable'
+$PREFIX = 'audit-log/prod/admin_audit_log/immutable/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
+
+# ── β.3.4 manifest/audit_log/immutable lock — 7y ──────────────────────────
+$NAME   = 'lock-manifest-immutable'
+$PREFIX = 'manifest/prod/audit_log/immutable/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
+
+# ── β.3.5 manifest/audit_log/security_critical lock — 7y ──────────────────
+$NAME   = 'lock-manifest-sec-critical'
+$PREFIX = 'manifest/prod/audit_log/security_critical/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
+
+# ── β.3.6 manifest/admin_audit_log/immutable lock — 7y ────────────────────
+$NAME   = 'lock-manifest-admin'
+$PREFIX = 'manifest/prod/admin_audit_log/immutable/'
+& $wrangler r2 bucket lock add $BUCKET $NAME $PREFIX --retention-days 2555 -y
+```
+
+**Phase β.3 收尾 → §6.1 Checkpoint #4 (final)**（lock list count = 18 + lifecycle list count = 18 + Default Multipart Abort Rule；prod lock 全段落定）。
+
+---
+
+**合計：Phase α 18 + Phase β.1 8 + Phase β.2 4 + Phase β.3 6 = 36 cmd。**
+
+### 3.4 為何不在 formal prefix 上跑 per-rule canary（codex r1 finding 5 套用）
+
+`docs/AUDIT_RETENTION_PLAN.md` line 180-181 寫的「每組 lock 設完 sleep 10s + canary PUT 驗 propagation」**對 formal prefix 不適用**：
+
+- 一旦 lock 上 prefix，**任何在該 prefix 上的物件**（含驗 propagation 用的 canary）都被 1/3/7yr 鎖死，無法在 retention 期內 delete
+- canary PUT 後 lock 命中 → throw → 但 throw 之前若已建立物件（PUT 成功但 lock 規則延遲生效）→ 物件 stuck 7yr
+- canary PUT 在 lock 前 → 物件無 lock 保護，不算 propagation 驗證
+- propagation 已在 [[reference_r2_lock_gate_design_evolution]] PR 0.2c-pre-3 對 sacrificial prefix `sacrificial/preview-gate-binding/...` 親驗，**不需再對 formal prefix 重複**
+
+→ Phase α + β 全程**禁** PUT canary on formal prefix。驗證限定 **config-list diffing**（§6.1 4-checkpoint lock/lifecycle list 對齊 §2 manifest）。
+
+> 替代 propagation 驗證（如果 codex 認為對 formal prefix 仍需）：可在 sacrificial 新 prefix `sacrificial/post-prod-lock-canary-<ts>/` 跑一次完整 enforce drill（同 0.2c-pre-3 模式，但 24h 過期）— **獨立 PR**，不在本 PR 範圍。
 
 ---
 
 ## §4 Pre-flight check（Phase 3 動工前 user 親跑；Phase 1 不跑）
 
-執行序：**全 36 cmd 之前**跑一遍 4 條 check，任一失敗 → 停手回報。
+執行序：**全 36 cmd 之前**跑一遍 5 條 check，任一失敗 → 停手回報。
 
-### 4.1 wrangler whoami 驗帳號
+### 4.1 wrangler runner setup + whoami 驗帳號（codex r1 finding 4 套用）
 
 ```powershell
-npx wrangler whoami
+# 0. 在 chiyigo.com 工作目錄
+npm ci                                                    # 依 lockfile 安裝 wrangler exact 4.87.0
+$wrangler = "$PWD\node_modules\.bin\wrangler.cmd"         # 絕對路徑，避免 cwd 漂移
+& $wrangler whoami
 ```
 
 預期輸出含三段：
@@ -383,28 +442,77 @@ npx wrangler whoami
 
 若 OAuth token 過期 → wrangler 會引導 browser login；重 login 後再跑。
 
-### 4.2 wrangler version 對齊
+### 4.2 wrangler version 對齊（hard pin）
 
 ```powershell
-npx wrangler --version
+& $wrangler --version
 ```
 
-預期：**`4.87.0`**（精確；不接受 `4.87.x` 之外的版本）。本 session 2026-05-28 已驗。
+預期：**`4.87.0`**（精確；不接受 `4.87.x` 之外的版本）。`npm ci` 已從 `package-lock.json` resolve 至 exact `4.87.0`（`package.json:48` `^4.87.0` 雖允許 caret 但 lockfile 鎖死），本 session 2026-05-28 已驗 `& $wrangler --version` = `4.87.0`。
 
-### 4.3 lock list 預期空
+### 4.3 Object emptiness check（codex r1 finding 2 套用 — 18 prefix 全 0 objects 驗證）
+
+**為何必須**：bucket lock 對 **new + existing** objects 都 apply（CF docs 明示）。若 18 個 formal prefix 內任一存在殘留物件（誤觸測試 / sacrificial cleanup 漏網 / 0.2c-pre-3 之前的 dry-run 殘骸），lock 上線後該物件被 1/3/7yr 鎖死無法 delete。`docs/AUDIT_RETENTION_PLAN.md:770` 寫的「`object_count=0`」是歷史快照，不能取代執行前驗證。
+
+**三 method 並行**（**Method 1 為 gating，其他為輔證**）：
+
+**Method 1（gating）— CF dashboard 視覺確認**
+
+1. 打開 https://dash.cloudflare.com → R2 → `chiyigo-audit-archive` → Objects
+2. 對 §2 manifest 列的 **18 個 prefix** 一個個點開（navigate folder tree）
+3. 確認每個 prefix 顯示「No objects」/「empty folder」/ 折疊狀無內容
+4. 若任一 prefix 有殘留物件 → **立刻停手**：
+   - 鑑別：是 cleanup 漏網（sacrificial）/ 早期 dry-run 殘骸 / 誤觸測試？
+   - 若是 dry-run 殘骸（key 含 `audit-log-dryrun/...` prefix）→ 不在 18 formal prefix 範圍，OK
+   - 若真在 formal prefix 內 → **不要 lock**；先 `wrangler r2 object delete <bucket>/<key> --remote` 清掉，重跑 4.3
+5. 寫進 fixture：「Method 1 visual scan: 18/18 prefix confirmed empty at <timestamp>」
+
+**Method 2（backup，scriptable）— S3 sigv4 ListObjectsV2**
+
+若 audit-archive-writer S3 limited token 仍 valid（[[project_audit_phase2]] 0.2c-pre-1b spike 期間有用過、之後被 Roll；Phase 3 動工時必須先 Roll 新組）：
 
 ```powershell
-npx wrangler r2 bucket lock list chiyigo-audit-archive
+# 預設 S3 endpoint = https://<account-id>.r2.cloudflarestorage.com
+$env:AWS_ACCESS_KEY_ID     = '<limited token access key>'
+$env:AWS_SECRET_ACCESS_KEY = '<limited token secret>'
+
+foreach ($prefix in $PREFIXES_18) {  # 18 個 §2 manifest prefix
+  aws s3api list-objects-v2 `
+    --bucket chiyigo-audit-archive `
+    --prefix $prefix `
+    --max-keys 5 `
+    --endpoint-url "https://2d2c4b4ddbddec1a5d045533c01d715f.r2.cloudflarestorage.com"
+}
+```
+
+預期：每 prefix 回 `{}` 或 `{"KeyCount": 0}` 或無 Contents 欄位 — 全 0 objects。任一非 0 → 同 Method 1 停手。
+
+**注意**：S3 sigv4 token 在 0.2c-pre-1b 後已 Roll；若要走此 method 必須先 Roll 新 limited token 並 set env vars（避走 [[feedback_secret_container_no_generic_grep]] / [[feedback_ide_selection_auto_echo_leak]]）。Method 1 不依賴 token，**Method 2 純粹 optional 加乘**。
+
+**Method 3（sampled yardstick，僅作 sanity check）— `wrangler r2 bucket info`**
+
+```powershell
+& $wrangler r2 bucket info chiyigo-audit-archive
+```
+
+預期回 `object_count: 0 / Bucket Size: 0 B`。**注意 per [[reference_wrangler_r2_windows_quirk]] Quirk 1：此 cmd 回的 object_count 是 sampled，不反映即時狀態**。所以 Method 3 不能單獨作 gating；只是「如果 Method 3 回非 0，那連 sampled view 都看到物件，肯定有殘留」的反向 sanity check。
+
+**Gating decision**：Method 1 = pass + Method 3 = `object_count: 0`（或 sampled 顯示非 0 但 Method 1 視覺確認真的空）→ proceed Phase α。Method 1 fail → 停手清殘留再跑。
+
+### 4.4 lock list 預期空
+
+```powershell
+& $wrangler r2 bucket lock list chiyigo-audit-archive
 ```
 
 預期：**無任何 rule**（cleanup 後狀態，sacrificial `preview-gate-binding-20260525-131627-9416db` 已 remove）。若仍有 rule entry → 停手回報 → 走 cleanup SOP 再跑。
 
 > ⚠️ Phase 1（本 session）**不**跑此 cmd（避免無謂 prod call）；user 在 Phase 3 動工前親跑。
 
-### 4.4 lifecycle list 預期只有 default housekeeping
+### 4.5 lifecycle list 預期只有 default housekeeping
 
 ```powershell
-npx wrangler r2 bucket lifecycle list chiyigo-audit-archive
+& $wrangler r2 bucket lifecycle list chiyigo-audit-archive
 ```
 
 預期：**只有** `Default Multipart Abort Rule`（CF 內建 housekeeping，非本 PR 設）。若有其他 entry → 停手回報。
@@ -417,33 +525,41 @@ npx wrangler r2 bucket lifecycle list chiyigo-audit-archive
 
 ### 5.1 中途任一條 cmd fail
 
-**場景**：跑到第 N 條（1 ≤ N ≤ 36）任一條失敗（網路、wrangler bug、CF API 5xx、CF 限流、libuv 噴出非 cosmetic error）。
+**場景**：跑到第 N 條（1 ≤ N ≤ 36）任一條失敗（網路、wrangler bug、CF API 5xx、CF 限流、libuv 噴出非 cosmetic error、4xx 非 already-exists）。
 
-**現實**：已成 N-1 條已 LIVE 在 prod bucket，**lock 部分（rule ≤ 18 範圍）全部 7yr 不可逆**，lifecycle 部分可手動 remove（per AUDIT_RETENTION_PLAN.md cleanup pattern）但無意義。
+**現實 — 依新 phase 結構**：
+- 若 fail 發生在 Phase α（lifecycle 18 條） → 已成 N-1 條 **reversible**（`bucket lifecycle remove --id <name>` 可清）；retry 簡單
+- 若 fail 發生在 Phase β.1（1y locks） → 已成 1y locks 不可逆但 ~1y 後 retention 過期可解；blast 1y
+- 若 fail 發生在 Phase β.2（3y locks） → β.1 全成 + 部分 β.2 不可逆；blast 含 3y
+- 若 fail 發生在 Phase β.3（7y locks） → β.1+β.2 全成 + 部分 β.3 不可逆；blast 含 7y
 
 **決策**：
-- **rollback 不存在**（Tier 0 conjunctive blocker — 7yr 是 immutable）
-- **partial 留著 retry**：是唯一可行路徑。已成 N-1 條保留，從 N 開始重跑
-- 不需 unwind 已成部分（即使 unwind 也只能 lifecycle remove；lock 永遠在）
+- **rollback 在 Phase α 內**：cmd 失敗可 `lifecycle remove` 清；其他 phase rollback 不存在
+- **partial 留著 retry**：唯一可行路徑。已成 N-1 條保留，從 N 開始重跑
 
-**SOP**：
+**SOP**（codex r1 finding 3 套用 — strict already-exists handling）：
 1. 停手記錄 fail cmd 的 stderr / stdout（整段截到 fixture）
-2. 看 fail 原因：
-   - 網路 / wrangler bug → 修 + retry 同 cmd
-   - CF API 5xx → 等 5 min 再 retry（不重試 sleep loop，先讀 status.cloudflare.com）
-   - CF API 4xx（如 already-exists） → 跳到下一條（rule 已存在等同這條已完成）
-   - wrangler OAuth 過期 → 重 login → retry
+2. 看 fail 原因分類：
+   - **網路 / 連線錯誤** → 修 + retry 同 cmd
+   - **CF API 5xx** → 讀 status.cloudflare.com → 等 5 min 再 retry（不 sleep loop 盲試）
+   - **CF API 4xx with "already exists" / equivalent confirmation msg** → **不直接 skip**，先走 list confirm 4-field exact match：
+     - `& $wrangler r2 bucket lock list chiyigo-audit-archive`（或 lifecycle list，視 cmd 種類）
+     - 對齊 4 欄：(1) name 完全一致 (2) prefix 完全一致 (3) retention-days 或 expire-days 完全一致 (4) enabled / active status 為 true
+     - **4/4 match** → 安全 skip，跳到 N+1 cmd
+     - **3/4 或以下 match** → **停手** 回報；很可能是同名 rule 在不同 prefix 或 days 上設過（資料 corrupt risk），不可繼續
+   - **其他 CF API 4xx**（非 already-exists；如 `400 BadRequest` / `403 Forbidden`） → **停手回報**，不 retry
+   - **wrangler OAuth 過期 (401)** → §5.2 SOP
 3. retry 後 success → 繼續 N+1 cmd
-4. **每一條完成都記錄到 progress log**（手寫文字檔，per `cmd seq num | rule name | success-msg | timestamp`）
+4. **每一條完成都記錄到 progress log**（手寫文字檔，per `cmd seq num | rule name | prefix | days | success-msg | timestamp`）
 
 ### 5.2 wrangler OAuth token 中途過期
 
 **場景**：跑到第 N 條時 wrangler 拋 `Authentication error: Status 401`。
 
 **SOP**：
-1. 確認 user 對應的 wrangler login（先 `npx wrangler whoami` 看現有 status）
-2. 若 token 確實過期 → `npx wrangler logout` → `npx wrangler login`（browser flow）
-3. login 完成後跑 `npx wrangler whoami` 確認回到正確 account（email + Account ID 對齊 §4.1）
+1. 確認 user 對應的 wrangler login（先 `& $wrangler whoami` 看現有 status）
+2. 若 token 確實過期 → `& $wrangler logout` → `& $wrangler login`（browser flow）
+3. login 完成後跑 `& $wrangler whoami` 確認回到正確 account（email + Account ID 對齊 §4.1）
 4. retry 第 N 條
 5. 若 4 重 login 後仍 401 → 停手回報 user，可能是 account 端問題
 
@@ -455,17 +571,27 @@ npx wrangler r2 bucket lifecycle list chiyigo-audit-archive
 
 **SOP**：忽略，繼續 N+1 cmd。但走 progress log + visual confirm Success 訊息（不只看 exit code）。
 
-### 5.4 同一條 cmd 跑兩次（誤觸 / progress log 混亂）
+### 5.4 同一條 cmd 跑兩次（誤觸 / progress log 混亂；codex r1 finding 3 套用 — strict skip）
 
-**場景**：user 不小心對同一條 rule 跑了兩次 cmd。
+**場景**：user 不小心對同一條 rule 跑了兩次 cmd（或 retry 後忘了已成）。
 
-**現實**：wrangler 4.87 對 `bucket lock add` / `bucket lifecycle add` 的同名 rule 大概率回 `4xx already exists`（per CF API 行為），可能會直接 fail。**不太可能**會建立兩條同名 rule（rule name 是 unique key）。
+**現實**：wrangler 4.87 對 `bucket lock add` / `bucket lifecycle add` 的同名 rule 大概率回 `4xx already exists`。但「同名 rule 已存在」**不等於**「prefix / days 也對」— 若 user 之前曾用同名設過不同 prefix / days，list 也會回同名，**單看 fail message 會誤 skip 真正錯的 rule**。
 
-**SOP**：fail = 等同已成（rule 已在），跳到下一條。
+**SOP**（**禁直接 skip**）：
+1. fail with "already exists" 字樣 → 不直接 skip
+2. 走 list verification（同 §5.1 step 2）：
+   ```powershell
+   & $wrangler r2 bucket lock list chiyigo-audit-archive | findstr <rule-name>
+   # 或全 list 後肉眼對 (name, prefix, days, enabled) 4 欄
+   ```
+3. **4 欄全 match** → 安全 skip，跳下一條
+4. **任一欄 mismatch** → 停手；可能是 historical leftover 或誤觸；不可繼續
 
-### 5.5 partial state 任一條 rule live 後就 7yr 不可逆
+### 5.5 partial state 沒有 rollback
 
-**確認**：本 plan **不**列出「partial rollback」path — 因為不存在。已成部分（lock 條目）全 7yr immutable。User walk-through 時必須親口確認接受「N-1 lock 已 live、剩 36-N+1 條 retry」這個 partial state 是可接受的 — 任何 lock 上 prod 之後就沒回頭路。
+**確認**：本 plan **不**列出「partial rollback」path 對 Phase β（lock 部分） — 因為不存在。已成部分（lock 條目）依 phase 決定 1y/3y/7y immutable。User walk-through 時必須親口確認接受「Phase β.X 任何一條 lock fail 後，已成 part 就是 partial state，無回頭路；retry 從 fail 那條開始」。
+
+Phase α（lifecycle）內 fail 是 **可 unwind** 的（用 `& $wrangler r2 bucket lifecycle remove <bucket> --id <name>`）；但通常不需要 unwind，直接 retry fail 的那條即可。
 
 ### 5.6 Cloudflare 帳號被誤切到他帳
 
@@ -479,8 +605,9 @@ npx wrangler r2 bucket lifecycle list chiyigo-audit-archive
 
 **SOP**：
 1. 重開 fresh PowerShell（不在 Claude IDE）
-2. 重跑 §4 pre-flight check（whoami / version / lock list / lifecycle list）— **lock list 與 lifecycle list 不再預期空**，要對著 progress log 確認「已成 N-1 條真的都在」
-3. 從第 N 條繼續跑
+2. 重跑 §4 pre-flight check（`npm ci` 重 setup `$wrangler` + whoami + version + lock list + lifecycle list）— **lock list 與 lifecycle list 不再預期空**，要對著 progress log 確認「已成 N-1 條真的都在 + 沒漂移」
+3. 若 list 與 progress log 完全對齊 → 從第 N 條繼續跑
+4. 若 list 與 progress log 不一致（多 1 條 / 少 1 條 / 同名但 prefix 異） → **停手** 詳查；可能是 propagation lag / 別人在改 / cmd 跑了但 progress log 沒記
 
 ### 5.8 user 看到「Added」success 訊息但 list 沒對應 rule
 
@@ -490,27 +617,37 @@ npx wrangler r2 bucket lifecycle list chiyigo-audit-archive
 
 **SOP**：
 1. 等 60s
-2. 重跑 `bucket lock list`
+2. 重跑 `& $wrangler r2 bucket lock list chiyigo-audit-archive`
 3. 仍無 → 停手回報；不繼續下一條
 4. 走 CF dashboard 視覺驗 R2 bucket > Settings > Bucket Lock 看當下實際狀態
 
 ---
 
-## §6 Post-monitor（24hr + 14-day）
+## §6 Post-monitor（4 milestone checkpoints + 24hr + 14-day）
 
-### 6.1 立即驗證（36 cmd 全跑完當下）
+### 6.1 4 milestone checkpoints during execution（codex r1 finding 6 套用）
 
-```powershell
-npx wrangler r2 bucket lock list chiyigo-audit-archive
-```
-預期：**18 條 lock rule**，rule name 對齊 §2 manifest。
+**目的**：每跨一個 phase 抓 forensic snapshot，把 Phase 進度凍結成可審計 fixture。任一 checkpoint 失敗（list 不對齊 §2 manifest）→ 停手回報，不進下一 phase。
 
-```powershell
-npx wrangler r2 bucket lifecycle list chiyigo-audit-archive
-```
-預期：**18 條 lifecycle rule + Default Multipart Abort Rule**，rule name 對齊 §2 manifest。
+**每個 checkpoint 必抓 5 段資料**：
+1. `& $wrangler whoami`（account email + ID + name）
+2. `& $wrangler --version`（必為 `4.87.0`）
+3. `& $wrangler r2 bucket lock list chiyigo-audit-archive`（full output，含每條 rule name / prefix / retention-days / enabled status）
+4. `& $wrangler r2 bucket lifecycle list chiyigo-audit-archive`（full output）
+5. ISO-8601 UTC timestamp（PowerShell `(Get-Date).ToUniversalTime().ToString('o')`）
 
-兩 list 寫進 fixture：`docs/fixtures/pr-0-2c-full-prod-lock-<YYYY-MM-DD>.json`
+**寫進 fixture**：`docs/fixtures/pr-0-2c-full-prod-lock-<YYYY-MM-DD>.json`，per-checkpoint 一個 nested object（schema：`{checkpoint_id, phase, expected_counts, captured_at, whoami, version, lock_list_raw, lifecycle_list_raw}`）。
+
+| Checkpoint | 跑點 | 預期 lock count | 預期 lifecycle count | 預期 rule names |
+|---|---|---|---|---|
+| **#1** | Phase α 收尾（α.18 跑完） | 0 | 18 + Default Multipart Abort Rule | 18 `expire-*` per §2 manifest |
+| **#2** | Phase β.1 收尾（β.1.8 跑完） | 8 | 18 + Default | 8 `lock-{telemetry,debug,manifest-tele,manifest-debug,agg-tele,agg-debug,agg-manifest-tele,agg-manifest-debug}` + 18 `expire-*` |
+| **#3** | Phase β.2 收尾（β.2.4 跑完） | 12 | 18 + Default | β.1 8 條 + 4 `lock-{sec-warn,read-audit,manifest-sec-warn,manifest-read}` |
+| **#4 (final)** | Phase β.3 收尾（β.3.6 跑完） | 18 | 18 + Default | 全 18 `lock-*` + 全 18 `expire-*`（對齊 §2 manifest 完整集） |
+
+**strict diff method**：checkpoint 採 4-field exact match（同 §5.1 step 2 規則）— rule name、prefix、days、enabled。任一 mismatch → 停手。
+
+**若 checkpoint 過程跑 list cmd 觸發 wrangler 4.87 已知 cosmetic noise**（labelled output / ANSI / libuv exit-crash） → 按 Quirk 5/6 strip 後對；fixture 寫 raw 不 strip 給 future audit。
 
 ### 6.2 24hr watch（Day 0 → Day 1）
 
@@ -532,92 +669,87 @@ npx wrangler r2 bucket lifecycle list chiyigo-audit-archive
 
 ---
 
-## §7 給 codex 的 open questions（Phase 1 review 抓手）
+## §7 Open questions — r1 resolution status
 
-以下 7 條請 codex r1 第一輪明確 verdict：
+### Q1 — Lock vs lifecycle 上序（**RESOLVED by codex r1**）
 
-### Q1 — Lock vs lifecycle 上序選擇（內部 SoT 衝突）
+**Codex r1 verdict**：lifecycle first（reversible setup）→ locks in 1y → 3y → 7y order（partial-fail blast radius ascending）。CF docs 證據：bucket locks > lifecycle rules（lock 後 lifecycle expire 不會誤刪資料）。
 
-`docs/AUDIT_RETENTION_PLAN.md` 有**兩處衝突**的順序記載：
-- **Line 802-897**（runbook 主體）：lock add × 18 全跑完，**才** lifecycle add × 18（block 順序）
-- **Line 178-181**（PR 0.2c-pre runbook 「執行順序原則」）：**先設 lifecycle**（無 retention enforce，只是過期清理），**後設 lock**（不可逆）；每組 lock 設完 sleep 10s + canary PUT 驗 propagation
+**r2 套用**：§3.3 完全重寫 — Phase α 全 18 lifecycle 先 / Phase β 18 lock 後 1y→3y→7y；§3.4 改寫 rationale；`docs/AUDIT_RETENTION_PLAN.md` line 802-897 vs line 178-181 衝突由 codex r1 仲裁解決（採 line 178-181 lifecycle-first，但對 formal prefix 拒 per-rule canary — 見 Q2 resolution）。
 
-兩條 SoT 互斥。本 plan §3 default 採前者（lock first），理由列在 §3.4。請 codex 仲裁，哪條是正確的、為何另一條被推翻或仍 valid？
+**衍生 follow-up**：本 plan 通過後應同步更新 `docs/AUDIT_RETENTION_PLAN.md` line 802-897，把 lock-first 順序改成 lifecycle-first 對齊新 execution sequence；或在 line 906 附近加 note 指向本 plan 作為「實際執行 SoT」。**不阻 Phase 3**；列為衍生 backlog（§9 衍生 memory 追加）。
 
-> 預設 answer hint（供 codex 評）：line 802-897 是「runbook 指令清單」屬實作 SoT；line 178-181 是早期設計筆記，可能 stale。但若 codex 認為 lifecycle 先設更安全（lifecycle 是 reversible），可推翻 default。
+### Q2 — Per-rule canary on formal prefix（**REJECTED by codex r1**）
 
-### Q2 — Per-rule canary 是否必要？
+**Codex r1 verdict**：reject — PUT canary after lock 會建立 locked objects 在 prefix 內 1/3/7yr 無法刪。Sacrificial 0.2c-pre-3 已 cover propagation enforcement，不需對 formal prefix 重複。Validation 限定 config-list diffing。
 
-Line 181 寫「每組 lock 設完 sleep 10s + canary PUT 驗 propagation」對齊 [[feedback_r2_lock_propagation_canary]]：**rule API 200 ≠ 對 prefix 生效；canary PUT 確認真擋**。
+**r2 套用**：§3.4 明示拒絕 formal prefix per-rule canary，配 §6.1 4-checkpoint config-list diffing。若未來真需要 formal prefix propagation drill → 走獨立 PR + sacrificial new prefix（同 0.2c-pre-3 模式），不在本 PR 範圍。
 
-本 plan §3 default **不**做 per-rule canary（理由：preview-gate-binding-canary 已 PASS 證 prod bucket binding enforce；不需重複每 prefix 都試）。但若 codex 認為 prod 每個 prefix 都要獨立 canary（per-prefix propagation 風險不能外推），請列出建議的 canary 順序與時程。
+### Q3 — Aggregate vs raw 上序（**implicitly RESOLVED by Q1**）
 
-### Q3 — Aggregate vs raw 上序
+**新狀態**：Q1 resolution 後，上序由 retention tier（1y → 3y → 7y）決定，**不再**由 raw / manifest / aggregate family 決定。同一 tier 內，本 plan 採以下 sub-order：
 
-本 plan §3 採 raw → manifest → aggregate 順序（block A → B → C）。是否該改成「先 1y rules（最低風險）→ 3y → 7y（最高風險）」分群？
+- Phase β.1（1y）：raw telemetry/debug → manifest tele/debug → aggregate tele/debug → aggregate manifest tele/debug（8 條，依 §3.3 β.1.1 → β.1.8）
+- Phase β.2（3y）：raw sec-warn/read-audit → manifest sec-warn/read（4 條，依 §3.3 β.2.1 → β.2.4）
+- Phase β.3（7y）：raw immutable/sec-critical/admin-immutable → manifest 3 個（6 條，依 §3.3 β.3.1 → β.3.6）
 
-理由評估：
-- raw → manifest → aggregate 是「資料 → 索引 → 衍生」邏輯順序，與 cron worker 寫入順序對齊
-- 1y → 3y → 7y 是「retention 風險 ascending」，若中途 fail，已成部分 retention 較短，blast radius 較小
+請 codex r2 確認此 sub-order 是否仍最小化心智 friction（保留 family grouping 在 tier 內）。或建議改其他 sub-order。
 
-請 codex 仲裁。
+### Q4 — Partial state 中間檢查點（**RESOLVED by codex r1 finding 6**）
 
-### Q4 — Partial state 是否需要中間檢查點？
+**Codex r1 verdict**：採 4 milestone checkpoint — after lifecycle / after 1y / after 3y / after 7y final。每點抓 whoami + version + lock list + lifecycle list + timestamp。
 
-跑 36 條中間，是否每跑 6 條（或 9 條 / 12 條）就 `bucket lock list` + `lifecycle list` 對 progress log 一次？
+**r2 套用**：§6.1 完整實作 4 checkpoint + 5-field fixture schema + 4-field strict diff method。
 
-理由：
-- Pros：早期發現「Added but not in list」的 propagation lag / 帳號錯切問題
-- Cons：CF API call ×6 額外風險（API 5xx / rate limit）+ 拖長執行時間
+### Q5 — Rule name uniqueness 風險（**仍 open，請 codex r2 驗 CF 文件**）
 
-請 codex 評是否值得。若值得，建議 checkpoint 間隔。
+CF rule name 是否 lock + lifecycle 共享 namespace？本 plan 假設兩 namespace 獨立（`lock-tele` 不撞 `expire-tele`）。若 codex 能引 CF 官方文件或 wrangler 4.87 行為佐證或推翻，請於 r2 明示。
 
-### Q5 — Rule name uniqueness 風險
+**r2 補強**：§5.1 / §5.4 strict already-exists handling 加了 4-field exact match（name + prefix + days + enabled），即使 namespace 共享也能在 list verification 階段抓到撞名 + 場景錯位。
 
-CF rule name 是 unique key（per AUDIT_RETENTION_PLAN.md observed 行為）。但本 PR 18 個 lock rule name + 18 個 lifecycle rule name **全不撞**（命名 `lock-*` vs `expire-*`）。
+### Q6 — wrangler version pin（**RESOLVED by codex r1 finding 4**）
 
-問題：CF bucket 是否 **lock rule name + lifecycle rule name** 共享同一 namespace？若共享，「`lock-tele`」與「`expire-tele`」算同 namespace 不撞，但若 user 不小心改 `expire-tele` 成 `lock-tele` 會炸。本 plan 假設兩 namespace 獨立 — 請 codex 驗證 CF 文件 / 4.87 wrangler 行為。
+**Codex r1 verdict**：use `.\node_modules\.bin\wrangler.cmd` after `npm ci` + exact `--version` check（preferred）；or `npx --yes wrangler@4.87.0`（backup）。
 
-### Q6 — wrangler version pin 機制
+**r2 套用**：§3.1 / §4.1 / §4.2 全部改用 `$wrangler = "$PWD\node_modules\.bin\wrangler.cmd"` lockfile-pinned binary；§3.3 36 cmd 全部走 `& $wrangler`；備案保留 `npx --yes wrangler@4.87.0` 於 §3.1 末。
 
-wrangler 4.87.0 是當前 codex baseline，但 user 機器若 `npx wrangler` 拉到 latest，可能拿到 4.88+。是否該寫成 `npx wrangler@4.87.0 r2 ...` 強制版本？
+### Q7 — Phase 3 執行時長預估（**revised**）
 
-理由：
-- Pros：絕對對齊 0.2c-pre-3 親驗 baseline
-- Cons：npx 每次 cmd 下載 wrangler tarball 拖速度（除非已 cached）
+**新預估**：
+- §3.1 runner setup（`npm ci` first-time）：~30s-2min（depends on cache state，後續 session 0s）
+- §4 pre-flight check：~3-5 min（whoami / version / §4.3 dashboard visual scan 18 prefix 是主要時間 cost）
+- §3.3 36 cmd serial（lockfile-pinned binary 跑點本機，無 npx download overhead）：~3-6 min
+- §6.1 4 checkpoint（每點 lock list + lifecycle list + 寫 fixture）：~3-4 min
+- §6.1 final fixture commit：~2-3 min
 
-請 codex 評。Phase 1 已驗本機 wrangler --version=4.87.0；Phase 3 動工前再 §4.2 確認一次。
-
-### Q7 — Phase 3 執行時長預估
-
-每條 cmd 約 5-10 sec（wrangler npx overhead + CF API call），36 cmd serial 預估 3-6 min；若加 10s sleep between（per [[feedback_r2_lock_propagation_canary]] 第二代設計），多 6 min；若加 §4 pre-flight + §6.1 立即驗證，總長預估 **10-15 min**。
-
-請 codex 評估是否合理；若 codex 認為應該分 session 跑（如 raw / manifest / aggregate 各一 session）、不一次全跑，請列理由。
+**總長預估**：**15-20 min**（保守上限；不含 §4.3 dashboard visual scan 若 user 一邊查證一邊處理殘留）。Codex r1 沒 reject 一次跑完，故本 plan 維持 single-session execution；若 codex r2 認為應拆 session（phase α / β.1 / β.2 / β.3 各一）請建議拆分理由。
 
 ---
 
 ## §8 Phase 1 → Phase 2 → Phase 3 邊界
 
-本檔（plan doc）= **Phase 1 prep**。Phase 1 收尾條件 = codex Approve plan。
+本檔（plan doc）= **Phase 1 prep**。Phase 1 收尾條件 = codex r2 Approve plan（含 r1 6 件 finding 全收）。
 
 **Phase 2** = user 親自走 walk-through（per [[feedback_irreversible_action_full_review]]）：
 - 從 §1 觸發前提到 §6 post-monitor 全段念過或列 checklist
 - 失敗劇本 §5 mental rehearsal
-- 一邊念一邊在 fresh PowerShell（不是 Claude IDE）跑 §4 pre-flight check
+- 一邊念一邊在 fresh PowerShell（不是 Claude IDE）跑 §4 pre-flight check（含 §4.3 18-prefix object emptiness dashboard visual scan）
 
 **Phase 3** = user 親自跑 36 cmd（fresh PS、不是 Claude IDE）：
-- 對著 §3.3 36-cmd block 一條一條跑
-- 每條完成都寫 progress log（cmd seq num | rule name | success-msg | timestamp）
-- 跑完跑 §6.1 立即驗證
+- §3.1 runner setup → `npm ci` + 設 `$wrangler` 變數
+- 對著 §3.3 Phase α → β.1 → β.2 → β.3 順序一條一條跑
+- 每條完成都寫 progress log（cmd seq num | rule name | prefix | days | success-msg | timestamp）
+- 每 phase 收尾跑 §6.1 對應 checkpoint
 - 寫 fixture commit
 
-**Phase 1 嚴守邊界**：本 session **不**跑任何 prod-touching cmd（含 read-only `lock list` / `lifecycle list`）。Phase 1 收尾 = codex Approve plan 後**停手**，給 user 接 Phase 2。
+**Phase 1 嚴守邊界**：本 session **不**跑任何 prod-touching cmd（含 read-only `lock list` / `lifecycle list`）。Phase 1 收尾 = codex r2 Approve plan 後**停手**，給 user 接 Phase 2。
 
 ---
 
 ## §9 衍生 memory（執行完更新）
 
 Phase 3 完成後，補：
-- 更新 [[project_audit_phase2]] —「PR 0.2c full prod lock 全段結」section（HEAD hash / fixture path / 36 rule verify / 24hr no-emit 證據）
+- 更新 [[project_audit_phase2]] —「PR 0.2c full prod lock 全段結」section（HEAD hash / fixture path / 36 rule verify / 24hr no-emit 證據 / 4 checkpoint fixture content / Phase α-β.1-β.2-β.3 各 phase timestamp）
 - 若 §5 任何失敗劇本實際發生，補 [[reference_wrangler_r2_windows_quirk]] / 開新 reference memory
-- 若 codex 在 §7 任何 open question 給出推翻本 plan default 的答案，更新本 plan + AUDIT_RETENTION_PLAN.md 對應段
+- 若 codex r2 在 §7 任何 open question 給出推翻本 r2 的答案，更新本 plan + AUDIT_RETENTION_PLAN.md 對應段
+- **(衍生 follow-up，Q1 resolution)**：更新 `docs/AUDIT_RETENTION_PLAN.md` line 802-897 把「lock-first / lifecycle-second」改成「lifecycle-first / lock 1y→3y→7y」對齊新 execution sequence；或於 line 906 附近加 note 指向本 plan 為「實際執行 SoT」
