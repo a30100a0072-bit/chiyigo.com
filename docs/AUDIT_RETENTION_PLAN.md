@@ -793,6 +793,8 @@ Phase 3 加：
 
 > 🛑 **DO NOT EXECUTE this section's command sequence as-is**
 >
+> **（2026-05-29）觸發改制**：上鎖觸發已從日曆（原訂 2026-06-10）改為**事件 trigger**（"Path C — Event-Trigger Defer"，**四條任一**：① 真實付費/金流上線 ② 真實客戶/regulator 要 immutable audit retention ③ audit_log 開始累積需保全的 prod security/payment events ④ owner 明確進入 production retention posture；完整定義以 lock plan 頂部 banner 為 SoT）。事件成立前 pipeline 維持 dry-run、**不執行**本段；下列 rule name/prefix/days 仍為 SoT。詳見 plan doc 頂部 banner 與 memory `project_audit_phase2`。
+>
 > 下方 lock + lifecycle cmd block 仍保留為 **rule name / prefix / retention-days SoT**，但**執行順序與執行方式 superseded by** `docs/reviews/pr-0-2c-full-prod-lock-plan-2026-05-28.md` §3.3：
 > - **新執行序**：Phase α 18 lifecycle 先（reversible setup）→ Phase β 18 lock 後依 1y → 3y → 7y order（partial-fail blast radius ascending）
 > - **新 runner**：`& "$PWD\node_modules\.bin\wrangler.cmd"`（lockfile-pinned `npm ci` exact 4.87.0；不用 `npx wrangler`）
