@@ -92,6 +92,9 @@ describe('classifyAuditEvent — security_signal（撞庫/釣魚/2FA fail）', (
     'mfa.totp.verify.replay',
     'admin.unknown_role_actor',
     'webauthn.register.fail',
+    // PR1 Tenant Foundation：org-switch 信號（deny = 越權/失效嘗試；success = active tenant 變更）
+    'tenant.switch.deny',
+    'tenant.switch.success',
   ])('%s → security_signal', (e) => {
     expect(classifyAuditEvent(e)).toBe(AUDIT_CATEGORY.SECURITY_SIGNAL)
   })
@@ -190,8 +193,11 @@ describe('registry coverage', () => {
     // PR 0.2c-pre-2 (2026-05-24) 加 3 個 force_purge_blocked_by_lock events：
     //   audit.archive.force_purge_blocked_by_lock（critical；raw retention lock 423 路徑）
     //   audit.aggregate_archive.{telemetry,debug}.force_purge_blocked_by_lock（critical）→ 172。
+    // PR1 Tenant Foundation (2026-05-29) 加 2 個 security_signal events：
+    //   tenant.switch.deny（org-switch 被拒；越權/失效嘗試信號，deny 率異常 = 可能越權）
+    //   tenant.switch.success（active tenant 切換成功；auth-context 變更信號）→ 174。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(172)
+    expect(_registrySize).toBe(174)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
