@@ -24,6 +24,7 @@
 
 import { generateSecureToken, hashToken } from '../../utils/crypto'
 import { signJwt } from '../../utils/jwt'
+import { resolveActiveTenantClaims } from '../../utils/tenant-context'
 import { getCorsHeaders, resolveAud } from '../../utils/cors'
 import { res } from '../../utils/auth'
 import { refreshCookie } from '../../utils/cookies'
@@ -220,7 +221,9 @@ export async function onRequestPost({ request, env }) {
     .run()
 
   // ── 5. 簽發新 Access Token ───────────────────────────────────
+  const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(user.id))
   const accessToken = await signJwt({
+    ...tenantClaims,
     sub:            String(user.id),
     email:          user.email,
     email_verified: user.email_verified === 1,

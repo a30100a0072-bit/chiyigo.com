@@ -34,6 +34,7 @@
 import { verifyAuthenticationResponse } from '@simplewebauthn/server'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt'
+import { resolveActiveTenantClaims } from '../../../utils/tenant-context'
 import { getCorsHeaders, resolveAud } from '../../../utils/cors'
 import { res } from '../../../utils/auth'
 import { refreshCookie, isWebClient } from '../../../utils/cookies'
@@ -208,7 +209,9 @@ export async function onRequestPost({ request, env }) {
   // amr：passkey 帶 UV 視為「擁有 + 知識」雙因子；無 UV 只算 'webauthn'
   const amr = userVerified ? ['webauthn', 'mfa'] : ['webauthn']
 
+  const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(cred.user_id))
   const accessToken = await signJwt({
+    ...tenantClaims,
     sub:            String(cred.user_id),
     email:          cred.email,
     email_verified: cred.email_verified === 1,

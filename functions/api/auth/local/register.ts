@@ -11,6 +11,7 @@
 
 import { generateSalt, hashPassword, generateSecureToken, hashToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt'
+import { resolveActiveTenantClaims } from '../../../utils/tenant-context'
 import { sendVerificationEmail } from '../../../utils/email'
 import { validatePassword } from '../../../utils/password'
 import { resolveAud } from '../../../utils/cors'
@@ -194,7 +195,9 @@ export async function onRequestPost({ request, env, waitUntil }) {
 
   // ── 9. 簽發 Access Token（ES256）────────────────────────────
   // Codex #8：對齊 login.js 補 ver / scope claim，避免後續 bumpTokenVersion / scope 守門失效
+  const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(user.id))
   const accessToken = await signJwt({
+    ...tenantClaims,
     sub:            String(user.id),
     email:          emailLower,
     email_verified: false,

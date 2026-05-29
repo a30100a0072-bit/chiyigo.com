@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
+import { decodeJwt } from 'jose'
 import { onRequestPost as bindEmailPost } from '../../functions/api/auth/oauth/bind-email'
 
 const URL_PATH = 'http://localhost/api/auth/oauth/bind-email'
@@ -63,6 +64,10 @@ describe('bind-email 成功路徑', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.access_token).toMatch(/^eyJ/)
+    // PR1 tenant claim wiring：bind-email 新用戶 token 帶 active personal tenant
+    const bindClaims = decodeJwt(body.access_token)
+    expect(typeof bindClaims.tenant_id).toBe('number')
+    expect(bindClaims.platform_role).toBe('tenant_owner')
 
     const cookies = getSetCookies(res)
     expect(cookies.some(c => /chiyigo_refresh=/.test(c))).toBe(true)

@@ -64,6 +64,9 @@ describe('POST /api/auth/local/register', () => {
     const { payload } = await jwtVerify(body.access_token, pub, { algorithms: ['ES256'] })
     expect(payload.email).toBe('new@example.com')
     expect(payload.email_verified).toBe(false)
+    // PR1 tenant claim wiring：register 簽出的 token 帶 active personal tenant
+    expect(typeof payload.tenant_id).toBe('number')
+    expect(payload.platform_role).toBe('tenant_owner')
 
     // DB rows
     const u = await env.chiyigo_db.prepare(

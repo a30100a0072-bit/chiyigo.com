@@ -14,6 +14,7 @@
 
 import { verifyPassword, generateSecureToken, hashToken } from '../../../utils/crypto'
 import { signJwt } from '../../../utils/jwt'
+import { resolveActiveTenantClaims } from '../../../utils/tenant-context'
 import { resolveAud } from '../../../utils/cors'
 import { verifyTurnstile } from '../../../utils/turnstile'
 import { res } from '../../../utils/auth'
@@ -222,7 +223,9 @@ export async function onRequestPost({ request, env }) {
   }
 
   // ── 6b. 無 2FA → 簽發完整 Access Token + Refresh Token ──────
+  const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(record.user_id))
   const accessToken = await signJwt({
+    ...tenantClaims,
     sub:            String(record.user_id),
     email:          record.email,
     email_verified: record.email_verified === 1,

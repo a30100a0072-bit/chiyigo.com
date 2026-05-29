@@ -19,6 +19,7 @@ import { verifyBackupCode, generateSecureToken, hashToken } from '../../../utils
 import { verifyTotpReplaySafe } from '../../../utils/totp'
 import { requireAuth, res } from '../../../utils/auth'
 import { signJwt } from '../../../utils/jwt'
+import { resolveActiveTenantClaims } from '../../../utils/tenant-context'
 import { resolveAud } from '../../../utils/cors'
 import { refreshCookie, isWebClient } from '../../../utils/cookies'
 import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/rate-limit'
@@ -141,7 +142,9 @@ export async function onRequestPost({ request, env }) {
 }
 
 async function respondWithToken(userId, record, db, deviceUuid, platform, env, audience, request, riskClaims, method) {
+  const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
+    ...tenantClaims,
     sub:            String(userId),
     email:          record.email,
     email_verified: record.email_verified === 1,

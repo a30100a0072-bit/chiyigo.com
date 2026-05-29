@@ -14,6 +14,7 @@
  */
 
 import { verifyJwt, signJwt } from '../../../utils/jwt'
+import { resolveActiveTenantClaims } from '../../../utils/tenant-context'
 import { generateSecureToken, hashToken } from '../../../utils/crypto'
 import { getProvider } from '../../../utils/oauth-providers'
 import { resolveAud } from '../../../utils/cors'
@@ -186,7 +187,9 @@ export async function onRequestPost(context) {
   if (userRow.status === 'banned') return res({ error: '此帳號已被停用', code: 'ACCOUNT_DISABLED' }, 403)
 
   // ── 6. 簽發 Access Token ───────────────────────────────────────
+  const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
+    ...tenantClaims,
     sub:            String(userId),
     email:          userRow.email,
     email_verified: userRow.email_verified === 1,

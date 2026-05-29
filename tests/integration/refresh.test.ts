@@ -14,6 +14,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh'
+import { decodeJwt } from 'jose'
 
 async function seedRefresh(userId, {
   deviceUuid = null, expired = false, revoked = false, issuedAud = null,
@@ -62,6 +63,10 @@ describe('POST /api/auth/refresh — Phase D1 device binding', () => {
     expect(r.status).toBe(200)
     expect(r.body.access_token).toBeTruthy()
     expect(r.body.refresh_token).toBeTruthy()
+    // PR1 tenant claim wiring：refresh 簽出的 token 帶 active personal tenant（decision D：回 personal）
+    const refreshClaims = decodeJwt(r.body.access_token)
+    expect(typeof refreshClaims.tenant_id).toBe('number')
+    expect(refreshClaims.platform_role).toBe('tenant_owner')
     // 舊 token 被 revoked，新 token 繼承 device_uuid
     const rows = await env.chiyigo_db
       .prepare('SELECT device_uuid, revoked_at FROM refresh_tokens WHERE user_id = ? ORDER BY id')
