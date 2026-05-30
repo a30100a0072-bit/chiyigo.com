@@ -172,14 +172,14 @@ describe('acceptance §10.2 — DB schema CHECK negatives (raw insert)', () => {
   })
 
   it('invalid from_status / to_status → rejected', async () => {
-    const base = (from: string, to: string) => db.prepare(
+    const base = () => db.prepare(
       `INSERT INTO grant_plan_operations
          (tenant_id, product_id, plan_id, "trigger", manual_source, admin_idempotency_key, request_hash,
           granted_by, granted_by_email, granted_by_role, grant_reason, from_status, to_status, prev_projection_version, occurred_at)
        VALUES (?, 'erp', ?, 'manual', 'admin_override', ?, 'h', 1, 'a@x.io', 'admin', 'r', ?, ?, 0, ?)`,
     )
-    await expect(base('bogus', 'active').bind(tenantId, planId, 'kf', 'bogus', 'active', T0).run()).rejects.toThrow()
-    await expect(base('none', 'bogus').bind(tenantId, planId, 'kt', 'none', 'bogus', T0).run()).rejects.toThrow()
+    await expect(base().bind(tenantId, planId, 'kf', 'bogus', 'active', T0).run()).rejects.toThrow()
+    await expect(base().bind(tenantId, planId, 'kt', 'none', 'bogus', T0).run()).rejects.toThrow()
   })
 
   it('blank / whitespace offline payment_ref → rejected', async () => {
