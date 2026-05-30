@@ -1,5 +1,17 @@
 # PR 0.2c Full Prod Lock — Execution Plan
 
+> ## ⚠️ SUPERSEDED TRIGGER — 2026-05-29 owner decision（Path C — Event-Trigger Defer）
+>
+> **本 plan 的「何時上鎖」觸發已改制。執行步驟（§2–§6 的 36 cmd / lifecycle-first / forensic SOP / checkpoint）仍是上鎖時的 SoT，HOW 不變；但「WHEN 觸發」不再是日曆 2026-06-10。**
+>
+> - **新觸發 = 事件 trigger（Path C「Event-Trigger Defer」）**：任一成立才進 Phase 2 walk-through —— ① 真實付費/金流上線 ② 真實客戶/regulator 要 immutable audit retention ③ audit_log 開始累積需保全的 prod security/payment events ④ owner 明確進入 production retention posture。
+> - **§1.4 的 Path A（日曆 defer 到 6/10）與 Path B（早鎖 + waiver）兩者皆 superseded** —— 它們都假設 lock 在原節奏內執行；Path C 把觸發脫離日曆。⚠️ **勿把本決策誤讀成 §1.4 的「Path B」**（語意相反：plan 的 Path B = 早鎖，本決策 = 延後到有真實需求才鎖）。
+> - **6/10** 降級為「dry-run 滿月 review checkpoint」，非上鎖日。
+> - **原凍結 4 檔已解凍**（2026-05-29）；解凍唯一條件 = 動後維持 27/27 parity test + canary + gates（typecheck:ratchet / lint / test:int）綠。
+> - **理由**：7yr R2 retention lock 不可逆，目前無真實流量/金流/合規 driver、audit_log 近空 → 不在無需求時創造不可逆狀態（baseline:不可逆操作 + 五年可維護）。
+> - **本檔其餘任何「2026-06-10」/「defer 到 6/10」字樣（header / changelog / review-request 等）皆為 2026-05-28 歷史記錄，trigger 一律以本 banner 為準、勿當 active 指令。**
+> - **權威記錄**：project memory `project_audit_phase2`「LOCK TRIGGER 改制」段 + `docs/AUDIT_RETENTION_PLAN.md` banner。
+
 **狀態**：r4 — 套用 codex r1 全 6 件 + r2 全 4 件 + r3 全 2 件 finding（三輪共 3 blocker + 5 high + state consistency + observability + 1 minor），待 codex r4 review
 **作者**：Claude（plan first written at main HEAD `4a1be03`，2026-05-28；r2 patch at `f5bf833`；r3 patch at `a4bccdd`；r4 patch in this commit）
 **為何存在**：PR 0.2c-pre-3 全段結（preview-gate-binding-canary PASS，HEAD `830b5d2`）+ sacrificial cleanup 完成（2026-05-28 ~08:00 local Taipei）後，prod lock 18+18=36 rules 是 F-3 Phase 2 cold archive 最後一道**不可逆 7yr** gate。本檔是 Phase 1 prep — 給 codex 在 user 走 walk-through 前 review 完整 36-cmd 序列、失敗劇本、open question。Codex Approve 後 user 才會親自走 Phase 2 walk-through 與 Phase 3 execute；本 session 不會 fire 任何 prod-touching cmd（含 read-only list）。
@@ -90,11 +102,13 @@ PR 0.2c **完成後**才開始 14-day no-incident watch（監控 `audit.archive.
 
 ### 1.4 SoT trigger conditions（per `docs/AUDIT_RETENTION_PLAN.md:781` — codex r2 finding 8 套用）
 
+> 🟡 **整個 §1.4 = 2026-05-28 歷史快照，已於 2026-05-29 SUPERSEDED（見頂部 banner）。** 下方 T1 row 與 T1 段落寫的「defer Phase 3 到 2026-06-10」**不再是 active plan** —— lock 觸發已改 Path C 事件驅動、不綁日曆，6/10 降為 review checkpoint。5 條 SoT trigger 仍是「上鎖那天」的 readiness checklist，但「何時上鎖」由事件決定。下方保留作決策史，**勿據此把 6/10 當上鎖日**。
+
 `docs/AUDIT_RETENTION_PLAN.md` Step 0.2c 規定 **5 條觸發條件全部滿足**才可執行 prod lock。逐條對齊 evidence / N/A reason：
 
 | # | Trigger（per AUDIT_RETENTION_PLAN.md:781-786） | Evidence / Status as of 2026-05-28 | 結論 |
 |---|---|---|---|
-| T1 | PR 2 archive worker dry-run 在 prod 跑 ≥ 1 個月 | 最早 dry-run smoke：2026-05-11（per `reference_wrangler_r2_windows_quirk` Quirk 1）；至 2026-05-28 共 ~17 天，**不滿 1 個月**（差 ~13 天）。dry-run worker 仍 active（PR 2.0/2.1a/2.1c/2.1d/2.2a/2.2b/2.2c/2.1b/2.2d/2.3 全部已 deploy；DRY_RUN flag 未翻） | ⚠️ **NOT met** — 預設 path = **defer Phase 3 到 2026-06-10**（natural compliance）。若選 waiver path，必須走 **separate explicit risk-acceptance artifact**（per codex r3 finding 13）— 不可只在 walk-through inline 同意 |
+| T1 | PR 2 archive worker dry-run 在 prod 跑 ≥ 1 個月 | 最早 dry-run smoke：2026-05-11（per `reference_wrangler_r2_windows_quirk` Quirk 1）；至 2026-05-28 共 ~17 天，**不滿 1 個月**（差 ~13 天）。dry-run worker 仍 active（PR 2.0/2.1a/2.1c/2.1d/2.2a/2.2b/2.2c/2.1b/2.2d/2.3 全部已 deploy；DRY_RUN flag 未翻） | 🟡 **[SUPERSEDED 2026-05-29 → Path C 事件 trigger]** ⚠️ NOT met（as of 2026-05-28）；~~預設 path = defer Phase 3 到 2026-06-10~~（natural compliance）。**原文**:若選 waiver path，必須走 **separate explicit risk-acceptance artifact**（per codex r3 finding 13）— 不可只在 walk-through inline 同意 |
 | T2 | dry-run 期間驗證通過：classify / chunk key / manifest / retry / cursor / month finalize 全綠 | PR 2.0 archive worker skeleton + PR 2.1a/c/d/d.1 state machine + PR 2.2a 6 cold_class round-robin + PR 2.2b admin retry endpoint + PR 2.2c lint hardening + PR 2.1b gzip + PR 2.2d fine-grain scope + PR 2.3 force_purge 真實作；HEAD `759b198` 為 PR 2 全段結 + 後續 PR 3 aggregate（HEAD `a8977f7`）+ PR 0.2c-pre-1c aggregate write-once；單元測試 521 / 整合測試 819 全綠（PR 0.2c-pre-3 baseline，[[project_audit_phase2]]） | ✅ **PASS** — 各功能項 codex review 全 Approved；2026-05-13 02:00 cron F-2 manifest.severities 已自然 prod 驗收（[[project_audit_phase2]]） |
 | T3 | dry-run **沒**寫進正式 cold_class prefix（最多寫 `audit-log-dryrun/` 或 preview） | 程式碼層面：cron worker 在 DRY_RUN flag = 1 時走 `audit-log-dryrun/` prefix（archive.ts）/ `audit-log-aggregate-{telemetry,debug}-dryrun/` prefix（aggregate runner）；PR 4 才翻 flag。但「真實 prod state」要靠 §4.3 object emptiness check 直接驗 — 不能用 source code 假設替代 prod verify | ⚠️ **PENDING §4.3 verification**（Phase 2 動工前） — 程式碼設計正確，但 prod 真實 state 必須 Phase 2 跑完 §4.3 scriptable S3 ListObjectsV2 才能 PASS |
 | T4 | admin 確認啟動指令、無需回退 | Phase 2 walk-through user 親口確認 | ⚠️ **PENDING Phase 2 walk-through**（無需 Phase 1 行動） |
@@ -102,7 +116,7 @@ PR 0.2c **完成後**才開始 14-day no-incident watch（監控 `audit.archive.
 
 **T1 user-decision gate**（codex r3 finding 13 — strict path）：
 
-T1 是 5 條 trigger 中**唯一未滿足條件**（NOT met）。本 plan 預設 path = **defer Phase 3 到 2026-06-10**（natural compliance；無 forensic 風險、無 audit trail debt）。
+T1 是 5 條 trigger 中**唯一未滿足條件**（NOT met，as of 2026-05-28）。~~本 plan 預設 path = **defer Phase 3 到 2026-06-10**~~ — **[SUPERSEDED 2026-05-29：改 Path C 事件 trigger，不再 defer 到 6/10；見頂部 banner 與 §1.4 段首]**（原文：natural compliance；無 forensic 風險、無 audit trail debt）。
 
 **若 user 評估 waiver path 仍是合理選擇**，必須符合以下全部條件（codex r3 line `Cost pressure should not be a primary safety-waiver reason`）：
 
@@ -118,6 +132,8 @@ T1 是 5 條 trigger 中**唯一未滿足條件**（NOT met）。本 plan 預設
    - ✅ "PR 2.0-2.3 / PR 3 / PR 0.2c-pre-1a/1b/1b.1/1b.2/1c/pre-2 / pre-3 全部 codex Approved，dry-run 各 sub-phase 都有 regression test 覆蓋"
    - ✅ "1-month dry-run 設計是早期 design caveat（v8 spec）；經多輪 binding canary + 各 PR codex review 後 redundant — 證據鍊強度遠超原 1-month soak time"
    - ✅ "binding canary fixture 已凍結 lock-classifier-binding 三段 interaction，post-lock failure mode 已 forensically captured"
+
+> ⚠️ **2026-05-29 SUPERSEDED**：下方 Path A / Path B 皆已被 **Path C「Event-Trigger Defer」**取代（見本檔頂部 banner）。lock 觸發改事件驅動、不綁日曆；6/10 降為 review checkpoint。下方 A/B 保留作決策史，**勿據此執行**。
 
 **Path 選擇邊界**：
 - **Path A (defer 預設)**：等 2026-06-10 自然滿月 → 進 Phase 2 walk-through → 5/5 trigger 全 ✅ → Phase 3 動工。**無 waiver 書面負擔**。

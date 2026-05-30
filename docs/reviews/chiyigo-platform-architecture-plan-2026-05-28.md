@@ -6,7 +6,7 @@
 - **規劃前提**：Production SaaS Ecosystem Core（非 demo / 非教學 / 非一次性 / 非單體會員系統）
 - **優先順序**：安全 > Tenant Isolation > 可維護 > 擴展 > 觀測 > 效能 > 開發速度
 - **硬性約束**：$0 Cloudflare 免費額度內、不提前微服務化、避免 vendor lock-in、baseline Tier 0–3 全條
-- 🔒 **檔案凍結**：2026-06-10 前不得改 `functions/utils/audit-archive.ts` / `audit-aggregate-archive.ts` / `audit-aggregate-archive-runner.ts` / `tsconfig.tests.json`。本計劃為純設計文件，不碰 code。
+- 🔓 **檔案凍結已於 2026-05-29 解除**（原 2026-06-10；lock trigger 改 event-based，見 lock plan banner）：`functions/utils/audit-archive.ts` / `audit-aggregate-archive.ts` / `audit-aggregate-archive-runner.ts` / `tsconfig.tests.json`。本計劃為純設計文件，不碰 code。
 
 ---
 
