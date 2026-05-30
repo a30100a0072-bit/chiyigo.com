@@ -161,6 +161,8 @@ const IMMUTABLE = [
   'auth.refresh.aud_mismatch',      // F-2 critical
   'auth.refresh.device_mismatch',
   'auth.token_revoked',
+  // PR2 Billing / Entitlement：manual grant 成功（金融狀態變更，永久 forensic trail）
+  'billing.grant.applied',
   'kyc.status.change',
   'mfa.backup_code.regenerate',
   'mfa.backup_code.use',
@@ -208,6 +210,10 @@ const SECURITY_SIGNAL = [
   'auth.risk.medium',
   'auth.step_up.fail',
   'auth.step_up.success',
+  // PR2 Billing / Entitlement：manual grant 被拒/衝突信號
+  'billing.grant.conflict',          // idempotency key 衝突（同 key 異 params）
+  'billing.grant.denied',            // 資格/驗證/授權失敗
+  'billing.grant.evidence_conflict', // offline payment_ref 重用
   'kyc.gate.fail',
   'mfa.totp.activate.fail',
   'mfa.totp.disable.fail',
@@ -236,6 +242,7 @@ const TELEMETRY = [
   'auth.login.rate_limited',
   'auth.refresh.rate_limited',
   'auth.step_up.rate_limited',
+  'billing.grant.idempotent_replay', // PR2：manual grant idempotency replay（非錯誤，計量用）
   'oauth.backchannel.dispatch',
   'oauth.token.rate_limited',
   'webauthn.register.options',
