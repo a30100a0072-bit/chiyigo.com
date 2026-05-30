@@ -18,6 +18,13 @@ import { res, requireStepUp } from '../../../utils/auth'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import { grantPlan, type GrantPlanManualInput } from '../../../utils/billing'
 import { safeUserAudit } from '../../../utils/user-audit'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
+
+// per-user write-path rate limit（arch §13「寬鬆」per-user 上限）。step-up 成功會清自己的 bucket，
+// 故 step-up 限流擋不住「compromised session 反覆 mint 一次性 step-up token → 爆量 grant」；
+// 本限流獨立計「通過 auth 的 grant attempts」以收斂寫入量。
+const BILLING_GRANT_RL_WINDOW_SEC = 60
+const BILLING_GRANT_RL_MAX = 30
 
 const ALLOWED_BODY_KEYS: ReadonlySet<string> = new Set([
   'tenant_id', 'product_id', 'plan_id', 'manual_source', 'admin_idempotency_key', 'payment_ref', 'grant_reason',
@@ -43,9 +50,22 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'admin:billing:grant scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:billing:grant' }, 403)
   }
 
+  // 2.5 per-user rate limit（auth 通過後、寫入前；計通過 auth 的 grant attempts，非 OTP 失敗/無權請求）
+  const { blocked } = await checkRateLimit(env.chiyigo_db, {
+    kind: 'billing_grant', userId, windowSeconds: BILLING_GRANT_RL_WINDOW_SEC, max: BILLING_GRANT_RL_MAX,
+  })
+  if (blocked) {
+    await emitDenied(env, request, userId, 'rate_limited')
+    return res({ error: 'Too many grant attempts; slow down', code: 'RATE_LIMITED' }, 429)
+  }
+  await recordRateLimit(env.chiyigo_db, { kind: 'billing_grant', userId })
+
   // 3. body parse + strict allowlist（未知 key 含 occurred_at → 400）
   let raw: unknown
-  try { raw = await request.json() } catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
+  try { raw = await request.json() } catch {
+    await emitDenied(env, request, userId, 'invalid_json')
+    return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400)
+  }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     await emitDenied(env, request, userId, 'malformed_body')
     return res({ error: 'Body must be a JSON object', code: 'ERR_VALIDATION' }, 400)
@@ -87,6 +107,7 @@ export async function onRequestPost({ request, env }) {
   const actorEmail = String(userRow?.email ?? '')
   const actorRole = String(userRow?.role ?? '')
   if (actorEmail.length === 0 || actorRole.length === 0) {
+    await emitDenied(env, request, userId, 'actor_not_found')
     return res({ error: 'Actor account not found', code: 'ACTOR_NOT_FOUND' }, 403)
   }
 
@@ -131,6 +152,7 @@ export async function onRequestPost({ request, env }) {
       await safeUserAudit(env, { event_type: 'billing.grant.evidence_conflict', severity: 'warn', user_id: userId, request, data: baseData })
       return res({ error: 'This offline payment reference is already used', code: 'EVIDENCE_ALREADY_USED' }, 409)
     case 'contention':
+      await emitDenied(env, request, userId, 'contention', baseData)
       return res({ error: 'Concurrent grant contention; retry', code: 'CONTENTION' }, 503)
     case 'invalid':
       await emitDenied(env, request, userId, result.code, baseData)
@@ -154,6 +176,7 @@ export async function onRequestPost({ request, env }) {
       await emitDenied(env, request, userId, 'illegal_transition', baseData)
       return res({ error: 'Illegal entitlement transition', code: 'ILLEGAL_TRANSITION' }, 409)
     default:
+      await emitDenied(env, request, userId, 'unexpected_outcome', baseData)
       return res({ error: 'Unexpected grant outcome', code: 'INTERNAL_ERROR' }, 500)
   }
 }

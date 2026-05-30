@@ -289,3 +289,82 @@ describe('GET /api/tenants/:tenantId/entitlements', () => {
     expect(r.status).toBe(400)
   })
 })
+
+// ───────────────────────────── POST per-user rate limit ────────────────────
+
+describe('POST /api/admin/billing/grant — per-user rate limit (billing_grant)', () => {
+  async function fillBucket(userId: number, n: number) {
+    for (let i = 0; i < n; i++) {
+      await db.prepare(`INSERT INTO login_attempts (kind, user_id) VALUES ('billing_grant', ?)`).bind(userId).run()
+    }
+  }
+
+  it('at the cap (30 prior attempts) → next grant 429 RATE_LIMITED, no ledger write, denial audited', async () => {
+    const { adminId, tenantId, planId } = await setup()
+    await fillBucket(adminId, 30)
+    const r = await call(grantHandler, postReq(await stepUp(adminId), overrideBody(tenantId, planId)))
+    expect(r.status).toBe(429)
+    expect((await r.json()).code).toBe('RATE_LIMITED')
+    expect(await ledgerCount(tenantId)).toBe(0) // blocked before mutation
+    const audit = await db.prepare(
+      `SELECT event_data FROM audit_log WHERE event_type = 'billing.grant.denied' ORDER BY id DESC LIMIT 1`,
+    ).first()
+    expect(String(audit?.event_data)).toContain('rate_limited')
+  })
+
+  it('just under the cap (29 prior attempts) → grant still succeeds (200)', async () => {
+    const { adminId, tenantId, planId } = await setup()
+    await fillBucket(adminId, 29)
+    const r = await call(grantHandler, postReq(await stepUp(adminId), overrideBody(tenantId, planId)))
+    expect(r.status).toBe(200)
+  })
+
+  it('limit is per-user: a second admin is unaffected by another full bucket', async () => {
+    const { adminId, tenantId, planId } = await setup()
+    await fillBucket(adminId, 30)
+    const admin2 = await seedUser({ email: 'admin2@x.io', role: 'admin' })
+    const r = await call(grantHandler, postReq(await stepUp(admin2.id, { email: 'admin2@x.io' }), overrideBody(tenantId, planId)))
+    expect(r.status).toBe(200) // admin2 has its own bucket
+  })
+})
+
+// ───────────────────────────── POST failure dispositions audited ───────────
+
+describe('POST /api/admin/billing/grant — failure dispositions are audited', () => {
+  it('invalid JSON body → 400 INVALID_JSON + denied audit (reason invalid_json)', async () => {
+    const { adminId } = await setup()
+    const req = new Request('http://localhost/api/admin/billing/grant', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${await stepUp(adminId)}`, 'Content-Type': 'application/json' },
+      body: 'not-json{',
+    })
+    const r = await call(grantHandler, req)
+    expect(r.status).toBe(400)
+    expect((await r.json()).code).toBe('INVALID_JSON')
+    const audit = await db.prepare(
+      `SELECT event_data FROM audit_log WHERE event_type = 'billing.grant.denied' ORDER BY id DESC LIMIT 1`,
+    ).first()
+    expect(String(audit?.event_data)).toContain('invalid_json')
+  })
+
+  it('grantPlan contention → 503 CONTENTION + denied audit (reason contention)', async () => {
+    const { adminId, tenantId, planId } = await setup()
+    // 佔住 version slot：projection 停在 v1，但 ledger 已有一筆 prev_projection_version=1 的 op
+    // → grant 讀到 v1、想以 prev_version=1 推進、撞 UNIQUE(tenant,product,prev_version) → 重試耗盡 → contention
+    await seedEntitlement({ tenantId, productId: 'erp', planId, status: 'active', version: 1 })
+    await db.prepare(
+      `INSERT INTO grant_plan_operations
+         (tenant_id, product_id, plan_id, "trigger", manual_source, admin_idempotency_key, request_hash,
+          granted_by, granted_by_email, granted_by_role, payment_ref, payment_ref_key,
+          from_status, to_status, prev_projection_version, occurred_at)
+       VALUES (?, 'erp', ?, 'manual', 'offline_payment', 'occupied-slot', 'h', 1, 'a@x.io', 'admin', 'OCC-REF', 'OCC-REF', 'active', 'active', 1, '2020-01-01T00:00:00.000Z')`,
+    ).bind(tenantId, planId).run()
+    const r = await call(grantHandler, postReq(await stepUp(adminId), overrideBody(tenantId, planId)))
+    expect(r.status).toBe(503)
+    expect((await r.json()).code).toBe('CONTENTION')
+    const audit = await db.prepare(
+      `SELECT event_data FROM audit_log WHERE event_type = 'billing.grant.denied' ORDER BY id DESC LIMIT 1`,
+    ).first()
+    expect(String(audit?.event_data)).toContain('contention')
+  })
+})
