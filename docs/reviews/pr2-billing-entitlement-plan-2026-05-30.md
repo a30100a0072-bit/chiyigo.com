@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS grant_plan_operations (
   occurred_at TEXT NOT NULL,                            -- SERVER-generated UTC ISO-8601 (Section 5.2); never client-provided
   created_at  TEXT NOT NULL DEFAULT (datetime('now')),
   -- NOTE: reconciled_at was intentionally removed -- an append-only ledger cannot carry a mutable
-  --       column (the UPDATE would hit the no-update trigger). Reconciliation is deferred and will
+  --       column (the app-layer insert-only discipline forbids any UPDATE). Reconciliation is deferred and will
   --       use a separate record; it never writes back into this table.
 
   UNIQUE(admin_idempotency_key),                          -- manual request dedup
@@ -197,14 +197,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_gpo_offline_payment_ref_key
   ON grant_plan_operations(payment_ref_key) WHERE manual_source = 'offline_payment';
 CREATE INDEX IF NOT EXISTS idx_gpo_tenant_product ON grant_plan_operations(tenant_id, product_id);
 
--- append-only: block UPDATE / DELETE (mirrors audit_log no_update/no_delete)
-CREATE TRIGGER IF NOT EXISTS gpo_no_update BEFORE UPDATE ON grant_plan_operations
-  BEGIN SELECT RAISE(ABORT, 'grant_plan_operations is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS gpo_no_delete BEFORE DELETE ON grant_plan_operations
-  BEGIN SELECT RAISE(ABORT, 'grant_plan_operations is append-only'); END;
+-- (SUPERSEDED 2026-05-30, Implementation Commit 1) The two append-only DB triggers from the
+-- approved draft are NOT implemented. This repo uses no DB triggers anywhere; PR2 enforces
+-- append-only at the app layer (grantPlan only ever INSERTs), matching audit_log (0017) /
+-- admin_audit_log house style. See the "Plan drift" note below this code block.
 ```
 
 **FK parent lifecycle (important).** `granted_by` intentionally has NO FK -- actor evidence must survive user mutation and account deletion (see the actor-snapshot note above). The other parents -- `tenant_id`, `product_id`, `plan_id`, `payment_intent_id` -- DO keep their FKs to enforce referential integrity. Because this ledger is append-only and immutable, once a row references those parents they MUST NOT be hard-deleted: use lifecycle patterns instead (tenant `status`, product/plan `is_active`, `deleted_at` soft-delete, anonymize/deactivate). A cascade delete or dangling orphan is not acceptable for a financial SoT. If a future feature genuinely requires physical deletion of such a parent, it must FIRST add an explicit archival/snapshot strategy (e.g. snapshot the referenced fields into the ledger or an archive table) before any hard delete.
+
+**Plan drift (2026-05-30, Implementation Commit 1) -- append-only mechanism.** The DB-level append-only triggers (`gpo_no_update` / `gpo_no_delete`) from the approved draft above are **superseded and NOT implemented**:
+- The repo uses **no DB triggers** anywhere; `audit_log` (0017) and `admin_audit_log` enforce append-only at the **app layer** (with hash-chain where needed), and both the migration runner and `resetDb` apply SQL via a simple `split(';')` that cannot carry a trigger body.
+- PR2 therefore enforces append-only with **app-layer insert-only discipline**: `grantPlan` only ever INSERTs into `grant_plan_operations`; it exposes no update/delete path.
+- The immutable-evidence guarantee for PR2 is **fail-closed INSERT + projection atomicity via CHECK / UNIQUE / `D1.batch()` rollback** (Stage 0 verified criteria 1-4, 6), not a DB trigger.
+- Hash-chain / DB-trigger tamper-evidence remains **future hardening**, not PR2.
+- The Stage 0 trigger-RAISE result (criterion 5) is **spike evidence only** and is not implemented in migration 0048.
 
 ### 3.5 down migration
 ```sql
@@ -311,10 +317,10 @@ grantPlanManual(env, { tenantId, productId, planId, manualSource, paymentRefRaw,
 - Formatting variants (case / whitespace / full-width / zero-width) collapse to the same `payment_ref_key` -> (same idempotency key) replay / (different key) 409.
 
 ### 5.5 fail-closed evidence strategy (atomicity)
-- The evidence of record is the atomic append-only ledger row, written in the SAME `D1.batch()` as the projection. Any ledger-INSERT violation (CHECK / NOT NULL / any UNIQUE / append-only trigger) rolls back the entire batch -> the projection is unchanged -> no silent grant (fail-closed).
+- The evidence of record is the atomic append-only ledger row, written in the SAME `D1.batch()` as the projection. Any ledger-INSERT violation (CHECK / NOT NULL / any UNIQUE) rolls back the entire batch -> the projection is unchanged -> no silent grant (fail-closed). (Append-only itself is app-layer insert-only discipline -- no DB trigger; see the Plan drift note in Section 3.4.)
 - Concurrency is fail-closed via statement error, not 0-row: `UNIQUE(tenant_id, product_id, prev_projection_version)` makes the second concurrent op at the same version hit the UNIQUE -> the whole batch rolls back -> retry re-reads the latest state (PR1/PR3 lesson: never rely on `changes()=0`, since a 0-row UPDATE is a success).
 - `safeUserAudit` is demoted to non-authoritative telemetry (Discord/alerting); its swallow-on-failure is acceptable because the evidence already persisted in the ledger.
-- No hash-chain (the architecture chains only `credit_ledger`; append-only trigger + atomic batch already deliver fail-closed). Tamper-evidence hash-chaining is a future hardening; Stage 0 confirms the non-chained design is sufficient.
+- No hash-chain (the architecture chains only `credit_ledger`; app-layer insert-only discipline + atomic batch already deliver fail-closed). Tamper-evidence hash-chaining (or a hash-chain ledger) is a future hardening; Stage 0 confirms the non-chained design is sufficient.
 
 ### 5.6 Projection reconstructable from ledger (SoT holds)
 For each `(tenant_id, product_id)`: take the latest op (max `prev_projection_version`) -> `status=to_status`, `plan_id`, `granted_via=trigger`, `last_op_occurred_at=occurred_at`, `version = prev_projection_version + 1`. No projection field is absent from the ledger -> the SoT claim holds (verified by Section 10 tests).
@@ -328,7 +334,7 @@ Mirrors PR3's mandated D1 batch-rollback spike (memory `feedback_spike_overrides
 2. `UNIQUE(tenant_id, product_id, prev_projection_version)` serializes two concurrent same-version grants (exactly one applies; the loser fully rolls back).
 3. `UNIQUE(admin_idempotency_key)` race -> one applies, loser rolls back -> re-read yields replay/conflict.
 4. `uq_gpo_offline_payment_ref_key` partial-unique race -> one applies, loser rolls back -> EVIDENCE_ALREADY_USED.
-5. Append-only `UPDATE/DELETE` triggers `RAISE` and abort within a batch.
+5. Append-only `UPDATE/DELETE` triggers `RAISE` and abort within a batch. *(Spike evidence only -- PR2 enforces append-only at the app layer, no DB trigger; see the Plan drift note in Section 3.4.)*
 6. Confirm a 0-row `UPDATE` is a success (does NOT roll back) -- proving why correctness relies on the ledger UNIQUE, not the UPDATE's `changes()`.
 7. (optional only, not required) Whether a SQLite `GENERATED ... STORED` column can derive `payment_ref_key` in D1; default remains app-computed.
 

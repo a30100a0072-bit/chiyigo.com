@@ -41,7 +41,7 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0001..0047 forward 已實作（見 line 448 describe）；本 case
+// 至少要有 targeted smoke。完整 0001..0048 forward 已實作（見 line 448 describe）；本 case
 // 維持手建 fixture 形式作 0037 issued_aud 行為的 targeted 驗證。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
@@ -82,6 +82,7 @@ import up0045 from '../../migrations/0045_admin_audit_unique_prev_hash.sql?raw'
 import up0046    from '../../migrations/0046_audit_archive_chunks_key_scheme.sql?raw'
 import down0046  from '../../migrations/down/0046_audit_archive_chunks_key_scheme.down.sql?raw'
 import up0047    from '../../migrations/0047_tenant_foundation.sql?raw'
+import up0048    from '../../migrations/0048_billing_entitlement.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -92,7 +93,7 @@ const ALL_UPS = [
   up0017, up0018, up0019, up0020, up0021, up0022, up0023, up0024,
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
-  up0041, up0042, up0043, up0044, up0045, up0046, up0047,
+  up0041, up0042, up0043, up0044, up0045, up0046, up0047, up0048,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -281,7 +282,7 @@ describe('migrations smoke', () => {
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
 // 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
-// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0047 已實作於下方
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0048 已實作於下方
 // 「full forward chain」describe（line 448）。本 case 維持手建 fixture 形式作 0037
 // issued_aud 行為 targeted 驗證。
 //
@@ -376,10 +377,10 @@ describe('migrations smoke 0037 targeted', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full forward chain 0001..0047 vs prod snapshot
+// Full forward chain 0001..0048 vs prod snapshot
 //
 // 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
-// 完整 forward 變得可行。本 describe 驗 _base + 0001..0047 跑完後的 schema shape
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0048 跑完後的 schema shape
 // 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
 //
 // 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
@@ -420,6 +421,8 @@ const EXPECTED_TABLES = [
   'requisition_refund_request', 'revoked_jti', 'tenants', 'used_totp', 'user_identities',
   'user_kyc', 'user_wallets', 'user_webauthn_credentials', 'users',
   'wallet_nonces', 'webauthn_challenges',
+  // PR2 migration 0048: billing / entitlement foundation
+  'grant_plan_operations', 'plans', 'products', 'tenant_product_access',
 ].sort()
 
 // Per-table expected column sets（baseline 12 表 + 部分 ALTER 重點目標）
@@ -444,6 +447,11 @@ const EXPECTED_COLUMNS = {
   // migration 0047 tenant foundation
   tenants: ['created_at', 'deleted_at', 'id', 'name', 'personal_owner_user_id', 'status', 'type', 'updated_at'],
   organization_members: ['id', 'joined_at', 'platform_role', 'status', 'tenant_id', 'updated_at', 'user_id'],
+  // migration 0048 billing / entitlement foundation
+  products: ['created_at', 'id', 'is_active', 'name', 'tenant_scope', 'updated_at'],
+  plans: ['code', 'created_at', 'currency', 'features', 'id', 'included_credits', 'is_active', 'name', 'price_subunit', 'product_id', 'updated_at'],
+  tenant_product_access: ['created_at', 'granted_via', 'last_op_occurred_at', 'plan_id', 'product_id', 'status', 'tenant_id', 'updated_at', 'version'],
+  grant_plan_operations: ['admin_idempotency_key', 'created_at', 'from_status', 'grant_reason', 'granted_by', 'granted_by_email', 'granted_by_role', 'id', 'manual_source', 'occurred_at', 'payment_event_ref', 'payment_intent_id', 'payment_ref', 'payment_ref_key', 'plan_id', 'prev_projection_version', 'product_id', 'request_hash', 'tenant_id', 'to_status', 'trigger'],
 }
 
 // 對齊後（0040 exact-parity）的 requisition 索引
@@ -452,7 +460,7 @@ const EXPECTED_REQUISITION_INDEXES = [
   'idx_requisition_ip',         // 0006
 ]
 
-describe('full forward chain 0001..0047 vs prod snapshot', () => {
+describe('full forward chain 0001..0048 vs prod snapshot', () => {
   beforeAll(async () => {
     await dropAllTables()
     await execAll(baseSql)
@@ -461,7 +469,7 @@ describe('full forward chain 0001..0047 vs prod snapshot', () => {
     }
   })
 
-  it('table set 對齊 prod snapshot（37 表）', async () => {
+  it('table set 對齊 prod snapshot（41 表）', async () => {
     const tables = await listTables()
     expect(tables).toEqual(EXPECTED_TABLES)
   })
