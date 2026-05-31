@@ -4,12 +4,14 @@
 
 ---
 
-## 治理基線來源（pinned governance baseline — candidate）
+## 治理基線來源（pinned governance baseline — binding SSOT）
 
-> ⚠ v0.1.2 已經 **Codex final re-review APPROVED**（approved as active candidate pin）；但**仍是 candidate baseline**，**尚未**宣告為 org-wide binding SSOT。升格（adoption / publish）為 **owner 決策**（Codex review gate 已完成）。
+> ✅ **v0.1.3 = org-wide binding SSOT**（owner 於 2026-05-31 拍板升格）。規則內容凍結於 v0.1.2 converged baseline（Codex r1→r3 + 最終 re-review **APPROVED**，2026-05-29，0 blocking）；v0.1.3 相對 v0.1.2 無任何規則內容變更，僅狀態由 candidate 翻為 binding（PATCH）。本 baseline 為 chiyigo.com 與所有 RP 必守的架構權威，衝突一律以本 SSOT 為準（見下「與本 repo 文件的關係」）。
+>
+> ⚠ **「binding」≠「stable」**：已承諾但未完成的契約遷移（`sub`→`public_sub`、`tenant_id` 內部 id→public id、deny-state / 撤銷事件格式）將以未來版本演進，詳見 `chiyigo-core` README §狀態 與對應 ADR。
 
 - **Repo**：`chiyigo-core`（與 chiyigo.com 並列；本機 `~/Desktop/chiyigo-core`）。
-- **Pin**：tag `governance-v0.1.2` @ commit `f865657f10b84192d464b5d76c853aa934abbcb0`。
+- **Pin**：tag `governance-v0.1.3` @ commit `aa0343735967e3f451233d08d06aacb316d3ec6a`。
   - **以 commit SHA 為準**（git tag 可被 retarget，無法單靠 tag 重現同一基線）。
   - 升級需經一次 review，不自動跟最新；升級時同時更新 tag + SHA。
 
@@ -24,7 +26,7 @@
 
 ## 與本 repo 文件的關係
 
-- `chiyigo-core` 是**規則治理基線**（candidate；Codex re-review 已 approve，升格為 binding SSOT 待 owner adoption 決策）；chiyigo.com 是**實作來源**。
+- `chiyigo-core` 是**規則治理基線**（org-wide **binding SSOT**，v0.1.3 起、2026-05-31 升格）；chiyigo.com 是**實作來源**，受其約束。
 - 兩者衝突 → **先停手**，判斷是改實作還是開 ADR 改規則，禁靜默選一邊。
 - chiyigo.com 內的舊規格文件（如 `docs/JWT_SPEC.md`）必與 `chiyigo-core` + runtime 對齊；`sub` 契約已於 2026-05-29 校正（見 `chiyigo-core` INV-1 / ADR-004）。
 
