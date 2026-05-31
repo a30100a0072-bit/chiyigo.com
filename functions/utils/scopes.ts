@@ -63,11 +63,16 @@ export const SCOPES = Object.freeze({
   ADMIN_AUDIT_ARCHIVE_RESOLVE: 'admin:audit_archive:resolve', // mark_resolved failed → blacklisted
   ADMIN_AUDIT_ARCHIVE_PURGE:   'admin:audit_archive:purge',   // force_purge（PR 2.3 真實作前 stub）
 
+  // ── PR2 Billing / Entitlement — 手動 grantPlan（plan §7）
+  ADMIN_BILLING:       'admin:billing',        // coarse（hierarchy 含 :grant）
+  ADMIN_BILLING_GRANT: 'admin:billing:grant',  // 手動 grant（offline 確認 / admin override）；:revoke 預留未來 revoke PR
+
   // 高權限（Phase C-3）— **絕對不出現在 ROLE_BASE_SCOPES**，只能透過 step-up flow 取得
   ELEVATED_ACCOUNT:   'elevated:account',     // 改密碼 / 改 email / 刪帳號
   ELEVATED_PAYMENT:   'elevated:payment',     // 任何金流操作
   ELEVATED_WITHDRAW:  'elevated:withdraw',
   ELEVATED_WALLET_OP: 'elevated:wallet_op',
+  ELEVATED_BILLING:   'elevated:billing',     // PR2：手動 grantPlan step-up（for_action='grant_plan'）
 })
 
 /**
@@ -98,6 +103,9 @@ const SCOPE_HIERARCHY = Object.freeze({
     SCOPES.ADMIN_AUDIT_ARCHIVE_RESOLVE,
     SCOPES.ADMIN_AUDIT_ARCHIVE_PURGE,
   ],
+  [SCOPES.ADMIN_BILLING]: [
+    SCOPES.ADMIN_BILLING_GRANT,
+  ],
 })
 
 /** 把 set 內所有 coarse scope 的 fine 子項一併加入；不影響原有 fine scope。*/
@@ -116,6 +124,7 @@ export const KNOWN_ELEVATED_SCOPES = new Set<string>([
   SCOPES.ELEVATED_PAYMENT,
   SCOPES.ELEVATED_WITHDRAW,
   SCOPES.ELEVATED_WALLET_OP,
+  SCOPES.ELEVATED_BILLING,
 ])
 
 /** 該 scope 是否為「高權限」類型（必走 step-up flow）*/
@@ -147,12 +156,12 @@ const ROLE_BASE_SCOPES = {
   admin: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
-    SCOPES.ADMIN_AUDIT_ARCHIVE,
+    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING,
   ],
   developer: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
-    SCOPES.ADMIN_AUDIT_ARCHIVE,
+    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING,
   ],
 
   // ── P1-17 Phase 2 latent roles ──────────────────────────────
@@ -160,7 +169,7 @@ const ROLE_BASE_SCOPES = {
   super_admin: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
-    SCOPES.ADMIN_AUDIT_ARCHIVE,
+    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING,
   ],
   // finance：金流 read + 退款 + 退款審核 + webhook-dlq（dlq endpoint 用 ADMIN_PAYMENTS gate）
   // 嚴禁：admin:users（避免改 role/ban）、admin:clients（OAuth RP）、admin:audit（avoid PII access）

@@ -40,6 +40,7 @@ describe('classifyAuditEvent — immutable（金融/權限/安全狀態變更）
     'admin.token.revoked.user',
     'auth.refresh.aud_mismatch',     // F-2 critical
     'auth.refresh.device_mismatch',
+    'billing.grant.applied',         // PR2 manual grant 成功
     'mfa.totp.disable',
     'payment.refund.success',
     'payment.webhook.amount_mismatch',
@@ -92,6 +93,10 @@ describe('classifyAuditEvent — security_signal（撞庫/釣魚/2FA fail）', (
     'mfa.totp.verify.replay',
     'admin.unknown_role_actor',
     'webauthn.register.fail',
+    // PR2 Billing / Entitlement：manual grant 拒絕/衝突
+    'billing.grant.denied',
+    'billing.grant.conflict',
+    'billing.grant.evidence_conflict',
     // PR1 Tenant Foundation：org-switch 信號（deny = 越權/失效嘗試；success = active tenant 變更）
     'tenant.switch.deny',
     'tenant.switch.success',
@@ -104,6 +109,7 @@ describe('classifyAuditEvent — telemetry（rate_limit / dispatch）', () => {
   it.each([
     'auth.login.rate_limited',
     'auth.refresh.rate_limited',
+    'billing.grant.idempotent_replay', // PR2 manual grant idempotency replay
     'oauth.backchannel.dispatch',
     'webauthn.register.options',
   ])('%s → telemetry', (e) => {
@@ -196,8 +202,11 @@ describe('registry coverage', () => {
     // PR1 Tenant Foundation (2026-05-29) 加 2 個 security_signal events：
     //   tenant.switch.deny（org-switch 被拒；越權/失效嘗試信號，deny 率異常 = 可能越權）
     //   tenant.switch.success（active tenant 切換成功；auth-context 變更信號）→ 174。
+    // PR2 Billing / Entitlement Commit 3 (2026-05-30) 加 5 個 billing.grant.* events：
+    //   billing.grant.applied（immutable）+ billing.grant.{denied,conflict,evidence_conflict}（security_signal）
+    //   + billing.grant.idempotent_replay（telemetry）→ 179。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(174)
+    expect(_registrySize).toBe(179)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

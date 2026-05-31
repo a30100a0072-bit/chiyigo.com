@@ -32,6 +32,7 @@ export default defineConfig({
         'functions/utils/audit-aggregate-archive-runner.{js,ts}', // D1/R2 cron orchestration runner
         'functions/utils/rate-limit.{js,ts}',         // login_attempts CRUD
         'functions/utils/payments.{js,ts}',           // payment_intents lockForRefund 等
+        'functions/utils/billing.{js,ts}',            // grant_plan_operations ledger + projection batch（D1-dependent，integration-tested）
         'functions/utils/kyc.{js,ts}',                // kyc_verifications schema + adapter
         'functions/utils/kyc-vendors/**',             // 同上
         'functions/utils/payment-vendors/**',         // ecpay/mock adapters 都吃 env+D1

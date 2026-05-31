@@ -95,6 +95,12 @@ export async function resetDb() {
     try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
   }
   await env.chiyigo_db.batch([
+    // migration 0048 billing/entitlement 表先刪（FK → tenants/products/plans/payment_intents，須早於它們）
+    // grant_plan_operations append-only 走應用層紀律（無 DB trigger）→ 測試 reset 用 plain DELETE 即可
+    env.chiyigo_db.prepare('DELETE FROM grant_plan_operations'),
+    env.chiyigo_db.prepare('DELETE FROM tenant_product_access'),
+    env.chiyigo_db.prepare('DELETE FROM plans'),
+    env.chiyigo_db.prepare('DELETE FROM products'),
     // migration 0047 tenant 表先刪（FK 指向 users / tenants，須早於 users 清空）
     env.chiyigo_db.prepare('DELETE FROM organization_members'),
     env.chiyigo_db.prepare('DELETE FROM tenants'),
@@ -396,5 +402,71 @@ export async function seedMembership(
     .prepare(`INSERT INTO organization_members (tenant_id, user_id, platform_role, status)
               VALUES (?, ?, ?, ?)`)
     .bind(tenantId, userId, role, status)
+    .run()
+}
+
+/**
+ * Insert a product (catalog, migration 0048). Idempotent via INSERT OR IGNORE on the TEXT id.
+ * Returns { id }.
+ */
+export async function seedProduct(
+  opts: { id?: string; name?: string; tenantScope?: 'organization' | 'personal' | 'any'; isActive?: number } = {},
+) {
+  const { id = 'erp', name = 'ERP', tenantScope = 'organization', isActive = 1 } = opts
+  await env.chiyigo_db
+    .prepare(`INSERT OR IGNORE INTO products (id, name, tenant_scope, is_active) VALUES (?, ?, ?, ?)`)
+    .bind(id, name, tenantScope, isActive)
+    .run()
+  return { id }
+}
+
+/**
+ * Insert a plan (migration 0048). Returns { id } (INTEGER surrogate).
+ */
+export async function seedPlan(
+  opts: {
+    productId?: string; code?: string; name?: string;
+    includedCredits?: number; priceSubunit?: number | null; currency?: string | null; isActive?: number;
+  } = {},
+) {
+  const {
+    productId = 'erp', code = 'erp_basic', name = 'ERP Basic',
+    includedCredits = 0, priceSubunit = null, currency = null, isActive = 1,
+  } = opts
+  const r = await env.chiyigo_db
+    .prepare(
+      `INSERT INTO plans (product_id, code, name, included_credits, price_subunit, currency, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(productId, code, name, includedCredits, priceSubunit, currency, isActive)
+    .run()
+  return { id: r.meta.last_row_id }
+}
+
+/**
+ * Insert a tenant_product_access projection row (low-level, migration 0048).
+ * Deliberately allows constructing reserved states (pending / expired / revoked)
+ * so later guard tests can exercise transitions out of those states.
+ */
+export async function seedEntitlement(
+  opts: {
+    tenantId: number; productId: string; planId: number;
+    status?: 'pending' | 'active' | 'expired' | 'revoked';
+    grantedVia?: 'payment' | 'manual';
+    version?: number; lastOpOccurredAt?: string;
+  },
+) {
+  const {
+    tenantId, productId, planId,
+    status = 'active', grantedVia = 'manual', version = 1,
+    lastOpOccurredAt = '2026-05-30T00:00:00.000Z',
+  } = opts
+  await env.chiyigo_db
+    .prepare(
+      `INSERT INTO tenant_product_access
+         (tenant_id, product_id, plan_id, status, granted_via, version, last_op_occurred_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(tenantId, productId, planId, status, grantedVia, version, lastOpOccurredAt)
     .run()
 }

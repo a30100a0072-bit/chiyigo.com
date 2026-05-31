@@ -521,3 +521,98 @@ CREATE TABLE IF NOT EXISTS organization_members (
 );
 CREATE INDEX IF NOT EXISTS idx_org_members_user        ON organization_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_tenant_role ON organization_members(tenant_id, platform_role);
+
+-- migration 0048: Billing / Entitlement Foundation (B2B platform PR2)
+-- NOTE: append-only is enforced at the app layer (insert-only discipline) with NO DB trigger,
+--   matching audit_log / admin_audit_log house style. The resetDb runner splits this file on raw
+--   semicolons (no comment stripping), so a trigger body cannot live here AND comments here must
+--   contain no semicolon. Seeds are NOT placed here (resetDb wipes them) -- tests seed via helpers.
+CREATE TABLE IF NOT EXISTS products (
+  id           TEXT    PRIMARY KEY,
+  name         TEXT    NOT NULL,
+  tenant_scope TEXT    NOT NULL CHECK(tenant_scope IN ('organization','personal','any')),
+  is_active    INTEGER NOT NULL DEFAULT 1,
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS plans (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id       TEXT    NOT NULL REFERENCES products(id),
+  code             TEXT    NOT NULL,
+  name             TEXT    NOT NULL,
+  features         TEXT,
+  included_credits INTEGER NOT NULL DEFAULT 0,
+  price_subunit    INTEGER,
+  currency         TEXT,
+  is_active        INTEGER NOT NULL DEFAULT 1,
+  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(product_id, code)
+);
+CREATE INDEX IF NOT EXISTS idx_plans_product ON plans(product_id);
+
+CREATE TABLE IF NOT EXISTS tenant_product_access (
+  tenant_id           INTEGER NOT NULL REFERENCES tenants(id),
+  product_id          TEXT    NOT NULL REFERENCES products(id),
+  plan_id             INTEGER NOT NULL REFERENCES plans(id),
+  status              TEXT    NOT NULL CHECK(status IN ('pending','active','expired','revoked')),
+  granted_via         TEXT    NOT NULL CHECK(granted_via IN ('payment','manual')),
+  version             INTEGER NOT NULL DEFAULT 1,
+  last_op_occurred_at TEXT    NOT NULL,
+  created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (tenant_id, product_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tpa_tenant ON tenant_product_access(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tpa_status ON tenant_product_access(status);
+
+CREATE TABLE IF NOT EXISTS grant_plan_operations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id  INTEGER NOT NULL REFERENCES tenants(id),
+  product_id TEXT    NOT NULL REFERENCES products(id),
+  plan_id    INTEGER NOT NULL REFERENCES plans(id),
+  trigger    TEXT    NOT NULL CHECK(trigger IN ('payment','manual')),
+  manual_source         TEXT CHECK(manual_source IN ('offline_payment','admin_override')),
+  admin_idempotency_key TEXT,
+  request_hash          TEXT,
+  granted_by            INTEGER,
+  granted_by_email      TEXT,
+  granted_by_role       TEXT,
+  payment_ref           TEXT,
+  payment_ref_key       TEXT,
+  grant_reason          TEXT,
+  payment_intent_id     INTEGER REFERENCES payment_intents(id),
+  payment_event_ref     TEXT,
+  from_status TEXT NOT NULL CHECK(from_status IN ('none','pending','active','expired','revoked')),
+  to_status   TEXT NOT NULL CHECK(to_status   IN ('pending','active','expired','revoked')),
+  prev_projection_version INTEGER NOT NULL DEFAULT 0,
+  occurred_at TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(admin_idempotency_key),
+  UNIQUE(payment_intent_id),
+  UNIQUE(tenant_id, product_id, prev_projection_version),
+  CHECK( trigger <> 'manual' OR (
+           manual_source IS NOT NULL AND admin_idempotency_key IS NOT NULL
+           AND request_hash IS NOT NULL
+           AND granted_by IS NOT NULL
+           AND granted_by_email IS NOT NULL AND length(trim(granted_by_email)) > 0
+           AND granted_by_role  IS NOT NULL AND length(trim(granted_by_role))  > 0
+           AND payment_intent_id IS NULL
+           AND payment_event_ref IS NULL) ),
+  CHECK( trigger <> 'payment' OR (
+           payment_intent_id IS NOT NULL
+           AND manual_source IS NULL AND admin_idempotency_key IS NULL AND request_hash IS NULL
+           AND granted_by IS NULL AND granted_by_email IS NULL AND granted_by_role IS NULL
+           AND payment_ref IS NULL AND payment_ref_key IS NULL AND grant_reason IS NULL) ),
+  CHECK( manual_source <> 'offline_payment' OR (
+           payment_ref IS NOT NULL AND length(trim(payment_ref)) > 0
+           AND payment_ref_key IS NOT NULL AND length(payment_ref_key) BETWEEN 3 AND 80
+           AND grant_reason IS NULL) ),
+  CHECK( manual_source <> 'admin_override' OR (
+           grant_reason IS NOT NULL AND length(trim(grant_reason)) > 0
+           AND payment_ref IS NULL AND payment_ref_key IS NULL) )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_gpo_offline_payment_ref_key
+  ON grant_plan_operations(payment_ref_key) WHERE manual_source = 'offline_payment';
+CREATE INDEX IF NOT EXISTS idx_gpo_tenant_product ON grant_plan_operations(tenant_id, product_id);

@@ -29,6 +29,7 @@ type RateLimitKind =
   | '2fa_regen'
   | 'admin_read'
   | 'org_switch'
+  | 'billing_grant'
 
 interface RateLimitScope {
   kind: RateLimitKind
