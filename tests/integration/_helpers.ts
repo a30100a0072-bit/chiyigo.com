@@ -95,6 +95,11 @@ export async function resetDb() {
     try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
   }
   await env.chiyigo_db.batch([
+    // migration 0049 credit wallet 表先刪（FK → tenants/products；append-only 走應用層紀律，plain DELETE 即可）
+    env.chiyigo_db.prepare('DELETE FROM credit_ledger'),
+    env.chiyigo_db.prepare('DELETE FROM quota_config_ledger'),
+    env.chiyigo_db.prepare('DELETE FROM product_usage_quota'),
+    env.chiyigo_db.prepare('DELETE FROM credit_wallets'),
     // migration 0048 billing/entitlement 表先刪（FK → tenants/products/plans/payment_intents，須早於它們）
     // grant_plan_operations append-only 走應用層紀律（無 DB trigger）→ 測試 reset 用 plain DELETE 即可
     env.chiyigo_db.prepare('DELETE FROM grant_plan_operations'),
@@ -468,5 +473,102 @@ export async function seedEntitlement(
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(tenantId, productId, planId, status, grantedVia, version, lastOpOccurredAt)
+    .run()
+}
+
+/**
+ * Insert a credit_wallets row (migration 0049). Provisions a tenant's single credit wallet.
+ */
+export async function seedWallet(
+  opts: { tenantId: number; balance?: number; version?: number },
+) {
+  const { tenantId, balance = 0, version = 0 } = opts
+  await env.chiyigo_db
+    .prepare(`INSERT INTO credit_wallets (tenant_id, balance, version) VALUES (?, ?, ?)`)
+    .bind(tenantId, balance, version)
+    .run()
+}
+
+/**
+ * Insert a product_usage_quota row (migration 0049). PR3 uses period='lifetime'.
+ */
+export async function seedQuota(
+  opts: { tenantId: number; productId: string; period?: string; quotaLimit: number; quotaUsed?: number; version?: number },
+) {
+  const { tenantId, productId, period = 'lifetime', quotaLimit, quotaUsed = 0, version = 0 } = opts
+  await env.chiyigo_db
+    .prepare(
+      `INSERT INTO product_usage_quota (tenant_id, product_id, period, quota_limit, quota_used, version)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(tenantId, productId, period, quotaLimit, quotaUsed, version)
+    .run()
+}
+
+/**
+ * Low-level credit_ledger insert (migration 0049) for reconstruction / constraint tests.
+ * Deliberately raw so a test can probe DB CHECK / UNIQUE behaviour. amount is signed
+ * (the caller chooses sign to match entry_type).
+ */
+export async function seedCreditLedger(
+  opts: {
+    tenantId: number; productId?: string | null; entryType: 'topup' | 'deduct' | 'refund' | 'adjust';
+    amount: number; balanceAfter: number;
+    quotaUsedAfter?: number | null; quotaLimitAfter?: number | null; quotaPeriod?: string | null;
+    idempotencyScope: string; idempotencyKey: string; requestHash?: string; ref?: string | null;
+    source?: 'manual' | 'product' | 'payment';
+    actorId?: number | null; actorEmail?: string | null; actorRole?: string | null;
+    occurredAt?: string;
+  },
+) {
+  const {
+    tenantId, productId = null, entryType, amount, balanceAfter,
+    quotaUsedAfter = null, quotaLimitAfter = null, quotaPeriod = null,
+    idempotencyScope, idempotencyKey, requestHash = 'h', ref = null,
+    source = 'manual', actorId = null, actorEmail = null, actorRole = null,
+    occurredAt = '2026-06-01T00:00:00.000Z',
+  } = opts
+  await env.chiyigo_db
+    .prepare(
+      `INSERT INTO credit_ledger
+         (tenant_id, product_id, entry_type, amount, balance_after, quota_used_after, quota_limit_after,
+          quota_period, idempotency_scope, idempotency_key, request_hash, ref, source,
+          actor_id, actor_email, actor_role, occurred_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      tenantId, productId, entryType, amount, balanceAfter, quotaUsedAfter, quotaLimitAfter,
+      quotaPeriod, idempotencyScope, idempotencyKey, requestHash, ref, source,
+      actorId, actorEmail, actorRole, occurredAt,
+    )
+    .run()
+}
+
+/**
+ * Low-level quota_config_ledger insert (migration 0049) for constraint / history tests.
+ */
+export async function seedQuotaConfigLedger(
+  opts: {
+    tenantId: number; productId: string; period?: string; oldLimit?: number | null; newLimit: number;
+    idempotencyScope?: string; idempotencyKey: string; requestHash?: string;
+    actorId: number; actorEmail: string; actorRole: string; reason?: string | null; occurredAt?: string;
+  },
+) {
+  const {
+    tenantId, productId, period = 'lifetime', oldLimit = null, newLimit,
+    idempotencyScope = `manual:quota_set:${opts.productId}:lifetime`, idempotencyKey, requestHash = 'h',
+    actorId, actorEmail, actorRole, reason = null, occurredAt = '2026-06-01T00:00:00.000Z',
+  } = opts
+  await env.chiyigo_db
+    .prepare(
+      `INSERT INTO quota_config_ledger
+         (tenant_id, product_id, period, old_limit, new_limit, idempotency_scope, idempotency_key,
+          request_hash, actor_id, actor_email, actor_role, reason, occurred_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      tenantId, productId, period, oldLimit, newLimit, idempotencyScope, idempotencyKey,
+      requestHash, actorId, actorEmail, actorRole, reason, occurredAt,
+    )
     .run()
 }

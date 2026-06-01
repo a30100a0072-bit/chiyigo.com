@@ -163,6 +163,12 @@ const IMMUTABLE = [
   'auth.token_revoked',
   // PR2 Billing / Entitlement：manual grant 成功（金融狀態變更，永久 forensic trail）
   'billing.grant.applied',
+  // PR3 Credit Wallet：金融狀態變更（永久 forensic trail）。billing.quota.set 為 telemetry，
+  // 對應 authoritative quota_config_ledger row（SoT 是 ledger，非 audit；plan §5.5）。
+  'billing.credit.deducted',
+  'billing.credit.topup',
+  'billing.credit.adjusted',
+  'billing.quota.set',
   'kyc.status.change',
   'mfa.backup_code.regenerate',
   'mfa.backup_code.use',
@@ -214,6 +220,9 @@ const SECURITY_SIGNAL = [
   'billing.grant.conflict',          // idempotency key 衝突（同 key 異 params）
   'billing.grant.denied',            // 資格/驗證/授權失敗
   'billing.grant.evidence_conflict', // offline payment_ref 重用
+  // PR3 Credit Wallet：扣點/錢包被拒/衝突信號
+  'billing.credit.conflict',         // idempotency (tenant,scope,key) 衝突（同 key 異 params）
+  'billing.credit.denied',           // insufficient / quota_exceeded / not_provisioned / 資格 / 驗證 / 授權 / rate_limited
   'kyc.gate.fail',
   'mfa.totp.activate.fail',
   'mfa.totp.disable.fail',
@@ -243,6 +252,7 @@ const TELEMETRY = [
   'auth.refresh.rate_limited',
   'auth.step_up.rate_limited',
   'billing.grant.idempotent_replay', // PR2：manual grant idempotency replay（非錯誤，計量用）
+  'billing.credit.idempotent_replay', // PR3：credit op idempotency replay（非錯誤，計量用）
   'oauth.backchannel.dispatch',
   'oauth.token.rate_limited',
   'webauthn.register.options',

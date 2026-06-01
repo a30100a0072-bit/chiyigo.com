@@ -41,7 +41,7 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0001..0048 forward 已實作（見 line 448 describe）；本 case
+// 至少要有 targeted smoke。完整 0001..0049 forward 已實作（見 line 448 describe）；本 case
 // 維持手建 fixture 形式作 0037 issued_aud 行為的 targeted 驗證。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
@@ -83,6 +83,8 @@ import up0046    from '../../migrations/0046_audit_archive_chunks_key_scheme.sql
 import down0046  from '../../migrations/down/0046_audit_archive_chunks_key_scheme.down.sql?raw'
 import up0047    from '../../migrations/0047_tenant_foundation.sql?raw'
 import up0048    from '../../migrations/0048_billing_entitlement.sql?raw'
+import up0049    from '../../migrations/0049_credit_wallet.sql?raw'
+import down0049  from '../../migrations/down/0049_credit_wallet.down.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -94,6 +96,7 @@ const ALL_UPS = [
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
   up0041, up0042, up0043, up0044, up0045, up0046, up0047, up0048,
+  up0049,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -282,7 +285,7 @@ describe('migrations smoke', () => {
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
 // 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
-// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0048 已實作於下方
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0049 已實作於下方
 // 「full forward chain」describe（line 448）。本 case 維持手建 fixture 形式作 0037
 // issued_aud 行為 targeted 驗證。
 //
@@ -377,10 +380,10 @@ describe('migrations smoke 0037 targeted', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full forward chain 0001..0048 vs prod snapshot
+// Full forward chain 0001..0049 vs prod snapshot
 //
 // 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
-// 完整 forward 變得可行。本 describe 驗 _base + 0001..0048 跑完後的 schema shape
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0049 跑完後的 schema shape
 // 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
 //
 // 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
@@ -423,6 +426,8 @@ const EXPECTED_TABLES = [
   'wallet_nonces', 'webauthn_challenges',
   // PR2 migration 0048: billing / entitlement foundation
   'grant_plan_operations', 'plans', 'products', 'tenant_product_access',
+  // PR3 migration 0049: credit wallet + quota + ledger
+  'credit_wallets', 'product_usage_quota', 'credit_ledger', 'quota_config_ledger',
 ].sort()
 
 // Per-table expected column sets（baseline 12 表 + 部分 ALTER 重點目標）
@@ -452,6 +457,11 @@ const EXPECTED_COLUMNS = {
   plans: ['code', 'created_at', 'currency', 'features', 'id', 'included_credits', 'is_active', 'name', 'price_subunit', 'product_id', 'updated_at'],
   tenant_product_access: ['created_at', 'granted_via', 'last_op_occurred_at', 'plan_id', 'product_id', 'status', 'tenant_id', 'updated_at', 'version'],
   grant_plan_operations: ['admin_idempotency_key', 'created_at', 'from_status', 'grant_reason', 'granted_by', 'granted_by_email', 'granted_by_role', 'id', 'manual_source', 'occurred_at', 'payment_event_ref', 'payment_intent_id', 'payment_ref', 'payment_ref_key', 'plan_id', 'prev_projection_version', 'product_id', 'request_hash', 'tenant_id', 'to_status', 'trigger'],
+  // migration 0049 credit wallet + quota + ledgers
+  credit_wallets: ['balance', 'created_at', 'tenant_id', 'updated_at', 'version'],
+  product_usage_quota: ['created_at', 'period', 'product_id', 'quota_limit', 'quota_used', 'tenant_id', 'updated_at', 'version'],
+  credit_ledger: ['actor_email', 'actor_id', 'actor_role', 'amount', 'balance_after', 'created_at', 'entry_type', 'id', 'idempotency_key', 'idempotency_scope', 'occurred_at', 'product_id', 'quota_limit_after', 'quota_period', 'quota_used_after', 'ref', 'request_hash', 'source', 'tenant_id'],
+  quota_config_ledger: ['actor_email', 'actor_id', 'actor_role', 'created_at', 'id', 'idempotency_key', 'idempotency_scope', 'new_limit', 'occurred_at', 'old_limit', 'period', 'product_id', 'reason', 'request_hash', 'tenant_id'],
 }
 
 // 對齊後（0040 exact-parity）的 requisition 索引
@@ -460,7 +470,7 @@ const EXPECTED_REQUISITION_INDEXES = [
   'idx_requisition_ip',         // 0006
 ]
 
-describe('full forward chain 0001..0048 vs prod snapshot', () => {
+describe('full forward chain 0001..0049 vs prod snapshot', () => {
   beforeAll(async () => {
     await dropAllTables()
     await execAll(baseSql)
@@ -469,7 +479,7 @@ describe('full forward chain 0001..0048 vs prod snapshot', () => {
     }
   })
 
-  it('table set 對齊 prod snapshot（41 表）', async () => {
+  it('table set 對齊 prod snapshot（45 表）', async () => {
     const tables = await listTables()
     expect(tables).toEqual(EXPECTED_TABLES)
   })
@@ -707,6 +717,50 @@ describe('migrations smoke 0044 targeted (aggregate→R2 schema)', () => {
     await execAll(up0046)
     expect(await columnExists('audit_archive_chunks', 'key_scheme')).toBe(true)
     expect(await columnExists('audit_archive_chunks', 'last_manifest_state')).toBe(true)
+  })
+})
+
+// migration 0049 credit wallet — targeted round-trip (up -> 4 tables, down -> gone, re-up idempotent).
+// IMPORTANT ORDERING: this describe runs ALL_UPS in its beforeAll, which rebuilds the FK-version
+//   audit_log (migration 0017) + NOT-NULL requisition. It MUST run BEFORE 'migrations smoke 0038
+//   targeted' (next describe) — that block re-CREATEs audit_log WITHOUT FK and is the last schema
+//   mutator, leaving the test-fixture-friendly state that user-audit / register / payments-ecpay
+//   rely on via the shared single-worker D1 (same reason the 0044 targeted describe sits before 0038).
+describe('migrations smoke 0049 targeted (credit wallet round-trip)', () => {
+  beforeAll(async () => {
+    await dropAllTables()
+    await execAll(baseSql)
+    for (const sql of ALL_UPS) await execAll(sql)
+  })
+
+  it('up: 4 credit tables + key indexes present', async () => {
+    expect(await tableExists('credit_wallets')).toBe(true)
+    expect(await tableExists('product_usage_quota')).toBe(true)
+    expect(await tableExists('credit_ledger')).toBe(true)
+    expect(await tableExists('quota_config_ledger')).toBe(true)
+    expect(await indexExists('idx_credit_ledger_tenant')).toBe(true)
+    expect(await indexExists('idx_credit_ledger_tenant_product')).toBe(true)
+    expect(await indexExists('idx_puq_tenant')).toBe(true)
+    expect(await indexExists('idx_qcl_tenant_product')).toBe(true)
+  })
+
+  it('down: 4 credit tables dropped', async () => {
+    await execAll(down0049)
+    expect(await tableExists('credit_ledger')).toBe(false)
+    expect(await tableExists('quota_config_ledger')).toBe(false)
+    expect(await tableExists('product_usage_quota')).toBe(false)
+    expect(await tableExists('credit_wallets')).toBe(false)
+    // 上游表（0047/0048）仍在（down 只拆 0049 自建）
+    expect(await tableExists('tenants')).toBe(true)
+    expect(await tableExists('products')).toBe(true)
+  })
+
+  it('re-up after down is idempotent (4 tables back)', async () => {
+    await execAll(up0049)
+    expect(await tableExists('credit_wallets')).toBe(true)
+    expect(await tableExists('product_usage_quota')).toBe(true)
+    expect(await tableExists('credit_ledger')).toBe(true)
+    expect(await tableExists('quota_config_ledger')).toBe(true)
   })
 })
 
