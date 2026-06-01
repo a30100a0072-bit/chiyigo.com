@@ -30,6 +30,7 @@ type RateLimitKind =
   | 'admin_read'
   | 'org_switch'
   | 'billing_grant'
+  | 'billing_wallet'
 
 interface RateLimitScope {
   kind: RateLimitKind

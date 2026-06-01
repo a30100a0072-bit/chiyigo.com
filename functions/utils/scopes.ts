@@ -64,8 +64,10 @@ export const SCOPES = Object.freeze({
   ADMIN_AUDIT_ARCHIVE_PURGE:   'admin:audit_archive:purge',   // force_purge（PR 2.3 真實作前 stub）
 
   // ── PR2 Billing / Entitlement — 手動 grantPlan（plan §7）
-  ADMIN_BILLING:       'admin:billing',        // coarse（hierarchy 含 :grant）
+  ADMIN_BILLING:       'admin:billing',        // coarse（hierarchy 含 :grant / :wallet）
   ADMIN_BILLING_GRANT: 'admin:billing:grant',  // 手動 grant（offline 確認 / admin override）；:revoke 預留未來 revoke PR
+  // ── PR3 Credit Wallet — 手動 topup / adjust / quota set（plan §7）
+  ADMIN_BILLING_WALLET: 'admin:billing:wallet', // 手動錢包/配額操作；與 web3 elevated:wallet_op 無關（命名陷阱）
 
   // 高權限（Phase C-3）— **絕對不出現在 ROLE_BASE_SCOPES**，只能透過 step-up flow 取得
   ELEVATED_ACCOUNT:   'elevated:account',     // 改密碼 / 改 email / 刪帳號
@@ -105,6 +107,7 @@ const SCOPE_HIERARCHY = Object.freeze({
   ],
   [SCOPES.ADMIN_BILLING]: [
     SCOPES.ADMIN_BILLING_GRANT,
+    SCOPES.ADMIN_BILLING_WALLET,
   ],
 })
 

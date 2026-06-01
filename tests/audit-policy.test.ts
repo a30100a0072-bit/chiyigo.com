@@ -155,6 +155,22 @@ describe('classifyAuditEvent — 未知 event', () => {
   })
 })
 
+// PR3 Credit Wallet：顯式列出 7 個新 event 的分類（codex Gate-2 非阻斷建議：別只靠 _registrySize 間接兜底）。
+// billing.quota.set 為 IMMUTABLE（telemetry 對應 authoritative quota_config_ledger，分類仍歸金融狀態變更永久保留）。
+describe('classifyAuditEvent — PR3 billing.credit.* / billing.quota.set', () => {
+  it.each([
+    ['billing.credit.deducted',         AUDIT_CATEGORY.IMMUTABLE],
+    ['billing.credit.topup',            AUDIT_CATEGORY.IMMUTABLE],
+    ['billing.credit.adjusted',         AUDIT_CATEGORY.IMMUTABLE],
+    ['billing.quota.set',               AUDIT_CATEGORY.IMMUTABLE],
+    ['billing.credit.conflict',         AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['billing.credit.denied',           AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['billing.credit.idempotent_replay', AUDIT_CATEGORY.TELEMETRY],
+  ])('%s → %s', (e, expected) => {
+    expect(classifyAuditEvent(e)).toBe(expected)
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -206,7 +222,7 @@ describe('registry coverage', () => {
     //   billing.grant.applied（immutable）+ billing.grant.{denied,conflict,evidence_conflict}（security_signal）
     //   + billing.grant.idempotent_replay（telemetry）→ 179。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(179)
+    expect(_registrySize).toBe(186)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
