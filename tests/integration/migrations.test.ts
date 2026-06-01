@@ -41,7 +41,7 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0001..0049 forward 已實作（見 line 448 describe）；本 case
+// 至少要有 targeted smoke。完整 0001..0050 forward 已實作（見 line 448 describe）；本 case
 // 維持手建 fixture 形式作 0037 issued_aud 行為的 targeted 驗證。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
@@ -85,6 +85,8 @@ import up0047    from '../../migrations/0047_tenant_foundation.sql?raw'
 import up0048    from '../../migrations/0048_billing_entitlement.sql?raw'
 import up0049    from '../../migrations/0049_credit_wallet.sql?raw'
 import down0049  from '../../migrations/down/0049_credit_wallet.down.sql?raw'
+import up0050    from '../../migrations/0050_member_lifecycle.sql?raw'
+import down0050  from '../../migrations/down/0050_member_lifecycle.down.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -96,7 +98,7 @@ const ALL_UPS = [
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
   up0041, up0042, up0043, up0044, up0045, up0046, up0047, up0048,
-  up0049,
+  up0049, up0050,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -285,7 +287,7 @@ describe('migrations smoke', () => {
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
 // 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
-// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0049 已實作於下方
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0050 已實作於下方
 // 「full forward chain」describe（line 448）。本 case 維持手建 fixture 形式作 0037
 // issued_aud 行為 targeted 驗證。
 //
@@ -380,10 +382,10 @@ describe('migrations smoke 0037 targeted', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full forward chain 0001..0049 vs prod snapshot
+// Full forward chain 0001..0050 vs prod snapshot
 //
 // 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
-// 完整 forward 變得可行。本 describe 驗 _base + 0001..0049 跑完後的 schema shape
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0050 跑完後的 schema shape
 // 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
 //
 // 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
@@ -428,6 +430,8 @@ const EXPECTED_TABLES = [
   'grant_plan_operations', 'plans', 'products', 'tenant_product_access',
   // PR3 migration 0049: credit wallet + quota + ledger
   'credit_wallets', 'product_usage_quota', 'credit_ledger', 'quota_config_ledger',
+  // PR4 migration 0050: invitation + member lifecycle
+  'invitations', 'org_create_operations',
 ].sort()
 
 // Per-table expected column sets（baseline 12 表 + 部分 ALTER 重點目標）
@@ -462,6 +466,9 @@ const EXPECTED_COLUMNS = {
   product_usage_quota: ['created_at', 'period', 'product_id', 'quota_limit', 'quota_used', 'tenant_id', 'updated_at', 'version'],
   credit_ledger: ['actor_email', 'actor_id', 'actor_role', 'amount', 'balance_after', 'created_at', 'entry_type', 'id', 'idempotency_key', 'idempotency_scope', 'occurred_at', 'product_id', 'quota_limit_after', 'quota_period', 'quota_used_after', 'ref', 'request_hash', 'source', 'tenant_id'],
   quota_config_ledger: ['actor_email', 'actor_id', 'actor_role', 'created_at', 'id', 'idempotency_key', 'idempotency_scope', 'new_limit', 'occurred_at', 'old_limit', 'period', 'product_id', 'reason', 'request_hash', 'tenant_id'],
+  // migration 0050 invitation + member lifecycle
+  invitations: ['accepted_at', 'accepted_user_id', 'created_at', 'email', 'expires_at', 'id', 'invited_by', 'platform_role', 'status', 'tenant_id', 'token_hash', 'updated_at'],
+  org_create_operations: ['created_at', 'creator_user_id', 'id', 'idempotency_key', 'request_hash', 'tenant_id'],
 }
 
 // 對齊後（0040 exact-parity）的 requisition 索引
@@ -470,7 +477,7 @@ const EXPECTED_REQUISITION_INDEXES = [
   'idx_requisition_ip',         // 0006
 ]
 
-describe('full forward chain 0001..0049 vs prod snapshot', () => {
+describe('full forward chain 0001..0050 vs prod snapshot', () => {
   beforeAll(async () => {
     await dropAllTables()
     await execAll(baseSql)
@@ -479,7 +486,7 @@ describe('full forward chain 0001..0049 vs prod snapshot', () => {
     }
   })
 
-  it('table set 對齊 prod snapshot（45 表）', async () => {
+  it('table set 對齊 prod snapshot（47 表）', async () => {
     const tables = await listTables()
     expect(tables).toEqual(EXPECTED_TABLES)
   })
@@ -761,6 +768,68 @@ describe('migrations smoke 0049 targeted (credit wallet round-trip)', () => {
     expect(await tableExists('product_usage_quota')).toBe(true)
     expect(await tableExists('credit_ledger')).toBe(true)
     expect(await tableExists('quota_config_ledger')).toBe(true)
+  })
+})
+
+// migration 0050 member lifecycle — targeted round-trip (up -> 2 tables, down -> gone, re-up idempotent).
+// Same ordering rule as the 0049 describe: runs ALL_UPS (FK audit_log) and MUST sit BEFORE the 0038
+// targeted block (which re-CREATEs audit_log WITHOUT FK as the last schema mutator).
+describe('migrations smoke 0050 targeted (member lifecycle round-trip)', () => {
+  beforeAll(async () => {
+    await dropAllTables()
+    await execAll(baseSql)
+    for (const sql of ALL_UPS) await execAll(sql)
+  })
+
+  it('up: invitations + org_create_operations + key indexes present', async () => {
+    expect(await tableExists('invitations')).toBe(true)
+    expect(await tableExists('org_create_operations')).toBe(true)
+    expect(await indexExists('idx_invitations_expires')).toBe(true)
+    expect(await indexExists('uq_invitations_pending')).toBe(true)
+    expect(await indexExists('idx_org_create_ops_tenant')).toBe(true)
+  })
+
+  it('down: 2 tables dropped, upstream (tenants/users) untouched', async () => {
+    await execAll(down0050)
+    expect(await tableExists('invitations')).toBe(false)
+    expect(await tableExists('org_create_operations')).toBe(false)
+    expect(await tableExists('tenants')).toBe(true)
+    expect(await tableExists('users')).toBe(true)
+  })
+
+  it('re-up after down is idempotent (2 tables back)', async () => {
+    await execAll(up0050)
+    expect(await tableExists('invitations')).toBe(true)
+    expect(await tableExists('org_create_operations')).toBe(true)
+  })
+})
+
+// PR4 D10 micro-spike: verify D1 preserves last_insert_rowid() across statements within ONE batch()
+// (S2 captures the AUTOINCREMENT id of S1's INSERT). createOrgTenant (commit 3) relies on this to write
+// the org_create_operations row pointing at the just-created tenant. Self-contained scratch tables so it
+// does not touch audit_log (ordering-neutral). If this ever FAILS, switch createOrgTenant to the
+// correlation-token fallback (plan section 8 / D10) -- do NOT rely on last_insert_rowid().
+describe('D1 batch last_insert_rowid() semantic (PR4 D10 micro-spike)', () => {
+  it('last_insert_rowid() in batch stmt 2 reflects the INSERT of stmt 1', async () => {
+    await env.chiyigo_db.prepare('DROP TABLE IF EXISTS _d10_parent').run()
+    await env.chiyigo_db.prepare('DROP TABLE IF EXISTS _d10_child').run()
+    await env.chiyigo_db.prepare('CREATE TABLE _d10_parent (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT)').run()
+    await env.chiyigo_db.prepare('CREATE TABLE _d10_child (parent_id INTEGER NOT NULL, note TEXT)').run()
+    // seed a few rows so the target id is not trivially 1 (makes the assertion meaningful)
+    await env.chiyigo_db.prepare(`INSERT INTO _d10_parent (label) VALUES ('s1'), ('s2'), ('s3')`).run()
+
+    await env.chiyigo_db.batch([
+      env.chiyigo_db.prepare(`INSERT INTO _d10_parent (label) VALUES ('target')`),
+      env.chiyigo_db.prepare(`INSERT INTO _d10_child (parent_id, note) SELECT last_insert_rowid(), 'c'`),
+    ])
+
+    const parent = await env.chiyigo_db.prepare(`SELECT id FROM _d10_parent WHERE label = 'target'`).first<{ id: number }>()
+    const child = await env.chiyigo_db.prepare(`SELECT parent_id FROM _d10_child WHERE note = 'c'`).first<{ parent_id: number }>()
+    expect(parent?.id).toBeGreaterThan(3)            // not the trivial first row
+    expect(child?.parent_id).toBe(parent?.id)        // S2 captured S1's rowid -> createOrgTenant can use it
+
+    await env.chiyigo_db.prepare('DROP TABLE IF EXISTS _d10_child').run()
+    await env.chiyigo_db.prepare('DROP TABLE IF EXISTS _d10_parent').run()
   })
 })
 

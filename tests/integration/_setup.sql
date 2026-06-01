@@ -707,3 +707,39 @@ CREATE TABLE IF NOT EXISTS quota_config_ledger (
   CONSTRAINT ck_qcl_actor_present CHECK( length(trim(actor_email)) > 0 AND length(trim(actor_role)) > 0 )
 );
 CREATE INDEX IF NOT EXISTS idx_qcl_tenant_product ON quota_config_ledger(tenant_id, product_id, period, id);
+
+-- migration 0050: invitation + member lifecycle (PR4). invitations (one-time signed invite) +
+-- org_create_operations (durable idempotency for POST /api/tenants). No event_outbox (PR5, D1=Option B).
+CREATE TABLE IF NOT EXISTS invitations (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id        INTEGER NOT NULL REFERENCES tenants(id),
+  email            TEXT    NOT NULL,
+  platform_role    TEXT    NOT NULL DEFAULT 'member'
+                           CONSTRAINT ck_inv_role CHECK(platform_role IN ('tenant_admin','billing_admin','member')),
+  token_hash       TEXT    NOT NULL UNIQUE,
+  status           TEXT    NOT NULL DEFAULT 'pending'
+                           CONSTRAINT ck_inv_status CHECK(status IN ('pending','accepted','revoked','expired')),
+  expires_at       TEXT    NOT NULL,
+  invited_by       INTEGER NOT NULL REFERENCES users(id),
+  accepted_user_id INTEGER REFERENCES users(id),
+  accepted_at      TEXT,
+  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  CONSTRAINT ck_inv_accept_fields CHECK(
+        (status =  'accepted' AND accepted_user_id IS NOT NULL AND accepted_at IS NOT NULL)
+     OR (status <> 'accepted' AND accepted_user_id IS NULL     AND accepted_at IS NULL) )
+);
+CREATE INDEX IF NOT EXISTS idx_invitations_expires ON invitations(expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_invitations_pending
+  ON invitations(tenant_id, email) WHERE status = 'pending';
+
+CREATE TABLE IF NOT EXISTS org_create_operations (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  creator_user_id  INTEGER NOT NULL REFERENCES users(id),
+  idempotency_key  TEXT    NOT NULL,
+  request_hash     TEXT    NOT NULL,
+  tenant_id        INTEGER NOT NULL REFERENCES tenants(id),
+  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(creator_user_id, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_org_create_ops_tenant ON org_create_operations(tenant_id);

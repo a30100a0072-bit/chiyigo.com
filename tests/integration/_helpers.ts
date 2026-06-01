@@ -95,6 +95,9 @@ export async function resetDb() {
     try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
   }
   await env.chiyigo_db.batch([
+    // migration 0050 member lifecycle 表先刪（FK → tenants/users，須早於它們清空；app-layer append-only，plain DELETE 即可）
+    env.chiyigo_db.prepare('DELETE FROM org_create_operations'),
+    env.chiyigo_db.prepare('DELETE FROM invitations'),
     // migration 0049 credit wallet 表先刪（FK → tenants/products；append-only 走應用層紀律，plain DELETE 即可）
     env.chiyigo_db.prepare('DELETE FROM credit_ledger'),
     env.chiyigo_db.prepare('DELETE FROM quota_config_ledger'),
@@ -571,4 +574,54 @@ export async function seedQuotaConfigLedger(
       requestHash, actorId, actorEmail, actorRole, reason, occurredAt,
     )
     .run()
+}
+
+/**
+ * Insert an invitations row (migration 0050). Defaults to a live pending invite.
+ * Pass `token` (raw) to store its SHA-256 (so a test can later accept with the same raw),
+ * or `tokenHash` directly. `expiresAt` is a SQLite-format datetime string (default far future).
+ * For `status='accepted'`, the caller MUST pass acceptedUserId + acceptedAt (ck_inv_accept_fields).
+ */
+export async function seedInvitation(
+  opts: {
+    tenantId: number; email: string;
+    platformRole?: 'tenant_admin' | 'billing_admin' | 'member';
+    token?: string; tokenHash?: string;
+    status?: 'pending' | 'accepted' | 'revoked' | 'expired';
+    expiresAt?: string; invitedBy: number;
+    acceptedUserId?: number | null; acceptedAt?: string | null;
+  },
+) {
+  const {
+    tenantId, email, platformRole = 'member', status = 'pending',
+    expiresAt = '2099-12-31 23:59:59', invitedBy,
+    acceptedUserId = null, acceptedAt = null,
+  } = opts
+  const tokenHash = opts.tokenHash ?? (opts.token ? await hashToken(opts.token) : `th-${tenantId}-${email}`)
+  const r = await env.chiyigo_db
+    .prepare(
+      `INSERT INTO invitations
+         (tenant_id, email, platform_role, token_hash, status, expires_at, invited_by, accepted_user_id, accepted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(tenantId, email, platformRole, tokenHash, status, expiresAt, invitedBy, acceptedUserId, acceptedAt)
+    .run()
+  return { id: r.meta.last_row_id, tokenHash }
+}
+
+/**
+ * Insert an org_create_operations row (migration 0050) for idempotency / constraint tests.
+ */
+export async function seedOrgCreateOp(
+  opts: { creatorUserId: number; idempotencyKey: string; requestHash?: string; tenantId: number },
+) {
+  const { creatorUserId, idempotencyKey, requestHash = 'h', tenantId } = opts
+  const r = await env.chiyigo_db
+    .prepare(
+      `INSERT INTO org_create_operations (creator_user_id, idempotency_key, request_hash, tenant_id)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .bind(creatorUserId, idempotencyKey, requestHash, tenantId)
+    .run()
+  return { id: r.meta.last_row_id }
 }
