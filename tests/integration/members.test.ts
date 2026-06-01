@@ -131,6 +131,17 @@ describe('member transitions + last-owner protection', () => {
     expect((await memberRow(tenantId, m))?.platform_role).toBe('tenant_admin')
   })
 
+  it('changeMemberRole to the SAME role -> no_op (no write, Gate-2)', async () => {
+    const { tenantId, owner } = await org()
+    const m = await addMember(tenantId, 'billing_admin')
+    const before = await db.prepare(`SELECT updated_at FROM organization_members WHERE tenant_id = ? AND user_id = ?`).bind(tenantId, m).first<{ updated_at: string }>()
+    const r = await changeMemberRole(db, { tenantId, targetUserId: m, actorUserId: owner, toRole: 'billing_admin' })
+    expect(r.outcome).toBe('no_op')
+    const after = await db.prepare(`SELECT updated_at, platform_role FROM organization_members WHERE tenant_id = ? AND user_id = ?`).bind(tenantId, m).first<{ updated_at: string; platform_role: string }>()
+    expect(after?.platform_role).toBe('billing_admin')
+    expect(after?.updated_at).toBe(before?.updated_at) // NO DB write
+  })
+
   it('LAST-OWNER protection: cannot suspend/offboard/demote the only active owner', async () => {
     const { tenantId, owner } = await org()
     // owner acts on a second owner-target == cannot target self, so use a distinct actor (another owner-capable admin)

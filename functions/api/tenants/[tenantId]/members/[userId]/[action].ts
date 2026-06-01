@@ -30,7 +30,10 @@ export async function onRequestPost({ request, env, params }) {
   if (!eventType) return res({ error: 'Unknown member action', code: 'NOT_FOUND' }, 404)
 
   const gate = await requireActiveTenantRole(request, env, tenantId, OWNER_ONLY)
-  if (gate.ok === false) return gate.error
+  if (gate.ok === false) {
+    if (gate.userId !== null) await emitDenied(env, request, gate.userId, tenantId, action, gate.reason ?? 'forbidden')
+    return gate.error
+  }
   const userId = gate.userId
 
   const { blocked } = await checkRateLimit(env.chiyigo_db, { kind: 'member_mutate', userId, windowSeconds: RL_WINDOW_SEC, max: RL_MAX })

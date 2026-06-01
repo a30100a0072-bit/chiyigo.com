@@ -24,7 +24,10 @@ export async function onRequestPatch({ request, env, params }) {
   if (!Number.isInteger(targetUserId) || targetUserId <= 0) return res({ error: 'Invalid user id', code: 'ERR_VALIDATION' }, 400)
 
   const gate = await requireActiveTenantRole(request, env, tenantId, OWNER_ONLY)
-  if (gate.ok === false) return gate.error
+  if (gate.ok === false) {
+    if (gate.userId !== null) await emitDenied(env, request, gate.userId, tenantId, gate.reason ?? 'forbidden')
+    return gate.error
+  }
   const userId = gate.userId
 
   const { blocked } = await checkRateLimit(env.chiyigo_db, { kind: 'member_mutate', userId, windowSeconds: RL_WINDOW_SEC, max: RL_MAX })
@@ -61,6 +64,10 @@ export async function onRequestPatch({ request, env, params }) {
       data: { tenant_id: tenantId, sub: String(targetUserId), from_role: result.fromRole, to_role: result.toRole },
     })
     return res({ ok: true }, 200)
+  }
+  if (result.outcome === 'no_op') {
+    // role already equals the requested value: idempotent success, NO write, NO member.role_changed audit (Gate-2)
+    return res({ ok: true, no_op: true }, 200)
   }
   await emitDenied(env, request, userId, tenantId, result.outcome === 'invalid' ? result.code : result.outcome)
   return denyResponse(result)

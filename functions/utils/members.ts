@@ -39,6 +39,7 @@ export type OrgCreateOutcome =
 
 export type MemberOutcome =
   | { outcome: 'applied'; previousRole?: string; platformRole?: string; fromRole?: string; toRole?: string }
+  | { outcome: 'no_op' }                          // requested state already holds (e.g. same-role PATCH) -- no write, no event
   | { outcome: 'not_a_member' }                   // 404
   | { outcome: 'illegal_transition' }             // 409 (wrong current state for this op)
   | { outcome: 'last_owner_protected' }           // 409 (would remove the tenant's only active owner)
@@ -257,18 +258,22 @@ export async function changeMemberRole(db: ChiyigoDb, input: ChangeRoleInput): P
   }
   const pre = await preflight(db, input.tenantId, input.targetUserId, input.actorUserId, true)
   if (pre.ok === false) return pre.outcome
+  // Same-role PATCH is a NO-OP (Gate-2): no DB write, no member.role_changed event -- a from_role==to_role
+  // entry would pollute the immutable audit trail. The CAS also carries `platform_role <> ?` so a racy
+  // same-role write can never land as 'applied' either (it would 0-row -> classifyZeroRow).
+  if (pre.member.platform_role === input.toRole) return { outcome: 'no_op' }
   // The last-owner guard fires ONLY when demoting an active owner (current=owner AND toRole<>owner AND no other
   // active owner). Promoting to owner or leaving a non-owner unaffected skips the guard.
   const upd = await db
     .prepare(
       `UPDATE organization_members SET platform_role = ?, updated_at = datetime('now')
-        WHERE tenant_id = ? AND user_id = ? AND status = 'active'
+        WHERE tenant_id = ? AND user_id = ? AND status = 'active' AND platform_role <> ?
           AND ( platform_role <> 'tenant_owner' OR ? = 'tenant_owner'
              OR EXISTS (SELECT 1 FROM organization_members o2
                          WHERE o2.tenant_id = ? AND o2.user_id <> ?
                            AND o2.platform_role = 'tenant_owner' AND o2.status = 'active') )`,
     )
-    .bind(input.toRole, input.tenantId, input.targetUserId, input.toRole, input.tenantId, input.targetUserId)
+    .bind(input.toRole, input.tenantId, input.targetUserId, input.toRole, input.toRole, input.tenantId, input.targetUserId)
     .run()
   if (upd.meta.changes === 1) return { outcome: 'applied', fromRole: pre.member.platform_role, toRole: input.toRole }
   return classifyZeroRow(db, input.tenantId, input.targetUserId, input.toRole !== 'tenant_owner')

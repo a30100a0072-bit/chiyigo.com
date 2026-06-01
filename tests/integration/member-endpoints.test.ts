@@ -98,19 +98,32 @@ describe('POST /api/tenants/:tenantId/invitations (invite)', () => {
     expect(inv?.status).toBe('pending')
   })
 
-  it('non-member actor -> 403 (live tenant-role gate)', async () => {
+  it('non-member actor -> 403 + member.denied (gate-failure evidence, Gate-2)', async () => {
     const { tenantId } = await orgWithOwner()
     const stranger = await user()
     const r = await call(invite, req('POST', await token(stranger.id), { email: 'b@x.io', platform_role: 'member' }), { tenantId: String(tenantId) })
     expect(r.status).toBe(403)
+    expect(await auditCount('member.denied')).toBe(1)
   })
 
-  it('plain member actor -> 403 (owner/admin only)', async () => {
+  it('plain member actor -> 403 + member.denied (owner/admin only)', async () => {
     const { tenantId } = await orgWithOwner()
     const m = await user()
     await seedMembership({ tenantId, userId: m.id, role: 'member', status: 'active' })
     const r = await call(invite, req('POST', await token(m.id), { email: 'b@x.io', platform_role: 'member' }), { tenantId: String(tenantId) })
     expect(r.status).toBe(403)
+    expect(await auditCount('member.denied')).toBe(1)
+  })
+
+  it('SUSPENDED member attempting a tenant write -> 403 + member.denied (hard-revoke evidence, Gate-2)', async () => {
+    const { tenantId } = await orgWithOwner()
+    const m = await user()
+    await seedMembership({ tenantId, userId: m.id, role: 'tenant_admin', status: 'suspended' })
+    const r = await call(invite, req('POST', await token(m.id), { email: 'x@x.io', platform_role: 'member' }), { tenantId: String(tenantId) })
+    expect(r.status).toBe(403)
+    expect(await auditCount('member.denied')).toBe(1)
+    const row = await db.prepare(`SELECT event_data FROM audit_log WHERE event_type = 'member.denied' ORDER BY id DESC LIMIT 1`).first<{ event_data: string }>()
+    expect(JSON.parse(row?.event_data ?? '{}').reason_code).toBe('membership_not_active')
   })
 
   it('unknown body field -> 400', async () => {
@@ -158,6 +171,7 @@ describe('member mutations + role', () => {
     await seedMembership({ tenantId, userId: m2.id, role: 'member', status: 'active' })
     const r = await call(memberAction, req('POST', await token(m1.id)), { tenantId: String(tenantId), userId: String(m2.id), action: 'suspend' })
     expect(r.status).toBe(403)
+    expect(await auditCount('member.denied')).toBe(1) // gate-failure evidence (insufficient_role), Gate-2
   })
 
   it('owner offboards a SECOND owner -> 200 (allowed; >=1 owner remains). NOTE: last_owner_protected is domain-tested', async () => {
@@ -187,6 +201,16 @@ describe('member mutations + role', () => {
     const r = await call(changeRole, req('PATCH', await token(ownerId), { platform_role: 'tenant_admin' }), { tenantId: String(tenantId), userId: String(m.id) })
     expect(r.status).toBe(200)
     expect(await auditCount('member.role_changed')).toBe(1)
+  })
+
+  it('same-role PATCH -> 200 no_op, NO member.role_changed audit (Gate-2)', async () => {
+    const { tenantId, ownerId } = await orgWithOwner()
+    const m = await user()
+    await seedMembership({ tenantId, userId: m.id, role: 'billing_admin', status: 'active' })
+    const r = await call(changeRole, req('PATCH', await token(ownerId), { platform_role: 'billing_admin' }), { tenantId: String(tenantId), userId: String(m.id) })
+    expect(r.status).toBe(200)
+    expect((await r.json() as { no_op?: boolean }).no_op).toBe(true)
+    expect(await auditCount('member.role_changed')).toBe(0) // same-role never pollutes the immutable trail
   })
 
   it('GET members lists active members + pending invitations', async () => {

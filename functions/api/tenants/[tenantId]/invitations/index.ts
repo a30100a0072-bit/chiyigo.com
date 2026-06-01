@@ -27,7 +27,10 @@ export async function onRequestPost({ request, env, params }) {
   if (!Number.isInteger(tenantId) || tenantId <= 0) return res({ error: 'Invalid tenant id', code: 'ERR_VALIDATION' }, 400)
 
   const gate = await requireActiveTenantRole(request, env, tenantId, MANAGER_ROLES)
-  if (gate.ok === false) return gate.error
+  if (gate.ok === false) {
+    if (gate.userId !== null) await emitDenied(env, request, gate.userId, tenantId, gate.reason ?? 'forbidden')
+    return gate.error
+  }
   const userId = gate.userId
 
   const { blocked } = await checkRateLimit(env.chiyigo_db, { kind: 'member_invite', userId, windowSeconds: INVITE_RL_WINDOW_SEC, max: INVITE_RL_MAX })

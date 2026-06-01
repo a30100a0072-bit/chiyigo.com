@@ -8,6 +8,7 @@
 import { res } from '../../../../utils/auth'
 import { requireActiveTenantRole, type PlatformRole } from '../../../../utils/tenant-context'
 import { listPendingInvitations } from '../../../../utils/invitations'
+import { safeUserAudit } from '../../../../utils/user-audit'
 
 const MANAGER_ROLES: readonly PlatformRole[] = ['tenant_owner', 'tenant_admin']
 
@@ -16,7 +17,15 @@ export async function onRequestGet({ request, env, params }) {
   if (!Number.isInteger(tenantId) || tenantId <= 0) return res({ error: 'Invalid tenant id', code: 'ERR_VALIDATION' }, 400)
 
   const gate = await requireActiveTenantRole(request, env, tenantId, MANAGER_ROLES)
-  if (gate.ok === false) return gate.error
+  if (gate.ok === false) {
+    if (gate.userId !== null) {
+      await safeUserAudit(env, {
+        event_type: 'member.denied', severity: 'warn', user_id: gate.userId, request,
+        data: { action: 'list_members', tenant_id: tenantId, reason_code: gate.reason ?? 'forbidden' },
+      })
+    }
+    return gate.error
+  }
 
   const memberRows = await env.chiyigo_db
     .prepare(
