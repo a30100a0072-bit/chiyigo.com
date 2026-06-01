@@ -34,6 +34,8 @@ export default defineConfig({
         'functions/utils/payments.{js,ts}',           // payment_intents lockForRefund 等
         'functions/utils/billing.{js,ts}',            // grant_plan_operations ledger + projection batch（D1-dependent，integration-tested）
         'functions/utils/credit.{js,ts}',             // credit_wallets/quota/ledger batch（D1-dependent，integration-tested）
+        'functions/utils/members.{js,ts}',            // org_create_operations + organization_members CAS（D1-dependent，integration-tested）
+        'functions/utils/invitations.{js,ts}',        // invitations one-time consume + join batch（D1-dependent，integration-tested）
         'functions/utils/kyc.{js,ts}',                // kyc_verifications schema + adapter
         'functions/utils/kyc-vendors/**',             // 同上
         'functions/utils/payment-vendors/**',         // ecpay/mock adapters 都吃 env+D1

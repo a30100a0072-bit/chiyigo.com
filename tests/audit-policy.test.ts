@@ -171,6 +171,27 @@ describe('classifyAuditEvent — PR3 billing.credit.* / billing.quota.set', () =
   })
 })
 
+// PR4 Invitation + Member Lifecycle：12 個新 event 顯式分類（org/membership 狀態 = immutable；
+// 被拒/accept 失敗 = security_signal；等冪重放 = telemetry）。
+describe('classifyAuditEvent — PR4 member lifecycle', () => {
+  it.each([
+    ['org.created',               AUDIT_CATEGORY.IMMUTABLE],
+    ['member.invited',            AUDIT_CATEGORY.IMMUTABLE],
+    ['member.joined',             AUDIT_CATEGORY.IMMUTABLE],
+    ['member.suspended',          AUDIT_CATEGORY.IMMUTABLE],
+    ['member.reactivated',        AUDIT_CATEGORY.IMMUTABLE],
+    ['member.offboarded',         AUDIT_CATEGORY.IMMUTABLE],
+    ['member.role_changed',       AUDIT_CATEGORY.IMMUTABLE],
+    ['invitation.revoked',        AUDIT_CATEGORY.IMMUTABLE],
+    ['member.denied',             AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['invitation.accept.denied',  AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['invitation.accept.replay',  AUDIT_CATEGORY.TELEMETRY],
+    ['org.create.replay',         AUDIT_CATEGORY.TELEMETRY],
+  ])('%s → %s', (e, expected) => {
+    expect(classifyAuditEvent(e)).toBe(expected)
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -221,8 +242,12 @@ describe('registry coverage', () => {
     // PR2 Billing / Entitlement Commit 3 (2026-05-30) 加 5 個 billing.grant.* events：
     //   billing.grant.applied（immutable）+ billing.grant.{denied,conflict,evidence_conflict}（security_signal）
     //   + billing.grant.idempotent_replay（telemetry）→ 179。
+    // PR3 Credit Wallet 加 7 個 billing.credit.* / billing.quota.set → 186。
+    // PR4 Invitation + Member Lifecycle 加 12 個（org.created / member.{invited,joined,suspended,reactivated,
+    //   offboarded,role_changed} / invitation.revoked = 8 immutable；member.denied / invitation.accept.denied
+    //   = 2 security_signal；invitation.accept.replay / org.create.replay = 2 telemetry）→ 198。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(186)
+    expect(_registrySize).toBe(198)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
