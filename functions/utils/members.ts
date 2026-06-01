@@ -276,5 +276,10 @@ export async function changeMemberRole(db: ChiyigoDb, input: ChangeRoleInput): P
     .bind(input.toRole, input.tenantId, input.targetUserId, input.toRole, input.toRole, input.tenantId, input.targetUserId)
     .run()
   if (upd.meta.changes === 1) return { outcome: 'applied', fromRole: pre.member.platform_role, toRole: input.toRole }
+  // 0-row: a CONCURRENT PATCH may have already set the target role on an active member between this request's
+  // pre-read and CAS -> converge to an idempotent no_op (NOT 409), and never a spurious member.role_changed
+  // (Gate-2 R2 optional follow-up). Other 0-row causes (last-owner / not-active / gone) fall through to classify.
+  const now = await loadMember(db, input.tenantId, input.targetUserId)
+  if (now && now.status === 'active' && now.platform_role === input.toRole) return { outcome: 'no_op' }
   return classifyZeroRow(db, input.tenantId, input.targetUserId, input.toRole !== 'tenant_owner')
 }

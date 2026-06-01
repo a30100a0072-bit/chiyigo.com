@@ -131,6 +131,17 @@ describe('member transitions + last-owner protection', () => {
     expect((await memberRow(tenantId, m))?.platform_role).toBe('tenant_admin')
   })
 
+  it('CONCURRENT same-target-role PATCH -> one applied, the other no_op (converges, no 409) [Gate-2 R2]', async () => {
+    const { tenantId, owner } = await org()
+    const m = await addMember(tenantId, 'member')
+    const [r1, r2] = await Promise.all([
+      changeMemberRole(db, { tenantId, targetUserId: m, actorUserId: owner, toRole: 'tenant_admin' }),
+      changeMemberRole(db, { tenantId, targetUserId: m, actorUserId: owner, toRole: 'tenant_admin' }),
+    ])
+    expect([r1.outcome, r2.outcome].sort()).toEqual(['applied', 'no_op']) // the loser converges, never 409
+    expect((await memberRow(tenantId, m))?.platform_role).toBe('tenant_admin')
+  })
+
   it('changeMemberRole to the SAME role -> no_op (no write, Gate-2)', async () => {
     const { tenantId, owner } = await org()
     const m = await addMember(tenantId, 'billing_admin')
