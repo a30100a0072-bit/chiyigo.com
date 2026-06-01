@@ -20,6 +20,8 @@
  *  - 任何不確定 → fail-closed（{ ok:false }，caller 一律 403 / 不發 token）。
  */
 
+import { res, requireRegularAccessToken } from './auth'
+
 export type PlatformRole = 'tenant_owner' | 'tenant_admin' | 'billing_admin' | 'member'
 
 /** 簽進 access_token 的 tenant claim delta（active tenant + 該 tenant 上的 platform_role）。 */
@@ -148,4 +150,32 @@ export async function resolveIssuanceContextForTenant(
   // 4. platform_role 由 DB 推導（禁信 client）。
   //    SAFETY: organization_members.platform_role 受 migration 0047 CHECK 約束在 PlatformRole 4 值內。
   return { ok: true, tenant_id: tenant.id, platform_role: m.platform_role as PlatformRole }
+}
+
+/**
+ * Tenant-scoped write gate (PR4 §9): the chiyigo-side hard-revoke enforcement.
+ *
+ * requireRegularAccessToken (actor identity, rejects pre_auth/temp_bind/elevated) THEN
+ * resolveIssuanceContextForTenant (LIVE re-check: tenant active + membership active + role from DB) on the
+ * path tenantId. The actor's platform_role is re-derived from the DB EVERY request -- NEVER trusted from the
+ * token claim -- so a suspended/offboarded/demoted actor is denied immediately (not after the <=15min token
+ * TTL). Any ok:false from the resolver, or a role not in allowedRoles, returns an opaque 403 (no leak).
+ */
+export type RequireTenantRoleResult =
+  | { ok: true; userId: number; role: PlatformRole; error: null }
+  | { ok: false; userId: null; role: null; error: Response }
+
+export async function requireActiveTenantRole(
+  request: Request, env: Env, tenantId: number, allowedRoles: readonly PlatformRole[],
+): Promise<RequireTenantRoleResult> {
+  const { userId, error } = await requireRegularAccessToken(request, env)
+  if (error) return { ok: false, userId: null, role: null, error }
+  const ctx = await resolveIssuanceContextForTenant(env.chiyigo_db, userId, tenantId)
+  if (ctx.ok === false) {
+    return { ok: false, userId: null, role: null, error: res({ error: 'Forbidden', code: 'TENANT_ACCESS_DENIED' }, 403) }
+  }
+  if (!allowedRoles.includes(ctx.platform_role)) {
+    return { ok: false, userId: null, role: null, error: res({ error: 'Forbidden', code: 'INSUFFICIENT_PLATFORM_ROLE' }, 403) }
+  }
+  return { ok: true, userId, role: ctx.platform_role, error: null }
 }

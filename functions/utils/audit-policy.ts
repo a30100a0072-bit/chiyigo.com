@@ -169,6 +169,15 @@ const IMMUTABLE = [
   'billing.credit.topup',
   'billing.credit.adjusted',
   'billing.quota.set',
+  // PR4 Invitation + Member Lifecycle：org / membership 狀態變更（永久 forensic trail）
+  'org.created',
+  'member.invited',
+  'member.joined',
+  'member.suspended',
+  'member.reactivated',
+  'member.offboarded',
+  'member.role_changed',
+  'invitation.revoked',
   'kyc.status.change',
   'mfa.backup_code.regenerate',
   'mfa.backup_code.use',
@@ -223,6 +232,9 @@ const SECURITY_SIGNAL = [
   // PR3 Credit Wallet：扣點/錢包被拒/衝突信號
   'billing.credit.conflict',         // idempotency (tenant,scope,key) 衝突（同 key 異 params）
   'billing.credit.denied',           // insufficient / quota_exceeded / not_provisioned / 資格 / 驗證 / 授權 / rate_limited
+  // PR4：owner/admin lifecycle 或 org-create 被拒（reason_code in payload）；accept 失敗（leaked-link / brute-force 信號）
+  'member.denied',
+  'invitation.accept.denied',
   'kyc.gate.fail',
   'mfa.totp.activate.fail',
   'mfa.totp.disable.fail',
@@ -253,6 +265,9 @@ const TELEMETRY = [
   'auth.step_up.rate_limited',
   'billing.grant.idempotent_replay', // PR2：manual grant idempotency replay（非錯誤，計量用）
   'billing.credit.idempotent_replay', // PR3：credit op idempotency replay（非錯誤，計量用）
+  // PR4：accept re-click 等冪重放 / org-create same-key+payload replay（非錯誤，計量用）
+  'invitation.accept.replay',
+  'org.create.replay',
   'oauth.backchannel.dispatch',
   'oauth.token.rate_limited',
   'webauthn.register.options',

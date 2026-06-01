@@ -143,6 +143,47 @@ export async function sendVerificationEmail(apiKey, to, token, env, signal?) {
 }
 
 /**
+ * 發送組織邀請信（PR4 Invitation）。
+ * @param {string} apiKey  RESEND_API_KEY（來自 env）
+ * @param {string} to      被邀請人信箱
+ * @param {string} token   原始邀請 token（hex，64 字元；僅存在於信件連結，DB 只存 hash）
+ */
+export async function sendInvitationEmail(apiKey, to, token, env, signal?) {
+  const BASE_URL = baseUrlOf(env)
+  // 指向前端接受頁，使用者登入後按下按鈕才 POST /api/invitations/accept 核銷（避免郵件預載提前消耗）
+  const link = `${BASE_URL}/accept-invitation.html?token=${token}`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif;color:#e2e8f0">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:40px auto">
+    <tr><td style="padding:32px;background:#1e293b;border-radius:12px">
+      <h1 style="margin:0 0 8px;font-size:24px;color:#f8fafc">你被邀請加入組織</h1>
+      <p style="margin:0 0 24px;color:#94a3b8;font-size:14px">登入（或註冊）你的 Chiyigo 帳號後，點擊下方按鈕接受邀請。</p>
+      <a href="${link}"
+         style="display:inline-block;padding:12px 28px;background:#6366f1;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px">
+        接受邀請
+      </a>
+      <p style="margin:24px 0 0;color:#475569;font-size:12px">
+        此邀請限本信箱使用，且僅能接受一次。<br>
+        若非預期收到此信，請忽略。
+      </p>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim();
+
+  return sendEmail(apiKey, env, {
+    to,
+    subject: '你被邀請加入 Chiyigo 組織',
+    html,
+    signal,
+  });
+}
+
+/**
  * 發送密碼重設信。
  * @param {string} apiKey  RESEND_API_KEY（來自 env）
  * @param {string} to      收件人信箱
