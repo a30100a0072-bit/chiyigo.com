@@ -95,6 +95,11 @@ export async function resetDb() {
     try { await env.chiyigo_db.prepare(sql).run() } catch { /* already present */ }
   }
   await env.chiyigo_db.batch([
+    // migration 0051 event tables（append/transition-only；唯一 FK = event_dlq.replayed_by→users ON DELETE SET NULL，故先刪 event_dlq 早於 users）
+    env.chiyigo_db.prepare('DELETE FROM event_deny_state'),
+    env.chiyigo_db.prepare('DELETE FROM event_dlq'),
+    env.chiyigo_db.prepare('DELETE FROM event_outbox'),
+    env.chiyigo_db.prepare('DELETE FROM event_stream_sequences'),
     // migration 0050 member lifecycle 表先刪（FK → tenants/users，須早於它們清空；app-layer append-only，plain DELETE 即可）
     env.chiyigo_db.prepare('DELETE FROM org_create_operations'),
     env.chiyigo_db.prepare('DELETE FROM invitations'),
