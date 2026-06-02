@@ -17,6 +17,7 @@
  */
 
 import { generateSecureToken, hashToken } from './crypto'
+import { emitMemberJoined } from './domain-event-emit'
 
 type ChiyigoDb = Env['chiyigo_db']
 
@@ -222,17 +223,34 @@ export async function acceptInvitation(db: ChiyigoDb, input: AcceptInvitationInp
          FROM invitations WHERE token_hash = ? AND accepted_user_id = ? AND accepted_at = ?`,
     )
     .bind(input.acceptingUserId, tokenHash, input.acceptingUserId, occurredAt)
+  // member.joined emitted in the SAME batch, gated on the JOIN insert (ruling 18.6: the join is "this request
+  // joined", not the consume). platformRole is BOUND from the IMMUTABLE invite row. Fresh eventId; occurredAt
+  // reuses the accept marker (event occurredAt is audit-only).
+  const emit = emitMemberJoined(
+    db,
+    { tenantId: invite.tenant_id, acceptingUserId: input.acceptingUserId, platformRole: invite.platform_role },
+    { eventId: crypto.randomUUID(), occurredAt },
+  )
 
   try {
-    await db.batch([consume, join])
-  } catch {
-    // message-independent: the only batch error is S2's UNIQUE(tenant,user) -> a membership already exists.
+    await db.batch([consume, join, ...emit])
+  } catch (e) {
+    // F2: a batch error is NOT necessarily the join's UNIQUE -- the outbox emit lives in this batch now, so an
+    // emission / seq / outbox failure also rolls the whole batch back here. Return a BUSINESS outcome ONLY when a
+    // re-read POSITIVELY proves one; otherwise RETHROW (system failure -> 5xx), never masking it as a business 200.
     const m = await db
       .prepare(`SELECT status FROM organization_members WHERE tenant_id = ? AND user_id = ?`)
       .bind(invite.tenant_id, input.acceptingUserId)
       .first<{ status: string }>()
-    if (m) return { outcome: 'already_member' }
-    return { outcome: 'already_resolved' }
+    if (m) return { outcome: 'already_member' }            // join UNIQUE-violated: membership already exists
+    const inv = await db
+      .prepare(`SELECT accepted_user_id FROM invitations WHERE token_hash = ?`)
+      .bind(tokenHash)
+      .first<{ accepted_user_id: number | null }>()
+    if (inv && inv.accepted_user_id !== null && inv.accepted_user_id !== input.acceptingUserId) {
+      return { outcome: 'already_resolved' }               // consumed by another sub (committed elsewhere)
+    }
+    throw e                                                // unexplained (emission/outbox/system) -> do NOT mask
   }
 
   // Did THIS request win the consume?
