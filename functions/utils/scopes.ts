@@ -69,12 +69,17 @@ export const SCOPES = Object.freeze({
   // ── PR3 Credit Wallet — 手動 topup / adjust / quota set（plan §7）
   ADMIN_BILLING_WALLET: 'admin:billing:wallet', // 手動錢包/配額操作；與 web3 elevated:wallet_op 無關（命名陷阱）
 
+  // ── PR5 Event Outbox — DLQ replay（plan §6 / L4）
+  ADMIN_EVENTS:        'admin:events',        // coarse（hierarchy 含 :replay）
+  ADMIN_EVENTS_REPLAY: 'admin:events:replay', // DLQ replay（re-enqueue 一個 dead outbox event）
+
   // 高權限（Phase C-3）— **絕對不出現在 ROLE_BASE_SCOPES**，只能透過 step-up flow 取得
   ELEVATED_ACCOUNT:   'elevated:account',     // 改密碼 / 改 email / 刪帳號
   ELEVATED_PAYMENT:   'elevated:payment',     // 任何金流操作
   ELEVATED_WITHDRAW:  'elevated:withdraw',
   ELEVATED_WALLET_OP: 'elevated:wallet_op',
   ELEVATED_BILLING:   'elevated:billing',     // PR2：手動 grantPlan step-up（for_action='grant_plan'）
+  ELEVATED_EVENTS:    'elevated:events',      // PR5：DLQ replay step-up（for_action='event_dlq_replay'）
 })
 
 /**
@@ -109,6 +114,9 @@ const SCOPE_HIERARCHY = Object.freeze({
     SCOPES.ADMIN_BILLING_GRANT,
     SCOPES.ADMIN_BILLING_WALLET,
   ],
+  [SCOPES.ADMIN_EVENTS]: [
+    SCOPES.ADMIN_EVENTS_REPLAY,
+  ],
 })
 
 /** 把 set 內所有 coarse scope 的 fine 子項一併加入；不影響原有 fine scope。*/
@@ -128,6 +136,7 @@ export const KNOWN_ELEVATED_SCOPES = new Set<string>([
   SCOPES.ELEVATED_WITHDRAW,
   SCOPES.ELEVATED_WALLET_OP,
   SCOPES.ELEVATED_BILLING,
+  SCOPES.ELEVATED_EVENTS,
 ])
 
 /** 該 scope 是否為「高權限」類型（必走 step-up flow）*/
@@ -159,12 +168,12 @@ const ROLE_BASE_SCOPES = {
   admin: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
-    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING,
+    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING, SCOPES.ADMIN_EVENTS,
   ],
   developer: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
-    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING,
+    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING, SCOPES.ADMIN_EVENTS,
   ],
 
   // ── P1-17 Phase 2 latent roles ──────────────────────────────
@@ -172,7 +181,7 @@ const ROLE_BASE_SCOPES = {
   super_admin: [
     SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE,
     SCOPES.ADMIN_USERS, SCOPES.ADMIN_REVOKE, SCOPES.ADMIN_AUDIT, SCOPES.ADMIN_CLIENTS, SCOPES.ADMIN_PAYMENTS,
-    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING,
+    SCOPES.ADMIN_AUDIT_ARCHIVE, SCOPES.ADMIN_BILLING, SCOPES.ADMIN_EVENTS,
   ],
   // finance：金流 read + 退款 + 退款審核 + webhook-dlq（dlq endpoint 用 ADMIN_PAYMENTS gate）
   // 嚴禁：admin:users（避免改 role/ban）、admin:clients（OAuth RP）、admin:audit（avoid PII access）
