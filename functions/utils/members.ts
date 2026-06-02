@@ -19,9 +19,24 @@
  */
 
 import { hashToken } from './crypto'
+import {
+  emitMemberSuspended,
+  emitMemberReactivated,
+  emitMemberOffboarded,
+  emitMemberRoleChanged,
+  type EmitMeta,
+} from './domain-event-emit'
 
 /** D1 binding type via ambient Env indexed access (same convention as tenant-context.ts / credit.ts). */
 type ChiyigoDb = Env['chiyigo_db']
+
+// eventId + occurredAt for the emitted domain event (PR5). crypto.randomUUID()/Date are the ONLY side effects
+// added to this module (matching invitations.ts's inline occurredAt); the emit helper itself stays pure. The
+// emit statements are spliced into each transition's db.batch() RIGHT AFTER the gating mutation so they are
+// gated on that mutation's changes()=1 (no event on a 0-row CAS) -- 5a spike-validated on local + remote D1.
+function emitMeta(): EmitMeta {
+  return { eventId: crypto.randomUUID(), occurredAt: new Date().toISOString() }
+}
 
 const MAX_NAME_LEN = 200
 const MAX_KEY_LEN = 200
@@ -200,7 +215,7 @@ export interface MemberTargetInput { tenantId: number; targetUserId: number; act
 export async function suspendMember(db: ChiyigoDb, input: MemberTargetInput): Promise<MemberOutcome> {
   const pre = await preflight(db, input.tenantId, input.targetUserId, input.actorUserId, true)
   if (pre.ok === false) return pre.outcome
-  const upd = await db
+  const mutation = db
     .prepare(
       `UPDATE organization_members SET status = 'suspended', updated_at = datetime('now')
         WHERE tenant_id = ? AND user_id = ? AND status = 'active'
@@ -210,8 +225,12 @@ export async function suspendMember(db: ChiyigoDb, input: MemberTargetInput): Pr
                            AND o2.platform_role = 'tenant_owner' AND o2.status = 'active') )`,
     )
     .bind(input.tenantId, input.targetUserId, input.tenantId, input.targetUserId)
-    .run()
-  if (upd.meta.changes === 1) return { outcome: 'applied', previousRole: pre.member.platform_role }
+  // member.suspended emitted in the SAME atomic batch, gated on the suspend CAS (no event on a 0-row no-op).
+  // The event's previousRole is SQL-DERIVED in-batch (the suspend does not change the role) -> authoritative even
+  // under a concurrent role change (plan F1). The previousRole RETURNED below is the pre-read snapshot for the
+  // HTTP response/audit (best-effort), NOT the event payload.
+  const res = await db.batch([mutation, ...emitMemberSuspended(db, input, emitMeta())])
+  if (res[0].meta.changes === 1) return { outcome: 'applied', previousRole: pre.member.platform_role }
   return classifyZeroRow(db, input.tenantId, input.targetUserId, true)
 }
 
@@ -219,14 +238,16 @@ export async function suspendMember(db: ChiyigoDb, input: MemberTargetInput): Pr
 export async function reactivateMember(db: ChiyigoDb, input: MemberTargetInput): Promise<MemberOutcome> {
   const pre = await preflight(db, input.tenantId, input.targetUserId, input.actorUserId, false)
   if (pre.ok === false) return pre.outcome
-  const upd = await db
+  const mutation = db
     .prepare(
       `UPDATE organization_members SET status = 'active', updated_at = datetime('now')
         WHERE tenant_id = ? AND user_id = ? AND status = 'suspended'`,
     )
     .bind(input.tenantId, input.targetUserId)
-    .run()
-  if (upd.meta.changes === 1) return { outcome: 'applied', platformRole: pre.member.platform_role }
+  // member.reactivated emitted in the SAME batch (gated on the reactivate CAS). platformRole is SQL-DERIVED
+  // post-reactivate (reactivate does not change the role); the returned platformRole is the pre-read snapshot.
+  const res = await db.batch([mutation, ...emitMemberReactivated(db, input, emitMeta())])
+  if (res[0].meta.changes === 1) return { outcome: 'applied', platformRole: pre.member.platform_role }
   return classifyZeroRow(db, input.tenantId, input.targetUserId, false)
 }
 
@@ -234,7 +255,7 @@ export async function reactivateMember(db: ChiyigoDb, input: MemberTargetInput):
 export async function offboardMember(db: ChiyigoDb, input: MemberTargetInput): Promise<MemberOutcome> {
   const pre = await preflight(db, input.tenantId, input.targetUserId, input.actorUserId, true)
   if (pre.ok === false) return pre.outcome
-  const del = await db
+  const mutation = db
     .prepare(
       `DELETE FROM organization_members
         WHERE tenant_id = ? AND user_id = ? AND status IN ('active','suspended')
@@ -244,8 +265,10 @@ export async function offboardMember(db: ChiyigoDb, input: MemberTargetInput): P
                            AND o2.platform_role = 'tenant_owner' AND o2.status = 'active') )`,
     )
     .bind(input.tenantId, input.targetUserId, input.tenantId, input.targetUserId)
-    .run()
-  if (del.meta.changes === 1) return { outcome: 'applied', previousRole: pre.member.platform_role }
+  // member.offboarded emitted in the SAME batch (gated on the offboard DELETE). data is {sub} only -- the DELETE
+  // removes the row so nothing is SQL-derived (no role in the offboarded payload by contract).
+  const res = await db.batch([mutation, ...emitMemberOffboarded(db, input, emitMeta())])
+  if (res[0].meta.changes === 1) return { outcome: 'applied', previousRole: pre.member.platform_role }
   return classifyZeroRow(db, input.tenantId, input.targetUserId, true)
 }
 
@@ -262,20 +285,30 @@ export async function changeMemberRole(db: ChiyigoDb, input: ChangeRoleInput): P
   // entry would pollute the immutable audit trail. The CAS also carries `platform_role <> ?` so a racy
   // same-role write can never land as 'applied' either (it would 0-row -> classifyZeroRow).
   if (pre.member.platform_role === input.toRole) return { outcome: 'no_op' }
-  // The last-owner guard fires ONLY when demoting an active owner (current=owner AND toRole<>owner AND no other
-  // active owner). Promoting to owner or leaving a non-owner unaffected skips the guard.
-  const upd = await db
+  const fromRole = pre.member.platform_role
+  // F1: pin `platform_role = ?fromRole` in the CAS so the emitted fromRole is AUTHORITATIVE -- the emit (gated on
+  // this CAS) fires only when the role was still fromRole. A concurrent change to a THIRD role now 0-rows ->
+  // illegal_transition (optimistic concurrency), never a wrong-fromRole event. The last-owner guard fires ONLY
+  // when demoting an active owner (current=owner AND toRole<>owner AND no other active owner).
+  const mutation = db
     .prepare(
       `UPDATE organization_members SET platform_role = ?, updated_at = datetime('now')
-        WHERE tenant_id = ? AND user_id = ? AND status = 'active' AND platform_role <> ?
+        WHERE tenant_id = ? AND user_id = ? AND status = 'active' AND platform_role = ? AND platform_role <> ?
           AND ( platform_role <> 'tenant_owner' OR ? = 'tenant_owner'
              OR EXISTS (SELECT 1 FROM organization_members o2
                          WHERE o2.tenant_id = ? AND o2.user_id <> ?
                            AND o2.platform_role = 'tenant_owner' AND o2.status = 'active') )`,
     )
-    .bind(input.toRole, input.tenantId, input.targetUserId, input.toRole, input.toRole, input.tenantId, input.targetUserId)
-    .run()
-  if (upd.meta.changes === 1) return { outcome: 'applied', fromRole: pre.member.platform_role, toRole: input.toRole }
+    .bind(input.toRole, input.tenantId, input.targetUserId, fromRole, input.toRole, input.toRole, input.tenantId, input.targetUserId)
+  const res = await db.batch([
+    mutation,
+    ...emitMemberRoleChanged(
+      db,
+      { tenantId: input.tenantId, targetUserId: input.targetUserId, actorUserId: input.actorUserId, fromRole, toRole: input.toRole },
+      emitMeta(),
+    ),
+  ])
+  if (res[0].meta.changes === 1) return { outcome: 'applied', fromRole, toRole: input.toRole }
   // 0-row: a CONCURRENT PATCH may have already set the target role on an active member between this request's
   // pre-read and CAS -> converge to an idempotent no_op (NOT 409), and never a spurious member.role_changed
   // (Gate-2 R2 optional follow-up). Other 0-row causes (last-owner / not-active / gone) fall through to classify.
