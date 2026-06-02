@@ -9,7 +9,7 @@
 
 import { res, requireRegularAccessToken } from '../../utils/auth'
 import { acceptInvitation } from '../../utils/invitations'
-import { safeUserAudit } from '../../utils/user-audit'
+import { safeUserAudit, auditDomainEventEmitted } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
 const ACCEPT_RL_WINDOW_SEC = 60
@@ -54,6 +54,8 @@ export async function onRequestPost({ request, env }) {
         event_type: 'member.joined', user_id: userId, request,
         data: { tenant_id: result.tenantId, sub: result.sub, platform_role: result.platformRole },
       })
+      // PR5 5b: post-commit, best-effort observability that the domain event was emitted into the outbox (C3).
+      await auditDomainEventEmitted(env, result.emitted)
       return res({ ok: true, tenant_id: result.tenantId, platform_role: result.platformRole }, 200)
     case 'replay':
       await safeUserAudit(env, {

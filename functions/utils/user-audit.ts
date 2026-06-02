@@ -20,6 +20,8 @@
  */
 
 import { classifyAuditEvent, classifyForCold } from './audit-policy'
+import { hashToken } from './crypto'
+import type { EmitIdentity } from './domain-event-emit'
 
 const KNOWN_SEVERITY = new Set(['info', 'warn', 'critical'])
 
@@ -158,6 +160,29 @@ export async function safeUserAudit(env, entry) {
       try { await notifyCritical(env, { ...entry, severity, ipHash, traceId }) } catch { /* swallow */ }
     }
   } catch { /* 表不存在 / D1 暫時失效 — 不擋主流程 */ }
+}
+
+/**
+ * PR5 5b（plan C3）：endpoint 在 domain 變更 COMMIT 後、best-effort emit 的 domain.event.emitted audit。
+ * 純 observability —— outbox row 才是 SoT，遺失不影響正確性，故吞錯（safeUserAudit 本就吞）、絕不擋請求。
+ * REDACTION：只記 stream_key_hash（SHA-256），永不記 raw streamKey；streamSeq 在 outbox row 上，applied 路徑
+ * 不需 read-back。env: Env / identity: EmitIdentity 顯式標型（此檔其餘為 loose JS style，新函式不增 implicit-any）。
+ */
+export async function auditDomainEventEmitted(env: Env, identity: EmitIdentity): Promise<void> {
+  // Wrap the WHOLE body: this runs POST-COMMIT, so even the hashToken() (outside safeUserAudit's own swallow) must
+  // never throw out and turn an already-applied 200 into a 500. Loss is acceptable (the outbox row is the SoT).
+  try {
+    await safeUserAudit(env, {
+      event_type: 'domain.event.emitted',
+      severity: 'info',
+      data: {
+        event_id: identity.eventId,
+        domain_event_type: identity.eventType,
+        stream_key_hash: await hashToken(identity.streamKey),
+        tenant_id: identity.tenantId,
+      },
+    })
+  } catch { /* best-effort observability — never affects the committed request */ }
 }
 
 /**

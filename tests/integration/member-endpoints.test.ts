@@ -94,6 +94,7 @@ describe('POST /api/tenants/:tenantId/invitations (invite)', () => {
     const r = await call(invite, req('POST', await token(ownerId), { email: 'bob@x.io', platform_role: 'member' }), { tenantId: String(tenantId) })
     expect(r.status).toBe(201)
     expect(await auditCount('member.invited')).toBe(1)
+    expect(await auditCount('domain.event.emitted')).toBe(1) // PR5 5b: endpoint post-commit emission audit (C3)
     const inv = await db.prepare(`SELECT status FROM invitations WHERE tenant_id = ? AND email = 'bob@x.io'`).bind(tenantId).first()
     expect(inv?.status).toBe('pending')
   })
@@ -142,6 +143,7 @@ describe('POST /api/invitations/accept', () => {
     expect(r.status).toBe(200)
     expect((await r.json() as { tenant_id: number }).tenant_id).toBe(tenantId)
     expect(await auditCount('member.joined')).toBe(1)
+    expect(await auditCount('domain.event.emitted')).toBe(1) // PR5 5b: endpoint post-commit emission audit (C3)
     const m = await db.prepare(`SELECT status FROM organization_members WHERE tenant_id = ? AND user_id = ?`).bind(tenantId, bob.id).first()
     expect(m?.status).toBe('active')
   })
@@ -162,6 +164,12 @@ describe('member mutations + role', () => {
     const r = await call(memberAction, req('POST', await token(ownerId)), { tenantId: String(tenantId), userId: String(m.id), action: 'suspend' })
     expect(r.status).toBe(200)
     expect(await auditCount('member.suspended')).toBe(1)
+    // PR5 5b: endpoint emits domain.event.emitted post-commit, REDACTED (stream_key_hash only, never raw streamKey).
+    expect(await auditCount('domain.event.emitted')).toBe(1)
+    const emitted = await db.prepare(`SELECT event_data FROM audit_log WHERE event_type='domain.event.emitted' ORDER BY id DESC LIMIT 1`).first<{ event_data: string }>()
+    expect(emitted!.event_data).toContain('stream_key_hash')
+    expect(emitted!.event_data).toContain('member.suspended')                  // domain_event_type carried
+    expect(emitted!.event_data).not.toContain(`tenant:${tenantId}:member:${m.id}`) // raw streamKey NEVER logged
   })
 
   it('plain member cannot suspend (owner-only) -> 403', async () => {
@@ -201,6 +209,7 @@ describe('member mutations + role', () => {
     const r = await call(changeRole, req('PATCH', await token(ownerId), { platform_role: 'tenant_admin' }), { tenantId: String(tenantId), userId: String(m.id) })
     expect(r.status).toBe(200)
     expect(await auditCount('member.role_changed')).toBe(1)
+    expect(await auditCount('domain.event.emitted')).toBe(1) // PR5 5b: endpoint post-commit emission audit (C3)
   })
 
   it('same-role PATCH -> 200 no_op, NO member.role_changed audit (Gate-2)', async () => {
@@ -211,6 +220,7 @@ describe('member mutations + role', () => {
     expect(r.status).toBe(200)
     expect((await r.json() as { no_op?: boolean }).no_op).toBe(true)
     expect(await auditCount('member.role_changed')).toBe(0) // same-role never pollutes the immutable trail
+    expect(await auditCount('domain.event.emitted')).toBe(0) // no event emitted on a no_op -> no emission audit either
   })
 
   it('GET members lists active members + pending invitations', async () => {

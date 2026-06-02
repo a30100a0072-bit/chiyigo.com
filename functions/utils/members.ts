@@ -25,6 +25,7 @@ import {
   emitMemberOffboarded,
   emitMemberRoleChanged,
   type EmitMeta,
+  type EmitIdentity,
 } from './domain-event-emit'
 
 /** D1 binding type via ambient Env indexed access (same convention as tenant-context.ts / credit.ts). */
@@ -53,7 +54,7 @@ export type OrgCreateOutcome =
   | { outcome: 'contention' }                     // 503 (bounded-retry exhausted)
 
 export type MemberOutcome =
-  | { outcome: 'applied'; previousRole?: string; platformRole?: string; fromRole?: string; toRole?: string }
+  | { outcome: 'applied'; emitted: EmitIdentity; previousRole?: string; platformRole?: string; fromRole?: string; toRole?: string }
   | { outcome: 'no_op' }                          // requested state already holds (e.g. same-role PATCH) -- no write, no event
   | { outcome: 'not_a_member' }                   // 404
   | { outcome: 'illegal_transition' }             // 409 (wrong current state for this op)
@@ -229,8 +230,9 @@ export async function suspendMember(db: ChiyigoDb, input: MemberTargetInput): Pr
   // The event's previousRole is SQL-DERIVED in-batch (the suspend does not change the role) -> authoritative even
   // under a concurrent role change (plan F1). The previousRole RETURNED below is the pre-read snapshot for the
   // HTTP response/audit (best-effort), NOT the event payload.
-  const res = await db.batch([mutation, ...emitMemberSuspended(db, input, emitMeta())])
-  if (res[0].meta.changes === 1) return { outcome: 'applied', previousRole: pre.member.platform_role }
+  const emit = emitMemberSuspended(db, input, emitMeta())
+  const res = await db.batch([mutation, ...emit.statements])
+  if (res[0].meta.changes === 1) return { outcome: 'applied', emitted: emit.identity, previousRole: pre.member.platform_role }
   return classifyZeroRow(db, input.tenantId, input.targetUserId, true)
 }
 
@@ -246,8 +248,9 @@ export async function reactivateMember(db: ChiyigoDb, input: MemberTargetInput):
     .bind(input.tenantId, input.targetUserId)
   // member.reactivated emitted in the SAME batch (gated on the reactivate CAS). platformRole is SQL-DERIVED
   // post-reactivate (reactivate does not change the role); the returned platformRole is the pre-read snapshot.
-  const res = await db.batch([mutation, ...emitMemberReactivated(db, input, emitMeta())])
-  if (res[0].meta.changes === 1) return { outcome: 'applied', platformRole: pre.member.platform_role }
+  const emit = emitMemberReactivated(db, input, emitMeta())
+  const res = await db.batch([mutation, ...emit.statements])
+  if (res[0].meta.changes === 1) return { outcome: 'applied', emitted: emit.identity, platformRole: pre.member.platform_role }
   return classifyZeroRow(db, input.tenantId, input.targetUserId, false)
 }
 
@@ -267,8 +270,9 @@ export async function offboardMember(db: ChiyigoDb, input: MemberTargetInput): P
     .bind(input.tenantId, input.targetUserId, input.tenantId, input.targetUserId)
   // member.offboarded emitted in the SAME batch (gated on the offboard DELETE). data is {sub} only -- the DELETE
   // removes the row so nothing is SQL-derived (no role in the offboarded payload by contract).
-  const res = await db.batch([mutation, ...emitMemberOffboarded(db, input, emitMeta())])
-  if (res[0].meta.changes === 1) return { outcome: 'applied', previousRole: pre.member.platform_role }
+  const emit = emitMemberOffboarded(db, input, emitMeta())
+  const res = await db.batch([mutation, ...emit.statements])
+  if (res[0].meta.changes === 1) return { outcome: 'applied', emitted: emit.identity, previousRole: pre.member.platform_role }
   return classifyZeroRow(db, input.tenantId, input.targetUserId, true)
 }
 
@@ -300,15 +304,13 @@ export async function changeMemberRole(db: ChiyigoDb, input: ChangeRoleInput): P
                            AND o2.platform_role = 'tenant_owner' AND o2.status = 'active') )`,
     )
     .bind(input.toRole, input.tenantId, input.targetUserId, fromRole, input.toRole, input.toRole, input.tenantId, input.targetUserId)
-  const res = await db.batch([
-    mutation,
-    ...emitMemberRoleChanged(
-      db,
-      { tenantId: input.tenantId, targetUserId: input.targetUserId, actorUserId: input.actorUserId, fromRole, toRole: input.toRole },
-      emitMeta(),
-    ),
-  ])
-  if (res[0].meta.changes === 1) return { outcome: 'applied', fromRole, toRole: input.toRole }
+  const emit = emitMemberRoleChanged(
+    db,
+    { tenantId: input.tenantId, targetUserId: input.targetUserId, actorUserId: input.actorUserId, fromRole, toRole: input.toRole },
+    emitMeta(),
+  )
+  const res = await db.batch([mutation, ...emit.statements])
+  if (res[0].meta.changes === 1) return { outcome: 'applied', emitted: emit.identity, fromRole, toRole: input.toRole }
   // 0-row: a CONCURRENT PATCH may have already set the target role on an active member between this request's
   // pre-read and CAS -> converge to an idempotent no_op (NOT 409), and never a spurious member.role_changed
   // (Gate-2 R2 optional follow-up). Other 0-row causes (last-owner / not-active / gone) fall through to classify.

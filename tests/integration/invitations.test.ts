@@ -97,7 +97,11 @@ describe('acceptInvitation', () => {
     const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
     if (inv.outcome !== 'created') throw new Error('seed failed')
     const acc = await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id })
-    expect(acc).toEqual({ outcome: 'joined', tenantId: tid, platformRole: 'member', sub: String(invitee.id) })
+    // toMatchObject (not toEqual): the 'joined' outcome now carries `emitted` (PR5 5b emission identity).
+    expect(acc).toMatchObject({ outcome: 'joined', tenantId: tid, platformRole: 'member', sub: String(invitee.id) })
+    if (acc.outcome !== 'joined') throw new Error('unreachable')
+    expect(acc.emitted).toMatchObject({ eventType: 'member.joined', tenantId: tid }) // identity the endpoint audits (C3)
+    expect(typeof acc.emitted.eventId).toBe('string')
     expect(await membership(tid, invitee.id)).toEqual({ status: 'active', platform_role: 'member' })
     expect((await inviteRow(await hashToken(inv.rawToken)))?.status).toBe('accepted')
   })

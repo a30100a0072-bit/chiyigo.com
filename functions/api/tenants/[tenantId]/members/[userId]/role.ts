@@ -9,7 +9,7 @@
 import { res } from '../../../../../utils/auth'
 import { requireActiveTenantRole, type PlatformRole } from '../../../../../utils/tenant-context'
 import { changeMemberRole, type MemberOutcome } from '../../../../../utils/members'
-import { safeUserAudit } from '../../../../../utils/user-audit'
+import { safeUserAudit, auditDomainEventEmitted } from '../../../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../../../utils/rate-limit'
 
 const OWNER_ONLY: readonly PlatformRole[] = ['tenant_owner']
@@ -63,6 +63,8 @@ export async function onRequestPatch({ request, env, params }) {
       event_type: 'member.role_changed', user_id: userId, request,
       data: { tenant_id: tenantId, sub: String(targetUserId), from_role: result.fromRole, to_role: result.toRole },
     })
+    // PR5 5b: post-commit, best-effort observability that the domain event was emitted into the outbox (C3).
+    await auditDomainEventEmitted(env, result.emitted)
     return res({ ok: true }, 200)
   }
   if (result.outcome === 'no_op') {

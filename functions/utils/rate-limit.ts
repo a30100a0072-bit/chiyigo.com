@@ -33,6 +33,7 @@ type RateLimitKind =
   | 'billing_wallet'
   | 'member_invite'
   | 'member_mutate'
+  | 'event_replay'
 
 interface RateLimitScope {
   kind: RateLimitKind

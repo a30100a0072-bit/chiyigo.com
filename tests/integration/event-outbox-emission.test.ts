@@ -141,7 +141,7 @@ describe('[PR5-5a] event emission — members.ts', () => {
     // the row had before this batch / before the helper was called).
     const gating = db.prepare(`UPDATE organization_members SET platform_role='billing_admin' WHERE tenant_id=? AND user_id=? AND status='active'`).bind(o.tenantId, o.member)
     const emit = emitMemberSuspended(db, { tenantId: o.tenantId, targetUserId: o.member, actorUserId: o.owner }, { eventId: 'fixed-e1', occurredAt: '2026-06-02T00:00:00.000Z' })
-    await db.batch([gating, ...emit])
+    await db.batch([gating, ...emit.statements])
     const rows = await outboxRows(o.streamKey)
     expect(rows.length).toBe(1)
     expect(JSON.parse(rows[0].data_json).previousRole).toBe('billing_admin')

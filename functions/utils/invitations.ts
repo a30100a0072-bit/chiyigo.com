@@ -17,7 +17,7 @@
  */
 
 import { generateSecureToken, hashToken } from './crypto'
-import { emitMemberJoined } from './domain-event-emit'
+import { emitMemberInvited, emitMemberJoined, type EmitIdentity } from './domain-event-emit'
 
 type ChiyigoDb = Env['chiyigo_db']
 
@@ -31,13 +31,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 // ── outcomes ─────────────────────────────────────────────────────────────────
 
 export type InviteCreateOutcome =
-  | { outcome: 'created'; invitationId: number; rawToken: string; email: string; platformRole: string }
+  | { outcome: 'created'; invitationId: number; rawToken: string; email: string; platformRole: string; emitted: EmitIdentity }
   | { outcome: 'already_member' }                 // email already maps to an active/suspended member
   | { outcome: 'tenant_ineligible' }              // not an active organization tenant
   | { outcome: 'invalid'; code: string }
 
 export type InviteAcceptOutcome =
-  | { outcome: 'joined'; tenantId: number; platformRole: string; sub: string }
+  | { outcome: 'joined'; tenantId: number; platformRole: string; sub: string; emitted: EmitIdentity }
   | { outcome: 'replay'; tenantId: number; platformRole: string }
   | { outcome: 'not_found' }
   | { outcome: 'expired' }
@@ -139,10 +139,18 @@ export async function createInvitation(db: ChiyigoDb, input: CreateInvitationInp
        VALUES (?, ?, ?, ?, 'pending', datetime('now', ?), ?)`,
     )
     .bind(input.tenantId, email, input.platformRole, tokenHash, `+${ttl} seconds`, input.invitedByUserId)
-  await db.batch([revoke, insert])
+  // member.invited emitted in the SAME batch, gated on the INSERT (the invite was created). invitationId is
+  // SQL-DERIVED (read-your-writes of the just-inserted invitations row by token_hash); email-keyed streamKey,
+  // 'none' deny-effect. The insert always applies, so a successful create always emits exactly one event.
+  const emit = emitMemberInvited(
+    db,
+    { tenantId: input.tenantId, email, platformRole: input.platformRole, tokenHash, invitedByUserId: input.invitedByUserId },
+    { eventId: crypto.randomUUID(), occurredAt: new Date().toISOString() },
+  )
+  await db.batch([revoke, insert, ...emit.statements])
 
   const row = await db.prepare(`SELECT id FROM invitations WHERE token_hash = ?`).bind(tokenHash).first<{ id: number }>()
-  return { outcome: 'created', invitationId: row ? row.id : 0, rawToken, email, platformRole: input.platformRole }
+  return { outcome: 'created', invitationId: row ? row.id : 0, rawToken, email, platformRole: input.platformRole, emitted: emit.identity }
 }
 
 // ── acceptInvitation ─────────────────────────────────────────────────────────────
@@ -233,7 +241,7 @@ export async function acceptInvitation(db: ChiyigoDb, input: AcceptInvitationInp
   )
 
   try {
-    await db.batch([consume, join, ...emit])
+    await db.batch([consume, join, ...emit.statements])
   } catch (e) {
     // F2: a batch error is NOT necessarily the join's UNIQUE -- the outbox emit lives in this batch now, so an
     // emission / seq / outbox failure also rolls the whole batch back here. Return a BUSINESS outcome ONLY when a
@@ -259,7 +267,7 @@ export async function acceptInvitation(db: ChiyigoDb, input: AcceptInvitationInp
     .bind(tokenHash)
     .first<{ accepted_user_id: number | null; accepted_at: string | null; platform_role: string; tenant_id: number }>()
   if (after && after.accepted_user_id === input.acceptingUserId && after.accepted_at === occurredAt) {
-    return { outcome: 'joined', tenantId: after.tenant_id, platformRole: after.platform_role, sub: String(input.acceptingUserId) }
+    return { outcome: 'joined', tenantId: after.tenant_id, platformRole: after.platform_role, sub: String(input.acceptingUserId), emitted: emit.identity }
   }
   // A concurrent accept won the consume (or it expired between pre-check and CAS): re-derive a stable deny.
   if (after && after.accepted_user_id !== null && after.accepted_user_id !== input.acceptingUserId) return { outcome: 'already_resolved' }

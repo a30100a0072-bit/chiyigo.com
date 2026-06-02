@@ -40,6 +40,29 @@ export interface EmitMeta {
   occurredAt: string
 }
 
+/**
+ * The EMISSION IDENTITY a domain transition returns to its endpoint on 'applied' (PR5 5b, plan C3). The endpoint
+ * audits domain.event.emitted from this POST-COMMIT, best-effort. streamSeq is intentionally absent: it is
+ * in-batch allocated and lives on the outbox row (no Tier-0 read-back needed just to audit). The audit redacts
+ * streamKey to a hash -- the RAW streamKey is carried here only so the endpoint can hash it (never logged raw).
+ */
+export interface EmitIdentity {
+  eventId: string
+  eventType: DomainEventType
+  streamKey: string
+  tenantId: number | null
+}
+
+/** What an emit builder returns: the in-batch [seqUpsert, outboxInsert] statements PLUS the emission identity. */
+export interface EmitResult {
+  statements: Stmt[]
+  identity: EmitIdentity
+}
+
+function emitResult(eventType: DomainEventType, streamKey: string, tenantId: number | null, meta: EmitMeta, statements: Stmt[]): EmitResult {
+  return { statements, identity: { eventId: meta.eventId, eventType, streamKey, tenantId } }
+}
+
 // A valid platformRole used ONLY as a sentinel to shape-validate events whose role is SQL-DERIVED (the real
 // value comes from the DB, which constrains platform_role; the consumer re-validates the concrete event).
 const ROLE_SENTINEL = 'member'
@@ -113,38 +136,38 @@ export interface MemberEmitInput {
 }
 
 /** member.suspended — previousRole is SQL-DERIVED (read AFTER the suspend; the suspend does not change role). */
-export function emitMemberSuspended(db: ChiyigoDb, input: MemberEmitInput, meta: EmitMeta): Stmt[] {
+export function emitMemberSuspended(db: ChiyigoDb, input: MemberEmitInput, meta: EmitMeta): EmitResult {
   const sub = String(input.targetUserId)
   const actorSub = String(input.actorUserId)
   const streamKey = deriveStreamKeyValidated('member.suspended', input.tenantId, actorSub, { sub, previousRole: ROLE_SENTINEL }, meta)
   const dataSql = `json_object('sub', ?, 'previousRole', (SELECT platform_role FROM organization_members WHERE tenant_id = ? AND user_id = ?))`
-  return [
+  return emitResult('member.suspended', streamKey, input.tenantId, meta, [
     seqUpsert(db, streamKey),
     outboxInsert(db, { eventId: meta.eventId, eventType: 'member.suspended', streamKey, tenantId: input.tenantId, actorSub, occurredAt: meta.occurredAt }, dataSql, [sub, input.tenantId, input.targetUserId]),
-  ]
+  ])
 }
 
 /** member.reactivated — platformRole is SQL-DERIVED (read AFTER reactivate; reactivate does not change role). */
-export function emitMemberReactivated(db: ChiyigoDb, input: MemberEmitInput, meta: EmitMeta): Stmt[] {
+export function emitMemberReactivated(db: ChiyigoDb, input: MemberEmitInput, meta: EmitMeta): EmitResult {
   const sub = String(input.targetUserId)
   const actorSub = String(input.actorUserId)
   const streamKey = deriveStreamKeyValidated('member.reactivated', input.tenantId, actorSub, { sub, platformRole: ROLE_SENTINEL }, meta)
   const dataSql = `json_object('sub', ?, 'platformRole', (SELECT platform_role FROM organization_members WHERE tenant_id = ? AND user_id = ?))`
-  return [
+  return emitResult('member.reactivated', streamKey, input.tenantId, meta, [
     seqUpsert(db, streamKey),
     outboxInsert(db, { eventId: meta.eventId, eventType: 'member.reactivated', streamKey, tenantId: input.tenantId, actorSub, occurredAt: meta.occurredAt }, dataSql, [sub, input.tenantId, input.targetUserId]),
-  ]
+  ])
 }
 
 /** member.offboarded — data {sub} only (no role); offboard DELETEs the row, so nothing is SQL-derived. */
-export function emitMemberOffboarded(db: ChiyigoDb, input: MemberEmitInput, meta: EmitMeta): Stmt[] {
+export function emitMemberOffboarded(db: ChiyigoDb, input: MemberEmitInput, meta: EmitMeta): EmitResult {
   const sub = String(input.targetUserId)
   const actorSub = String(input.actorUserId)
   const streamKey = deriveStreamKeyValidated('member.offboarded', input.tenantId, actorSub, { sub }, meta)
-  return [
+  return emitResult('member.offboarded', streamKey, input.tenantId, meta, [
     seqUpsert(db, streamKey),
     outboxInsert(db, { eventId: meta.eventId, eventType: 'member.offboarded', streamKey, tenantId: input.tenantId, actorSub, occurredAt: meta.occurredAt }, `json_object('sub', ?)`, [sub]),
-  ]
+  ])
 }
 
 export interface RoleChangedEmitInput extends MemberEmitInput {
@@ -153,14 +176,14 @@ export interface RoleChangedEmitInput extends MemberEmitInput {
 }
 
 /** member.role_changed — fromRole is CAS-PINNED in the caller's mutation (`= ?fromRole`), so it is authoritative. */
-export function emitMemberRoleChanged(db: ChiyigoDb, input: RoleChangedEmitInput, meta: EmitMeta): Stmt[] {
+export function emitMemberRoleChanged(db: ChiyigoDb, input: RoleChangedEmitInput, meta: EmitMeta): EmitResult {
   const sub = String(input.targetUserId)
   const actorSub = String(input.actorUserId)
   const streamKey = deriveStreamKeyValidated('member.role_changed', input.tenantId, actorSub, { sub, fromRole: input.fromRole, toRole: input.toRole }, meta)
-  return [
+  return emitResult('member.role_changed', streamKey, input.tenantId, meta, [
     seqUpsert(db, streamKey),
     outboxInsert(db, { eventId: meta.eventId, eventType: 'member.role_changed', streamKey, tenantId: input.tenantId, actorSub, occurredAt: meta.occurredAt }, `json_object('sub', ?, 'fromRole', ?, 'toRole', ?)`, [sub, input.fromRole, input.toRole]),
-  ]
+  ])
 }
 
 export interface MemberJoinedEmitInput {
@@ -170,11 +193,35 @@ export interface MemberJoinedEmitInput {
 }
 
 /** member.joined — platformRole is BOUND from the IMMUTABLE invite row. actor is the accepting user (self). */
-export function emitMemberJoined(db: ChiyigoDb, input: MemberJoinedEmitInput, meta: EmitMeta): Stmt[] {
+export function emitMemberJoined(db: ChiyigoDb, input: MemberJoinedEmitInput, meta: EmitMeta): EmitResult {
   const sub = String(input.acceptingUserId)
   const streamKey = deriveStreamKeyValidated('member.joined', input.tenantId, sub, { sub, platformRole: input.platformRole }, meta)
-  return [
+  return emitResult('member.joined', streamKey, input.tenantId, meta, [
     seqUpsert(db, streamKey),
     outboxInsert(db, { eventId: meta.eventId, eventType: 'member.joined', streamKey, tenantId: input.tenantId, actorSub: sub, occurredAt: meta.occurredAt }, `json_object('sub', ?, 'platformRole', ?)`, [sub, input.platformRole]),
-  ]
+  ])
+}
+
+export interface MemberInvitedEmitInput {
+  tenantId: number
+  email: string
+  platformRole: string
+  tokenHash: string        // to SQL-derive the just-inserted invitationId (read-your-writes)
+  invitedByUserId: number
+}
+
+/**
+ * member.invited — invitationId is SQL-DERIVED: read back from the invitations row JUST inserted in the same
+ * batch (by token_hash), because the AUTOINCREMENT id does not exist before the INSERT. streamKey is EMAIL-keyed
+ * (tenant:T:member:<email>), distinct from the sub-keyed member.* streams; DENY_EFFECT is 'none'. actor = inviter.
+ */
+export function emitMemberInvited(db: ChiyigoDb, input: MemberInvitedEmitInput, meta: EmitMeta): EmitResult {
+  const actorSub = String(input.invitedByUserId)
+  // sentinel invitationId (posint) for shape validation only; the real id is SQL-derived + re-validated at delivery.
+  const streamKey = deriveStreamKeyValidated('member.invited', input.tenantId, actorSub, { invitationId: 1, email: input.email, platformRole: input.platformRole }, meta)
+  const dataSql = `json_object('invitationId', (SELECT id FROM invitations WHERE token_hash = ?), 'email', ?, 'platformRole', ?)`
+  return emitResult('member.invited', streamKey, input.tenantId, meta, [
+    seqUpsert(db, streamKey),
+    outboxInsert(db, { eventId: meta.eventId, eventType: 'member.invited', streamKey, tenantId: input.tenantId, actorSub, occurredAt: meta.occurredAt }, dataSql, [input.tokenHash, input.email, input.platformRole]),
+  ])
 }
