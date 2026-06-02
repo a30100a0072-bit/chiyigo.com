@@ -17,7 +17,7 @@
  */
 
 import { generateSecureToken, hashToken } from './crypto'
-import { emitMemberJoined } from './domain-event-emit'
+import { emitMemberInvited, emitMemberJoined } from './domain-event-emit'
 
 type ChiyigoDb = Env['chiyigo_db']
 
@@ -139,7 +139,15 @@ export async function createInvitation(db: ChiyigoDb, input: CreateInvitationInp
        VALUES (?, ?, ?, ?, 'pending', datetime('now', ?), ?)`,
     )
     .bind(input.tenantId, email, input.platformRole, tokenHash, `+${ttl} seconds`, input.invitedByUserId)
-  await db.batch([revoke, insert])
+  // member.invited emitted in the SAME batch, gated on the INSERT (the invite was created). invitationId is
+  // SQL-DERIVED (read-your-writes of the just-inserted invitations row by token_hash); email-keyed streamKey,
+  // 'none' deny-effect. The insert always applies, so a successful create always emits exactly one event.
+  const emit = emitMemberInvited(
+    db,
+    { tenantId: input.tenantId, email, platformRole: input.platformRole, tokenHash, invitedByUserId: input.invitedByUserId },
+    { eventId: crypto.randomUUID(), occurredAt: new Date().toISOString() },
+  )
+  await db.batch([revoke, insert, ...emit])
 
   const row = await db.prepare(`SELECT id FROM invitations WHERE token_hash = ?`).bind(tokenHash).first<{ id: number }>()
   return { outcome: 'created', invitationId: row ? row.id : 0, rawToken, email, platformRole: input.platformRole }

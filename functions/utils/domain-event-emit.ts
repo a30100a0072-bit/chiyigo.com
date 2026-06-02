@@ -178,3 +178,27 @@ export function emitMemberJoined(db: ChiyigoDb, input: MemberJoinedEmitInput, me
     outboxInsert(db, { eventId: meta.eventId, eventType: 'member.joined', streamKey, tenantId: input.tenantId, actorSub: sub, occurredAt: meta.occurredAt }, `json_object('sub', ?, 'platformRole', ?)`, [sub, input.platformRole]),
   ]
 }
+
+export interface MemberInvitedEmitInput {
+  tenantId: number
+  email: string
+  platformRole: string
+  tokenHash: string        // to SQL-derive the just-inserted invitationId (read-your-writes)
+  invitedByUserId: number
+}
+
+/**
+ * member.invited — invitationId is SQL-DERIVED: read back from the invitations row JUST inserted in the same
+ * batch (by token_hash), because the AUTOINCREMENT id does not exist before the INSERT. streamKey is EMAIL-keyed
+ * (tenant:T:member:<email>), distinct from the sub-keyed member.* streams; DENY_EFFECT is 'none'. actor = inviter.
+ */
+export function emitMemberInvited(db: ChiyigoDb, input: MemberInvitedEmitInput, meta: EmitMeta): Stmt[] {
+  const actorSub = String(input.invitedByUserId)
+  // sentinel invitationId (posint) for shape validation only; the real id is SQL-derived + re-validated at delivery.
+  const streamKey = deriveStreamKeyValidated('member.invited', input.tenantId, actorSub, { invitationId: 1, email: input.email, platformRole: input.platformRole }, meta)
+  const dataSql = `json_object('invitationId', (SELECT id FROM invitations WHERE token_hash = ?), 'email', ?, 'platformRole', ?)`
+  return [
+    seqUpsert(db, streamKey),
+    outboxInsert(db, { eventId: meta.eventId, eventType: 'member.invited', streamKey, tenantId: input.tenantId, actorSub, occurredAt: meta.occurredAt }, dataSql, [input.tokenHash, input.email, input.platformRole]),
+  ]
+}
