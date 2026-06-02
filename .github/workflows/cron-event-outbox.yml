@@ -1,0 +1,33 @@
+name: Cron — Event Outbox Consumer (PR5 5b)
+
+# 每 5 分鐘把 event_outbox 的 pending 事件投遞到 INTERNAL event_deny_state projection。
+# Consumer: functions/api/admin/cron/event-outbox.ts（owner-CAS fencing + sweep/claim/deliver + DLQ + run report）。
+# $0：public repo → GitHub Actions 免費；不用 Cloudflare Cron Triggers / Queues / Durable Objects（付費）。
+# 詳見 docs/reviews/pr5-event-outbox-consumer-plan-2026-06-02.md。
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:        # 手動觸發（debug / backlog drain）
+
+jobs:
+  consume:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call event-outbox consumer endpoint
+        run: |
+          set -euo pipefail
+          response=$(curl -sS -w "\n%{http_code}" \
+            -X POST https://chiyigo.com/api/admin/cron/event-outbox \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+
+          echo "Status: $status"
+          echo "Body:   $body"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::event-outbox consumer returned $status"
+            exit 1
+          fi

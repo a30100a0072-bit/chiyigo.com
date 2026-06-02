@@ -62,6 +62,12 @@ declare global {
     AUDIT_ARCHIVE_TELEMETRY_HOT_DAYS?: string;
     AUDIT_ARCHIVE_PUT_RETRY_BACKOFF_MS?: string;
 
+    // ── PR5 event outbox consumer (cron knobs; defaults in event-outbox.ts) ──
+    EVENT_OUTBOX_MAX_ATTEMPTS?: string;
+    EVENT_OUTBOX_LEASE_SECONDS?: string;
+    EVENT_OUTBOX_CLAIM_LIMIT?: string;
+    EVENT_OUTBOX_RETRY_BACKOFF_S?: string;
+
     // ── Ops / env meta ─────────────────────────────────────────────────
     ENVIRONMENT?: string;
     CRON_SECRET?: string;
