@@ -1,7 +1,7 @@
 # PR5 5b - Consumer + Deny-State Projection + DLQ Replay (Gate-1 Plan)
 
 - Created: 2026-06-02
-- Status: DRAFT for Codex Gate-1 (5b plan gate). NOT yet coded.
+- Status: DRAFT R2 for Codex Gate-1 re-review. Addresses Codex Gate-1 R1 REJECT (2 state-machine blockers + emitted-audit boundary). NOT yet coded.
 - DESIGN SoT: docs/reviews/pr5-event-outbox-consumer-plan-2026-06-02.md (the PR5 master plan, Gate-1 R4 APPROVED).
   This 5b plan does NOT re-derive that design -- it is the IMPLEMENTATION plan for the 5b slice: which files,
   which functions, the commit breakdown, the schema-sufficiency proof, and the six 5b locks confirmed against the
@@ -11,6 +11,31 @@
 - Workgrade: L3 + HIGH-RISK ADDENDUM (Queue/Message + Distributed State). Reuses the master plan's full 10-step
   domain flow; this doc focuses on the 5b implementation surface.
 - Constraints: $0 (Cloudflare free tier), no CF Queues / Durable Objects, no vendor lock-in, Tier-0 baseline.
+
+--------------------------------------------------------------------------------
+## R1 -> R2 changelog (what changed since Codex Gate-1 R1 REJECT)
+--------------------------------------------------------------------------------
+
+C1 (CRITICAL, crash recovery): R1's STEP B abbreviated the claim predicate to "eligible", which did NOT make it
+   explicit that an EXPIRED 'processing' row with attempts<MAX is re-claimable. A consumer that crashes at
+   attempts=1 (lease then expires) would otherwise be neither 'pending' nor maxed -> never reclaimed -> the
+   streamKey is head-of-line blocked forever. R2 spells the claim predicate out IN FULL (section 5 STEP B):
+   `(status='pending' AND next_attempt_at<=now) OR (status='processing' AND lease_until<now)`, AND attempts<MAX,
+   AND contiguity. Added the explicit reclaim test (section 7).
+
+C2 (CRITICAL, replay atomicity): R1's DLQ replay said "reset outbox + stamp dlq" with no atomicity / CAS gating.
+   Two admins replaying, or a crash between the two writes, could let a stale unreplayed DLQ row reset an
+   already-'done' outbox event back to 'pending'. R2 makes replay a SINGLE atomic db.batch, CAS-gated: the outbox
+   reset fires ONLY when the outbox is 'dead' AND the target DLQ row is unreplayed; the dlq stamp is gated on the
+   reset's changes()=1; 0-row -> 409 idempotent no-op. Added double-replay / stale-replay tests. (section 6)
+
+C3 (emitted-audit boundary): domain.event.emitted placement is now defined EXPLICITLY (section 6 AUDIT): emitted
+   at the ENDPOINT layer (repo pattern) from emission metadata the domain fn RETURNS on 'applied', best-effort
+   (safeUserAudit swallow), post-commit, NEVER inside the Tier-0 emit batch. data = stream_key_hash + eventType +
+   eventId + tenantId (no raw streamKey; streamSeq lives in the outbox row, so no Tier-0 read-back).
+
+No schema change (Codex confirmed): all three fixes are SQL / state-machine contract fixes; 0051 remains
+sufficient and 5b stays code-only.
 
 --------------------------------------------------------------------------------
 ## 0. Preflight evidence (post-ship, captured 2026-06-02)
@@ -98,7 +123,9 @@ MODIFIED:
 - functions/utils/invitations.ts        -- wire createInvitation -> member.invited into its existing batch.
 - functions/utils/scopes.ts             -- add admin:events:replay to the scope hierarchy (L4).
 - functions/utils/audit-policy.ts       -- register the PR5 domain.event.* types + bump _registrySize (L5).
-- (emission sites) members.ts / invitations.ts -- best-effort post-commit domain.event.emitted audit (L5).
+- members.ts / invitations.ts           -- RETURN emission identity (eventId/eventType/streamKey/tenantId) on
+                                           'applied' so the endpoint can audit it (C3); no audit I/O in the domain.
+- the member / invitation ENDPOINTS     -- emit best-effort post-commit domain.event.emitted from that metadata (C3).
 
 --------------------------------------------------------------------------------
 ## 4. SCHEMA SUFFICIENCY PROOF (L6) -- does 5b need a migration 0052?
@@ -143,9 +170,22 @@ Endpoint: POST functions/api/admin/cron/event-outbox.ts
   - STEP A sweep: per exhausted row (processing AND lease<now AND attempts>=MAX) -> atomic
     db.batch([UPDATE outbox SET status='dead' WHERE id=? AND status='processing' AND lease_until<now AND
     attempts>=MAX, INSERT event_dlq(reason='max_attempts') SELECT ... WHERE changes()=1]) + critical audit.
-  - STEP B claim: UPDATE ... SET status='processing', locked_by=runToken, lease_until=now+LEASE, attempts+1
-    WHERE id IN (eligible AND attempts<MAX AND NOT EXISTS earlier-seq-same-streamKey not 'done') ORDER BY id LIMIT N.
-    then SELECT claimed ORDER BY stream_key, stream_seq.
+  - STEP B claim (attempts++ at claim ONLY -- single source; C1 explicit predicate):
+      UPDATE event_outbox SET status='processing', locked_by=runToken, lease_until=datetime('now','+<LEASE> seconds'),
+             attempts=attempts+1
+      WHERE id IN (
+        SELECT o.id FROM event_outbox o
+        WHERE ( (o.status='pending'    AND o.next_attempt_at<=datetime('now'))
+             OR (o.status='processing' AND o.lease_until    < datetime('now')) )   -- EXPIRED processing IS reclaimable
+          AND o.attempts < <MAX>                                                   -- never claim past MAX (sweep owns those)
+          AND NOT EXISTS (SELECT 1 FROM event_outbox e
+                            WHERE e.stream_key=o.stream_key AND e.stream_seq<o.stream_seq AND e.status<>'done')
+        ORDER BY o.id ASC LIMIT ?)
+      then SELECT claimed WHERE locked_by=runToken AND status='processing' ORDER BY stream_key, stream_seq.
+    CRASH RECOVERY (C1): a consumer that crashes at attempts=1 leaves a 'processing' row; once its lease expires it
+    is RE-CLAIMED here (it is expired-processing AND attempts<MAX), attempts increments to 2, and it retries. It is
+    NEVER stuck -- the sweep (STEP A) only reaps attempts>=MAX. Repeated crashes climb attempts to MAX, then the
+    sweep collects it to DLQ. Bounded + terminating.
   - STEP C deliver per claimed row (OWNER = id+status='processing'+locked_by=runToken):
       reconstruct via frozen buildDomainEvent (re-validate; poison -> DLQ validation_failed);
       read prior=last_applied_seq; ask deny-state-projection module for {apply|noop|gap}:
@@ -171,17 +211,31 @@ PROJECTION (deny-state-projection.ts, pure): given (event, prior) return apply|n
   does no I/O), so the gap->DLQ side effect is the consumer's, not the module's. (master 5.2)
 
 REPLAY (admin/event-dlq/[id]/replay.ts): requireStepUp(elevated) + for_action='event_dlq_replay' + effective
-  scope admin:events:replay + per-user rate limit + server actor. Resets the outbox row by event_id
-  (status='pending', attempts=0, next_attempt_at=now, last_error=null); stamps event_dlq.replayed_at/by; audited.
-  Response + audit: stream_key_hash + eventId + dlq_reason ONLY. Replaying a head-of-line blocker auto-unblocks
-  its streamKey (the claim NOT EXISTS). (master 9.4)
+  scope admin:events:replay + per-user rate limit + server actor. The state transition is a SINGLE ATOMIC,
+  CAS-GATED db.batch (C2) -- never two un-gated writes:
+    S1: UPDATE event_outbox SET status='pending', attempts=0, next_attempt_at=datetime('now'),
+            lease_until=NULL, locked_by=NULL, last_error=NULL
+        WHERE status='dead'                                                    -- only re-enqueue a genuinely dead row
+          AND event_id = (SELECT event_id FROM event_dlq WHERE id=? AND replayed_at IS NULL)  -- AND DLQ row unreplayed
+    S2: UPDATE event_dlq SET replayed_at=datetime('now'), replayed_by=?
+        WHERE id=? AND replayed_at IS NULL AND changes()=1                     -- stamp ONLY if S1 reset a row
+  Outcome by S1.changes(): 1 -> replayed (200); 0 -> idempotent no-op -> 409 ALREADY_REPLAYED_OR_NOT_DEAD (the
+  outbox is not 'dead', or the DLQ row is already replayed / mismatched). This PREVENTS a stale unreplayed DLQ row
+  from resetting an already-'done' outbox to 'pending' (the `status='dead'` CAS), and double-replay (the
+  `replayed_at IS NULL` subquery + the changes()=1 gate) -- both-or-neither, atomic, idempotent.
+  Response + audit: stream_key_hash + eventId + dlq_reason ONLY (never raw stream_key/data_json). Replaying a
+  head-of-line blocker auto-unblocks its streamKey (the claim NOT EXISTS). (master 9.4)
 
 AUDIT (audit-policy.ts, +7 -- emitted moves here from 5a):
   domain.event.emitted (info), .delivered (info), .retry (warn), .dlq (critical), .consumer_run (info),
   .validation_failed (critical), .gap_detected (critical). ALL data fields use streamKeyHash. Explicit it.each
   classification + _registrySize bump (current 198, verify at coding time). (master 11)
-  domain.event.emitted itself is a BEST-EFFORT post-commit safeUserAudit at the emission sites (members.ts/
-  invitations.ts) -- NOT in the emit batch; its loss never affects correctness (the outbox row is the SoT).
+  domain.event.emitted AUDIT BOUNDARY (C3, explicit): emitted at the ENDPOINT layer (the repo pattern -- endpoints
+  already audit member/invitation outcomes), NOT inside the domain utils' Tier-0 batch. The domain transition
+  returns its emission identity on 'applied' (eventId, eventType, streamKey, tenantId); the endpoint emits
+  domain.event.emitted via safeUserAudit POST-COMMIT, BEST-EFFORT (swallow-on-failure). Its loss never affects
+  correctness (the outbox row is the SoT). data = stream_key_hash + eventType + eventId + tenantId -- NO raw
+  stream_key, NO streamSeq (streamSeq lives in the outbox row, so the applied path needs no read-back).
 
 member.invited (deferred from 5a): emitMemberInvited builds data_json via json_object reading the just-inserted
   invitations row by token_hash (invitationId is post-INSERT -- the SQL-derived read-your-writes case the 5a
@@ -200,12 +254,18 @@ member.invited (deferred from 5a): emitMemberInvited builds data_json via json_o
 - idempotent re-delivery: same eventId / seq<=last_applied -> no state change.
 - attempts SINGLE SOURCE (B3): one failed delivery -> attempts==1 (claim-time only, not double).
 - transient retry -> backoff -> eventual done.
+- C1 CRASH RECOVERY (transient): an expired 'processing' row with attempts<MAX is RE-CLAIMED (not stuck), attempts
+  increments exactly once per claim, and it completes on a later run. (locks the EXACT failure mode of blocker 1)
 - poison -> DLQ(validation_failed); max attempts -> DLQ(max_attempts); MAX-ATTEMPT CRASH SWEEP converges.
 - G1 FENCING: stale-worker resume (re-claim by another runToken) 0-rows + cannot stomp; fenced counter increments.
 - G2: projection CAS 0-row -> outbox NOT marked done.
 - G3: overlapping sweeps/DLQ -> exactly ONE event_dlq row.
-- replay: dead -> pending -> delivered; head-of-line replay unblocks N+1; F4 authz (no scope -> 403; finance/
-  support -> 403; scope but no step-up -> 401; response/audit carry no raw streamKey/data_json).
+- replay happy: dead -> pending -> delivered; head-of-line replay unblocks N+1.
+- C2 REPLAY ATOMICITY: (a) double-replay of one DLQ row -> first 200, second 409 no-op (no second reset); (b) a
+  stale unreplayed DLQ row whose outbox is already 'done' -> replay 409 no-op, outbox stays 'done' (NEVER reset to
+  pending); (c) replay of a non-dead outbox -> 409. (locks the EXACT failure mode of blocker 2)
+- F4 authz: no scope -> 403; finance/support -> 403; scope but no step-up -> 401; response/audit carry no raw
+  streamKey/data_json (stream_key_hash only).
 - member.invited: createInvitation emits with the real (post-insert) invitationId; streamKey email-keyed.
 - audit-policy registry test updated (+7, it.each classification).
 Infra: vitest workers pool + real local D1; the cron handler invoked directly with a Bearer header (like
@@ -218,7 +278,8 @@ audit-archive tests); env backoff override [0,0,0] to avoid real waits.
   d1 deny-state-projection.ts (pure module) + unit tests
   d2 consumer cron (sweep+claim+deliver, F-R3-1 fencing, run report) + cron-event-outbox.yml + consumer tests
   d3 DLQ replay endpoint + scopes.ts (admin:events:replay) + step-up + redaction + authz tests
-  d4 audit-policy +7 (domain.event.*) + best-effort domain.event.emitted emission at the emit sites
+  d4 audit-policy +7 (domain.event.*) + domain fns return emission identity on 'applied' + endpoints emit
+     best-effort domain.event.emitted from it (C3)
   d5 emitMemberInvited (SQL-derived) + createInvitation wiring + member.invited tests
 
 5b is CODE-ONLY (section 4): no migration. migration-before-deploy is therefore N/A for 5b (0051 already on prod);
@@ -228,15 +289,16 @@ the 5b PR still re-checks the prod event_outbox count as evidence and runs the f
 ## 9. Open questions for Codex (Gate-1)
 --------------------------------------------------------------------------------
 
-9.1 Schema sufficiency (section 4): confirm 0051 is enough for consumer/replay/projection/audit and 5b is
-    code-only -- or name the missing index/column that forces a 0052.
-9.2 domain.event.emitted emission site: best-effort post-commit safeUserAudit in the DOMAIN fns (members.ts/
-    invitations.ts), or hoisted to the ENDPOINTS? (leaning domain-fn: it is where the emission happens, and it
-    is swallow-on-failure so it does not change Tier-0 control flow.) Acceptable?
-9.3 cron interval / lease / MAX_ATTEMPTS (5m / 120s / 6) reaffirmed for the live consumer, or tighter given the
-    revocation-propagation-lag SLO?
-9.4 the consumer claims/delivers at most ONE event per streamKey per run (contiguity). For a bursty streamKey
-    this drains 1/tick. Acceptable for 5b, or should the consumer drain a streamKey's contiguous run within a
-    single invocation? (leaning acceptable: per-subject event rate is low; simpler + safer.)
+9.1 Schema sufficiency (section 4) -- RESOLVED by R1 ("I do not see a reason for 0052 yet"). The R2 fixes (C1/C2/
+    C3) are SQL / state-machine contract fixes, NOT schema; 5b stays code-only. Re-confirm.
+9.2 domain.event.emitted placement -- RESOLVED by R1 (C3): endpoint-level, from returned emission metadata,
+    best-effort post-commit, never in the Tier-0 batch (section 6 AUDIT).
+9.3 cron interval / lease / MAX_ATTEMPTS (5m / 120s / 6) -- accepted (no R1 objection); reaffirm for the live
+    consumer or tighten to the revocation-lag SLO.
+9.4 per-streamKey 1 event / tick -- RESOLVED by R1 (acceptable for 5b: RP integration absent + chiyigo enforces
+    live DB state).
 
---- END PR5 5b GATE-1 PLAN ---
+R2 carries no new open questions; the two blockers (C1 claim predicate / C2 replay atomicity) + C3 emitted-audit
+boundary are addressed above and in the cited sections.
+
+--- END PR5 5b GATE-1 PLAN (R2) ---
