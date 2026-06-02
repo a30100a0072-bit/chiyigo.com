@@ -13,7 +13,7 @@ import { res } from '../../../../utils/auth'
 import { requireActiveTenantRole, type PlatformRole } from '../../../../utils/tenant-context'
 import { createInvitation } from '../../../../utils/invitations'
 import { sendInvitationEmail } from '../../../../utils/email'
-import { safeUserAudit } from '../../../../utils/user-audit'
+import { safeUserAudit, auditDomainEventEmitted } from '../../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit'
 
 const INVITE_RL_WINDOW_SEC = 60
@@ -68,6 +68,8 @@ export async function onRequestPost({ request, env, params }) {
         event_type: 'member.invited', user_id: userId, request,
         data: { tenant_id: tenantId, email: result.email, platform_role: result.platformRole, invitation_id: result.invitationId },
       })
+      // PR5 5b: post-commit, best-effort observability that the domain event was emitted into the outbox (C3).
+      await auditDomainEventEmitted(env, result.emitted)
       // Best-effort email (durable invite already persisted). Skip when no API key (e.g. tests); bound by AbortSignal.
       if (env.RESEND_API_KEY) {
         const ctrl = new AbortController()

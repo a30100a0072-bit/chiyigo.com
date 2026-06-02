@@ -274,6 +274,7 @@ const TELEMETRY = [
   'invitation.accept.replay',
   'org.create.replay',
   // PR5 Event Outbox consumer — operational dispatch（高量、可 aggregate）
+  'domain.event.emitted',     // info — endpoint post-commit best-effort：domain 事件已寫入 outbox（plan C3；純觀測，SoT 是 outbox row）
   'domain.event.delivered',   // info — 事件投遞到 deny-state projection（含 idempotent noop）
   'domain.event.retry',       // warn — transient 投遞失敗重試
   'domain.event.consumer_run', // info — consumer run report summary（counts only）

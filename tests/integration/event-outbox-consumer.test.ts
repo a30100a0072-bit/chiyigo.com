@@ -4,7 +4,7 @@
  * / DLQ state machine: contiguous delivery, gap -> DLQ, idempotent noop, poison -> DLQ, crash recovery (expired
  * 'processing' with attempts<MAX reclaimed), max-attempt sweep, and G3 (overlapping sweeps -> exactly one DLQ).
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb } from './_helpers'
 import { onRequestPost } from '../../functions/api/admin/cron/event-outbox'
@@ -16,6 +16,7 @@ beforeEach(async () => {
   env.EVENT_OUTBOX_RETRY_BACKOFF_S = '0'   // immediate retry in tests
   env.EVENT_OUTBOX_LEASE_SECONDS = '120'
 })
+afterEach(() => { vi.restoreAllMocks() })
 
 let _e = 0
 const PAST = '2020-01-01 00:00:00'
@@ -125,5 +126,53 @@ describe('[PR5-5b] event outbox consumer', () => {
     await runConsumer()
     await runConsumer() // second sweep finds it already 'dead' -> no second DLQ
     expect(await dlqCount()).toBe(1)
+  })
+
+  // F-R3-1 fencing (G1/G2) + transient retry. A real owner-CAS / projection-CAS loss is a TOCTOU only a SECOND
+  // overlapping consumer can create; here we inject ONE concurrent write immediately before this run's apply batch
+  // (mockImplementationOnce on the real binding's .batch, then call through) to force that exact race deterministically.
+  it('G1 FENCING: a worker that lost its lock (owner-CAS 0-row) cannot mark its row done -> fenced++, no stomp', async () => {
+    await seedOutbox({ streamKey: K, seq: 1 })
+    const realBatch = db.batch.bind(db)
+    vi.spyOn(db, 'batch').mockImplementationOnce(async (stmts) => {
+      // another run steals the lock between this run's prior-read and its apply batch
+      await db.prepare(`UPDATE event_outbox SET locked_by='intruder-run' WHERE stream_key=? AND stream_seq=1`).bind(K).run()
+      return realBatch(stmts)
+    })
+    const { report } = await runConsumer()
+    expect(report.fenced).toBe(1)
+    expect(report.delivered).toBe(0)
+    const row = await db.prepare(`SELECT status, locked_by FROM event_outbox WHERE stream_key=? AND stream_seq=1`).bind(K).first<{ status: string; locked_by: string }>()
+    expect(row).toEqual({ status: 'processing', locked_by: 'intruder-run' }) // the fenced worker did NOT stomp the row to done
+  })
+
+  it('G2 FENCING: projection CAS 0-row -> gated mark-done suppressed -> fenced++, no double-apply', async () => {
+    await seedOutbox({ streamKey: K, seq: 1 })
+    const realBatch = db.batch.bind(db)
+    vi.spyOn(db, 'batch').mockImplementationOnce(async (stmts) => {
+      // a concurrent consumer applies seq 1 to the projection between this run's prior-read (priorSeq=0) and its
+      // apply batch, so the projection upsert CAS (WHERE last_applied_seq=0) loses and its changes()=0 gates mark-done off
+      await db.prepare(`INSERT INTO event_deny_state (stream_key, event_type, deny_effect, denied, tenant_id, last_applied_seq) VALUES (?, 'member.suspended', 'deny', 1, 1, 1)`).bind(K).run()
+      return realBatch(stmts)
+    })
+    const { report } = await runConsumer()
+    expect(report.fenced).toBe(1)
+    expect(report.delivered).toBe(0)
+    expect((await outbox(K, 1))!.status).toBe('processing')      // gated mark-done suppressed -> re-delivered later as noop
+    expect(await proj(K)).toEqual({ denied: 1, last_applied_seq: 1 }) // applied exactly once (the concurrent winner), not doubled
+  })
+
+  it('TRANSIENT retry: a delivery fault -> pending+backoff (retried; attempts intact), then eventual done', async () => {
+    await seedOutbox({ streamKey: K, seq: 1 })
+    vi.spyOn(db, 'batch').mockImplementationOnce(async () => { throw new Error('transient db fault') })
+    const r1 = await runConsumer()
+    expect(r1.report.retried).toBe(1)
+    expect(r1.report.delivered).toBe(0)
+    expect(await outbox(K, 1)).toEqual({ status: 'pending', attempts: 1 }) // re-enqueued; attempts unchanged (claim-time only, B3)
+    vi.restoreAllMocks()
+    const r2 = await runConsumer() // backoff=0 -> immediately reclaimable
+    expect(r2.report.delivered).toBe(1)
+    expect(await outbox(K, 1)).toEqual({ status: 'done', attempts: 2 })
+    expect(await proj(K)).toEqual({ denied: 1, last_applied_seq: 1 })
   })
 })

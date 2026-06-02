@@ -10,7 +10,7 @@
 import { res } from '../../../../../utils/auth'
 import { requireActiveTenantRole, type PlatformRole } from '../../../../../utils/tenant-context'
 import { suspendMember, reactivateMember, offboardMember, type MemberOutcome } from '../../../../../utils/members'
-import { safeUserAudit } from '../../../../../utils/user-audit'
+import { safeUserAudit, auditDomainEventEmitted } from '../../../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../../../utils/rate-limit'
 
 const OWNER_ONLY: readonly PlatformRole[] = ['tenant_owner']
@@ -54,6 +54,8 @@ export async function onRequestPost({ request, env, params }) {
     if (result.previousRole !== undefined) data.previous_role = result.previousRole
     if (result.platformRole !== undefined) data.platform_role = result.platformRole
     await safeUserAudit(env, { event_type: eventType, user_id: userId, request, data })
+    // PR5 5b: post-commit, best-effort observability that the domain event was emitted into the outbox (C3).
+    await auditDomainEventEmitted(env, result.emitted)
     return res({ ok: true }, 200)
   }
   await emitDenied(env, request, userId, tenantId, action, result.outcome === 'invalid' ? result.code : result.outcome)

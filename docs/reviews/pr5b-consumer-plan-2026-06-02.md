@@ -226,10 +226,13 @@ REPLAY (admin/event-dlq/[id]/replay.ts): requireStepUp(elevated) + for_action='e
   Response + audit: stream_key_hash + eventId + dlq_reason ONLY (never raw stream_key/data_json). Replaying a
   head-of-line blocker auto-unblocks its streamKey (the claim NOT EXISTS). (master 9.4)
 
-AUDIT (audit-policy.ts, +7 -- emitted moves here from 5a):
-  domain.event.emitted (info), .delivered (info), .retry (warn), .dlq (critical), .consumer_run (info),
-  .validation_failed (critical), .gap_detected (critical). ALL data fields use streamKeyHash. Explicit it.each
-  classification + _registrySize bump (current 198, verify at coding time). (master 11)
+AUDIT (audit-policy.ts, +8 -- emitted moves here from 5a; replay is the L4 admin-action audit):
+  domain.event.emitted (info), .delivered (info), .retry (warn), .consumer_run (info)  [4 telemetry];
+  domain.event.dlq (critical), .validation_failed (critical), .gap_detected (critical), .replay (immutable)  [4 immutable].
+  ALL data fields use streamKeyHash. Explicit it.each classification + _registrySize bump (198 -> 206).
+  NOTE (code-gate reconciliation): R2's prose said "+7" but omitted .replay, which the L4 REPLAY paragraph below
+  itself requires (the admin DLQ-replay action audit) -- the real count is +8. emitted + replay COEXIST: emitted is
+  the endpoint emission observability, replay is the admin action; neither replaces the other. (master 11)
   domain.event.emitted AUDIT BOUNDARY (C3, explicit): emitted at the ENDPOINT layer (the repo pattern -- endpoints
   already audit member/invitation outcomes), NOT inside the domain utils' Tier-0 batch. The domain transition
   returns its emission identity on 'applied' (eventId, eventType, streamKey, tenantId); the endpoint emits
