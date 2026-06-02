@@ -1,7 +1,7 @@
 # PR5 - Event Outbox + Consumer (Gate-1 Plan)
 
 - Created: 2026-06-02
-- Status: DRAFT R2 for Codex Gate-1 re-review. Addresses Codex Gate-1 R1 REJECT (4 blockers + rulings). NOT yet coded.
+- Status: DRAFT R3 for Codex Gate-1 re-review. Addresses Codex Gate-1 R2 REJECT (4 findings); R1 (4 blockers) already folded. NOT yet coded.
 - Plan order: docs/reviews/chiyigo-platform-architecture-plan-2026-05-28.md section 20, step 5
   ("Event outbox + consumer: lease / retry / DLQ / replay"). PR1-PR4 SHIPPED.
 - Workgrade: L3 (new bounded-context infra + security model surface) + HIGH-RISK ADDENDUM
@@ -10,6 +10,46 @@
   PR5 REUSES it verbatim and is the FIRST module that emits / persists / delivers events.
 - Constraints: $0 (Cloudflare free tier only), no CF Queues / Durable Objects (paid), no vendor lock-in,
   Tier-0 baseline. D1 outbox + HTTP cron consumer is the established $0 pattern (see audit-archive cron).
+
+--------------------------------------------------------------------------------
+## R2 -> R3 changelog (what changed since Codex Gate-1 R2 REJECT)
+--------------------------------------------------------------------------------
+
+The R2 reject centered on 5a WIRING amplifying latent races in the EXISTING PR4 domain code. The "all 5a data is
+PRE-batch known" claim was WRONG. Fixes:
+
+F1 (CRITICAL, stale role payload): member.suspended.previousRole / member.reactivated.platformRole /
+   member.role_changed.fromRole were taken from an app PRE-READ (pre.member.platform_role) that the CAS does NOT
+   pin, so a concurrent role change emits a STALE role. Fix per field:
+   - suspend.previousRole / reactivate.platformRole -> SQL-DERIVED authoritative: read platform_role from the row
+     IN THE SAME BATCH AFTER the mutation (suspend/reactivate do NOT change the role, so the post-mutation row
+     carries the true role regardless of concurrency). No CAS change, no new failure mode.
+   - role_changed.fromRole -> CANNOT be read post-UPDATE (the UPDATE overwrites it), so BIND the pre-read role
+     into the CAS (`AND platform_role = ?fromRole`): the emit only fires when the role was still fromRole, making
+     fromRole authoritative + adding optimistic-concurrency safety (a concurrent change to a 3rd role now 0-rows
+     -> illegal_transition instead of applying on a stale base).
+   - offboard ({sub,reason}) + joined ({sub,platformRole from the IMMUTABLE invite}) carry no stale-role risk.
+   Consequence: the emit helper MUST support SQL-DERIVED data fields (not pre-bound-only); see 9.1/9.2. Race tests
+   added (12). See sections 9.1, 9.2, 4 (spike), 12, 16.
+
+F2 (CRITICAL, accept catch swallows system errors): acceptInvitation's catch ASSUMES the only batch error is the
+   join's UNIQUE violation and returns already_member/already_resolved. Adding [..., seqUpsert, outboxInsert] to
+   the batch means an emission/outbox failure also rolls the batch back and would be MISCLASSIFIED as a business
+   outcome (event lost + wrong 200). Fix: the catch must rethrow (system failure / 5xx) UNLESS a re-read POSITIVELY
+   proves a business cause (membership now exists -> already_member; invite consumed by another -> already_resolved).
+   Forced-outbox-failure test added. This RESTRUCTURES accept's catch (the R2 "does not restructure" claim is
+   revised). See sections 9.2, 12.
+
+F3 (GAP branch must be loud + bounded): the projection GAP branch did a SILENT attempts-1 + immediate retry --
+   if the contiguity invariant ever broke it would retry forever with no DLQ/alarm. Fix: a GAP is an INVARIANT
+   VIOLATION -> critical audit (domain.event.gap_detected) + atomic DLQ(reason='gap_detected') + status='dead'
+   (loud, bounded, terminating; replayable after the bug is fixed). No silent attempt-decrement. See sections
+   5.2, 9.3, 8, 11, 12.
+
+F4 (DLQ replay scope too coarse): replay was just "admin auth + step-up", but event_dlq holds raw stream_key /
+   data_json and replay mutates the deny projection. Fix: require an EXPLICIT fine scope (admin:events:replay) +
+   step-up; the response + audit emit only stream_key_hash, NEVER raw streamKey/data_json (B4). Negative authz
+   tests added. See sections 9.4, 10, 12.
 
 --------------------------------------------------------------------------------
 ## R1 -> R2 changelog (what changed since Codex Gate-1 R1 REJECT)
@@ -25,8 +65,9 @@ B2 (member.invited payload): member.invited is DEFERRED from 5a to 5b. Its invit
    post-INSERT (a read-your-writes case the generic pre-bound helper cannot serve), and it is a 'none'-effect
    event on an ISOLATED email-keyed streamKey (tenant:T:member:<email>, distinct from the sub-keyed member.*),
    so deferring it has zero deny-state impact. 5b wires it via an explicit SQL-derived json_object payload path
-   (reads the just-inserted invitations row by token_hash) with its own spike case. All 5a-wired events have
-   data fully known PRE-batch. See sections 1, 9.2, 9.3, 14.
+   (reads the just-inserted invitations row by token_hash) with its own spike case. (NOTE: R2 here claimed all
+   5a-wired events had pre-batch data -- R3/F1 corrected that; suspend/reactivate use SQL-derived role.) See
+   sections 1, 9.2, 9.3, 14.
 
 B3 (attempts / crash convergence): attempts is incremented at CLAIM ONLY (single source). The failure path only
    READS attempts to decide retry-vs-DLQ (no second increment). A new MAX-ATTEMPT SWEEP collects crashed rows
@@ -199,9 +240,15 @@ Spike matrix (throwaway, deleted before commit; PR-body records the receipts):
     commit/serialization order (D1 single-writer serializes the batches). [contiguity is what B1 relies on]
   - forced error in S3 -> whole batch rolls back: mutation NOT applied, no seq bump, no row.
   - cold streamKey first event -> seq == 1.
-  - REMOTE D1 sanity (Codex R1 ruling, REQUIRED before 5a code): re-run the applied / no-op / rollback cases on
-    a real remote D1, not just local miniflare -- changes()/batch read-your-writes semantics confirmed on the
-    real engine. (The member.invited SQL-derived json_object read-your-writes is a SEPARATE 5b spike case, B2.)
+  - SQL-derived payload read-your-writes (5a, F1): in [suspend CAS, seqUpsert, outboxInsert], outboxInsert's
+    json_object subquery (SELECT platform_role ... AFTER the suspend) reads the POST-mutation COMMITTED role in
+    the same batch -> data_json.previousRole == the row's actual role. Verify it is correct even when a concurrent
+    role change committed between this request's pre-read and its CAS (the whole point of F1).
+  - role_changed CAS pin (5a, F1): with `AND platform_role = ?fromRole` added, a concurrent change to a 3rd role
+    makes the CAS 0-row -> NO emit, NO wrong fromRole; a still-fromRole row emits fromRole correctly.
+  - REMOTE D1 sanity (Codex R1 ruling, REQUIRED before 5a code): re-run applied / no-op / rollback / SQL-derived
+    cases on a real remote D1, not just local miniflare -- changes()/batch/json_object read-your-writes confirmed
+    on the real engine. (member.invited's invitationId read-your-writes is the same mechanism, exercised in 5b.)
 
 FALLBACK (only if the spike disproves (a)-(c)) -- explicitly worse, documented so codex sees the tradeoff:
   Do the mutation in its own batch, read upd.meta.changes in app code; if applied, run a SECOND batch
@@ -244,7 +291,7 @@ FALLBACK (only if the spike disproves (a)-(c)) -- explicitly worse, documented s
      processing -> done       : projection apply + mark-done in ONE atomic batch (9.3 STEP C); at-least-once via
                                 idempotent re-delivery if the consumer crashed before that batch committed
      processing -> pending    : transient delivery failure with attempts<MAX (next_attempt_at = now + backoff)
-     processing -> dead       : delivery failure with attempts>=MAX, OR poison, OR max-attempt sweep -- writes event_dlq
+     processing -> dead       : delivery fail at attempts>=MAX, OR poison, OR max-attempt sweep, OR gap_detected -- writes event_dlq
      dead       -> pending    : admin replay only
 
 5.2 event_deny_state projection per streamKey (the sink, 5b) -- CONTIGUOUS apply (B1):
@@ -252,13 +299,18 @@ FALLBACK (only if the spike disproves (a)-(c)) -- explicitly worse, documented s
    Let prior = row.last_applied_seq for streamKey K, or 0 if no projection row exists yet.
    For each delivered event E on K:
      if E.stream_seq <= prior      -> IGNORE (duplicate / already applied / stale re-delivery). Idempotent no-op.
-     if E.stream_seq >  prior + 1  -> GAP: do NOT apply, do NOT advance, do NOT mark the outbox row 'done'.
-                                      Release it back to pending/retry (its predecessor is still in flight/blocked).
-                                      PROVABLY unreachable, not merely "shouldn't happen": apply + mark-'done'
-                                      commit in ONE atomic batch (9.3 STEP C), so a predecessor being 'done'
-                                      implies last_applied_seq >= its seq; the claim SQL (9.3) only hands out a row
-                                      whose earlier-seq peers are all 'done', which forces E.stream_seq == prior+1.
-                                      Kept purely as a defense-in-depth assertion (feedback_two_gate_defense_in_depth).
+     if E.stream_seq >  prior + 1  -> GAP = INVARIANT VIOLATION (F3). Do NOT apply, do NOT mark 'done'. This is
+                                      PROVABLY unreachable in correct operation: apply + mark-'done' commit in ONE
+                                      atomic batch (9.3 STEP C), so a 'done' predecessor implies last_applied_seq
+                                      >= its seq, and the claim SQL (9.3) only hands out a row whose earlier-seq
+                                      peers are all 'done' -> E.stream_seq == prior+1. So a gap means the
+                                      contiguity invariant ITSELF broke (claim bug / projection corruption /
+                                      manual tampering). The pure apply rule RETURNS a 'gap' outcome; the CONSUMER
+                                      (9.3 STEP C) then treats it LOUD + BOUNDED, never a silent retry: critical
+                                      audit domain.event.gap_detected + atomic DLQ(reason='gap_detected') +
+                                      status='dead'. It is then replayable after the root cause is fixed
+                                      (feedback_two_gate_defense_in_depth: the assertion FIRES the alarm, it does
+                                      not paper over the bug).
      if E.stream_seq == prior + 1  -> APPLY (the only path that mutates the projection + marks 'done'):
         last_applied_seq = E.stream_seq
         event_type       = E.eventType
@@ -388,7 +440,7 @@ the .sql may contain a ';'. APPEND-ONLY enforced at the APP layer (house style; 
     actor_sub    TEXT
     occurred_at  TEXT    NOT NULL
     data_json    TEXT    NOT NULL
-    dlq_reason   TEXT    NOT NULL                           -- 'max_attempts' | 'validation_failed' | ...
+    dlq_reason   TEXT    NOT NULL                           -- 'max_attempts' | 'validation_failed' | 'gap_detected'
     attempts     INTEGER NOT NULL
     last_error   TEXT
     failed_at    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -419,41 +471,59 @@ second schema touch and keeps migration-before-deploy a single step. Unused-unti
 --------------------------------------------------------------------------------
 
 9.1 Emission helper -- functions/utils/domain-event-emit.ts (DOMAIN layer, framework-agnostic; 5a)
-    - Imports domain-events.ts (frozen). Signature: given (eventType, {tenantId, actorSub, data}, {eventId,
-      occurredAt}) it VALIDATES the event shape via the frozen contract (buildDomainEvent with a sentinel seq to
-      fail-fast on bad data + derive streamKey) and RETURNS the two D1 prepared statements [seqUpsert,
-      outboxInsert] to splice into the CALLER's batch IMMEDIATELY AFTER the GATING mutation. Throws on invalid
-      input (programmer error, same as buildDomainEvent).
+    - Imports domain-events.ts (frozen). Per-eventType statement builders: given (eventType, envelope inputs,
+      {eventId, occurredAt}) each RETURNS the two D1 prepared statements [seqUpsert, outboxInsert] to splice into
+      the CALLER's batch IMMEDIATELY AFTER the GATING mutation. The streamKey is derived via deriveStreamKey; the
+      shape is validated pre-batch via buildDomainEvent with a sentinel seq (throws on bad BOUND input; the
+      consumer re-validates the fully-concrete event at delivery -- defense in depth for SQL-derived fields).
+    - data_json is built IN-SQL via json_object(...), because some data fields must be AUTHORITATIVE, not a stale
+      app pre-read (F1):
+        * BOUND fields (?) -- values fully known + immutable pre-batch (sub, toRole, reason, an immutable invite
+          role, member.invited email/platformRole).
+        * SQL-DERIVED fields -- read in-batch so they reflect the committed state, never a stale pre-read:
+            suspend.previousRole / reactivate.platformRole = (SELECT platform_role FROM organization_members
+            WHERE tenant_id=? AND user_id=?) evaluated in S3 AFTER the mutation (the mutation does not change the
+            role, so this is the true role under any concurrency). member.invited.invitationId = (SELECT id FROM
+            invitations WHERE token_hash=?) (read-your-writes of the just-inserted row, 5b).
+        * CAS-PINNED fields -- role_changed.fromRole is bound AND pinned in the mutation CAS (`= ?fromRole`), so
+          the emit (gated on that CAS) only fires when the role was fromRole -> the bound value is authoritative.
     - eventId + occurredAt are INJECTED by the caller (side-effects-through-adapter baseline + deterministic
       tests): prod callers pass crypto.randomUUID() / new Date().toISOString(); tests pass fixed values. The
-      helper itself does NO I/O and NO time/random generation -- it is a pure statement-builder. streamSeq is the
-      only envelope field it cannot supply (the in-batch seqUpsert subquery fills it).
+      helper does NO I/O and NO time/random generation. streamSeq is filled by the in-batch seqUpsert subquery.
     - Contract with callers (documented + asserted in tests): the emit statements MUST sit directly after the
       gating statement -- the LAST business statement whose changes() means "this request applied it" (the bare
       CAS for members.ts; the JOIN insert for acceptInvitation, ruling 18.6). No other write may intervene
       between the gating statement and seqUpsert (the changes() chain).
 
-9.2 Wired emit sites -- 5a (FRESH PR4 surfaces; lowest traffic). ALL have data fully known PRE-batch:
+9.2 Wired emit sites -- 5a (FRESH PR4 surfaces; lowest traffic). Payload provenance is per-field (F1):
     functions/utils/members.ts
-      suspendMember      -> member.suspended   (data: {sub, previousRole, reason?})  [gate on the suspend CAS]
-      reactivateMember   -> member.reactivated (data: {sub, platformRole})           [gate on the reactivate CAS]
-      offboardMember     -> member.offboarded  (data: {sub, reason?})                [gate on the offboard DELETE]
-      changeMemberRole   -> member.role_changed(data: {sub, fromRole, toRole})       [gate on the role CAS; no_op emits nothing]
+      suspendMember      -> member.suspended   data {sub(bound), previousRole(SQL-DERIVED post-suspend), reason?(bound)}
+                            [gate on the suspend CAS; previousRole read from the row AFTER suspend -- authoritative]
+      reactivateMember   -> member.reactivated data {sub(bound), platformRole(SQL-DERIVED post-reactivate)}
+                            [gate on the reactivate CAS; role read from the row AFTER reactivate -- authoritative]
+      offboardMember     -> member.offboarded  data {sub(bound), reason?(bound)}   [gate on the offboard DELETE; no role -> safe]
+      changeMemberRole   -> member.role_changed data {sub(bound), fromRole(CAS-PINNED), toRole(bound)}
+                            [F1: add `AND platform_role = ?fromRole` to the CAS so fromRole is authoritative;
+                             same-role still no_op; concurrent change to a 3rd role -> 0-row -> illegal_transition
+                             (optimistic concurrency), never a wrong-fromRole emit]
       createOrgTenant    -> (no event; org.created is NOT in the frozen 11-type set -- do NOT invent one)
     functions/utils/invitations.ts
-      acceptInvitation   -> member.joined      (data: {sub, platformRole})  [only on 'joined', not replay;
-                            Codex R1 ruling 18.6: the emit gates on the JOIN insert (the statement that creates
-                            the membership = "this request joined"), NOT the consume CAS. The join is itself
-                            conditional on the consume winning, so gating on the join's changes() is exactly
-                            "this request joined". platformRole is read from the pre-loaded invite row (known).]
-      createInvitation   -> member.invited     -> DEFERRED to 5b (B2): invitationId is only known post-INSERT
-                            (read-your-writes), needs a SQL-derived json_object payload path + its own spike; it
-                            is a 'none'-effect event on the isolated tenant:T:member:<email> streamKey (distinct
-                            from the sub-keyed member.*), so deferring it has zero deny-state impact.
-    NOTE: each 5a site is ALREADY an atomic db.batch (or a single CAS). 5a EXTENDS the existing batch with the
-    two emit statements gated on the existing mutation -- it does NOT restructure the proven PR4 control flow.
-    The gating-statement choice (especially acceptInvitation's [consume, join, seqUpsert, outboxInsert]) is a
-    spike case before wiring.
+      acceptInvitation   -> member.joined      data {sub(bound), platformRole(bound: from the IMMUTABLE invite row)}
+                            [only on 'joined', not replay; ruling 18.6: gate on the JOIN insert (membership
+                            created = "this request joined"), NOT the consume CAS.
+                            F2: REWRITE the catch -- on a batch error, re-read state; return a BUSINESS outcome
+                            ONLY if it is positively proven (membership now exists -> already_member; invite
+                            consumed by another sub -> already_resolved). Otherwise RETHROW (system failure /
+                            5xx): an emission/seq/outbox failure rolled the batch back and must NOT be masked as a
+                            business 200. (forced-outbox-failure test in 12.)]
+      createInvitation   -> member.invited     -> DEFERRED to 5b: SQL-DERIVED invitationId (read-your-writes,
+                            now a supported helper mode, 9.1) + email-keyed streamKey (tenant:T:member:<email>,
+                            'none' effect, isolated from the sub-keyed member.*). Deferral is now a SCOPE choice
+                            (bound the createInvitation wiring + email-stream surface), NOT a helper-capability gap.
+    NOTE: 5a MODIFIES these domain fns minimally -- it extends each batch with [seqUpsert, outboxInsert] gated on
+    the gating mutation, AND makes the two correctness fixes the emission exposes (F1 role_changed CAS pin;
+    F2 accept catch rethrow). It does NOT change the proven outcome SEMANTICS of the happy/no-op/last-owner paths.
+    The gating-statement choice + the SQL-derived role read-your-writes are spike cases before wiring.
 
 9.3 Consumer -- functions/api/admin/cron/event-outbox.ts (5b)
     - Auth: Authorization: Bearer <CRON_SECRET> (mirror audit-archive cron; 500 if unset, 401 on mismatch).
@@ -500,9 +570,11 @@ second schema touch and keeps migration-before-deploy a single step. Unused-unti
                                 Projection + mark-done commit together (shrinks the crash window). The CAS guard is
                                 belt-and-braces -- the lease already gives single-owner so prior cannot move.
       - valid + seq<=prior   -> idempotent no-op -> UPDATE status='done', clear lease (apply already happened).
-      - valid + seq>prior+1  -> GAP (should NOT happen given STEP B's contiguity claim): release status='pending',
-                                clear lease, next_attempt_at=now, attempts=attempts-1 (un-count the erroneous
-                                claim -- it was never deliverable); do NOT apply.
+      - valid + seq>prior+1  -> GAP = invariant violation (F3; unreachable in correct operation, see 5.2). Do NOT
+                                apply, do NOT silent-retry. atomic db.batch([INSERT event_dlq(reason=
+                                'gap_detected'), UPDATE status='dead']) + critical audit domain.event.gap_detected.
+                                Loud + bounded + replayable; surfaces the broken contiguity invariant instead of
+                                looping forever.
       - invalid (poison)     -> atomic db.batch([INSERT event_dlq(reason='validation_failed'), UPDATE status=
                                 'dead']) + critical audit.
       - apply throws (transient): READ attempts -> attempts<MAX: status='pending', clear lease, next_attempt_at=
@@ -515,8 +587,14 @@ second schema touch and keeps migration-before-deploy a single step. Unused-unti
     - Cron trigger: .github/workflows/cron-event-outbox.yml (every 5 min, per ruling 18.3).
 
 9.4 DLQ replay -- functions/api/admin/event-dlq/[id]/replay.ts (5b)
-    - Mirror payment DLQ retry: admin auth + step-up; resets the outbox row by event_id to status='pending',
-      attempts=0, next_attempt_at=now, last_error=null; stamps event_dlq.replayed_at/replayed_by; audited.
+    - AUTHZ (F4, tightened): NOT just "admin auth". Require an EXPLICIT fine scope `admin:events:replay` (under
+      the existing scope hierarchy, same shape as PR3's admin:billing:wallet; admin/dev/super_admin inherit,
+      others do NOT -- negative test) PLUS step-up (for_action='event_dlq_replay'). Rationale: event_dlq holds raw
+      stream_key + data_json and a replay MUTATES the deny projection, so it is a privileged, audited action.
+    - REDACTION (F4): the endpoint RESPONSE and the audit emit only stream_key_hash + eventId + dlq_reason --
+      NEVER the raw stream_key or data_json (B4). The raw payload stays in the DB row for the consumer only.
+    - Action: resets the outbox row by event_id to status='pending', attempts=0, next_attempt_at=now,
+      last_error=null; stamps event_dlq.replayed_at/replayed_by; server-actor; per-user rate limited; audited.
     - Replaying a head-of-line blocker (a 'dead' seq N) automatically UNBLOCKS its streamKey: once N redelivers
       to 'done', the claim NOT EXISTS (9.3 STEP B) lets N+1.. flow again. No manual unblock needed.
     - Replay SOP documented in a runbook section (fix root cause -> replay -> watch delivery).
@@ -527,7 +605,8 @@ second schema touch and keeps migration-before-deploy a single step. Unused-unti
 ## 10. Security boundary (high-risk addendum + baseline)
 --------------------------------------------------------------------------------
 
-- Consumer + replay are CRON_SECRET / admin-step-up gated; deny-by-default; no anonymous access.
+- Consumer is CRON_SECRET gated; DLQ replay needs the EXPLICIT fine scope admin:events:replay + step-up (F4),
+  not blanket admin; deny-by-default; no anonymous access. Replay response/audit redact raw streamKey/data_json.
 - No external egress (no push; no client-supplied URLs) -> no SSRF surface introduced.
 - Emission carries actor_sub from the SERVER-resolved actor (never client input); tenant_id from the
   authenticated tenant context (PR1 claim), never from the request body.
@@ -555,6 +634,7 @@ streamKey or data_json (B4):
                    domain.event.dlq                     (critical; streamKeyHash, dlq_reason, attempts)
                    domain.event.consumer_run            (info; run report summary -- counts only, no streamKeys)
                    domain.event.validation_failed       (critical; eventId, dlq_reason; NO streamKey/data)
+                   domain.event.gap_detected            (critical; streamKeyHash, streamSeq, expected=prior+1; F3 invariant breach)
   (5b also wires member.invited emission, reusing domain.event.emitted. 5c reuses domain.event.emitted at the new
    security sites and adds NO new audit types.)
 domain.event.emitted is a BEST-EFFORT post-commit safeUserAudit (swallow-on-failure) -- it is NOT inside the
@@ -577,6 +657,13 @@ Alerting: DLQ insert + validation_failed are critical -> existing Discord alert 
   - seq contiguity + monotonicity: N concurrent applied mutations on one streamKey -> N rows, CONTIGUOUS
     strictly-increasing seqs 1..N (no gaps, since seq bumps only on emit), seq order == commit order; different
     streamKeys are independent. (this contiguity is what 5b's claim/projection rely on -- B1.)
+  - F1 stale-role race (suspend/reactivate): a role change commits between this request's pre-read and its CAS;
+    the emitted previousRole/platformRole == the ACTUAL (post-change) role from the SQL-derived subquery, NOT the
+    stale pre-read. (regression-locks the EXACT failure mode.)
+  - F1 role_changed CAS pin: concurrent change to a 3rd role -> CAS 0-row -> NO emit + illegal_transition (no
+    wrong-fromRole row); same-role concurrent -> no_op + no emit; clean case -> fromRole emitted correctly.
+  - F2 accept catch: a FORCED outbox-insert failure makes acceptInvitation RETHROW (5xx), NOT return
+    already_member/already_resolved; a genuine concurrent membership (real UNIQUE) still returns already_member.
   - contract: every emitted row passes validateDomainEvent on reconstruct; streamKey == deriveStreamKey.
   - migration 0051 up+down round-trip.
 
@@ -584,8 +671,8 @@ Alerting: DLQ insert + validation_failed are critical -> existing Discord alert 
   - claim leases only eligible rows; two overlapping runs never both own a row (no double-deliver).
   - happy path: pending -> done; projection denied/undenied per DENY_EFFECT; last_applied_seq advances by 1.
   - CONTIGUITY (B1): while seq N on a streamKey is not 'done', seq N+1 is NOT claimed/delivered (head-of-line).
-  - GAP REFUSAL (B1 defense net): force-deliver seq N+1 before seq N applied -> projection HOLDS it (not applied,
-    not 'done'), state unchanged.
+  - GAP DETECTION (B1 net + F3): force-deliver seq N+1 before seq N applied -> projection does NOT apply, the row
+    goes to DLQ(reason='gap_detected') + critical audit domain.event.gap_detected (NOT a silent retry loop).
   - SOFT/NONE-BEFORE-DENY regression (B1 root cause): member.role_changed (soft, seq N+1) can NEVER apply or
     advance past a still-pending member.suspended (deny, seq N) -> the suspend is never skipped. (locks EXACT mode)
   - idempotent re-delivery: same eventId / seq <= last_applied_seq delivered again -> no state change.
@@ -597,8 +684,10 @@ Alerting: DLQ insert + validation_failed are critical -> existing Discord alert 
   - MAX-ATTEMPT CRASH SWEEP (B3 convergence): simulate repeated crash (claim then no completion, lease expiry) so
     attempts climbs to MAX; the next run's sweep moves the stuck 'processing' row to DLQ. Provably terminates.
   - crash recovery (transient): a 'processing' row with expired lease and attempts<MAX is re-claimed and completes.
-  - replay: a dead/DLQ row reset -> pending -> delivered (and on a blocked streamKey, replaying seq N unblocks N+1);
-    replay endpoint authz negative tests.
+  - replay: a dead/DLQ row reset -> pending -> delivered (and on a blocked streamKey, replaying seq N unblocks N+1).
+  - F4 replay authz: admin WITHOUT admin:events:replay -> 403; finance/support roles -> 403; with scope but no
+    step-up -> 401/STEP_UP_REQUIRED; with scope + step-up -> ok. Response + audit contain stream_key_hash only,
+    asserted to carry NO raw stream_key / data_json.
   - member.invited SQL-derived path: createInvitation emits member.invited with invitationId read from the just-
     inserted row (read-your-writes); assert data_json.invitationId == the real id, and streamKey is email-keyed.
 
@@ -629,17 +718,21 @@ exercised for real). audit-policy registry test updated with the new events.
 5a (this Gate-1's primary coding target after approval + spike). Spike is pre-c1, on local AND remote D1,
     throwaway, never committed; receipts in the PR body (D3 / ruling 18.5):
   c1 migration 0051 (4 tables + down) + scaffold + this plan doc
-  c2 functions/utils/domain-event-emit.ts (emit helper, contract-validated; pre-bound-data case only)
-  c3 wire members.ts (suspend/reactivate/offboard/role_change) emit into existing batches
-  c4 wire invitations.ts ACCEPT only (member.joined, gated on the join) -- member.invited NOT wired here (B2)
-  c5 audit-policy +1 (domain.event.emitted) + tests (emit-on-apply/no-emit-on-noop/atomicity/seq-contiguity/migration)
+  c2 functions/utils/domain-event-emit.ts (emit helper: bound + SQL-derived + CAS-pinned data fields, 9.1; F1)
+  c3 wire members.ts emit into existing batches; suspend/reactivate use SQL-derived role; role_change adds the
+     `AND platform_role = ?fromRole` CAS pin (F1); offboard pre-bound
+  c4 wire invitations.ts ACCEPT only (member.joined, gated on the join) + REWRITE accept catch to rethrow on
+     unexplained failure (F2) -- member.invited NOT wired here (scope)
+  c5 audit-policy +1 (domain.event.emitted) + tests (emit-on-apply/no-emit-on-noop/atomicity/seq-contiguity/
+     F1-stale-role-race/F1-role-pin/F2-accept-rethrow/migration)
   NOTE: after 5a ships, outbox rows accumulate as 'pending' (no consumer until 5b) -- durable + harmless. The
   pending-depth / oldest-pending-age alarms (section 11) are ENABLED only in 5b when the consumer exists, so a
   growing pending backlog between 5a-ship and 5b-ship pages no one (and is drained the moment 5b deploys).
 
-5b: consumer cron (sweep+claim+deliver) + event_deny_state projection (contiguous apply) + DLQ replay endpoint +
-    cron workflow yml + member.invited SQL-derived emit path (its own spike case) + audit-policy +5 + consumer
-    tests (contiguity/gap-refusal/soft-before-deny/idempotency/attempts-single-source/crash-sweep/replay).
+5b: consumer cron (sweep+claim+deliver) + event_deny_state projection (contiguous apply) + DLQ replay endpoint
+    (scope admin:events:replay + step-up + redaction, F4) + new scope wiring + cron workflow yml + member.invited
+    SQL-derived emit path + audit-policy +6 (incl. domain.event.gap_detected) + consumer tests (contiguity/
+    gap-detection/soft-before-deny/idempotency/attempts-single-source/crash-sweep/replay/F4-authz).
 5c: ban->account.disabled, unban->account.reenabled, per-device|per-jti revoke->session.revoked wiring + tests,
     one Tier-0 surface per commit. (product_access.* NOT here -- deferred to F-2 per ruling.)
 
@@ -664,9 +757,14 @@ exercised for real). audit-policy registry test updated with the new events.
 - product_access.* deferred ENTIRELY to F-2 (Codex R1 ruling): PR2 Option B has no deny source, so PR5 emits
   neither revoked nor restored. Contract types stay reserved; both wire together when F-2 adds the revoke site.
   Explicitly deferred, not silently skipped.
-- member.invited deferred from 5a to 5b (B2): needs a SQL-derived json_object read-your-writes payload (its
-  invitationId is post-INSERT). The emit helper's bind-time-data contract stays simple in 5a; the SQL-derived
-  variant + its spike case live in 5b. Not a debt, a deliberate phase boundary.
+- PR5 emission SURFACES + FIXES two latent PR4 correctness gaps (proactive): (F1) the member transitions emitted
+  a STALE pre-read role under a concurrent role change -- in PR4 this only mis-coloured the HTTP response, but as
+  a deny-state EVENT consumed by RPs it is a contract-integrity bug; (F2) acceptInvitation's catch could mask a
+  system error as a business outcome. Both are corrected in 5a (SQL-derived/CAS-pinned role; rethrow-on-unexplained).
+  These are FIXES landed with the feature, not new debt; the regression tests lock them.
+- member.invited deferred from 5a to 5b is now a pure SCOPE choice (bound the createInvitation + email-stream
+  surface), NOT a helper-capability gap -- the 5a helper already does SQL-derived read-your-writes (for the
+  suspend/reactivate role), so member.invited's invitationId subquery is the same mechanism, just landed in 5b.
 - No stored payload_hash in v1 (section 3): if an external sink later needs it, it is an additive ALTER.
 - event_outbox 'done' rows grow unbounded. Pruning 'done' rows is SAFE w.r.t. the contiguity claim -- a missing
   earlier row that was already 'done' simply stops blocking via the NOT EXISTS (correct: it WAS delivered). So a
@@ -699,8 +797,10 @@ exercised for real). audit-policy registry test updated with the new events.
 18.5 spike -> REMOTE D1 sanity REQUIRED before 5a code (not local/miniflare only). (D3, section 4)
 18.6 acceptInvitation -> emit gates on the JOIN mutation (membership created), not the consume. (section 9.2)
 
-R2 carries NO new open questions. The four R1 blockers (B1 contiguous projection, B2 member.invited defer +
-SQL-derived path, B3 single-source attempts + crash sweep, B4 PII redaction) are addressed above and in the
-cited sections; the changelog at the top maps each blocker to its sections.
+R3 carries NO new open questions. R1 blockers (B1 contiguous projection, B2 member.invited defer, B3 single-source
+attempts + crash sweep, B4 PII redaction) AND R2 findings (F1 authoritative role payload, F2 accept catch rethrow,
+F3 gap = loud+bounded DLQ, F4 fine-scope replay) are all addressed in the cited sections; the two changelogs at
+the top map each item to its sections. The directions Codex affirmed are unchanged: structured columns, one
+migration 0051, product_access deferred, remote-D1 spike, local projection sink.
 
---- END PR5 GATE-1 PLAN (R2) ---
+--- END PR5 GATE-1 PLAN (R3) ---
