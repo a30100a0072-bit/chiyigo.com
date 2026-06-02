@@ -192,6 +192,22 @@ describe('classifyAuditEvent — PR4 member lifecycle', () => {
   })
 })
 
+// PR5 Event Outbox 5b：consumer/replay 的 7 個 domain.event.* 顯式分類（critical forensic = immutable；
+// operational dispatch = telemetry）。domain.event.emitted 的 endpoint-level emission 延後（見 5b 報告）。
+describe('classifyAuditEvent — PR5 event outbox consumer/replay', () => {
+  it.each([
+    ['domain.event.dlq',               AUDIT_CATEGORY.IMMUTABLE],
+    ['domain.event.gap_detected',      AUDIT_CATEGORY.IMMUTABLE],
+    ['domain.event.validation_failed', AUDIT_CATEGORY.IMMUTABLE],
+    ['domain.event.replay',            AUDIT_CATEGORY.IMMUTABLE],
+    ['domain.event.delivered',         AUDIT_CATEGORY.TELEMETRY],
+    ['domain.event.retry',             AUDIT_CATEGORY.TELEMETRY],
+    ['domain.event.consumer_run',      AUDIT_CATEGORY.TELEMETRY],
+  ])('%s → %s', (e, expected) => {
+    expect(classifyAuditEvent(e)).toBe(expected)
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -246,8 +262,10 @@ describe('registry coverage', () => {
     // PR4 Invitation + Member Lifecycle 加 12 個（org.created / member.{invited,joined,suspended,reactivated,
     //   offboarded,role_changed} / invitation.revoked = 8 immutable；member.denied / invitation.accept.denied
     //   = 2 security_signal；invitation.accept.replay / org.create.replay = 2 telemetry）→ 198。
+    // PR5 Event Outbox 5b 加 7 個 domain.event.*（dlq / gap_detected / validation_failed / replay = 4 immutable；
+    //   delivered / retry / consumer_run = 3 telemetry）→ 205。domain.event.emitted 的 endpoint emission 延後。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(198)
+    expect(_registrySize).toBe(205)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

@@ -178,6 +178,11 @@ const IMMUTABLE = [
   'member.offboarded',
   'member.role_changed',
   'invitation.revoked',
+  // PR5 Event Outbox consumer / replay — critical forensic（投遞失敗 + admin replay；永久保留）
+  'domain.event.dlq',                // critical — 事件 dead-letter（投遞失敗，deny-state 未套用）
+  'domain.event.gap_detected',       // critical — contiguity invariant 違反
+  'domain.event.validation_failed',  // critical — poison event（reconstruct/validate 失敗）
+  'domain.event.replay',             // admin DLQ replay 動作（domain.event-dlq/[id]/replay）
   'kyc.status.change',
   'mfa.backup_code.regenerate',
   'mfa.backup_code.use',
@@ -268,6 +273,10 @@ const TELEMETRY = [
   // PR4：accept re-click 等冪重放 / org-create same-key+payload replay（非錯誤，計量用）
   'invitation.accept.replay',
   'org.create.replay',
+  // PR5 Event Outbox consumer — operational dispatch（高量、可 aggregate）
+  'domain.event.delivered',   // info — 事件投遞到 deny-state projection（含 idempotent noop）
+  'domain.event.retry',       // warn — transient 投遞失敗重試
+  'domain.event.consumer_run', // info — consumer run report summary（counts only）
   'oauth.backchannel.dispatch',
   'oauth.token.rate_limited',
   'webauthn.register.options',
