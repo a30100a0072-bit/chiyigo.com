@@ -743,3 +743,67 @@ CREATE TABLE IF NOT EXISTS org_create_operations (
   UNIQUE(creator_user_id, idempotency_key)
 );
 CREATE INDEX IF NOT EXISTS idx_org_create_ops_tenant ON org_create_operations(tenant_id);
+
+-- migration 0051: event outbox + sequence + dlq + internal deny-state projection (PR5)
+CREATE TABLE IF NOT EXISTS event_stream_sequences (
+  stream_key TEXT PRIMARY KEY,
+  last_seq   INTEGER NOT NULL CONSTRAINT ck_ess_last_seq_pos CHECK(last_seq >= 1),
+  updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS event_outbox (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id        TEXT    NOT NULL UNIQUE,
+  event_type      TEXT    NOT NULL CONSTRAINT ck_eo_type CHECK(event_type IN (
+                    'member.invited','member.joined','member.suspended','member.reactivated',
+                    'member.offboarded','member.role_changed','account.disabled','account.reenabled',
+                    'product_access.revoked','product_access.restored','session.revoked')),
+  stream_key      TEXT    NOT NULL,
+  stream_seq      INTEGER NOT NULL CONSTRAINT ck_eo_seq_pos CHECK(stream_seq > 0),
+  tenant_id       INTEGER,
+  actor_sub       TEXT,
+  occurred_at     TEXT    NOT NULL,
+  data_json       TEXT    NOT NULL,
+  status          TEXT    NOT NULL DEFAULT 'pending'
+                    CONSTRAINT ck_eo_status CHECK(status IN ('pending','processing','done','dead')),
+  attempts        INTEGER NOT NULL DEFAULT 0 CONSTRAINT ck_eo_attempts_nonneg CHECK(attempts >= 0),
+  next_attempt_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  lease_until     TEXT,
+  locked_by       TEXT,
+  last_error      TEXT,
+  processed_at    TEXT,
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  CONSTRAINT uq_eo_stream_seq UNIQUE(stream_key, stream_seq)
+);
+CREATE INDEX IF NOT EXISTS idx_event_outbox_claim  ON event_outbox(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_event_outbox_lease  ON event_outbox(lease_until) WHERE status = 'processing';
+CREATE INDEX IF NOT EXISTS idx_event_outbox_stream ON event_outbox(stream_key, stream_seq);
+CREATE TABLE IF NOT EXISTS event_dlq (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id    TEXT    NOT NULL,
+  event_type  TEXT    NOT NULL,
+  stream_key  TEXT    NOT NULL,
+  stream_seq  INTEGER NOT NULL,
+  tenant_id   INTEGER,
+  actor_sub   TEXT,
+  occurred_at TEXT    NOT NULL,
+  data_json   TEXT    NOT NULL,
+  dlq_reason  TEXT    NOT NULL
+              CONSTRAINT ck_dlq_reason CHECK(dlq_reason IN ('max_attempts','validation_failed','gap_detected')),
+  attempts    INTEGER NOT NULL,
+  last_error  TEXT,
+  failed_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  replayed_at TEXT,
+  replayed_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_event_dlq_pending ON event_dlq(failed_at DESC) WHERE replayed_at IS NULL;
+CREATE TABLE IF NOT EXISTS event_deny_state (
+  stream_key       TEXT    PRIMARY KEY,
+  event_type       TEXT    NOT NULL,
+  deny_effect      TEXT    NOT NULL CONSTRAINT ck_eds_effect CHECK(deny_effect IN ('deny','undeny','soft','none')),
+  denied           INTEGER NOT NULL CONSTRAINT ck_eds_denied_bool CHECK(denied IN (0,1)),
+  tenant_id        INTEGER,
+  last_applied_seq INTEGER NOT NULL CONSTRAINT ck_eds_seq_pos CHECK(last_applied_seq > 0),
+  created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at       TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_event_deny_state_tenant ON event_deny_state(tenant_id);

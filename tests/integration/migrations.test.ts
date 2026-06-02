@@ -87,6 +87,8 @@ import up0049    from '../../migrations/0049_credit_wallet.sql?raw'
 import down0049  from '../../migrations/down/0049_credit_wallet.down.sql?raw'
 import up0050    from '../../migrations/0050_member_lifecycle.sql?raw'
 import down0050  from '../../migrations/down/0050_member_lifecycle.down.sql?raw'
+import up0051    from '../../migrations/0051_event_outbox.sql?raw'
+import down0051  from '../../migrations/down/0051_event_outbox.down.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -98,7 +100,7 @@ const ALL_UPS = [
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
   up0041, up0042, up0043, up0044, up0045, up0046, up0047, up0048,
-  up0049, up0050,
+  up0049, up0050, up0051,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -432,6 +434,8 @@ const EXPECTED_TABLES = [
   'credit_wallets', 'product_usage_quota', 'credit_ledger', 'quota_config_ledger',
   // PR4 migration 0050: invitation + member lifecycle
   'invitations', 'org_create_operations',
+  // PR5 migration 0051: event outbox + sequence + dlq + deny-state projection
+  'event_outbox', 'event_stream_sequences', 'event_dlq', 'event_deny_state',
 ].sort()
 
 // Per-table expected column sets（baseline 12 表 + 部分 ALTER 重點目標）
@@ -469,6 +473,11 @@ const EXPECTED_COLUMNS = {
   // migration 0050 invitation + member lifecycle
   invitations: ['accepted_at', 'accepted_user_id', 'created_at', 'email', 'expires_at', 'id', 'invited_by', 'platform_role', 'status', 'tenant_id', 'token_hash', 'updated_at'],
   org_create_operations: ['created_at', 'creator_user_id', 'id', 'idempotency_key', 'request_hash', 'tenant_id'],
+  // migration 0051 event outbox + sequence + dlq + deny-state projection
+  event_stream_sequences: ['last_seq', 'stream_key', 'updated_at'],
+  event_outbox: ['actor_sub', 'attempts', 'created_at', 'data_json', 'event_id', 'event_type', 'id', 'last_error', 'lease_until', 'locked_by', 'next_attempt_at', 'occurred_at', 'processed_at', 'status', 'stream_key', 'stream_seq', 'tenant_id'],
+  event_dlq: ['actor_sub', 'attempts', 'data_json', 'dlq_reason', 'event_id', 'event_type', 'failed_at', 'id', 'last_error', 'occurred_at', 'replayed_at', 'replayed_by', 'stream_key', 'stream_seq', 'tenant_id'],
+  event_deny_state: ['created_at', 'denied', 'deny_effect', 'event_type', 'last_applied_seq', 'stream_key', 'tenant_id', 'updated_at'],
 }
 
 // 對齊後（0040 exact-parity）的 requisition 索引
@@ -477,7 +486,7 @@ const EXPECTED_REQUISITION_INDEXES = [
   'idx_requisition_ip',         // 0006
 ]
 
-describe('full forward chain 0001..0050 vs prod snapshot', () => {
+describe('full forward chain 0001..0051 vs prod snapshot', () => {
   beforeAll(async () => {
     await dropAllTables()
     await execAll(baseSql)
@@ -486,7 +495,7 @@ describe('full forward chain 0001..0050 vs prod snapshot', () => {
     }
   })
 
-  it('table set 對齊 prod snapshot（47 表）', async () => {
+  it('table set 對齊 prod snapshot（51 表）', async () => {
     const tables = await listTables()
     expect(tables).toEqual(EXPECTED_TABLES)
   })
@@ -801,6 +810,77 @@ describe('migrations smoke 0050 targeted (member lifecycle round-trip)', () => {
     await execAll(up0050)
     expect(await tableExists('invitations')).toBe(true)
     expect(await tableExists('org_create_operations')).toBe(true)
+  })
+})
+
+// Same ordering rule as the 0049/0050 describes: runs ALL_UPS (FK audit_log) and MUST sit BEFORE the 0038
+// targeted block (which re-CREATEs audit_log WITHOUT FK as the last schema mutator).
+describe('migrations smoke 0051 targeted (event outbox round-trip)', () => {
+  beforeAll(async () => {
+    await dropAllTables()
+    await execAll(baseSql)
+    for (const sql of ALL_UPS) await execAll(sql)
+  })
+
+  it('up: 4 event tables + key indexes present', async () => {
+    expect(await tableExists('event_stream_sequences')).toBe(true)
+    expect(await tableExists('event_outbox')).toBe(true)
+    expect(await tableExists('event_dlq')).toBe(true)
+    expect(await tableExists('event_deny_state')).toBe(true)
+    expect(await indexExists('idx_event_outbox_claim')).toBe(true)
+    expect(await indexExists('idx_event_outbox_lease')).toBe(true)
+    expect(await indexExists('idx_event_outbox_stream')).toBe(true)
+    expect(await indexExists('idx_event_dlq_pending')).toBe(true)
+    expect(await indexExists('idx_event_deny_state_tenant')).toBe(true)
+  })
+
+  it('event_outbox guards: 11-type CHECK + UNIQUE(stream_key,stream_seq) + UNIQUE(event_id)', async () => {
+    await env.chiyigo_db.prepare(
+      `INSERT INTO event_outbox (event_id, event_type, stream_key, stream_seq, occurred_at, data_json)
+       VALUES ('e1','member.suspended','tenant:1:member:9',1,'2026-06-02T00:00:00Z','{}')`,
+    ).run()
+    let badType = false
+    try {
+      await env.chiyigo_db.prepare(
+        `INSERT INTO event_outbox (event_id, event_type, stream_key, stream_seq, occurred_at, data_json)
+         VALUES ('e2','member.frobnicated','tenant:1:member:9',2,'2026-06-02T00:00:00Z','{}')`,
+      ).run()
+    } catch { badType = true }
+    expect(badType).toBe(true)            // unknown event_type rejected by the 11-type CHECK
+    let dupSeq = false
+    try {
+      await env.chiyigo_db.prepare(
+        `INSERT INTO event_outbox (event_id, event_type, stream_key, stream_seq, occurred_at, data_json)
+         VALUES ('e3','member.reactivated','tenant:1:member:9',1,'2026-06-02T00:00:00Z','{}')`,
+      ).run()
+    } catch { dupSeq = true }
+    expect(dupSeq).toBe(true)             // (stream_key, stream_seq) ordering-integrity UNIQUE
+    let dupId = false
+    try {
+      await env.chiyigo_db.prepare(
+        `INSERT INTO event_outbox (event_id, event_type, stream_key, stream_seq, occurred_at, data_json)
+         VALUES ('e1','member.reactivated','tenant:1:member:9',2,'2026-06-02T00:00:00Z','{}')`,
+      ).run()
+    } catch { dupId = true }
+    expect(dupId).toBe(true)              // event_id dedup UNIQUE
+  })
+
+  it('down: 4 tables dropped, upstream (users/tenants) untouched', async () => {
+    await execAll(down0051)
+    expect(await tableExists('event_outbox')).toBe(false)
+    expect(await tableExists('event_stream_sequences')).toBe(false)
+    expect(await tableExists('event_dlq')).toBe(false)
+    expect(await tableExists('event_deny_state')).toBe(false)
+    expect(await tableExists('users')).toBe(true)
+    expect(await tableExists('tenants')).toBe(true)
+  })
+
+  it('re-up after down is idempotent (4 tables back)', async () => {
+    await execAll(up0051)
+    expect(await tableExists('event_outbox')).toBe(true)
+    expect(await tableExists('event_stream_sequences')).toBe(true)
+    expect(await tableExists('event_dlq')).toBe(true)
+    expect(await tableExists('event_deny_state')).toBe(true)
   })
 })
 
