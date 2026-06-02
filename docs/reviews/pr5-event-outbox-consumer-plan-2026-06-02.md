@@ -1,7 +1,7 @@
 # PR5 - Event Outbox + Consumer (Gate-1 Plan)
 
 - Created: 2026-06-02
-- Status: DRAFT R3 for Codex Gate-1 re-review. Addresses Codex Gate-1 R2 REJECT (4 findings); R1 (4 blockers) already folded. NOT yet coded.
+- Status: DRAFT R4 for Codex Gate-1 re-review. Addresses Codex Gate-1 R3 REJECT (consumer lease/fencing); R1+R2 folded. NOT yet coded.
 - Plan order: docs/reviews/chiyigo-platform-architecture-plan-2026-05-28.md section 20, step 5
   ("Event outbox + consumer: lease / retry / DLQ / replay"). PR1-PR4 SHIPPED.
 - Workgrade: L3 (new bounded-context infra + security model surface) + HIGH-RISK ADDENDUM
@@ -10,6 +10,32 @@
   PR5 REUSES it verbatim and is the FIRST module that emits / persists / delivers events.
 - Constraints: $0 (Cloudflare free tier only), no CF Queues / Durable Objects (paid), no vendor lock-in,
   Tier-0 baseline. D1 outbox + HTTP cron consumer is the established $0 pattern (see audit-archive cron).
+
+--------------------------------------------------------------------------------
+## R3 -> R4 changelog (what changed since Codex Gate-1 R3 REJECT)
+--------------------------------------------------------------------------------
+
+R3 reject = the consumer's lease was a re-claim HINT but NOT a fence: completion/DLQ transitions did not verify
+the worker still owns the row, so a stale worker could stomp a new owner, and overlapping sweeps could double-DLQ
+(event_dlq has no UNIQUE). R4 adds ONE uniform fencing invariant (F-R3-1, section 9.3) + tightens three writes:
+
+G1 (owner-CAS on EVERY worker transition): a per-run token runToken=randomUUID is written to locked_by at claim.
+   EVERY processing -> {done,pending,dead} a worker performs MUST carry `WHERE id=? AND status='processing' AND
+   locked_by=<runToken>`. A stale worker whose row was re-claimed (locked_by overwritten) 0-rows and is fenced
+   out; it can never stomp the new owner. (sections 5.1, 9.3 STEP C, 12)
+
+G2 (mark-done gated on the projection ACTUALLY applying): the apply branch's outbox UPDATE adds `AND changes()=1`
+   so mark-done fires ONLY if the immediately-prior event_deny_state CAS upsert changed a row. A stale/lost
+   projection CAS -> changes()=0 -> NOT marked done (re-delivered later), never a done-without-apply. (9.3 STEP C)
+
+G3 (DLQ insert gated on the transition actually happening): every DLQ write is db.batch([UPDATE outbox->dead
+   (CAS), INSERT event_dlq SELECT ... WHERE changes()=1]). The INSERT fires ONLY if the dead-transition changed a
+   row, so two overlapping runs/sweeps on one row produce exactly ONE DLQ row (no orphan, no duplicate). The sweep
+   (STEP A, reaping ABANDONED rows) uses a status+lease+attempts CAS instead of owner-CAS. (9.3 STEP A + STEP C)
+
+G4 (minor, observability wording): section 10 no longer claims data_json is fully validateDomainEvent'd at write.
+   With SQL-derived fields the WRITE validates only the BOUND fields; SQL-derived fields are guarded by DB
+   constraints + the consumer's delivery-time re-validation. (section 10)
 
 --------------------------------------------------------------------------------
 ## R2 -> R3 changelog (what changed since Codex Gate-1 R2 REJECT)
@@ -284,14 +310,18 @@ FALLBACK (only if the spike disproves (a)-(c)) -- explicitly worse, documented s
    lease expired AND attempts>=MAX) collects it to the DLQ. Bounded, terminating.
 
    Transition rules (single-writer serialized; claim is a conditional UPDATE so two overlapping cron runs cannot
-   both own a row -- see section 8). Claim is also gated on per-streamKey CONTIGUITY (B1): a row is only claimed
-   when NO earlier-seq row on the same streamKey is still un-'done':
+   both own a row -- see section 8). Claim is gated on per-streamKey CONTIGUITY (B1). EVERY worker-driven
+   transition below is OWNER-CAS fenced (F-R3-1 G1): `id=? AND status='processing' AND locked_by=<runToken>`, so a
+   stale worker whose row was re-claimed/swept is fenced out and cannot stomp the new owner:
      pending    -> processing : claim (status='pending' AND next_attempt_at<=now) [or expired processing],
                                 AND attempts<MAX, AND no earlier-seq same-streamKey row with status<>'done'
-     processing -> done       : projection apply + mark-done in ONE atomic batch (9.3 STEP C); at-least-once via
+     processing -> done       : [owner-CAS] projection apply + mark-done in ONE atomic batch, mark-done ALSO gated
+                                on the projection CAS changing a row (changes()=1, G2); at-least-once via
                                 idempotent re-delivery if the consumer crashed before that batch committed
-     processing -> pending    : transient delivery failure with attempts<MAX (next_attempt_at = now + backoff)
-     processing -> dead       : delivery fail at attempts>=MAX, OR poison, OR max-attempt sweep, OR gap_detected -- writes event_dlq
+     processing -> pending    : [owner-CAS] transient delivery failure with attempts<MAX (next_attempt_at=now+backoff)
+     processing -> dead       : [owner-CAS for worker DLQ; status+lease+attempts-CAS for the sweep] delivery fail
+                                at attempts>=MAX, OR poison, OR max-attempt sweep, OR gap_detected; DLQ insert
+                                gated on the dead-transition changing a row (G3) -> no duplicate DLQ
      dead       -> pending    : admin replay only
 
 5.2 event_deny_state projection per streamKey (the sink, 5b) -- CONTIGUOUS apply (B1):
@@ -533,12 +563,28 @@ second schema touch and keeps migration-before-deploy a single step. Unused-unti
       EVENT_OUTBOX_RETRY_BACKOFF_MS (CSV, for tests), EVENT_OUTBOX_MAX_ATTEMPTS, EVENT_OUTBOX_LEASE_SECONDS.
     - Run order: STEP A sweep, then STEP B claim, then STEP C deliver.
 
-    STEP A -- MAX-ATTEMPT SWEEP (B3 crash convergence): for rows status='processing' AND lease_until<now AND
-      attempts>=MAX -> move to DLQ. The DLQ transition is a SINGLE atomic db.batch([INSERT event_dlq(reason=
-      'max_attempts'), UPDATE event_outbox SET status='dead']) so a crash can never leave a half-DLQ'd row (no
-      orphan, no duplicate DLQ row) + critical audit. (Also any pending row whose attempts somehow reached MAX.)
-      This is what guarantees crashed-at-claim rows terminate. (event_dlq has NO UNIQUE(event_id): replay -> later
-      re-failure legitimately writes a NEW DLQ row for the new episode; the OLD row is marked replayed_at.)
+    FENCING INVARIANT (F-R3-1, governs ALL transitions; the lease is a re-claim HINT, NEVER a completion right):
+      runToken = randomUUID per cron run, written to locked_by at claim (STEP B).
+      * G1 owner-CAS: EVERY worker-driven transition processing -> {done,pending,dead} MUST carry
+        `WHERE id=? AND status='processing' AND locked_by=<runToken>`. If this run's lease expired and another run
+        re-claimed the row (locked_by overwritten) or swept it (status='dead'), the CAS 0-rows -> the stale worker
+        is fenced out and cannot stomp the new owner. (randomUUID uniqueness, not monotonicity, suffices because a
+        re-claim OVERWRITES locked_by -- there is no ABA in practice.)
+      * G3 gated DLQ: EVERY DLQ write is db.batch([UPDATE outbox->dead (CAS), INSERT event_dlq SELECT ... WHERE
+        changes()=1]). The INSERT fires ONLY when the dead-transition actually changed a row, so overlapping
+        runs/sweeps yield EXACTLY ONE DLQ row (event_dlq has no UNIQUE(event_id) -- replay -> later re-failure
+        legitimately writes a NEW row for the new episode; the OLD row is marked replayed_at).
+      NOTE: G2/G3's `changes()=1` gating uses the SAME cross-statement changes() semantics the 5a spike (section 4)
+      proves -- no new unproven D1 primitive is introduced at 5b.
+
+    STEP A -- MAX-ATTEMPT SWEEP (B3 crash convergence; reaps ABANDONED rows, so it uses a STATUS+lease+attempts
+      CAS, NOT owner-CAS -- the owners are dead/other runs). Per exhausted row, atomic db.batch([
+        UPDATE event_outbox SET status='dead'
+          WHERE id=? AND status='processing' AND lease_until<datetime('now') AND attempts>=<MAX>,
+        INSERT event_dlq(reason='max_attempts') SELECT ... WHERE changes()=1 ]) + critical audit.
+      The status='processing' guard makes exactly ONE overlapping sweep flip the row (the loser 0-rows -> changes()
+      =0 -> no duplicate DLQ); a row a late-but-un-reclaimed owner already marked 'done' is skipped (status<>
+      'processing'). This guarantees crashed-at-claim rows terminate.
 
     STEP B -- CLAIM (attempts incremented HERE only -- B3 single source; CONTIGUOUS per streamKey -- B1):
       run lock token = randomUUID.
@@ -560,26 +606,30 @@ second schema touch and keeps migration-before-deploy a single step. Unused-unti
       streamKey throughput = 1 event / cron tick; acceptable, per-subject event rate is low. Index (stream_key,
       stream_seq) backs the NOT EXISTS.)
 
-    STEP C -- DELIVER (per claimed row, processed in stream_key,stream_seq order). The apply rule (5.2) lives in
-      a pure unit-testable module functions/utils/deny-state-projection.ts, not inline in the cron handler.
-      reconstruct via buildDomainEvent (re-derives streamKey + re-validates); read prior=last_applied_seq for the
-      streamKey (0 if none).
-      - valid + seq==prior+1 -> SINGLE atomic db.batch([ event_deny_state upsert, CAS-guarded
-                                ON CONFLICT(stream_key) DO UPDATE SET ... WHERE event_deny_state.last_applied_seq
-                                = prior ; UPDATE event_outbox SET status='done', processed_at, lease cleared ]).
-                                Projection + mark-done commit together (shrinks the crash window). The CAS guard is
-                                belt-and-braces -- the lease already gives single-owner so prior cannot move.
-      - valid + seq<=prior   -> idempotent no-op -> UPDATE status='done', clear lease (apply already happened).
-      - valid + seq>prior+1  -> GAP = invariant violation (F3; unreachable in correct operation, see 5.2). Do NOT
-                                apply, do NOT silent-retry. atomic db.batch([INSERT event_dlq(reason=
-                                'gap_detected'), UPDATE status='dead']) + critical audit domain.event.gap_detected.
-                                Loud + bounded + replayable; surfaces the broken contiguity invariant instead of
-                                looping forever.
-      - invalid (poison)     -> atomic db.batch([INSERT event_dlq(reason='validation_failed'), UPDATE status=
-                                'dead']) + critical audit.
-      - apply throws (transient): READ attempts -> attempts<MAX: status='pending', clear lease, next_attempt_at=
-                                now+backoff(attempts), last_error; attempts>=MAX: atomic db.batch([INSERT event_dlq
-                                (reason='max_attempts'), UPDATE status='dead']) + critical audit.
+    STEP C -- DELIVER (per claimed row, in stream_key,stream_seq order; ALL transitions are owner-CAS per F-R3-1
+      G1, and the DLQ writes follow G3). The apply rule (5.2) is a pure unit-testable module
+      functions/utils/deny-state-projection.ts returning {apply|noop|gap}. reconstruct via buildDomainEvent
+      (re-derives streamKey + re-validates); read prior=last_applied_seq for the streamKey (0 if none).
+      Below, OWNER = `id=? AND status='processing' AND locked_by=<runToken>`.
+      - apply (seq==prior+1) -> SINGLE atomic db.batch([
+            event_deny_state upsert CAS-guarded: ON CONFLICT(stream_key) DO UPDATE SET ... WHERE last_applied_seq=prior ;
+            UPDATE event_outbox SET status='done', processed_at, lease_until=null WHERE OWNER AND changes()=1 ]).
+          G2: the `changes()=1` ties mark-done to the projection CAS ACTUALLY applying -- a stale/lost CAS ->
+          changes()=0 -> NOT marked done (row stays 'processing' -> re-delivered, never done-without-apply). OWNER
+          fences a stale worker. Both must hold.
+          Subtlety (safe): the projUpsert runs before the OWNER check, so a STALE worker can still advance the
+          projection (its CAS) yet be fenced on mark-done. That is harmless: the projection CAS is idempotent on
+          last_applied_seq, so the NEW owner re-reads prior, sees seq already applied, and completes via the noop
+          branch (owner-CAS). The applied event is correct (it is the right seq); only the outbox bookkeeping
+          converges via one extra pass. The row never sticks and the projection is never double-applied.
+      - noop (seq<=prior; already applied) -> UPDATE event_outbox SET status='done', lease_until=null WHERE OWNER.
+          (owner-CAS only; nothing to apply, so no changes()=1 gate.)
+      - transient apply failure, attempts<MAX -> UPDATE event_outbox SET status='pending',
+          next_attempt_at=now+backoff(attempts), last_error, lease_until=null WHERE OWNER.
+      - DLQ (gap reason='gap_detected' / poison reason='validation_failed' / attempts>=MAX reason='max_attempts')
+          -> atomic db.batch([ UPDATE event_outbox SET status='dead' WHERE OWNER ;
+             INSERT event_dlq(reason) SELECT ... WHERE changes()=1 ]) + critical audit (gap -> domain.event.
+             gap_detected; F3 invariant breach is loud + bounded + replayable, never a silent retry).
 
     - Report: structured run report (run_id, swept, claimed, delivered, retried, dlq, errors) as the HTTP body
       (mirror audit-archive cron). Report + per-row audit log a STREAM_KEY_HASH, never the raw streamKey (B4).
@@ -610,7 +660,11 @@ second schema touch and keeps migration-before-deploy a single step. Unused-unti
 - No external egress (no push; no client-supplied URLs) -> no SSRF surface introduced.
 - Emission carries actor_sub from the SERVER-resolved actor (never client input); tenant_id from the
   authenticated tenant context (PR1 claim), never from the request body.
-- data_json holds only contract-validated fields (validateDomainEvent at write). PII REDACTION (B4): the raw
+- data_json field validation (G4): at WRITE the helper validates only the BOUND fields via buildDomainEvent (the
+  SQL-derived fields like previousRole do not exist until the batch runs). SQL-derived fields are guarded by DB
+  constraints (organization_members.platform_role) AND by the consumer's DELIVERY-time buildDomainEvent
+  re-validation (poison -> DLQ). Do NOT implement on the false belief that the whole event is validated at write.
+- PII REDACTION (B4): the raw
   streamKey can contain an email (member.invited = tenant:T:member:<email>), so audit events / Discord alerts /
   run reports emit a STREAM_KEY_HASH (sha256 hex) + eventType + streamSeq + eventId, and NEVER the raw streamKey
   or data_json. Raw streamKey lives ONLY in DB columns (event_outbox / event_dlq / event_deny_state), which are
@@ -684,6 +738,12 @@ Alerting: DLQ insert + validation_failed are critical -> existing Discord alert 
   - MAX-ATTEMPT CRASH SWEEP (B3 convergence): simulate repeated crash (claim then no completion, lease expiry) so
     attempts climbs to MAX; the next run's sweep moves the stuck 'processing' row to DLQ. Provably terminates.
   - crash recovery (transient): a 'processing' row with expired lease and attempts<MAX is re-claimed and completes.
+  - G1 FENCING (stale-worker resume): claim row with runToken A; expire A's lease; re-claim with runToken B; then
+    have A attempt done/pending/dead -> A's owner-CAS 0-rows (fenced), B's transition wins; final state is B's.
+  - G2 projection-CAS-fail: force the event_deny_state CAS to 0-row (stale last_applied_seq) -> the outbox row is
+    NOT marked done (stays 'processing'), no done-without-apply.
+  - G3 overlapping sweeps / overlapping DLQ: two sweeps (or sweep + worker DLQ) target one exhausted row ->
+    EXACTLY ONE event_dlq row is written (the loser's INSERT is gated out by changes()=0), no orphan.
   - replay: a dead/DLQ row reset -> pending -> delivered (and on a blocked streamKey, replaying seq N unblocks N+1).
   - F4 replay authz: admin WITHOUT admin:events:replay -> 403; finance/support roles -> 403; with scope but no
     step-up -> 401/STEP_UP_REQUIRED; with scope + step-up -> ok. Response + audit contain stream_key_hash only,
@@ -729,10 +789,11 @@ exercised for real). audit-policy registry test updated with the new events.
   pending-depth / oldest-pending-age alarms (section 11) are ENABLED only in 5b when the consumer exists, so a
   growing pending backlog between 5a-ship and 5b-ship pages no one (and is drained the moment 5b deploys).
 
-5b: consumer cron (sweep+claim+deliver) + event_deny_state projection (contiguous apply) + DLQ replay endpoint
+5b: consumer cron (sweep+claim+deliver, ALL transitions OWNER-CAS fenced + DLQ gated on changes()=1, F-R3-1) +
+    event_deny_state projection (contiguous apply, mark-done gated on projection CAS) + DLQ replay endpoint
     (scope admin:events:replay + step-up + redaction, F4) + new scope wiring + cron workflow yml + member.invited
     SQL-derived emit path + audit-policy +6 (incl. domain.event.gap_detected) + consumer tests (contiguity/
-    gap-detection/soft-before-deny/idempotency/attempts-single-source/crash-sweep/replay/F4-authz).
+    gap-detection/idempotency/attempts-single-source/crash-sweep/replay/F4-authz/G1-fencing/G2-cas/G3-no-dup-dlq).
 5c: ban->account.disabled, unban->account.reenabled, per-device|per-jti revoke->session.revoked wiring + tests,
     one Tier-0 surface per commit. (product_access.* NOT here -- deferred to F-2 per ruling.)
 
@@ -797,10 +858,11 @@ exercised for real). audit-policy registry test updated with the new events.
 18.5 spike -> REMOTE D1 sanity REQUIRED before 5a code (not local/miniflare only). (D3, section 4)
 18.6 acceptInvitation -> emit gates on the JOIN mutation (membership created), not the consume. (section 9.2)
 
-R3 carries NO new open questions. R1 blockers (B1 contiguous projection, B2 member.invited defer, B3 single-source
-attempts + crash sweep, B4 PII redaction) AND R2 findings (F1 authoritative role payload, F2 accept catch rethrow,
-F3 gap = loud+bounded DLQ, F4 fine-scope replay) are all addressed in the cited sections; the two changelogs at
-the top map each item to its sections. The directions Codex affirmed are unchanged: structured columns, one
-migration 0051, product_access deferred, remote-D1 spike, local projection sink.
+R4 carries NO new open questions. R1 blockers (B1-B4), R2 findings (F1-F4), AND R3's lease/fencing finding
+(G1 owner-CAS on every transition, G2 mark-done gated on the projection CAS, G3 DLQ gated on the dead-transition,
+G4 validation wording) are all addressed in the cited sections; the three changelogs at the top map each item to
+its sections. The directions Codex affirmed are unchanged: structured columns, one migration 0051, product_access
+deferred, remote-D1 spike (also covers the G2/G3 changes() gating), local projection sink, SQL-derived/CAS-pinned
+payloads, gap->DLQ, admin:events:replay.
 
---- END PR5 GATE-1 PLAN (R3) ---
+--- END PR5 GATE-1 PLAN (R4) ---
