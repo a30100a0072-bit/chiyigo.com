@@ -168,26 +168,37 @@ export async function onRequestPost({ request, env }) {
   if (!user) return res({ error: 'User not found', code: 'USER_NOT_FOUND' }, 401, cors)
   if (user.status === 'banned') return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403, cors)
 
-  // ── 4. Refresh Token Rotation（原子輪換）─────────────────────
+  // ── 4. Refresh Token Rotation（單一 atomic db.batch；PR5 5d-2 §1.5）─────────────────
   const newPlainToken    = generateSecureToken()
   const newTokenHash     = await hashToken(newPlainToken)
   const newExpiresAt     = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
-
-  // Rotation 保留原本的 auth_time（silent refresh 不算重新互動式認證，
-  // OIDC max_age 才有意義）。舊 row 沒 auth_time 時用 NOW 當保守 fallback。
+  // Rotation 保留原本的 auth_time（silent refresh 不算重新互動式認證，OIDC max_age 才有意義）；
+  // 舊 row 沒 auth_time 時用 NOW 當保守 fallback。
   const preservedAuthTime = tokenRow.auth_time ?? new Date().toISOString().replace('T', ' ').slice(0, 19)
-  // Codex #2（2026-05-10）：原 SELECT→batch UPDATE/INSERT 有 race 窗 — 兩個並發 refresh 都
-  // 通過 SELECT 的 revoked_at IS NULL 檢查 → 雙方各拿到一條新 refresh chain。改用 atomic
-  // UPDATE...WHERE revoked_at IS NULL RETURNING：D1/SQLite 對 token_hash UNIQUE 列做 row-level
-  // 序列化，只會有一方 RETURNING 出 row；輸的一方視同 reuse_detected。
-  const revokedRow = await db
-    .prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now')
-                WHERE id = ? AND revoked_at IS NULL
-                RETURNING id`)
-    .bind(tokenRow.id)
-    .first()
-  if (!revokedRow) {
+  // Codex r9-5：簽 audience 用 tokenRow.issued_aud（綁定發行時 aud）；舊 row NULL → 退回 requestedAud 保相容。
+  const effectiveAud = tokenRow.issued_aud || requestedAud || 'chiyigo'
+  // PR5 5d-1b：PRESERVE per-login session_id across rotation（同 auth_time/scope/issued_aud）；legacy/deploy-gap
+  // 的 NULL session_id 在此 HEAL 成 fresh uuid，使每個 rotated row 都帶 non-null id。
+  const preservedSessionId = tokenRow.session_id ?? crypto.randomUUID()
+
+  // PR5 5d-2 §1.5：rotation 必須是「單一 atomic db.batch」。舊版「UPDATE old (revoke) → 另一句 INSERT new」是兩個
+  // 分離寫入，中間存在 0-LIVE-HEAD window：並發的 session.revoked 撤銷（casByFamily）若落在窗內，會找不到 live
+  // head → 不 emit，而 rotation 隨後插入的新 head 卻存活（漏撤 + event ⊥ auth DB）。改成一個 batch 後，並發讀者只
+  // 會見到「舊 head」(batch 前) 或「新 head」(batch 後)、永不見 0 live head。
+  //   S1 = UPDATE old SET revoked_at WHERE id=? AND revoked_at IS NULL —— `revoked_at IS NULL` 仍對並發 refresh 做
+  //        row-level 序列化（只有一方 changes()=1，輸的一方 changes()=0 視為 reuse；保留 Codex #2 的防護）。
+  //   S2 = INSERT new ... SELECT ... WHERE changes()=1 —— 只在 S1 真的撤了舊 head 時才插新 head（both-or-neither）。
+  const rot = await db.batch([
+    db.prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`)
+      .bind(tokenRow.id),
+    db.prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud, session_id)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`)
+      .bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null, effectiveAud, preservedSessionId),
+  ])
+  // reuse 偵測：S1 的 changes()≠1 → 舊 head 早被撤（replay，或並發 refresh / logout 贏了 race）→ gated INSERT 沒插
+  // 任何新 head（changes()=1 為偽）→ 401。
+  if (rot[0].meta.changes !== 1) {
     await safeUserAudit(env, {
       event_type: 'auth.refresh.fail', severity: 'warn',
       user_id: tokenRow.user_id, request,
@@ -195,12 +206,20 @@ export async function onRequestPost({ request, env }) {
     })
     return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
   }
-  // Codex r9-5：簽 audience 改用 tokenRow.issued_aud（綁定發行時 aud）。
-  // 舊 row 沒 issued_aud（NULL）→ 退回 requestedAud 保 backward compat。F-1 已批次 revoke
-  // NULL 舊 row（2026-05-10），仍保留 fallback 鏈以防未來邊界情境。
-  // F-2：mismatch 條件收緊 — 只有 client 明確送了 raw aud 且 ≠ issued_aud 時才 audit；
-  // 升 critical（攻擊者主動嘗試切換 audience 的訊號，非 client 缺送的噪音）。
-  const effectiveAud = tokenRow.issued_aud || requestedAud || 'chiyigo'
+  // Codex c2 code-gate：也必須驗 S2（gated INSERT）的 row-count。S1 changes()=1 ⇒ S2 也應=1（spike 已證 changes()
+  // 鏈），但若 SQL / D1 semantic drift / 未來 refactor 讓 S1 撤了舊 head 卻沒插新 head（rot[1]≠1）→ FAIL CLOSED：
+  // 絕不為一個 DB 不存在的 session row 簽發/回傳新 token（否則使用者拿到孤兒 refresh token、下次 refresh 必失敗）。
+  // 舊 token 已在 S1 撤銷，故回 5xx 讓使用者重新登入 + critical audit 告警。
+  if (rot[1].meta.changes !== 1) {
+    await safeUserAudit(env, {
+      event_type: 'auth.refresh.fail', severity: 'critical',
+      user_id: tokenRow.user_id, request,
+      data: { reason_code: 'rotation_insert_missing' },
+    })
+    return res({ error: 'Rotation failed', code: 'ROTATION_FAILED' }, 500, cors)
+  }
+  // F-2 audience mismatch audit（post-batch、best-effort；只有 client 明確送 raw aud 且 ≠ issued_aud 才記，升
+  // critical = 攻擊者主動切換 audience 的訊號，非 client 缺送的噪音）。
   if (tokenRow.issued_aud && rawAudProvided && requestedAud !== tokenRow.issued_aud) {
     await safeUserAudit(env, {
       event_type: 'auth.refresh.aud_mismatch', severity: 'critical',
@@ -212,16 +231,6 @@ export async function onRequestPost({ request, env }) {
       },
     })
   }
-  // P1-5：把 OIDC scope 透傳到 rotation 後的新 row，避免遺失
-  // Codex r9-5：issued_aud 也透傳，rotation 後新 row 仍綁定原 aud
-  // PR5 5d-1b: PRESERVE the per-login session_id across rotation (like auth_time/scope/issued_aud) so the
-  // session.revoked family id is STABLE for the life of one login. A legacy/deploy-gap row with a NULL session_id
-  // is HEALED to a fresh one here (?? crypto.randomUUID()) so every rotated row carries a non-null id going forward.
-  await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud, session_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null, effectiveAud, tokenRow.session_id ?? crypto.randomUUID())
-    .run()
 
   // ── 5. 簽發新 Access Token ───────────────────────────────────
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(user.id))

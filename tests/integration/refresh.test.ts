@@ -173,6 +173,16 @@ describe('POST /api/auth/refresh — PR5 5d session_id preserve / heal', () => {
     expect(rows.results[1].session_id).toBeTruthy()           // new row HEALED to a non-null id (?? crypto.randomUUID())
     expect(String(rows.results[1].session_id)).not.toContain(':')  // delimiter-safe (a UUID, no colon)
   })
+
+  it('PR5 5d-2 §1.5 reuse: an already-revoked token → 401 + NO new head (gated INSERT inserts nothing)', async () => {
+    const u = await seedUser({ email: 'rot-reuse@x' })
+    const tok = await seedRefresh(u.id, { revoked: true })
+    const r = await call(refreshReq({ token: tok }))
+    expect(r.status).toBe(401)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REVOKED')
+    const n = await env.chiyigo_db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id=?').bind(u.id).first()
+    expect(n.n).toBe(1)  // only the seeded revoked row — the atomic rotation created NO new live head
+  })
 })
 
 // F-2 (codex r9-5 follow-up, commit b774b1a, 2026-05-10) — refresh aud 綁定 + mismatch 條件

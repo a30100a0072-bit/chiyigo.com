@@ -161,6 +161,10 @@ const IMMUTABLE = [
   'auth.refresh.aud_mismatch',      // F-2 critical
   'auth.refresh.device_mismatch',
   'auth.token_revoked',
+  // PR5 5d-2：session-family 完整性違反 — logout / device-revoke 的 fail-closed 前置檢查偵測到某 (user_id, ref)
+  // family 的 GLOBAL live-head 數 != 1（rotation 不變量被破壞，或並發異常）→ 不撤銷、不 emit。critical forensic
+  // 訊號（不該發生；發生即需調查該 user 的 session 家族），永久保留。
+  'session.integrity_violation',
   // PR2 Billing / Entitlement：manual grant 成功（金融狀態變更，永久 forensic trail）
   'billing.grant.applied',
   // PR3 Credit Wallet：金融狀態變更（永久 forensic trail）。billing.quota.set 為 telemetry，

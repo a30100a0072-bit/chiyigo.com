@@ -18,8 +18,12 @@
  *     被偷裝置不明 / 帳號全面失守時用。
  *
  *  3. mode='device'      { mode, user_id, device_uuid }
- *     只撤該 user 在指定 device 上的 refresh_token。
+ *     只撤該 user 在指定 device 上的 session families（每個 per-login session_id 一個 family），並對每個撤掉的
+ *     family emit 一筆 session.revoked（PR5 5d-2 c5，multi-family；device_uuid 為 non-null）。
  *     access_token 仍有效到 exp，但 refresh 失敗後即下線（不影響其他裝置）。
+ *
+ * 注意：mode='user'（bump token_version）與 mode='jti' **永不** emit session.revoked — token-epoch / 單一 access
+ *       token 的失效不是「per-login session 被撤」的 deny subject（master plan D6）。只有 mode='device' 走 emission。
  *
  * 保護規則（同 ban.ts）：
  *  - mode='user' / 'device'：不可撤自己 / 不可撤同層級或更高層級 role
@@ -29,13 +33,16 @@
  *   400 → 參數錯誤
  *   401 / 403 → 未授權 / 角色不足
  *   404 → user not found（mode user/device）
+ *   500 → mode=device：{ code:'SESSION_INTEGRITY_VIOLATION' }（同 session_id >1 live head）
+ *                    / { code:'REVOKE_INCOMPLETE', revoked, emitted, remaining }（chunk 部分失敗，retry 剩下的）
  */
 
 import { res } from '../../utils/auth'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../utils/requireRole'
 import { revokeJti } from '../../utils/revocation'
 import { appendAuditLog } from '../../utils/audit-log'
-import { safeUserAudit } from '../../utils/user-audit'
+import { safeUserAudit, auditDomainEventEmitted } from '../../utils/user-audit'
+import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE } from '../../utils/session-revoke'
 
 const VALID_MODES = new Set(['jti', 'user', 'device'])
 
@@ -140,7 +147,7 @@ export async function onRequestPost({ request, env }) {
   const deviceUuid = typeof body.device_uuid === 'string' ? body.device_uuid.trim() : ''
   if (!deviceUuid) return res({ error: 'device_uuid is required for mode=device', code: 'DEVICE_UUID_REQUIRED' }, 400)
 
-  // P1-15：先寫 hash-chain
+  // P1-15：先寫 hash-chain（記錄 admin 動作，無論結果；失敗即拒）
   try {
     await appendAuditLog(db, {
       admin_id: Number(user.sub), admin_email: user.email,
@@ -151,19 +158,56 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
   }
 
-  const result = await db
-    .prepare(`
-      UPDATE refresh_tokens SET revoked_at = datetime('now')
-      WHERE user_id = ? AND device_uuid = ? AND revoked_at IS NULL
-    `)
+  // PR5 5d-2 c5：multi-family。device_uuid 為 non-null（admin 契約不擴充到 null，master plan D6）。先列此 device 上
+  // 仍 live 的 DISTINCT family refs，交 revokeSessionFamilies 做 GLOBAL 完整性前置檢查 + chunk + 撤銷 + emit。
+  // actorSub = admin 的 sub。
+  const candRows = await db
+    .prepare(`SELECT DISTINCT ${FAMILY_REF_SQL} AS ref FROM refresh_tokens
+                WHERE user_id = ? AND device_uuid = ? AND revoked_at IS NULL`)
     .bind(targetId, deviceUuid)
-    .run()
-  const refreshRevoked = result?.meta?.changes ?? 0
+    .all()
+  const candidateRefs = (candRows.results ?? []).map((r) => String(r.ref))
 
+  const result = await revokeSessionFamilies(db, targetId, candidateRefs, String(user.sub))
+
+  // 同一 session_id 出現 >1 live head（不變量被破壞）→ fail-closed：critical 稽核 + 500，不撤不 emit
+  //（P1-15 已記錄此次 admin 嘗試；不寫 admin.token.revoked.device，因為實際沒撤任何 token）。
+  if (result.outcome === 'integrity_violation') {
+    await safeUserAudit(env, {
+      event_type: 'session.integrity_violation', severity: 'critical',
+      user_id: targetId, request,
+      data: { heads: result.integrityHeads, site: 'admin.revoke.device', admin_id: Number(user.sub) },
+    })
+    return res({ error: 'Session integrity violation', code: 'SESSION_INTEGRITY_VIOLATION' }, 500)
+  }
+
+  // post-commit、best-effort：每個已 emit 的 family 記一筆 redacted domain.event.emitted（部分失敗時也對已 commit 的記）。
+  for (const id of result.emittedIdentities) await auditDomainEventEmitted(env, id)
+
+  // chunk 部分失敗、前面 chunk 已 commit → forward-progress。寫一筆**獨立的 partial-failure 稽核**（partial:true +
+  // counts），ops 才能區分「完整成功」與「只完成前幾個 chunk 後失敗」（plan §5）；回 NON-2xx + counts，client retry 剩下的。
+  if (result.outcome === 'incomplete') {
+    await safeUserAudit(env, {
+      event_type: 'admin.token.revoked.device', severity: 'critical',
+      user_id: targetId, request,
+      data: {
+        partial: true, site: 'admin.revoke.device', admin_id: Number(user.sub), device_uuid: deviceUuid,
+        revoked: result.revoked, emitted: result.emitted, remaining: result.remaining,
+        chunk_size: SESSION_REVOKE_CHUNK_SIZE,
+      },
+    })
+    return res({
+      error: 'Session revocation incomplete; retry to finish',
+      code: 'REVOKE_INCOMPLETE',
+      revoked: result.revoked, emitted: result.emitted, remaining: result.remaining,
+    }, 500)
+  }
+
+  // ok：既有 admin.token.revoked.device 稽核（refresh_revoked = 撤掉的 family 數）。
   await safeUserAudit(env, {
     event_type: 'admin.token.revoked.device', severity: 'critical',
     user_id: targetId, request,
-    data: { admin_id: Number(user.sub), device_uuid: deviceUuid, refresh_revoked: refreshRevoked },
+    data: { admin_id: Number(user.sub), device_uuid: deviceUuid, refresh_revoked: result.revoked },
   })
-  return res({ mode, user_id: targetId, device_uuid: deviceUuid, refresh_revoked: refreshRevoked })
+  return res({ mode, user_id: targetId, device_uuid: deviceUuid, refresh_revoked: result.revoked })
 }

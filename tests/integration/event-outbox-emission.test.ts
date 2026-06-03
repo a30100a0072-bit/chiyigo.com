@@ -19,8 +19,11 @@ import { env } from 'cloudflare:test'
 import { resetDb, seedUser, seedTenant, seedMembership, seedInvitation } from './_helpers'
 import { suspendMember, reactivateMember, offboardMember, changeMemberRole } from '../../functions/utils/members'
 import { acceptInvitation } from '../../functions/utils/invitations'
-import { emitMemberSuspended, emitAccountDisabled, emitAccountReenabled } from '../../functions/utils/domain-event-emit'
+import { emitMemberSuspended, emitAccountDisabled, emitAccountReenabled, emitSessionRevoked } from '../../functions/utils/domain-event-emit'
 import { validateDomainEvent } from '../../functions/utils/domain-events'
+import { onRequestPost as logoutHandler } from '../../functions/api/auth/logout'
+import { casByFamily } from '../../functions/utils/session-revoke'
+import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
 
 const db = env.chiyigo_db
 beforeEach(async () => { await resetDb() })
@@ -260,5 +263,251 @@ describe('[PR5-5c] account.* emission builders — ban/unban', () => {
     await expect(db.batch([gating, ...emit.statements])).rejects.toThrow()
     const u = await db.prepare(`SELECT status FROM users WHERE id=?`).bind(uid).first<{ status: string }>()
     expect(u!.status).toBe('active') // rolled back
+  })
+})
+
+describe('[PR5-5d-2] session.revoked emission builder', () => {
+  // The emit BUILDER is the unit-test seam (meta injectable). Endpoint wiring (auth/logout, devices/logout,
+  // admin mode=device) is c4/c5. Here we prove the builder contract: emit-on-apply / no-emit-on-noop / atomicity /
+  // valid FROZEN contract / opaque per-login ref / NO raw refresh token in the streamKey or data.
+  async function seedLiveToken(userId: number, sessionId: string | null, hash: string): Promise<number> {
+    const r = await db.prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at, session_id) VALUES (?,?,?,?)`)
+      .bind(userId, hash, '2099-01-01 00:00:00', sessionId).run()
+    return Number(r.meta.last_row_id)
+  }
+  // single-row family-id CAS, identical shape to the endpoint's casByFamily (PK-pinned subquery, device-less).
+  const casByFamily = (userId: number, ref: string) =>
+    db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE id=(SELECT id FROM refresh_tokens WHERE user_id=? AND COALESCE(session_id,'legacy_'||id)=? AND revoked_at IS NULL LIMIT 1) AND revoked_at IS NULL`).bind(userId, ref)
+
+  it('emits ONE row (session:<sub>:device:<ref>, tenant null, {sub,scope,ref}) gated on casByFamily; NO raw token', async () => {
+    const uid = await user()
+    await seedLiveToken(uid, 'sess-AAA', 'h-sr1')
+    const ref = 'sess-AAA'
+    const streamKey = `session:${uid}:device:${ref}`
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: String(uid) }, { eventId: 'sr-1', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([casByFamily(uid, ref), ...emit.statements])
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(rows[0].event_type).toBe('session.revoked')
+    expect(rows[0].stream_seq).toBe(1)
+    expect(rows[0].tenant_id).toBeNull()
+    expect(rows[0].actor_sub).toBe(String(uid))
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(uid), scope: 'device', ref })
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+    // NO raw token leak: streamKey + data carry ONLY the opaque family ref (never the token_hash/plaintext).
+    expect(rows[0].data_json).not.toContain('h-sr1')
+    expect(rows[0].stream_key).not.toContain('h-sr1')
+  })
+
+  it('legacy ref (ref=legacy_<id>, COALESCE form) produces a valid contract event', async () => {
+    const uid = await user()
+    const rid = await seedLiveToken(uid, null, 'h-sr-legacy') // NULL session_id -> COALESCE = legacy_<id>
+    const ref = `legacy_${rid}`
+    const streamKey = `session:${uid}:device:${ref}`
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: String(uid) }, { eventId: 'sr-legacy', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([casByFamily(uid, ref), ...emit.statements])
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(JSON.parse(rows[0].data_json).ref).toBe(ref)
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+  })
+
+  it('no-emit-on-noop: a 0-row gating CAS (already-revoked family) bumps no seq and writes no outbox row', async () => {
+    const uid = await user()
+    await seedLiveToken(uid, 'sess-NOOP', 'h-sr2')
+    await db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE user_id=?`).bind(uid).run() // pre-revoke
+    const ref = 'sess-NOOP'
+    const streamKey = `session:${uid}:device:${ref}`
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: String(uid) }, { eventId: 'sr-noop', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([casByFamily(uid, ref), ...emit.statements])
+    expect((await outboxRows(streamKey)).length).toBe(0)
+    expect(await seqOf(streamKey)).toBeNull()
+  })
+
+  it('atomicity: a forced outbox UNIQUE collision rolls the WHOLE batch back (the revoke does NOT apply)', async () => {
+    const uid = await user()
+    const rid = await seedLiveToken(uid, 'sess-ATOM', 'h-sr3')
+    const ref = 'sess-ATOM'
+    const streamKey = `session:${uid}:device:${ref}`
+    await db.prepare(
+      `INSERT INTO event_outbox (event_id, event_type, stream_key, stream_seq, occurred_at, data_json)
+       VALUES ('sr-pre','session.revoked', ?, 1, '2026-06-03T00:00:00Z', '{}')`,
+    ).bind(streamKey).run()
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: String(uid) }, { eventId: 'sr-atom', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await expect(db.batch([casByFamily(uid, ref), ...emit.statements])).rejects.toThrow()
+    const row = await db.prepare(`SELECT revoked_at FROM refresh_tokens WHERE id=?`).bind(rid).first<{ revoked_at: string | null }>()
+    expect(row!.revoked_at).toBeNull() // rolled back — the revoke did NOT apply (both-or-neither)
+  })
+
+  it('actorSub null (system-driven, e.g. a future device_mismatch wire) is accepted', async () => {
+    const uid = await user()
+    await seedLiveToken(uid, 'sess-SYS', 'h-sr4')
+    const ref = 'sess-SYS'
+    const streamKey = `session:${uid}:device:${ref}`
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: null }, { eventId: 'sr-sys', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([casByFamily(uid, ref), ...emit.statements])
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(rows[0].actor_sub).toBeNull()
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+  })
+
+  it('rejects a ref with a colon or blank (delimiter-safety invariant) — throws, produces no statements', () => {
+    const meta = { eventId: 'sr-bad', occurredAt: '2026-06-03T00:00:00.000Z' }
+    expect(() => emitSessionRevoked(db, { sub: '1', ref: 'bad:ref', actorSub: '1' }, meta)).toThrow(/colon-free/)
+    expect(() => emitSessionRevoked(db, { sub: '1', ref: '', actorSub: '1' }, meta)).toThrow()
+  })
+})
+
+describe('[PR5-5d-2] session.revoked endpoint wire — auth/logout (single-family, c4)', () => {
+  // End-to-end through the REAL logout endpoint (which uses the REAL shared casByFamily + emitSessionRevoked):
+  // emit-on-apply / idempotent no-emit / GLOBAL fail-closed COUNT!=1 / re-login-clean / legacy ref. (Per-family
+  // contiguity THROUGH the 5b consumer + the multi-family chunk path are c5; here = the single-family wire.)
+  async function seedLoginSession(userId: number, sessionId: string | null): Promise<{ plain: string; id: number; ref: string }> {
+    const plain = generateSecureToken()
+    const hash = await hashToken(plain)
+    const r = await db.prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at, session_id) VALUES (?,?,?,?)`)
+      .bind(userId, hash, '2099-01-01 00:00:00', sessionId).run()
+    const id = Number(r.meta.last_row_id)
+    return { plain, id, ref: sessionId ?? `legacy_${id}` }
+  }
+  async function logout(refreshToken?: string) {
+    const req = new Request('http://x/api/auth/logout', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
+    })
+    const resp = await logoutHandler({ request: req, env })
+    let body = null
+    try { body = await resp.json() } catch { /* swallow */ }
+    return { status: resp.status, body }
+  }
+  async function countWhere(sql: string, ...binds: unknown[]): Promise<number> {
+    const r = await db.prepare(`SELECT COUNT(*) AS n FROM ${sql}`).bind(...binds).first<{ n: number }>()
+    return r ? r.n : 0
+  }
+
+  it('live session → 200 + EXACTLY ONE session.revoked + token revoked + auth.logout + REDACTED domain.event.emitted', async () => {
+    const uid = await user()
+    const s = await seedLoginSession(uid, 'sess-L1')
+    const streamKey = `session:${uid}:device:sess-L1`
+    const r = await logout(s.plain)
+    expect(r.status).toBe(200)
+    expect(r.body.message).toBe('Logged out')
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(rows[0].event_type).toBe('session.revoked')
+    expect(rows[0].stream_seq).toBe(1)
+    expect(rows[0].tenant_id).toBeNull()
+    expect(rows[0].actor_sub).toBe(String(uid))
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(uid), scope: 'device', ref: 'sess-L1' })
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+    // the token's family head is revoked
+    const tok = await db.prepare(`SELECT revoked_at FROM refresh_tokens WHERE id=?`).bind(s.id).first<{ revoked_at: string | null }>()
+    expect(tok!.revoked_at).not.toBeNull()
+    // auth.logout audit preserved (only written when a row was actually revoked)
+    expect(await countWhere(`audit_log WHERE user_id=? AND event_type='auth.logout'`, uid)).toBe(1)
+    // domain.event.emitted (user_id NULL) is REDACTED: a stream_key_hash, never the raw streamKey/ref
+    const dee = await db.prepare(`SELECT event_data FROM audit_log WHERE event_type='domain.event.emitted'`).first<{ event_data: string }>()
+    expect(dee).not.toBeNull()
+    const deeData = JSON.parse(dee!.event_data)
+    expect(deeData.domain_event_type).toBe('session.revoked')
+    expect(typeof deeData.stream_key_hash).toBe('string')
+    expect(dee!.event_data).not.toContain('sess-L1')   // raw ref never logged
+    expect(dee!.event_data).not.toContain('session:')  // raw streamKey never logged (only the hash)
+  })
+
+  it('rotation-before-logout race (B1 at the endpoint): a concurrent refresh already rotated old→new (same session_id); logout with the OLD token revokes the NEW head + emits exactly one session.revoked', async () => {
+    const uid = await user()
+    const old = await seedLoginSession(uid, 'sess-RACE')
+    // a concurrent refresh ALREADY completed its atomic rotation: old head revoked, new LIVE head, SAME session_id
+    await db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE id=?`).bind(old.id).run()
+    const fresh = await seedLoginSession(uid, 'sess-RACE')
+    // the browser still holds the OLD token (cookie not yet refreshed) → logout with it
+    const r = await logout(old.plain)
+    expect(r.status).toBe(200)
+    // the CURRENT (new) head IS revoked — logout did NOT silently miss it (the rejected pre-read would have 200'd here)
+    const freshRow = await db.prepare(`SELECT revoked_at FROM refresh_tokens WHERE id=?`).bind(fresh.id).first<{ revoked_at: string | null }>()
+    expect(freshRow!.revoked_at).not.toBeNull()
+    // exactly ONE session.revoked for the family (ref = the shared session_id), valid contract
+    const rows = await outboxRows(`session:${uid}:device:sess-RACE`)
+    expect(rows.length).toBe(1)
+    expect(rows[0].stream_seq).toBe(1)
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(uid), scope: 'device', ref: 'sess-RACE' })
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+  })
+
+  it('unknown / absent token → 200, NO outbox, NO auth.logout audit, the unrelated live session untouched', async () => {
+    const uid = await user()
+    await seedLoginSession(uid, 'sess-OTHER')
+    const r = await logout('unknown-plaintext-token-value')
+    expect(r.status).toBe(200)
+    expect(await countWhere(`event_outbox`)).toBe(0)
+    expect(await countWhere(`audit_log WHERE event_type='auth.logout'`)).toBe(0)
+    expect(await countWhere(`refresh_tokens WHERE user_id=? AND revoked_at IS NULL`, uid)).toBe(1)
+  })
+
+  it('already-revoked token → 200, NO outbox, NO emit (idempotent)', async () => {
+    const uid = await user()
+    const s = await seedLoginSession(uid, 'sess-REV')
+    await db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE id=?`).bind(s.id).run()
+    const r = await logout(s.plain)
+    expect(r.status).toBe(200)
+    expect((await outboxRows(`session:${uid}:device:sess-REV`)).length).toBe(0)
+    expect(await countWhere(`audit_log WHERE event_type='auth.logout'`)).toBe(0)
+  })
+
+  it('2-head family (two live rows share one session_id) → 500 SESSION_INTEGRITY_VIOLATION, NO mutation, NO outbox, critical audit', async () => {
+    const uid = await user()
+    const s1 = await seedLoginSession(uid, 'sess-DUP')
+    const s2 = await seedLoginSession(uid, 'sess-DUP') // duplicate ref = the EXACTLY-ONE-LIVE-HEAD invariant violated
+    const r = await logout(s1.plain)
+    expect(r.status).toBe(500)
+    expect(r.body.code).toBe('SESSION_INTEGRITY_VIOLATION')
+    // fail-closed: NO row revoked (both still live), NO event emitted
+    expect(await countWhere(`refresh_tokens WHERE user_id=? AND revoked_at IS NULL`, uid)).toBe(2)
+    expect((await outboxRows(`session:${uid}:device:sess-DUP`)).length).toBe(0)
+    // critical session.integrity_violation audit with the observed head count
+    const iv = await db.prepare(`SELECT severity, event_data FROM audit_log WHERE user_id=? AND event_type='session.integrity_violation'`)
+      .bind(uid).first<{ severity: string; event_data: string }>()
+    expect(iv).not.toBeNull()
+    expect(iv!.severity).toBe('critical')
+    expect(JSON.parse(iv!.event_data).heads).toBe(2)
+    void s2
+  })
+
+  it('re-login = a NEW session_id → a NEW streamKey with NO outbox row (never inherits the old deny — the contract promise)', async () => {
+    const uid = await user()
+    const s1 = await seedLoginSession(uid, 'sess-OLD')
+    await logout(s1.plain)
+    expect((await outboxRows(`session:${uid}:device:sess-OLD`)).length).toBe(1) // old session denied
+    const s2 = await seedLoginSession(uid, 'sess-NEW')                          // a fresh login
+    expect((await outboxRows(`session:${uid}:device:sess-NEW`)).length).toBe(0) // new stream untouched
+    expect(await seqOf(`session:${uid}:device:sess-NEW`)).toBeNull()
+    void s2
+  })
+
+  it('NULL session_id (pre-0052 gap) → logout emits ref = legacy_<id> via COALESCE', async () => {
+    const uid = await user()
+    const s = await seedLoginSession(uid, null)
+    expect(s.ref).toBe(`legacy_${s.id}`)
+    const r = await logout(s.plain)
+    expect(r.status).toBe(200)
+    const rows = await outboxRows(`session:${uid}:device:${s.ref}`)
+    expect(rows.length).toBe(1)
+    expect(JSON.parse(rows[0].data_json).ref).toBe(s.ref)
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+  })
+
+  it('shared casByFamily re-resolves the current head after a rotation (B1): revokes the NEW head, not the stale id', async () => {
+    const uid = await user()
+    const old = await seedLoginSession(uid, 'sess-ROT')
+    // simulate a COMPLETED atomic rotation (plan §1.5): old head revoked, new head inserted with the SAME session_id
+    await db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE id=?`).bind(old.id).run()
+    const fresh = await seedLoginSession(uid, 'sess-ROT')
+    // the shared CAS keyed on (user_id, ref) targets the CURRENT live head (the new one), not the stale old id
+    const res = await db.batch([casByFamily(db, uid, 'sess-ROT')])
+    expect(res[0].meta.changes).toBe(1)
+    const newRow = await db.prepare(`SELECT revoked_at FROM refresh_tokens WHERE id=?`).bind(fresh.id).first<{ revoked_at: string | null }>()
+    expect(newRow!.revoked_at).not.toBeNull()
   })
 })

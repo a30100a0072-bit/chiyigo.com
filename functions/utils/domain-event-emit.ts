@@ -259,3 +259,37 @@ export function emitAccountReenabled(db: ChiyigoDb, input: AccountEmitInput, met
     outboxInsert(db, { eventId: meta.eventId, eventType: 'account.reenabled', streamKey, tenantId: null, actorSub, occurredAt: meta.occurredAt }, `json_object('sub', ?)`, [sub]),
   ])
 }
+
+// ── session.revoked builder (5d-2 wired sites; auth/logout, devices/logout, admin mode=device) ───────────────────
+// session.revoked keys on session:<sub>:device:<ref> where ref is the PER-LOGIN family id (NOT the stable account
+// id, NOT device_uuid) -- the inverse of account.* : a re-login is a NEW ref -> a NEW streamKey, never permanently
+// denied (the frozen contract's promise, domain-events.ts:16-18). The CALLER supplies ref from its pre-read of the
+// IMMUTABLE session_id (COALESCE(session_id,'legacy_'||id)), so streamKey stays BOUND -- no SQL-derived field.
+// scope is fixed 'device' (jti scope deferred to a later phase). tenant null (session-scoped). DENY_EFFECT='deny'
+// (one-way; a session is never un-revoked). data {sub,scope,ref} is fully BOUND, so the existing single-row
+// changes()=1 seqUpsert applies (per family; a multi-family caller splices one [seqUpsert,outboxInsert] per family
+// behind a GLOBAL (user_id,ref) COUNT=1 fail-closed preflight -- 5d-2 plan §4). ref is the OPAQUE family id only;
+// this NEVER carries a raw refresh token (no token_hash, no plaintext) -- the audit layer hashes the streamKey too.
+
+export interface SessionRevokedEmitInput {
+  sub: string              // String(userId) -- the session owner (server-resolved; NEVER client-supplied)
+  ref: string              // per-login family id = COALESCE(session_id,'legacy_'||id) (immutable; caller pre-reads)
+  actorSub: string | null  // self-logout: the user's sub; admin: the admin sub; system-driven: null
+}
+
+/** session.revoked — bounded device-scope. streamKey session:<sub>:device:<ref>; tenant null; one-way 'deny'. */
+export function emitSessionRevoked(db: ChiyigoDb, input: SessionRevokedEmitInput, meta: EmitMeta): EmitResult {
+  // 5d DELIMITER-SAFETY invariant (owner / Codex c3 code-gate): ref must be a NON-EMPTY, COLON-FREE string so the
+  // 3-colon streamKey session:<sub>:<scope>:<ref> stays cleanly colon-splittable for future RP/tooling. The FROZEN
+  // contract only checks non-empty, so this builder (the c4/c5 contract seam) enforces colon-freeness — a colon or
+  // blank ref is a programmer error (throw, like buildDomainEvent on bad bound input). Real refs (a UUID or
+  // legacy_<id>) are colon-free by construction; this guards a future caller wiring a bad ref.
+  if (typeof input.ref !== 'string' || input.ref.length === 0 || input.ref.includes(':')) {
+    throw new Error(`emitSessionRevoked: ref must be a non-empty, colon-free string (got ${JSON.stringify(input.ref)})`)
+  }
+  const streamKey = deriveStreamKeyValidated('session.revoked', null, input.actorSub, { sub: input.sub, scope: 'device', ref: input.ref }, meta)
+  return emitResult('session.revoked', streamKey, null, meta, [
+    seqUpsert(db, streamKey),
+    outboxInsert(db, { eventId: meta.eventId, eventType: 'session.revoked', streamKey, tenantId: null, actorSub: input.actorSub, occurredAt: meta.occurredAt }, `json_object('sub', ?, 'scope', 'device', 'ref', ?)`, [input.sub, input.ref]),
+  ])
+}
