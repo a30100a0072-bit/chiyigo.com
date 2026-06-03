@@ -19,7 +19,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, seedUser, seedTenant, seedMembership, seedInvitation } from './_helpers'
 import { suspendMember, reactivateMember, offboardMember, changeMemberRole } from '../../functions/utils/members'
 import { acceptInvitation } from '../../functions/utils/invitations'
-import { emitMemberSuspended } from '../../functions/utils/domain-event-emit'
+import { emitMemberSuspended, emitAccountDisabled, emitAccountReenabled } from '../../functions/utils/domain-event-emit'
 import { validateDomainEvent } from '../../functions/utils/domain-events'
 
 const db = env.chiyigo_db
@@ -196,5 +196,69 @@ describe('[PR5-5a] event emission — invitations.ts accept', () => {
     // and the invite was NOT consumed (atomic rollback) -> still pending
     const inv = await db.prepare(`SELECT status FROM invitations WHERE tenant_id=? AND email LIKE 'invitee%'`).bind(a.tenantId).first<{ status: string }>()
     expect(inv!.status).toBe('pending')
+  })
+})
+
+describe('[PR5-5c] account.* emission builders — ban/unban', () => {
+  // The emit BUILDERS are the unit-test seam (meta is injectable here). The wiring is INLINE in ban.ts/unban.ts
+  // (owner Q1), whose endpoint behavior is locked in admin-users.test.ts. Here we prove the builder mechanism:
+  // emit-on-apply / no-emit-on-noop / atomicity, exercised against a single-row gating CAS like the endpoint's.
+
+  it('account.disabled builder emits ONE row (account:<sub>, tenant null, {sub}) gated on the transition CAS', async () => {
+    const uid = await user()
+    const streamKey = `account:${uid}`
+    const gating = db.prepare(`UPDATE users SET status='banned', token_version=token_version+1 WHERE id=? AND status!='banned'`).bind(uid)
+    const emit = emitAccountDisabled(db, { targetUserId: uid, actorUserId: 777 }, { eventId: 'acc-d1', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([gating, ...emit.statements])
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(rows[0].event_type).toBe('account.disabled')
+    expect(rows[0].stream_seq).toBe(1)
+    expect(rows[0].tenant_id).toBeNull()
+    expect(rows[0].actor_sub).toBe('777')
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(uid) })
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+  })
+
+  it('account.reenabled builder emits ONE row gated on the banned->active CAS', async () => {
+    const uid = await user()
+    await db.prepare(`UPDATE users SET status='banned' WHERE id=?`).bind(uid).run()
+    const streamKey = `account:${uid}`
+    const gating = db.prepare(`UPDATE users SET status='active' WHERE id=? AND status='banned'`).bind(uid)
+    const emit = emitAccountReenabled(db, { targetUserId: uid, actorUserId: 777 }, { eventId: 'acc-r1', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([gating, ...emit.statements])
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(rows[0].event_type).toBe('account.reenabled')
+    expect(rows[0].tenant_id).toBeNull()
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(uid) })
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+  })
+
+  it('no-emit-on-noop: a 0-row gating CAS bumps no seq and writes no outbox row', async () => {
+    const uid = await user()
+    await db.prepare(`UPDATE users SET status='banned' WHERE id=?`).bind(uid).run() // already banned -> gating 0-rows
+    const streamKey = `account:${uid}`
+    const gating = db.prepare(`UPDATE users SET status='banned', token_version=token_version+1 WHERE id=? AND status!='banned'`).bind(uid)
+    const emit = emitAccountDisabled(db, { targetUserId: uid, actorUserId: 777 }, { eventId: 'acc-d2', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([gating, ...emit.statements])
+    expect((await outboxRows(streamKey)).length).toBe(0)
+    expect(await seqOf(streamKey)).toBeNull()
+  })
+
+  it('atomicity: a forced outbox UNIQUE collision rolls the WHOLE batch back (the ban does NOT apply)', async () => {
+    const uid = await user()
+    const streamKey = `account:${uid}`
+    // pre-occupy (streamKey, seq=1) WITHOUT a sequences row, so the fresh seq allocation hits seq=1 -> UNIQUE
+    // collision in the outbox insert -> the whole batch (incl. the gating ban UPDATE) rolls back.
+    await db.prepare(
+      `INSERT INTO event_outbox (event_id, event_type, stream_key, stream_seq, occurred_at, data_json)
+       VALUES ('acc-pre','account.disabled', ?, 1, '2026-06-03T00:00:00Z', '{}')`,
+    ).bind(streamKey).run()
+    const gating = db.prepare(`UPDATE users SET status='banned' WHERE id=? AND status!='banned'`).bind(uid)
+    const emit = emitAccountDisabled(db, { targetUserId: uid, actorUserId: 777 }, { eventId: 'acc-d3', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await expect(db.batch([gating, ...emit.statements])).rejects.toThrow()
+    const u = await db.prepare(`SELECT status FROM users WHERE id=?`).bind(uid).first<{ status: string }>()
+    expect(u!.status).toBe('active') // rolled back
   })
 })
