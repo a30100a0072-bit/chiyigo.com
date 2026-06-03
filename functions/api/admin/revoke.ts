@@ -42,7 +42,7 @@ import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '.
 import { revokeJti } from '../../utils/revocation'
 import { appendAuditLog } from '../../utils/audit-log'
 import { safeUserAudit, auditDomainEventEmitted } from '../../utils/user-audit'
-import { revokeSessionFamilies, FAMILY_REF_SQL } from '../../utils/session-revoke'
+import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE } from '../../utils/session-revoke'
 
 const VALID_MODES = new Set(['jti', 'user', 'device'])
 
@@ -181,16 +181,21 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Session integrity violation', code: 'SESSION_INTEGRITY_VIOLATION' }, 500)
   }
 
-  await safeUserAudit(env, {
-    event_type: 'admin.token.revoked.device', severity: 'critical',
-    user_id: targetId, request,
-    data: { admin_id: Number(user.sub), device_uuid: deviceUuid, refresh_revoked: result.revoked },
-  })
-  // post-commit、best-effort：每個已 emit 的 family 記一筆 redacted domain.event.emitted。
+  // post-commit、best-effort：每個已 emit 的 family 記一筆 redacted domain.event.emitted（部分失敗時也對已 commit 的記）。
   for (const id of result.emittedIdentities) await auditDomainEventEmitted(env, id)
 
-  // chunk 部分失敗、前面 chunk 已 commit → forward-progress：回 NON-2xx + counts，client retry 剩下的。
+  // chunk 部分失敗、前面 chunk 已 commit → forward-progress。寫一筆**獨立的 partial-failure 稽核**（partial:true +
+  // counts），ops 才能區分「完整成功」與「只完成前幾個 chunk 後失敗」（plan §5）；回 NON-2xx + counts，client retry 剩下的。
   if (result.outcome === 'incomplete') {
+    await safeUserAudit(env, {
+      event_type: 'admin.token.revoked.device', severity: 'critical',
+      user_id: targetId, request,
+      data: {
+        partial: true, site: 'admin.revoke.device', admin_id: Number(user.sub), device_uuid: deviceUuid,
+        revoked: result.revoked, emitted: result.emitted, remaining: result.remaining,
+        chunk_size: SESSION_REVOKE_CHUNK_SIZE,
+      },
+    })
     return res({
       error: 'Session revocation incomplete; retry to finish',
       code: 'REVOKE_INCOMPLETE',
@@ -198,5 +203,11 @@ export async function onRequestPost({ request, env }) {
     }, 500)
   }
 
+  // ok：既有 admin.token.revoked.device 稽核（refresh_revoked = 撤掉的 family 數）。
+  await safeUserAudit(env, {
+    event_type: 'admin.token.revoked.device', severity: 'critical',
+    user_id: targetId, request,
+    data: { admin_id: Number(user.sub), device_uuid: deviceUuid, refresh_revoked: result.revoked },
+  })
   return res({ mode, user_id: targetId, device_uuid: deviceUuid, refresh_revoked: result.revoked })
 }

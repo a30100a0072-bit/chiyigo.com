@@ -252,6 +252,14 @@ immutable. Never client-supplied.)
   error.data — Codex R1 Q1; NEVER a misleading 2xx) + a DISTINCT partial-failure audit (warn/critical), and the
   client RETRY re-enumerates (excludes revoked rows) → converges with NO double-emit. (master §10 / §7.1.)
 - Large-N THRESHOLD alarm (warn) is a SEPARATE signal (fires even on full success) — not a partial-failure signal.
+- AS-BUILT (c5, 2026-06-04 — consistency WAIVER, owner-override invited): the REVOKE_INCOMPLETE response is FLAT —
+  `res({error, code:'REVOKE_INCOMPLETE', revoked, emitted, remaining}, 500)` — NOT the nested `{error:{...,data}}`
+  sketched above. Rationale: EVERY handler in this codebase uses the flat `res({error, code, ...})` shape, and c4's
+  SESSION_INTEGRITY_VIOLATION 500 (flat) was Codex-APPROVED; a nested envelope ONLY here would be the lone
+  nested-envelope handler (inconsistent with its siblings + c4). The Q1 intent (NON-2xx + counts readable, not a
+  bespoke body) is met. The DISTINCT partial-failure audit IS implemented (reuses the endpoint event_type with
+  severity warn[self] / critical[admin] + data {partial:true, revoked, emitted, remaining, chunk_size, site}). N≤K
+  total-rollback also returns REVOKE_INCOMPLETE with revoked=0 (unified — the client always retries `remaining`).
 
 --------------------------------------------------------------------------------
 ## 6. Idempotency + state machine
@@ -337,9 +345,10 @@ immutable. Never client-supplied.)
 ## 11. Open questions for Codex Gate-1
 --------------------------------------------------------------------------------
 
-Q1. [RESOLVED, Codex R1] REVOKE_INCOMPLETE on a chunk failure uses the STANDARD error envelope
-    `{error:{code:'REVOKE_INCOMPLETE', message, traceId, data:{revoked,emitted,remaining}}}` — counts under
-    error.data (not a bespoke body).
+Q1. [RESOLVED, Codex R1; AS-BUILT c5 = FLAT, consistency waiver] The Gate-1 sketch was the nested
+    `{error:{code:'REVOKE_INCOMPLETE', message, traceId, data:{revoked,emitted,remaining}}}`. c5 ships FLAT
+    `res({error, code:'REVOKE_INCOMPLETE', revoked, emitted, remaining}, 500)` for codebase consistency (every
+    handler uses flat res(); c4's flat 500 was Codex-APPROVED) — see §5 AS-BUILT. Owner-override-to-nested invited.
 Q2. [RESOLVED, Codex R1] Coupling revoke success to emit success (N≤K single batch) is correct for a security path.
 Q3. [RESOLVED, Codex R1] SP1-SP7 as PR-body receipts (throwaway, uncommitted) accepted (5a precedent); the
     code-gate cross-checks the spike SQL + outputs.

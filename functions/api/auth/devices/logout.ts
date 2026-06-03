@@ -26,7 +26,7 @@
 import { requireAuth, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { safeUserAudit, hashIdentifierForAudit, auditDomainEventEmitted } from '../../../utils/user-audit'
-import { revokeSessionFamilies, FAMILY_REF_SQL } from '../../../utils/session-revoke'
+import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE } from '../../../utils/session-revoke'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -86,26 +86,30 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Session integrity violation', code: 'SESSION_INTEGRITY_VIOLATION' }, 500, cors)
   }
 
-  // 既有 auth.devices.logout 觀測（revoked_count = 撤掉的 family 數）。
-  // Codex r9-4：device_uuid_prefix → keyed HMAC（domain='device-uuid'，與 device-alerts 同 domain）
-  const sig = dev === null ? null : await hashIdentifierForAudit(env, 'device-uuid', dev)
-  await safeUserAudit(env, {
-    event_type: 'auth.devices.logout',
-    severity:   'info',
-    user_id:    userId,
-    request,
-    data: {
-      device_uuid_hmac16: sig === null ? null : sig.hex.slice(0, 16),
-      salted:             sig === null ? null : sig.salted,
-      revoked_count:      result.revoked,
-    },
-  })
-  // post-commit、best-effort：每個已 emit 的 family 記一筆 redacted domain.event.emitted（stream_key→hash）。
+  // post-commit、best-effort：每個已 emit 的 family 記一筆 redacted domain.event.emitted（stream_key→hash；
+  // 部分失敗時也對「已 commit」的 family 記）。
   for (const id of result.emittedIdentities) await auditDomainEventEmitted(env, id)
 
-  // 某 chunk 失敗、前面 chunk 已 commit → forward-progress：回 NON-2xx + counts，client retry 剩下的
-  // （已撤的 family 不會被重新 enumerate → 不重複 emit）。
+  // Codex r9-4：device_uuid_prefix → keyed HMAC（domain='device-uuid'，與 device-alerts 同 domain）
+  const sig = dev === null ? null : await hashIdentifierForAudit(env, 'device-uuid', dev)
+  const deviceAudit = {
+    device_uuid_hmac16: sig === null ? null : sig.hex.slice(0, 16),
+    salted:             sig === null ? null : sig.salted,
+  }
+
+  // 某 chunk 失敗、前面 chunk 已 commit → forward-progress。寫一筆**獨立的 partial-failure 稽核**（partial:true +
+  // counts），ops 才能區分「完整成功」與「只完成前幾個 chunk 後失敗」（plan §5）；回 NON-2xx + counts，client retry
+  // 剩下的（已撤的 family 不會被重新 enumerate → 不重複 emit）。
   if (result.outcome === 'incomplete') {
+    await safeUserAudit(env, {
+      event_type: 'auth.devices.logout', severity: 'warn',
+      user_id: userId, request,
+      data: {
+        ...deviceAudit, partial: true, site: 'auth.devices.logout',
+        revoked: result.revoked, emitted: result.emitted, remaining: result.remaining,
+        chunk_size: SESSION_REVOKE_CHUNK_SIZE,
+      },
+    })
     return res({
       error: 'Session revocation incomplete; retry to finish',
       code: 'REVOKE_INCOMPLETE',
@@ -113,5 +117,11 @@ export async function onRequestPost({ request, env }) {
     }, 500, cors)
   }
 
+  // ok：既有 auth.devices.logout 觀測（revoked_count = 撤掉的 family 數）。
+  await safeUserAudit(env, {
+    event_type: 'auth.devices.logout', severity: 'info',
+    user_id: userId, request,
+    data: { ...deviceAudit, revoked_count: result.revoked },
+  })
   return res({ revoked: result.revoked }, 200, cors)
 }

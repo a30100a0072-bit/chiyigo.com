@@ -121,7 +121,7 @@ export async function revokeSessionFamilies(
   const headsByRef = new Map<string, number>()
   for (const row of countRows.results ?? []) headsByRef.set(String(row.ref), Number(row.heads))
 
-  // FAIL CLOSED: any candidate with >1 GLOBAL live head = the one-live-head invariant is broken (same session_id on
+  // FAIL CLOSED — if a candidate has >1 GLOBAL live head, the one-live-head invariant is broken (same session_id on
   // two rows / two devices). Revoking one + emitting a deny while a live head remains makes the event ⊥ the auth DB
   // → abort the WHOLE request, mutate nothing. (c4-consistent: 0 = benign skip below, >1 = violation here.)
   for (const ref of candidateRefs) {
@@ -153,7 +153,7 @@ export async function revokeSessionFamilies(
         tracking.push({ identity: emit.identity, casIdx: stmts.length })
         stmts.push(casByFamily(db, userId, ref), ...emit.statements)
       }
-      // WITHIN a chunk = ONE atomic batch (both-or-neither): any failure rolls the whole chunk back (SP4).
+      // WITHIN a chunk = ONE atomic batch (both-or-neither) — a chunk failure rolls the whole chunk back (SP4).
       const results = await db.batch(stmts)
       for (const t of tracking) {
         if (results[t.casIdx]?.meta?.changes === 1) {

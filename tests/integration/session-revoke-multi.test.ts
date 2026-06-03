@@ -18,7 +18,7 @@ import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { hashToken, generateSecureToken } from '../../functions/utils/crypto'
 import { validateDomainEvent } from '../../functions/utils/domain-events'
-import { revokeSessionFamilies } from '../../functions/utils/session-revoke'
+import { revokeSessionFamilies, SESSION_REVOKE_CHUNK_SIZE } from '../../functions/utils/session-revoke'
 import { onRequestPost as devicesLogoutHandler } from '../../functions/api/auth/devices/logout'
 import { onRequestPost as adminRevokeHandler } from '../../functions/api/admin/revoke'
 import { onRequestPost as consumerHandler } from '../../functions/api/admin/cron/event-outbox'
@@ -62,6 +62,10 @@ async function proj(streamKey: string) {
 async function integrityAuditHeads(userId: number): Promise<number | null> {
   const r = await db.prepare(`SELECT event_data FROM audit_log WHERE user_id = ? AND event_type = 'session.integrity_violation'`).bind(userId).first<{ event_data: string }>()
   return r ? Number(JSON.parse(r.event_data).heads) : null
+}
+async function auditData(eventType: string, userId: number): Promise<Record<string, unknown> | null> {
+  const r = await db.prepare(`SELECT event_data FROM audit_log WHERE event_type = ? AND user_id = ? ORDER BY id DESC LIMIT 1`).bind(eventType, userId).first<{ event_data: string }>()
+  return r ? JSON.parse(r.event_data) : null
 }
 
 let _u = 0
@@ -190,6 +194,41 @@ describe('[PR5-5d-2 c5] auth/devices/logout — multi-family', () => {
     vi.restoreAllMocks()
     expect(await liveCount(uid)).toBe(2)        // chunk rolled back — both still live
     expect(await sessionOutboxCount()).toBe(0)  // nothing emitted
+    // distinct partial-failure audit (plan §5): ops can tell this from a full success
+    const a = await auditData('auth.devices.logout', uid)
+    expect(a?.partial).toBe(true)
+    expect(a?.revoked).toBe(0)
+    expect(a?.remaining).toBe(2)
+    expect(a?.chunk_size).toBe(SESSION_REVOKE_CHUNK_SIZE)
+    expect(a?.site).toBe('auth.devices.logout')
+  })
+
+  it('endpoint N>K partial failure (2nd chunk forced-fails AFTER the 1st commits) → REVOKE_INCOMPLETE {revoked:K, remaining:1} + partial audit; 1st chunk committed (K revoked + K emitted), 1 still live', async () => {
+    const uid = await player()
+    const N = SESSION_REVOKE_CHUNK_SIZE + 1 // forces exactly 2 chunks: [K] + [1]
+    for (let i = 0; i < N; i++) await seedSession(uid, `nk-${i}`, 'dev-1')
+    const orig = db.batch.bind(db)
+    let calls = 0
+    vi.spyOn(db, 'batch').mockImplementation((stmts) => {
+      calls++
+      if (calls === 2) throw new Error('forced 2nd-chunk failure')
+      return orig(stmts)
+    })
+    const r = await devicesLogout(await selfToken(uid), 'dev-1')
+    expect(r.status).toBe(500)
+    expect(r.body.code).toBe('REVOKE_INCOMPLETE')
+    expect(r.body.revoked).toBe(SESSION_REVOKE_CHUNK_SIZE) // the 1st chunk committed
+    expect(r.body.remaining).toBe(1)
+    vi.restoreAllMocks()
+    expect(await sessionOutboxCount()).toBe(SESSION_REVOKE_CHUNK_SIZE) // K events emitted (1st chunk)
+    expect(await liveCount(uid)).toBe(1)                               // the 2nd-chunk family rolled back / still live
+    const a = await auditData('auth.devices.logout', uid)
+    expect(a?.partial).toBe(true)
+    expect(a?.revoked).toBe(SESSION_REVOKE_CHUNK_SIZE)
+    expect(a?.emitted).toBe(SESSION_REVOKE_CHUNK_SIZE)
+    expect(a?.remaining).toBe(1)
+    expect(a?.chunk_size).toBe(SESSION_REVOKE_CHUNK_SIZE)
+    expect(a?.site).toBe('auth.devices.logout')
   })
 })
 
@@ -224,6 +263,27 @@ describe('[PR5-5d-2 c5] admin/revoke mode=device — multi-family', () => {
     expect(r.body.refresh_revoked).toBe(2)         // all refresh revoked (whole-user)
     expect(await liveCount(target.id)).toBe(0)
     expect(await sessionOutboxCount()).toBe(0)     // but ZERO session.revoked — token-epoch is not a deny subject
+  })
+
+  it('partial failure (forced batch error) → 500 REVOKE_INCOMPLETE + distinct partial audit (site=admin.revoke.device), nothing committed', async () => {
+    const admin = await seedUser({ email: 'admp@x', role: 'admin' })
+    const target = await seedUser({ email: 'tgtp@x' })
+    await seedSession(target.id, 'ap-1', 'dev-Z')
+    await seedSession(target.id, 'ap-2', 'dev-Z')
+    vi.spyOn(db, 'batch').mockImplementation(() => { throw new Error('forced batch failure') })
+    const r = await adminRevoke(await adminToken(admin.id), { mode: 'device', user_id: target.id, device_uuid: 'dev-Z' })
+    expect(r.status).toBe(500)
+    expect(r.body.code).toBe('REVOKE_INCOMPLETE')
+    expect(r.body.remaining).toBe(2)
+    vi.restoreAllMocks()
+    expect(await sessionOutboxCount()).toBe(0)
+    expect(await liveCount(target.id)).toBe(2)
+    const a = await auditData('admin.token.revoked.device', target.id)
+    expect(a?.partial).toBe(true)
+    expect(a?.revoked).toBe(0)
+    expect(a?.remaining).toBe(2)
+    expect(a?.chunk_size).toBe(SESSION_REVOKE_CHUNK_SIZE)
+    expect(a?.site).toBe('admin.revoke.device')
   })
 })
 
