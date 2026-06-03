@@ -1,10 +1,10 @@
 # PR5 5d-2 — session.revoked EMISSION (spike-first) — Gate-1 Plan
 
 - Created: 2026-06-03
-- Status: Codex Gate-1 R1→R2→R2 REJECT→R3→R3 REJECT (NEW Tier-0 blocker: refresh.ts rotation has a 0-LIVE-HEAD
-  window that casByFamily alone cannot close) → R4 fixes applied 2026-06-03 (adds the refresh.ts rotation-atomicity
-  PREREQUISITE, §1.5). NOT yet coded. The SPIKE (section 2) runs FIRST after approval, BEFORE any emission code —
-  if it does not prove out, STOP + report.
+- Status: Codex Gate-1 R1→R2→R3→R4 (each REJECT, fixes applied) → R4 REJECT (the multi-family integrity count was
+  device-FILTERED while casByFamily is device-LESS → a same-ref-across-two-devices duplicate could revoke the wrong
+  head + emit) → R5 fixes applied 2026-06-03 (GLOBAL (user_id,ref) integrity count). NOT yet coded. The SPIKE
+  (section 2) runs FIRST after approval, BEFORE any emission code — if it does not prove out, STOP + report (§2).
 - Predecessor: PR5 5d-1 SHIPPED (PR #15 → main `819008c`). refresh_tokens.session_id is live + populated (7 logins
   write a fresh UUID, refresh.ts rotation preserves/heals; backfill = `legacy_<id>`). NO emission yet.
 - Approved design SoT: docs/reviews/pr5d-session-revoked-plan-2026-06-03.md (Codex Gate-1 R2 APPROVED) — §6
@@ -173,10 +173,11 @@ globally-unique family id, PK-PINNED via a scalar subquery:
 - B3 SINGLE-ROW + EMIT-IFF-FULLY-REVOKED (Codex R2): `WHERE id=(scalar subquery)` matches the PK → changes() ∈
   {0,1}; MULTI-ROW MUTATION IS IMPOSSIBLE. But a 2-LIVE-HEAD family must NOT be "revoke 1, emit 1, leave the other
   live" — that emits a deny while a live token of the family REMAINS (event ⊥ auth DB). So the EXACTLY-ONE-LIVE-HEAD
-  invariant is FAIL-CLOSED: each site (§4.1/§4.2) PREFLIGHTS the family's live-head COUNT (GROUP BY ref). COUNT != 1
-  → NO emit, NO mutation, critical audit `session.integrity_violation`, non-2xx `SESSION_INTEGRITY_VIOLATION`,
-  ABORT. We emit session.revoked ⟺ the family becomes FULLY revoked (its single live head is revoked). [The prior
-  "revoke 1, emit 1 on 2-head" is REMOVED.]
+  invariant is FAIL-CLOSED: each site PREFLIGHTS the family's GLOBAL live-head COUNT on (user_id, ref) — DEVICE-LESS,
+  matching casByFamily's (user_id, ref) keying (Codex R4). COUNT != 1 → NO emit, NO mutation, critical audit
+  `session.integrity_violation`, non-2xx `SESSION_INTEGRITY_VIOLATION`, ABORT. We emit session.revoked ⟺ the family
+  becomes FULLY revoked (its single live head is revoked). [The count is GLOBAL, NOT device-filtered — a
+  device-filtered count would miss a same-ref-across-two-devices duplicate; the prior "revoke 1, emit 1" REMOVED.]
 - DISTINCT-by-ref: the multi-family enumeration GROUPS BY ref, so a family is processed ONCE — never chunked twice
   (which would emit a duplicate seq-2 event) even if it momentarily had >1 row.
 
@@ -189,8 +190,9 @@ enforce the one-live-head invariant at the DB; it is a MIGRATION → flagged Q4,
 - PRE-READ the token's LIVE row (Codex B1): `SELECT user_id, COALESCE(session_id,'legacy_'||id) AS ref FROM
   refresh_tokens WHERE token_hash=? AND revoked_at IS NULL`. No live row (absent / already revoked) → idempotent
   200, NO emit (unchanged; no surprise family-logout for a stale token).
-- INTEGRITY COUNT the family's live heads (Codex R2): `SELECT COUNT(*) AS heads FROM refresh_tokens WHERE user_id=?
-  AND COALESCE(session_id,'legacy_'||id)=? AND revoked_at IS NULL`. heads != 1 → critical audit
+- INTEGRITY COUNT the family's live heads (Codex R2; already GLOBAL/device-less — logout has no device param, so it
+  matches casByFamily): `SELECT COUNT(*) AS heads FROM refresh_tokens WHERE user_id=? AND
+  COALESCE(session_id,'legacy_'||id)=? AND revoked_at IS NULL`. heads != 1 → critical audit
   `session.integrity_violation` + 5xx SESSION_INTEGRITY_VIOLATION + ABORT (no mutation, no emit).
 - Else `db.batch([ casByFamily(user_id, ref), ...emitSessionRevoked({sub:String(user_id), ref,
   actorSub:String(user_id)}).statements ])`; emit gated on casByFamily changes()=1.
@@ -202,16 +204,20 @@ enforce the one-live-head invariant at the DB; it is a MIGRATION → flagged Q4,
 
 ### 4.2 auth/devices/logout.ts — MULTI-family (self; BOTH device_uuid=string AND device_uuid IS NULL/web)
 - Keep the existing 404 anti-probe exists-check (unchanged).
-- ENUMERATE + INTEGRITY PREFLIGHT (device branch in the ENUMERATION not the CAS — Codex B2; DISTINCT + COUNT —
-  Codex R2): `SELECT COALESCE(session_id,'legacy_'||id) AS ref, COUNT(*) AS heads FROM refresh_tokens WHERE
-  user_id=? AND <device> AND revoked_at IS NULL GROUP BY ref`, where `<device>` = `device_uuid=?` (non-null) or
-  `device_uuid IS NULL` (web; families distinguished ONLY by session_id). GROUP BY ref ⇒ DISTINCT families. If ANY
-  ref has heads != 1 → critical audit `session.integrity_violation` + 5xx SESSION_INTEGRITY_VIOLATION + ABORT (no
-  mutation, no emit).
-- Else CHUNK the DISTINCT refs into ≤K (L3): per chunk `db.batch(refs.flatMap(ref => [casByFamily(user_id, ref),
-  ...emit(ref)]))`. casByFamily (§4) keys on (user_id, family-id) with NO device_uuid → the web/NULL path revokes +
-  emits correctly (a `device_uuid=?` inside the CAS would 0-row on a NULL-device row). Post-commit audit per family
-  CAS changes()=1.
+- ENUMERATE CANDIDATES (device-FILTERED → which families live on THIS device; the device branch lives ONLY here,
+  Codex B2, NOT in the CAS): `SELECT DISTINCT COALESCE(session_id,'legacy_'||id) AS ref FROM refresh_tokens WHERE
+  user_id=? AND <device> AND revoked_at IS NULL`, where `<device>` = `device_uuid=?` (non-null) or `device_uuid IS
+  NULL` (web — families distinguished ONLY by session_id).
+- GLOBAL INTEGRITY COUNT — DEVICE-LESS, matching casByFamily's (user_id, ref) keying (Codex R4): `SELECT
+  COALESCE(session_id,'legacy_'||id) AS ref, COUNT(*) AS heads FROM refresh_tokens WHERE user_id=? AND
+  COALESCE(session_id,'legacy_'||id) IN (SELECT value FROM json_each(?)) AND revoked_at IS NULL GROUP BY ref` (the
+  candidate refs as a JSON array — reference_d1_query_budget_json_each). If ANY candidate ref has GLOBAL heads != 1
+  → critical audit `session.integrity_violation` + 5xx SESSION_INTEGRITY_VIOLATION + ABORT (no mutation, no emit).
+  [A DEVICE-filtered count would PASS a same-ref-on-two-devices duplicate, then casByFamily (device-less) could
+  revoke the WRONG device's row + emit — event ⊥ auth DB; Codex R4.]
+- Else CHUNK the validated refs into ≤K (L3): per chunk `db.batch(refs.flatMap(ref => [casByFamily(user_id, ref),
+  ...emit(ref)]))`. GLOBAL heads==1 ⇒ casByFamily revokes exactly that one head (which IS the device candidate) +
+  emits. Post-commit audit per family CAS changes()=1.
 
 ### 4.3 admin/revoke.ts mode=device — MULTI-family (admin; NON-NULL device_uuid only — UNCHANGED contract)
 - Same Mechanism-B chunked pattern as 4.2, but device_uuid is non-null (admin API not expanded to null — see master
@@ -266,6 +272,9 @@ immutable. Never client-supplied.)
   between the pre-read and the batch → casByFamily revokes the NEW head + emits ONCE (no stale-row miss).
 - 2-HEAD FAIL-CLOSED (B3): seed 2 unrevoked rows sharing one session_id → revoke → NO mutation, NO emit, response
   5xx SESSION_INTEGRITY_VIOLATION + a critical `session.integrity_violation` audit (emit ⟺ family fully revoked).
+- CROSS-DEVICE DUPLICATE (Codex R4): seed 2 live rows with the SAME ref on DIFFERENT device_uuids → revoke device A
+  → the GLOBAL device-less count sees heads=2 → fail-closed (0 mutation, 0 outbox, 5xx + critical audit), even
+  though device A's candidate enumeration alone showed 1.
 - DISTINCT dedupe: a family that would be enumerated twice is processed ONCE (no duplicate seq-2 event).
 - multi-family (auth/devices/logout.ts): 2 logins on one device → revoke → EXACTLY 2 rows, distinct streamKeys, each
   seq 1; run BOTH device_uuid=string AND device_uuid IS NULL (web). admin mode=device: 2 logins (non-null) → 2 rows.
@@ -326,10 +335,15 @@ Q4. [RESOLVED, R3] Per-family CAS = PK-pinned family-id subquery (casByFamily) +
     "revoke 1 emit 1"; emit ⟺ family FULLY revoked). Disproof protocol TIERED (L1); error envelope standardized (§5).
 Q5. [OPEN — owner/Codex] DB hardening: a partial UNIQUE index `ON refresh_tokens(session_id) WHERE revoked_at IS
     NULL` would make a 2-live-head family IMPOSSIBLE at the DB (not just detected). It is a MIGRATION (breaks
-    code-only). It does NOT fix the §1.5 rotation window (that needs the atomic batch regardless). Default: NOT in
-    5d-2 — the code-level fail-closed preflight suffices; track as follow-up. Fold in (a 5d-2a schema step), or keep separate?
+    code-only). It does NOT fix the §1.5 rotation window (needs the atomic batch regardless). If ever built, the
+    index expression MUST align with the runtime ref `COALESCE(session_id,'legacy_'||id)` (don't let the DB
+    invariant diverge from the runtime one — Codex R4). Default: NOT in 5d-2 (the code-level GLOBAL fail-closed
+    preflight suffices); track as follow-up. Fold in (a 5d-2a schema step), or keep separate?
 Q6. [RESOLVED, R4 — Codex R3] refresh.ts rotation has a 0-LIVE-HEAD window (two separate writes) casByFamily alone
     cannot close → 5d-2 PREREQUISITE (§1.5) makes rotation ONE atomic db.batch (UPDATE old + gated INSERT new; reuse
     = changes()=0), proven by SP7. Without it, 5d-2 emission MUST NOT ship.
+Q7. [RESOLVED, R5 — Codex R4] multi-family integrity COUNT is GLOBAL on (user_id, ref) — DEVICE-LESS, matching
+    casByFamily — NOT device-filtered (which would miss a same-ref-across-two-devices duplicate). The device filter
+    selects CANDIDATE refs only (§4.2); the global count validates each before any mutation/emit.
 
---- END PR5 5d-2 GATE-1 PLAN (R4 — Codex R3: refresh.ts rotation-atomicity PREREQUISITE §1.5 closes the 0-live-head revoke-vs-refresh race; SP7) ---
+--- END PR5 5d-2 GATE-1 PLAN (R5 — Codex R4: multi-family integrity count GLOBAL (user_id,ref) device-less, matches casByFamily; device filter selects candidates only) ---
