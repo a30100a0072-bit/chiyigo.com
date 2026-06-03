@@ -1,9 +1,10 @@
 # PR5 5d — session.revoked (correct per-login modeling) — Gate-1 Plan
 
 - Created: 2026-06-03
-- Status: Owner Gate-1 APPROVED 2026-06-03 (section 0 decisions D1-D6 ruled 1/1/1/1 + 2 refinements; section 20).
-  Pushed for formal Codex Gate-1. NOT yet coded. NO spike run yet (the multi-family spike runs at the start of
-  5d-2, AFTER 5d-1 ships — section 7 / 16).
+- Status: Owner-approved direction (D1-D6 ruled 1/1/1/1 + 2 refinements). Codex Gate-1 R1 = REJECT (3 plan-level
+  blockers: session_id type semantics / chunk-failure model / admin-null-vs-web) — all plan-precision, NO
+  architecture change. R2 = those 3 fixes applied 2026-06-03 (sections 3/6/7/7.1/10/13/14 + 0/20), resubmitting to
+  Codex. NOT yet coded. The multi-family spike runs at the start of 5d-2, AFTER 5d-1 ships (section 7 / 16).
 - Predecessor: PR5 5a/5b/5c SHIPPED. 5c explicitly DEFERRED session.revoked to this phase (5d) because the
   refresh_tokens schema had no per-login id (pr5c-account-events-plan-2026-06-03.md sections 0/16).
 - Frozen contract: functions/utils/domain-events.ts (FROZEN by PR4). session.revoked is ALREADY in the 11-type
@@ -22,9 +23,10 @@ each, clearly marked; if the owner rules differently the body is revised (cheap,
 recommended option as decided.
 
 D1. **Where does the per-login id live?** (section 3)
-    - (A) RECOMMENDED — a new NULLABLE column `refresh_tokens.session_id TEXT` (a UUID), generated fresh at each
-      interactive login and PRESERVED across rotation (exactly like the existing auth_time / scope / issued_aud
-      carried fields, refresh.ts:218). Minimal; follows the established preserve-on-rotation pattern.
+    - (A) RECOMMENDED — a new NULLABLE column `refresh_tokens.session_id TEXT` (OPAQUE delimiter-safe TEXT — live
+      logins get a UUID, the backfill is a `legacy_<id>` sentinel; NOT uniformly uuid-shaped, see the D1 ruling),
+      generated fresh at each interactive login and PRESERVED across rotation (exactly like the existing auth_time /
+      scope / issued_aud carried fields, refresh.ts:218). Minimal; follows the established preserve-on-rotation pattern.
     - (B) a new first-class table `login_sessions(id, user_id, device_uuid, created_at, revoked_at, ...)` +
       `refresh_tokens.login_session_id`. Normalizes a "login session" as an entity (enables a future "list/!revoke
       my sessions" UX), but is a much larger schema + migration + a second write on every login.
@@ -32,11 +34,13 @@ D1. **Where does the per-login id live?** (section 3)
       it forward is just (A) with a worse-named column.
     Trade-off: (A) = first-do-no-harm minimal change, the projection is INTERNAL so we don't need the entity yet;
     (B) = nicer 5-year model but enlarges a Tier-0 auth-table change now. Recommend (A), track (B) as a follow-up.
-    → RULED 2026-06-03: (A). DESIGN session_id AS THE FORERUNNER of a future `login_sessions.id`: a globally-unique
-    UUID, generated at login, preserved on rotation. Do NOT build login_sessions now. Upgrade path (later phase): a
-    migration creates login_sessions seeded from the DISTINCT session_id values, and refresh_tokens.session_id
-    becomes its FK — so 5d corrects session.revoked semantics short-term AND keeps the long-term first-class-table
-    door open. Keep session_id opaque + uuid-shaped so that upgrade is clean.
+    → RULED 2026-06-03: (A), with a CORRECTION (Codex R1 blocker 1): session_id is OPAQUE delimiter-safe TEXT, NOT
+    uniformly uuid-shaped — LIVE logins get a UUID (crypto.randomUUID), the backfill is a `legacy_<id>` sentinel
+    (D2). Coding adds NO uuid CHECK / regex / shape validation on the column (the only constraint is the
+    delimiter-safety invariant: non-empty + no `:`). DESIGN it as the FORERUNNER of a future `login_sessions.id`:
+    don't build login_sessions now; the upgrade path is a later migration that seeds login_sessions from the
+    DISTINCT session_id values — and `login_sessions.id` MUST also accept opaque TEXT (or that migration mints a
+    surrogate UUID per legacy session_id + preserves the mapping). Do NOT bake "all session_id are UUIDs" anywhere.
 
 D2. **Backfill value for existing refresh_tokens rows** (section 4)
     - (A) RECOMMENDED — `UPDATE refresh_tokens SET session_id = 'legacy_' || id WHERE session_id IS NULL`. Uses the
@@ -109,9 +113,10 @@ D6. **Which revoke sites does 5d-2 wire?** (section 5/7) — recommend:
       a separate follow-up). Owner: include device_mismatch in 5d-2, or defer?
     - NEVER: `admin/revoke.ts mode=user` + ban's token_version bump (whole-user logout-all = token-epoch, NOT a
       deny-list subject — frozen contract + non-negotiable).
-    → RULED 2026-06-03: 5d-2 IN = auth/logout.ts, auth/devices/logout.ts, admin/revoke.ts mode=device. DEFER =
-    refresh.ts device_mismatch (hot refresh path — first-do-no-harm), admin/revoke.ts mode=jti (→ 5d-3), and NEVER
-    admin/revoke.ts mode=user.
+    → RULED 2026-06-03: 5d-2 IN = auth/logout.ts (single-family), auth/devices/logout.ts (multi-family; BOTH
+    device_uuid=string AND =null/web), admin/revoke.ts mode=device (multi-family; NON-NULL device_uuid ONLY —
+    existing contract, NOT expanded to null in 5d; Codex R1 blocker 3). DEFER = refresh.ts device_mismatch (hot
+    refresh path — first-do-no-harm), admin/revoke.ts mode=jti (→ 5d-3); NEVER admin/revoke.ts mode=user.
 
 --------------------------------------------------------------------------------
 ## 1. Scope and non-goals
@@ -194,10 +199,12 @@ is the precise inverse: the subject is a SESSION, which must be per-login. Same 
 - Index rationale: enables a future "revoke by session_id" + the round-trip test; the device-revoke enumeration
   (section 7) reads session_id off rows already selected by (user_id, device_uuid), which the existing
   idx_refresh_tokens_device + idx_refresh_tokens_user_id already serve.
-- FORERUNNER intent (owner ruling D1): session_id is a globally-unique UUID INTENDED to become a future
-  `login_sessions.id`. 5d does NOT build that table; the upgrade path is a later migration seeding login_sessions
-  from the DISTINCT session_id values + repointing refresh_tokens.session_id as its FK. Keep session_id opaque +
-  uuid-shaped (no embedded structure) so that upgrade stays clean.
+- FORERUNNER intent (owner ruling D1, corrected per Codex R1 blocker 1): session_id is OPAQUE delimiter-safe TEXT
+  — LIVE logins = a UUID, backfill = a `legacy_<id>` sentinel; it is NOT uniformly uuid-shaped, and coding adds NO
+  uuid CHECK / regex / validation. It is INTENDED to become a future `login_sessions.id`; 5d does NOT build that
+  table. Upgrade path: a later migration seeds login_sessions from the DISTINCT session_id values — and
+  `login_sessions.id` must ALSO accept opaque TEXT (or that migration mints a surrogate UUID per legacy session_id
+  + keeps the mapping). The only column invariant is delimiter-safety (non-empty + no `:`), NOT uuid-shape.
 - DELIMITER-SAFETY INVARIANT (owner ruling D2): backfill is `'legacy_' || id` (UNDERSCORE) and live ids are UUIDs
   → ref NEVER contains a `:`. The frozen streamKey `session:<sub>:<scope>:<ref>` therefore always has EXACTLY 3
   colons and stays unambiguously colon-splittable for future RP/tooling. 5d's ref construction must uphold this.
@@ -252,7 +259,8 @@ session_id (section 2), so streamKey stays BOUND (computed in JS pre-batch). NO 
     export interface SessionRevokedEmitInput {
       sub: string            // String(userId) — the session owner
       ref: string            // COALESCE(session_id,'legacy_'||id) read from the row(s) being revoked (immutable)
-      actorSub: string | null // self-logout: the user; admin: the admin sub; system (device_mismatch): null
+      actorSub: string | null // self-logout: the user; admin mode=device: the admin sub. (null is reserved for a
+                               // future system-driven wire e.g. device_mismatch — DEFERRED from 5d-2 per D6.)
     }
     emitSessionRevoked(db, input, meta):
       scope='device'  (v1; jti deferred per D3)
@@ -272,9 +280,13 @@ deny at seq 1, so NO head-of-line deny/undeny interleave risk).
 ## 7. Multi-family emission + THE SPIKE (the gating artifact) — D4=(A)
 --------------------------------------------------------------------------------
 
-A device revoke (`WHERE user_id=? AND device_uuid=?` or `device_uuid IS NULL`) matches ONE unrevoked head per
-active login family. The contract requires ONE session.revoked per family (each its own streamKey). Mechanism B
-decomposes the multi-row revoke into N single-row CAS triples in ONE atomic batch, reusing the proven changes()=1:
+A device revoke matches ONE unrevoked head per active login family — but the (user_id, device_uuid) predicate has
+TWO SHAPES BY SITE (Codex R1 blocker 3): auth/devices/logout.ts supports BOTH `device_uuid = ?` (string) AND
+`device_uuid IS NULL` (web — families distinguished ONLY by session_id); admin/revoke.ts mode=device requires a
+NON-NULL device_uuid (revoke.ts:140-141 DEVICE_UUID_REQUIRED — UNCHANGED; 5d does NOT expand admin to accept null,
+which would be a separate additive API decision). The contract requires ONE session.revoked per family (each its
+own streamKey). Mechanism B decomposes the multi-row revoke into N single-row CAS triples in ONE atomic batch (or
+chunks of ≤K, section 7.1), reusing the proven changes()=1:
 
   caller (e.g. auth/devices/logout.ts):
    1. PRE-READ heads:  SELECT id, COALESCE(session_id,'legacy_'||id) AS ref
@@ -297,12 +309,15 @@ batches 2-3 statements (grep-confirmed); there is NO precedent + NO measured D1 
 number (feedback_dont_assert_runtime_semantics_without_verify) — SP6 measures it. N (active unrevoked families on
 one device) is usually 1-3 but is UNBOUNDED in principle (each login without logout/rotation-away adds a family;
 expired-but-unrevoked rows still match `revoked_at IS NULL`), so the tail must be handled:
-  - (a) RECOMMENDED — CHUNK into atomic batches of ≤K families (K from SP6, with margin). The endpoint is idempotent
-    + forward-progress: a mid-way failure leaves earlier chunks fully revoked+emitted; a retry RE-ENUMERATES heads,
-    which now excludes the already-revoked (revoked_at NOT NULL) families → it never double-emits and only finishes
-    the remainder. ALARM (warn audit) when N exceeds a threshold (anomalous multi-login) — no silent cap
-    (feedback_audit no-silent-caps). Cost: if the client does NOT retry, a partial revoke leaves some sessions live
-    (the admin/user sees the device still logged in and re-revokes) — acceptable + observable.
+  - (a) RECOMMENDED — CHUNK into atomic batches of ≤K families (K from SP6, with margin). Failure model is the
+    TWO-LAYER contract in section 10: WITHIN a chunk = atomic (both-or-neither for that chunk's families); ACROSS
+    chunks = FORWARD-PROGRESS (a committed chunk is NOT rolled back by a later chunk's failure). On a chunk failure
+    the endpoint MUST NOT return a misleading 2xx — it returns NON-2xx (code REVOKE_INCOMPLETE) with
+    `{revoked, emitted, remaining}` + writes a DISTINCT partial-failure audit (warn/critical), and the client
+    RETRIES: re-enumeration excludes already-revoked (revoked_at NOT NULL) families → it finishes the remainder,
+    never double-revoking or double-emitting (those events are already committed). Convergent + idempotent.
+    SEPARATELY, a LARGE-N THRESHOLD alarm (warn) fires when N exceeds an anomaly threshold — that is a DIFFERENT
+    signal (it fires even on FULL success; it is NOT a partial-failure signal) — no silent cap (feedback_audit).
   - (b) FALLBACK if (a) is rejected — keep the single multi-row UPDATE for the REVOKE (atomic, all N, no ceiling)
     and emit per-family BEST-EFFORT post-commit (not gated in the mutation batch). Trades the section-10 atomic
     revoke+emit coupling for always-complete-revoke + eventually-projected emit (needs a reconciliation note). Only
@@ -365,12 +380,17 @@ Idempotency:
 ## 10. Failure modes + recovery (high-risk addendum)
 --------------------------------------------------------------------------------
 
-- EMIT-time DB error (any statement in the multi-family batch) → WHOLE batch rolls back → NO token revoked, NO
-  event, endpoint returns 5xx. Both-or-neither (SP4 + section 14 atomicity test). This couples revocation success
-  to emission success — ACCEPTABLE and arguably correct (we never want a "revoked but un-emitted" silent gap on a
-  security path); flagged because it changes auth/logout.ts / devices/logout.ts from "best-effort revoke" to
-  "atomic revoke+emit". (Contrast the post-commit AUDIT, which stays best-effort — its loss never affects the
-  outbox SoT.)
+- EMIT-time failure has a TWO-LAYER model (Codex R1 blocker 2 — reconciles section 7.1 chunking):
+  - N ≤ K (SINGLE batch — the common case): any error → WHOLE batch rolls back → NO token revoked, NO event, 5xx.
+    Both-or-neither (SP4 + section 14 atomicity test). Couples revoke success to emit success (acceptable on a
+    security path — no "revoked-but-unemitted" gap). Changes logout / devices-logout from best-effort to atomic
+    revoke+emit.
+  - N > K (CHUNKED): WITHIN a chunk = atomic (the N≤K rule applied per chunk); ACROSS chunks = FORWARD-PROGRESS — a
+    later chunk's failure does NOT roll back already-committed chunks. The endpoint then MUST return NON-2xx
+    (REVOKE_INCOMPLETE) with `{revoked, emitted, remaining}` (NEVER a misleading 2xx), write a DISTINCT
+    partial-failure audit (warn/critical, SEPARATE from the section-13 large-N threshold alarm), and the client
+    RETRY re-enumerates (excludes revoked rows) → converges with NO double-emit. (section 7.1 / section 14 test.)
+  - post-commit AUDIT stays best-effort — its loss never affects the outbox SoT.
 - Consumer crash / transient delivery / poison / DLQ / replay / lease fencing — ALL inherited from 5b UNCHANGED
   (session events are just more event_outbox rows; the consumer is event-type-agnostic).
 - Migrate→deploy gap (NULL session_id) — handled by COALESCE at emission + rotation NULL-heal (section 4).
@@ -398,8 +418,9 @@ Post-commit auditDomainEventEmitted is best-effort (safeUserAudit swallow-on-fai
   stream_key_hash regardless (uniform B4). Raw streamKey/data live ONLY in access-controlled event_outbox /
   event_deny_state columns. No raw streamKey in any audit/alert.
 - No external egress → no SSRF. eventId UNIQUE + (stream_key,stream_seq) UNIQUE inherited from 0051.
-- session_id is a RANDOM uuid (crypto.randomUUID) — not guessable, not enumerable; it is NOT a secret (it only
-  names a deny subject) but is hashed in audit anyway.
+- a LIVE session_id is a random uuid (crypto.randomUUID) — not guessable/enumerable; the legacy backfill sentinel
+  `legacy_<id>` is likewise not sensitive (it only names a deny subject). Neither is a secret; both are hashed in
+  audit anyway.
 - admin/revoke.ts mode=device: the P1-15 hash-chain admin_audit_log write STILL precedes the mutation (unchanged,
   like 5c's ban) — the deny-state emit batch replaces only the single revoke UPDATE; appendAuditLog ordering is
   untouched, and on a rare all-0-row enumeration the pre-batch hash-chain row records a revoke ATTEMPT (true).
@@ -413,6 +434,11 @@ Post-commit auditDomainEventEmitted is best-effort (safeUserAudit swallow-on-fai
 - 5b consumer's domain.event.delivered/.retry/.dlq/.consumer_run already cover session events with no change.
 - Multi-family emit: audit ONCE PER applied family (skip 0-row CAS families) so the emitted-count matches the
   revoked-family-count for revocation-propagation-lag observability.
+- TWO DISTINCT operational signals (Codex R1 blocker 2 — a threshold alarm is NOT a partial-failure signal):
+  (i) PARTIAL-FAILURE — on a chunk error mid-operation, the endpoint's OWN audit (auth.devices.logout /
+  admin.token.revoked.device) is written with severity warn/critical + fields {revoked, emitted, remaining, error,
+  partial:true}; fires on FAILURE. (ii) LARGE-N THRESHOLD — a warn when N exceeds the anomaly threshold; fires even
+  on FULL success. Both reuse EXISTING endpoint audit types' data fields → audit-policy registry UNCHANGED.
 
 --------------------------------------------------------------------------------
 ## 14. Test plan
@@ -437,11 +463,20 @@ Post-commit auditDomainEventEmitted is best-effort (safeUserAudit swallow-on-fai
    - single-family (auth/logout.ts): logout a live session → EXACTLY ONE session.revoked outbox row (streamKey
      session:<sub>:device:<session_id>, seq 1, tenant NULL, data.ref==that session_id); logout an
      already-revoked/absent token → NO outbox row, still 200 (idempotent).
-   - multi-family (devices/logout.ts + admin mode=device): seed TWO logins on one device (two families, two
-     session_ids; AND a web/device_uuid=NULL variant) → revoke device → EXACTLY TWO session.revoked rows with
-     DISTINCT streamKeys, each seq 1 on its own stream; all matching refresh_tokens revoked.
+   - multi-family (auth/devices/logout.ts, self): seed TWO logins on one device → revoke → EXACTLY TWO
+     session.revoked rows, DISTINCT streamKeys, each seq 1 on its own stream; all matching refresh_tokens revoked.
+     Cover BOTH branches: `device_uuid=<string>` AND `device_uuid IS NULL` (web — families distinguished ONLY by
+     session_id). [Codex R1 blocker 3 — the null/web case is auth/devices/logout.ts territory.]
+   - multi-family (admin/revoke.ts mode=device, NON-NULL device_uuid ONLY): seed TWO logins on one device with a
+     non-null device_uuid → admin revoke → EXACTLY TWO rows. admin mode=device does NOT accept null (no web case
+     here); expanding it would be a separate additive API decision (NOT 5d).
    - CONCURRENT double-revoke of the same device → each family emits EXACTLY ONCE (per-family CAS 0-rows the loser);
      assert outbox row count == family count, each stream last_seq == 1, refresh_tokens finally all revoked.
+   - CHUNK-FAILURE + RETRY CONVERGENCE (N > K, Codex R1 blocker 2): with K forced small, seed N > K families + force
+     an error in the 2nd chunk → assert (1) 1st-chunk families revoked + their events in event_outbox, (2) endpoint
+     returns NON-2xx REVOKE_INCOMPLETE with remaining>0, (3) a partial-failure audit (warn/critical, partial:true)
+     written, (4) a RETRY re-enumerates + finishes the remainder → total emitted == family count (NO double-emit),
+     all families revoked. Locks the across-chunk forward-progress contract (section 10).
    - whole-user NEGATIVE: admin mode=user + a ban → assert ZERO session.revoked outbox rows (token-epoch ≠ deny).
    - contiguity THROUGH the real 5b consumer: emit → run consumer → event_deny_state for each session streamKey
      denied=1, last_applied_seq=1 (proves session events need NO consumer change).
@@ -535,8 +570,9 @@ Q5. Phasing (D5) + the deferred device_mismatch site (D6) + jti deferral (D3) �
 --------------------------------------------------------------------------------
 
 Owner reviewed against the production-SaaS gate: 1/1/1/1 + two refinements. Folded into section 0:
-- D1 = (A) new column refresh_tokens.session_id (UUID), DESIGNED as the forerunner of a future login_sessions.id
-  (don't build the table now; keep the upgrade path open).
+- D1 = (A) new column refresh_tokens.session_id = OPAQUE delimiter-safe TEXT (live=UUID, legacy=`legacy_<id>`
+  sentinel; NO uuid CHECK — Codex R1 blocker 1 correction), DESIGNED as the forerunner of a future
+  login_sessions.id (don't build the table now; that id must also accept opaque TEXT or mint surrogates).
 - D2 = (A) legacy backfill + COALESCE, BUT delimiter-safe `legacy_<id>` (underscore) — ref must never contain `:`
   so the 3-colon streamKey stays cleanly splittable (the contract does not sanction a colon in ref).
 - D3 = (A) device-scope ONLY in 5d; jti deferred (no sub guessing).
@@ -545,6 +581,15 @@ Owner reviewed against the production-SaaS gate: 1/1/1/1 + two refinements. Fold
 - D6 = 5d-2 wires auth/logout.ts + auth/devices/logout.ts + admin mode=device; DEFER device_mismatch + mode=jti;
   NEVER mode=user.
 
-NEXT: formal Codex Gate-1 review of this plan → on Approve, code 5d-1 (migration 0052 + write surface, no emit).
+CODEX GATE-1 R1 (2026-06-03) = REJECT, 3 plan-level blockers → R2 fixes (NO architecture change, direction intact):
+- B1 session_id = OPAQUE delimiter-safe TEXT (live UUID + `legacy_<id>` sentinel), NO uuid CHECK; future
+  login_sessions.id must accept opaque TEXT or mint surrogates (sections 0-D1 / 3 / 12 / 20).
+- B2 chunk-failure TWO-LAYER model: within-chunk atomic, across-chunk forward-progress; partial → NON-2xx
+  REVOKE_INCOMPLETE + {revoked,emitted,remaining} + a DISTINCT partial-failure audit (≠ large-N threshold alarm) +
+  idempotent retry convergence (sections 7.1 / 10 / 13 + a section-14 test).
+- B3 admin mode=device = NON-NULL device_uuid only (unchanged contract); the web/null multi-family case is
+  auth/devices/logout.ts ONLY; no admin API expansion to null (sections 7 / 14 / 0-D6).
+
+NEXT: resubmit to Codex Gate-1 R2 → on Approve, code 5d-1 (migration 0052 + write surface, no emit).
 
 --- END PR5 5d GATE-1 PLAN (R1, owner-approved 2026-06-03) ---
