@@ -26,6 +26,8 @@
  * (the no-leak invariant, plan §6 / L5). This builder does NO I/O — the caller executes the batch.
  */
 
+import { emitSessionRevoked, type EmitIdentity } from './domain-event-emit'
+
 /** D1 binding type via ambient Env indexed access (same convention as domain-event-emit.ts). */
 type ChiyigoDb = Env['chiyigo_db']
 type Stmt = ReturnType<ChiyigoDb['prepare']>
@@ -57,4 +59,115 @@ export function casByFamily(db: ChiyigoDb, userId: number, ref: string): Stmt {
           AND revoked_at IS NULL`,
     )
     .bind(userId, ref)
+}
+
+// ── multi-family revocation (5d-2 c5; auth/devices/logout + admin/revoke mode=device) ────────────────────────────
+// auth/logout (c4) revokes a SINGLE family inline. The multi-family sites (a user logging out a whole device, an
+// admin revoking a device) revoke MANY families at once. This orchestrator is the ONE place that logic lives, so the
+// two endpoints cannot drift on the intricate Tier-0 concurrency rules (GLOBAL integrity preflight, chunk ceiling,
+// both-or-neither WITHIN a chunk, forward-progress ACROSS chunks). The CALLER does the device-specific candidate
+// ENUMERATION (the device_uuid filter lives THERE, never in the device-less casByFamily — B2) + the audits + the
+// HTTP response; this helper is pure D1 orchestration and returns a structured outcome (no env / audit / Response →
+// testable in isolation, and the per-endpoint audit type + envelope stay with each caller).
+
+/**
+ * Chunk ceiling (plan L3 / SP6, LOCKED): a multi-family revoke runs in atomic batches of ≤K families (3 statements
+ * each → ≤3K per batch). K=20 is proven on local + remote D1 (a 60-statement one-txn batch). N>K → multiple batches.
+ */
+export const SESSION_REVOKE_CHUNK_SIZE = 20
+
+export interface RevokeFamiliesResult {
+  /**
+   * 'ok'                  — every revocable family was processed (committed).
+   * 'integrity_violation' — a candidate had >1 GLOBAL live head (one-live-head invariant broken) → NOTHING mutated.
+   * 'incomplete'          — a chunk FAILED after earlier chunks committed → the client must retry `remaining`.
+   */
+  outcome: 'ok' | 'integrity_violation' | 'incomplete'
+  revoked: number                   // families whose live head was revoked (casByFamily changes()=1)
+  emitted: number                   // session.revoked events written (== revoked; the emit is gated on the CAS)
+  remaining: number                 // revocable families NOT yet committed (only meaningful on 'incomplete')
+  integrityRef?: string             // the ref with >1 live head (only on 'integrity_violation')
+  integrityHeads?: number
+  emittedIdentities: EmitIdentity[] // for the caller's POST-COMMIT domain.event.emitted audits (redacted stream_key)
+}
+
+/**
+ * Revoke a set of session families (each by its per-login ref) + emit one session.revoked per family — fail-closed
+ * on a broken EXACTLY-ONE-LIVE-HEAD invariant, chunked to a bounded batch size with forward-progress on a partial
+ * failure. `candidateRefs` MUST be the DISTINCT, device-filtered, currently-live refs the caller enumerated (the
+ * device filter is the caller's; this helper is device-less, matching casByFamily's (user_id, ref) keying).
+ */
+export async function revokeSessionFamilies(
+  db: ChiyigoDb,
+  userId: number,
+  candidateRefs: string[],
+  actorSub: string | null,
+  opts: { chunkSize?: number } = {},
+): Promise<RevokeFamiliesResult> {
+  const base = { revoked: 0, emitted: 0, remaining: 0, emittedIdentities: [] as EmitIdentity[] }
+  if (candidateRefs.length === 0) return { outcome: 'ok', ...base }
+
+  // GLOBAL device-less live-head COUNT per candidate ref — ONE query via json_each(?) (reference_d1_query_budget_
+  // json_each): the refs go in as a single JSON-array bind, never an IN(?,?,...) list. GLOBAL (no device filter) so a
+  // same-ref-on-two-devices duplicate is SEEN (Codex R4), matching casByFamily's device-less (user_id, ref) key.
+  const countRows = await db
+    .prepare(
+      `SELECT ${FAMILY_REF_SQL} AS ref, COUNT(*) AS heads FROM refresh_tokens
+        WHERE user_id = ? AND ${FAMILY_REF_SQL} IN (SELECT value FROM json_each(?)) AND revoked_at IS NULL
+        GROUP BY ref`,
+    )
+    .bind(userId, JSON.stringify(candidateRefs))
+    .all<{ ref: string; heads: number }>()
+  const headsByRef = new Map<string, number>()
+  for (const row of countRows.results ?? []) headsByRef.set(String(row.ref), Number(row.heads))
+
+  // FAIL CLOSED: any candidate with >1 GLOBAL live head = the one-live-head invariant is broken (same session_id on
+  // two rows / two devices). Revoking one + emitting a deny while a live head remains makes the event ⊥ the auth DB
+  // → abort the WHOLE request, mutate nothing. (c4-consistent: 0 = benign skip below, >1 = violation here.)
+  for (const ref of candidateRefs) {
+    const h = headsByRef.get(ref) ?? 0
+    if (h > 1) return { outcome: 'integrity_violation', integrityRef: ref, integrityHeads: h, ...base }
+  }
+
+  // Revocable = candidates with EXACTLY ONE live head. heads===0 (concurrently revoked between enumerate + count) is
+  // a benign skip — its casByFamily would 0-row anyway; never a violation.
+  const revocable = candidateRefs.filter((ref) => (headsByRef.get(ref) ?? 0) === 1)
+  if (revocable.length === 0) return { outcome: 'ok', ...base }
+
+  const chunkSize = opts.chunkSize && opts.chunkSize > 0 ? opts.chunkSize : SESSION_REVOKE_CHUNK_SIZE
+  const emittedIdentities: EmitIdentity[] = []
+  let revoked = 0
+  let processed = 0
+  try {
+    for (let i = 0; i < revocable.length; i += chunkSize) {
+      const chunk = revocable.slice(i, i + chunkSize)
+      const stmts: Stmt[] = []
+      const tracking: { identity: EmitIdentity; casIdx: number }[] = []
+      for (const ref of chunk) {
+        // eventId / occurredAt are the only side effects — generated per family (this helper is the I/O adapter).
+        const emit = emitSessionRevoked(
+          db,
+          { sub: String(userId), ref, actorSub },
+          { eventId: crypto.randomUUID(), occurredAt: new Date().toISOString() },
+        )
+        tracking.push({ identity: emit.identity, casIdx: stmts.length })
+        stmts.push(casByFamily(db, userId, ref), ...emit.statements)
+      }
+      // WITHIN a chunk = ONE atomic batch (both-or-neither): any failure rolls the whole chunk back (SP4).
+      const results = await db.batch(stmts)
+      for (const t of tracking) {
+        if (results[t.casIdx]?.meta?.changes === 1) {
+          revoked++
+          emittedIdentities.push(t.identity)
+        }
+      }
+      processed += chunk.length
+    }
+  } catch {
+    // ACROSS chunks = forward progress: earlier chunks are COMMITTED (revoked + emitted); this chunk + later ones are
+    // not. The caller returns NON-2xx with these counts; a client RETRY re-enumerates (committed families are now
+    // revoked → excluded) → converges with NO double-emit.
+    return { outcome: 'incomplete', revoked, emitted: revoked, remaining: revocable.length - processed, emittedIdentities }
+  }
+  return { outcome: 'ok', revoked, emitted: revoked, remaining: 0, emittedIdentities }
 }
