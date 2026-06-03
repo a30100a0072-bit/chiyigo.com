@@ -50,6 +50,7 @@ import { hashToken, generateSecureToken } from '../../functions/utils/crypto'
 import { onRequestGet as listHandler } from '../../functions/api/admin/users'
 import { onRequestPost as banHandler } from '../../functions/api/admin/users/[id]/ban'
 import { onRequestPost as unbanHandler } from '../../functions/api/admin/users/[id]/unban'
+import { onRequestPost as consumerHandler } from '../../functions/api/admin/cron/event-outbox'
 
 // ── helpers ────────────────────────────────────────────────────────
 
@@ -111,6 +112,32 @@ async function setStatus(userId, status) {
 
 async function setRole(userId, role) {
   await env.chiyigo_db.prepare('UPDATE users SET role = ? WHERE id = ?').bind(role, userId).run()
+}
+
+// ── PR5 5c helpers — account.* emission + the (unchanged, type-agnostic) 5b consumer for the e2e path ──
+async function accountOutbox(targetId) {
+  const r = await env.chiyigo_db
+    .prepare(`SELECT event_type, stream_seq, tenant_id, actor_sub, data_json FROM event_outbox
+              WHERE stream_key = ? ORDER BY stream_seq`)
+    .bind(`account:${targetId}`).all()
+  return r.results ?? []
+}
+async function accountSeq(targetId) {
+  const r = await env.chiyigo_db
+    .prepare(`SELECT last_seq FROM event_stream_sequences WHERE stream_key = ?`)
+    .bind(`account:${targetId}`).first()
+  return r ? r.last_seq : null
+}
+async function emittedAuditCount() {
+  const r = await env.chiyigo_db
+    .prepare(`SELECT COUNT(*) AS c FROM audit_log WHERE event_type = 'domain.event.emitted'`).first()
+  return Number(r.c)
+}
+async function runConsumer() {
+  const req = new Request('http://x/api/admin/cron/event-outbox', {
+    method: 'POST', headers: { Authorization: 'Bearer test-cron-secret', 'Content-Type': 'application/json' },
+  })
+  return consumerHandler({ request: req, env })
 }
 
 // ── tests ──────────────────────────────────────────────────────────
@@ -396,6 +423,60 @@ describe('POST /api/admin/users/:id/ban', () => {
       .bind(tid).first()
     expect(usrLog).toBeFalsy()
   })
+
+  // ── PR5 5c: account.disabled emission ────────────────────────────────────
+  it('happy ban emits ONE account.disabled (account:<sub>, seq 1, tenant null) + REDACTED domain.event.emitted', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    const { id: tid } = await seedUser({ email: 't@x' })
+    const r = await callBan(await tokenFor(aid, 'admin'), tid)
+    expect(r.status).toBe(200)
+    const rows = await accountOutbox(tid)
+    expect(rows.length).toBe(1)
+    expect(rows[0].event_type).toBe('account.disabled')
+    expect(rows[0].stream_seq).toBe(1)
+    expect(rows[0].tenant_id).toBeNull()
+    expect(rows[0].actor_sub).toBe(String(aid))
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(tid) })
+    // post-commit emitted audit, REDACTED: stream_key_hash present, raw `account:<tid>` NEVER logged
+    const emitted = await env.chiyigo_db
+      .prepare(`SELECT event_data FROM audit_log WHERE event_type = 'domain.event.emitted' ORDER BY id DESC LIMIT 1`).first()
+    expect(emitted).toBeTruthy()
+    expect(emitted.event_data).toContain('stream_key_hash')
+    expect(emitted.event_data).not.toContain(`account:${tid}`)
+  })
+
+  it('already-banned ban emits NOTHING (no outbox row, no seq, no emitted audit)', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    const { id: tid } = await seedUser({ email: 't@x' })
+    await setStatus(tid, 'banned')
+    const r = await callBan(await tokenFor(aid, 'admin'), tid)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('USER_ALREADY_BANNED')
+    expect((await accountOutbox(tid)).length).toBe(0)
+    expect(await accountSeq(tid)).toBeNull()
+    expect(await emittedAuditCount()).toBe(0)
+  })
+
+  it('concurrent double-ban: EXACTLY one account.disabled, last_seq=1, token_version=1, all refresh revoked', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    const { id: tid } = await seedUser({ email: 't@x' })
+    await seedRefresh(tid, 'dev-A'); await seedRefresh(tid, 'dev-B')
+    const tok = await tokenFor(aid, 'admin')
+    const [r1, r2] = await Promise.all([callBan(tok, tid), callBan(tok, tid)])
+    // exactly one request wins the transition (the other 0-rows the CAS, or short-circuits at the pre-read)
+    expect([r1.status, r2.status].filter(s => s === 200).length).toBe(1)
+    // the FOUR lost-race invariants (owner Gate-1 code-gate lock)
+    const rows = await accountOutbox(tid)
+    expect(rows.length).toBe(1)                          // (1) EXACTLY one event
+    expect(rows[0].event_type).toBe('account.disabled')
+    expect(await accountSeq(tid)).toBe(1)                // (2) no second seq bump
+    const u = await env.chiyigo_db.prepare('SELECT status, token_version FROM users WHERE id = ?').bind(tid).first()
+    expect(u.status).toBe('banned')
+    expect(u.token_version).toBe(1)                      // (3) +1 EXACTLY (the 0-row loser does not bump)
+    const active = await env.chiyigo_db
+      .prepare('SELECT COUNT(*) AS c FROM refresh_tokens WHERE user_id = ? AND revoked_at IS NULL').bind(tid).first()
+    expect(Number(active.c)).toBe(0)                     // (4) refresh tokens finally revoked
+  })
 })
 
 describe('POST /api/admin/users/:id/unban', () => {
@@ -493,5 +574,58 @@ describe('POST /api/admin/users/:id/unban', () => {
       .prepare(`SELECT 1 FROM audit_log WHERE event_type = 'admin.user.unbanned' AND user_id = ?`)
       .bind(tid).first()
     expect(usrLog).toBeFalsy()
+  })
+
+  // ── PR5 5c: account.reenabled emission ───────────────────────────────────
+  it('happy unban emits ONE account.reenabled (account:<sub>, seq 1, tenant null) + REDACTED domain.event.emitted', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    const { id: tid } = await seedUser({ email: 't@x' })
+    await setStatus(tid, 'banned')
+    const r = await callUnban(await tokenFor(aid, 'admin'), tid)
+    expect(r.status).toBe(200)
+    const rows = await accountOutbox(tid)
+    expect(rows.length).toBe(1)
+    expect(rows[0].event_type).toBe('account.reenabled')
+    expect(rows[0].tenant_id).toBeNull()
+    expect(rows[0].actor_sub).toBe(String(aid))
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(tid) })
+    const emitted = await env.chiyigo_db
+      .prepare(`SELECT event_data FROM audit_log WHERE event_type = 'domain.event.emitted' ORDER BY id DESC LIMIT 1`).first()
+    expect(emitted.event_data).toContain('stream_key_hash')
+    expect(emitted.event_data).not.toContain(`account:${tid}`)
+  })
+
+  it('not-banned unban emits NOTHING (no outbox row, no seq)', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    const { id: tid } = await seedUser({ email: 't@x' }) // active
+    const r = await callUnban(await tokenFor(aid, 'admin'), tid)
+    expect(r.status).toBe(400)
+    expect(r.body.code).toBe('USER_NOT_BANNED')
+    expect((await accountOutbox(tid)).length).toBe(0)
+    expect(await accountSeq(tid)).toBeNull()
+  })
+})
+
+describe('[PR5-5c] account.* end-to-end through the 5b consumer', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('ban then unban -> contiguous disabled(1)+reenabled(2); the type-agnostic consumer applies denied=1 then denied=0', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    const { id: tid } = await seedUser({ email: 't@x' })
+    const tok = await tokenFor(aid, 'admin')
+    expect((await callBan(tok, tid)).status).toBe(200)
+    expect((await callUnban(tok, tid)).status).toBe(200)
+    // emit-level contiguity on the shared account:<sub> stream
+    const rows = await accountOutbox(tid)
+    expect(rows.map(r => r.event_type)).toEqual(['account.disabled', 'account.reenabled'])
+    expect(rows.map(r => r.stream_seq)).toEqual([1, 2])
+    // through the UNCHANGED 5b consumer: run 1 delivers seq 1 (deny), run 2 delivers seq 2 (undeny, contiguous)
+    expect((await runConsumer()).status).toBe(200)
+    expect((await runConsumer()).status).toBe(200)
+    const proj = await env.chiyigo_db
+      .prepare(`SELECT denied, last_applied_seq FROM event_deny_state WHERE stream_key = ?`)
+      .bind(`account:${tid}`).first()
+    expect(proj).toEqual({ denied: 0, last_applied_seq: 2 })
   })
 })
