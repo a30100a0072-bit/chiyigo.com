@@ -134,10 +134,11 @@ export async function onRequestPost({ request, env }) {
   // P1-5：把 OIDC scope 落 refresh_tokens；refresh.ts rotation 時透傳，
   // silent refresh 後 access_token 仍帶 openid/email 等
   // Codex r9-5：issued_aud 鎖定發行時的 audience；refresh.ts 用此簽新 token 防 body.aud 切換
+  // PR5 5d-1b: + a fresh per-login session_id (the session.revoked family id, preserved across rotation).
   await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime, authCode.scope ?? null, aud)
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud, session_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime, authCode.scope ?? null, aud, crypto.randomUUID())
     .run()
 
   // 簽發 Access Token（ES256，15 分鐘） — 用上面決定好的 aud

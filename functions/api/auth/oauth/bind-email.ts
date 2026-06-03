@@ -213,10 +213,11 @@ export async function onRequestPost(context) {
   const webDeviceUuid = readOAuthDeviceCookie(request)
 
   // Codex r9-5：issued_aud 鎖定發行時的 audience
+  // PR5 5d-1b: + a fresh per-login session_id (the session.revoked family id, preserved across rotation).
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
-    VALUES (?, ?, ?, ?, datetime('now'), ?)
-  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience).run()
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
+    VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
+  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience, crypto.randomUUID()).run()
 
   await safeUserAudit(env, { event_type: 'oauth.bind_email.success', user_id: userId, request, data: { provider } })
 

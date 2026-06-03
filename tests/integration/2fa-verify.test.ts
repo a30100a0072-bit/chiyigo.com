@@ -100,6 +100,11 @@ describe('POST /api/auth/2fa/verify — isWebClient channel matrix (規格 B)', 
         expect(cookie).toBeNull()
         expect(body.refresh_token).toMatch(/^[0-9a-f]{64}$/)
       }
+      // PR5 5d-1b: 2fa/verify stamps a non-null per-login session_id
+      const rt = await env.chiyigo_db.prepare(
+        'SELECT MAX(session_id) AS sid FROM refresh_tokens WHERE user_id = ?',
+      ).bind(u.id).first()
+      expect(rt.sid).toBeTruthy()
     })
   })
 })

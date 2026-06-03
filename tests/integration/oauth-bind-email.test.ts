@@ -86,9 +86,10 @@ describe('bind-email 成功路徑', () => {
     expect(ident.provider_id).toBe('discord-uid-new')
 
     const rt = await env.chiyigo_db
-      .prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?')
+      .prepare('SELECT COUNT(*) AS n, MAX(session_id) AS sid FROM refresh_tokens WHERE user_id = ?')
       .bind(u.id).first()
     expect(rt.n).toBe(1)
+    expect(rt.sid).toBeTruthy()  // PR5 5d-1b: oauth bind-email stamps a non-null per-login session_id
 
     // Audit：oauth.bind_email.success 含 user_id + provider
     const audit = await env.chiyigo_db

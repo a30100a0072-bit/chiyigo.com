@@ -242,10 +242,11 @@ export async function onRequestPost({ request, env }) {
 
   // Codex r9-5：issued_aud 鎖定發行時的 audience；refresh.ts rotation 用此簽新 token，
   // body.aud 不一致則 audit warn。防止子站共用 cookie 後切換 aud=chiyigo 取 token。
+  // PR5 5d-1b: + a fresh per-login session_id (the session.revoked family id, preserved across rotation).
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
-    VALUES (?, ?, ?, ?, datetime('now'), ?)
-  `).bind(record.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience).run()
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
+    VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
+  `).bind(record.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience, crypto.randomUUID()).run()
 
   const payload = {
     access_token:   accessToken,

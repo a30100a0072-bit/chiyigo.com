@@ -170,9 +170,10 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
 
     // refresh_tokens row
     const rt = await env.chiyigo_db.prepare(
-      'SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?',
+      'SELECT COUNT(*) AS n, MAX(session_id) AS sid FROM refresh_tokens WHERE user_id = ?',
     ).bind(u.id).first()
     expect(rt.n).toBe(1)
+    expect(rt.sid).toBeTruthy()  // PR5 5d-1b: oauth callback stamps a non-null per-login session_id
   })
 
   it('信箱碰撞 + trustEmail=true (google) + email_verified=true → 靜默綁定（C2）', async () => {

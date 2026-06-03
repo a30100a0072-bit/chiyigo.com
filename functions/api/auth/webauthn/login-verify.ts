@@ -228,10 +228,11 @@ export async function onRequestPost({ request, env }) {
     .toISOString().replace('T', ' ').slice(0, 19)
 
   // Codex r9-5：issued_aud 鎖定發行時的 audience
+  // PR5 5d-1b: + a fresh per-login session_id (the session.revoked family id, preserved across rotation).
   await env.chiyigo_db.prepare(
-    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
-     VALUES (?, ?, ?, ?, datetime('now'), ?)`,
-  ).bind(cred.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience).run()
+    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
+     VALUES (?, ?, ?, ?, datetime('now'), ?, ?)`,
+  ).bind(cred.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience, crypto.randomUUID()).run()
 
   // Codex r9-4：credential_id_prefix → keyed HMAC（同 register/delete 同 domain）
   const credSig = await hashIdentifierForAudit(env, 'credential-id', credentialId)

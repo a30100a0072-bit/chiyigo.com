@@ -55,9 +55,10 @@ describe('POST /api/auth/local/login — happy path & failures', () => {
 
     // refresh_tokens DB row 存在
     const rt = await env.chiyigo_db.prepare(
-      'SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?',
+      'SELECT COUNT(*) AS n, MAX(session_id) AS sid FROM refresh_tokens WHERE user_id = ?',
     ).bind(u.id).first()
     expect(rt.n).toBe(1)
+    expect(rt.sid).toBeTruthy()  // PR5 5d-1b: local/login stamps a non-null per-login session_id
   })
 
   it('App 平台（platform=app + device_uuid）→ 200 + refresh_token 在 body、無 cookie', async () => {
