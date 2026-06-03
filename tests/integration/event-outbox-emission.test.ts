@@ -19,7 +19,7 @@ import { env } from 'cloudflare:test'
 import { resetDb, seedUser, seedTenant, seedMembership, seedInvitation } from './_helpers'
 import { suspendMember, reactivateMember, offboardMember, changeMemberRole } from '../../functions/utils/members'
 import { acceptInvitation } from '../../functions/utils/invitations'
-import { emitMemberSuspended, emitAccountDisabled, emitAccountReenabled } from '../../functions/utils/domain-event-emit'
+import { emitMemberSuspended, emitAccountDisabled, emitAccountReenabled, emitSessionRevoked } from '../../functions/utils/domain-event-emit'
 import { validateDomainEvent } from '../../functions/utils/domain-events'
 
 const db = env.chiyigo_db
@@ -260,5 +260,92 @@ describe('[PR5-5c] account.* emission builders — ban/unban', () => {
     await expect(db.batch([gating, ...emit.statements])).rejects.toThrow()
     const u = await db.prepare(`SELECT status FROM users WHERE id=?`).bind(uid).first<{ status: string }>()
     expect(u!.status).toBe('active') // rolled back
+  })
+})
+
+describe('[PR5-5d-2] session.revoked emission builder', () => {
+  // The emit BUILDER is the unit-test seam (meta injectable). Endpoint wiring (auth/logout, devices/logout,
+  // admin mode=device) is c4/c5. Here we prove the builder contract: emit-on-apply / no-emit-on-noop / atomicity /
+  // valid FROZEN contract / opaque per-login ref / NO raw refresh token in the streamKey or data.
+  async function seedLiveToken(userId: number, sessionId: string | null, hash: string): Promise<number> {
+    const r = await db.prepare(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at, session_id) VALUES (?,?,?,?)`)
+      .bind(userId, hash, '2099-01-01 00:00:00', sessionId).run()
+    return Number(r.meta.last_row_id)
+  }
+  // single-row family-id CAS, identical shape to the endpoint's casByFamily (PK-pinned subquery, device-less).
+  const casByFamily = (userId: number, ref: string) =>
+    db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE id=(SELECT id FROM refresh_tokens WHERE user_id=? AND COALESCE(session_id,'legacy_'||id)=? AND revoked_at IS NULL LIMIT 1) AND revoked_at IS NULL`).bind(userId, ref)
+
+  it('emits ONE row (session:<sub>:device:<ref>, tenant null, {sub,scope,ref}) gated on casByFamily; NO raw token', async () => {
+    const uid = await user()
+    await seedLiveToken(uid, 'sess-AAA', 'h-sr1')
+    const ref = 'sess-AAA'
+    const streamKey = `session:${uid}:device:${ref}`
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: String(uid) }, { eventId: 'sr-1', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([casByFamily(uid, ref), ...emit.statements])
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(rows[0].event_type).toBe('session.revoked')
+    expect(rows[0].stream_seq).toBe(1)
+    expect(rows[0].tenant_id).toBeNull()
+    expect(rows[0].actor_sub).toBe(String(uid))
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(uid), scope: 'device', ref })
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+    // NO raw token leak: streamKey + data carry ONLY the opaque family ref (never the token_hash/plaintext).
+    expect(rows[0].data_json).not.toContain('h-sr1')
+    expect(rows[0].stream_key).not.toContain('h-sr1')
+  })
+
+  it('legacy ref (ref=legacy_<id>, COALESCE form) produces a valid contract event', async () => {
+    const uid = await user()
+    const rid = await seedLiveToken(uid, null, 'h-sr-legacy') // NULL session_id -> COALESCE = legacy_<id>
+    const ref = `legacy_${rid}`
+    const streamKey = `session:${uid}:device:${ref}`
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: String(uid) }, { eventId: 'sr-legacy', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([casByFamily(uid, ref), ...emit.statements])
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(JSON.parse(rows[0].data_json).ref).toBe(ref)
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+  })
+
+  it('no-emit-on-noop: a 0-row gating CAS (already-revoked family) bumps no seq and writes no outbox row', async () => {
+    const uid = await user()
+    await seedLiveToken(uid, 'sess-NOOP', 'h-sr2')
+    await db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE user_id=?`).bind(uid).run() // pre-revoke
+    const ref = 'sess-NOOP'
+    const streamKey = `session:${uid}:device:${ref}`
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: String(uid) }, { eventId: 'sr-noop', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([casByFamily(uid, ref), ...emit.statements])
+    expect((await outboxRows(streamKey)).length).toBe(0)
+    expect(await seqOf(streamKey)).toBeNull()
+  })
+
+  it('atomicity: a forced outbox UNIQUE collision rolls the WHOLE batch back (the revoke does NOT apply)', async () => {
+    const uid = await user()
+    const rid = await seedLiveToken(uid, 'sess-ATOM', 'h-sr3')
+    const ref = 'sess-ATOM'
+    const streamKey = `session:${uid}:device:${ref}`
+    await db.prepare(
+      `INSERT INTO event_outbox (event_id, event_type, stream_key, stream_seq, occurred_at, data_json)
+       VALUES ('sr-pre','session.revoked', ?, 1, '2026-06-03T00:00:00Z', '{}')`,
+    ).bind(streamKey).run()
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: String(uid) }, { eventId: 'sr-atom', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await expect(db.batch([casByFamily(uid, ref), ...emit.statements])).rejects.toThrow()
+    const row = await db.prepare(`SELECT revoked_at FROM refresh_tokens WHERE id=?`).bind(rid).first<{ revoked_at: string | null }>()
+    expect(row!.revoked_at).toBeNull() // rolled back — the revoke did NOT apply (both-or-neither)
+  })
+
+  it('actorSub null (system-driven, e.g. a future device_mismatch wire) is accepted', async () => {
+    const uid = await user()
+    await seedLiveToken(uid, 'sess-SYS', 'h-sr4')
+    const ref = 'sess-SYS'
+    const streamKey = `session:${uid}:device:${ref}`
+    const emit = emitSessionRevoked(db, { sub: String(uid), ref, actorSub: null }, { eventId: 'sr-sys', occurredAt: '2026-06-03T00:00:00.000Z' })
+    await db.batch([casByFamily(uid, ref), ...emit.statements])
+    const rows = await outboxRows(streamKey)
+    expect(rows.length).toBe(1)
+    expect(rows[0].actor_sub).toBeNull()
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
   })
 })
