@@ -3,8 +3,9 @@
 - Created: 2026-06-03
 - Status: Codex Gate-1 R1→R2→R3→R4 (each REJECT, fixes applied) → R4 REJECT (the multi-family integrity count was
   device-FILTERED while casByFamily is device-LESS → a same-ref-across-two-devices duplicate could revoke the wrong
-  head + emit) → R5 fixes applied 2026-06-03 (GLOBAL (user_id,ref) integrity count). NOT yet coded. The SPIKE
-  (section 2) runs FIRST after approval, BEFORE any emission code — if it does not prove out, STOP + report (§2).
+  head + emit) → R5 fixes applied 2026-06-03 (GLOBAL (user_id,ref) integrity count) → R5 ✅ APPROVED 2026-06-03.
+  SPIKE SP1-SP7 ✅ PASS local + remote 2026-06-03 (no disproof; K=20 locked — §2 SPIKE RESULT). NOT yet coded —
+  emission (c2-c5) is the next step.
 - Predecessor: PR5 5d-1 SHIPPED (PR #15 → main `819008c`). refresh_tokens.session_id is live + populated (7 logins
   write a fresh UUID, refresh.ts rotation preserves/heals; backfill = `legacy_<id>`). NO emission yet.
 - Approved design SoT: docs/reviews/pr5d-session-revoked-plan-2026-06-03.md (Codex Gate-1 R2 APPROVED) — §6
@@ -109,9 +110,9 @@ attached to the 5d-2 PR.
 - SP4 (atomicity across families): force a UNIQUE(event_id) violation in B's outbox → WHOLE batch rolls back (A NOT
   revoked, zero outbox, zero seq bump). Both-or-neither across the chunk.
 - SP5 (remote parity): re-run SP1-SP4 on the throwaway remote D1 (multi-stmt command = one batch txn) → identical.
-- SP6 (chunk ceiling K — L3): find the largest db.batch (statement count AND bound-param count) the remote D1
-  accepts → derive the safe per-batch family count K (3 statements + ~9 binds per family). Measurement, not
-  assumption (feedback_dont_assert_runtime_semantics_without_verify).
+- SP6 (chunk ceiling K — L3) ✅ RESOLVED: K=20 LOCKED, proven LOCAL (one db.batch of 60 statements + ~240 bound
+  params → 20 families each emit seq1, all revoked) AND REMOTE (a 60-statement one-txn batch on a throwaway D1 →
+  20 outbox rows, all seq1). K=20 is generous vs the typical 1-3 families/device; N>20 chunks into ≤20-family batches.
 - SP7 (rotation atomicity + revoke-vs-rotation NO-MISS — Codex R3 / §1.5): (a) the atomic rotation batch:
   changes()=1 → old revoked + new inserted (BOTH); changes()=0 → reuse → NEITHER (no new head). (b) REVOKE-BEFORE
   rotation: casByFamily revokes+emits the old head, THEN the rotation batch's UPDATE 0-rows → gated INSERT adds NO
@@ -124,6 +125,19 @@ SP3 + SP4 + SP5 + SP7) → STOP ALL emission, report — NO single-family fallba
 depends on the atomic rotation too). ONLY a multi-family-specific failure (cross-triple chaining / chunk) WITH the
 shared primitive + rotation atomicity proven local+remote → MAY ship auth/logout.ts only. SP6 just SETS K (bounds
 the chunk size, not a stop).
+
+SPIKE RESULT (2026-06-03; throwaway, deleted, NOT committed — receipts for the 5d-2 PR body): ALL PASS, NO disproof.
+- LOCAL (miniflare workerd D1): SP1 (2-family N-triple, both seq1 + revoked) · SP2 (pre-revoked family emits
+  nothing, no neighbour poison) · SP3 (each outbox row carries its OWN ref + seq) · SP4 (dup event_id → whole-batch
+  rollback, family A NOT revoked) · SP7a/b/c (atomic rotation both / reuse-neither; revoke-before-rotation = no
+  survivor; rotation-before-revoke = no stale-id miss) · cross-device global-count fail-closed (heads=2 caught) ·
+  SP6 K=20 (60 stmts / ~240 binds).
+- REMOTE (throwaway chiyigo-spike-5d2, created→verified→deleted, $0, never touched prod chiyigo_db): SP1 parity
+  (sA/sB seq1) · SP2 (sA+sC emit, sB silent) · SP4 (dup → FULL rollback: s4A_live=1, s4A_outbox=0, s4A_seq=0) ·
+  SP7 (rotation live=1; reuse changes()=0 → live still 1) · SP6 (60-stmt one-txn → 20 rows, all seq1). IDENTICAL
+  to local.
+→ shared primitive + rotation atomicity PROVEN local + remote; disproof protocol NOT triggered → emission code
+  (c2-c5) unblocked.
 
 --------------------------------------------------------------------------------
 ## 3. emitSessionRevoked builder (functions/utils/domain-event-emit.ts)
