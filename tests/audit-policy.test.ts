@@ -210,6 +210,14 @@ describe('classifyAuditEvent — PR5 event outbox consumer/replay/emitted', () =
   })
 })
 
+// PR5 5d-2 session.revoked emission：1 個新 endpoint audit type session.integrity_violation（critical forensic =
+// immutable，永久保留）。fail-closed COUNT!=1 guard 用；emission 本身走既有 domain.event.emitted（無新 domain.event.* type）。
+describe('classifyAuditEvent — PR5 5d-2 session.integrity_violation', () => {
+  it('session.integrity_violation → immutable', () => {
+    expect(classifyAuditEvent('session.integrity_violation')).toBe(AUDIT_CATEGORY.IMMUTABLE)
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -267,8 +275,10 @@ describe('registry coverage', () => {
     // PR5 Event Outbox 5b 加 8 個 domain.event.*（dlq / gap_detected / validation_failed / replay = 4 immutable；
     //   emitted / delivered / retry / consumer_run = 4 telemetry）→ 206。emitted = endpoint post-commit best-effort
     //   觀測（plan C3，code-gate 補做 plan-faithful，非 waiver）；replay 與 emitted 並存不互相替代。
+    // PR5 5d-2 session.revoked emission 加 1 個 session.integrity_violation（immutable；fail-closed COUNT!=1
+    //   guard 用；emission 本身走既有 domain.event.emitted，無新 domain.event.* type）→ 207。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(206)
+    expect(_registrySize).toBe(207)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
