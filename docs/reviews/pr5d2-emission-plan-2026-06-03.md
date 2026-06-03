@@ -1,9 +1,10 @@
 # PR5 5d-2 — session.revoked EMISSION (spike-first) — Gate-1 Plan
 
 - Created: 2026-06-03
-- Status: Codex Gate-1 R1 REJECT → R2 (PK-pinned `casByFamily`) → R2 REJECT (2-head must FAIL-CLOSED; tiered
-  disproof; error envelope) → R3 fixes applied 2026-06-03. NOT yet coded. The SPIKE (section 2) runs FIRST after
-  approval, BEFORE any emission code — if it does not prove out, STOP + report.
+- Status: Codex Gate-1 R1→R2→R2 REJECT→R3→R3 REJECT (NEW Tier-0 blocker: refresh.ts rotation has a 0-LIVE-HEAD
+  window that casByFamily alone cannot close) → R4 fixes applied 2026-06-03 (adds the refresh.ts rotation-atomicity
+  PREREQUISITE, §1.5). NOT yet coded. The SPIKE (section 2) runs FIRST after approval, BEFORE any emission code —
+  if it does not prove out, STOP + report.
 - Predecessor: PR5 5d-1 SHIPPED (PR #15 → main `819008c`). refresh_tokens.session_id is live + populated (7 logins
   write a fresh UUID, refresh.ts rotation preserves/heals; backfill = `legacy_<id>`). NO emission yet.
 - Approved design SoT: docs/reviews/pr5d-session-revoked-plan-2026-06-03.md (Codex Gate-1 R2 APPROVED) — §6
@@ -18,7 +19,7 @@
 ## 0. OWNER LOCKS (must hold; non-negotiable for 5d-2)
 --------------------------------------------------------------------------------
 
-L1. **SPIKE FIRST, TIERED STOP-IF-FAIL (Codex R2).** SP1-SP6 (section 2) on local miniflare AND a throwaway remote
+L1. **SPIKE FIRST, TIERED STOP-IF-FAIL (Codex R2/R3).** SP1-SP7 (section 2) on local miniflare AND a throwaway remote
     D1 run BEFORE any emission wiring. Because auth/logout.ts ALSO uses casByFamily, the fallback is TIERED: (a) a
     SHARED-primitive failure — casByFamily semantics / N=1 single-triple gating / self-logout rotation sub-case /
     remote parity — → STOP ALL emission (single-family is NOT a safe fallback). (b) ONLY the multi-family-specific
@@ -52,12 +53,46 @@ L6. Carryover non-negotiables: scope=`device` ONLY (no jti) · `refresh.ts` devi
   admin/revoke.ts mode=device (requireRole admin; non-null device_uuid; P1-15 hash-chain audit precedes the revoke).
 
 --------------------------------------------------------------------------------
-## 2. THE SPIKE (SP1-SP6) — the gating opener (run FIRST, throwaway, $0)
+## 1.5 PREREQUISITE — refresh.ts rotation atomicity (Codex R3 Tier-0 blocker)
+--------------------------------------------------------------------------------
+
+casByFamily ALONE does NOT close the revoke-vs-refresh race, because refresh.ts rotation is TWO separate D1 writes
+with a 0-LIVE-HEAD WINDOW between them: `UPDATE old SET revoked_at … RETURNING` (refresh.ts:184-189) THEN, after an
+intervening audit, `INSERT new` (refresh.ts:220-224). Interleaving: a revoke's casByFamily that runs AFTER the
+rotation's UPDATE committed but BEFORE its INSERT finds NO `revoked_at IS NULL` row → 0-row, NO emit; the rotation
+then INSERTs the new live head → it SURVIVES. The exact old race, at a different boundary — and a partial UNIQUE
+index would NOT fix it (the window is about TIMING, not uniqueness).
+
+FIX (5d-2 prerequisite, code-only, NO migration): make the rotation ONE atomic db.batch so a concurrent reader
+never sees a 0-live-head state:
+
+    const b = await db.batch([
+      db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE id=? AND revoked_at IS NULL`).bind(oldId),
+      db.prepare(`INSERT INTO refresh_tokens
+                    (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud, session_id)
+                  SELECT ?,?,?,?,?,?,?,? WHERE changes()=1`).bind(...newRowValues),   -- gated on the UPDATE
+    ])
+    if (b[0].meta.changes !== 1) return 401 REFRESH_TOKEN_REVOKED   -- reuse / lost race (gated INSERT added NOTHING)
+
+- REUSE DETECTION PRESERVED: changes()=0 → the old head was already revoked (replay, or a logout/revoke won) → 401,
+  and the gated INSERT inserted NO new head. changes()=1 → rotation succeeded.
+- session_id PRESERVED + NULL-heal exactly as 5d-1; auth_time/scope/issued_aud/device_uuid move into the
+  INSERT…SELECT binds. The aud_mismatch audit + token signing move to AFTER the batch (best-effort / pure).
+- ATOMIC ⇒ a concurrent casByFamily sees a CONSISTENT snapshot: the OLD head (pre-batch) OR the NEW head
+  (post-batch), NEVER 0. So a revoke either revokes+emits the old head (then the rotation reuse-aborts: its UPDATE
+  0-rows, gated INSERT adds nothing) OR revokes+emits the new head. NO miss. Proven by SP7 (both interleavings).
+- Strictly BETTER than today even ignoring emission: also removes the crash-between-window (old revoked + new
+  lost). Touches refresh.ts (hot Tier-0 path) → its OWN commit, spike-proven, full refresh.test regression green.
+- If this prerequisite is NOT done, 5d-2 emission is NOT safe and MUST NOT ship (Codex R3).
+
+--------------------------------------------------------------------------------
+## 2. THE SPIKE (SP1-SP7) — the gating opener (run FIRST, throwaway, $0)
 --------------------------------------------------------------------------------
 
 Mirror the 5a spike method: local miniflare (`db.batch()`, real workerd) + a throwaway REMOTE D1 (create
 `chiyigo-spike-5d2` → run → drop; never touch prod chiyigo_db). Throwaway vitest + wrangler d1 execute --remote.
-Proves the Mechanism-B multi-family batch semantics that section 4 depends on. Receipts attached to the 5d-2 PR.
+Proves the Mechanism-B multi-family batch semantics (§4) AND the rotation-atomicity prerequisite (§1.5). Receipts
+attached to the 5d-2 PR.
 
 - SP1 (core N-triple): `batch([casByFamily(A),seqA,obA, casByFamily(B),seqB,obB])` on two distinct unrevoked
   families → assert EXACTLY 2 outbox rows (skA seq1, skB seq1), both revoked. casByFamily = the PK-pinned subquery
@@ -77,12 +112,18 @@ Proves the Mechanism-B multi-family batch semantics that section 4 depends on. R
 - SP6 (chunk ceiling K — L3): find the largest db.batch (statement count AND bound-param count) the remote D1
   accepts → derive the safe per-batch family count K (3 statements + ~9 binds per family). Measurement, not
   assumption (feedback_dont_assert_runtime_semantics_without_verify).
+- SP7 (rotation atomicity + revoke-vs-rotation NO-MISS — Codex R3 / §1.5): (a) the atomic rotation batch:
+  changes()=1 → old revoked + new inserted (BOTH); changes()=0 → reuse → NEITHER (no new head). (b) REVOKE-BEFORE
+  rotation: casByFamily revokes+emits the old head, THEN the rotation batch's UPDATE 0-rows → gated INSERT adds NO
+  new head → 401 reuse. (c) ROTATION-BEFORE revoke: atomic rotation (one head) → casByFamily finds + revokes +
+  emits the NEW head. (d) assert NO interleaving leaves "revoke 0-rows AND a new live head survives". local+remote.
 
-DISPROOF PROTOCOL (L1, TIERED — Codex R2): a SHARED-primitive failure (casByFamily semantics / N=1 gating /
-self-logout rotation / remote parity = SP1 incl. sub-cases + SP3 + SP4 + SP5) → STOP ALL emission, report — NO
-single-family fallback (auth/logout.ts uses casByFamily too). ONLY a multi-family-specific failure (cross-triple
-chaining / chunk) WITH the shared primitive proven local+remote → MAY ship auth/logout.ts only. SP6 just SETS K
-(its failure bounds the chunk size, not a stop).
+DISPROOF PROTOCOL (L1, TIERED — Codex R2/R3): a SHARED-primitive failure (casByFamily semantics / N=1 gating /
+self-logout rotation / rotation-atomicity + revoke-vs-rotation no-miss / remote parity = SP1 incl. sub-cases +
+SP3 + SP4 + SP5 + SP7) → STOP ALL emission, report — NO single-family fallback (auth/logout.ts uses casByFamily AND
+depends on the atomic rotation too). ONLY a multi-family-specific failure (cross-triple chaining / chunk) WITH the
+shared primitive + rotation atomicity proven local+remote → MAY ship auth/logout.ts only. SP6 just SETS K (bounds
+the chunk size, not a stop).
 
 --------------------------------------------------------------------------------
 ## 3. emitSessionRevoked builder (functions/utils/domain-event-emit.ts)
@@ -123,6 +164,9 @@ globally-unique family id, PK-PINNED via a scalar subquery:
   execution time, so a concurrent refresh that rotated the head (revoke old id, INSERT new id with session_id
   PRESERVED) is still caught — casByFamily revokes the NEW head + emits. by-row-id (`WHERE id=100`) would 0-row and
   let the live new head SURVIVE the revoke. This applies to auth/logout.ts too (§4.1), not just device revoke.
+  SOUND ONLY because §1.5 makes rotation ATOMIC: without it, a revoke landing in the 0-live-head window BETWEEN the
+  rotation's UPDATE-old and INSERT-new would STILL 0-row + miss the about-to-appear head (Codex R3 — the §1.5
+  prerequisite, not casByFamily, closes that window).
 - B2 NULL-DEVICE: casByFamily keys on (user_id, family-id) with NO device_uuid in the predicate — session_id is
   globally unique, so it identifies the family regardless of device. The device branch (device_uuid=? vs IS NULL)
   lives ONLY in the ENUMERATION (§4.2). A `device_uuid=?` inside the CAS would 0-row on web/NULL rows (B2 bug).
@@ -235,14 +279,18 @@ immutable. Never client-supplied.)
 - COALESCE ref: a NULL-session_id row → revoke → emitted ref == `legacy_<id>` (L2).
 - post-commit audit redacted (stream_key_hash, never raw); audit-policy registry == 207 (the one new
   session.integrity_violation type).
-- SPIKE receipts (SP1-SP6, local+remote) in the PR body.
+- SPIKE receipts (SP1-SP7, local+remote) in the PR body (incl. SP7 rotation atomicity + revoke-vs-rotation no-miss).
 
 --------------------------------------------------------------------------------
 ## 9. Deploy / migration discipline
 --------------------------------------------------------------------------------
 
-- CODE-ONLY (no migration). credential-free prod smoke: home 200; wired endpoints 401/403 without auth (no state
-  change). Positive smoke (real revoke → outbox → consumer → deny projection) follows the owner-waiver pattern.
+- 5d-2 touches refresh.ts (the rotation-atomicity prerequisite §1.5/c2) IN ADDITION to the emit builder + 3 revoke
+  sites — still CODE-ONLY (no migration), but the refresh.ts change is a Tier-0 HOT PATH needing its own careful
+  code-gate + the FULL refresh.test regression green.
+- credential-free prod smoke: home 200; wired endpoints 401/403 without auth (no state change); a refresh round-trip
+  still 200 + rotates (the atomic rotation must not regress refresh). Positive revoke→outbox→consumer→deny smoke
+  follows the owner-waiver pattern.
 - Branch pr5d2-emission; double-gate (this plan → Codex; SPIKE receipts; then code → Codex); squash-merge after
   Approve; never push main.
 
@@ -251,11 +299,14 @@ immutable. Never client-supplied.)
 --------------------------------------------------------------------------------
 
   c1  this plan doc (Gate-1 checkpoint).
-  --- after Gate-1 Approve: run SP1-SP6; if disproven STOP+report ---
-  c2  emitSessionRevoked builder + builder unit tests + SP1-SP6 receipts in the PR body.
-  c3  auth/logout.ts single-family wire (incl. the COUNT=1 fail-closed preflight + the new
+  --- after Gate-1 Approve: run SP1-SP7; if disproven STOP+report (TIERED, §2) ---
+  c2  PREREQUISITE (§1.5): refresh.ts rotation → ONE atomic db.batch (UPDATE old + gated INSERT new; session_id +
+      auth_time/scope/issued_aud/device_uuid preserved; reuse = changes()=0) + FULL refresh.test regression +
+      SP7 receipts. [Tier-0 hot path — its OWN commit]
+  c3  emitSessionRevoked builder + builder unit tests + SP1-SP6 receipts in the PR body.
+  c4  auth/logout.ts single-family wire (incl. the COUNT=1 fail-closed preflight + the new
       `session.integrity_violation` audit type → registry 207) + tests.
-  c4  auth/devices/logout.ts + admin/revoke.ts mode=device multi-family wire (DISTINCT enumeration + COUNT!=1
+  c5  auth/devices/logout.ts + admin/revoke.ts mode=device multi-family wire (DISTINCT enumeration + COUNT!=1
       fail-closed) + chunk-K + failure contract + tests.
   (one PR, squash-merged; no migration.)
 
@@ -267,7 +318,7 @@ Q1. [RESOLVED, Codex R1] REVOKE_INCOMPLETE on a chunk failure uses the STANDARD 
     `{error:{code:'REVOKE_INCOMPLETE', message, traceId, data:{revoked,emitted,remaining}}}` — counts under
     error.data (not a bespoke body).
 Q2. [RESOLVED, Codex R1] Coupling revoke success to emit success (N≤K single batch) is correct for a security path.
-Q3. [RESOLVED, Codex R1] SP1-SP6 as c2 PR-body receipts (throwaway, uncommitted) accepted (5a precedent); the
+Q3. [RESOLVED, Codex R1] SP1-SP7 as PR-body receipts (throwaway, uncommitted) accepted (5a precedent); the
     code-gate cross-checks the spike SQL + outputs.
 Q4. [RESOLVED, R3] Per-family CAS = PK-pinned family-id subquery (casByFamily) + an EXACTLY-ONE-LIVE-HEAD
     FAIL-CLOSED preflight (COUNT!=1 → no emit / no mutation / critical audit / non-2xx) + DISTINCT-by-ref
@@ -275,7 +326,10 @@ Q4. [RESOLVED, R3] Per-family CAS = PK-pinned family-id subquery (casByFamily) +
     "revoke 1 emit 1"; emit ⟺ family FULLY revoked). Disproof protocol TIERED (L1); error envelope standardized (§5).
 Q5. [OPEN — owner/Codex] DB hardening: a partial UNIQUE index `ON refresh_tokens(session_id) WHERE revoked_at IS
     NULL` would make a 2-live-head family IMPOSSIBLE at the DB (not just detected). It is a MIGRATION (breaks
-    code-only). Default: NOT in 5d-2 — the code-level fail-closed preflight suffices; track as a follow-up. Fold
-    into 5d-2 (a 5d-2a schema step), or keep separate?
+    code-only). It does NOT fix the §1.5 rotation window (that needs the atomic batch regardless). Default: NOT in
+    5d-2 — the code-level fail-closed preflight suffices; track as follow-up. Fold in (a 5d-2a schema step), or keep separate?
+Q6. [RESOLVED, R4 — Codex R3] refresh.ts rotation has a 0-LIVE-HEAD window (two separate writes) casByFamily alone
+    cannot close → 5d-2 PREREQUISITE (§1.5) makes rotation ONE atomic db.batch (UPDATE old + gated INSERT new; reuse
+    = changes()=0), proven by SP7. Without it, 5d-2 emission MUST NOT ship.
 
---- END PR5 5d-2 GATE-1 PLAN (R3 — Codex R2: 2-head FAIL-CLOSED (emit ⟺ fully revoked) + tiered disproof + std envelope) ---
+--- END PR5 5d-2 GATE-1 PLAN (R4 — Codex R3: refresh.ts rotation-atomicity PREREQUISITE §1.5 closes the 0-live-head revoke-vs-refresh race; SP7) ---
