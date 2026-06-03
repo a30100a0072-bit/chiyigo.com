@@ -7,15 +7,16 @@
  * 不需要 Authorization header — 讓 access_token 過期的用戶也能登出。
  *
  * 設計原則：
- *  - 冪等：token 不存在 / 已撤銷 / 被並發 logout 搶先撤 → 同樣回 200，不洩漏 token 是否有效。
- *  - fail-closed：family 的 GLOBAL live-head 數必須 == 1；!= 1（2-head invariant 破壞或 0-head TOCTOU）
- *    → 不撤銷、不 emit、critical 稽核 + 5xx，避免「撤一個 head、emit 一筆 deny、卻仍留一個 live head」。
- *  - rotation-robust：撤銷走 casByFamily（PK-pinned subquery 重新解析當前 head），對並發 refresh 輪替安全（B1）。
+ *  - 冪等：token 不存在 / family 已全撤（含 old token 被輪換或登出後 replay）→ 同樣回 200，不洩漏 token 是否有效。
+ *  - rotation-robust（B1，端到端）：先用 token_hash 讀 family ref（**不要求該列仍 live**），再用 GLOBAL live-head
+ *    COUNT 決定動作；撤銷走 casByFamily（PK-pinned subquery 重新解析當前 head）。即使 concurrent refresh 已把
+ *    old token 輪換成 new live head，用 old token logout 仍會撤掉 new head（關掉 refresh-before-logout race）。
+ *  - fail-closed：同一 session_id 出現 >1 live head（不變量被破壞）→ 不撤、不 emit、critical 稽核 + 5xx。
  *  - emit ⟺ family 完全撤銷：session.revoked 與 refresh_tokens 撤銷在同一 atomic batch，both-or-neither。
  *
  * 回傳：
- *  200 → { message: 'Logged out' }（冪等；清除 chiyigo_refresh cookie）
- *  500 → { error, code: 'SESSION_INTEGRITY_VIOLATION' }（live-head 數 != 1；不撤銷、不清 cookie）
+ *  200 → { message: 'Logged out' }（冪等；清除 chiyigo_refresh cookie；含 0-live-head 無 emit 路徑）
+ *  500 → { error, code: 'SESSION_INTEGRITY_VIOLATION' }（同 family >1 live head；不撤、不 emit、不清 cookie）
  */
 
 import { hashToken } from '../../utils/crypto'
@@ -51,27 +52,34 @@ export async function onRequestPost({ request, env }) {
   const db = env.chiyigo_db
   const tokenHash = await hashToken(refresh_token)
 
-  // PR5 5d-2 §4.1：PRE-READ 此 token 的 LIVE row，取 user_id + 不可變的 per-login family ref。
-  // 不存在 / 已撤銷 → 冪等 200、不 emit（不替陳舊 token 製造「整個 session 被登出」的意外事件）。
-  const liveRow = await db
-    .prepare(`SELECT user_id, ${FAMILY_REF_SQL} AS ref FROM refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL`)
+  // PR5 5d-2 §4.1（code-gate c4 fix）：用 token_hash 讀此 token 所屬的 session FAMILY 的 ref — **刻意不要求該列仍
+  // live**。否則「concurrent refresh 先完成 atomic rotation（old 列撤、new 列 live、同 session_id）→ logout 才
+  // pre-read」這個 interleaving，會因 old 列已撤而找不到 family、直接 200 漏撤 current(new) head（refresh-before-
+  // logout race，違反 plan SP7 rotation-before-revoke）。改讀「任一同 token_hash 列（live 或 revoked）」的 family
+  // ref，再交給下方 GLOBAL live-head COUNT 決定動作 → casByFamily 仍會解析並撤掉當前 live head。
+  // 完全不存在此 token（從未發出 / 已清理）→ 冪等 200、不 emit。
+  const familyRow = await db
+    .prepare(`SELECT user_id, ${FAMILY_REF_SQL} AS ref FROM refresh_tokens WHERE token_hash = ? LIMIT 1`)
     .bind(tokenHash)
     .first()
-  if (!liveRow?.user_id) return loggedOut()
+  if (!familyRow?.user_id) return loggedOut()
 
-  const userId = Number(liveRow.user_id)
-  const ref = String(liveRow.ref)
+  const userId = Number(familyRow.user_id)
+  const ref = String(familyRow.ref)
 
-  // PR5 5d-2 §4.1 / B3：EXACTLY-ONE-LIVE-HEAD fail-closed 前置檢查。family (user_id, ref) 的 GLOBAL live-head
-  // 數必須 == 1（device-less，對齊 casByFamily 的 (user_id, ref) keying）。!= 1 → 不撤銷、不 emit、critical 稽核
-  // + 5xx，避免 event ⊥ auth-DB（emit ⟺ family 完全撤銷）。0-head 多半是並發搶先撤的 TOCTOU，2-head 是 rotation
-  // 不變量被破壞 — 兩者都拒絕猜測、誠實回報失敗（不清 cookie：本 request 並未完成撤銷）。
+  // PR5 5d-2 §4.1 / B3：GLOBAL device-less live-head COUNT on (user_id, ref)（對齊 casByFamily 的 (user_id, ref)
+  // keying；revoked 列不計入）：
+  //   heads === 0 → family 已全撤（含「old token 早被輪換 / 登出」後的 replay）→ 冪等 200、不 emit。
+  //   heads === 1 → casByFamily 撤掉當前 live head（可能正是輪換後的 new head）+ emit。
+  //   heads  > 1 → EXACTLY-ONE-LIVE-HEAD 不變量被破壞（同 session_id 兩列同時 live）→ fail-closed：critical 稽核
+  //                + 5xx，不撤不 emit、不清 cookie（避免「撤一列、emit 一筆 deny、卻仍留一個 live head」）。
   const countRow = await db
     .prepare(`SELECT COUNT(*) AS heads FROM refresh_tokens WHERE user_id = ? AND ${FAMILY_REF_SQL} = ? AND revoked_at IS NULL`)
     .bind(userId, ref)
     .first()
   const heads = Number(countRow?.heads ?? 0)
-  if (heads !== 1) {
+  if (heads === 0) return loggedOut()   // family 已全撤 → 冪等，不 emit
+  if (heads > 1) {
     await safeUserAudit(env, {
       event_type: 'session.integrity_violation', severity: 'critical',
       user_id: userId, request,

@@ -416,6 +416,26 @@ describe('[PR5-5d-2] session.revoked endpoint wire — auth/logout (single-famil
     expect(dee!.event_data).not.toContain('session:')  // raw streamKey never logged (only the hash)
   })
 
+  it('rotation-before-logout race (B1 at the endpoint): a concurrent refresh already rotated old→new (same session_id); logout with the OLD token revokes the NEW head + emits exactly one session.revoked', async () => {
+    const uid = await user()
+    const old = await seedLoginSession(uid, 'sess-RACE')
+    // a concurrent refresh ALREADY completed its atomic rotation: old head revoked, new LIVE head, SAME session_id
+    await db.prepare(`UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE id=?`).bind(old.id).run()
+    const fresh = await seedLoginSession(uid, 'sess-RACE')
+    // the browser still holds the OLD token (cookie not yet refreshed) → logout with it
+    const r = await logout(old.plain)
+    expect(r.status).toBe(200)
+    // the CURRENT (new) head IS revoked — logout did NOT silently miss it (the rejected pre-read would have 200'd here)
+    const freshRow = await db.prepare(`SELECT revoked_at FROM refresh_tokens WHERE id=?`).bind(fresh.id).first<{ revoked_at: string | null }>()
+    expect(freshRow!.revoked_at).not.toBeNull()
+    // exactly ONE session.revoked for the family (ref = the shared session_id), valid contract
+    const rows = await outboxRows(`session:${uid}:device:sess-RACE`)
+    expect(rows.length).toBe(1)
+    expect(rows[0].stream_seq).toBe(1)
+    expect(JSON.parse(rows[0].data_json)).toEqual({ sub: String(uid), scope: 'device', ref: 'sess-RACE' })
+    expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
+  })
+
   it('unknown / absent token → 200, NO outbox, NO auth.logout audit, the unrelated live session untouched', async () => {
     const uid = await user()
     await seedLoginSession(uid, 'sess-OTHER')
