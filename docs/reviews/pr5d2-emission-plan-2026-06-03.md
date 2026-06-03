@@ -1,8 +1,9 @@
 # PR5 5d-2 — session.revoked EMISSION (spike-first) — Gate-1 Plan
 
 - Created: 2026-06-03
-- Status: DRAFT for owner/Codex Gate-1. NOT yet coded. The SPIKE (section 2) runs FIRST, after this plan is
-  approved and BEFORE any emission code — if it does not prove out, STOP + report (do NOT enter emission).
+- Status: Codex Gate-1 R1 REJECT (3 plan-level blockers) → R2 fixes applied 2026-06-03 (a single PK-pinned
+  family-id CAS — `casByFamily`, §4 — closes B1/B2/B3 + the L4 inconsistency). Resubmitting. NOT yet coded. The
+  SPIKE (section 2) runs FIRST after approval, BEFORE any emission code — if it does not prove out, STOP + report.
 - Predecessor: PR5 5d-1 SHIPPED (PR #15 → main `819008c`). refresh_tokens.session_id is live + populated (7 logins
   write a fresh UUID, refresh.ts rotation preserves/heals; backfill = `legacy_<id>`). NO emission yet.
 - Approved design SoT: docs/reviews/pr5d-session-revoked-plan-2026-06-03.md (Codex Gate-1 R2 APPROVED) — §6
@@ -24,9 +25,10 @@ L2. **ref = `COALESCE(session_id, 'legacy_' || id)`** at every emission site —
     NEVER use bare session_id. (Heals any residual migrate-gap NULL; delimiter-safe — the ref never contains `:`.)
 L3. **chunk ceiling K** (from SP6) — a multi-family revoke is chunked into ≤K-family atomic batches; never emit an
     unbounded 3N-statement batch.
-L4. **multi-family CAS triple (Mechanism B)** — decompose into per-family `[CAS-UPDATE-by-id, seqUpsert(skᵢ),
-    outboxInsert(skᵢ)]`, each gated on its OWN preceding single-row CAS `changes()=1`. Reuse the proven primitive;
-    do NOT invent a `changes()>=1` primitive.
+L4. **multi-family CAS triple (Mechanism B)** — decompose into per-family `[casByFamily(ref), seqUpsert(skᵢ),
+    outboxInsert(skᵢ)]`, each gated on its OWN preceding CAS `changes()=1`. casByFamily (§4) is PK-pinned via a
+    scalar subquery → single-row (changes ∈ {0,1}) + rotation-robust + keyed on the family id (NO device_uuid).
+    Reuse the proven changes()=1 primitive; do NOT invent `changes()>=1`; do NOT CAS by row-id (rotation race, B1).
 L5. **0-row no-leak** — a 0-row per-family CAS (already-revoked / lost race) bumps NO seq + writes NO outbox row AND
     does not poison the next family's gate. Proven by SP2; asserted in the endpoint concurrency test.
 L6. Carryover non-negotiables: scope=`device` ONLY (no jti) · `refresh.ts` device_mismatch DEFERRED · whole-user
@@ -52,11 +54,13 @@ Mirror the 5a spike method: local miniflare (`db.batch()`, real workerd) + a thr
 `chiyigo-spike-5d2` → run → drop; never touch prod chiyigo_db). Throwaway vitest + wrangler d1 execute --remote.
 Proves the Mechanism-B multi-family batch semantics that section 4 depends on. Receipts attached to the 5d-2 PR.
 
-- SP1 (core N-triple): `batch([CAS(A),seqA,obA, CAS(B),seqB,obB])` on two distinct unrevoked families → assert
-  EXACTLY 2 outbox rows (skA seq1, skB seq1), both revoked. CAS = the FAMILY-id predicate (`… AND
-  COALESCE(session_id,'legacy_'||id)=? AND revoked_at IS NULL`, section-4 finding), NOT by-row-id. Proves
-  changes()=1 reflects each triple's OWN preceding CAS (CAS(B) RESETS changes() after obA). Add a rotation-race
-  sub-case: rotate family A's head between enumerate + batch → the family-id CAS still revokes the NEW head + emits.
+- SP1 (core N-triple): `batch([casByFamily(A),seqA,obA, casByFamily(B),seqB,obB])` on two distinct unrevoked
+  families → assert EXACTLY 2 outbox rows (skA seq1, skB seq1), both revoked. casByFamily = the PK-pinned subquery
+  CAS (§4). Proves changes()=1 reflects each triple's OWN preceding CAS (casByFamily(B) RESETS changes() after obA).
+  SUB-CASES: (i) ROTATION (B1) — rotate A's head (revoke old id, INSERT new id, session_id preserved) between
+  enumerate + batch → casByFamily revokes the NEW head + emits. (ii) NULL-DEVICE (B2) — a `device_uuid IS NULL`
+  family revokes + emits via family-id. (iii) 2-HEAD DEFENSE (B3) — seed 2 unrevoked rows with the SAME session_id
+  → casByFamily revokes EXACTLY 1 (subquery LIMIT 1 + PK match) + emits 1, NEVER 2, NEVER revoke-without-emit.
 - SP2 (0-row no-leak — L5): pre-revoke B, add a third family C → `batch([CAS(A),seqA,obA, CAS(B→0row),seqB,obB,
   CAS(C),seqC,obC])` → assert ONLY A + C emit; B's 0-row CAS yields no seq/outbox AND does not poison C.
 - SP3 (per-family read-your-writes): obB's `(SELECT last_seq … WHERE stream_key=skB)` reads skB's freshly-allocated
@@ -96,32 +100,52 @@ streamKey sees a single deny at seq 1 → no head-of-line interleave).
 ## 4. Wire sites + Mechanism B + chunking
 --------------------------------------------------------------------------------
 
-SELF-REVIEW FINDING (refines the master §7 sketch — flag for Codex, Q4): the master sketch CAS's each per-family
-revoke BY ROW id (`WHERE id=? AND revoked_at IS NULL`). With 5d-1's rotation live, that has a ROTATION-RACE security
-gap: a concurrent refresh revokes the enumerated head (id=100) + inserts a new head (id=105, session_id PRESERVED),
-so the admin's `CAS id=100` 0-rows → NO emit AND the live head 105 SURVIVES the revoke. The pre-5d code's single
-`UPDATE … WHERE user_id=? AND device_uuid=?` would catch 105. FIX (adopted below): CAS by the STABLE FAMILY id
-`COALESCE(session_id,'legacy_'||id)`, which revokes whatever the current unrevoked head is (robust to rotation),
-still exactly `changes()=1` per family (one unrevoked head per family — the rotation invariant). The spike SP1 uses
-this family-id CAS predicate (not by-row-id).
+THE CANONICAL PER-FAMILY CAS (`casByFamily`) — one design closes all 3 Codex R1 blockers. Keyed on the STABLE,
+globally-unique family id, PK-PINNED via a scalar subquery:
 
-### 4.1 auth/logout.ts — SINGLE-family (N=1, the 5a-proven single triple; ships even if the spike kills multi)
-- Restructure: PRE-READ `SELECT id, user_id, COALESCE(session_id,'legacy_'||id) AS ref FROM refresh_tokens WHERE
-  token_hash=?` (token_hash UNIQUE → 0/1 row; session_id IMMUTABLE → pre-read authoritative — L2).
-- If no row / already revoked → idempotent 200, NO emit (unchanged behavior).
-- Else `db.batch([ UPDATE … SET revoked_at WHERE token_hash=? AND revoked_at IS NULL (CAS),
-  ...emitSessionRevoked({sub:String(user_id), ref, actorSub:String(user_id)}).statements ])`; emit gated on the CAS.
+    casByFamily(userId, ref) =
+      UPDATE refresh_tokens SET revoked_at = datetime('now')
+       WHERE id = (SELECT id FROM refresh_tokens
+                     WHERE user_id = ? AND COALESCE(session_id,'legacy_'||id) = ? AND revoked_at IS NULL
+                     LIMIT 1)
+         AND revoked_at IS NULL                                              -- binds: [userId, ref]
+
+- B1 ROTATION-RACE (was the master §7 by-row-id CAS): the subquery RE-RESOLVES the current unrevoked head at
+  execution time, so a concurrent refresh that rotated the head (revoke old id, INSERT new id with session_id
+  PRESERVED) is still caught — casByFamily revokes the NEW head + emits. by-row-id (`WHERE id=100`) would 0-row and
+  let the live new head SURVIVE the revoke. This applies to auth/logout.ts too (§4.1), not just device revoke.
+- B2 NULL-DEVICE: casByFamily keys on (user_id, family-id) with NO device_uuid in the predicate — session_id is
+  globally unique, so it identifies the family regardless of device. The device branch (device_uuid=? vs IS NULL)
+  lives ONLY in the ENUMERATION (§4.2). A `device_uuid=?` inside the CAS would 0-row on web/NULL rows (B2 bug).
+- B3 SINGLE-ROW / NEVER REVOKE-WITHOUT-EMIT: `WHERE id=(scalar subquery)` matches the PK → changes() ∈ {0,1};
+  MULTI-ROW MUTATION IS IMPOSSIBLE. A hypothetical invariant-violating 2-unrevoked-head family → the subquery
+  LIMIT 1 picks one → revokes EXACTLY 1 + emits 1 (never 2, never revoke-without-emit). emit stays gated on
+  changes()=1 of that one row. (The prior plan's "accept changes()=2 → no emit" edge is REMOVED.)
+
+ref = `COALESCE(session_id,'legacy_'||id)` (L2). For a NULL-session_id gap row, COALESCE='legacy_<id>' is unique to
+that row's PK, so casByFamily still targets exactly it. All three wire sites (§4.1-4.3) use casByFamily verbatim.
+
+### 4.1 auth/logout.ts — SINGLE-family (N=1; ships even if the spike kills multi)
+- PRE-READ the LIVE row only (Codex B1): `SELECT user_id, COALESCE(session_id,'legacy_'||id) AS ref FROM
+  refresh_tokens WHERE token_hash=? AND revoked_at IS NULL`. No live row (absent / already revoked) → idempotent
+  200, NO emit (unchanged; no surprise family-logout for a stale token).
+- Else `db.batch([ casByFamily(user_id, ref), ...emitSessionRevoked({sub:String(user_id), ref,
+  actorSub:String(user_id)}).statements ])`; emit gated on casByFamily changes()=1.
+- ROTATION-ROBUST (Codex B1): the OLD design CAS'd `WHERE token_hash=? AND revoked_at IS NULL`; if a concurrent
+  refresh rotated the head between the pre-read and the batch, that 0-rows → logout 200 + NO emit + the live new
+  head SURVIVES. casByFamily's subquery re-resolves the current head → revokes + emits it. Add a
+  self-logout-vs-refresh-race spike/test (§2 SP1-i, §8).
 - Post-commit best-effort auditDomainEventEmitted (redacted stream_key_hash).
 
 ### 4.2 auth/devices/logout.ts — MULTI-family (self; BOTH device_uuid=string AND device_uuid IS NULL/web)
 - Keep the existing 404 anti-probe exists-check (unchanged).
-- PRE-READ heads: `SELECT id, COALESCE(session_id,'legacy_'||id) AS ref FROM refresh_tokens
-  WHERE user_id=? AND (device_uuid=? | device_uuid IS NULL) AND revoked_at IS NULL` (one unrevoked head per family;
-  for web/null, families are distinguished ONLY by session_id — this is why device_uuid alone was insufficient).
-- CHUNK heads into ≤K (L3): per chunk, `db.batch(heads.flatMap(h => [casByFamily(h.ref), ...emit(ref:h.ref)]))`
-  where `casByFamily` = `UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE user_id=? AND device_uuid=?
-  AND COALESCE(session_id,'legacy_'||id)=? AND revoked_at IS NULL` (Mechanism B — L4; FAMILY-id CAS per the
-  section-4 finding, robust to rotation; exactly changes()=1 per family). Post-commit audit per family CAS
+- ENUMERATE heads — the device branch lives in the ENUMERATION, NOT the CAS (Codex B2): non-null →
+  `… WHERE user_id=? AND device_uuid=? AND revoked_at IS NULL`; web/null → `… WHERE user_id=? AND device_uuid IS
+  NULL AND revoked_at IS NULL`. SELECT `COALESCE(session_id,'legacy_'||id) AS ref` (one head per family; web
+  families are distinguished ONLY by session_id, since device_uuid is NULL).
+- CHUNK heads into ≤K (L3): per chunk `db.batch(heads.flatMap(h => [casByFamily(user_id, h.ref), ...emit(h.ref)]))`.
+  casByFamily (§4) keys on (user_id, family-id) with NO device_uuid → the web/NULL path revokes + emits correctly
+  (a `device_uuid=?` inside the CAS would 0-row on a NULL-device row — Codex B2). Post-commit audit per family CAS
   changes()=1.
 
 ### 4.3 admin/revoke.ts mode=device — MULTI-family (admin; NON-NULL device_uuid only — UNCHANGED contract)
@@ -172,7 +196,10 @@ immutable. Never client-supplied.)
 - BUILDER unit: emitSessionRevoked shape/streamKey (session:<sub>:device:<ref>, tenant NULL, data {sub,scope,ref});
   atomicity-at-the-builder-seam (dup event_id rolls back the stub+emit batch).
 - single-family (auth/logout.ts): logout a live session → EXACTLY ONE session.revoked outbox row (ref = that
-  session_id); already-revoked/absent → NO row, still 200.
+  session_id); already-revoked/absent → NO row, still 200. SELF-LOGOUT-vs-REFRESH-RACE (B1): rotate the head
+  between the pre-read and the batch → casByFamily revokes the NEW head + emits ONCE (no stale-row miss).
+- single-row defense (B3): seed 2 unrevoked rows sharing one session_id → a revoke mutates EXACTLY 1 + emits 1
+  (never 2, never revoke-without-emit).
 - multi-family (auth/devices/logout.ts): 2 logins on one device → revoke → EXACTLY 2 rows, distinct streamKeys, each
   seq 1; run BOTH device_uuid=string AND device_uuid IS NULL (web). admin mode=device: 2 logins (non-null) → 2 rows.
 - 0-row no-leak / CONCURRENT double-revoke: each family emits EXACTLY once; outbox count == family count, each stream
@@ -210,16 +237,14 @@ immutable. Never client-supplied.)
 ## 11. Open questions for Codex Gate-1
 --------------------------------------------------------------------------------
 
-Q1. REVOKE_INCOMPLETE shape on a chunk failure: a 5xx with {revoked,emitted,remaining} in the body (vs the strict
-    error envelope {error:{code,message,traceId}}). Counts aid the client's retry; for admin/self they are not
-    sensitive. Acceptable, or fold the counts under error.data?
-Q2. Coupling revoke success to emit success in the single batch (N≤K) — correct for a security path (no
-    revoked-but-unemitted gap), agreed?
-Q3. Sequencing: SP1-SP6 as c2's PR-body receipts (throwaway, uncommitted) — sufficient, or require a committed
-    spike test? (5a precedent = receipts in PR body.)
-Q4. ROTATION-RACE FIX (section 4 finding): adopt FAMILY-id CAS (`COALESCE(session_id,'legacy_'||id)`) over the
-    master §7 by-row-id CAS, to avoid a concurrent rotation surviving a device revoke? (Plan adopts family-id.)
-    Edge: a malformed 2-unrevoked-head family would changes()=2 → no emit (safe: no emit), revoked but unemitted —
-    acceptable given the one-head-per-family rotation invariant. Confirm.
+Q1. [RESOLVED, Codex R1] REVOKE_INCOMPLETE on a chunk failure uses the STANDARD error envelope
+    `{error:{code:'REVOKE_INCOMPLETE', message, traceId, data:{revoked,emitted,remaining}}}` — counts under
+    error.data (not a bespoke body).
+Q2. [RESOLVED, Codex R1] Coupling revoke success to emit success (N≤K single batch) is correct for a security path.
+Q3. [RESOLVED, Codex R1] SP1-SP6 as c2 PR-body receipts (throwaway, uncommitted) accepted (5a precedent); the
+    code-gate cross-checks the spike SQL + outputs.
+Q4. [RESOLVED via §4 casByFamily] Per-family CAS = PK-pinned family-id subquery — closes B1 (rotation, incl.
+    auth/logout.ts), B2 (NULL device), B3 (single-row → multi-row mutation impossible → NEVER revoke-without-emit;
+    the prior "accept changes()=2" edge is REMOVED). No new open questions; submitting R2.
 
---- END PR5 5d-2 GATE-1 PLAN (DRAFT, owner-locks §0; rotation-race fix §4/Q4) ---
+--- END PR5 5d-2 GATE-1 PLAN (R2 — Codex R1 B1/B2/B3 fixed via the §4 PK-pinned family-id CAS `casByFamily`) ---
