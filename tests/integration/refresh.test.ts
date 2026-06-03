@@ -17,7 +17,7 @@ import { onRequestPost as refreshHandler } from '../../functions/api/auth/refres
 import { decodeJwt } from 'jose'
 
 async function seedRefresh(userId, {
-  deviceUuid = null, expired = false, revoked = false, issuedAud = null,
+  deviceUuid = null, expired = false, revoked = false, issuedAud = null, sessionId = null,
 } = {}) {
   const plain = generateSecureToken()
   const hash  = await hashToken(plain)
@@ -26,9 +26,9 @@ async function seedRefresh(userId, {
   const revokedAt = revoked
     ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null
   await env.chiyigo_db.prepare(
-    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, revoked_at, issued_aud)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).bind(userId, hash, deviceUuid, exp, revokedAt, issuedAud).run()
+    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, revoked_at, issued_aud, session_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(userId, hash, deviceUuid, exp, revokedAt, issuedAud, sessionId).run()
   return plain
 }
 
@@ -136,6 +136,42 @@ describe('POST /api/auth/refresh — Phase D1 device binding', () => {
     const tok = await seedRefresh(u.id, { deviceUuid: null })
     const r = await call(refreshReq({ token: tok, headers: { 'X-Device-Id': 'dev-zzz' } }))
     expect(r.status).toBe(200)
+  })
+})
+
+// PR5 5d-1b — refresh.ts rotation PRESERVES the per-login session_id (the session.revoked family id, stable
+// across the login's rotation chain), and HEALS a legacy/deploy-gap NULL session_id to a fresh non-null id.
+// Emission of session.revoked is 5d-2 (not wired here) -- these tests only lock the rotation write behavior.
+describe('POST /api/auth/refresh — PR5 5d session_id preserve / heal', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('rotation PRESERVES session_id (stable per-login family id, not regenerated)', async () => {
+    const u = await seedUser({ email: 'sess-keep@x' })
+    const tok = await seedRefresh(u.id, { sessionId: 'sess-keep-1' })
+    const r = await call(refreshReq({ token: tok }))
+    expect(r.status).toBe(200)
+    const rows = await env.chiyigo_db
+      .prepare('SELECT session_id, revoked_at FROM refresh_tokens WHERE user_id=? ORDER BY id')
+      .bind(u.id).all()
+    expect(rows.results).toHaveLength(2)
+    expect(rows.results[0].revoked_at).not.toBeNull()        // old row revoked
+    expect(rows.results[1].revoked_at).toBeNull()            // new rotated row live
+    expect(rows.results[1].session_id).toBe('sess-keep-1')   // PRESERVED across rotation, not a fresh uuid
+  })
+
+  it('rotation HEALS a NULL session_id row (legacy / deploy-gap) to a fresh non-null id', async () => {
+    const u = await seedUser({ email: 'sess-heal@x' })
+    const tok = await seedRefresh(u.id, { sessionId: null })  // pre-5d-1b legacy / migrate->deploy gap row
+    const r = await call(refreshReq({ token: tok }))
+    expect(r.status).toBe(200)
+    const rows = await env.chiyigo_db
+      .prepare('SELECT session_id FROM refresh_tokens WHERE user_id=? ORDER BY id')
+      .bind(u.id).all()
+    expect(rows.results).toHaveLength(2)
+    expect(rows.results[0].session_id).toBeNull()             // old gap row keeps its NULL (only revoked_at set)
+    expect(rows.results[1].session_id).toBeTruthy()           // new row HEALED to a non-null id (?? crypto.randomUUID())
+    expect(String(rows.results[1].session_id)).not.toContain(':')  // delimiter-safe (a UUID, no colon)
   })
 })
 

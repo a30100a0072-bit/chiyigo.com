@@ -95,7 +95,7 @@ export async function onRequestPost({ request, env }) {
   const tokenHash = await hashToken(refresh_token)
   const tokenRow  = await db
     .prepare(`
-      SELECT id, user_id, device_uuid, revoked_at, auth_time, scope, issued_aud
+      SELECT id, user_id, device_uuid, revoked_at, auth_time, scope, issued_aud, session_id
       FROM refresh_tokens
       WHERE token_hash = ? AND expires_at > datetime('now')
     `)
@@ -214,10 +214,13 @@ export async function onRequestPost({ request, env }) {
   }
   // P1-5：把 OIDC scope 透傳到 rotation 後的新 row，避免遺失
   // Codex r9-5：issued_aud 也透傳，rotation 後新 row 仍綁定原 aud
+  // PR5 5d-1b: PRESERVE the per-login session_id across rotation (like auth_time/scope/issued_aud) so the
+  // session.revoked family id is STABLE for the life of one login. A legacy/deploy-gap row with a NULL session_id
+  // is HEALED to a fresh one here (?? crypto.randomUUID()) so every rotated row carries a non-null id going forward.
   await db
-    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null, effectiveAud)
+    .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud, session_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null, effectiveAud, tokenRow.session_id ?? crypto.randomUUID())
     .run()
 
   // ── 5. 簽發新 Access Token ───────────────────────────────────

@@ -217,9 +217,10 @@ describe('POST /api/auth/oauth/token — code exchange', () => {
     // refresh_token 寫進 DB（hashed）
     const refreshHash = await hashToken(body.refresh_token)
     const dbRow = await env.chiyigo_db
-      .prepare('SELECT user_id FROM refresh_tokens WHERE token_hash = ?')
+      .prepare('SELECT user_id, session_id FROM refresh_tokens WHERE token_hash = ?')
       .bind(refreshHash).first()
     expect(dbRow?.user_id).toBe(user.id)
+    expect(dbRow?.session_id).toBeTruthy()  // PR5 5d-1b: oauth/token (OIDC) stamps a non-null per-login session_id
 
     // auth_code 已被原子消化（無法重放）
     const codeHash = await hashToken(code)

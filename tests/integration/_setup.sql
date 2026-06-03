@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   revoked_at  TEXT,
   auth_time   TEXT,
   scope       TEXT, -- migration 0035（P1-5）
-  issued_aud  TEXT  -- migration 0037（Codex r9-5）
+  issued_aud  TEXT, -- migration 0037（Codex r9-5）
+  session_id  TEXT  -- migration 0052（PR5 5d per-login session id, opaque TEXT, live=UUID or legacy_<id>）
 );
 
 -- migration 0035（P1-6/P1-8）— TOTP replay 防護

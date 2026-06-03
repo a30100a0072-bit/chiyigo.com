@@ -267,10 +267,11 @@ describe('POST /api/auth/webauthn/login-verify', () => {
 
     // refresh row 寫入
     const rt = await env.chiyigo_db.prepare(
-      `SELECT device_uuid FROM refresh_tokens WHERE user_id = ?`,
+      `SELECT device_uuid, session_id FROM refresh_tokens WHERE user_id = ?`,
     ).bind(u.id).first()
     expect(rt).not.toBeNull()
     expect(rt.device_uuid).toBeNull()  // web
+    expect(rt.session_id).toBeTruthy()  // PR5 5d-1b: webauthn login stamps a non-null per-login session_id
 
     // audit
     const audit = await env.chiyigo_db.prepare(

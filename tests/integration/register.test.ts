@@ -82,9 +82,10 @@ describe('POST /api/auth/local/register', () => {
     ).bind(u.id).first()
     expect(ev.n).toBe(1)
     const rt = await env.chiyigo_db.prepare(
-      'SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?',
+      'SELECT COUNT(*) AS n, MAX(session_id) AS sid FROM refresh_tokens WHERE user_id = ?',
     ).bind(u.id).first()
     expect(rt.n).toBe(1)
+    expect(rt.sid).toBeTruthy()  // PR5 5d-1b: register stamps a non-null per-login session_id
   })
 
   it('弱密碼 → 400（validatePassword 守門）', async () => {

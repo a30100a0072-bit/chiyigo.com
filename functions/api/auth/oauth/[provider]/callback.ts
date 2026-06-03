@@ -327,10 +327,11 @@ async function handle(context) {
   const webDeviceUuid = readOAuthDeviceCookie(request)
 
   // Codex r9-5：issued_aud 鎖定發行時的 audience
+  // PR5 5d-1b: + a fresh per-login session_id (the session.revoked family id, preserved across rotation).
   await db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud)
-    VALUES (?, ?, ?, ?, datetime('now'), ?)
-  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience).run()
+    INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
+    VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
+  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience, crypto.randomUUID()).run()
 
   // Phase D-4：登入 audit + 異常裝置警示。webDeviceUuid 有值 → 視作真實裝置，
   // 觸發新裝置 email；NULL → 只跑 country jump（OAuth 舊行為）
