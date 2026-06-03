@@ -225,3 +225,37 @@ export function emitMemberInvited(db: ChiyigoDb, input: MemberInvitedEmitInput, 
     outboxInsert(db, { eventId: meta.eventId, eventType: 'member.invited', streamKey, tenantId: input.tenantId, actorSub, occurredAt: meta.occurredAt }, dataSql, [input.tokenHash, input.email, input.platformRole]),
   ])
 }
+
+// ── account.* builders (5c wired sites; admin ban / unban) ───────────────────────
+// account.disabled / account.reenabled key on the STABLE account:<sub> (the user's numeric id) -- correct, because
+// account disable/reenable is a sticky per-account toggle (ban=deny seq N -> unban=undeny seq N+1 on ONE stream),
+// the inverse of session.revoked (which must be per-login and is therefore DEFERRED to 5d). tenantId is null
+// (account-scoped). data is {sub} only -- fully BOUND (sub is the immutable target id; actor is the admin), so no
+// json_object subquery / SQL-derived / CAS-pinned field, and the existing single-row changes()=1 seqUpsert applies.
+
+export interface AccountEmitInput {
+  targetUserId: number
+  actorUserId: number
+}
+
+/** account.disabled — admin ban. data {sub}(bound); streamKey account:<sub>; tenant null; actor = the admin. */
+export function emitAccountDisabled(db: ChiyigoDb, input: AccountEmitInput, meta: EmitMeta): EmitResult {
+  const sub = String(input.targetUserId)
+  const actorSub = String(input.actorUserId)
+  const streamKey = deriveStreamKeyValidated('account.disabled', null, actorSub, { sub }, meta)
+  return emitResult('account.disabled', streamKey, null, meta, [
+    seqUpsert(db, streamKey),
+    outboxInsert(db, { eventId: meta.eventId, eventType: 'account.disabled', streamKey, tenantId: null, actorSub, occurredAt: meta.occurredAt }, `json_object('sub', ?)`, [sub]),
+  ])
+}
+
+/** account.reenabled — admin unban. data {sub}(bound); streamKey account:<sub>; tenant null; actor = the admin. */
+export function emitAccountReenabled(db: ChiyigoDb, input: AccountEmitInput, meta: EmitMeta): EmitResult {
+  const sub = String(input.targetUserId)
+  const actorSub = String(input.actorUserId)
+  const streamKey = deriveStreamKeyValidated('account.reenabled', null, actorSub, { sub }, meta)
+  return emitResult('account.reenabled', streamKey, null, meta, [
+    seqUpsert(db, streamKey),
+    outboxInsert(db, { eventId: meta.eventId, eventType: 'account.reenabled', streamKey, tenantId: null, actorSub, occurredAt: meta.occurredAt }, `json_object('sub', ?)`, [sub]),
+  ])
+}

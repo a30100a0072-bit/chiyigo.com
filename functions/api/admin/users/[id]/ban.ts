@@ -15,7 +15,8 @@
 import { res } from '../../../../utils/auth'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../../../utils/requireRole'
 import { appendAuditLog } from '../../../../utils/audit-log'
-import { safeUserAudit } from '../../../../utils/user-audit'
+import { safeUserAudit, auditDomainEventEmitted } from '../../../../utils/user-audit'
+import { emitAccountDisabled } from '../../../../utils/domain-event-emit'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes'
 
 export async function onRequestPost({ request, env, params }) {
@@ -68,15 +69,30 @@ export async function onRequestPost({ request, env, params }) {
     return res({ error: 'audit_log_write_failed', code: 'AUDIT_CHAIN_FAILED' }, 500)
   }
 
-  // ── 原子：更新 status + bump token_version + 撤銷所有 refresh_token ───
-  // bump token_version 使所有 access token 立即失效（不必等 15m 過期）
-  await db.batch([
-    db.prepare(`UPDATE users SET status = 'banned', token_version = token_version + 1 WHERE id = ?`).bind(targetId),
-    db.prepare(`
-      UPDATE refresh_tokens SET revoked_at = datetime('now')
-      WHERE user_id = ? AND revoked_at IS NULL
-    `).bind(targetId),
+  // ── 原子：狀態轉移 + bump token_version + emit account.disabled + 撤銷所有 refresh_token（同一 batch）───
+  // bump token_version 使所有 access token 立即失效（不必等 15m 過期）。
+  // PR5 5c：account.disabled 在同一 atomic batch emit，gated on 狀態轉移 CAS（status != 'banned'）→ 只有真正
+  // active→banned 的 request emit 一筆事件；並發雙 ban 由 CAS 仲裁（loser 0-row、不 emit、不 bump seq、不再 +1）。
+  // 順序固定：CAS update → emit statements → refresh revoke（emit 的 changes() chain 必須讀到 users-UPDATE，
+  // 中間不可插入其他寫入）。eventId/occurredAt 是唯一副作用，在此注入（helper 無 I/O）。
+  const emit = emitAccountDisabled(
+    db,
+    { targetUserId: targetId, actorUserId: Number(user.sub) },
+    { eventId: crypto.randomUUID(), occurredAt: new Date().toISOString() },
+  )
+  const banBatch = await db.batch([
+    db.prepare(`UPDATE users SET status = 'banned', token_version = token_version + 1
+                 WHERE id = ? AND status != 'banned'`).bind(targetId),
+    ...emit.statements,
+    db.prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now')
+                 WHERE user_id = ? AND revoked_at IS NULL`).bind(targetId),
   ])
+
+  // 0-row CAS = 一個並發 ban 在本 request 的 pre-read 與 batch 之間搶先轉移了狀態 → 無轉移、無事件
+  // （seqUpsert/outboxInsert 也 0-row）。回與 pre-read 同樣的 already-banned 結果。
+  if (banBatch[0].meta.changes !== 1) {
+    return res({ error: 'User is already banned', code: 'USER_ALREADY_BANNED' }, 400)
+  }
 
   // P1-15：補 user_audit critical（觸發 Discord 即時通知）
   await safeUserAudit(env, {
@@ -84,6 +100,8 @@ export async function onRequestPost({ request, env, params }) {
     user_id: targetId, request,
     data: { admin_id: Number(user.sub), target_email: target.email },
   })
+  // PR5 5c：post-commit、best-effort 觀測 account.disabled 已寫入 outbox（redact streamKey→hash；失敗不擋已成功的 200）。
+  await auditDomainEventEmitted(env, emit.identity)
 
   return res({ message: 'User banned', user_id: targetId, status: 'banned' })
 }
