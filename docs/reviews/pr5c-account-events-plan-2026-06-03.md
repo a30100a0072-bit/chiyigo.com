@@ -1,7 +1,8 @@
 # PR5 5c — Retro-wire account.disabled / account.reenabled (Gate-1 Plan)
 
 - Created: 2026-06-03
-- Status: DRAFT R1 for Codex Gate-1. NOT yet coded.
+- Status: Owner Gate-1 APPROVED 2026-06-03 (Q1-Q5 ruled — section 18); pushed for formal Codex Gate-1 review.
+  NOT yet coded.
 - Plan order: docs/reviews/pr5-event-outbox-consumer-plan-2026-06-02.md section 0/D2 + section 14
   ("5c: retro-wire the HOTTER Tier-0 security paths one surface at a time"). PR5 5a + 5b SHIPPED.
 - Workgrade: L2 (wire emission into 2 existing admin endpoints + 2 new emit builders; NO new module, NO new
@@ -231,12 +232,16 @@ ENDPOINT integration tests (c3/c4 — real local D1, real db.batch — NO mock; 
     tenant_id NULL, actor_sub=admin, data.sub=<id>); a real unban → ONE account.reenabled row.
   - no-emit-on-noop (locks the EXACT failure mode): ban an already-banned user (CAS 0-row) → NO outbox row, NO
     seq bump, response USER_ALREADY_BANNED; unban a not-banned user likewise → USER_NOT_BANNED.
-  - CONCURRENT DOUBLE-BAN (the latent-race fix, locks the EXACT mode): two concurrent bans on one active user →
-    EXACTLY ONE account.disabled event (one CAS wins, the other 0-rows), not two.
+  - CONCURRENT DOUBLE-BAN — the FULL lost-race invariant set (owner Gate-1 code-gate LOCK, section 18): two
+    concurrent bans on one active user MUST assert ALL FOUR — (1) EXACTLY ONE account.disabled outbox row, (2) NO
+    second seq bump on account:<sub> (event_stream_sequences.last_seq == 1, not 2), (3) users.token_version
+    incremented by EXACTLY 1 (winner +1, the 0-row loser does NOT bump — the bump is inside the CAS'd statement),
+    (4) refresh_tokens ALL revoked at the end (the winner's S4, and the loser's UNGATED S4 is an idempotent
+    re-revoke — "finally revoked" holds either way). These four lock the latent-race fix AND the S4-ungated edge.
   - ban→unban contiguity THROUGH THE REAL 5b CONSUMER: ban then unban, run the consumer, assert event_deny_state
     for account:<sub> ends denied=0, last_applied_seq=2 — proving account events need NO consumer change.
-  - NO REGRESSION on ban side effects: token_version still increments by 1 on a real ban; active refresh_tokens
-    still revoked. unban still sets 'active' with no token_version change.
+  - NO REGRESSION on ban side effects: a single real ban bumps users.token_version by EXACTLY 1 (assert +1, not
+    +2); active refresh_tokens still revoked. unban still sets 'active' with NO token_version change.
   - post-commit audit: domain.event.emitted fires ONCE on applied (redacted — event_data contains stream_key_hash,
     NEVER the raw streamKey), ZERO on a no-op.
   - contract: every emitted row passes validateDomainEvent on reconstruct; streamKey == deriveStreamKey.
@@ -354,4 +359,25 @@ Q4. 0-row CAS endpoint response: PRESERVE the existing USER_ALREADY_BANNED / USE
     200). Plan keeps the existing responses.
 Q5. Confirm the session.revoked → 5d deferral (D-5c-1) and the 5d outline (section 16).
 
---- END PR5 5c GATE-1 PLAN (R1) ---
+--------------------------------------------------------------------------------
+## 18. Owner Gate-1 rulings (RESOLVED 2026-06-03 — fold into coding)
+--------------------------------------------------------------------------------
+
+Owner reviewed against the production-SaaS gate: APPROVED, no blocking finding. The five open questions are ruled:
+
+R-Q1. Wiring = INLINE emit-builder into ban.ts/unban.ts (small diff first on a Tier-0 phase). Domain-util
+       extraction stays a tracked follow-up (section 13). [section 4 / Q1]
+R-Q2. account.disabled carries NO `reason` in v1 — the endpoint has no reason input, do NOT fabricate one. The
+       contract key stays OPTIONAL + additive later. [section 3 / Q2]
+R-Q3. CAS predicates: ban `status != 'banned'`, unban `status = 'banned'`. users.status is NOT NULL (owner
+       confirmed) — so no NULL-status edge to guard. [section 4 / Q3]
+R-Q4. 0-row CAS preserves the existing USER_ALREADY_BANNED / USER_NOT_BANNED 400 responses (not idempotent 200).
+       [section 4 / Q4]
+R-Q5. session.revoked → 5d CONFIRMED. 5c is account-only. [D-5c-1 / section 16 / Q5]
+
+NON-BLOCKING (owner, for code-gate attention): ban's S4 refresh_tokens revoke is UNGATED, so a rare CAS-loser may
+re-run the revoke — ACCEPTABLE (same user, idempotent, defensive). The CODE-GATE must confirm the tests LOCK the
+four lost-race invariants (now in section 8 CONCURRENT DOUBLE-BAN): exactly ONE account.disabled event, NO seq
+bump on the loser, token_version incremented by EXACTLY 1, refresh_tokens finally revoked.
+
+--- END PR5 5c GATE-1 PLAN (R1, owner-approved 2026-06-03) ---
