@@ -279,6 +279,14 @@ export interface SessionRevokedEmitInput {
 
 /** session.revoked — bounded device-scope. streamKey session:<sub>:device:<ref>; tenant null; one-way 'deny'. */
 export function emitSessionRevoked(db: ChiyigoDb, input: SessionRevokedEmitInput, meta: EmitMeta): EmitResult {
+  // 5d DELIMITER-SAFETY invariant (owner / Codex c3 code-gate): ref must be a NON-EMPTY, COLON-FREE string so the
+  // 3-colon streamKey session:<sub>:<scope>:<ref> stays cleanly colon-splittable for future RP/tooling. The FROZEN
+  // contract only checks non-empty, so this builder (the c4/c5 contract seam) enforces colon-freeness — a colon or
+  // blank ref is a programmer error (throw, like buildDomainEvent on bad bound input). Real refs (a UUID or
+  // legacy_<id>) are colon-free by construction; this guards a future caller wiring a bad ref.
+  if (typeof input.ref !== 'string' || input.ref.length === 0 || input.ref.includes(':')) {
+    throw new Error(`emitSessionRevoked: ref must be a non-empty, colon-free string (got ${JSON.stringify(input.ref)})`)
+  }
   const streamKey = deriveStreamKeyValidated('session.revoked', null, input.actorSub, { sub: input.sub, scope: 'device', ref: input.ref }, meta)
   return emitResult('session.revoked', streamKey, null, meta, [
     seqUpsert(db, streamKey),

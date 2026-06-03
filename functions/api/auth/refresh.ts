@@ -206,6 +206,18 @@ export async function onRequestPost({ request, env }) {
     })
     return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
   }
+  // Codex c2 code-gate：也必須驗 S2（gated INSERT）的 row-count。S1 changes()=1 ⇒ S2 也應=1（spike 已證 changes()
+  // 鏈），但若 SQL / D1 semantic drift / 未來 refactor 讓 S1 撤了舊 head 卻沒插新 head（rot[1]≠1）→ FAIL CLOSED：
+  // 絕不為一個 DB 不存在的 session row 簽發/回傳新 token（否則使用者拿到孤兒 refresh token、下次 refresh 必失敗）。
+  // 舊 token 已在 S1 撤銷，故回 5xx 讓使用者重新登入 + critical audit 告警。
+  if (rot[1].meta.changes !== 1) {
+    await safeUserAudit(env, {
+      event_type: 'auth.refresh.fail', severity: 'critical',
+      user_id: tokenRow.user_id, request,
+      data: { reason_code: 'rotation_insert_missing' },
+    })
+    return res({ error: 'Rotation failed', code: 'ROTATION_FAILED' }, 500, cors)
+  }
   // F-2 audience mismatch audit（post-batch、best-effort；只有 client 明確送 raw aud 且 ≠ issued_aud 才記，升
   // critical = 攻擊者主動切換 audience 的訊號，非 client 缺送的噪音）。
   if (tokenRow.issued_aud && rawAudProvided && requestedAud !== tokenRow.issued_aud) {

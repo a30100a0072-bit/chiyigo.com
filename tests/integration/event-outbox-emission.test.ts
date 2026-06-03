@@ -348,4 +348,10 @@ describe('[PR5-5d-2] session.revoked emission builder', () => {
     expect(rows[0].actor_sub).toBeNull()
     expect(validateDomainEvent(asEnvelope(rows[0])).ok).toBe(true)
   })
+
+  it('rejects a ref with a colon or blank (delimiter-safety invariant) — throws, produces no statements', () => {
+    const meta = { eventId: 'sr-bad', occurredAt: '2026-06-03T00:00:00.000Z' }
+    expect(() => emitSessionRevoked(db, { sub: '1', ref: 'bad:ref', actorSub: '1' }, meta)).toThrow(/colon-free/)
+    expect(() => emitSessionRevoked(db, { sub: '1', ref: '', actorSub: '1' }, meta)).toThrow()
+  })
 })
