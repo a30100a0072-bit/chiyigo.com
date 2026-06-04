@@ -248,6 +248,25 @@ describe('acceptInvitation', () => {
 
     expect(loser.outcome).toBe('membership_not_active')   // PRE-FIX: 'expired'
   })
+
+  it('same-user concurrent loser whose membership was offboarded -> already_resolved (NOT expired)', async () => {
+    const { owner, tid, invitee } = await setup()
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    if (inv.outcome !== 'created') throw new Error('seed')
+    const tokenHash = await hashToken(inv.rawToken)
+
+    const realBatch = db.batch.bind(db)
+    const spy = vi.spyOn(db, 'batch').mockImplementationOnce(async (stmts) => {
+      await commitSelfWinner(realBatch, tokenHash, tid, invitee.id)
+      // offboard DELETEs the membership row (mirrors offboardMember) -> the loser's re-read finds no member row.
+      await db.prepare(`DELETE FROM organization_members WHERE tenant_id = ? AND user_id = ?`).bind(tid, invitee.id).run()
+      return realBatch(stmts)
+    })
+    const loser = await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id })
+    spy.mockRestore()
+
+    expect(loser.outcome).toBe('already_resolved')   // PRE-FIX: 'expired'
+  })
 })
 
 describe('revokeInvitation + list', () => {
