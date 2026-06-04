@@ -50,7 +50,11 @@ Reference — stream keys + deny effects (frozen contract, domain-events.ts):
 - session.revoked → `session:<sub>:device:<ref>` (deny; one-way)
 
 ### A. PR2 — billing grant (Option B permanent entitlement)  [D1 + audit + entitlements; NO outbox]
-- ACTION: admin step-up (scope `elevated:billing`, for_action `grant_plan`; + the JWT must carry `admin:billing:grant`) → `POST /api/admin/billing/grant`, body (snake_case) `{ "tenant_id": T, "product_id": "<p>", "manual_source": "smoke", "admin_idempotency_key": "<uuid>", "grant_reason": "smoke" }` (grant by `product_id` OR `plan_id`; `payment_ref` optional).
+- ACTION: admin step-up (scope `elevated:billing`, for_action `grant_plan`; + the JWT must carry `admin:billing:grant`) → `POST /api/admin/billing/grant`, body (snake_case; **`tenant_id` + `product_id` + `plan_id` are ALL required**; `manual_source` MUST be `admin_override` or `offline_payment`):
+  ```json
+  { "tenant_id": T, "product_id": "<p>", "plan_id": <planId>, "manual_source": "admin_override", "admin_idempotency_key": "<uuid>", "grant_reason": "smoke" }
+  ```
+  (the `offline_payment` variant uses `payment_ref` instead of `grant_reason`. A bad `manual_source` / a missing id → 400 ERR_VALIDATION.)
 - EXPECT: **200** `{ ok:true, operation_id, status, version }` (a repeat with the same `admin_idempotency_key` → 200 `replay:true`).
 - VERIFY D1: `SELECT * FROM tenant_product_access WHERE tenant_id=T;` → an active access row; `SELECT * FROM grant_plan_operations WHERE tenant_id=T ORDER BY id DESC LIMIT 1;` → the grant op (idempotency record).
 - VERIFY audit: `SELECT event_type,severity FROM audit_log WHERE event_type='billing.grant.applied' AND user_id=<admin> ORDER BY id DESC LIMIT 1;`
