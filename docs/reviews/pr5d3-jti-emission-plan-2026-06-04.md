@@ -123,6 +123,10 @@ Strictly worse than not emitting. Rejected.
 token — NOT a1 (unverified sub) and NOT b (hot-path map).** Sections 4-9 below are written for the (a2) path and
 are SKIPPED entirely if the ruling is (c).
 
+**Codex Gate-1 R1 (2026-06-04): APPROVE for (c) DEFER; REJECT for (a2) as first written**, with 3 folded blockers
+(token-class validation, mandatory rank guard, validate-before-coerce — see the §20 record + §4.4). The extra (a2)
+validation surface this exposed REINFORCES the (c) recommendation. Under (a2), §4.4 must hold before any code.
+
 --------------------------------------------------------------------------------
 ## 2. Scope and non-goals
 --------------------------------------------------------------------------------
@@ -131,7 +135,9 @@ IN SCOPE (only if §1 is ruled (a2); under (c), 5d-3 is a decision-record commit
 - Parameterize `scope` in the session.revoked emitter (or add a jti sibling builder) so it can emit
   `scope='jti'`, keeping the colon-free ref guard.
 - Accept a full access token at `admin/revoke.ts mode='jti'` (additive; bare jti remains accepted but does NOT
-  emit), verify it, extract sub+jti, revoke + emit one session.revoked(jti) gated on the `revoked_jti` insert.
+  emit), verify it, VALIDATE the token CLASS (§4.4 — regular session access token only), then extract sub+jti,
+  revoke + emit one session.revoked(jti) gated on the `revoked_jti` insert.
+- §4.4 regular-session-token + active-user + token-version + RANK validation (Codex R1 High#1/#2 + Medium) — REQUIRED.
 - The one new gating shape (emit gated on `revoked_jti` INSERT OR IGNORE changes()=1) + its spike (§5).
 - Post-commit best-effort `domain.event.emitted` audit (reuse, redacted). Boundary jti validation.
 - Tests at every layer (§9).
@@ -199,26 +205,33 @@ Additive: accept EITHER a bare `jti` (today's behavior, NO emit) OR a full `acce
       if (rawToken) {
         // verifyJwt (jwt.ts:152-175) returns the payload DIRECTLY and THROWS on bad sig / expired / wrong issuer;
         // it verifies issuer='https://chiyigo.com' by DEFAULT (so only OUR tokens pass) — pass audience:null to be
-        // aud-agnostic (a revoked token may have been minted for any platform app: mbti/talo/chiyigo).
+        // aud-agnostic (a session access token may be minted for any platform app: mbti/talo/chiyigo). Signature +
+        // exp + issuer ALONE do NOT prove "a regular SESSION access token" — §4.4 validates the token CLASS.
         let payload
         try { payload = await verifyJwt(rawToken, env, { audience: null }) }
         catch { return res({ error: 'access_token invalid or expired', code: 'ACCESS_TOKEN_INVALID' }, 400) }
-        sub = String(payload.sub); jti = String(payload.jti); exp = Number(payload.exp)
-        if (!sub || !jti) return res({ error: 'token missing sub/jti', code: 'TOKEN_CLAIMS_MISSING' }, 400)
+        // VALIDATE RAW TYPES BEFORE any String()/Number() coercion (Codex R1 Medium — a missing claim must NOT become
+        // the literal "undefined" in a streamKey). §4.4 does the full regular-access-token + active-user + rank gate.
+        const v = await validateRegularSessionTokenForRevoke(env, payload, /*adminRole*/ user.role)
+        if (v.error) return v.error                 // 400/403 — not a regular session token / unknown-or-higher target
+        sub = v.sub                                 // verified numeric-string user id (the SESSION owner)
+        jti = v.jti                                 // verified non-empty, colon-free jti
+        exp = v.exp                                 // verified finite exp
       } else {
         jti = (typeof body.jti === 'string' ? body.jti.trim() : '')   // legacy bare-jti path (no sub -> no emit)
         exp = Number.isFinite(body.exp) ? body.exp : now + 3600
+        if (!jti) return res({ error: 'jti is required for mode=jti', code: 'JTI_REQUIRED' }, 400)
+        if (jti.includes(':')) return res({ error: 'jti malformed', code: 'JTI_MALFORMED' }, 400)   // L3 boundary
       }
-      if (!jti) -> 400 JTI_REQUIRED
-      if (jti.includes(':') || jti.length === 0) -> 400 JTI_MALFORMED   // L3 boundary guard (ref delimiter-safety)
-      // P1-15 hash-chain audit precedes the mutation (UNCHANGED); target_id = sub ? Number(sub) : 0
+      // P1-15 hash-chain audit precedes the mutation (UNCHANGED); target_id = sub ? Number(sub) : 0.
       ...
       if (sub) {
-        // VERIFIED-sub path: atomic [INSERT OR IGNORE revoked_jti, ...emitSessionRevoked(scope:'jti')] (§5)
+        // VERIFIED-sub path: atomic db.batch([INSERT OR IGNORE revoked_jti, ...emitSessionRevoked(scope:'jti')]) (§5)
       } else {
         await revokeJti(env, jti, exp)   // legacy bare-jti path UNCHANGED (no emit)
       }
-      // KV cache + admin.token.revoked.jti audit (UNCHANGED); post-commit domain.event.emitted only when emitted
+      // KV cache (UNCONDITIONAL best-effort) + admin.token.revoked.jti audit (UNCHANGED); post-commit
+      // domain.event.emitted ONLY when an event was emitted (changes()=1).
     }
 
 - sub is SERVER-VERIFIED (from the signature-checked token), NEVER client-asserted (this is why a2, not a1).
@@ -231,6 +244,54 @@ jti-scope is structurally SIMPLE vs device-scope: one jti = one `revoked_jti` ro
 `session:<sub>:jti:<jti>`. NO multi-family, NO chunk, NO casByFamily, NO COUNT!=1 preflight, NO
 SESSION_INTEGRITY_VIOLATION path (those exist only because a device matches MANY login families; a jti is one
 token). This is why session-revoke.ts is NOT touched by 5d-3.
+
+### 4.4 REQUIRED — regular-session-token + active-user + rank validation (Codex Gate-1 R1 High#1/#2 + Medium)
+**The trap (Codex R1 High#1):** `verifyJwt` proves only "a signed, unexpired, chiyigo-issued JWT" — it does NOT
+prove "a regular SESSION access token". The platform signs SEVERAL token classes with the same key that ALSO carry
+sub (+ often jti): `pre_auth` (pre-2FA, scope='pre_auth'), step-up `elevated:*` (scope contains an elevated scope),
+`temp_bind` (OAuth email-bind, scope='temp_bind', **sub = the provider id, NOT a user id** — callback.ts:162-167),
+and the **OIDC id_token** (token.ts:208 — aud=client_id, claims sub/email/nonce, **NO `scope` claim, NO `ver`**).
+Accepting any of these would emit a durable `session.revoked(jti)` for a NON-session token (wrong/garbage subject).
+
+**The fix — reuse the codebase's EXISTING "regular access token" predicate, do NOT invent a new taxonomy.**
+`functions/utils/auth.ts:298` already has `requireRegularAccessToken`, whose docstring describes this EXACT threat
+("tenant 解析路徑必須只接受『一般 access token』…非登入完成 / 高權限一次性 token 可能滲進"). It rejects pre_auth /
+temp_bind / any `elevated:*` (via isElevatedScope) + requires a positive-int sub. 5d-3 adds a pure payload-level
+sibling that applies the SAME predicate to the body token (requireRegularAccessToken is header-based; we have a
+verified payload), plus the id_token exclusion + the requireAuth-level liveness checks + the rank guard:
+
+    validateRegularSessionTokenForRevoke(env, payload, adminRole) -> { sub, jti, exp } | { error: Response }
+      // 1. RAW-TYPE gate BEFORE coercion (Codex R1 Medium):
+      if (!Number.isFinite(payload.exp)) -> 400 ACCESS_TOKEN_INVALID
+      if (typeof payload.jti !== 'string' || payload.jti.length === 0 || payload.jti.includes(':')) -> 400 JTI_MALFORMED
+      const scope = typeof payload.scope === 'string' ? payload.scope : ''
+      // 2. TOKEN-CLASS gate = the requireRegularAccessToken predicate + id_token exclusion (High#1):
+      if (scope === '') -> 400 NOT_A_REGULAR_TOKEN          // id_tokens carry NO scope claim -> excluded here
+      if (scope === 'pre_auth' || scope === 'temp_bind') -> 400 NOT_A_REGULAR_TOKEN
+      if (scope.split(/\s+/).filter(Boolean).some(isElevatedScope)) -> 400 NOT_A_REGULAR_TOKEN   // step-up
+      const userId = Number(payload.sub)
+      if (!Number.isInteger(userId) || userId <= 0) -> 400 INVALID_SUBJECT     // temp_bind provider-id / id_token edge
+      // 3. ACTIVE-USER + token-version (mirror requireAuth:79-92 + step-up P2-4) — ONE users lookup, fail closed:
+      const row = SELECT role, status, token_version FROM users WHERE id=? AND deleted_at IS NULL  (userId)
+      if (!row) -> 404 USER_NOT_FOUND
+      if (row.status === 'banned') -> still revocable, but it is a known-target (no special-case needed; rank guard below)
+      if ((Number.isFinite(payload.ver) ? payload.ver : 0) < (row.token_version ?? 0)) -> 400 TOKEN_STALE   // already globally revoked
+      // 4. RANK guard = mode=user/device parity (Codex R1 High#2, revoke.ts:104-114) — NON-OPTIONAL:
+      if (!isKnownRole(row.role)) -> 403 UNKNOWN_TARGET_ROLE   (+ critical admin.unknown_role_target audit)
+      if (!actorOutranksTarget(adminRole, row.role)) -> 403 CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE
+      // (self-target: revoking ONE of your own access tokens is not a lockout -> no self guard needed, unlike mode=user/device)
+      return { sub: String(userId), jti: payload.jti, exp: Number(payload.exp) }
+
+- **Reuse, not reinvention:** the class predicate is byte-identical to requireRegularAccessToken (scope checks +
+  positive-int sub); the liveness checks mirror requireAuth/requireStepUp; the rank guard mirrors revoke.ts
+  mode=user/device. RECOMMEND extracting a shared pure `isRegularAccessTokenPayload(payload)` that BOTH
+  requireRegularAccessToken and this path call (behaviour-preserving extraction, locked by requireRegularAccessToken's
+  existing tests) so the two can never drift; FALLBACK = inline-mirror with a regression test asserting parity. Decide
+  at code-gate (first-do-no-harm: only extract if the existing tests fully cover the extracted predicate).
+- **id_token exclusion** is the `scope === ''` reject (our id_tokens have no scope claim, token.ts:184) — a positive
+  "must be a real access scope" check, not a fragile blocklist of id_token claims.
+- This is why §1's RECOMMENDATION is (c): even (a2)'s "minimal" path is a real Tier-0 validation surface (token-class
+  + active-user + token-version + rank) for a signal no RP consumes yet.
 
 --------------------------------------------------------------------------------
 ## 5. The one new gating shape + SP-JTI spike (gating artifact; IF (a2))
@@ -301,23 +362,32 @@ stays as-is (the bare-jti path, no emit) and jti-scope reverts to DEFER (c). Rec
 - Authz UNCHANGED: `requireRole(request, env, 'admin')` gates the whole endpoint. 5d-3 adds NO route, NO scope.
 - sub is SERVER-VERIFIED from the signature-checked token (a2) — NEVER client-asserted (the whole reason a2 ⟶ a1).
   ref = the verified jti. actorSub = the admin's validated sub. tenant_id = null (session-scoped).
-- Boundary validation (L3): the jti (ref) is validated non-empty + colon-free at the endpoint → 400 on bad input,
-  so a malformed ref can never reach the builder/streamKey (defense in depth over the builder's throw).
+- **TOKEN-CLASS gate (REQUIRED, Codex R1 High#1, §4.4):** a verified signature ≠ a session access token. The token
+  MUST pass the requireRegularAccessToken predicate (reject pre_auth / temp_bind / elevated:* step-up) + the
+  id_token exclusion (non-empty scope) + a positive-int sub, BEFORE any revoke/emit. Otherwise a pre_auth /
+  step-up / temp_bind / id_token (all signed, all carry sub) would mint a garbage-subject durable deny.
+- **TOKEN-VERSION + active-user (REQUIRED, §4.4):** revalidate payload.ver ≥ users.token_version + user exists /
+  not deleted (mirrors requireAuth:79-92), so a globally-revoked or deleted-user token is not re-emitted.
+- **RANK guard (REQUIRED, Codex R1 High#2 — NOT an open question, §4.4):** a2 resolves the target's identity, so it
+  MUST apply the same `isKnownRole` + `actorOutranksTarget` guard mode=user/device use (revoke.ts:104-114), fail
+  closed on unknown role. Without it a lower admin could revoke a peer's / a higher admin's specific access token by
+  pasting it = a vertical privilege-escalation gap. (Self-target needs no guard: one access-token self-revoke ≠ a
+  lockout, unlike mode=user/device.)
+- **Validate-before-coerce (REQUIRED, Codex R1 Medium, §4.4):** raw claim types are checked BEFORE String()/Number(),
+  so a missing sub/jti can never become the literal "undefined" inside a streamKey.
+- Boundary validation (L3): the jti (ref) is validated non-empty + colon-free → 400 on bad input (both the verified
+  and the legacy bare-jti path), so a malformed ref can never reach the builder/streamKey (defense in depth over the
+  builder's throw).
 - Token handling: the pasted access_token is verified then DISCARDED; only its jti (an opaque id) + sub (a numeric
   id) are used. The streamKey `session:<numeric sub>:jti:<uuid>` carries NO email / low PII; the audit hashes it to
   stream_key_hash regardless. The RAW refresh/access token is NEVER stored in the event (data is {sub,scope,ref}
   where ref is the jti, not a token secret). No raw token in any audit/alert.
 - No external egress → no SSRF. eventId UNIQUE + (stream_key, stream_seq) UNIQUE inherited from 0051.
 - P1-15 hash-chain audit STILL precedes the mutation (unchanged), recording the admin's revoke attempt.
-- **AUTHZ DELTA found in self-review (Open Question Q6):** today mode='jti' has NO `actorOutranksTarget` rank guard
-  (it blacklists a bare jti with no user context) and NO self-target guard. a2 NEWLY resolves the target's identity
-  (the verified sub), so a lower admin revoking a higher admin's specific access token becomes a VISIBLE action. For
-  parity with mode=user/device (which both enforce `actorOutranksTarget` + a self-target guard), RECOMMEND a2 also
-  look up the target's role (by the verified sub) and apply the same rank guard before revoke+emit; a single-token
-  self-revoke is NOT a lockout so the self-target guard is optional here. This is a security HARDENING the moment we
-  know the target — flagged for owner/Codex (do not silently resolve the target yet skip the guard mode=user/device
-  apply). Note: it adds a `users.role` lookup by sub on the a2 path only (the legacy bare-jti path stays guard-free
-  as today, since it has no resolved target).
+- **AUTHZ DELTA (RESOLVED → REQUIRED, Codex R1 High#2):** the rank guard is no longer an open question — it is a
+  mandatory part of §4.4 (isKnownRole + actorOutranksTarget on the verified target, fail closed). The single
+  `users` lookup in §4.4 serves the active-user, token-version, AND rank checks at once; the legacy bare-jti path
+  stays guard-free (it resolves no target).
 
 --------------------------------------------------------------------------------
 ## 8. Observability (IF (a2))
@@ -351,6 +421,15 @@ ENDPOINT integration (tests/integration/admin-revoke.test.ts; real local D1, rea
   rows (no sub → no emit) — proves the additive overlay leaves the legacy path's behavior intact.
 - INVALID token → 400 ACCESS_TOKEN_INVALID, no revoke, no emit. EXPIRED token → 400 (verifyJwt rejects), no emit.
 - MALFORMED jti (a colon-bearing pasted bare jti) → 400 JTI_MALFORMED, no revoke, no emit (L3 boundary).
+- **TOKEN-CLASS NEGATIVES (Codex R1 High#1 — each asserts NO revoke + NO outbox row):** a `pre_auth` token, a
+  step-up `elevated:*` token, a `temp_bind` token (sub=provider id), and an OIDC **id_token** (no scope claim) each
+  → 400 NOT_A_REGULAR_TOKEN / INVALID_SUBJECT, zero revoked_jti write, zero session.revoked rows. These are the
+  core High#1 regressions — they lock that a signed-but-non-session token never mints a deny.
+- **STALE token-version NEGATIVE (§4.4):** a token whose `ver` < users.token_version → 400 TOKEN_STALE, no emit.
+- **RANK-GUARD NEGATIVES (Codex R1 High#2):** admin pastes a token belonging to a PEER (equal role) or a HIGHER
+  role → 403 CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE, no revoke, no emit; an UNKNOWN-role target → 403
+  UNKNOWN_TARGET_ROLE (+ critical audit). A strictly-lower-role target → revoke + EXACTLY ONE emit (positive).
+- **DELETED-user NEGATIVE:** a token whose sub no longer exists / is soft-deleted → 404 USER_NOT_FOUND, no emit.
 - authz: non-admin → 401/403, no state change.
 - contiguity THROUGH the real 5b consumer: emit → run consumer → event_deny_state for `session:<sub>:jti:<jti>`
   denied=1, last_applied_seq=1 (proves jti events need NO consumer change).
@@ -413,26 +492,51 @@ SP-JTI receipts (SP-JTI-1..4, local + remote) attached to the PR body (5a/5d-2 d
 --------------------------------------------------------------------------------
 
 (Beyond §1, which Codex should sanity-check as the lead decision.)
-Q1. Is the (a2) verified-full-token mechanism the right way to obtain a server-authoritative sub for jti-scope
-    (vs a1 caller-asserted / b hot-path map), and is keeping the legacy bare-jti path as a no-emit overlay correct?
+Q1. [folded Codex R1 High#1] (a2) = verified full token + the §4.4 regular-session-token CLASS gate
+    (reject pre_auth/temp_bind/elevated:*/id_token, positive-int sub) + active-user/token-version + the legacy
+    bare-jti no-emit overlay — is this the right server-authoritative-sub mechanism (vs a1 / b)?
 Q2. Is the new gating shape (emit gated on `revoked_jti` INSERT OR IGNORE changes()=1) sufficiently covered by
     SP-JTI-1..4 (incl. the IGNORE-branch-yields-changes()=0 case + remote parity) to clear it before code? Is an
     INSERT OR IGNORE conflict materially different from the proven UPDATE-CAS for changes()-chaining?
 Q3. Scope parameter (single builder, §4.1-i) vs jti sibling builder (4.1-ii) — preference for the contract seam?
+    AND: extract a shared pure `isRegularAccessTokenPayload` from requireRegularAccessToken for §4.4 to reuse, or
+    inline-mirror with a parity regression test? (§4.4 — first-do-no-harm vs DRY.)
 Q4. a2's expired-token limitation (verifyJwt rejects expired → can't emit for an already-expired jti) — acceptable
     given revoking an expired token is itself a near-no-op, or does the owner want pre-emptive bare-jti+user_id
     (a1) despite the unverified-sub integrity caveat?
 Q5. Confirm 5d-3 touches NEITHER device-scope LOGIC (5d-2) NOR mode=user NOR refresh.ts (blast-radius containment;
     scope-param option i adds only a literal `scope:'device'` arg at the 2 existing call locations — §4.1 / L4).
-Q6. (self-review) a2 newly resolves the target's identity → apply the mode=user/device `actorOutranksTarget` rank
-    guard on the a2 path (recommended, §7), or keep mode='jti' rank-guard-free as today? Self-target guard needed?
+Q6. [RESOLVED, Codex R1 High#2] The `actorOutranksTarget` rank guard is now MANDATORY in §4.4 (not optional) — a2
+    resolves the target, so it enforces isKnownRole + actorOutranksTarget, fail closed, parity with mode=user/device.
 
 --------------------------------------------------------------------------------
 ## 14. Owner Gate-1 rulings (to be filled at the checkpoint)
 --------------------------------------------------------------------------------
 
-- §1 (jti→sub source): __ (a1 / a2 / b / c) — PENDING owner ruling.
-- If (a2): §4.1 builder shape (scope param vs sibling): __ ; Q4 (expired-token limitation accepted?): __ .
+- §1 (jti→sub source): __ (a1 / a2 / b / c) — PENDING owner ruling. (Codex R1: approve for c; for a2, §4.4 required.)
+- If (a2): §4.1 builder shape (scope param vs sibling): __ ; §4.4 shared-predicate extract vs inline (Q3): __ ;
+  Q4 (expired-token limitation accepted?): __ .
 - If (c): record the deferral + the reserved-slot rationale here + in memory; close 5d-3.
 
---- END PR5 5d-3 GATE-1 PLAN (jti-scope emission; lead decision = the jti→sub source, §1) ---
+--------------------------------------------------------------------------------
+## 20. Codex Gate-1 review record
+--------------------------------------------------------------------------------
+
+CODEX GATE-1 R1 (2026-06-04) = **APPROVE for (c) DEFER; REJECT for (a2) DELIVER as first written** — 3 blockers,
+all folded into the (a2) sections (NO change to the §1 decision framing or the (c) recommendation):
+- **High#1 (token class):** verifyJwt proves only "signed + unexpired + chiyigo-issued", NOT "a regular SESSION
+  access token". pre_auth / step-up elevated:* / temp_bind / OIDC id_token all carry sub (+jti) and would emit a
+  garbage-subject deny. FOLD → §4.4 REQUIRED: reuse the requireRegularAccessToken predicate (reject
+  pre_auth/temp_bind/elevated:*) + id_token exclusion (non-empty scope) + positive-int sub + active-user +
+  token-version revalidation. §9 negative tests for pre_auth/step-up/temp_bind/id_token/stale-ver/deleted-user.
+- **High#2 (rank guard mandatory):** once a2 resolves the target sub, skipping the mode=user/device
+  actorOutranksTarget guard is a vertical-privilege gap (revoke a peer/higher's token by pasting it). FOLD → §4.4
+  REQUIRED: isKnownRole + actorOutranksTarget, fail closed; §7 upgraded from open-question to mandatory; §9
+  peer/higher/unknown-role negatives. (Q6 RESOLVED.)
+- **Medium (validate before coerce):** String(payload.sub)/String(payload.jti) before type-checking would let a
+  missing claim become the literal "undefined" in a streamKey. FOLD → §4.2/§4.4 raw-type gate BEFORE any coercion.
+Codex also affirmed: SP-JTI-1..4 is the right spike shape and remote parity IS required (INSERT OR IGNORE is
+materially different enough from UPDATE-CAS); consumer/DENY_EFFECT reuse is fine; keep raw tokens out of
+audit/response/log. Release decision: approve for (c); for (a2), §4.4 + the negatives are non-optional before code.
+
+--- END PR5 5d-3 GATE-1 PLAN (jti-scope emission; lead decision = the jti→sub source, §1; Codex R1 folded) ---
