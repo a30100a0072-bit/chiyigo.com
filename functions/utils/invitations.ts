@@ -269,9 +269,22 @@ export async function acceptInvitation(db: ChiyigoDb, input: AcceptInvitationInp
   if (after && after.accepted_user_id === input.acceptingUserId && after.accepted_at === occurredAt) {
     return { outcome: 'joined', tenantId: after.tenant_id, platformRole: after.platform_role, sub: String(input.acceptingUserId), emitted: emit.identity }
   }
-  // A concurrent accept won the consume (or it expired between pre-check and CAS): re-derive a stable deny.
+  // A concurrent accept by ANOTHER user won the consume: re-derive a stable deny.
   if (after && after.accepted_user_id !== null && after.accepted_user_id !== input.acceptingUserId) return { outcome: 'already_resolved' }
-  return { outcome: 'expired' }
+  // A concurrent accept by the SAME user won (this request saw 'pending' at the pre-check, then lost the consume CAS
+  // to a sibling click -> the row is accepted by self but at a DIFFERENT accepted_at). We did NOT 'expire': the user
+  // IS resolved. Re-read live membership and classify exactly like the sequential accepted-by-self replay (above),
+  // never the misleading 'expired' fallthrough. Read-only: the loser already wrote nothing (consume/join/emit 0-row).
+  if (after && after.accepted_user_id === input.acceptingUserId) {
+    const m = await db
+      .prepare(`SELECT status, platform_role FROM organization_members WHERE tenant_id = ? AND user_id = ?`)
+      .bind(after.tenant_id, input.acceptingUserId)
+      .first<{ status: string; platform_role: string }>()
+    if (!m) return { outcome: 'already_resolved' }                       // offboarded between the win and this re-read
+    if (m.status !== 'active') return { outcome: 'membership_not_active' } // suspended -> NOT a silent re-join
+    return { outcome: 'replay', tenantId: after.tenant_id, platformRole: m.platform_role }
+  }
+  return { outcome: 'expired' }   // genuinely never consumed (accepted_user_id null / row gone)
 }
 
 // ── revokeInvitation ───────────────────────────────────────────────────────────

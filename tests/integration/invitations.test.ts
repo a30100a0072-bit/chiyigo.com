@@ -6,7 +6,7 @@
  * not_found; accepted-replay gated on live membership: active->replay, suspended->MEMBERSHIP_NOT_ACTIVE,
  * offboarded->already_resolved; concurrent double-accept) + revoke (incl. cross-tenant guard) + list.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, seedUser, seedTenant, seedMembership, seedInvitation } from './_helpers'
 import { hashToken } from '../../functions/utils/crypto'
@@ -14,6 +14,7 @@ import {
   createInvitation, acceptInvitation, revokeInvitation, listPendingInvitations,
 } from '../../functions/utils/invitations'
 import { suspendMember, offboardMember } from '../../functions/utils/members'
+import { emitMemberJoined } from '../../functions/utils/domain-event-emit'
 
 const db = env.chiyigo_db
 beforeEach(async () => { await resetDb() })
@@ -90,6 +91,30 @@ describe('acceptInvitation', () => {
     const tid = await orgTenant()
     const invitee = await user(opts.inviteeEmail ?? 'bob@x.io', opts.inviteeVerified ?? 1)
     return { owner, tid, invitee }
+  }
+
+  // Commit a PRODUCTION-EQUIVALENT same-user winner (real consume + join + member.joined emit) at a FIXED past
+  // accepted_at, via the REAL db.batch. Used inside a one-shot spy to force the concurrent same-user race
+  // DETERMINISTICALLY: the fixed past accepted_at can never collide with the loser's real (~now) occurredAt, so the
+  // loser is guaranteed to hit the "same user won concurrently" branch (never a spurious joined/already_member).
+  // A faked raw-SQL winner would emit NO member.joined, making the "exactly one member.joined" invariant meaningless
+  // (Codex Gate-1 binding condition).
+  const WINNER_AT = '2020-01-01T00:00:00.000Z'
+  async function commitSelfWinner(realBatch: typeof db.batch, tokenHash: string, tid: number, inviteeId: number) {
+    const emit = emitMemberJoined(
+      db, { tenantId: tid, acceptingUserId: inviteeId, platformRole: 'member' },
+      { eventId: crypto.randomUUID(), occurredAt: WINNER_AT },
+    )
+    await realBatch([
+      db.prepare(`UPDATE invitations SET status = 'accepted', accepted_user_id = ?, accepted_at = ?, updated_at = ?
+                    WHERE token_hash = ? AND status = 'pending' AND expires_at > datetime('now')`)
+        .bind(inviteeId, WINNER_AT, WINNER_AT, tokenHash),
+      db.prepare(`INSERT INTO organization_members (tenant_id, user_id, platform_role, status)
+                    SELECT tenant_id, ?, platform_role, 'active' FROM invitations
+                     WHERE token_hash = ? AND accepted_user_id = ? AND accepted_at = ?`)
+        .bind(inviteeId, tokenHash, inviteeId, WINNER_AT),
+      ...emit.statements,
+    ])
   }
 
   it('happy: consumes the invite + creates an active membership, exactly once', async () => {
@@ -177,6 +202,70 @@ describe('acceptInvitation', () => {
     expect(r2.outcome === 'joined' || r2.outcome === 'replay' || r2.outcome === 'already_member').toBe(true)
     const cnt = await db.prepare(`SELECT COUNT(*) AS c FROM organization_members WHERE tenant_id = ? AND user_id = ?`).bind(tid, invitee.id).first<{ c: number }>()
     expect(Number(cnt?.c)).toBe(1)
+  })
+
+  // Regression (deterministic, forced interleaving): a SAME-USER concurrent loser must be reclassified, NOT
+  // mis-reported as 'expired'. PRE-FIX this returned 'expired' (the bug); POST-FIX it returns the live-membership
+  // classification, exactly like the sequential accepted-by-self replay. A Promise.all test can't be reliably
+  // pre-fix RED, so we force the exact race with a one-shot db.batch spy + a production-equivalent winner.
+  it('same-user concurrent loser -> replay (NOT expired) and writes neither membership nor member.joined', async () => {
+    const { owner, tid, invitee } = await setup()
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    if (inv.outcome !== 'created') throw new Error('seed')
+    const tokenHash = await hashToken(inv.rawToken)
+
+    const realBatch = db.batch.bind(db)
+    const spy = vi.spyOn(db, 'batch').mockImplementationOnce(async (stmts) => {
+      await commitSelfWinner(realBatch, tokenHash, tid, invitee.id)   // same-user winner commits first (real emit)
+      return realBatch(stmts)                                          // the loser's real batch -> 0-rows everything
+    })
+    const loser = await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id })
+    spy.mockRestore()
+
+    expect(loser.outcome).toBe('replay')   // PRE-FIX: 'expired' (this assertion is the RED that locks the bug)
+
+    // The loser touched NOTHING: exactly one membership + exactly one member.joined, both the winner's.
+    const mem = await db.prepare(`SELECT COUNT(*) AS c FROM organization_members WHERE tenant_id = ? AND user_id = ?`).bind(tid, invitee.id).first<{ c: number }>()
+    expect(Number(mem?.c)).toBe(1)
+    const joined = await db.prepare(`SELECT COUNT(*) AS c FROM event_outbox WHERE event_type = 'member.joined' AND stream_key = ?`).bind(`tenant:${tid}:member:${invitee.id}`).first<{ c: number }>()
+    expect(Number(joined?.c)).toBe(1)
+  })
+
+  it('same-user concurrent loser whose membership is now suspended -> membership_not_active (NOT expired)', async () => {
+    const { owner, tid, invitee } = await setup()
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    if (inv.outcome !== 'created') throw new Error('seed')
+    const tokenHash = await hashToken(inv.rawToken)
+
+    const realBatch = db.batch.bind(db)
+    const spy = vi.spyOn(db, 'batch').mockImplementationOnce(async (stmts) => {
+      await commitSelfWinner(realBatch, tokenHash, tid, invitee.id)
+      await db.prepare(`UPDATE organization_members SET status = 'suspended' WHERE tenant_id = ? AND user_id = ?`).bind(tid, invitee.id).run()
+      return realBatch(stmts)
+    })
+    const loser = await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id })
+    spy.mockRestore()
+
+    expect(loser.outcome).toBe('membership_not_active')   // PRE-FIX: 'expired'
+  })
+
+  it('same-user concurrent loser whose membership was offboarded -> already_resolved (NOT expired)', async () => {
+    const { owner, tid, invitee } = await setup()
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    if (inv.outcome !== 'created') throw new Error('seed')
+    const tokenHash = await hashToken(inv.rawToken)
+
+    const realBatch = db.batch.bind(db)
+    const spy = vi.spyOn(db, 'batch').mockImplementationOnce(async (stmts) => {
+      await commitSelfWinner(realBatch, tokenHash, tid, invitee.id)
+      // offboard DELETEs the membership row (mirrors offboardMember) -> the loser's re-read finds no member row.
+      await db.prepare(`DELETE FROM organization_members WHERE tenant_id = ? AND user_id = ?`).bind(tid, invitee.id).run()
+      return realBatch(stmts)
+    })
+    const loser = await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id })
+    spy.mockRestore()
+
+    expect(loser.outcome).toBe('already_resolved')   // PRE-FIX: 'expired'
   })
 })
 
