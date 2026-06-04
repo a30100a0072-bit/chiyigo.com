@@ -57,25 +57,45 @@ Reference — stream keys + deny effects (frozen contract, domain-events.ts):
 - VERIFY entitlement: `GET /api/tenants/T/entitlements` (as a member) reflects the granted product.
 - NOTE: PR2 emits NO domain event (product_access.* deferred to F-2) → no outbox/consumer step here.
 
-### B. PR3 — credit wallet topup + quota  [D1 + audit; NO outbox]
-- ACTION: admin step-up (scope `elevated:billing`, for_action `wallet_topup`; + the JWT must carry `admin:billing:wallet`) → `POST /api/admin/billing/wallets/T/topup` (amount). (Adjust: `.../wallets/T/adjust`; quota: `POST /api/admin/billing/quotas/T/<productId>`.)
-- EXPECT: 200.
-- VERIFY D1: `SELECT balance FROM credit_wallets WHERE tenant_id=T;` increased by amount; `SELECT delta,reason FROM credit_ledger WHERE tenant_id=T ORDER BY id DESC LIMIT 1;` → the topup entry. Quota: `product_usage_quota` + `quota_config_ledger` rows.
-- VERIFY audit: the wallet/quota audit event.
-- VERIFY view: `GET /api/tenants/T/wallet` shows the new balance.
+### B. PR3 — credit wallet topup / adjust / quota  [D1 + audit; NO outbox]
+All three are admin step-up `elevated:billing` + effective `admin:billing:wallet`, but DIFFERENT for_action + method + body.
+The credit ledger is `credit_ledger(entry_type, amount, balance_after, ...)` — there is NO `delta`/`reason` column there;
+`reason`/`new_limit` live in `quota_config_ledger` (quota only).
+
+- **B1 topup** — step-up for_action `wallet_topup` → `POST /api/admin/billing/wallets/T/topup`, body `{ "amount": 100, "admin_idempotency_key": "<uuid>", "ref": "smoke" }` → EXPECT 200.
+  - D1: `SELECT balance FROM credit_wallets WHERE tenant_id=T;` increased by amount;
+    `SELECT entry_type, amount, balance_after FROM credit_ledger WHERE tenant_id=T AND entry_type='topup' ORDER BY id DESC LIMIT 1;`
+  - view: `GET /api/tenants/T/wallet` shows the new balance. audit: `billing.*` (or `billing.credit.*`) event.
+- **B2 adjust** — step-up for_action `wallet_adjust` → `POST /api/admin/billing/wallets/T/adjust`, body `{ "amount": 10, "direction": "credit", "admin_idempotency_key": "<uuid>", "reason": "smoke" }` → EXPECT 200.
+  - D1: `SELECT entry_type, amount, balance_after, ref FROM credit_ledger WHERE tenant_id=T AND entry_type='adjust' ORDER BY id DESC LIMIT 1;` (reason is stored in `ref`).
+- **B3 quota** — step-up for_action `quota_set`, **PUT** (not POST) → `PUT /api/admin/billing/quotas/T/<productId>`, body `{ "quota_limit": 1000, "period": "lifetime", "admin_idempotency_key": "<uuid>", "reason": "smoke" }` → EXPECT 200.
+  - D1: `SELECT quota_limit FROM product_usage_quota WHERE tenant_id=T AND product_id='<p>' AND period='lifetime';`
+    `SELECT old_limit, new_limit, reason FROM quota_config_ledger WHERE tenant_id=T AND product_id='<p>' ORDER BY id DESC LIMIT 1;`
 
 ### C. PR4 — invitation → accept  [D1 + audit + outbox + consumer + projection]
-- CREATE: `POST /api/tenants/T/invitations` (email=INVITEE, platformRole=member) → 200. VERIFY: `SELECT status FROM invitations WHERE tenant_id=T AND email='<invitee>';` = pending; `SELECT event_type,stream_key FROM event_outbox WHERE event_type='member.invited' AND stream_key='tenant:T:member:<invitee-email>';` exists. (rawToken comes from the invite EMAIL / link.)
-- ACCEPT: `POST /api/invitations/accept` (rawToken) as INVITEE → 200 joined. VERIFY: `SELECT status FROM organization_members WHERE tenant_id=T AND user_id=<invitee-sub>;` = active; `event_outbox` has `member.joined` at `tenant:T:member:<invitee-sub>`.
-- CONSUMER → VERIFY projection: run §2, then `SELECT denied,last_applied_seq FROM event_deny_state WHERE stream_key='tenant:T:member:<invitee-sub>';` → denied=0 (joined=undeny), seq advanced.
+- CREATE (tenant owner/admin): `POST /api/tenants/T/invitations`, body `{ "email": "<invitee>", "platform_role": "member" }` (snake_case keys — an unknown key → 400) → EXPECT **201** `{ ok:true, invitation_id }` (409 ALREADY_MEMBER / 422 TENANT_INELIGIBLE on those paths).
+  - D1: `SELECT status FROM invitations WHERE tenant_id=T AND email='<invitee>';` = pending.
+  - outbox: `SELECT stream_key,stream_seq,status FROM event_outbox WHERE event_type='member.invited' AND stream_key='tenant:T:member:<invitee-email>';` exists. (rawToken travels in the invite EMAIL link.)
+- ACCEPT (the INVITEE, with their regular access token): `POST /api/invitations/accept`, body `{ "token": "<rawToken>" }` → EXPECT 200 joined.
+  - D1: `SELECT status FROM organization_members WHERE tenant_id=T AND user_id=<invitee-sub>;` = active.
+  - outbox: `event_outbox` has `member.joined` at `tenant:T:member:<invitee-sub>`.
+- CONSUMER → VERIFY BOTH stream projections (run §2 first):
+  - joined (undeny): `SELECT denied,deny_effect,last_applied_seq FROM event_deny_state WHERE stream_key='tenant:T:member:<invitee-sub>';` → denied=0, deny_effect='undeny', seq advanced.
+  - **invited (effect NONE — Codex #3, don't false-pass on denied alone):** the consumer STILL applies a 'none' event
+    (advances the cursor). Verify `SELECT status FROM event_outbox WHERE stream_key='tenant:T:member:<invitee-email>';`
+    = **'done'** AND `SELECT denied,deny_effect,last_applied_seq FROM event_deny_state WHERE stream_key='tenant:T:member:<invitee-email>';`
+    → deny_effect='none', denied=0, last_applied_seq advanced (proves the consumer PROCESSED it, not silently skipped).
 
 ### D. PR4 — member suspend / reactivate / role_change / offboard  [outbox + consumer + projection]
 For TARGET membership in `T` (`POST /api/tenants/T/members/<sub>/<action>`; role via `.../role`):
 - suspend → member.suspended; consumer → `event_deny_state` `tenant:T:member:<sub>` denied=1.
 - reactivate → member.reactivated; consumer → denied=0.
-- role (change platformRole) → member.role_changed (soft; denied unchanged); verify the outbox row + organization_members.platform_role.
+- role (change platform_role via `.../role`) → member.role_changed (**soft** — denied stays the same, so denied alone
+  CAN'T confirm processing, Codex #3): verify organization_members.platform_role changed AND the outbox row
+  `status='done'` after consumer AND `event_deny_state.last_applied_seq` ADVANCED (deny_effect='soft', denied unchanged).
 - offboard → organization_members row removed; member.offboarded; consumer → denied=1.
-(Each: verify the D1 row change + the matching `event_outbox` row + post-consumer `event_deny_state`.)
+(Each: verify the D1 row change + the matching `event_outbox` row + post-consumer `event_deny_state` — for deny/undeny
+check `denied`; for soft/none ALSO check outbox `status='done'` + `last_applied_seq` advanced, never `denied` alone.)
 
 ### E. 5c — account ban / unban  [D1 + audit + outbox + consumer + projection]
 - BAN: `POST /api/admin/users/<sub>/ban` → `SELECT status FROM users WHERE id=<sub>;`=banned; `event_outbox` `account.disabled` at `account:<sub>`; audit `admin.*` ban event; consumer → `event_deny_state` `account:<sub>` denied=1.
