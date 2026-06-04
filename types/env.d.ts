@@ -68,6 +68,9 @@ declare global {
     EVENT_OUTBOX_CLAIM_LIMIT?: string;
     EVENT_OUTBOX_RETRY_BACKOFF_S?: string;
 
+    // ── PR5 5d-2 large-N session-revoke anomaly alarm (strict default in session-revoke.ts) ──
+    SESSION_REVOKE_LARGE_N_THRESHOLD?: string;
+
     // ── Ops / env meta ─────────────────────────────────────────────────
     ENVIRONMENT?: string;
     CRON_SECRET?: string;

@@ -18,7 +18,8 @@ import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { hashToken, generateSecureToken } from '../../functions/utils/crypto'
 import { validateDomainEvent } from '../../functions/utils/domain-events'
-import { revokeSessionFamilies, SESSION_REVOKE_CHUNK_SIZE } from '../../functions/utils/session-revoke'
+import { revokeSessionFamilies, SESSION_REVOKE_CHUNK_SIZE, SESSION_REVOKE_LARGE_N_THRESHOLD, resolveLargeNThreshold } from '../../functions/utils/session-revoke'
+import { _registrySize } from '../../functions/utils/audit-policy'
 import { onRequestPost as devicesLogoutHandler } from '../../functions/api/auth/devices/logout'
 import { onRequestPost as adminRevokeHandler } from '../../functions/api/admin/revoke'
 import { onRequestPost as consumerHandler } from '../../functions/api/admin/cron/event-outbox'
@@ -30,6 +31,9 @@ beforeEach(async () => {
   env.EVENT_OUTBOX_MAX_ATTEMPTS = '2'
   env.EVENT_OUTBOX_RETRY_BACKOFF_S = '0'
   env.EVENT_OUTBOX_LEASE_SECONDS = '120'
+  // PR5 large-N alarm: reset the threshold env each test so a low-threshold case can't LEAK into later cases
+  // (Codex Gate-1 Low). Tests that need it set it explicitly; unset => the strict default (50) applies.
+  delete env.SESSION_REVOKE_LARGE_N_THRESHOLD
 })
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -66,6 +70,10 @@ async function integrityAuditHeads(userId: number): Promise<number | null> {
 async function auditData(eventType: string, userId: number): Promise<Record<string, unknown> | null> {
   const r = await db.prepare(`SELECT event_data FROM audit_log WHERE event_type = ? AND user_id = ? ORDER BY id DESC LIMIT 1`).bind(eventType, userId).first<{ event_data: string }>()
   return r ? JSON.parse(r.event_data) : null
+}
+async function auditRow(eventType: string, userId: number): Promise<{ severity: string; data: Record<string, unknown> } | null> {
+  const r = await db.prepare(`SELECT severity, event_data FROM audit_log WHERE event_type = ? AND user_id = ? ORDER BY id DESC LIMIT 1`).bind(eventType, userId).first<{ severity: string; event_data: string }>()
+  return r ? { severity: r.severity, data: JSON.parse(r.event_data) } : null
 }
 
 let _u = 0
@@ -203,7 +211,49 @@ describe('[PR5-5d-2 c5] auth/devices/logout — multi-family', () => {
     expect(a?.site).toBe('auth.devices.logout')
   })
 
+  it('large-N alarm: N > threshold on FULL SUCCESS → ok 200 + severity warn + large_n flag (no silent cap)', async () => {
+    env.SESSION_REVOKE_LARGE_N_THRESHOLD = '2'
+    const uid = await player()
+    await seedSession(uid, 'ln-1', 'dev-1')
+    await seedSession(uid, 'ln-2', 'dev-1')
+    await seedSession(uid, 'ln-3', 'dev-1')          // N = 3 > threshold 2
+    const r = await devicesLogout(await selfToken(uid), 'dev-1')
+    expect(r.status).toBe(200)
+    expect(r.body.revoked).toBe(3)
+    const a = await auditRow('auth.devices.logout', uid)
+    expect(a?.severity).toBe('warn')                  // info -> warn on large N
+    expect(a?.data.large_n).toBe(true)
+    expect(a?.data.n).toBe(3)
+    expect(a?.data.threshold).toBe(2)
+    expect(a?.data.revoked_count).toBe(3)             // existing field preserved
+  })
+
+  it('small-N (N <= threshold, strict >) → NO large_n flag, severity stays info', async () => {
+    env.SESSION_REVOKE_LARGE_N_THRESHOLD = '2'
+    const uid = await player()
+    await seedSession(uid, 'sn-1', 'dev-1')
+    await seedSession(uid, 'sn-2', 'dev-1')           // N = 2, NOT > 2
+    const r = await devicesLogout(await selfToken(uid), 'dev-1')
+    expect(r.status).toBe(200)
+    const a = await auditRow('auth.devices.logout', uid)
+    expect(a?.severity).toBe('info')
+    expect(a?.data.large_n).toBeUndefined()
+  })
+
+  it('invalid threshold env (-1) → strict default 50 → small revoke NOT flagged (no always-fire)', async () => {
+    env.SESSION_REVOKE_LARGE_N_THRESHOLD = '-1'       // naive Number()||default would make this always-fire
+    const uid = await player()
+    await seedSession(uid, 'iv-1', 'dev-1')
+    await seedSession(uid, 'iv-2', 'dev-1')
+    const r = await devicesLogout(await selfToken(uid), 'dev-1')
+    expect(r.status).toBe(200)
+    const a = await auditRow('auth.devices.logout', uid)
+    expect(a?.severity).toBe('info')                  // -1 rejected -> default 50 -> N=2 not large
+    expect(a?.data.large_n).toBeUndefined()
+  })
+
   it('endpoint N>K partial failure (2nd chunk forced-fails AFTER the 1st commits) → REVOKE_INCOMPLETE {revoked:K, remaining:1} + partial audit; 1st chunk committed (K revoked + K emitted), 1 still live', async () => {
+    env.SESSION_REVOKE_LARGE_N_THRESHOLD = '2'        // N=K+1 >> 2 → the partial audit also carries the large_n flag
     const uid = await player()
     const N = SESSION_REVOKE_CHUNK_SIZE + 1 // forces exactly 2 chunks: [K] + [1]
     for (let i = 0; i < N; i++) await seedSession(uid, `nk-${i}`, 'dev-1')
@@ -229,6 +279,12 @@ describe('[PR5-5d-2 c5] auth/devices/logout — multi-family', () => {
     expect(a?.remaining).toBe(1)
     expect(a?.chunk_size).toBe(SESSION_REVOKE_CHUNK_SIZE)
     expect(a?.site).toBe('auth.devices.logout')
+    // INCOMPLETE-path large-N (Codex Gate-1 Medium#2): the partial audit ALSO carries the large_n flag (N>threshold),
+    // orthogonal to the partial-failure signal.
+    expect(a?.partial).toBe(true)        // still the distinct partial signal
+    expect(a?.large_n).toBe(true)
+    expect(a?.n).toBe(N)
+    expect(a?.threshold).toBe(2)
   })
 })
 
@@ -265,7 +321,24 @@ describe('[PR5-5d-2 c5] admin/revoke mode=device — multi-family', () => {
     expect(await sessionOutboxCount()).toBe(0)     // but ZERO session.revoked — token-epoch is not a deny subject
   })
 
+  it('large-N alarm: admin revoke N > threshold on full success → large_n flag on the critical audit (severity stays critical)', async () => {
+    env.SESSION_REVOKE_LARGE_N_THRESHOLD = '1'
+    const admin = await seedUser({ email: 'admln@x', role: 'admin' })
+    const target = await seedUser({ email: 'tgtln@x' })
+    await seedSession(target.id, 'al-1', 'dev-Z')
+    await seedSession(target.id, 'al-2', 'dev-Z')     // N = 2 > threshold 1
+    const r = await adminRevoke(await adminToken(admin.id), { mode: 'device', user_id: target.id, device_uuid: 'dev-Z' })
+    expect(r.status).toBe(200)
+    expect(r.body.refresh_revoked).toBe(2)
+    const a = await auditRow('admin.token.revoked.device', target.id)
+    expect(a?.severity).toBe('critical')              // unchanged (already >= warn)
+    expect(a?.data.large_n).toBe(true)
+    expect(a?.data.n).toBe(2)
+    expect(a?.data.threshold).toBe(1)
+  })
+
   it('partial failure (forced batch error) → 500 REVOKE_INCOMPLETE + distinct partial audit (site=admin.revoke.device), nothing committed', async () => {
+    env.SESSION_REVOKE_LARGE_N_THRESHOLD = '1'        // N=2 > 1 → the partial audit also carries large_n (Medium#2)
     const admin = await seedUser({ email: 'admp@x', role: 'admin' })
     const target = await seedUser({ email: 'tgtp@x' })
     await seedSession(target.id, 'ap-1', 'dev-Z')
@@ -284,6 +357,26 @@ describe('[PR5-5d-2 c5] admin/revoke mode=device — multi-family', () => {
     expect(a?.remaining).toBe(2)
     expect(a?.chunk_size).toBe(SESSION_REVOKE_CHUNK_SIZE)
     expect(a?.site).toBe('admin.revoke.device')
+    // INCOMPLETE-path large-N (Codex Gate-1 Medium#2): partial audit also carries large_n (N=2 > threshold 1).
+    expect(a?.partial).toBe(true)
+    expect(a?.large_n).toBe(true)
+    expect(a?.n).toBe(2)
+    expect(a?.threshold).toBe(1)
+  })
+})
+
+// ── large-N threshold parsing (Codex Gate-1 Medium#1) + registry guard ───────
+describe('[PR5-5d-2] resolveLargeNThreshold (strict) + registry guard', () => {
+  it('accepts only finite positive integers; everything else → the safe default', () => {
+    expect(resolveLargeNThreshold('3')).toBe(3)
+    expect(resolveLargeNThreshold('50')).toBe(50)
+    // invalid: a naive Number()||default would mis-accept -1/Infinity (always/never fire) — all must default:
+    for (const bad of ['-1', '0', 'abc', 'Infinity', '2.5', '', '  ', undefined, null, 5, NaN]) {
+      expect(resolveLargeNThreshold(bad)).toBe(SESSION_REVOKE_LARGE_N_THRESHOLD)
+    }
+  })
+  it('audit-policy registry unchanged — large-N reuses existing endpoint types, no new type', () => {
+    expect(_registrySize).toBe(207)
   })
 })
 

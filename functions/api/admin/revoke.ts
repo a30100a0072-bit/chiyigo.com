@@ -42,7 +42,7 @@ import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '.
 import { revokeJti } from '../../utils/revocation'
 import { appendAuditLog } from '../../utils/audit-log'
 import { safeUserAudit, auditDomainEventEmitted } from '../../utils/user-audit'
-import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE } from '../../utils/session-revoke'
+import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE, resolveLargeNThreshold } from '../../utils/session-revoke'
 
 const VALID_MODES = new Set(['jti', 'user', 'device'])
 
@@ -168,6 +168,12 @@ export async function onRequestPost({ request, env }) {
     .all()
   const candidateRefs = (candRows.results ?? []).map((r) => String(r.ref))
 
+  // PR5 large-N 異常告警（observability，no silent cap）：N = 此 device 上列舉到的 live family 數；超過異常門檻就在
+  // 既有 critical 稽核加 large_n flag（即使 full success 也發）。門檻 env 可調（嚴格只收 finite 正整數，否則 default 50）。
+  const threshold = resolveLargeNThreshold(env.SESSION_REVOKE_LARGE_N_THRESHOLD)
+  const n = candidateRefs.length
+  const largeNData = n > threshold ? { large_n: true, n, threshold } : {}
+
   const result = await revokeSessionFamilies(db, targetId, candidateRefs, String(user.sub))
 
   // 同一 session_id 出現 >1 live head（不變量被破壞）→ fail-closed：critical 稽核 + 500，不撤不 emit
@@ -193,7 +199,7 @@ export async function onRequestPost({ request, env }) {
       data: {
         partial: true, site: 'admin.revoke.device', admin_id: Number(user.sub), device_uuid: deviceUuid,
         revoked: result.revoked, emitted: result.emitted, remaining: result.remaining,
-        chunk_size: SESSION_REVOKE_CHUNK_SIZE,
+        chunk_size: SESSION_REVOKE_CHUNK_SIZE, ...largeNData,
       },
     })
     return res({
@@ -203,11 +209,12 @@ export async function onRequestPost({ request, env }) {
     }, 500)
   }
 
-  // ok：既有 admin.token.revoked.device 稽核（refresh_revoked = 撤掉的 family 數）。
+  // ok：既有 admin.token.revoked.device 稽核（refresh_revoked = 撤掉的 family 數）。large-N 時加 large_n flag
+  //（severity 已是 critical ≥ warn，不變）；正常小 N 不加欄位。
   await safeUserAudit(env, {
     event_type: 'admin.token.revoked.device', severity: 'critical',
     user_id: targetId, request,
-    data: { admin_id: Number(user.sub), device_uuid: deviceUuid, refresh_revoked: result.revoked },
+    data: { admin_id: Number(user.sub), device_uuid: deviceUuid, refresh_revoked: result.revoked, ...largeNData },
   })
   return res({ mode, user_id: targetId, device_uuid: deviceUuid, refresh_revoked: result.revoked })
 }

@@ -26,7 +26,7 @@
 import { requireAuth, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { safeUserAudit, hashIdentifierForAudit, auditDomainEventEmitted } from '../../../utils/user-audit'
-import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE } from '../../../utils/session-revoke'
+import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE, resolveLargeNThreshold } from '../../../utils/session-revoke'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -73,6 +73,13 @@ export async function onRequestPost({ request, env }) {
                           WHERE user_id = ? AND device_uuid = ? AND revoked_at IS NULL`).bind(userId, dev).all()
   const candidateRefs = (candRows.results ?? []).map((r) => String(r.ref))
 
+  // PR5 large-N 異常告警（observability，no silent cap）：N = 此 device 上列舉到的 live family 數；超過異常門檻就在
+  // 既有稽核加 large_n flag（即使 full success 也發）。門檻 env 可調（嚴格只收 finite 正整數，否則 default 50）。
+  const threshold = resolveLargeNThreshold(env.SESSION_REVOKE_LARGE_N_THRESHOLD)
+  const n = candidateRefs.length
+  const largeN = n > threshold
+  const largeNData = largeN ? { large_n: true, n, threshold } : {}
+
   // actorSub = 自己（self-logout）。
   const result = await revokeSessionFamilies(db, userId, candidateRefs, String(userId))
 
@@ -107,7 +114,7 @@ export async function onRequestPost({ request, env }) {
       data: {
         ...deviceAudit, partial: true, site: 'auth.devices.logout',
         revoked: result.revoked, emitted: result.emitted, remaining: result.remaining,
-        chunk_size: SESSION_REVOKE_CHUNK_SIZE,
+        chunk_size: SESSION_REVOKE_CHUNK_SIZE, ...largeNData,
       },
     })
     return res({
@@ -117,11 +124,12 @@ export async function onRequestPost({ request, env }) {
     }, 500, cors)
   }
 
-  // ok：既有 auth.devices.logout 觀測（revoked_count = 撤掉的 family 數）。
+  // ok：既有 auth.devices.logout 觀測（revoked_count = 撤掉的 family 數）。large-N 時升 warn + 帶 large_n flag
+  // （full success 也發異常訊號）；正常小 N 維持 info、不加欄位（不破壞既有 data shape）。
   await safeUserAudit(env, {
-    event_type: 'auth.devices.logout', severity: 'info',
+    event_type: 'auth.devices.logout', severity: largeN ? 'warn' : 'info',
     user_id: userId, request,
-    data: { ...deviceAudit, revoked_count: result.revoked },
+    data: { ...deviceAudit, revoked_count: result.revoked, ...largeNData },
   })
   return res({ revoked: result.revoked }, 200, cors)
 }

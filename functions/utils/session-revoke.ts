@@ -76,6 +76,26 @@ export function casByFamily(db: ChiyigoDb, userId: number, ref: string): Stmt {
  */
 export const SESSION_REVOKE_CHUNK_SIZE = 20
 
+/**
+ * Large-N anomaly threshold (PR5 5d-2 observability residual): a multi-family revoke whose enumerated live-family
+ * count on ONE device exceeds this is SURFACED as a warn signal (even on full success) — "no silent cap". It is an
+ * ANOMALY threshold, NOT the chunk ceiling: it sits well ABOVE both the typical count (1-3, up to ~14 for a daily
+ * re-login user over the 7-day TTL) AND K=20, so it only fires on a genuine outlier (bot / abuse / a family-minting
+ * bug). Default is conservative; ops can tune via env without a redeploy (we have no prod distribution data yet).
+ */
+export const SESSION_REVOKE_LARGE_N_THRESHOLD = 50
+
+/**
+ * Resolve the effective large-N threshold from a raw env value, STRICTLY: only a finite POSITIVE INTEGER is
+ * accepted; anything else (undefined, '', '0', '-1', '2.5', 'abc', 'Infinity', NaN) falls back to the safe default.
+ * A naive `Number(env) || default` would wrongly accept -1 / Infinity (alarm always- or never-fires) — this guards
+ * that. Pure (takes the raw value, no env/IO) so it stays out of the revoke logic and is unit-testable.
+ */
+export function resolveLargeNThreshold(raw: unknown): number {
+  const n = typeof raw === 'string' ? Number(raw) : NaN
+  return Number.isInteger(n) && n > 0 ? n : SESSION_REVOKE_LARGE_N_THRESHOLD
+}
+
 export interface RevokeFamiliesResult {
   /**
    * 'ok'                  — every revocable family was processed (committed).
