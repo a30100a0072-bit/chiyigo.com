@@ -101,16 +101,25 @@ LIVE membership re-read, identical to L191-201.
 (the existing `invitations.test.ts:166-180` Promise.all test is non-deterministic; relying on the race to be red is
 the very flakiness we are removing). Force the exact interleaving:
 
-- **Regression A (locks the exact failure):** run a single `acceptInvitation` whose pre-check observes `pending`,
-  then force a SAME-USER winner to commit BEFORE its batch via a one-shot seam (e.g. `vi.spyOn(db,'batch')
-  .mockImplementationOnce(...)` that first commits the winner — set the invite `accepted` by the same user at a
-  DIFFERENT occurredAt + an active membership row — then delegates to the ORIGINAL `db.batch`). The technique mirrors
-  the 5b consumer fence tests (real D1, real SQL, injected interleaving). Assert:
+- **Regression A (locks the exact failure):** run a single `acceptInvitation` (the LOSER) whose pre-check observes
+  `pending`, then force a SAME-USER winner to commit BEFORE the loser's batch via a one-shot seam
+  (`vi.spyOn(db,'batch').mockImplementationOnce(...)`) that runs the winner, then delegates the loser's batch to the
+  ORIGINAL `db.batch`. The technique mirrors the 5b consumer fence tests (real D1, injected interleaving). Assert:
     - PRE-FIX: outcome === `'expired'` (this is the RED that proves the test catches the bug).
     - POST-FIX: outcome === `'replay'` (active membership) — and a suspended variant → `'membership_not_active'`,
       an offboarded variant → `'already_resolved'`.
+  **WINNER MUST BE PRODUCTION-EQUIVALENT (Codex Gate-1 binding condition — do NOT fake it with raw SQL):** the
+  forced winner runs the real mutation path — `db.batch([winnerConsume, winnerJoin, ...emitMemberJoined(...).statements])`
+  via the ORIGINAL `db.batch` (same user, same token, same tenant/role) — so it produces a REAL `member.joined`
+  outbox row (making the "exactly one member.joined" assertion meaningful, not a fake INSERT that emits nothing).
+  Prefer this production-equivalent batch over calling the whole `acceptInvitation` as the winner, because the
+  winner's `accepted_at` MUST be DETERMINISTICALLY DIFFERENT from the loser's `occurredAt` — use a FIXED past ISO
+  string (e.g. `'2020-01-01T00:00:00.000Z'`) for the winner's consume/join `accepted_at`, guaranteeing the loser's
+  real `occurredAt` (~now) never collides (a same-millisecond collision would route the loser to `joined`/
+  `already_member` and FAIL to lock the exact `expired`→`replay` failure). [Codex R1 Medium.]
 - **Data invariants (must still hold, asserted in/with Regression A):** after the forced-loser run, EXACTLY ONE
-  `organization_members` row for (tenant,user) and EXACTLY ONE `member.joined` outbox row — the loser added neither.
+  `organization_members` row for (tenant,user) and EXACTLY ONE `member.joined` outbox row (BOTH produced by the
+  real winner; the loser added NEITHER — the whole point: it only reclassifies its outcome).
 - **Existing Promise.all test (L166-180):** KEEP. Post-fix it is deterministically green for ANY interleaving
   (every outcome now lands in the asserted allow-set), so it stops flaking — but it is NOT the pre-fix-red lock
   (Regression A is). Optionally tighten its assert to include `membership_not_active`/`already_resolved` is NOT
