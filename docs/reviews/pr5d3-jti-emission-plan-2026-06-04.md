@@ -1,10 +1,11 @@
 # PR5 5d-3 — session.revoked `scope='jti'` EMISSION — Gate-1 Plan
 
 - Created: 2026-06-04
-- Status: Gate-1 plan only (NO code, NO spike yet). This phase has ONE blocking Open Decision (§1, the jti→sub
-  source) that MUST be ruled by the owner before any emission code is written — there is currently NO server-side
-  call site that supplies BOTH a session `sub` AND a jti, so `session:<sub>:jti:<ref>` cannot be formed correctly
-  today. The body below is written around a RECOMMENDED ruling, clearly marked and cheap to revise pre-code.
+- Status: **CLOSED — owner ruled §1 = (c) DEFER on 2026-06-04 (Codex Gate-1 R1→R2 APPROVED; Codex concurred with
+  (c)).** NO code, NO spike. The blocking Open Decision (§1, the jti→sub source) is RESOLVED: there is no
+  server-side call site that supplies BOTH a session `sub` AND a jti, so jti-scope is deferred until its natural
+  home (OIDC backchannel / RP logout) exists, and `scope='jti'` stays a valid-but-dormant contract slot. The body
+  below is retained as the READY BLUEPRINT for that future (a2) wiring (§4.4 validation + SP-JTI spike). See §14.
 - Predecessor: PR5 5d-1 (schema) + 5d-2 (device-scope emission) SHIPPED (PR #15 → `819008c`, PR #16 → `c6c3b4c`).
   `scope='device'` is live; this phase adds the SECOND (and final) bounded scope, `jti`, which the FROZEN contract
   already enumerates. 5d-3 invents NO taxonomy / envelope / ordering.
@@ -518,12 +519,16 @@ Q6. [RESOLVED, Codex R1 High#2] The `actorOutranksTarget` rank guard is now MAND
 ## 14. Owner Gate-1 rulings (to be filled at the checkpoint)
 --------------------------------------------------------------------------------
 
-- §1 (jti→sub source): __ (a1 / a2 / b / c) — PENDING owner ruling. (Codex Gate-1 R2: APPROVE for c; a2 folded-plan
-  APPROVABLE conditional on owner choosing a2 + running SP-JTI before code.)
-- If (a2): §4.1 builder shape (scope param vs sibling): __ ; §4.4 shared-predicate extract vs inline (Q3, Codex:
-  extract only if tiny+parity-tested else inline+parity regression): __ ; Q4 expired-token limitation: ACCEPTED
-  (Codex R2; do NOT fall back to a1).
-- If (c): record the deferral + the reserved-slot rationale here + in memory; close 5d-3.
+- §1 (jti→sub source): **RULED (c) DEFER — owner, 2026-06-04; Codex concurred.** Deciding factor = production value
+  vs Tier-0 surface: revoked_jti ALREADY enforces real access-token revocation, and the session.revoked(jti) event
+  would be a future-RP signal NO RP consumes yet — so (a2) would add real auth/security complexity now for little
+  immediate runtime benefit. (a1) rejected (unverified user_id poisons durable projection state); (b) rejected
+  (hot-path token-mint D1 writes too costly for rare admin revocation).
+- **5d-3 CLOSED.** No emission code is written. `scope='jti'` stays a VALID-but-DORMANT contract slot (the frozen
+  SESSION_SCOPES enumerates it; validateDomainEvent + the 5b consumer already accept it; an unemitted-but-valid
+  scope is not an error). Its natural future home: an **OIDC backchannel logout / RP-driven logout** path where the
+  `sub` + the jti/sid + an RP consumer of the deny-state projection all arrive together — wire it via (a2) THEN,
+  with the §4.4 validation + SP-JTI spike from this plan as the ready blueprint. Do NOT use (a1)/(b) at that time.
 
 --------------------------------------------------------------------------------
 ## 20. Codex Gate-1 review record
