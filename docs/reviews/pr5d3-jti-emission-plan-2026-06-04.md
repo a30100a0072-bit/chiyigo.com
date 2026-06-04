@@ -123,9 +123,10 @@ Strictly worse than not emitting. Rejected.
 token — NOT a1 (unverified sub) and NOT b (hot-path map).** Sections 4-9 below are written for the (a2) path and
 are SKIPPED entirely if the ruling is (c).
 
-**Codex Gate-1 R1 (2026-06-04): APPROVE for (c) DEFER; REJECT for (a2) as first written**, with 3 folded blockers
-(token-class validation, mandatory rank guard, validate-before-coerce — see the §20 record + §4.4). The extra (a2)
-validation surface this exposed REINFORCES the (c) recommendation. Under (a2), §4.4 must hold before any code.
+**Codex Gate-1 (2026-06-04): R1 = APPROVE for (c) / REJECT for (a2)-as-written (3 blockers); R2 = folded plan
+APPROVED, no new blocking findings** (token-class validation, mandatory rank guard, validate-before-coerce folded —
+§4.4 + §20). (c) is approved outright; (a2)'s folded plan is APPROVABLE conditional on the owner choosing (a2) +
+running SP-JTI before code. The extra (a2) validation surface REINFORCES the (c) recommendation.
 
 --------------------------------------------------------------------------------
 ## 2. Scope and non-goals
@@ -265,8 +266,10 @@ verified payload), plus the id_token exclusion + the requireAuth-level liveness 
       if (!Number.isFinite(payload.exp)) -> 400 ACCESS_TOKEN_INVALID
       if (typeof payload.jti !== 'string' || payload.jti.length === 0 || payload.jti.includes(':')) -> 400 JTI_MALFORMED
       const scope = typeof payload.scope === 'string' ? payload.scope : ''
-      // 2. TOKEN-CLASS gate = the requireRegularAccessToken predicate + id_token exclusion (High#1):
-      if (scope === '') -> 400 NOT_A_REGULAR_TOKEN          // id_tokens carry NO scope claim -> excluded here
+      // 2. TOKEN-CLASS gate = the requireRegularAccessToken predicate + "modern access token" positive check (High#1):
+      if (scope === '') -> 400 NOT_A_REGULAR_TOKEN          // NOT SAFELY CLASSIFIABLE as a modern regular access token
+                                                            // (fail-closed: rejects id_tokens AND any legacy/no-scope
+                                                            //  token — broader than "id_token only" ON PURPOSE; Codex R2)
       if (scope === 'pre_auth' || scope === 'temp_bind') -> 400 NOT_A_REGULAR_TOKEN
       if (scope.split(/\s+/).filter(Boolean).some(isElevatedScope)) -> 400 NOT_A_REGULAR_TOKEN   // step-up
       const userId = Number(payload.sub)
@@ -289,7 +292,10 @@ verified payload), plus the id_token exclusion + the requireAuth-level liveness 
   existing tests) so the two can never drift; FALLBACK = inline-mirror with a regression test asserting parity. Decide
   at code-gate (first-do-no-harm: only extract if the existing tests fully cover the extracted predicate).
 - **id_token exclusion** is the `scope === ''` reject (our id_tokens have no scope claim, token.ts:184) — a positive
-  "must be a real access scope" check, not a fragile blocklist of id_token claims.
+  "must be a real access scope" check, not a fragile blocklist of id_token claims. Codex R2 NON-BLOCKING: this is
+  slightly BROADER than "id_token only" — it also rejects any legacy/no-scope access token. That is fail-closed and
+  acceptable for (a2); code comments + tests MUST phrase it as "not safely classifiable as a modern regular access
+  token", NOT only "id_token", so the intent is not misread as id-token-specific.
 - This is why §1's RECOMMENDATION is (c): even (a2)'s "minimal" path is a real Tier-0 validation surface (token-class
   + active-user + token-version + rank) for a signal no RP consumes yet.
 
@@ -498,12 +504,11 @@ Q1. [folded Codex R1 High#1] (a2) = verified full token + the §4.4 regular-sess
 Q2. Is the new gating shape (emit gated on `revoked_jti` INSERT OR IGNORE changes()=1) sufficiently covered by
     SP-JTI-1..4 (incl. the IGNORE-branch-yields-changes()=0 case + remote parity) to clear it before code? Is an
     INSERT OR IGNORE conflict materially different from the proven UPDATE-CAS for changes()-chaining?
-Q3. Scope parameter (single builder, §4.1-i) vs jti sibling builder (4.1-ii) — preference for the contract seam?
-    AND: extract a shared pure `isRegularAccessTokenPayload` from requireRegularAccessToken for §4.4 to reuse, or
-    inline-mirror with a parity regression test? (§4.4 — first-do-no-harm vs DRY.)
-Q4. a2's expired-token limitation (verifyJwt rejects expired → can't emit for an already-expired jti) — acceptable
-    given revoking an expired token is itself a near-no-op, or does the owner want pre-emptive bare-jti+user_id
-    (a1) despite the unverified-sub integrity caveat?
+Q3. [Codex R2 guidance] Scope parameter (single builder, §4.1-i) vs jti sibling builder (4.1-ii) — open for owner.
+    For the §4.4 predicate: extract a pure `isRegularAccessTokenPayload` ONLY IF it is tiny + covered by parity
+    tests; otherwise inline-mirror + a parity regression test is acceptable (first-do-no-harm). Decide at code-gate.
+Q4. [RESOLVED, Codex R2] a2's expired-token limitation is ACCEPTABLE (revoking an expired token is a near-no-op).
+    Do NOT use (a1) to work around it.
 Q5. Confirm 5d-3 touches NEITHER device-scope LOGIC (5d-2) NOR mode=user NOR refresh.ts (blast-radius containment;
     scope-param option i adds only a literal `scope:'device'` arg at the 2 existing call locations — §4.1 / L4).
 Q6. [RESOLVED, Codex R1 High#2] The `actorOutranksTarget` rank guard is now MANDATORY in §4.4 (not optional) — a2
@@ -513,9 +518,11 @@ Q6. [RESOLVED, Codex R1 High#2] The `actorOutranksTarget` rank guard is now MAND
 ## 14. Owner Gate-1 rulings (to be filled at the checkpoint)
 --------------------------------------------------------------------------------
 
-- §1 (jti→sub source): __ (a1 / a2 / b / c) — PENDING owner ruling. (Codex R1: approve for c; for a2, §4.4 required.)
-- If (a2): §4.1 builder shape (scope param vs sibling): __ ; §4.4 shared-predicate extract vs inline (Q3): __ ;
-  Q4 (expired-token limitation accepted?): __ .
+- §1 (jti→sub source): __ (a1 / a2 / b / c) — PENDING owner ruling. (Codex Gate-1 R2: APPROVE for c; a2 folded-plan
+  APPROVABLE conditional on owner choosing a2 + running SP-JTI before code.)
+- If (a2): §4.1 builder shape (scope param vs sibling): __ ; §4.4 shared-predicate extract vs inline (Q3, Codex:
+  extract only if tiny+parity-tested else inline+parity regression): __ ; Q4 expired-token limitation: ACCEPTED
+  (Codex R2; do NOT fall back to a1).
 - If (c): record the deferral + the reserved-slot rationale here + in memory; close 5d-3.
 
 --------------------------------------------------------------------------------
@@ -539,4 +546,15 @@ Codex also affirmed: SP-JTI-1..4 is the right spike shape and remote parity IS r
 materially different enough from UPDATE-CAS); consumer/DENY_EFFECT reuse is fine; keep raw tokens out of
 audit/response/log. Release decision: approve for (c); for (a2), §4.4 + the negatives are non-optional before code.
 
---- END PR5 5d-3 GATE-1 PLAN (jti-scope emission; lead decision = the jti→sub source, §1; Codex R1 folded) ---
+CODEX GATE-1 R2 (2026-06-04) = **NO new blocking findings — folded plan APPROVED.** Critical risk RESOLVED (§4.4 no
+longer treats verifyJwt as sufficient; reuses the requireRegularAccessToken threat model; rank guard mandatory).
+- NON-BLOCKING (folded above, §4.4): the `scope === ''` reject is a good fail-closed classifier but is broader than
+  "id_token only" (also rejects legacy/no-scope access tokens) — acceptable; code comments + tests MUST phrase it as
+  "not safely classifiable as a modern regular access token", not only "id_token".
+- Q3 (folded §13): extract a pure `isRegularAccessTokenPayload` ONLY IF tiny + parity-tested; else inline-mirror +
+  parity regression (first-do-no-harm). Q4 (folded §13/§14): expired-token limitation ACCEPTED; do NOT use (a1).
+- SP-JTI stays the REQUIRED gate before code; local + throwaway-remote D1 parity mandatory.
+RELEASE DECISION: **APPROVE Gate-1 for (c) DEFER. For (a2) DELIVER: folded plan APPROVABLE, conditional on the
+owner choosing (a2), then running SP-JTI before any code.** (Codex did not run tests; plan/diff review vs current code.)
+
+--- END PR5 5d-3 GATE-1 PLAN (jti-scope emission; §1 = jti→sub source; Codex Gate-1 R1+R2 folded, R2 APPROVED) ---
