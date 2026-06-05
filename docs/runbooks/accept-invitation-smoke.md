@@ -35,6 +35,17 @@ wrangler pages deploy public --project-name chiyigo-com --branch acc-inv-preview
 > **raw token 安全**：信件連結指向 prod（`IAM_BASE_URL`→`chiyigo.com`，merge 前會 404）；smoke 時取
 > 信件 raw token、只在本機無痕視窗**地址列**把 host 換成 preview 使用。**raw token 不要貼進聊天 / log / PR。**
 
+> **Preview 自備 JWT 金鑰（auth smoke 前必做）**：preview 綁 prod D1，但 **dashboard 管理的 env secrets
+> 是 per-environment 的，Production 設了 ≠ Preview 有**。缺 `JWT_PRIVATE_KEY` 時 preview 登入會在
+> `signJwt` 拋例外 → 500（傳統症狀：有效帳密卻回 500 而非 401；traceId 進 Functions log、非 D1）。設法：
+> - **產一組「專屬 preview」keypair**：`node scripts/generate-jwt-keys.mjs`（本機跑、輸出含 private `d`，
+>   **不要**貼進聊天 / log / PR）。**絕不**把 **production** JWT private key 複製進 Preview。
+> - `JWT_PRIVATE_KEY` → 設為 **Preview 的加密 Secret**（不可 plaintext / 不可 commit / 不可 log）。
+> - `JWT_PUBLIC_KEY`（或 `JWT_PUBLIC_KEYS`）→ 設**同一次生成**的 public JWK（sign/verify 必須同對、kid 相符）。
+> - `TURNSTILE_SECRET_KEY` 可不設（未設則 server 端 Turnstile skip，smoke 可接受）。
+> - **設完 secrets 必 redeploy preview**（既有 deployment 不會自動吃新增 secret）。
+> 好處：preview token 用 preview key 簽，**不對 prod 生效**，blast radius 收斂。
+
 ## 前置
 - 一個 **fresh pending** 邀請（依下方「建議流程」用單一 invite 串完；token 成功接受後即消耗，勿用已接受過的）。
 - 受邀者帳號：email 等於邀請的 email、**且已驗證**。
