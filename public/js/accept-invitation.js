@@ -139,7 +139,17 @@
             }
             catch { /* storage blocked */ }
         }
-        function goLogin() { rememberReturn(); location.href = '/login.html'; }
+        function goLogin() {
+            // 先清掉本分頁（可能是錯帳號）的 access_token，否則 /login.html 的 login-boot 看到 token 仍在，
+            // 會直接讀 auth_redirect 並 location.replace 回本頁 → accept→login→accept 迴圈，永遠換不了帳號。
+            // 只清 per-tab sessionStorage token（不碰 refresh cookie / 不跨分頁）：login 頁因此顯示表單。
+            try {
+                sessionStorage.removeItem('access_token');
+            }
+            catch { /* storage blocked */ }
+            rememberReturn();
+            location.href = '/login.html';
+        }
         async function doAccept() {
             if (typeof window.apiFetch !== 'function') {
                 setError(T('err_network'));
