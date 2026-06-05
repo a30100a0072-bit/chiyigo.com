@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>接受邀請 — CHIYIGO</title>
+  <meta name="robots" content="noindex, nofollow" />
+  {{> head-top}}
+  <link rel="stylesheet" href="/css/login.css" />
+  <link rel="stylesheet" href="/css/accept-invitation.css" />
+  {{> head-foot}}
+</head>
+<body>
+
+  <div class="dash-wrap">
+    {{> sidebar-public-other pathPrefix="/"}}
+    <div class="dash-main">
+      <main class="dash-content">
+        <div class="login-center">
+          <div class="login-wrap">
+            <div class="card">
+
+              <!-- 初始載入 / 處理中（預設顯示，JS resolve 後切換；JS 失效時 noscript 提示）-->
+              <div id="panel-loading" class="panel active text-center">
+                <div class="ai-spinner"></div>
+                <p class="lp-subtitle" data-i18n="loading_text">請稍候…</p>
+                <noscript>
+                  <p class="lp-subtitle ai-noscript" data-i18n="noscript_hint">請啟用 JavaScript 以接受邀請。</p>
+                </noscript>
+              </div>
+
+              <!-- 已登入：等待點擊接受 -->
+              <div id="panel-confirm" class="panel text-center">
+                <div class="lp-logo-icon ai-logo-mb">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.479m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                  </svg>
+                </div>
+                <h1 class="lp-title" data-i18n="confirm_title">你被邀請加入組織</h1>
+                <p class="lp-subtitle ai-subtitle-mb" data-i18n="confirm_desc">點擊下方按鈕，以你目前登入的帳號接受邀請。</p>
+                <button id="btn-accept" class="submit-btn" data-i18n="btn_accept">接受邀請</button>
+              </div>
+
+              <!-- 未登入：先去登入（再回來接受）-->
+              <div id="panel-login" class="panel text-center">
+                <div class="lp-logo-icon ai-logo-mb">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H9v1.5H7.5v1.5H6v1.5H3.75a.75.75 0 01-.75-.75v-2.69c0-.2.079-.39.22-.53l6.633-6.633c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+                  </svg>
+                </div>
+                <h1 class="lp-title" data-i18n="login_title">請先登入</h1>
+                <p class="lp-subtitle ai-subtitle-mb" data-i18n="login_desc">請先登入（或註冊）你的 Chiyigo 帳號，並使用收到邀請的信箱，再回來接受邀請。</p>
+                <button id="btn-login" class="submit-btn" data-i18n="btn_login">登入並接受邀請</button>
+              </div>
+
+              <!-- 成功（joined / 已是成員的 replay 都算成功）-->
+              <div id="panel-success" class="panel success-state">
+                <div class="success-icon-wrap">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h1 class="success-title" data-i18n="success_title">成功加入組織</h1>
+                <p class="success-desc" data-i18n="success_desc">你已成功接受邀請。</p>
+                <a href="/dashboard.html" class="submit-btn success-back-btn" data-i18n="btn_to_dashboard">前往 Dashboard</a>
+              </div>
+
+              <!-- 失敗 -->
+              <div id="panel-error" class="panel error-state">
+                <div class="error-icon-wrap">
+                  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <h1 class="error-title" data-i18n="error_title">無法接受邀請</h1>
+                <p id="err-msg" class="error-desc">無法接受邀請，請稍後再試。</p>
+                <a href="/dashboard.html" class="submit-btn success-back-btn" data-i18n="btn_to_dashboard">前往 Dashboard</a>
+                <button id="btn-relogin" class="submit-btn ai-btn-secondary" data-i18n="btn_relogin">改用其他帳號登入</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  {{> topbar-mobile pathPrefix="/" brandHref="/index.html" loginHref="/login.html" loginLabel="會員登入"}}
+
+  {{> m-overlay-public-other pathPrefix="/"}}
+
+  <script src="/js/api.js" defer></script>
+  <script src="/js/sidebar-auth.js" defer></script>
+  <script src="/js/accept-invitation.js?v=p1" defer></script>
+</body>
+</html>

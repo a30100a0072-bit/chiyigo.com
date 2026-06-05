@@ -98,7 +98,10 @@ async function buildPage(filename) {
   const tpl = Handlebars.compile(withI18n, { noEscape: true })
   const rendered = tpl({})
   // P2-8：HTML 出檔前統一注入 ?v=<git-hash>，蓋掉手寫的 ?v=
-  const out = injectCacheBust(rendered)
+  // 並清掉「整行皆空白」的行（Handlebars 巢狀 partial 縮排會把 partial 內的空行渲染成
+  // 純空白行 → git diff --check / PR hygiene 會抱怨）。只清整行空白、不動有內容行的尾隨
+  // 空白，故不影響 <pre>/<textarea> 內容（站內 textarea 皆空 default、無多行內容）。
+  const out = injectCacheBust(rendered).replace(/^[ \t]+$/gm, '')
   await fs.mkdir(path.dirname(outPath), { recursive: true })
   await fs.writeFile(outPath, out, 'utf8')
 }
