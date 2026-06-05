@@ -1,0 +1,20 @@
+/* accept-invitation.css — 沿用 login.css + _components.css；本頁專屬：載入/處理 spinner + 次要按鈕 */
+
+.ai-spinner {
+  width: 48px; height: 48px; margin: 0 auto 1rem;
+  border: 3px solid var(--accent-dim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ai-spin .9s linear infinite;
+}
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+
+/* 次要動作（錯誤頁「改用其他帳號登入」）：與主 submit-btn 區隔 */
+.ai-btn-secondary { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border); margin-top: .75rem; }
+.ai-btn-secondary:hover { filter: brightness(1.05); }
+
+/* panel 內距微調（對齊 verify-email 視覺節奏） */
+.ai-logo-mb { margin-bottom: 1rem; }
+.ai-subtitle-mb { margin-bottom: 1.5rem; }
+
+.ai-noscript { color: #f87171; margin-top: 1rem; }

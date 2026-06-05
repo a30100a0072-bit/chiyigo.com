@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendDeleteConfirmationEmail,
+  sendInvitationEmail,
 } from '../functions/utils/email'
 
 const RESEND_API = 'https://api.resend.com/emails'
@@ -77,6 +80,33 @@ describe('sendDeleteConfirmationEmail', () => {
     await sendDeleteConfirmationEmail('k', 'a@b', 'dt', {})
     expect(lastReq.body.html).toContain('/confirm-delete.html?token=dt')
     expect(lastReq.body.subject).toContain('刪除')
+  })
+})
+
+// 邀請信連結契約 + 接受頁存在性 — 鎖定 prod 404 regression：
+// email 連結 /accept-invitation.html?token=... 必須對到一個會被服務出去的頁面。
+// 原 bug = 信件連到此頁但 public/accept-invitation.html 不存在（build 從未產出）→ 404。
+describe('sendInvitationEmail', () => {
+  it('連結指向 /accept-invitation.html?token=...，主旨明示邀請', async () => {
+    mockOk()
+    await sendInvitationEmail('k', 'a@b', 'inv123', { IAM_BASE_URL: 'https://chiyigo.com' })
+    expect(lastReq.body.html).toContain('https://chiyigo.com/accept-invitation.html?token=inv123')
+    expect(lastReq.body.subject).toContain('邀請')
+  })
+  it('env 缺 IAM_BASE_URL → 用預設 chiyigo.com', async () => {
+    mockOk()
+    await sendInvitationEmail('k', 'a@b', 't', {})
+    expect(lastReq.body.html).toContain('https://chiyigo.com/accept-invitation.html?token=t')
+  })
+})
+
+describe('accept-invitation 頁存在性（prod 404 regression）', () => {
+  const fromRoot = (rel: string) => fileURLToPath(new URL('../' + rel, import.meta.url))
+  it('source 頁存在 src/pages/accept-invitation.html', () => {
+    expect(existsSync(fromRoot('src/pages/accept-invitation.html'))).toBe(true)
+  })
+  it('build 產物存在 public/accept-invitation.html（缺 = 邀請連結會 404）', () => {
+    expect(existsSync(fromRoot('public/accept-invitation.html'))).toBe(true)
   })
 })
 
