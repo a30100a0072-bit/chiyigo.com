@@ -132,22 +132,28 @@
             setErrorKey('err_default');
         }
         // 是否有有效登入態：sessionStorage 有 access_token，否則委派 window.silentRefresh（HttpOnly cookie）。
-        // silentRefresh 由 api.js 提供且已 navigator.locks 去重，與 sidebar-auth.js 同時呼叫共用同一 inflight。
+        // ⚠ silentRefresh 可能卡住：sidebar-auth.js 的 silentRefreshIfNeeded 會「持 navigator.locks(chiyigo-auth-refresh)
+        //   後再呼叫 window.silentRefresh」，而 api.js 的 silentRefresh 又重取同把 exclusive lock → re-entrant 死結
+        //   （本頁是首個同時載入 sidebar-auth.js + api.js 的公開 no-token 頁，才暴露此 latent bug）。故加 bounded
+        //   timeout fail-open：逾時回 false → 顯示 login panel，不永遠停在 loading。根因（sidebar-auth 別雙重上鎖）另案修。
+        const SESSION_PROBE_TIMEOUT_MS = 3000;
         async function ensureSession() {
             try {
                 if (sessionStorage.getItem('access_token'))
                     return true;
             }
             catch { /* storage blocked */ }
-            if (typeof window.silentRefresh === 'function') {
-                try {
-                    return await window.silentRefresh();
-                }
-                catch {
-                    return false;
-                }
+            if (typeof window.silentRefresh !== 'function')
+                return false;
+            try {
+                return await Promise.race([
+                    window.silentRefresh(),
+                    new Promise(resolve => setTimeout(() => resolve(false), SESSION_PROBE_TIMEOUT_MS)),
+                ]);
             }
-            return false;
+            catch {
+                return false;
+            }
         }
         // 回跳脈絡：把本頁（含 token）寫進 same-origin sessionStorage('auth_redirect')；導去登入後
         // auth-ui.ts redirectAfterAuth() 會優先讀它回跳本頁。token 只進 sessionStorage、不進 login URL，
