@@ -42,3 +42,20 @@ DELETE FROM portfolio WHERE id = 8 AND title = '健身紀錄 APP';
 --             唯獨此 DB row 漏改，仍指向已從 repo 移除的孤兒 .jpg）→ 已 apply (remote)
 -- ─────────────────────────────────────────────────────────────
 UPDATE portfolio SET image_url = '/images/portfolio/og-case-platform.webp' WHERE id = 6 AND title = 'CHIYIGO 會員系統';
+
+-- ─────────────────────────────────────────────────────────────
+-- 2026-06-05：新增「Vibe Coding Academy 程式教學平台」（vibe-coding-academy）
+--             category=Web；排在現有 Web 項（解答之書 sort_order=101 / 塔羅作品集 102）之後 → sort_order=103
+--             圖片 /images/portfolio/vibe-coding-banner-1672x914.webp（實際 1696×927、比例≈1.83；卡片 16:9 object-fit:cover 會左右各裁約 1.4%，owner 確認可接受）隨本 PR merge→deploy 上線後再 apply
+--             → 待 apply（執行方式見檔頭 ②；CJK 字串建議寫成暫存 .sql 走 --file 避免 PowerShell 編碼問題）
+-- ─────────────────────────────────────────────────────────────
+-- INSERT INTO portfolio (title, category, description, image_url, link_url, tags, sort_order)
+-- VALUES (
+--   'Vibe Coding Academy 程式教學平台',
+--   'Web',
+--   '程式教學平台，用圖解、流程圖與生活化比喻帶完全新手從 0 到 1 打造網站、SaaS 與 AI 產品。涵蓋 52+ 知識主題、113+ 互動圖解，提供作品集 / CRM / SaaS / AI 工具四條學習路徑，支援繁中 / English / 日本語 / 한국어。Next.js + Tailwind CSS + MDX + Mermaid，部署於 Cloudflare Pages。',
+--   '/images/portfolio/vibe-coding-banner-1672x914.webp',
+--   'https://vibe-coding-academy.pages.dev/zh-TW/',
+--   'Next.js, Tailwind CSS, MDX, Mermaid, Cloudflare Pages',
+--   103
+-- );
