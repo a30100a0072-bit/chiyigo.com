@@ -118,6 +118,15 @@ type AuthBroadcast =
   // 入口：sessionStorage 沒 token 時試一次 refresh；用 navigator.locks 序列化避免多分頁同時 rotate
   async function silentRefreshIfNeeded(): Promise<void> {
     if (readToken()) return
+    // api.js 的 window.silentRefresh 自己用 navigator.locks(chiyigo-auth-refresh) 協調 → 有它就「直接委派」、
+    // 不要再包一層同名 exclusive lock。否則：本函式先持鎖，doRefresh 又透過 window.silentRefresh 重取同一把
+    // exclusive lock → re-entrant 死結（同時載入 sidebar-auth.js + api.js 且無 token 的頁面穩定踩到：
+    // accept-invitation / login / admin-* 的 no-token 進入）。lock ownership 收斂回單一 owner（api.js）。
+    if (typeof win.silentRefresh === 'function') {
+      await doRefresh()   // doRefresh 內部即委派 win.silentRefresh，由 api.js 獨佔該鎖
+      return
+    }
+    // legacy fallback：api.js 未載入時，由本檔自己用 navigator.locks 序列化直接 fetch，避免多分頁同時 rotate。
     if ('locks' in navigator) {
       try {
         await navigator.locks.request(LOCK_NAME, { mode: 'exclusive' }, async function () {
