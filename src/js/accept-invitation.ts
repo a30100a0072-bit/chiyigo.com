@@ -19,6 +19,12 @@
 // ── i18n ─────────────────────────────────────────────────────
 const I18N = /*@i18n@*/{};
 
+// 錯誤面板訊息是動態決定的；#err-msg 不掛 data-i18n，改記目前 error 的 i18n key（null = 後端原文/無 key）。
+// 否則 applyLang 的 generic [data-i18n] pass 會把它蓋回靜態預設 —— 這正是 no-token 初始錯誤被蓋成
+// err_default 的 bug：accept-flow 在 defer 執行（DOMContentLoaded 前）就 setError，DOMContentLoaded 的
+// applyLang 隨後又把 #err-msg 蓋回去。
+let activeErrKey: string | null = null;
+
 function getLang() { try { return localStorage.getItem('lang') || 'zh-TW' } catch { return 'zh-TW' } }
 function T(key) { const d = I18N[getLang()] || I18N['zh-TW']; return d[key] ?? key; }
 
@@ -29,6 +35,10 @@ function applyLang(lang) {
   document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
     const k = el.dataset.i18n; if (k && dict[k] != null) el.textContent = dict[k];
   });
+  // #err-msg 無 data-i18n（動態訊息）；有 active keyed error 時依新語言重套（含語言切換），不被 generic pass 蓋掉。
+  if (activeErrKey) {
+    const errEl = document.getElementById('err-msg'); if (errEl) errEl.textContent = T(activeErrKey);
+  }
   document.querySelectorAll<HTMLElement>('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
 }
 
@@ -53,8 +63,15 @@ document.addEventListener('DOMContentLoaded', () => {
     Object.values(panels).forEach(p => { if (p) p.classList.remove('active') })
     const el = panels[name]; if (el) el.classList.add('active')
   }
-  function setError(msg: string) {
-    const el = document.getElementById('err-msg'); if (el) el.textContent = msg
+  // 錯誤面板：keyed（語言切換可重套）vs raw text（後端原文，不重套）。activeErrKey 在外層 scope，applyLang 會讀它。
+  function setErrorKey(key: string) {
+    activeErrKey = key
+    const el = document.getElementById('err-msg'); if (el) el.textContent = T(key)
+    show('error')
+  }
+  function setErrorText(text: string) {
+    activeErrKey = null
+    const el = document.getElementById('err-msg'); if (el) el.textContent = text
     show('error')
   }
 
@@ -80,19 +97,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return null
   }
-  function messageFor(e: unknown): string {
+  // 解析 ApiError → 顯示對應錯誤：有 code 對映用 keyed（可重套），否則後端原文，再否則通用句。
+  function showResolvedError(e: unknown) {
     let code = ''
     if (e && typeof e === 'object' && 'code' in e) {
       const c = (e as { code?: unknown }).code
       if (typeof c === 'string') code = c
     }
     const key = CODE_KEY[code]
-    if (key) return T(key)
+    if (key) { setErrorKey(key); return }
     if (e && typeof e === 'object' && 'message' in e) {
       const m = (e as { message?: unknown }).message
-      if (typeof m === 'string' && m) return m
+      if (typeof m === 'string' && m) { setErrorText(m); return }
     }
-    return T('err_default')
+    setErrorKey('err_default')
   }
 
   // 是否有有效登入態：sessionStorage 有 access_token，否則委派 window.silentRefresh（HttpOnly cookie）。
@@ -124,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function doAccept(): Promise<void> {
-    if (typeof window.apiFetch !== 'function') { setError(T('err_network')); return }
+    if (typeof window.apiFetch !== 'function') { setErrorKey('err_network'); return }
     show('loading')
     // 預先記回跳：session 失效時 apiFetch 會清 token 並導去 /login.html，auth_redirect 讓使用者
     // 登入後回到本頁繼續接受（避免「邀請走丟」）。沿用 apiFetch 內建 silent-refresh→retry，
@@ -139,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // 終局 401：apiFetch 已 refresh 失敗並正在導向 /login.html（auth_redirect 回跳本頁）；不蓋 error 面板。
       if (statusOf(e) === 401) return
       clearReturn()
-      setError(messageFor(e)); return
+      showResolvedError(e); return
     }
     clearReturn()
     show('success')
@@ -151,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-relogin')?.addEventListener('click', goLogin)
 
   // 缺 token：直接錯誤態，不進登入閘門。
-  if (!token) { setError(T('err_missing')); return }
+  if (!token) { setErrorKey('err_missing'); return }
 
   // 初始閘門：已登入 → 顯示「接受」面板；未登入 → 顯示「先登入」面板。
   void ensureSession().then(loggedIn => { show(loggedIn ? 'confirm' : 'login') })

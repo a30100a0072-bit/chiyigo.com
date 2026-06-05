@@ -19,6 +19,11 @@
 (function () {
     // ── i18n ─────────────────────────────────────────────────────
     const I18N = {"zh-TW":{"status_open":"接案中","nav_home":"首頁","nav_services":"服務項目與流程","nav_portfolio":"chiyigo作品","nav_about":"關於我們","nav_contact":"需求諮詢","cta_btn_m":"開始諮詢 →","cta_desc":"讓我一起打造最適合你的數位解決方案！","cta_btn":"開始諮詢","login":"會員登入","member_center":"會員中心","logout":"登出","back_login":"返回登入","loading_text":"請稍候…","noscript_hint":"請啟用 JavaScript 以接受邀請。","confirm_title":"你被邀請加入組織","confirm_desc":"點擊下方按鈕，以你目前登入的帳號接受邀請。","btn_accept":"接受邀請","login_title":"請先登入","login_desc":"請先登入（或註冊）你的 Chiyigo 帳號，並使用收到邀請的信箱，再回來接受邀請。","btn_login":"登入並接受邀請","success_title":"成功加入組織","success_desc":"你已成功接受邀請。","btn_to_dashboard":"前往 Dashboard","error_title":"無法接受邀請","btn_relogin":"改用其他帳號登入","err_missing":"缺少邀請 token，請從邀請信中的連結重新開啟。","err_default":"無法接受邀請，請稍後再試。","err_network":"網路錯誤，請稍後再試。","err_not_found":"找不到這個邀請，可能連結有誤或已被撤銷。","err_expired":"這個邀請已過期，請向邀請人索取新的邀請。","err_email_mismatch":"這個邀請是寄給特定信箱的。請確認你登入的帳號使用收到邀請的信箱，且該信箱已完成驗證。","err_membership_inactive":"你在這個組織的成員資格目前未啟用，請聯繫組織管理員。","err_not_pending":"這個邀請已經被處理過，無法再次接受。","err_already_member":"你已經是這個組織的成員了。","err_tenant_ineligible":"這個組織目前無法接受新成員。","err_rate_limited":"嘗試次數過多，請稍後再試。","err_validation":"邀請連結格式有誤，請從邀請信重新開啟。"},"en":{"status_open":"Available","nav_home":"Home","nav_services":"Services & Process","nav_portfolio":"chiyigo Portfolio","nav_about":"About","nav_contact":"Inquiry","cta_btn_m":"Get Started →","cta_desc":"Let's build the perfect digital solution for you!","cta_btn":"Get Started","login":"Member Login","member_center":"Member Center","logout":"Sign Out","back_login":"Back to login","loading_text":"Please wait…","noscript_hint":"Please enable JavaScript to accept the invitation.","confirm_title":"You're invited to join an organization","confirm_desc":"Click the button below to accept the invitation with your current account.","btn_accept":"Accept invitation","login_title":"Please log in first","login_desc":"Log in (or sign up) to your Chiyigo account using the email that received this invitation, then come back to accept.","btn_login":"Log in and accept","success_title":"You've joined the organization","success_desc":"Your invitation has been accepted.","btn_to_dashboard":"Go to Dashboard","error_title":"Couldn't accept the invitation","btn_relogin":"Log in with a different account","err_missing":"The invitation token is missing. Please reopen the link from your invitation email.","err_default":"Couldn't accept the invitation, please try again later.","err_network":"Network error, please try again later.","err_not_found":"This invitation wasn't found — the link may be wrong or has been revoked.","err_expired":"This invitation has expired. Please ask the inviter for a new one.","err_email_mismatch":"This invitation was issued to a specific email. Make sure you're logged in with the email that received it, and that the email is verified.","err_membership_inactive":"Your membership in this organization isn't active. Please contact an organization admin.","err_not_pending":"This invitation has already been handled and can't be accepted again.","err_already_member":"You're already a member of this organization.","err_tenant_ineligible":"This organization can't accept new members right now.","err_rate_limited":"Too many attempts, please try again later.","err_validation":"The invitation link is malformed. Please reopen it from your invitation email."},"ja":{"status_open":"受付中","nav_home":"ホーム","nav_services":"サービスとプロセス","nav_portfolio":"chiyigoの実績","nav_about":"私たちについて","nav_contact":"お問い合わせ","cta_btn_m":"相談を始める →","cta_desc":"あなたに最適なデジタルソリューションを一緒に構築しましょう！","cta_btn":"相談を始める","login":"会員ログイン","member_center":"メンバーセンター","logout":"ログアウト","back_login":"ログインに戻る","loading_text":"お待ちください…","noscript_hint":"招待を受け入れるには JavaScript を有効にしてください。","confirm_title":"組織への招待が届いています","confirm_desc":"現在ログイン中のアカウントで招待を受け入れるには、下のボタンを押してください。","btn_accept":"招待を受け入れる","login_title":"先にログインしてください","login_desc":"招待を受け取ったメールアドレスで Chiyigo アカウントにログイン（または登録）し、戻って招待を受け入れてください。","btn_login":"ログインして受け入れる","success_title":"組織に参加しました","success_desc":"招待を受け入れました。","btn_to_dashboard":"ダッシュボードへ","error_title":"招待を受け入れられませんでした","btn_relogin":"別のアカウントでログイン","err_missing":"招待トークンがありません。招待メール内のリンクから開き直してください。","err_default":"招待を受け入れられませんでした。後でお試しください。","err_network":"ネットワークエラーです。後でお試しください。","err_not_found":"この招待が見つかりません。リンクが誤っているか、取り消された可能性があります。","err_expired":"この招待は有効期限が切れています。招待者に新しい招待を依頼してください。","err_email_mismatch":"この招待は特定のメールアドレス宛てです。招待を受け取ったメールアドレスでログインしているか、そのメールが認証済みかをご確認ください。","err_membership_inactive":"この組織でのあなたのメンバー資格は有効ではありません。組織の管理者にご連絡ください。","err_not_pending":"この招待は既に処理されており、再度受け入れることはできません。","err_already_member":"あなたは既にこの組織のメンバーです。","err_tenant_ineligible":"この組織は現在、新しいメンバーを受け入れられません。","err_rate_limited":"試行回数が多すぎます。後でお試しください。","err_validation":"招待リンクの形式が正しくありません。招待メールから開き直してください。"},"ko":{"status_open":"수주 중","nav_home":"홈","nav_services":"서비스 & 프로세스","nav_portfolio":"chiyigo 포트폴리오","nav_about":"소개","nav_contact":"문의하기","cta_btn_m":"시작하기 →","cta_desc":"함께 최적의 디지털 솔루션을 만들어 드리겠습니다!","cta_btn":"시작하기","login":"회원 로그인","member_center":"회원 센터","logout":"로그아웃","back_login":"로그인으로 돌아가기","loading_text":"잠시만 기다려 주세요…","noscript_hint":"초대를 수락하려면 JavaScript를 활성화해 주세요.","confirm_title":"조직 초대를 받았습니다","confirm_desc":"현재 로그인한 계정으로 초대를 수락하려면 아래 버튼을 누르세요.","btn_accept":"초대 수락","login_title":"먼저 로그인해 주세요","login_desc":"초대를 받은 이메일로 Chiyigo 계정에 로그인(또는 가입)한 뒤 돌아와 초대를 수락해 주세요.","btn_login":"로그인하고 수락","success_title":"조직에 가입했습니다","success_desc":"초대를 수락했습니다.","btn_to_dashboard":"대시보드로 이동","error_title":"초대를 수락할 수 없습니다","btn_relogin":"다른 계정으로 로그인","err_missing":"초대 토큰이 없습니다. 초대 이메일의 링크에서 다시 열어 주세요.","err_default":"초대를 수락할 수 없습니다. 잠시 후 다시 시도해 주세요.","err_network":"네트워크 오류입니다. 잠시 후 다시 시도해 주세요.","err_not_found":"초대를 찾을 수 없습니다. 링크가 잘못되었거나 철회되었을 수 있습니다.","err_expired":"이 초대는 만료되었습니다. 초대한 사람에게 새 초대를 요청해 주세요.","err_email_mismatch":"이 초대는 특정 이메일로 발송되었습니다. 초대를 받은 이메일로 로그인했는지, 그리고 해당 이메일이 인증되었는지 확인해 주세요.","err_membership_inactive":"이 조직에서의 멤버십이 활성 상태가 아닙니다. 조직 관리자에게 문의해 주세요.","err_not_pending":"이 초대는 이미 처리되어 다시 수락할 수 없습니다.","err_already_member":"이미 이 조직의 멤버입니다.","err_tenant_ineligible":"이 조직은 현재 새 멤버를 받을 수 없습니다.","err_rate_limited":"시도 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요.","err_validation":"초대 링크 형식이 올바르지 않습니다. 초대 이메일에서 다시 열어 주세요."}};
+    // 錯誤面板訊息是動態決定的；#err-msg 不掛 data-i18n，改記目前 error 的 i18n key（null = 後端原文/無 key）。
+    // 否則 applyLang 的 generic [data-i18n] pass 會把它蓋回靜態預設 —— 這正是 no-token 初始錯誤被蓋成
+    // err_default 的 bug：accept-flow 在 defer 執行（DOMContentLoaded 前）就 setError，DOMContentLoaded 的
+    // applyLang 隨後又把 #err-msg 蓋回去。
+    let activeErrKey = null;
     function getLang() { try {
         return localStorage.getItem('lang') || 'zh-TW';
     }
@@ -38,6 +43,12 @@
             if (k && dict[k] != null)
                 el.textContent = dict[k];
         });
+        // #err-msg 無 data-i18n（動態訊息）；有 active keyed error 時依新語言重套（含語言切換），不被 generic pass 蓋掉。
+        if (activeErrKey) {
+            const errEl = document.getElementById('err-msg');
+            if (errEl)
+                errEl.textContent = T(activeErrKey);
+        }
         document.querySelectorAll('.lang-opt,.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
     }
     document.addEventListener('DOMContentLoaded', () => {
@@ -62,10 +73,19 @@
             if (el)
                 el.classList.add('active');
         }
-        function setError(msg) {
+        // 錯誤面板：keyed（語言切換可重套）vs raw text（後端原文，不重套）。activeErrKey 在外層 scope，applyLang 會讀它。
+        function setErrorKey(key) {
+            activeErrKey = key;
             const el = document.getElementById('err-msg');
             if (el)
-                el.textContent = msg;
+                el.textContent = T(key);
+            show('error');
+        }
+        function setErrorText(text) {
+            activeErrKey = null;
+            const el = document.getElementById('err-msg');
+            if (el)
+                el.textContent = text;
             show('error');
         }
         // 後端 res({ code }) → 本頁 i18n key。未對應的 code fallback 後端 message，再 fallback 通用句。
@@ -89,7 +109,8 @@
             }
             return null;
         }
-        function messageFor(e) {
+        // 解析 ApiError → 顯示對應錯誤：有 code 對映用 keyed（可重套），否則後端原文，再否則通用句。
+        function showResolvedError(e) {
             let code = '';
             if (e && typeof e === 'object' && 'code' in e) {
                 const c = e.code;
@@ -97,14 +118,18 @@
                     code = c;
             }
             const key = CODE_KEY[code];
-            if (key)
-                return T(key);
+            if (key) {
+                setErrorKey(key);
+                return;
+            }
             if (e && typeof e === 'object' && 'message' in e) {
                 const m = e.message;
-                if (typeof m === 'string' && m)
-                    return m;
+                if (typeof m === 'string' && m) {
+                    setErrorText(m);
+                    return;
+                }
             }
-            return T('err_default');
+            setErrorKey('err_default');
         }
         // 是否有有效登入態：sessionStorage 有 access_token，否則委派 window.silentRefresh（HttpOnly cookie）。
         // silentRefresh 由 api.js 提供且已 navigator.locks 去重，與 sidebar-auth.js 同時呼叫共用同一 inflight。
@@ -152,7 +177,7 @@
         }
         async function doAccept() {
             if (typeof window.apiFetch !== 'function') {
-                setError(T('err_network'));
+                setErrorKey('err_network');
                 return;
             }
             show('loading');
@@ -171,7 +196,7 @@
                 if (statusOf(e) === 401)
                     return;
                 clearReturn();
-                setError(messageFor(e));
+                showResolvedError(e);
                 return;
             }
             clearReturn();
@@ -183,7 +208,7 @@
         document.getElementById('btn-relogin')?.addEventListener('click', goLogin);
         // 缺 token：直接錯誤態，不進登入閘門。
         if (!token) {
-            setError(T('err_missing'));
+            setErrorKey('err_missing');
             return;
         }
         // 初始閘門：已登入 → 顯示「接受」面板；未登入 → 顯示「先登入」面板。
