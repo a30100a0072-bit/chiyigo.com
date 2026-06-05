@@ -24,15 +24,37 @@
 
 ```
 wrangler pages deploy public --project-name chiyigo-com --branch acc-inv-preview
-# → 回傳 https://<hash>.chiyigo-com.pages.dev，對著它跑下方「必跑路徑」
+# → 回傳 https://<hash>.chiyigo-com.pages.dev，對著它跑下方流程
 ```
 
+> **Turnstile**：登入頁有 Turnstile，site key 綁網域。若 preview host 被擋而無法登入，只把**該次
+> preview 的 exact host** 加進 Turnstile site key 的 allowed domains（**不要**放寬成 `*.pages.dev`），
+> smoke 完移除。
+> **raw token 安全**：信件連結指向 prod（`IAM_BASE_URL`→`chiyigo.com`，merge 前會 404）；smoke 時取
+> 信件 raw token、只在本機無痕視窗**地址列**把 host 換成 preview 使用。**raw token 不要貼進聊天 / log / PR。**
+
 ## 前置
-- 一個 **pending** 邀請（記下信件連結 `…/accept-invitation.html?token=<RAW>`）。
+- 一個 **fresh pending** 邀請（依下方「建議流程」用單一 invite 串完；token 成功接受後即消耗，勿用已接受過的）。
 - 受邀者帳號：email 等於邀請的 email、**且已驗證**。
 - 另一個無關帳號（測 wrong-account）。
 
-## 必跑路徑
+## 建議流程：一個 invite 串完（最少 prod mutation）
+
+invite 的 token 一旦成功接受就被消耗（之後只剩 replay），故用**單一 invite** 串完
+#7 / #3 / #3b / happy，避免後面測到非 fresh-pending 狀態。raw token 從信件取得、只在地址列改 host：
+
+1. 部署 preview；以測試 tenant owner 邀請你控制的測試 email（受邀者，email 已驗證）→ 信件取 raw token。
+2. **無痕、登出狀態** → 地址列開 `https://<preview-host>/accept-invitation.html?token=<RAW>` → 應顯示「請先登入」面板。
+3. 按「登入並接受邀請」→ 看地址列：應是 `/login.html`、**不含 token**（#7）。
+4. 以**無關帳號**登入 → 自動回 accept → 按「接受邀請」→ 應 `INVITE_EMAIL_MISMATCH` 錯誤面板（#3）。
+5. 按「改用其他帳號登入」→ 應顯示**登入表單**（**不可**彈回 accept＝迴圈；#3b）→ 以**受邀者**登入。
+6. 自動回 accept → 按「接受邀請」→ **成功**（happy）；`organization_members` 該列 `status='active'`、`member.joined` audit。
+7. （可選）再開同一連結 → 接受 → 仍成功（replay；#6）。
+
+⇒ 此鏈一次覆蓋 #2b（登出→登入→回跳）/ #7 / #3 / #3b / happy，invite 只消耗一次。
+缺 token（#4）、明暗 + i18n（#8）另外快速點一下即可，不需新 invite。
+
+## 必跑路徑（逐條對照）
 
 | # | 情境 | 步驟 | 預期 |
 |---|---|---|---|
@@ -55,7 +77,9 @@ wrangler pages deploy public --project-name chiyigo-com --branch acc-inv-preview
   membership 還原到 baseline）。
 - **絕不刪 append-only**：`event_outbox` / `audit_log` / `*_ledger` / `event_deny_state` 的歷史列
   一律保留（與本 PR 原始任務約束一致）。
-- 還原後核對：users 仍 active、tenant memberships 回 baseline、deny_state 回 baseline。
+- **deny_state 不刪、也不要求 row count 回 baseline**（本 smoke 本就會新增 `event_deny_state` 列）：
+  只核對相關 member stream 的**最終狀態不是錯誤 deny**（`member.joined` ⇒ undeny / `denied=0`）、
+  `event_outbox` pending=0 / processing=0 / dead=0、`event_dlq` open=0、相關 users 仍 active。
 
 ## #3b 是本頁最易回歸的點
 `goLogin()` 必須先 `sessionStorage.removeItem('access_token')` 再導去 `/login.html`；否則
