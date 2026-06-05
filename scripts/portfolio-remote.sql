@@ -46,7 +46,7 @@ UPDATE portfolio SET image_url = '/images/portfolio/og-case-platform.webp' WHERE
 -- ─────────────────────────────────────────────────────────────
 -- 2026-06-05：新增「Vibe Coding Academy 程式教學平台」（vibe-coding-academy）
 --             category=Web；排在現有 Web 項（解答之書 sort_order=101 / 塔羅作品集 102）之後 → sort_order=103
---             圖片 /images/portfolio/vibe-coding-banner-1672x914.webp（16:9 webp）隨本 PR merge→deploy 上線後再 apply
+--             圖片 /images/portfolio/vibe-coding-banner-1672x914.webp（實際 1696×927、比例≈1.83；卡片 16:9 object-fit:cover 會左右各裁約 1.4%，owner 確認可接受）隨本 PR merge→deploy 上線後再 apply
 --             → 待 apply（執行方式見檔頭 ②；CJK 字串建議寫成暫存 .sql 走 --file 避免 PowerShell 編碼問題）
 -- ─────────────────────────────────────────────────────────────
 -- INSERT INTO portfolio (title, category, description, image_url, link_url, tags, sort_order)
