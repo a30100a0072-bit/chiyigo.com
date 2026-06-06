@@ -20,6 +20,44 @@
     let allItems = [];
     // Read URL ?filter= param for cross-page linking
     let curFilter = new URLSearchParams(location.search).get('filter') ?? 'all';
+    // ── Group scoping (作品 / Tools / Fun 三分類 IA) ───────────────────────
+    // TECH-DEBT: 下方 curated id-list 是 portfolio.group 欄位落地前的過渡策展表。
+    //   真實資料已證 category 軸無法推 group（category=Web 同時含 works 與 Fun），
+    //   且 link_url host 推斷不穩（id=12「Talo SSO」在 talo.chiyigo.com 但屬 works，非 Fun）
+    //   → 採 id-list-only。歸屬（2026-06-06 prod SELECT，owner ratified）：
+    //     tools = 7 (MBTI)；fun = 10 (解答之書), 11 (塔羅作品集)；其餘 → works。
+    //   長期：portfolio 表加 group 欄（Expand→Migrate→Contract）取代此表。tracking: tech-debt backlog。
+    // Set<string> 顯式型別：避免 literal array 推成 Set<'tools'|'fun'> 後 .has(string) 報 TS2345。
+    const VALID_GROUPS = new Set(['tools', 'fun']);
+    const DEFAULT_SCOPE = 'works';
+    const TOOLS_IDS = new Set(['7']);
+    const FUN_IDS = new Set(['10', '11']);
+    // ?group= allowlist + fail-open：未知/缺省值一律回 DEFAULT_SCOPE，杜絕空 grid / 無 active
+    function parseGroup() {
+        const g = new URLSearchParams(location.search).get('group');
+        return (g && VALID_GROUPS.has(g)) ? g : DEFAULT_SCOPE;
+    }
+    const CUR_SCOPE = parseGroup();
+    function groupOf(item) {
+        const id = String(item.id); // D1 回 number；Set 存 string → 統一字串比對
+        if (TOOLS_IDS.has(id))
+            return 'tools';
+        if (FUN_IDS.has(id))
+            return 'fun';
+        return 'works';
+    }
+    // grid 唯一 scoped 來源：buildFilters / applyFilter / applyLang / renderGrid 全走它，
+    // 確保切語系 / 點 filter / 重建後永遠停在 group scope 內，不漏回全量。
+    function getScopedItems() {
+        return CUR_SCOPE ? allItems.filter(i => groupOf(i) === CUR_SCOPE) : allItems;
+    }
+    // 依 group scope 同步 sidebar(.sb-item) + mobile overlay(.m-ov-item) 的 active 高亮
+    ;
+    (function syncNavActive() {
+        const activeKey = CUR_SCOPE || 'works';
+        document.querySelectorAll('.sb-item[data-nav-group], .m-ov-item[data-nav-group]')
+            .forEach(el => el.classList.toggle('active', el.dataset.navGroup === activeKey));
+    })();
     const CAT_LABEL = {
         'Web': '網站設計',
         'System': '系統設計',
@@ -119,7 +157,8 @@
             return;
         curFilter = filter;
         FBAR.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
-        renderGrid(filter === 'all' ? allItems : allItems.filter(i => i.category === filter));
+        const scoped = getScopedItems();
+        renderGrid(filter === 'all' ? scoped : scoped.filter(i => i.category === filter));
     }
     FBAR?.addEventListener('click', e => {
         const btn = e.target?.closest('.filter-btn');
@@ -136,7 +175,7 @@
             allItems = data.items ?? [];
             if (SKEL)
                 SKEL.style.display = 'none';
-            buildFilters(allItems);
+            buildFilters(getScopedItems());
             applyFilter(curFilter);
         }
         catch {
@@ -146,7 +185,7 @@
         }
     }
     // ── i18n ──────────────────────────────────────────────
-    const LANGS = {"zh-TW":{"nav_home":"首頁","nav_services":"服務項目與流程","nav_process":"服務流程","nav_portfolio":"chiyigo作品","nav_about":"關於我們","nav_contact":"需求諮詢","cta_desc":"讓我一起打造最適合你的數位解決方案！","cta_btn":"開始諮詢","cta_btn_m":"開始諮詢 →","login":"會員登入","status_open":"接案中","eyebrow":"// chiyigo作品","title1":"每個專案背後","title2":"都是真實需求","subtitle":"從系統開發到品牌活動，用技術解決真正的商業問題。","stat_projects":"完成專案","stat_satisfaction":"客戶滿意度","stat_experience":"開發經驗","filter_all":"全部","err_load":"// error: 載入失敗，請稍後再試","err_empty":"// empty: 此分類尚無作品","footer_tagline":"不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。","tooltip_theme":"切換明暗","tooltip_lang":"切換語言","view_project":"查看專案 →","cat_web":"網站設計","cat_system":"系統設計","cat_ai":"AI解決方案","cat_analytics":"量化數據分析","cat_app":"APP設計","cat_integration":"企業應用整合","cat_game":"遊戲開發","cat_platform":"平台 / 會員系統","footer_contact_title":"聯絡我們","member_center":"會員中心","logout":"登出"},"en":{"nav_home":"Home","nav_services":"Services & Process","nav_process":"Process","nav_portfolio":"chiyigo Portfolio","nav_about":"About","nav_contact":"Inquiry","cta_desc":"Let's build the perfect digital solution for you!","cta_btn":"Get in Touch","cta_btn_m":"Get in Touch →","login":"Member Login","status_open":"Open for Work","eyebrow":"// Portfolio","title1":"Every Project","title2":"Starts with Real Needs","subtitle":"From system development to brand campaigns — solving real business problems with technology.","stat_projects":"Projects Done","stat_satisfaction":"Client Satisfaction","stat_experience":"Dev Experience","filter_all":"All","err_load":"// error: Failed to load. Please try again.","err_empty":"// empty: No projects in this category.","footer_tagline":"Not just pretty interfaces — we turn your needs into systems that actually work.","tooltip_theme":"Toggle Theme","tooltip_lang":"Switch Language","view_project":"View Project →","cat_web":"Web Design","cat_system":"System Design","cat_ai":"AI Solutions","cat_analytics":"Data Analytics","cat_app":"App Design","cat_integration":"Enterprise Integration","cat_game":"Game Dev","cat_platform":"Platform / Identity","footer_contact_title":"Contact Us","member_center":"Member Center","logout":"Sign Out"},"ja":{"nav_home":"ホーム","nav_services":"サービスとプロセス","nav_process":"開発プロセス","nav_portfolio":"chiyigoの実績","nav_about":"私たちについて","nav_contact":"お問い合わせ","cta_desc":"最適なデジタルソリューションを一緒に作りましょう！","cta_btn":"相談する","cta_btn_m":"相談する →","login":"ログイン","status_open":"受注中","eyebrow":"// 実績","title1":"すべてのプロジェクトは","title2":"リアルな課題から始まる","subtitle":"システム開発からブランドキャンペーンまで、技術でビジネス課題を解決します。","stat_projects":"完了案件","stat_satisfaction":"顧客満足度","stat_experience":"開発経験","filter_all":"すべて","err_load":"// error: 読み込み失敗。もう一度お試しください。","err_empty":"// empty: このカテゴリには作品がありません。","footer_tagline":"見た目だけでなく、要件を本当に使えるシステムに変えます。","tooltip_theme":"テーマ切替","tooltip_lang":"言語切替","view_project":"プロジェクトを見る →","cat_web":"Webデザイン","cat_system":"システム設計","cat_ai":"AIソリューション","cat_analytics":"データ分析","cat_app":"アプリ設計","cat_integration":"システム連携","cat_game":"ゲーム開発","cat_platform":"プラットフォーム / IAM","footer_contact_title":"お問い合わせ","member_center":"メンバーセンター","logout":"ログアウト"},"ko":{"nav_home":"홈","nav_services":"서비스 & 프로세스","nav_process":"진행 과정","nav_portfolio":"chiyigo 포트폴리오","nav_about":"소개","nav_contact":"문의하기","cta_desc":"최적의 디지털 솔루션을 함께 만들어보세요!","cta_btn":"상담 시작","cta_btn_m":"상담 시작 →","login":"회원 로그인","status_open":"수주 중","eyebrow":"// 포트폴리오","title1":"모든 프로젝트는","title2":"실제 필요에서 시작됩니다","subtitle":"시스템 개발부터 브랜드 캠페인까지, 기술로 비즈니스 문제를 해결합니다.","stat_projects":"완료 프로젝트","stat_satisfaction":"고객 만족도","stat_experience":"개발 경력","filter_all":"전체","err_load":"// error: 로드 실패. 다시 시도해주세요.","err_empty":"// empty: 이 카테고리에는 작품이 없습니다.","footer_tagline":"예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.","tooltip_theme":"테마 전환","tooltip_lang":"언어 전환","view_project":"프로젝트 보기 →","cat_web":"웹 디자인","cat_system":"시스템 설계","cat_ai":"AI 솔루션","cat_analytics":"데이터 분석","cat_app":"앱 디자인","cat_integration":"엔터프라이즈 통합","cat_game":"게임 개발","cat_platform":"플랫폼 / IAM","footer_contact_title":"연락하기","member_center":"회원 센터","logout":"로그아웃"}};
+    const LANGS = {"zh-TW":{"nav_home":"首頁","nav_services":"服務項目與流程","nav_process":"服務流程","nav_portfolio":"chiyigo作品","nav_tools":"Tools 工具","nav_fun":"Fun 娛樂","nav_about":"關於我們","nav_contact":"需求諮詢","cta_desc":"讓我一起打造最適合你的數位解決方案！","cta_btn":"開始諮詢","cta_btn_m":"開始諮詢 →","login":"會員登入","status_open":"接案中","eyebrow":"// chiyigo作品","title1":"每個專案背後","title2":"都是真實需求","subtitle":"從系統開發到品牌活動，用技術解決真正的商業問題。","stat_projects":"完成專案","stat_satisfaction":"客戶滿意度","stat_experience":"開發經驗","filter_all":"全部","err_load":"// error: 載入失敗，請稍後再試","err_empty":"// empty: 此分類尚無作品","footer_tagline":"不是只做漂亮畫面，而是幫你把需求變成真正能用的系統。","tooltip_theme":"切換明暗","tooltip_lang":"切換語言","view_project":"查看專案 →","cat_web":"網站設計","cat_system":"系統設計","cat_ai":"AI解決方案","cat_analytics":"量化數據分析","cat_app":"APP設計","cat_integration":"企業應用整合","cat_game":"遊戲開發","cat_platform":"平台 / 會員系統","footer_contact_title":"聯絡我們","member_center":"會員中心","logout":"登出"},"en":{"nav_home":"Home","nav_services":"Services & Process","nav_process":"Process","nav_portfolio":"chiyigo Portfolio","nav_tools":"Tools","nav_fun":"Fun","nav_about":"About","nav_contact":"Inquiry","cta_desc":"Let's build the perfect digital solution for you!","cta_btn":"Get in Touch","cta_btn_m":"Get in Touch →","login":"Member Login","status_open":"Open for Work","eyebrow":"// Portfolio","title1":"Every Project","title2":"Starts with Real Needs","subtitle":"From system development to brand campaigns — solving real business problems with technology.","stat_projects":"Projects Done","stat_satisfaction":"Client Satisfaction","stat_experience":"Dev Experience","filter_all":"All","err_load":"// error: Failed to load. Please try again.","err_empty":"// empty: No projects in this category.","footer_tagline":"Not just pretty interfaces — we turn your needs into systems that actually work.","tooltip_theme":"Toggle Theme","tooltip_lang":"Switch Language","view_project":"View Project →","cat_web":"Web Design","cat_system":"System Design","cat_ai":"AI Solutions","cat_analytics":"Data Analytics","cat_app":"App Design","cat_integration":"Enterprise Integration","cat_game":"Game Dev","cat_platform":"Platform / Identity","footer_contact_title":"Contact Us","member_center":"Member Center","logout":"Sign Out"},"ja":{"nav_home":"ホーム","nav_services":"サービスとプロセス","nav_process":"開発プロセス","nav_portfolio":"chiyigoの実績","nav_tools":"ツール","nav_fun":"エンタメ","nav_about":"私たちについて","nav_contact":"お問い合わせ","cta_desc":"最適なデジタルソリューションを一緒に作りましょう！","cta_btn":"相談する","cta_btn_m":"相談する →","login":"ログイン","status_open":"受注中","eyebrow":"// 実績","title1":"すべてのプロジェクトは","title2":"リアルな課題から始まる","subtitle":"システム開発からブランドキャンペーンまで、技術でビジネス課題を解決します。","stat_projects":"完了案件","stat_satisfaction":"顧客満足度","stat_experience":"開発経験","filter_all":"すべて","err_load":"// error: 読み込み失敗。もう一度お試しください。","err_empty":"// empty: このカテゴリには作品がありません。","footer_tagline":"見た目だけでなく、要件を本当に使えるシステムに変えます。","tooltip_theme":"テーマ切替","tooltip_lang":"言語切替","view_project":"プロジェクトを見る →","cat_web":"Webデザイン","cat_system":"システム設計","cat_ai":"AIソリューション","cat_analytics":"データ分析","cat_app":"アプリ設計","cat_integration":"システム連携","cat_game":"ゲーム開発","cat_platform":"プラットフォーム / IAM","footer_contact_title":"お問い合わせ","member_center":"メンバーセンター","logout":"ログアウト"},"ko":{"nav_home":"홈","nav_services":"서비스 & 프로세스","nav_process":"진행 과정","nav_portfolio":"chiyigo 포트폴리오","nav_tools":"도구","nav_fun":"재미","nav_about":"소개","nav_contact":"문의하기","cta_desc":"최적의 디지털 솔루션을 함께 만들어보세요!","cta_btn":"상담 시작","cta_btn_m":"상담 시작 →","login":"회원 로그인","status_open":"수주 중","eyebrow":"// 포트폴리오","title1":"모든 프로젝트는","title2":"실제 필요에서 시작됩니다","subtitle":"시스템 개발부터 브랜드 캠페인까지, 기술로 비즈니스 문제를 해결합니다.","stat_projects":"완료 프로젝트","stat_satisfaction":"고객 만족도","stat_experience":"개발 경력","filter_all":"전체","err_load":"// error: 로드 실패. 다시 시도해주세요.","err_empty":"// empty: 이 카테고리에는 작품이 없습니다.","footer_tagline":"예쁜 화면만이 아닌, 요구사항을 실제로 사용 가능한 시스템으로 만듭니다.","tooltip_theme":"테마 전환","tooltip_lang":"언어 전환","view_project":"프로젝트 보기 →","cat_web":"웹 디자인","cat_system":"시스템 설계","cat_ai":"AI 솔루션","cat_analytics":"데이터 분석","cat_app":"앱 디자인","cat_integration":"엔터프라이즈 통합","cat_game":"게임 개발","cat_platform":"플랫폼 / IAM","footer_contact_title":"연락하기","member_center":"회원 센터","logout":"로그아웃"}};
     let curLang = localStorage.getItem('lang') || 'zh-TW';
     function applyLang(lang) {
         if (!LANGS[lang])
@@ -182,11 +221,12 @@
         document.querySelectorAll('.lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
         document.querySelectorAll('.m-ov-lang-opt').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
         localStorage.setItem('lang', lang);
-        if (FBAR && allItems.length > 0) {
+        const scoped = getScopedItems();
+        if (FBAR && scoped.length > 0) {
             FBAR.querySelectorAll('.filter-btn:not([data-filter="all"])').forEach(b => b.remove());
-            buildFilters(allItems);
+            buildFilters(scoped);
             FBAR.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === curFilter));
-            renderGrid(curFilter === 'all' ? allItems : allItems.filter(i => i.category === curFilter));
+            renderGrid(curFilter === 'all' ? scoped : scoped.filter(i => i.category === curFilter));
         }
     }
     const langToggleBtn = document.getElementById('lang-toggle-btn');

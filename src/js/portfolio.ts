@@ -20,6 +20,46 @@ let allItems  = [];
 // Read URL ?filter= param for cross-page linking
 let curFilter = new URLSearchParams(location.search).get('filter') ?? 'all';
 
+// ── Group scoping (作品 / Tools / Fun 三分類 IA) ───────────────────────
+// TECH-DEBT: 下方 curated id-list 是 portfolio.group 欄位落地前的過渡策展表。
+//   真實資料已證 category 軸無法推 group（category=Web 同時含 works 與 Fun），
+//   且 link_url host 推斷不穩（id=12「Talo SSO」在 talo.chiyigo.com 但屬 works，非 Fun）
+//   → 採 id-list-only。歸屬（2026-06-06 prod SELECT，owner ratified）：
+//     tools = 7 (MBTI)；fun = 10 (解答之書), 11 (塔羅作品集)；其餘 → works。
+//   長期：portfolio 表加 group 欄（Expand→Migrate→Contract）取代此表。tracking: tech-debt backlog。
+// Set<string> 顯式型別：避免 literal array 推成 Set<'tools'|'fun'> 後 .has(string) 報 TS2345。
+const VALID_GROUPS  = new Set<string>(['tools', 'fun']);
+const DEFAULT_SCOPE = 'works';
+const TOOLS_IDS     = new Set<string>(['7']);
+const FUN_IDS       = new Set<string>(['10', '11']);
+
+// ?group= allowlist + fail-open：未知/缺省值一律回 DEFAULT_SCOPE，杜絕空 grid / 無 active
+function parseGroup() {
+  const g = new URLSearchParams(location.search).get('group');
+  return (g && VALID_GROUPS.has(g)) ? g : DEFAULT_SCOPE;
+}
+const CUR_SCOPE = parseGroup();
+
+function groupOf(item) {
+  const id = String(item.id);   // D1 回 number；Set 存 string → 統一字串比對
+  if (TOOLS_IDS.has(id)) return 'tools';
+  if (FUN_IDS.has(id))   return 'fun';
+  return 'works';
+}
+
+// grid 唯一 scoped 來源：buildFilters / applyFilter / applyLang / renderGrid 全走它，
+// 確保切語系 / 點 filter / 重建後永遠停在 group scope 內，不漏回全量。
+function getScopedItems() {
+  return CUR_SCOPE ? allItems.filter(i => groupOf(i) === CUR_SCOPE) : allItems;
+}
+
+// 依 group scope 同步 sidebar(.sb-item) + mobile overlay(.m-ov-item) 的 active 高亮
+;(function syncNavActive() {
+  const activeKey = CUR_SCOPE || 'works';
+  document.querySelectorAll<HTMLElement>('.sb-item[data-nav-group], .m-ov-item[data-nav-group]')
+    .forEach(el => el.classList.toggle('active', el.dataset.navGroup === activeKey));
+})();
+
 const CAT_LABEL = {
   'Web':         '網站設計',
   'System':      '系統設計',
@@ -109,7 +149,8 @@ function applyFilter(filter) {
   curFilter = filter;
   FBAR.querySelectorAll<HTMLElement>('.filter-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.filter === filter));
-  renderGrid(filter === 'all' ? allItems : allItems.filter(i => i.category === filter));
+  const scoped = getScopedItems();
+  renderGrid(filter === 'all' ? scoped : scoped.filter(i => i.category === filter));
 }
 
 FBAR?.addEventListener('click', e => {
@@ -125,7 +166,7 @@ async function loadPortfolio() {
     const data = await res.json();
     allItems = data.items ?? [];
     if (SKEL) SKEL.style.display = 'none';
-    buildFilters(allItems);
+    buildFilters(getScopedItems());
     applyFilter(curFilter);
   } catch {
     if (SKEL) SKEL.style.display = 'none';
@@ -160,12 +201,13 @@ function applyLang(lang) {
   document.querySelectorAll<HTMLElement>('.m-ov-lang-opt').forEach(b =>
     b.classList.toggle('active', b.dataset.lang === lang));
   localStorage.setItem('lang', lang);
-  if (FBAR && allItems.length > 0) {
+  const scoped = getScopedItems();
+  if (FBAR && scoped.length > 0) {
     FBAR.querySelectorAll('.filter-btn:not([data-filter="all"])').forEach(b => b.remove());
-    buildFilters(allItems);
+    buildFilters(scoped);
     FBAR.querySelectorAll<HTMLElement>('.filter-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.filter === curFilter));
-    renderGrid(curFilter === 'all' ? allItems : allItems.filter(i => i.category === curFilter));
+    renderGrid(curFilter === 'all' ? scoped : scoped.filter(i => i.category === curFilter));
   }
 }
 
