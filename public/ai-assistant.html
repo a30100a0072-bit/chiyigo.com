@@ -43,10 +43,23 @@
         var el = document.getElementById('__authsplash');
         if (el) el.parentNode.removeChild(el);
       };
-      var refreshOnce = function () {
+      // refresh token 綁登入時的 device id；refresh 必須帶「既有」device id（read-only），缺則
+      // fail-closed 不打 refresh——新生 UUID ≠ 後端綁定值會觸發 device_mismatch、撤整個 device
+      // family + critical audit（login/register 才 get-or-create；此 refresh 路徑絕不新生）。
+      var readDeviceUuidForRefresh = function () {
+        var RE = /^web-[0-9a-f-]{36}$/i;
+        try {
+          var v = localStorage.getItem('chiyigo.device_uuid');
+          if (v && RE.test(v)) return v;
+        } catch (_) { /* storage 被擋 */ }
+        var mem = window.__chiyigoMemoryDeviceUuid;
+        if (mem && RE.test(mem)) return mem;
+        return null;
+      };
+      var refreshOnce = function (devId) {
         return fetch('/api/auth/refresh', {
           method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }, body: '{}'
+          headers: { 'Content-Type': 'application/json', 'X-Device-Id': devId }, body: '{}'
         }).then(function (r) { return r.ok ? r.json() : null; })
           .then(function (d) {
             if (d && d.access_token) {
@@ -65,16 +78,22 @@
           });
       };
       var run = function () {
-        // 與 sidebar-auth.js 共用同一把 lock，避免多分頁 / sidebar-auth.js 自己的 silentRefresh 重複 rotate
+        // refresh 必帶既有 device id；缺則 fail-closed（見 readDeviceUuidForRefresh），不打 refresh。
+        // 此路徑無 in-flight request → 後續 goLogin navigation 安全（不會取消 pending rotation）。
+        var devId = readDeviceUuidForRefresh();
+        if (!devId) return Promise.resolve(false);
+        // 與 sidebar-auth.js 共用同一把 lock，避免多分頁 / sidebar-auth.js silentRefresh 重複 rotate。
+        // 註：本 PR 不加 lock-budget——ai-assistant 失敗即 goLogin（navigation 取消 in-flight refresh、
+        // 會重開 rotation-orphan）；lock-budget 需「不導航取消」語意，屬另案（② lock-budget 系列）。
         if ('locks' in navigator) {
           return navigator.locks.request('chiyigo-auth-refresh', { mode: 'exclusive' }, function () {
             var tok = null;
             try { tok = sessionStorage.getItem('access_token'); } catch (_) {}
             if (tok) { removeSplash(); return true; }
-            return refreshOnce();
+            return refreshOnce(devId);
           });
         }
-        return refreshOnce();
+        return refreshOnce(devId);
       };
       run().then(function (ok) { if (!ok) goLogin(); }).catch(goLogin);
     })();
