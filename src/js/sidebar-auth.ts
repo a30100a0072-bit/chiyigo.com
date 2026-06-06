@@ -82,19 +82,12 @@ type AuthBroadcast =
     try { channel.postMessage({ type: 'logout' } as AuthBroadcast) } catch (_) { /* channel closed */ }
   }
 
-  // 跑一次 /api/auth/refresh；成功 → 寫 token + 廣播 + re-apply UI
-  // P0-11：委派給 api.js 的 window.silentRefresh（含 navigator.locks）；
-  // 成功後自己讀回 token 廣播 + 套 UI
-  async function doRefresh(): Promise<boolean> {
-    if (typeof win.silentRefresh === 'function') {
-      const ok = await win.silentRefresh()
-      if (ok) {
-        const t = readToken()
-        if (t) { broadcastLogin(t); applyAuthState(); return true }
-      }
-      return false
-    }
-    // fallback（罕見：api.js 未 load）
+  // 直接打 /api/auth/refresh 換 token；成功 → 寫 token + 廣播 + re-apply UI。
+  // 關鍵：本 helper 永不委派 win.silentRefresh —— 它是給 fallback 的 navigator.locks
+  // exclusive lock callback 內部用的。lock 內若委派 api.js 的 window.silentRefresh
+  // （api.ts 會重取同名 chiyigo-auth-refresh exclusive lock，Web Locks 不可重入），會 re-entrant 死結。
+  // 「lock 內絕不委派」這條不變量由本 helper 從結構上保證，不靠 doRefresh 的動態 win.silentRefresh 檢查。
+  async function doRawRefresh(): Promise<boolean> {
     try {
       const devId = getDeviceUuid()
       const hdrs: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -115,6 +108,25 @@ type AuthBroadcast =
     } catch (_) { return false }
   }
 
+  // 跑一次 /api/auth/refresh；成功 → 寫 token + 廣播 + re-apply UI
+  // P0-11：有 api.js 時委派 window.silentRefresh（含 navigator.locks）；成功後自己讀回 token
+  // 廣播 + 套 UI。無 api.js 時走 doRawRefresh()。
+  // 注意：本函式會「動態委派」win.silentRefresh，故只能在「未持 chiyigo-auth-refresh 鎖」的路徑
+  // 呼叫（top-level 委派 path / navigator.locks 不支援的 tail）；fallback 的 lock callback 內
+  // 必走 doRawRefresh()（見上），不可走本函式。
+  async function doRefresh(): Promise<boolean> {
+    if (typeof win.silentRefresh === 'function') {
+      const ok = await win.silentRefresh()
+      if (ok) {
+        const t = readToken()
+        if (t) { broadcastLogin(t); applyAuthState(); return true }
+      }
+      return false
+    }
+    // fallback（罕見：api.js 未 load）
+    return doRawRefresh()
+  }
+
   // 入口：sessionStorage 沒 token 時試一次 refresh；用 navigator.locks 序列化避免多分頁同時 rotate
   async function silentRefreshIfNeeded(): Promise<void> {
     if (readToken()) return
@@ -132,7 +144,9 @@ type AuthBroadcast =
         await navigator.locks.request(LOCK_NAME, { mode: 'exclusive' }, async function () {
           // 進到 lock 後再檢一次：別的分頁可能在我等 lock 時已 broadcast token 過來
           if (readToken()) { applyAuthState(); return }
-          await doRefresh()
+          // 持鎖中絕不委派 win.silentRefresh —— api.js 會重取同名 exclusive lock → re-entrant 死結。
+          // 故走 doRawRefresh()（永不委派），不走 doRefresh()。
+          await doRawRefresh()
         })
         return
       } catch (_) { /* fallthrough to no-lock path */ }
