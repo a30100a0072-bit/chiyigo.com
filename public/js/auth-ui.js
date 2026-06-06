@@ -61,6 +61,23 @@ function _chiyigoGetDeviceUuid() {
     }
     return fullUuid;
 }
+// refresh 路徑專用：只讀「既有」device id（read-only，不 get-or-create）。refresh token 綁登入時的
+// device id；refresh 帶不符值（含新生 UUID）→ 後端 device_mismatch、撤整個 device family（refresh.ts:131）。
+// 故缺/不合法時回 null，由呼叫端 fail-closed（不打 refresh）。登入路徑才用上面 _chiyigoGetDeviceUuid（get-or-create）。
+function _readDeviceUuidForRefresh() {
+    var KEY = 'chiyigo.device_uuid';
+    var RE = /^web-[0-9a-f-]{36}$/i;
+    try {
+        var v = localStorage.getItem(KEY);
+        if (v && RE.test(v))
+            return v;
+    }
+    catch (_) { /* storage 被擋 */ }
+    var mem = window.__chiyigoMemoryDeviceUuid;
+    if (mem && RE.test(mem))
+        return mem;
+    return null;
+}
 // ── i18n：四語系錯誤 / UI 字串 ───────────────────────────────────
 // 後端錯誤訊息（res.json().error）對照：以英文 key 查 4 語對應翻譯
 const ERROR_I18N = {
@@ -233,12 +250,15 @@ async function refreshAccessToken() {
         return w.silentRefresh();
     }
     // fallback：api.js 還沒 load（同頁 script 順序保證罕見）→ 直接打一次
+    // refresh 必帶「既有」device id（read-only）；缺則 fail-closed（不新生，見 _readDeviceUuidForRefresh）。
+    const _devId = _readDeviceUuidForRefresh();
+    if (!_devId)
+        return false;
     try {
-        const _devId = _chiyigoGetDeviceUuid();
         const res = await fetch('/api/auth/refresh', {
             method: 'POST',
             credentials: 'include',
-            headers: Object.assign({ 'Content-Type': 'application/json' }, _devId ? { 'X-Device-Id': _devId } : {}),
+            headers: { 'Content-Type': 'application/json', 'X-Device-Id': _devId },
             body: '{}',
         });
         if (!res.ok)

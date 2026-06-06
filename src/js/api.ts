@@ -89,21 +89,20 @@ interface Window {
 ;(function () {
   'use strict'
 
-  // 同 auth-ui.js：每瀏覽器一次性 web-<uuid>，給 /api/auth/refresh X-Device-Id 用
-  function _chiyigoGetDeviceUuid(): string | null {
+  // refresh 路徑專用：只讀「既有」device id（read-only，不 get-or-create）。refresh token 綁登入時的
+  // device id；refresh 帶不符值（含新生 UUID）→ 後端 device_mismatch、撤整個 device family（refresh.ts:131）。
+  // 故缺/不合法時回 null，由呼叫端 fail-closed（不打 refresh）。login/register/OAuth 創建路徑才 get-or-create
+  // （在 auth-ui.ts）；api.ts 無創建路徑，僅此 read-only。
+  function _readDeviceUuidForRefresh(): string | null {
     const KEY = 'chiyigo.device_uuid'
+    const RE = /^web-[0-9a-f-]{36}$/i
     try {
       const v = localStorage.getItem(KEY)
-      if (v && /^web-[0-9a-f-]{36}$/i.test(v)) return v
+      if (v && RE.test(v)) return v
     } catch (_) { /* localStorage blocked */ }
-    if (window.__chiyigoMemoryDeviceUuid) return window.__chiyigoMemoryDeviceUuid
-    const uuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
-      ? crypto.randomUUID() : null
-    if (!uuid) return null
-    const fullUuid = 'web-' + uuid
-    try { localStorage.setItem(KEY, fullUuid) }
-    catch (_) { window.__chiyigoMemoryDeviceUuid = fullUuid }
-    return fullUuid
+    const mem = window.__chiyigoMemoryDeviceUuid
+    if (mem && RE.test(mem)) return mem
+    return null
   }
 
   function getAccessToken(): string | null {
@@ -120,11 +119,13 @@ interface Window {
   let _refreshInflight: Promise<boolean> | null = null
 
   async function _doRefreshOnce(): Promise<boolean> {
+    // refresh 必帶「既有」device id；缺則 fail-closed（見 _readDeviceUuidForRefresh）。
+    const _devId = _readDeviceUuidForRefresh()
+    if (!_devId) return false
     try {
-      const _devId = _chiyigoGetDeviceUuid()
       const r = await fetch('/api/auth/refresh', {
         method: 'POST', credentials: 'include',
-        headers: Object.assign({ 'Content-Type': 'application/json' }, _devId ? { 'X-Device-Id': _devId } : {}),
+        headers: { 'Content-Type': 'application/json', 'X-Device-Id': _devId },
         body: '{}',
       })
       if (!r.ok) return false
