@@ -29,6 +29,16 @@
     const TOKEN_KEY = 'access_token';
     const CHANNEL_NAME = 'chiyigo-auth';
     const LOCK_NAME = 'chiyigo-auth-refresh';
+    // 持 chiyigo-auth-refresh 鎖的「持鎖上限」(ms)。逾時只放鎖、不 abort in-flight rotation
+    // （abort 一個已在 server 端 commit 的 rotation 會在 client 留下已撤銷 cookie）；refresh 在背景
+    // 跑完、晚到的成功由 authEpoch guard 把關。bound 的是「持鎖時間」，不是 fetch 本身。
+    const RAW_REFRESH_LOCK_BUDGET_MS = 10000;
+    // 登出/登入世代計數：本分頁每觀察到 logout / front-channel logout / 外部登入即 +1。doRawRefresh
+    // 發 fetch 前捕捉當下世代、套用結果前比對；世代已變 → 不以晚到的 refresh 結果做 JS 端 writeToken /
+    // broadcastLogin（避免覆蓋較新的登入 token、或視覺上復活已登出 session）。
+    // ⚠ 此 guard 僅擋「JS 端晚寫」；對「已送出 fetch 的晚到 Set-Cookie」cookie-side race 無能為力，
+    //   那需後端 rotation grace window（Fork 2 follow-up）才能根治。
+    let authEpoch = 0;
     let channel = null;
     try {
         channel = ('BroadcastChannel' in window) ? new BroadcastChannel(CHANNEL_NAME) : null;
@@ -84,6 +94,7 @@
     // （api.ts 會重取同名 chiyigo-auth-refresh exclusive lock，Web Locks 不可重入），會 re-entrant 死結。
     // 「lock 內絕不委派」這條不變量由本 helper 從結構上保證，不靠 doRefresh 的動態 win.silentRefresh 檢查。
     async function doRawRefresh() {
+        const startEpoch = authEpoch;
         try {
             const devId = getDeviceUuid();
             const hdrs = { 'Content-Type': 'application/json' };
@@ -99,6 +110,10 @@
                 return false;
             const data = await r.json();
             if (!data || !data.access_token)
+                return false;
+            // 世代已變（fetch 期間發生 logout / 外部登入）→ 不做 JS 端晚寫，避免復活已登出 session
+            // 或覆蓋較新的登入 token。
+            if (authEpoch !== startEpoch)
                 return false;
             writeToken(data.access_token);
             broadcastLogin(data.access_token);
@@ -154,7 +169,24 @@
                     }
                     // 持鎖中絕不委派 win.silentRefresh —— api.js 會重取同名 exclusive lock → re-entrant 死結。
                     // 故走 doRawRefresh()（永不委派），不走 doRefresh()。
-                    await doRawRefresh();
+                    // bound 的是「持鎖時間」非 fetch：race 一個 lock-budget timeout；逾時 → 退出 callback、放掉
+                    // chiyigo-auth-refresh 鎖，讓 in-flight rotation 在背景跑完（從不 abort → 不會留下已撤銷
+                    // cookie），避免「卡死的 refresh」starve 其他同鎖 refresher。晚到成功由 doRawRefresh 內
+                    // authEpoch guard 把關。注意：本 PR 只 bound 公開 sidebar fallback 路徑；api.ts 與
+                    // ai-assistant.html 的同鎖路徑仍 unbounded（residual / follow-up）。
+                    let timer = null;
+                    const lockBudget = new Promise(function (resolve) {
+                        timer = setTimeout(resolve, RAW_REFRESH_LOCK_BUDGET_MS);
+                    });
+                    try {
+                        // doRawRefresh 內部 try/catch 永不 reject；.catch 防衛吞掉任何意外 rejection，避免 detached
+                        // 後成為 unhandled rejection。
+                        await Promise.race([doRawRefresh().catch(function () { return false; }), lockBudget]);
+                    }
+                    finally {
+                        if (timer !== null)
+                            clearTimeout(timer);
+                    }
                 });
                 return;
             }
@@ -167,6 +199,7 @@
     // 它會撤所有 refresh + 嵌 iframe 同步登出 mbti / talo（front-channel logout）
     // 沒有 id_token_hint 也能跑（cookie token 還是會被撤）
     function doLogout() {
+        authEpoch++; // 登出 → 作廢任何 in-flight raw refresh 的晚寫
         writeToken(null);
         broadcastLogout();
         const url = '/api/auth/oauth/end-session?post_logout_redirect_uri=' +
@@ -186,10 +219,12 @@
                 if (!data)
                     return;
                 if (data.type === 'login' && data.token) {
+                    authEpoch++; // 外部登入較新 → 作廢 in-flight raw refresh 的晚寫，不覆蓋較新 token
                     writeToken(data.token);
                     applyAuthState();
                 }
                 else if (data.type === 'logout') {
+                    authEpoch++;
                     writeToken(null);
                     applyAuthState();
                     // P0-12：私密頁要立刻跳 login，避免連鎖 401（公開頁僅切 UI）
@@ -206,6 +241,7 @@
         // 也監聽 OIDC Front-Channel Logout 訊號（其他子站登出 → 同源主頁分頁立刻清狀態）
         window.addEventListener('storage', function (e) {
             if (e.key === 'oidc_logout_at') {
+                authEpoch++;
                 writeToken(null);
                 applyAuthState();
                 return;
