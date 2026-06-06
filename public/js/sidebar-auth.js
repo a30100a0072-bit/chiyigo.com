@@ -1,30 +1,22 @@
 (function () {
     'use strict';
     const win = window;
-    // 同 auth-ui.js / api.js：每瀏覽器一次性 web-<uuid>，給 /api/auth/refresh X-Device-Id 用
-    function getDeviceUuid() {
+    // refresh 路徑專用：只讀「既有」device id（read-only，不 get-or-create）。refresh token 綁登入時的
+    // device id；refresh 帶不符值（含新生 UUID）→ 後端 device_mismatch、撤整個 device family（refresh.ts:131）。
+    // 故缺/不合法時回 null，由呼叫端 fail-closed（不打 refresh）。創建路徑（login）才 get-or-create（在 auth-ui.ts）。
+    function readDeviceUuidForRefresh() {
         const KEY = 'chiyigo.device_uuid';
+        const RE = /^web-[0-9a-f-]{36}$/i;
         try {
             const v = localStorage.getItem(KEY);
-            if (v && /^web-[0-9a-f-]{36}$/i.test(v))
+            if (v && RE.test(v))
                 return v;
         }
         catch (_) { /* localStorage blocked */ }
-        if (win.__chiyigoMemoryDeviceUuid)
-            return win.__chiyigoMemoryDeviceUuid;
-        const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-            ? crypto.randomUUID()
-            : null;
-        if (!uuid)
-            return null;
-        const fullUuid = 'web-' + uuid;
-        try {
-            localStorage.setItem(KEY, fullUuid);
-        }
-        catch (_) {
-            win.__chiyigoMemoryDeviceUuid = fullUuid;
-        }
-        return fullUuid;
+        const mem = win.__chiyigoMemoryDeviceUuid;
+        if (mem && RE.test(mem))
+            return mem;
+        return null;
     }
     const TOKEN_KEY = 'access_token';
     const CHANNEL_NAME = 'chiyigo-auth';
@@ -96,10 +88,10 @@
     async function doRawRefresh() {
         const startEpoch = authEpoch;
         try {
-            const devId = getDeviceUuid();
-            const hdrs = { 'Content-Type': 'application/json' };
-            if (devId)
-                hdrs['X-Device-Id'] = devId;
+            const devId = readDeviceUuidForRefresh();
+            if (!devId)
+                return false; // 缺既有 device id → fail-closed，不打 refresh
+            const hdrs = { 'Content-Type': 'application/json', 'X-Device-Id': devId };
             const r = await fetch('/api/auth/refresh', {
                 method: 'POST',
                 credentials: 'include',
