@@ -1,6 +1,6 @@
-# Stage 7 — Strict Zero-Error Gate（Plan v3）
+# Stage 7 — Strict Zero-Error Gate（Plan v3.1）
 
-> 狀態：plan 階段，**0 行 Stage 7 code 變更**。本檔為 Codex plan-gate v3 審查標的。
+> 狀態：plan 階段，**0 行 Stage 7 code 變更**。本檔為 Codex plan-gate v3.1 審查標的。
 > Base HEAD：`1185ed5`（main，working tree clean，non-strict solution = EXIT 0 / 0 error）。
 > 動工分級：**L3**（跨全 codebase + Tier-0 治理機制變更）；屬「治理 + 機械型遷移」，runtime 0 變更，不跑 §輸出順序 11 步。
 
@@ -8,7 +8,7 @@
 
 - **架構分叉拍板（owner + Codex 一致）**：**方案 A（locked override）**，非 B'（雙軌 strict-probe）。
 - **執行 refinement 拍板**：**per-flag ladder**（每 leaf 先 `noImplicitAny` 再 `strict:true`），非 per-leaf 一次 full strict。理由：red window 更小、PR 更同質、hot-zone review 更乾淨。
-- **plan-gate 軌跡**：v1 reject（PR-0 override 太鬆）→ v2 reject（override 豁免集不完整 + operational deadlock + 機械化缺口）→ **v3（本檔）**。
+- **plan-gate 軌跡**：v1 reject（PR-0 override 太鬆）→ v2 reject（override 豁免集不完整 + operational deadlock + 機械化缺口）→ v3 reject（governance workflow 缺 explicit base ref）→ **v3.1（本檔）**。
 - **數字雙方復現**：functions 1293 / scripts 49 / browser-typecheck 1088 / tests(全)2485 由 Claude 與 Codex 各自實測一致。
 
 ## 1. 目標與終態
@@ -81,11 +81,12 @@ leaf→path-prefix 映射（P5 用；由 leaf include 推導）：
 [OVERRIDE] leaf=<name> flag=<strict-family> errorCount 0→N cleanFiles 257→M baseRef=<sha> reason=<env value>
 ```
 
-### 3.4 env / merge path（Codex High 2 — 解 operational deadlock）
+### 3.4 env / merge path（Codex High 2 解 deadlock + v3-H base ref）
 
 - env：`RATCHET_ALLOW_BASELINE_RAISE=<reason>`，**CI 預設不帶**（`ci.yml` 一般 PR 流程不注入）。
-- **merge path（明文，不留隱含）**：open-strict PR 走**專用 governance workflow** `.github/workflows/strict-leaf-governance.yml`（`workflow_dispatch`，input：`leaf` + `reason`，注入 env 跑 ratchet，產生 durable run log）。一般 `ci.yml` 對 open-strict PR 的 ratchet step **預期 red**（§3.6 Approval Record 已載明、bounded per leaf），由 owner 經 governance workflow 綠燈 + admin merge 進 main。
-- 後續 reduce PR **不帶 env**（它們是 error-reducing，走正常 ratchet 下降，CI 正常綠）。
+- **merge path（明文，不留隱含）**：open-strict PR 走**專用 governance workflow** `.github/workflows/strict-leaf-governance.yml`（`workflow_dispatch`），input：`leaf` + `reason` + **`base_ref`（required）**。一般 `ci.yml` 對 open-strict PR 的 ratchet step **預期 red**（§3.6 Approval Record、bounded per leaf），由 owner 經 governance workflow 綠燈 + admin merge 進 main。
+- **base_ref（v3-H，Codex High）**：`workflow_dispatch` 非 PR event，`github.base_ref` / `pull_request.base.sha` 皆不存在；ratchet 在 CI 環境缺 `RATCHET_BASE_REF`+`GITHUB_BASE_REF` 會 **`exit 3`**（`getBaseRef` F8-CI @ `typecheck-ratchet.mjs:298`）。故 governance workflow 必須：(a) `base_ref` 為 **required input**（= open-strict branch 的 fork point；其 baseline.errorCount 應為 0，即 P3 讀取對象）；(b) `actions/checkout` 用 **`fetch-depth: 0`** 讓 base_ref 可 resolve；(c) 跑 ratchet 前先 `git rev-parse --verify <base_ref>^{commit}`，不可 resolve → **fail-closed（T0）**；(d) step env `RATCHET_BASE_REF: ${{ inputs.base_ref }}` + `RATCHET_ALLOW_BASELINE_RAISE: ${{ inputs.reason }}`；(e) **不依賴** ratchet 的 `origin/main` fallback（line 291-293，fetch 狀態不定 + fork point 未必等於當前 origin/main）。
+- 後續 reduce PR **不帶 env**（error-reducing，走正常 ratchet 下降，CI 正常綠）。
 
 ### 3.5 durable ledger（Codex Medium 2）
 
@@ -102,6 +103,7 @@ PR-0 同步更新 `docs/governance-exceptions.md`：
 
 | # | 場景 | 預期 |
 |---|---|---|
+| T0 | governance workflow 缺 `base_ref` 或不可 resolve | workflow **fail-closed**（rev-parse step 先擋，不跑到 ratchet `exit 3`） |
 | T1 | 開 strict flag、**無 env** | 照常 enforce → `[BASE]/[BASE-B']/[BASE-EBF]/[BASE-D-tsconfig]` fail (exit 1) |
 | T2 | 有 env、tsconfigSnapshot **無 strict-family 變更**（P2 fail） | override 不啟用 → fail |
 | T3 | 有 env + strict flag、diff **含 source**（P1 fail） | override 不啟用 → fail |
@@ -136,7 +138,7 @@ PR-0 同步更新 `docs/governance-exceptions.md`：
 
 **PR-0｜治理（熱區：改 ratchet Tier-0 gate，必 codex chain）**
 - ratchet 加 locked override（§3.2–3.4 豁免集 + 5 precondition + log）。
-- 新增 `.github/workflows/strict-leaf-governance.yml`（§3.4）。
+- 新增 `.github/workflows/strict-leaf-governance.yml`（§3.4；required `base_ref` input + `fetch-depth:0` + rev-parse 驗證 fail-closed）。
 - 新增 `scripts/strict-tests-preflight.mjs`（§4）+ NEW_JS_ALLOWLIST。
 - 更新 `docs/governance-exceptions.md` policy（§3.5）。
 - 跑 §3.7 T1–T8 adversarial，PR body 貼 receipt。**無任何 leaf 開 strict**（純機制）。
@@ -159,7 +161,7 @@ PR-0 同步更新 `docs/governance-exceptions.md`：
 ## 7. 風險 / Claude 自審（對抗式，一輪 0 新發現）
 
 1. **override = 永久後門** → 5-precondition「以歸因證明」+ no-source + 單 leaf 方向限定 + log + durable ledger + 8 adversarial；豁免限 5 條 base-derived。最高 review 點。
-2. **operational deadlock**（CI 不帶 env）→ §3.4 專用 governance workflow + 明文 red-CI Approval Record 解。
+2. **operational deadlock**（CI 不帶 env）→ §3.4 專用 governance workflow + 明文 red-CI Approval Record 解。**`workflow_dispatch` 非 PR event 缺 base ref → ratchet `exit 3`（F8-CI）**：required `base_ref` input + `RATCHET_BASE_REF=inputs.base_ref` + `fetch-depth:0` + rev-parse 驗證 + T0 fail-closed，不依賴 origin/main fallback。
 3. **同時開多 leaf** → P3（base errorCount==0）+ P5（errorsByFile 歸屬）機械 enforce。
 4. **tests leaf 非 standalone**（include functions/**）→ §4 preflight script gate（exit-code 正確、非 grep -c）。
 5. **hot-zone 型別補洞無聲改 runtime** → annotation/runtime 拆 PR + cast/`!` 註明 invariant + integration test。
@@ -167,6 +169,6 @@ PR-0 同步更新 `docs/governance-exceptions.md`：
 
 ## 8. 下一步（四檢查點）
 
-1. 本 v3 doc commit 到 `stage7-strict-plan` 分支 → owner 拿 diff 給 **Codex 審 plan v3**。
-2. Codex Approve → 開 **PR-0**（locked override 機制，走完整四檢查點 + codex chain）。
-3. PR-0 merged → 依 §6 per-flag ladder 逐 leaf/flag 推進，每個 open-strict 走 governance workflow + durable ledger，每個 reduce PR 守 §5 補洞紀律。
+1. v3.1 doc 新 commit 到 `stage7-strict-plan` 分支 → owner 拿 diff 給 **Codex 審 plan v3.1**（v3 唯一 blocker = governance workflow base ref，已補）。
+2. Codex Approve → 開 **PR-0**（locked override + governance workflow + preflight script + ledger，走完整四檢查點 + codex chain）。
+3. PR-0 merged → 依 §6 per-flag ladder 逐 leaf/flag 推進，每個 open-strict 走 governance workflow（帶 base_ref + reason）+ durable ledger，每個 reduce PR 守 §5 補洞紀律。
