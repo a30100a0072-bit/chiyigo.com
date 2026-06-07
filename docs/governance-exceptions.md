@@ -1,9 +1,18 @@
 # Ratchet Governance Exceptions Log
 
 書面留底「typecheck:ratchet 在 base ref 對比下被故意觸發 fail」的人工放行紀錄。
-ratchet 設計（`scripts/typecheck-ratchet.mjs` §F4-BASE-LIVE）規定「破例需走人工 governance review，本 script 未實作 env gate」，所以每次刪除 clean TS source 或縮小 tsconfig include 都會留在這個檔。
 
-格式：每個事件一段，列出三件事 — 觸發的 commit、ratchet 跑出來的 failure 列表（逐字）、放行理由。
+## 兩類放行
+
+### (A) Source deletion / tsconfig 縮小（人工 review，無 env gate）
+
+刪除 clean TS source 或縮小 tsconfig include 會觸發 base-derived fail（如 `[BASE] cleanFiles` / `[BASE-D-tsconfig] include 縮小`）。這類**無 env gate**，走人工 governance review。格式：每個事件一段，列出觸發 commit、ratchet failure 列表（逐字）、放行理由。
+
+### (B) Open-strict baseline raise（locked override，PR-0 / Stage 7 起）
+
+開單一 solution leaf 的 strict-family flag 會從 zero base 製造大量 error，觸發 base-derived guards（`[BASE] errorCount/cleanFiles`、`[BASE-B']`、`[BASE-EBF]`、`[BASE-D-tsconfig]` strict-family）。自 PR-0（`scripts/lib/ratchet-override.mjs` + `typecheck-ratchet.mjs`）起，這類走 **locked override**：env `RATCHET_ALLOW_BASELINE_RAISE=<reason>` + 5 precondition（P1 no-source／P2 單 leaf strict-family↑／P3 base errorCount===0／P4 branch===current／P5 errorsByFile leaf-scoped）全過，才豁免那 5 條 base-derived；branch-local guard（A/B/B'/B''/SCHEMA、非該 leaf strict-family 的 D-tsconfig、C、D/E）永遠 enforce。經 `.github/workflows/strict-leaf-governance.yml`（workflow_dispatch + 必填 base_ref）執行；一般 ci.yml 對 open-strict PR 預期 red。每次 override 在本檔留一筆。
+
+open-strict override entry 格式：觸發 commit／leaf／strict flag(s)／governance workflow run id／`errorCount 0 → N`、`cleanFiles → M`／被豁免的 failure 列表（逐字）／reason（= env value）。
 
 ---
 
