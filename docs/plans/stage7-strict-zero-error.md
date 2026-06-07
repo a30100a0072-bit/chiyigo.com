@@ -141,7 +141,7 @@ PR-0 同步更新 `docs/governance-exceptions.md`：
 - 新增 `.github/workflows/strict-leaf-governance.yml`（§3.4；required `base_ref` input + `fetch-depth:0` + rev-parse 驗證 fail-closed）。
 - 新增 `scripts/strict-tests-preflight.mjs`（§4）+ NEW_JS_ALLOWLIST。
 - 更新 `docs/governance-exceptions.md` policy（§3.5）。
-- 跑 §3.7 T1–T8 adversarial，PR body 貼 receipt。**無任何 leaf 開 strict**（純機制）。
+- 跑 §3.7 T0–T8 adversarial（含 T0 base_ref fail-closed receipt），PR body 貼 receipt。**無任何 leaf 開 strict**（純機制）。
 
 **順序正確性（已驗）**：tests leaf 與 functions leaf 用完全相同 lib/types（`WebWorker` + `@cloudflare/vitest-pool-workers`），functions 修乾淨後 tests leaf 對 functions/** 0 新 error（§6.1 紀律）；scripts 的 `forensic.mjs` 也被 tests include，scripts 先清則 tests 受益。**functions→scripts→tests→browser 採納。**
 
@@ -160,12 +160,12 @@ PR-0 同步更新 `docs/governance-exceptions.md`：
 
 ## 7. 風險 / Claude 自審（對抗式，一輪 0 新發現）
 
-1. **override = 永久後門** → 5-precondition「以歸因證明」+ no-source + 單 leaf 方向限定 + log + durable ledger + 8 adversarial；豁免限 5 條 base-derived。最高 review 點。
+1. **override = 永久後門** → 5-precondition「以歸因證明」+ no-source + 單 leaf 方向限定 + log + durable ledger + T0–T8 adversarial；豁免限 5 條 base-derived。最高 review 點。
 2. **operational deadlock**（CI 不帶 env）→ §3.4 專用 governance workflow + 明文 red-CI Approval Record 解。**`workflow_dispatch` 非 PR event 缺 base ref → ratchet `exit 3`（F8-CI）**：required `base_ref` input + `RATCHET_BASE_REF=inputs.base_ref` + `fetch-depth:0` + rev-parse 驗證 + T0 fail-closed，不依賴 origin/main fallback。
 3. **同時開多 leaf** → P3（base errorCount==0）+ P5（errorsByFile 歸屬）機械 enforce。
 4. **tests leaf 非 standalone**（include functions/**）→ §4 preflight script gate（exit-code 正確、非 grep -c）。
 5. **hot-zone 型別補洞無聲改 runtime** → annotation/runtime 拆 PR + cast/`!` 註明 invariant + integration test。
-6. **per-flag ladder 增 override 次數**（per leaf 2 次、共 ~8 次）→ locked override 後每次都過 5-precondition + 8-adversarial，安全可接受；換取 red 更小段 + PR 更同質。
+6. **per-flag ladder 增 override 次數**（per leaf 2 次、共 ~8 次）→ locked override 後每次都過 5-precondition + T0–T8 adversarial，安全可接受；換取 red 更小段 + PR 更同質。
 
 ## 8. 下一步（四檢查點）
 
