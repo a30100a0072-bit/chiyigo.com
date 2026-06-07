@@ -102,6 +102,7 @@ import { execSync, execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
+import { evaluateOverridePreconditions, isExemptableFailure } from './lib/ratchet-override.mjs'
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -122,6 +123,8 @@ const NEW_JS_ALLOWLIST = new Set([
   SELF_FILE,
   'scripts/verify-browser-pipeline.mjs',
   'scripts/lib/inject-i18n.js',
+  // PR-0 (Stage 7)：locked override pure 決策邏輯（ratchet 本體 + vitest 共用；見該檔註解）
+  'scripts/lib/ratchet-override.mjs',
 ])
 
 // PR-55（Stage 4.5a 治理收尾）：Stage 4.5a browser pipeline 結構不變式
@@ -969,7 +972,7 @@ function main() {
     failures.push(`[B] cleanFiles 倒退：${baseline.cleanFiles} → ${current.cleanFiles}（-${baseline.cleanFiles - current.cleanFiles}；可能新增 error 檔）`)
   }
 
-  const { added, unifiedDiff, effectiveRange, renameMap } = getDiff(baseRef)
+  const { added, modified, unifiedDiff, effectiveRange, renameMap } = getDiff(baseRef)
   const addedFiles = new Set(added.map((f) => f.replace(/\\/g, '/')))
 
   // 規則 B'（F3，PR-治理-2）：current 新出現的 error 檔 → fail；rename 例外。
@@ -1060,16 +1063,35 @@ function main() {
     failures.push(`[D/E] ${v.file}：${v.reason}`)
   }
 
+  // locked override（PR-0 Stage 7）：env RATCHET_ALLOW_BASELINE_RAISE + 5-precondition
+  // 證明 failure 全因單一 leaf 開 strict flag → 只豁免 5 條 base-derived；其餘永遠 enforce。
+  // 設計與證明見 docs/plans/stage7-strict-zero-error.md §3 / isExemptableFailure。
+  let effectiveFailures = failures
+  const overrideReason = (process.env.RATCHET_ALLOW_BASELINE_RAISE || '').trim()
+  if (overrideReason) {
+    const pc = evaluateOverridePreconditions({
+      baseBaseline, baseline, current, added, modified, renameMap,
+      currentSnap: currentTsconfigSnap, baseSnap: baseTsconfigSnap,
+    })
+    if (pc.ok) {
+      effectiveFailures = failures.filter((f) => !isExemptableFailure(f, pc))
+      console.log(`[OVERRIDE] leaf=${pc.leaf} flag=${pc.flags.join('+')} errorCount ${baseBaseline.errorCount}→${baseline.errorCount} cleanFiles ${baseBaseline.cleanFiles}→${baseline.cleanFiles} baseRef=${baseRef} reason=${overrideReason}`)
+    } else {
+      console.error('[OVERRIDE-REJECTED] preconditions 未過，照常 enforce 全部守備：')
+      for (const v of pc.violations) console.error('  - ' + v)
+    }
+  }
+
   console.log(`baseline: errorCount=${baseline.errorCount} cleanFiles=${baseline.cleanFiles} (baseRef=${baseRef} effectiveRange=${effectiveRange})`)
   console.log(`current : errorCount=${current.errorCount} cleanFiles=${current.cleanFiles}`)
 
-  if (failures.length === 0) {
+  if (effectiveFailures.length === 0) {
     console.log('ratchet OK')
     return
   }
 
   console.error('\nFAIL — typecheck ratchet 違反以下規則：')
-  for (const f of failures) console.error('  - ' + f)
+  for (const f of effectiveFailures) console.error('  - ' + f)
   console.error('\n參考：memory/project_js_to_ts_migration.md §1.5a / §1.5g')
   process.exit(1)
 }
