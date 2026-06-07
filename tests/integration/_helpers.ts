@@ -69,6 +69,7 @@ export async function resetDb() {
     `ALTER TABLE refresh_tokens ADD COLUMN scope TEXT`,     // migration 0035
     `ALTER TABLE refresh_tokens ADD COLUMN issued_aud TEXT`, // migration 0037（Codex r9-5）
     `ALTER TABLE refresh_tokens ADD COLUMN session_id TEXT`, // migration 0052 (PR5 5d-1a per-login session id)
+    `ALTER TABLE refresh_tokens ADD COLUMN successor_token_hash TEXT`, // migration 0053 (Fork 2 Route B rotation-orphan marker)
     `ALTER TABLE audit_log ADD COLUMN archived_at TEXT`,                                  // migration 0038
     `ALTER TABLE audit_log ADD COLUMN cold_class TEXT NOT NULL DEFAULT 'immutable'`,     // migration 0038
   ]) {

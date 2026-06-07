@@ -34,6 +34,10 @@ import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
+// Fork 2 Route B (docs/reviews/fork2-rotation-grace-plan.md): window (seconds) after a rotation within which a
+// re-presented just-revoked token is classified as a benign rotation-orphan (auth.refresh.grace_orphan) instead of
+// reuse. Owner-ratified 30s (Gate-1, 2026-06-07). Magic number → named constant (unit: seconds).
+const REFRESH_GRACE_SECONDS = 30
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -93,13 +97,19 @@ export async function onRequestPost({ request, env }) {
 
   // ── 1. 查找 token（含過期與撤銷過濾）────────────────────────
   const tokenHash = await hashToken(refresh_token)
+  // Fork 2 Route B: also fetch successor_token_hash + a SQL-computed grace_candidate flag. grace_candidate is true
+  // ONLY for a token revoked BY A ROTATION (successor_token_hash set) still inside the classification window. The
+  // window is evaluated SQL-side (revoked_at > datetime('now', ?)) -- both sides are SQLite 'YYYY-MM-DD HH:MM:SS' UTC,
+  // the same-format comparison feedback_sqlite_iso_datetime_compare prescribes (NEVER parse SQLite datetimes in JS).
+  const graceWindow = `-${REFRESH_GRACE_SECONDS} seconds`
   const tokenRow  = await db
     .prepare(`
-      SELECT id, user_id, device_uuid, revoked_at, auth_time, scope, issued_aud, session_id
+      SELECT id, user_id, device_uuid, revoked_at, auth_time, scope, issued_aud, session_id, successor_token_hash,
+             (successor_token_hash IS NOT NULL AND revoked_at > datetime('now', ?)) AS grace_candidate
       FROM refresh_tokens
       WHERE token_hash = ? AND expires_at > datetime('now')
     `)
-    .bind(tokenHash)
+    .bind(graceWindow, tokenHash)
     .first()
 
   if (!tokenRow) {
@@ -107,14 +117,57 @@ export async function onRequestPost({ request, env }) {
     return res({ error: 'Invalid or expired refresh token', code: 'INVALID_REFRESH_TOKEN' }, 401, cors)
   }
 
+  // ip is needed by both the revoked/grace path (rate-limit on a correct-device candidate) and the live path below.
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
+
+  // ── 1b. Revoked token: genuine reuse vs benign rotation-orphan (Fork 2 Route B) ──────────────────────────────
+  // READ-ONLY re-classification: this path NEVER issues a token and NEVER mutates a refresh_tokens row (an
+  // already-revoked token must not be weaponizable to kill the live successor session or to spend the victim quota).
+  // It only chooses which audit signal to record. A PROVEN benign orphan (revoked BY A ROTATION + same device + live
+  // successor + within window, gated by the SQL-computed grace_candidate flag) is recorded as the distinct
+  // auth.refresh.grace_orphan instead of the FALSE reuse_detected. Everything else keeps reuse_detected -- token-theft
+  // detection is preserved. Owner-ratified: grace_orphan is a SECURITY_SIGNAL/warn (no retention downgrade); 30s window.
   if (tokenRow.revoked_at) {
-    // 已撤銷 token 重放 = 高度可疑（refresh rotation 設計下偷 token 必中此分支）
+    if (tokenRow.grace_candidate) {
+      const deviceBound = tokenRow.device_uuid !== null && tokenRow.device_uuid !== ''
+      if (deviceBound && tokenRow.device_uuid !== (device_uuid ?? '')) {
+        // device-bound candidate from a wrong/absent device: keep a security signal, NO quota, NO family-revoke
+        // (family-revoke stays on the LIVE-token path only -- a revoked token may not kill the live successor).
+        await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'grace_device_mismatch' } })
+        return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
+      }
+      if (deviceBound) {
+        // correct-device candidate: only NOW spend the refresh rate-limit (device check is before rate-limit so a
+        // wrong-device replay cannot burn the victim quota), then a read-only successor-liveness check. A TRUE orphan
+        // never used its successor, so it is still live -> benign. A dead/missing successor = chain advanced / session
+        // ended -> keep the reuse_detected signal.
+        const { blocked } = await checkRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, windowSeconds: 60, max: 30 })
+        if (blocked) {
+          await safeUserAudit(env, { event_type: 'auth.refresh.rate_limited', severity: 'warn', user_id: tokenRow.user_id, request })
+          return res({ error: 'Too many refresh attempts. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+        }
+        await recordRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, ip })
+        const successorLive = await db
+          .prepare(`SELECT 1 AS ok FROM refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > datetime('now')`)
+          .bind(tokenRow.successor_token_hash)
+          .first()
+        if (successorLive) {
+          // benign rotation-orphan: same device, live (unused) successor, within window. Distinct non-alarming
+          // security signal instead of the FALSE reuse_detected. Still 401 (no resurrection -- Route B).
+          await safeUserAudit(env, { event_type: 'auth.refresh.grace_orphan', severity: 'warn', user_id: tokenRow.user_id, request })
+          return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
+        }
+        // dead/missing successor -> fall through to reuse_detected below.
+      }
+      // device-null candidate -> fall through to reuse_detected (cannot confirm same device -> stay a security signal).
+    }
+    // genuine reuse: out of window / revoked by logout-admin-device (successor_token_hash NULL) / device-null candidate
+    // / dead-or-missing successor. (refresh rotation 設計下偷 token 必中此分支)
     await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'reuse_detected' } })
     return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
   }
 
   // ── 1.5 Rate limit（Phase E3）─ 30/user/min；spec 寫 per-token，per-user 涵蓋更廣（持多 token 不能繞）
-  const ip = request.headers.get('CF-Connecting-IP') ?? null
   const { blocked: rlBlocked } = await checkRateLimit(db, {
     kind: 'refresh', userId: tokenRow.user_id, windowSeconds: 60, max: 30,
   })
@@ -190,8 +243,8 @@ export async function onRequestPost({ request, env }) {
   //        row-level 序列化（只有一方 changes()=1，輸的一方 changes()=0 視為 reuse；保留 Codex #2 的防護）。
   //   S2 = INSERT new ... SELECT ... WHERE changes()=1 —— 只在 S1 真的撤了舊 head 時才插新 head（both-or-neither）。
   const rot = await db.batch([
-    db.prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL`)
-      .bind(tokenRow.id),
+    db.prepare(`UPDATE refresh_tokens SET revoked_at = datetime('now'), successor_token_hash = ? WHERE id = ? AND revoked_at IS NULL`)
+      .bind(newTokenHash, tokenRow.id),
     db.prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud, session_id)
                 SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`)
       .bind(user.id, newTokenHash, tokenRow.device_uuid, newExpiresAt, preservedAuthTime, tokenRow.scope ?? null, effectiveAud, preservedSessionId),

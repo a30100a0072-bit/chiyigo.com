@@ -375,8 +375,10 @@ describe('[PR5-5d-2] resolveLargeNThreshold (strict) + registry guard', () => {
       expect(resolveLargeNThreshold(bad)).toBe(SESSION_REVOKE_LARGE_N_THRESHOLD)
     }
   })
-  it('audit-policy registry unchanged — large-N reuses existing endpoint types, no new type', () => {
-    expect(_registrySize).toBe(207)
+  it('audit-policy registry — large-N reuses existing endpoint types, no new type of its own', () => {
+    // PR5-5d-2 large-N itself adds NO audit type. The GLOBAL registry size is 208 as of Fork 2 Route B
+    // (auth.refresh.grace_orphan, 2026-06-07) — keep this in lockstep with audit-policy.test.ts's _registrySize assertion.
+    expect(_registrySize).toBe(208)
   })
 })
 

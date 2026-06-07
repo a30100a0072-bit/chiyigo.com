@@ -230,6 +230,10 @@ const SECURITY_SIGNAL = [
   'auth.login.success',
   'auth.new_device',
   'auth.refresh.fail',
+  // Fork 2 Route B：benign rotation-orphan re-classification（distinct from the FALSE reuse_detected）。Owner-ratified
+  // "1b" = SECURITY_SIGNAL/warn（NO retention downgrade — kept at security forensic tier, just a distinct event type so
+  // theft analytics can exclude the benign pattern）。grace-path device mismatch reuses auth.refresh.fail/grace_device_mismatch.
+  'auth.refresh.grace_orphan',
   'auth.risk.blocked',
   'auth.risk.medium',
   'auth.step_up.fail',

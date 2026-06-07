@@ -1,0 +1,31 @@
+-- Migration 0053: refresh_tokens.successor_token_hash -- rotation-orphan grace classification (Fork 2, Route B)
+--
+-- Upstream design: docs/reviews/fork2-rotation-grace-plan.md (Codex Gate-1 APPROVED round-5, owner ratified 1b + 30s).
+--   Fork 2 root cause: refresh-token rotation revokes the old token then mints a successor in one atomic batch. If the
+--   response/Set-Cookie is lost after commit, the client re-presents the now-revoked old token and the server records a
+--   FALSE token-theft signal (auth.refresh.fail / reuse_detected). Route B recognizes that benign rotation-orphan and
+--   records it as a distinct non-alarming security signal (auth.refresh.grace_orphan) instead -- WITHOUT issuing any
+--   token (no resurrection) and WITHOUT weakening reuse detection for every other case.
+--
+-- successor_token_hash is the PROVENANCE MARKER: refresh.ts rotation S1 stamps it (= the new live row token_hash) on the
+--   row it revokes. ONLY rotation sets it -- logout / admin-revoke / device-mismatch family-revoke leave it NULL, so a
+--   token revoked by any of those is NOT a grace candidate and keeps emitting reuse_detected (detection preserved). It
+--   also locates the successor row for the read-only liveness check (a benign orphan has a still-live successor).
+--
+-- EXPAND stage of expand/migrate/contract: this migration ONLY adds one nullable column. NO backfill (legacy rows stay
+--   NULL = not grace-eligible = today reuse path, fail-safe). NO index (the old row is found by its UNIQUE token_hash,
+--   and the successor is found by the UNIQUE token_hash that successor_token_hash stores). The revoked/grace path is
+--   READ-ONLY w.r.t. refresh_tokens rows -- it never mutates a row, so no new write contention is introduced.
+--
+-- DEPLOY ORDER (REQUIRED -- Codex Gate-2 State-Consistency finding). This repo AUTO-DEPLOYS functions on push to main
+--   (.github/workflows/deploy.yml) and applies D1 migrations OUT OF BAND (manual wrangler step). The refresh hot path
+--   (functions/api/auth/refresh.ts) SELECTs successor_token_hash on EVERY request and rotation writes it, so deploying
+--   that code before this column exists makes every refresh fail with "no such column" -- an auth-refresh outage.
+--   THEREFORE: apply this migration to the target D1 (wrangler d1 migrations apply chiyigo_db --remote, then verify)
+--   BEFORE merging/deploying the refresh.ts code. This is the same migration-first discipline used for 0052 session_id,
+--   which likewise SELECTs and writes refresh_tokens on the refresh path. ROLLBACK ORDER is the inverse -- see the down
+--   migration: revert/redeploy the pre-0053 code FIRST, then run the down migration (never drop a column live code reads).
+--
+-- The migration + resetDb runners split SQL on raw semicolons, so NO comment in this file may contain a semicolon.
+
+ALTER TABLE refresh_tokens ADD COLUMN successor_token_hash TEXT;
