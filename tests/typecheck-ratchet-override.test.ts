@@ -73,11 +73,12 @@ describe('evaluateOverridePreconditions (P1-P5)', () => {
   const curSnap = { 'tsconfig.functions.json': snap({ strict: true, noImplicitAny: true }) }
   function legalCtx(over = {}) {
     return {
-      baseBaseline: { errorCount: 0, cleanFiles: 257, errorsByFile: {} },
-      baseline: { errorCount: 1293, cleanFiles: 111, errorsByFile: { 'functions/utils/jwt.ts': 36 } },
-      current: { errorCount: 1293, cleanFiles: 111, errorsByFile: { 'functions/utils/jwt.ts': 36 } },
+      baseBaseline: { errorCount: 0, fileErrors: 0, globalErrors: 0, errorFiles: 0, cleanFiles: 257, sourceFilesTotal: 412, errorsByFile: {} },
+      baseline: { errorCount: 1293, fileErrors: 1293, globalErrors: 0, errorFiles: 1, cleanFiles: 111, sourceFilesTotal: 412, errorsByFile: { 'functions/utils/jwt.ts': 1293 } },
+      current: { errorCount: 1293, fileErrors: 1293, globalErrors: 0, errorFiles: 1, cleanFiles: 111, sourceFilesTotal: 412, errorsByFile: { 'functions/utils/jwt.ts': 1293 } },
       added: [],
       modified: ['tsconfig.functions.json', 'types/typecheck-baseline.json'],
+      deleted: [],
       renameMap: new Map(),
       currentSnap: curSnap,
       baseSnap,
@@ -98,10 +99,28 @@ describe('evaluateOverridePreconditions (P1-P5)', () => {
     expect(r.violations.some((v) => v.startsWith('P3'))).toBe(true)
   })
 
-  it('P4 baseline != current is rejected (T8 padding)', () => {
-    const r = evaluateOverridePreconditions(legalCtx({ baseline: { errorCount: 9999, cleanFiles: 111, errorsByFile: { 'functions/utils/jwt.ts': 36 } } }))
+  it('P4 errorCount mismatch is rejected (T8 padding)', () => {
+    const r = evaluateOverridePreconditions(legalCtx({ baseline: { errorCount: 9999, fileErrors: 9999, globalErrors: 0, errorFiles: 1, cleanFiles: 111, sourceFilesTotal: 412, errorsByFile: { 'functions/utils/jwt.ts': 9999 } } }))
     expect(r.ok).toBe(false)
     expect(r.violations.some((v) => v.startsWith('P4'))).toBe(true)
+  })
+
+  it('P4 cleanFiles padding is rejected (B2)', () => {
+    const r = evaluateOverridePreconditions(legalCtx({ baseline: { errorCount: 1293, fileErrors: 1293, globalErrors: 0, errorFiles: 1, cleanFiles: 100, sourceFilesTotal: 412, errorsByFile: { 'functions/utils/jwt.ts': 1293 } } }))
+    expect(r.ok).toBe(false)
+    expect(r.violations.some((v) => v.includes('cleanFiles'))).toBe(true)
+  })
+
+  it('P1 deleted source is rejected (B1)', () => {
+    const r = evaluateOverridePreconditions(legalCtx({ deleted: ['functions/utils/removed.ts'] }))
+    expect(r.ok).toBe(false)
+    expect(r.violations.some((v) => v.startsWith('P1'))).toBe(true)
+  })
+
+  it('P1 extra tsconfig change is rejected (M1)', () => {
+    const r = evaluateOverridePreconditions(legalCtx({ modified: ['tsconfig.functions.json', 'tsconfig.scripts.json', 'types/typecheck-baseline.json'] }))
+    expect(r.ok).toBe(false)
+    expect(r.violations.some((v) => v.startsWith('P1'))).toBe(true)
   })
 
   it('P1 source change is rejected (T3)', () => {
@@ -125,9 +144,10 @@ describe('evaluateOverridePreconditions (P1-P5)', () => {
   })
 
   it('P5 errorsByFile outside leaf prefix is rejected (T6)', () => {
+    const ebf = { 'src/js/dashboard.ts': 1293 }
     const r = evaluateOverridePreconditions(legalCtx({
-      baseline: { errorCount: 1293, cleanFiles: 111, errorsByFile: { 'src/js/dashboard.ts': 1293 } },
-      current: { errorCount: 1293, cleanFiles: 111, errorsByFile: { 'src/js/dashboard.ts': 1293 } },
+      baseline: { errorCount: 1293, fileErrors: 1293, globalErrors: 0, errorFiles: 1, cleanFiles: 111, sourceFilesTotal: 412, errorsByFile: ebf },
+      current: { errorCount: 1293, fileErrors: 1293, globalErrors: 0, errorFiles: 1, cleanFiles: 111, sourceFilesTotal: 412, errorsByFile: ebf },
     }))
     expect(r.ok).toBe(false)
     expect(r.violations.some((v) => v.startsWith('P5'))).toBe(true)

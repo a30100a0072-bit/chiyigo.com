@@ -20,14 +20,17 @@ const CMD =
   'npx tsc -p tsconfig.tests.json --strict --noImplicitAny --composite false --incremental false --noEmit --pretty false'
 
 let out = ''
+let tscExit = 0
 try {
   out = execSync(CMD, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] })
 } catch (e) {
   // tsc 有 error 時 exit 非 0；診斷走 stdout
   out = (e.stdout || '') + (e.stderr || '')
+  tscExit = e.status ?? 1
 }
 
 const FILE_ERR_RE = /^(.+?)\((\d+),(\d+)\):\s+error\s+TS\d+:/gm
+const GLOBAL_ERR_RE = /^error\s+TS\d+:/gm
 let total = 0
 let functionsErr = 0
 let forensicErr = 0
@@ -41,10 +44,22 @@ for (const m of out.matchAll(FILE_ERR_RE)) {
   else if (f.startsWith('tests/')) testsErr++
   else otherErr++
 }
+const globalErr = (out.match(GLOBAL_ERR_RE) || []).length
 
 console.log(
-  `strict-tests-preflight: total=${total} functions=${functionsErr} forensic=${forensicErr} tests=${testsErr} other=${otherErr}`,
+  `strict-tests-preflight: total=${total} functions=${functionsErr} forensic=${forensicErr} tests=${testsErr} other=${otherErr} global=${globalErr} tscExit=${tscExit}`,
 )
+
+// fail-closed：tsc 非 0 但 0 個可歸類 file diagnostic（疑 global / tsconfig 級失敗），
+// 或有 global error（TSxxxx 無 file 位置）— 否則 functions===0 會誤放行。
+if (tscExit !== 0 && total === 0) {
+  console.error('FAIL: tsc exit 非 0 但 0 個 file diagnostic — 疑 global / tsconfig 級失敗，fail-closed')
+  process.exit(1)
+}
+if (globalErr > 0) {
+  console.error(`FAIL: ${globalErr} 個 global / tsconfig 級 error（無 file 位置）— fail-closed`)
+  process.exit(1)
+}
 
 if (functionsErr === 0 && forensicErr === 0) {
   console.log('OK: functions/** + forensic 在 tests config strict 下為 0 — 可開 tests leaf strict')

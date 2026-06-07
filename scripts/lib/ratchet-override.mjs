@@ -30,6 +30,19 @@ export function isOverrideAllowedPath(file) {
   return false
 }
 
+// P4 用：errorsByFile（{path: count}）深度相等比對（order-independent）。
+function shallowCountMapEqual(a, b) {
+  const oa = a || {}
+  const ob = b || {}
+  const ka = Object.keys(oa)
+  if (ka.length !== Object.keys(ob).length) return false
+  for (const k of ka) {
+    if (!Object.prototype.hasOwnProperty.call(ob, k)) return false
+    if (oa[k] !== ob[k]) return false
+  }
+  return true
+}
+
 // P2：diff(baseSnap, currentSnap) 必須剛好單一 leaf tsconfig 的 strict-family flag
 // falsy→true，無其他 leaf / compilerOptions key / include / exclude / references 變更。
 export function analyzeStrictFlagDelta(baseSnap, currentSnap) {
@@ -74,28 +87,42 @@ export function analyzeStrictFlagDelta(baseSnap, currentSnap) {
 
 // P1-P5 全 AND；任一不過回 { ok:false, violations }。
 export function evaluateOverridePreconditions(ctx) {
-  const { baseBaseline, baseline, current, added, modified, renameMap, currentSnap, baseSnap } = ctx
+  const { baseBaseline, baseline, current, added, modified, deleted, renameMap, currentSnap, baseSnap } = ctx
   const violations = []
 
   // P3：base ref baseline 須存在且 errorCount===0（前一 strict surface 已清零並 merge）
   if (!baseBaseline) violations.push('P3: base ref baseline 不存在（無法證明前一 strict surface 已清零）')
   else if (baseBaseline.errorCount !== 0) violations.push(`P3: base baseline.errorCount=${baseBaseline.errorCount} ≠ 0（前一 leaf/flag 階梯未清零；override 限一次一 leaf）`)
 
-  // P4：branch baseline.errorCount === current.errorCount（防 pre-allocate budget 灌水）
-  if (baseline.errorCount !== current.errorCount) violations.push(`P4: baseline.errorCount=${baseline.errorCount} ≠ current.errorCount=${current.errorCount}（baseline 與實測不符）`)
+  // P4：baseline 全 derived field 必須等於 current（防 pre-allocate budget；不只 errorCount —
+  //     cleanFiles 等被預先放寬，override 豁免 [BASE] cleanFiles 後會留 budget slack）。
+  for (const f of ['errorCount', 'fileErrors', 'globalErrors', 'errorFiles', 'cleanFiles', 'sourceFilesTotal']) {
+    if (baseline[f] !== current[f]) violations.push(`P4: baseline.${f}=${baseline[f]} ≠ current.${f}=${current[f]}（baseline 必須等於實測，防 budget slack）`)
+  }
+  if (!shallowCountMapEqual(baseline.errorsByFile, current.errorsByFile)) violations.push('P4: baseline.errorsByFile ≠ current.errorsByFile（防 per-file budget slack）')
 
   // P2：剛好單一 leaf strict-family flag 開啟
   const p2 = analyzeStrictFlagDelta(baseSnap, currentSnap)
   if (!p2.ok) for (const v of p2.violations) violations.push(v)
 
-  // P1：無 source 變更（含 rename 來源；只准 baseline / 單一 leaf tsconfig / docs/plans / governance-exceptions）
+  // P1：無 source 變更（含 added / modified / deleted / rename 來源；只准 baseline /
+  //     單一 leaf tsconfig / docs/plans / governance-exceptions）。deleted 必收 — 否則可刪
+  //     clean source 降 cleanFiles，再被 [BASE] cleanFiles 豁免，破壞「純翻 flag」保證。
   const changed = new Set()
-  for (const f of [...(added || []), ...(modified || [])]) changed.add(f.replace(/\\/g, '/'))
+  for (const f of [...(added || []), ...(modified || []), ...(deleted || [])]) changed.add(f.replace(/\\/g, '/'))
   if (renameMap) for (const oldPath of renameMap.values()) changed.add(oldPath.replace(/\\/g, '/'))
   const sourceChanged = [...changed].filter((f) => SOURCE_EXT_RE.test(f) && !isOverrideAllowedPath(f))
   if (sourceChanged.length > 0) violations.push(`P1: override PR 含 source 變更（禁；override 限純翻 flag + baseline + 治理文件）：${sourceChanged.slice(0, 8).join(', ')}`)
   const strayNonAllowed = [...changed].filter((f) => !SOURCE_EXT_RE.test(f) && !isOverrideAllowedPath(f))
   if (strayNonAllowed.length > 0) violations.push(`P1: override PR 含非白名單檔：${strayNonAllowed.slice(0, 8).join(', ')}`)
+  // P1 補：diff 的 tsconfig 變更必須剛好是 p2.leafTsconfig（防改其他 tsconfig、或改 leaf 以外
+  //     tsconfig 落在 snapshot 未涵蓋欄位繞過 P2）。
+  if (p2.ok) {
+    const changedTsconfigs = [...changed].filter((f) => /^tsconfig\..*\.json$/.test(f))
+    if (changedTsconfigs.length !== 1 || changedTsconfigs[0] !== p2.leafTsconfig) {
+      violations.push(`P1: diff 的 tsconfig 變更必須剛好是 ${p2.leafTsconfig}（實際：${changedTsconfigs.join(', ') || '無'}）`)
+    }
+  }
 
   // P5：current.errorsByFile 所有 path 屬於 changed leaf 的 include 範圍
   if (p2.ok) {
