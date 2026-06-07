@@ -88,6 +88,7 @@ describe('classifyAuditEvent — security_signal（撞庫/釣魚/2FA fail）', (
     'auth.login.fail',
     'auth.login.success',             // 高頻但仍是 security trail
     'auth.refresh.fail',              // reuse_detected
+    'auth.refresh.grace_orphan',      // Fork 2 Route B：benign rotation-orphan（owner-ratified 1b = security_signal, no downgrade）
     'auth.country_jump',
     'auth.new_device',
     'mfa.totp.verify.replay',
@@ -277,8 +278,10 @@ describe('registry coverage', () => {
     //   觀測（plan C3，code-gate 補做 plan-faithful，非 waiver）；replay 與 emitted 並存不互相替代。
     // PR5 5d-2 session.revoked emission 加 1 個 session.integrity_violation（immutable；fail-closed COUNT!=1
     //   guard 用；emission 本身走既有 domain.event.emitted，無新 domain.event.* type）→ 207。
+    // Fork 2 Route B (2026-06-07) 加 1 個 auth.refresh.grace_orphan（security_signal；owner-ratified 1b = no downgrade）。
+    //   grace-path device mismatch 走既有 auth.refresh.fail/grace_device_mismatch（reason_code，無新 event type）→ 208。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(207)
+    expect(_registrySize).toBe(208)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

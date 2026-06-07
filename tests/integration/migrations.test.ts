@@ -41,7 +41,7 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0001..0052 forward 已實作（見 line 448 describe）；本 case
+// 至少要有 targeted smoke。完整 0001..0053 forward 已實作（見 line 448 describe）；本 case
 // 維持手建 fixture 形式作 0037 issued_aud 行為的 targeted 驗證。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
@@ -91,6 +91,8 @@ import up0051    from '../../migrations/0051_event_outbox.sql?raw'
 import down0051  from '../../migrations/down/0051_event_outbox.down.sql?raw'
 import up0052    from '../../migrations/0052_refresh_token_session_id.sql?raw'
 import down0052  from '../../migrations/down/0052_refresh_token_session_id.down.sql?raw'
+import up0053    from '../../migrations/0053_refresh_token_successor_hash.sql?raw'
+import down0053  from '../../migrations/down/0053_refresh_token_successor_hash.down.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -102,7 +104,7 @@ const ALL_UPS = [
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
   up0041, up0042, up0043, up0044, up0045, up0046, up0047, up0048,
-  up0049, up0050, up0051, up0052,
+  up0049, up0050, up0051, up0052, up0053,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -291,7 +293,7 @@ describe('migrations smoke', () => {
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
 // 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
-// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0052 已實作於下方
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0053 已實作於下方
 // 「full forward chain」describe（line 448）。本 case 維持手建 fixture 形式作 0037
 // issued_aud 行為 targeted 驗證。
 //
@@ -386,10 +388,10 @@ describe('migrations smoke 0037 targeted', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full forward chain 0001..0052 vs prod snapshot
+// Full forward chain 0001..0053 vs prod snapshot
 //
 // 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
-// 完整 forward 變得可行。本 describe 驗 _base + 0001..0052 跑完後的 schema shape
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0053 跑完後的 schema shape
 // 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
 //
 // 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
@@ -449,7 +451,7 @@ const EXPECTED_COLUMNS = {
   backup_codes: ['code_hash', 'id', 'used_at', 'user_id'],
   user_identities: ['avatar_url', 'created_at', 'display_name', 'id', 'metadata', 'provider', 'provider_id', 'updated_at', 'user_id'],
   password_resets: ['expires_at', 'token_hash', 'user_id'],
-  refresh_tokens: ['auth_time', 'device_info', 'device_uuid', 'expires_at', 'id', 'issued_aud', 'revoked_at', 'scope', 'session_id', 'token_hash', 'user_id'],
+  refresh_tokens: ['auth_time', 'device_info', 'device_uuid', 'expires_at', 'id', 'issued_aud', 'revoked_at', 'scope', 'session_id', 'successor_token_hash', 'token_hash', 'user_id'],
   oauth_states: ['aud', 'client_callback', 'code_verifier', 'created_at', 'expires_at', 'ip_address', 'nonce', 'platform', 'redirect_uri', 'state_token'],
   pkce_sessions: ['code_challenge', 'created_at', 'expires_at', 'ip_address', 'nonce', 'redirect_uri', 'scope', 'session_key', 'state'],
   auth_codes: ['auth_time', 'code_challenge', 'code_hash', 'expires_at', 'nonce', 'redirect_uri', 'scope', 'state', 'user_id'],
@@ -488,7 +490,7 @@ const EXPECTED_REQUISITION_INDEXES = [
   'idx_requisition_ip',         // 0006
 ]
 
-describe('full forward chain 0001..0052 vs prod snapshot', () => {
+describe('full forward chain 0001..0053 vs prod snapshot', () => {
   beforeAll(async () => {
     await dropAllTables()
     await execAll(baseSql)
@@ -999,6 +1001,101 @@ describe('migrations smoke 0052 targeted (refresh_tokens.session_id round-trip +
     await execAll(up0052)
     expect(await columnExists('refresh_tokens', 'session_id')).toBe(true)
     expect(await indexExists('idx_refresh_tokens_session')).toBe(true)
+  })
+})
+
+// migration 0053 refresh_tokens.successor_token_hash (Fork 2 Route B) — targeted round-trip.
+// Builds a pre-0053 refresh_tokens fixture (0052-era shape: WITH session_id, NO successor_token_hash), applies up0053,
+// and verifies the nullable column appears (NO index, NO backfill), a value persists across an unrelated UPDATE, the
+// legacy row stays NULL (fail-safe non-candidate), and down drops the column (reversible on this D1 engine) with re-up
+// restoring it. Builds its OWN fixture (manual CREATE, like the 0037/0052 targeted blocks) but still does
+// dropAllTables in beforeAll, so it MUST sit BEFORE the '0038 targeted' block (the last schema mutator that leaves the
+// FK-less audit_log other integration test files rely on via the shared single-worker D1).
+describe('migrations smoke 0053 targeted (refresh_tokens.successor_token_hash round-trip)', () => {
+  beforeAll(async () => {
+    await dropAllTables()
+    await env.chiyigo_db.prepare(`
+      CREATE TABLE users (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        email           TEXT    NOT NULL UNIQUE,
+        email_verified  INTEGER NOT NULL DEFAULT 0,
+        role            TEXT    NOT NULL DEFAULT 'player',
+        status          TEXT    NOT NULL DEFAULT 'active',
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        deleted_at      TEXT,
+        token_version   INTEGER NOT NULL DEFAULT 0,
+        public_sub      TEXT
+      )
+    `).run()
+    // pre-0053 shape: 0052-era refresh_tokens (has session_id, no successor_token_hash)
+    await env.chiyigo_db.prepare(`
+      CREATE TABLE refresh_tokens (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash  TEXT    NOT NULL UNIQUE,
+        device_info TEXT,
+        device_uuid TEXT,
+        expires_at  TEXT    NOT NULL,
+        revoked_at  TEXT,
+        auth_time   TEXT,
+        scope       TEXT,
+        issued_aud  TEXT,
+        session_id  TEXT
+      )
+    `).run()
+    await env.chiyigo_db.prepare(`INSERT INTO users (email) VALUES ('succ-legacy@test')`).run()
+    const u = await env.chiyigo_db.prepare(`SELECT id FROM users WHERE email='succ-legacy@test'`).first()
+    // a pre-0053 row (no successor_token_hash) -- simulates a prod legacy refresh token at migration time
+    await env.chiyigo_db.prepare(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+       VALUES (?, 'h_succ_legacy', datetime('now','+7 days'))`,
+    ).bind(u.id).run()
+    await execAll(up0053)
+  })
+
+  it('successor_token_hash column present after up (EXPAND-only, NO index)', async () => {
+    expect(await columnExists('refresh_tokens', 'successor_token_hash')).toBe(true)
+    expect(await indexExists('idx_refresh_tokens_successor')).toBe(false)  // 0053 adds NO index by design
+  })
+
+  it('legacy row (pre-0053) successor_token_hash is NULL (no backfill -> fail-safe non-candidate)', async () => {
+    const r = await env.chiyigo_db.prepare(
+      `SELECT successor_token_hash FROM refresh_tokens WHERE token_hash='h_succ_legacy'`,
+    ).first()
+    expect(r.successor_token_hash).toBeNull()
+  })
+
+  it('a successor_token_hash value persists; an unrelated UPDATE (revoke) leaves it intact', async () => {
+    const u = await env.chiyigo_db.prepare(`SELECT id FROM users WHERE email='succ-legacy@test'`).first()
+    await env.chiyigo_db.prepare(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, successor_token_hash)
+       VALUES (?, 'h_succ_old', datetime('now','+7 days'), 'h_succ_new')`,
+    ).bind(u.id).run()
+    await env.chiyigo_db.prepare(
+      `UPDATE refresh_tokens SET revoked_at=datetime('now') WHERE token_hash='h_succ_old'`,
+    ).run()
+    const r = await env.chiyigo_db.prepare(
+      `SELECT successor_token_hash, revoked_at FROM refresh_tokens WHERE token_hash='h_succ_old'`,
+    ).first()
+    expect(r.successor_token_hash).toBe('h_succ_new')
+    expect(r.revoked_at).toBeTruthy()
+  })
+
+  it('down: column dropped (reversible on this D1 engine); table + other columns survive', async () => {
+    await execAll(down0053)
+    expect(await columnExists('refresh_tokens', 'successor_token_hash')).toBe(false)
+    expect(await tableExists('refresh_tokens')).toBe(true)
+    expect(await columnExists('refresh_tokens', 'token_hash')).toBe(true)
+    expect(await columnExists('refresh_tokens', 'session_id')).toBe(true)
+    const r = await env.chiyigo_db.prepare(
+      `SELECT token_hash FROM refresh_tokens WHERE token_hash='h_succ_legacy'`,
+    ).first()
+    expect(r.token_hash).toBe('h_succ_legacy')
+  })
+
+  it('re-up after down restores the column (forward idempotent)', async () => {
+    await execAll(up0053)
+    expect(await columnExists('refresh_tokens', 'successor_token_hash')).toBe(true)
   })
 })
 

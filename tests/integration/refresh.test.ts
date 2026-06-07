@@ -18,17 +18,24 @@ import { decodeJwt } from 'jose'
 
 async function seedRefresh(userId, {
   deviceUuid = null, expired = false, revoked = false, issuedAud = null, sessionId = null,
+  // Fork 2 Route B: successorTokenHash stamps the rotation-orphan provenance marker; revokedSecondsAgo sets revoked_at
+  // to an explicit age (for grace-window boundary tests) and takes precedence over the boolean `revoked`.
+  successorTokenHash = null, revokedSecondsAgo = null,
+}: {
+  deviceUuid?: string | null; expired?: boolean; revoked?: boolean; issuedAud?: string | null;
+  sessionId?: string | null; successorTokenHash?: string | null; revokedSecondsAgo?: number | null;
 } = {}) {
   const plain = generateSecureToken()
   const hash  = await hashToken(plain)
   const exp   = new Date(Date.now() + (expired ? -3600_000 : 7 * 86400_000))
     .toISOString().replace('T', ' ').slice(0, 19)
-  const revokedAt = revoked
-    ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null
+  const revokedAt = revokedSecondsAgo != null
+    ? new Date(Date.now() - revokedSecondsAgo * 1000).toISOString().replace('T', ' ').slice(0, 19)
+    : (revoked ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null)
   await env.chiyigo_db.prepare(
-    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, revoked_at, issued_aud, session_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(userId, hash, deviceUuid, exp, revokedAt, issuedAud, sessionId).run()
+    `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, revoked_at, issued_aud, session_id, successor_token_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(userId, hash, deviceUuid, exp, revokedAt, issuedAud, sessionId, successorTokenHash).run()
   return plain
 }
 
@@ -182,6 +189,129 @@ describe('POST /api/auth/refresh — PR5 5d session_id preserve / heal', () => {
     expect(r.body.code).toBe('REFRESH_TOKEN_REVOKED')
     const n = await env.chiyigo_db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id=?').bind(u.id).first()
     expect(n.n).toBe(1)  // only the seeded revoked row — the atomic rotation created NO new live head
+  })
+})
+
+// Fork 2 Route B — rotation-orphan grace classification (docs/reviews/fork2-rotation-grace-plan.md).
+// A token revoked BY A ROTATION (successor_token_hash set) + same device + LIVE successor + within REFRESH_GRACE_SECONDS
+// is a benign orphan -> recorded as auth.refresh.grace_orphan (a distinct SECURITY_SIGNAL, owner-ratified 1b), NOT the
+// false auth.refresh.fail/reuse_detected. No token is issued (still 401). Every other case keeps reuse_detected, and the
+// revoked/grace path NEVER family-revokes nor spends the victim quota on a wrong-device replay.
+describe('POST /api/auth/refresh — Fork 2 Route B rotation-orphan grace', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  // seed a live successor + the just-revoked predecessor pointing at it; returns the predecessor plaintext.
+  async function seedOrphanPair(userId, {
+    device = 'dev-x', revokedSecondsAgo = 5, successorRevoked = false, successorExpired = false,
+  }: { device?: string | null; revokedSecondsAgo?: number; successorRevoked?: boolean; successorExpired?: boolean } = {}) {
+    const successorPlain = await seedRefresh(userId, { deviceUuid: device, revoked: successorRevoked, expired: successorExpired })
+    const successorHash  = await hashToken(successorPlain)
+    return await seedRefresh(userId, { deviceUuid: device, revokedSecondsAgo, successorTokenHash: successorHash })
+  }
+  async function countAudit(userId, eventType) {
+    const r = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE user_id = ? AND event_type = ?`)
+      .bind(userId, eventType).first<{ n: number }>()
+    return r?.n ?? 0
+  }
+  async function refreshQuotaUsed(userId) {
+    const r = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM login_attempts WHERE kind='refresh' AND user_id = ?`)
+      .bind(userId).first<{ n: number }>()
+    return r?.n ?? 0
+  }
+
+  it('benign orphan (same device, live successor, within window) → grace_orphan, NOT reuse_detected, 401', async () => {
+    const u = await seedUser({ email: 'graceA@x' })
+    const pred = await seedOrphanPair(u.id)
+    const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-x' } }))
+    expect(r.status).toBe(401)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REVOKED')      // no token issued (Route B does not resurrect)
+    expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(1)
+    expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(0)  // crucial: NOT the false token-theft signal
+  })
+
+  it('out-of-window replay → reuse_detected (not grace_orphan)', async () => {
+    const u = await seedUser({ email: 'graceB@x' })
+    const pred = await seedOrphanPair(u.id, { revokedSecondsAgo: 120 })  // > 30s window
+    const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-x' } }))
+    expect(r.status).toBe(401)
+    expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(0)
+    expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(1)
+  })
+
+  it('revoked by logout/admin (successor_token_hash NULL) → reuse_detected, never grace_orphan', async () => {
+    const u = await seedUser({ email: 'graceC@x' })
+    // revoked WITHIN window but NO successor_token_hash (= revoked by logout/admin/device-mismatch, not rotation)
+    const pred = await seedRefresh(u.id, { deviceUuid: 'dev-x', revokedSecondsAgo: 5 })
+    const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-x' } }))
+    expect(r.status).toBe(401)
+    expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(0)
+    expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(1)
+  })
+
+  it('dead successor (chain advanced / session ended) → reuse_detected, not grace_orphan', async () => {
+    const u = await seedUser({ email: 'graceD@x' })
+    const pred = await seedOrphanPair(u.id, { successorRevoked: true })
+    const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-x' } }))
+    expect(r.status).toBe(401)
+    expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(0)
+    expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(1)
+  })
+
+  it('device mismatch on a revoked candidate → grace_device_mismatch, NO family-revoke, NO quota (round-2 H + round-3)', async () => {
+    const u = await seedUser({ email: 'graceE@x' })
+    const pred = await seedOrphanPair(u.id, { device: 'dev-x' })
+    const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-evil' } }))
+    expect(r.status).toBe(401)
+    expect(r.body.code).toBe('REFRESH_TOKEN_REVOKED')
+    const fail = await env.chiyigo_db
+      .prepare(`SELECT event_data FROM audit_log WHERE user_id=? AND event_type='auth.refresh.fail'`)
+      .bind(u.id).first<{ event_data: string }>()
+    expect(fail).not.toBeNull()
+    expect(JSON.parse(fail!.event_data).reason_code).toBe('grace_device_mismatch')
+    expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(0)
+    // round-2 H regression: an already-revoked token MUST NOT family-revoke the live successor session.
+    const live = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id=? AND device_uuid='dev-x' AND revoked_at IS NULL`)
+      .bind(u.id).first<{ n: number }>()
+    expect(live?.n).toBe(1)  // the successor is untouched
+    // round-3: a wrong-device replay must NOT consume the victim's refresh quota (device check is before rate-limit).
+    expect(await refreshQuotaUsed(u.id)).toBe(0)
+  })
+
+  it('device-null revoked candidate → reuse_detected (cannot confirm same device)', async () => {
+    const u = await seedUser({ email: 'graceF@x' })
+    const successorPlain = await seedRefresh(u.id, { deviceUuid: null })
+    const successorHash  = await hashToken(successorPlain)
+    const pred = await seedRefresh(u.id, { deviceUuid: null, revokedSecondsAgo: 5, successorTokenHash: successorHash })
+    const req = new Request('http://x/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': `chiyigo_refresh=${pred}` },
+      body: '{}',
+    })
+    const resp = await refreshHandler({ request: req, env })
+    expect(resp.status).toBe(401)
+    expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(0)
+    expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(1)
+  })
+
+  it('rotation stamps successor_token_hash on the revoked old row (= the new live row token_hash)', async () => {
+    const u = await seedUser({ email: 'graceG@x' })
+    const tok = await seedRefresh(u.id, { deviceUuid: 'dev-rot' })
+    const r = await call(refreshReq({ token: tok, headers: { 'X-Device-Id': 'dev-rot' } }))
+    expect(r.status).toBe(200)
+    const rows = await env.chiyigo_db
+      .prepare('SELECT token_hash, revoked_at, successor_token_hash FROM refresh_tokens WHERE user_id=? ORDER BY id')
+      .bind(u.id).all()
+    expect(rows.results).toHaveLength(2)
+    const oldRow = rows.results[0]
+    const newRow = rows.results[1]
+    expect(oldRow.revoked_at).not.toBeNull()
+    expect(newRow.revoked_at).toBeNull()
+    expect(oldRow.successor_token_hash).toBe(newRow.token_hash)  // old row points to the new live row
+    expect(newRow.successor_token_hash).toBeNull()               // the new live row has no successor yet
   })
 })
 
