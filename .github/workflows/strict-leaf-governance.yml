@@ -1,0 +1,58 @@
+name: Strict Leaf Governance (open-strict override)
+
+# PR-0 (Stage 7 strict zero-error gate): manual governance gate for an
+# open-strict PR. The normal ci.yml ratchet step is expected RED for such a
+# PR (it raises the baseline past base-derived guards); this dispatch run is
+# the gate of record. RATCHET_ALLOW_BASELINE_RAISE + RATCHET_BASE_REF are
+# injected here only (ci.yml never carries them). See
+# docs/plans/stage7-strict-zero-error.md sections 3.4 / 3.6.
+
+on:
+  workflow_dispatch:
+    inputs:
+      leaf:
+        description: 'Solution leaf opening strict'
+        required: true
+        type: choice
+        options:
+          - functions
+          - scripts
+          - tests
+          - browser-typecheck
+      reason:
+        description: 'Governance reason (logged in [OVERRIDE] + governance-exceptions.md)'
+        required: true
+        type: string
+      base_ref:
+        description: 'Fork-point commit on main (its baseline.errorCount MUST be 0)'
+        required: true
+        type: string
+
+jobs:
+  governance-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需完整歷史讓 base_ref 可 resolve（ratchet getBaseRef / getDiff / readBaseBaseline 都用它）
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify base_ref resolvable (T0 fail-closed)
+        # workflow_dispatch 非 PR event，無 github.base_ref / pull_request.base.sha；
+        # base_ref 必須是 caller 提供的可 resolve commit，否則 ratchet getBaseRef 在 CI
+        # 會 exit 3。此 step 先 fail-closed，給出清楚錯誤。
+        run: git rev-parse --verify "${{ inputs.base_ref }}^{commit}"
+
+      - name: Ratchet with locked override
+        run: npm run typecheck:ratchet
+        env:
+          RATCHET_BASE_REF: ${{ inputs.base_ref }}
+          RATCHET_ALLOW_BASELINE_RAISE: ${{ inputs.reason }}

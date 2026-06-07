@@ -125,6 +125,8 @@ const NEW_JS_ALLOWLIST = new Set([
   'scripts/lib/inject-i18n.js',
   // PR-0 (Stage 7)：locked override pure 決策邏輯（ratchet 本體 + vitest 共用；見該檔註解）
   'scripts/lib/ratchet-override.mjs',
+  // PR-0 (Stage 7)：tests-leaf strict preflight（開 tests strict 前 gate；node 跑，非 app source）
+  'scripts/strict-tests-preflight.mjs',
 ])
 
 // PR-55（Stage 4.5a 治理收尾）：Stage 4.5a browser pipeline 結構不變式

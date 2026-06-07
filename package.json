@@ -24,6 +24,7 @@
     "typecheck:ratchet:report": "node scripts/typecheck-ratchet.mjs --report",
     "typecheck:baseline:update": "node scripts/typecheck-ratchet.mjs --update",
     "build:functions": "wrangler pages functions build functions --outdir .tmp-pages-functions-build",
+    "strict:tests:preflight": "node scripts/strict-tests-preflight.mjs",
     "verify:browser-pipeline": "node scripts/verify-browser-pipeline.mjs"
   },
   "dependencies": {
