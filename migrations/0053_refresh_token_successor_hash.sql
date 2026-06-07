@@ -17,6 +17,15 @@
 --   and the successor is found by the UNIQUE token_hash that successor_token_hash stores). The revoked/grace path is
 --   READ-ONLY w.r.t. refresh_tokens rows -- it never mutates a row, so no new write contention is introduced.
 --
+-- DEPLOY ORDER (REQUIRED -- Codex Gate-2 State-Consistency finding). This repo AUTO-DEPLOYS functions on push to main
+--   (.github/workflows/deploy.yml) and applies D1 migrations OUT OF BAND (manual wrangler step). The refresh hot path
+--   (functions/api/auth/refresh.ts) SELECTs successor_token_hash on EVERY request and rotation writes it, so deploying
+--   that code before this column exists makes every refresh fail with "no such column" -- an auth-refresh outage.
+--   THEREFORE: apply this migration to the target D1 (wrangler d1 migrations apply chiyigo_db --remote, then verify)
+--   BEFORE merging/deploying the refresh.ts code. This is the same migration-first discipline used for 0052 session_id,
+--   which likewise SELECTs and writes refresh_tokens on the refresh path. ROLLBACK ORDER is the inverse -- see the down
+--   migration: revert/redeploy the pre-0053 code FIRST, then run the down migration (never drop a column live code reads).
+--
 -- The migration + resetDb runners split SQL on raw semicolons, so NO comment in this file may contain a semicolon.
 
 ALTER TABLE refresh_tokens ADD COLUMN successor_token_hash TEXT;

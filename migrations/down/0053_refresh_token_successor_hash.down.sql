@@ -9,6 +9,10 @@
 -- Once Route B classification ships and is relied on for audit hygiene, a rollback becomes forward-fix per
 -- feedback_irreversible_action_full_review.
 --
+-- ROLLBACK ORDER (REQUIRED -- inverse of the up migration deploy order, Codex Gate-2). Revert/redeploy the pre-0053
+--   refresh.ts code (which no longer SELECTs or writes successor_token_hash) FIRST, then run this down migration.
+--   Dropping the column while live code still references it would cause the same "no such column" auth-refresh outage.
+--
 -- The migration + resetDb runners split SQL on raw semicolons, so NO comment in this file may contain a semicolon.
 
 ALTER TABLE refresh_tokens DROP COLUMN successor_token_hash;

@@ -88,6 +88,25 @@ rows NULL = not grace-eligible = today's reuse path, fail-safe), no index (old r
 rotation S1 sets it; logout / admin-revoke / device-mismatch leave it NULL. Down: plain
 `DROP COLUMN` (D1 ≥ 3.39, per 0052), reversible round-trip tested.
 
+## Deploy / rollback contract (REQUIRED — Codex Gate-2 State-Consistency finding)
+
+This repo **auto-deploys** functions on push to `main` (`.github/workflows/deploy.yml`) and applies D1
+migrations **out of band** (manual `wrangler d1 migrations apply`). `refresh.ts` SELECTs
+`successor_token_hash` on **every** refresh and rotation writes it, so deploying the code before the
+column exists fails **every** refresh with "no such column" — an auth-refresh outage.
+
+- **Deploy order:** apply migration 0053 to the target D1 (`wrangler d1 migrations apply chiyigo_db
+  --remote`, verify the column) **BEFORE merging** this PR / deploying the code. Same migration-first
+  discipline already used for 0052 `session_id` (which likewise reads + writes `refresh_tokens` on the
+  refresh path). This MUST be stated in the PR body and done before squash-merge.
+- **Rollback order (inverse):** revert/redeploy the pre-0053 `refresh.ts` code **FIRST**, then run the
+  0053 down migration. Never drop the column while live code still references it.
+- **Why no runtime column-existence fallback:** kept consistent with the 0052 `session_id` precedent
+  (identical risk profile, handled by migration-first discipline, no per-column runtime guard) and to
+  avoid module-level mutable state + branching on the hottest auth path. A guarded fallback covering
+  ALL recent `refresh_tokens` columns (0052 + 0053) is a possible separate hardening PR if the team
+  wants belt-and-suspenders independent of deploy discipline.
+
 ## Audit
 
 - New `auth.refresh.grace_orphan` → **SECURITY_SIGNAL** (`_registrySize` 207→208 + audit-policy.test).
