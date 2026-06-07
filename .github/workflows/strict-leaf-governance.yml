@@ -45,19 +45,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify base_ref resolvable (T0 fail-closed)
-        # workflow_dispatch 非 PR event，無 github.base_ref / pull_request.base.sha；
-        # base_ref 必須是 caller 提供的可 resolve commit，否則 ratchet getBaseRef 在 CI
-        # 會 exit 3。此 step 先 fail-closed，給出清楚錯誤。
-        run: git rev-parse --verify "${{ inputs.base_ref }}^{commit}"
-
-      - name: Verify base_ref is the main fork-point (anti-spoof)
-        # base_ref 必須 == merge-base(HEAD, origin/main)：否則可挑 branch 內較晚的 commit
-        # 當 base_ref，讓 P1 的 base..HEAD diff 排除前面已做的 source 變更而繞過 no-source。
+      - name: Verify base_ref (hex SHA + resolvable + main fork-point, anti-spoof)
+        # workflow_dispatch input 是 free string → 經 env 傳入、不直接插 shell，避免 injection。
+        # T0：先驗 hex SHA 格式 + 可 resolve（否則 ratchet getBaseRef 在 CI exit 3）。
+        # anti-spoof：base_ref 必須 == merge-base(HEAD, origin/main)，否則可挑 branch 內較晚的
+        #   commit 當 base_ref，讓 P1 的 base..HEAD diff 排除前面已做的 source 變更。
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
         run: |
+          case "$BASE_REF" in
+            ''|*[!0-9a-fA-F]*) echo "FAIL: base_ref must be a hex commit SHA"; exit 1 ;;
+          esac
+          if [ "${#BASE_REF}" -lt 7 ] || [ "${#BASE_REF}" -gt 40 ]; then
+            echo "FAIL: base_ref length must be 7..40 hex chars"; exit 1
+          fi
+          git rev-parse --verify "$BASE_REF^{commit}"
           git fetch --no-tags origin main
           MERGE_BASE="$(git merge-base HEAD origin/main)"
-          RESOLVED="$(git rev-parse "${{ inputs.base_ref }}^{commit}")"
+          RESOLVED="$(git rev-parse "$BASE_REF^{commit}")"
           echo "merge-base(HEAD,origin/main)=$MERGE_BASE  base_ref=$RESOLVED"
           if [ "$RESOLVED" != "$MERGE_BASE" ]; then
             echo "FAIL: base_ref must equal merge-base(HEAD, origin/main)"; exit 1

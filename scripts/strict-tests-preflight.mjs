@@ -35,23 +35,28 @@ let total = 0
 let functionsErr = 0
 let forensicErr = 0
 let testsErr = 0
-let otherErr = 0
+let reduceErr = 0 // tests-leaf-only 依賴（override.mjs）— 與 tests/** 同屬 tests strict reduce 範圍
+let blockerErr = 0 // 其他（types/*.d.ts / tsconfig file 診斷 / 未知前綴）— 非目標、掃描可能不完整
 for (const m of out.matchAll(FILE_ERR_RE)) {
   total++
   const f = m[1].replace(/\\/g, '/')
   if (f.startsWith('functions/')) functionsErr++
   else if (f.startsWith('scripts/audit-archive-forensic-classify')) forensicErr++
   else if (f.startsWith('tests/')) testsErr++
-  else otherErr++
+  else if (f === 'scripts/lib/ratchet-override.mjs') reduceErr++
+  else blockerErr++
 }
 const globalErr = (out.match(GLOBAL_ERR_RE) || []).length
 
 console.log(
-  `strict-tests-preflight: total=${total} functions=${functionsErr} forensic=${forensicErr} tests=${testsErr} other=${otherErr} global=${globalErr} tscExit=${tscExit}`,
+  `strict-tests-preflight: total=${total} functions=${functionsErr} forensic=${forensicErr} tests=${testsErr} reduce=${reduceErr} blocker=${blockerErr} global=${globalErr} tscExit=${tscExit}`,
 )
 
-// fail-closed：tsc 非 0 但 0 個可歸類 file diagnostic（疑 global / tsconfig 級失敗），
-// 或有 global error（TSxxxx 無 file 位置）— 否則 functions===0 會誤放行。
+// fail-closed（任一即不可放行）：
+//   (a) tsc 非 0 但 0 個 file diagnostic — 疑 global / tsconfig 級失敗、未進 file scan
+//   (b) global / tsconfig 級 error（無 file 位置）
+//   (c) blocker file 診斷（types/*.d.ts / tsconfig / 未知前綴）— 非目標錯誤，掃描可能不完整，
+//       functions===0 不可信（Codex r2 High）。可忽略類別僅 tests/** 與 override.mjs（tests reduce）。
 if (tscExit !== 0 && total === 0) {
   console.error('FAIL: tsc exit 非 0 但 0 個 file diagnostic — 疑 global / tsconfig 級失敗，fail-closed')
   process.exit(1)
@@ -60,9 +65,13 @@ if (globalErr > 0) {
   console.error(`FAIL: ${globalErr} 個 global / tsconfig 級 error（無 file 位置）— fail-closed`)
   process.exit(1)
 }
+if (blockerErr > 0) {
+  console.error(`FAIL: ${blockerErr} 個非目標 file 診斷（非 functions / forensic / tests / override.mjs）— 掃描不可信，fail-closed`)
+  process.exit(1)
+}
 
 if (functionsErr === 0 && forensicErr === 0) {
-  console.log('OK: functions/** + forensic 在 tests config strict 下為 0 — 可開 tests leaf strict')
+  console.log('OK: functions/** + forensic 在 tests config strict 下為 0 — 可開 tests leaf strict（tests/** + override.mjs 屬 tests reduce）')
   process.exit(0)
 }
 console.error('FAIL: 開 tests leaf strict 前，functions/** 與 forensic 在 tests config strict 下必須為 0')
