@@ -22,7 +22,7 @@ import { safeUserAudit, auditDomainEventEmitted } from '../../../../utils/user-a
 import { emitAccountReenabled } from '../../../../utils/domain-event-emit'
 import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes'
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
 
