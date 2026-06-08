@@ -12,7 +12,7 @@
 import { res, requireRegularAccessToken } from '../../../utils/auth'
 import { resolveIssuanceContextForTenant } from '../../../utils/tenant-context'
 
-export async function onRequestGet({ request, env, params }) {
+export async function onRequestGet({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   // 一般 access token（拒 temp_bind / elevated / 非正整數 sub）
   const { userId, error } = await requireRegularAccessToken(request, env)
   if (error) return error
@@ -38,7 +38,7 @@ export async function onRequestGet({ request, env, params }) {
     .bind(targetTenantId)
     .all()
 
-  const entitlements = (rows.results ?? []).map((r) => ({
+  const entitlements = (rows.results ?? []).map((r: Record<string, unknown>) => ({
     product_id:          r.product_id,
     plan_id:             r.plan_id,
     status:              r.status,

@@ -12,7 +12,7 @@ import { safeUserAudit } from '../../../../utils/user-audit'
 
 const MANAGER_ROLES: readonly PlatformRole[] = ['tenant_owner', 'tenant_admin']
 
-export async function onRequestGet({ request, env, params }) {
+export async function onRequestGet({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const tenantId = Number(params?.tenantId)
   if (!Number.isInteger(tenantId) || tenantId <= 0) return res({ error: 'Invalid tenant id', code: 'ERR_VALIDATION' }, 400)
 
@@ -36,7 +36,7 @@ export async function onRequestGet({ request, env, params }) {
     )
     .bind(tenantId)
     .all()
-  const members = (memberRows.results ?? []).map((r) => ({
+  const members = (memberRows.results ?? []).map((r: Record<string, unknown>) => ({
     user_id:       Number(r.user_id),
     sub:           String(r.user_id),
     email:         r.email,

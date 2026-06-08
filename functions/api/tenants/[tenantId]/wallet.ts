@@ -14,7 +14,7 @@ import { resolveIssuanceContextForTenant } from '../../../utils/tenant-context'
 
 const BILLING_CAPABLE_ROLES: ReadonlySet<string> = new Set(['tenant_owner', 'tenant_admin', 'billing_admin'])
 
-export async function onRequestGet({ request, env, params }) {
+export async function onRequestGet({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const { userId, error } = await requireRegularAccessToken(request, env)
   if (error) return error
 
@@ -48,7 +48,7 @@ export async function onRequestGet({ request, env, params }) {
     .bind(targetTenantId)
     .all()
 
-  const quotas = (quotaRows.results ?? []).map((r) => ({
+  const quotas = (quotaRows.results ?? []).map((r: Record<string, unknown>) => ({
     product_id:  r.product_id,
     period:      r.period,
     quota_limit: r.quota_limit,
