@@ -17,7 +17,7 @@ const SERVICE_TYPES = ['system', 'web', 'game', 'integration', 'interactive', 'b
 const BUDGETS       = ['under30k', '30k-80k', '80k-200k', '200k-1m', 'flexible']
 const TIMELINES     = ['asap', '1-3m', '3-6m', 'flexible']
 
-function validate(body) {
+function validate(body: Record<string, string | undefined>) {
   for (const key of REQUIRED) {
     if (!body[key]?.trim()) return `Missing field: ${key}`
   }
@@ -36,11 +36,11 @@ function validate(body) {
   return null
 }
 
-function escapeTgHtml(s) {
+function escapeTgHtml(s: unknown) {
   return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
 }
 
-async function sendTelegram(env, text) {
+async function sendTelegram(env: Env, text: string) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return null
   try {
     const r = await fetch(
@@ -62,7 +62,7 @@ async function sendTelegram(env, text) {
   }
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   // ── 1. Auth optional（訪客不需登入即可提單）─────────────────
   let userId = null
   const authHeader = request.headers.get('Authorization') ?? ''

@@ -21,7 +21,7 @@ import { requireAuth, res } from '../../utils/auth'
 import { safeUserAudit } from '../../utils/user-audit'
 import { syncRequisitionTgMessage } from '../../utils/tg-requisition'
 
-async function editTelegramMessage(env, messageId, text) {
+async function editTelegramMessage(env: Env, messageId: number | null, text: string) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID || !messageId) return
   try {
     await fetch(
@@ -40,7 +40,7 @@ async function editTelegramMessage(env, messageId, text) {
   } catch { /* TG 失敗不影響 DB 狀態 */ }
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 

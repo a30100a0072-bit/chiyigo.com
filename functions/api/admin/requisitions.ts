@@ -19,7 +19,7 @@ import { SCOPES } from '../../utils/scopes'
 import { safeUserAudit } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   // P1-17 Phase 3: requisitions 屬金流脈絡（接案 → 報價 → 收款），收進 admin:payments:* 任一
   const { user, error } = await requireAnyScope(
     request, env,

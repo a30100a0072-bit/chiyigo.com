@@ -9,7 +9,7 @@
 import { requireAuth, res } from '../../utils/auth'
 import { safeUserAudit } from '../../utils/user-audit'
 
-export async function onRequestGet({ request, env, params }) {
+export async function onRequestGet({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 
@@ -42,7 +42,7 @@ export async function onRequestGet({ request, env, params }) {
   return res({ ...row, linked_payments: payQuery.results ?? [] }, 200)
 }
 
-export async function onRequestDelete({ request, env, params }) {
+export async function onRequestDelete({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 
