@@ -79,7 +79,7 @@ const TASKS = [
              AND created_at < datetime('now', '-24 hours')` },
 ]
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   // ── Auth：bearer CRON_SECRET ──────────────────────────────
   const auth = request.headers.get('Authorization') ?? ''
   const expected = env.CRON_SECRET
