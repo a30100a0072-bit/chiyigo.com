@@ -17,11 +17,11 @@ import { res, requireAnyScope } from '../../../utils/auth'
 import { SCOPES } from '../../../utils/scopes'
 import { getCorsHeaders } from '../../../utils/cors'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env)
   // P1-17 Phase 3: 同 deals.js
   const role = await requireAnyScope(
@@ -60,7 +60,7 @@ export async function onRequestGet({ request, env }) {
     )
     .bind(...binds).all()
 
-  const buckets = (main.results ?? []).map(r => {
+  const buckets = (main.results ?? []).map((r: Record<string, unknown>) => {
     const total    = Number(r.sum_total_subunit) || 0
     const refunded = Number(r.sum_refunded_subunit) || 0
     return {
