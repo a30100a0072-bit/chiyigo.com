@@ -16,11 +16,11 @@
  *   - audit log（caller 自己負責，這裡純做訊息）
  */
 
-function escapeTgHtml(s) {
+function escapeTgHtml(s: unknown) {
   return String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
 }
 
-const STATUS_HEADER = {
+const STATUS_HEADER: Record<string, { icon: string; label: string }> = {
   pending:        { icon: '📥', label: '新諮詢通知' },
   refund_pending: { icon: '⏳', label: '客戶申請退款，待 admin 審核' },
   revoked:        { icon: '❌', label: '客戶已撤銷此需求單' },
@@ -28,7 +28,7 @@ const STATUS_HEADER = {
   deleted:        { icon: '🗑', label: 'Admin 已刪除此需求單' },
 }
 
-const PAYMENT_STATUS_LABEL = {
+const PAYMENT_STATUS_LABEL: Record<string, string> = {
   pending:    '等待付款',
   processing: '處理中',
   succeeded:  '✅ 已收款',
@@ -44,7 +44,7 @@ const PAYMENT_STATUS_LABEL = {
  * @param {string} [overrideStatus] 例如刪除時 row 已不存在，由 caller 帶入 'deleted'
  * @returns {Promise<{tg_message_id: number|null, text: string} | null>}
  */
-export async function buildRequisitionTgText(env, reqId, overrideStatus) {
+export async function buildRequisitionTgText(env: Env, reqId: number, overrideStatus?: string) {
   const db = env.chiyigo_db
   if (!db) return null
   const row = await db
@@ -82,7 +82,7 @@ export async function buildRequisitionTgText(env, reqId, overrideStatus) {
   // 付款摘要
   if (payments.length) {
     let totalSucceeded = 0, totalRefunded = 0
-    const detail = payments.map(p => {
+    const detail = payments.map((p: { id: number; status: string; amount_subunit: number | null; currency: string | null }) => {
       const amt = p.amount_subunit ?? 0
       if (p.status === 'succeeded') totalSucceeded += amt
       if (p.status === 'refunded')  totalRefunded += amt
@@ -111,7 +111,7 @@ export async function buildRequisitionTgText(env, reqId, overrideStatus) {
  *
  * 環境變數缺失就 noop；其餘錯誤都吞掉，不擋主流程。
  */
-export async function syncRequisitionTgMessage(env, reqId, overrideStatus) {
+export async function syncRequisitionTgMessage(env: Env, reqId: number, overrideStatus?: string) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return
   const built = await buildRequisitionTgText(env, reqId, overrideStatus)
   if (!built) return

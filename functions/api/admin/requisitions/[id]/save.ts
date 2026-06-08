@@ -30,11 +30,11 @@ import { safeUserAudit } from '../../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug'
 import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const cors = getCorsHeaders(request, env)
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
@@ -111,7 +111,7 @@ export async function onRequestPost({ request, env, params }) {
   }
   const totalSucceeded = Number(slot.succeeded)
   const totalRefunded  = Number(slot.refunded)
-  const intentIds = intents.map(it => it.id)
+  const intentIds = intents.map((it: { id: number }) => it.id)
 
   // P2-7：兩個 admin 同時雙擊「保存」會各自跑完整流程 → 兩筆 deals 雙重計算。
   // atomic 把 status 'pending'→'deal'，沒拿到 row 的第二個 caller 直接 409。
