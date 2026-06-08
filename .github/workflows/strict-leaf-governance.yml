@@ -32,12 +32,12 @@ jobs:
   governance-ratchet:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # 需完整歷史讓 base_ref 可 resolve（ratchet getBaseRef / getDiff / readBaseBaseline 都用它）
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
