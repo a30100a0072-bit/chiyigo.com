@@ -84,3 +84,46 @@ Cloudflare Pages 對 production deployment 的 static asset 有自己的 interna
 - 查 zone Cache Rules / Page Rules / Transform Rules
 - 查 Cache Reserve 實際狀態
 - 查 Workers Routes（看有沒有 worker 攔截路徑）
+
+---
+
+## 2026-06-08 — Stage 7 PR-1：functions leaf `noImplicitAny` open-strict override
+
+第一個 (B) locked-override PR：開 functions leaf 的 `noImplicitAny`（per-flag ladder rung 1，`strict` 仍 `false`），同 PR 收編 baseline、**不修任何 error**。完整 plan 見 `docs/plans/stage7-pr1-functions-noimplicitany.md`。
+
+- **觸發 commit**: `<squash-merge commit SHA 補註；PR #__；branch stage7-functions-noimplicitany>`
+- **leaf / flag**: `functions` / `noImplicitAny`（**來源 = ratchet `[OVERRIDE]` 輸出，非 `workflow_dispatch` UI input**）
+- **governance workflow run id**: `<dispatch 綠後、squash-merge 前補>`
+  （`.github/workflows/strict-leaf-governance.yml`；inputs: `leaf=functions` / `reason=`見下 / `base_ref=c694366b2dd2d80639c72daf32ccd038893dd3d9`）
+- **errorCount 0 → 1193**、**cleanFiles 257 → 158**
+  - cleanFiles `257→158` = 過期 base baseline `257` → 實 clean `304` 刷新（`b63d971` 後新增 47 clean source）**減** 146 個 functions 檔因 noImplicitAny 落入 error；即 **`304 − 146 = 158`**。
+- **reason（= `RATCHET_ALLOW_BASELINE_RAISE` env value）**:
+  ```
+  Stage 7 PR-1: open functions leaf noImplicitAny (per-flag ladder rung 1; strict stays false); baseline errorCount 0->1193 / cleanFiles ->158; reduce PRs follow
+  ```
+- **ratchet `[OVERRIDE]` 行（gate of record = governance workflow run 輸出；本地 T4 帶同一 `RATCHET_BASE_REF` 復現一致）**:
+  ```
+  [OVERRIDE] leaf=functions flag=noImplicitAny errorCount 0→1193 cleanFiles 257→158 baseRef=c694366b2dd2d80639c72daf32ccd038893dd3d9 reason=Stage 7 PR-1: open functions leaf noImplicitAny (per-flag ladder rung 1; strict stays false); baseline errorCount 0->1193 / cleanFiles ->158; reduce PRs follow
+  ```
+
+### 被豁免的 base-derived failures（逐字；無 env 時 `npm run typecheck:ratchet` 實測 150 行，全屬下列 5 類，**無任何 branch-local 規則觸發**）
+
+1. `[BASE] baseline.errorCount 被同 PR 削弱：0 → 1193（baseline 只能由 error-reducing PR 降低；如需提高，走 governance review）`
+2. `[BASE] baseline.cleanFiles 被同 PR 削弱：257 → 158`
+3. `[BASE-B'] 新增 error 檔（base ref baseline 無對應；同 PR 改 baseline 也擋）：` + 146 個 `functions/` 檔（單行；完整清單 = `types/typecheck-baseline.json` 的 `errorsByFile` keys）
+4. `[BASE-EBF] branch baseline.errorsByFile 新增 <functions/檔> (count=N) — base baseline 無此檔且非合法 rename；防 PR 同 commit 預先擴 baseline 加 budget` —— **×146**（每個 errored functions 檔一行；完整 146 檔 = `types/typecheck-baseline.json` 的 `errorsByFile` keys；首例：`functions/.well-known/jwks.json.ts (count=1)`）
+5. `[BASE-D-tsconfig] tsconfig.functions.json compilerOptions.noImplicitAny 變更：false → true（影響 typecheck 強度；升級走 governance review）`
+
+> branch-local guards（`[A]/[B]/[B']/[B'']/[SCHEMA-baseline]/[SCHEMA-baseBaseline]/[D-tsconfig]/[C]/[D/E]`）全部**不觸發** = override 設計（baseline:update 使 `current == branch baseline`；無 source、無 suppression、tsconfig snapshot 自洽）；故非豁免、亦非 budget slack。
+
+### precondition 證明（override 啟用條件，全 AND；由 T4 綠燈機械證明）
+
+- **P1** no-source：`git diff c694366b2dd2d80639c72daf32ccd038893dd3d9...HEAD --name-only` 僅 `tsconfig.functions.json` + `types/typecheck-baseline.json` + `docs/governance-exceptions.md` + `docs/plans/stage7-pr1-functions-noimplicitany.md`；**0 個 `.ts/.js/.mjs/.cjs/.d.ts`**。
+- **P2** 單 leaf strict-family：snapshot diff（base ref live read vs working tree）恰 `tsconfig.functions.json` 的 `noImplicitAny` `false→true`。
+- **P3** base errorCount==0：`c694366` 的 `types/typecheck-baseline.json` errorCount=0。
+- **P4** baseline==current：baseline:update 寫 current 快照，全 derived 欄位相等。
+- **P5** errorsByFile ⊆ `functions/`：146 檔全在 `functions/`（0 非 functions 路徑）。
+
+### CI gate 狀態
+
+一般 `ci.yml` 的 `typecheck:ratchet` step（不帶 `RATCHET_ALLOW_BASELINE_RAISE`）對本 PR **預期 RED**（上述 150 行 base-derived），屬上位 plan §3.6 Approval Record 的設計內 red、bounded per leaf（P3 機械保證同時最多一個 strict surface 未清零）。**gate of record = `strict-leaf-governance` workflow_dispatch run #`<id>`**（帶 env + base_ref，override 啟用後綠）。owner 於該 run 綠燈後 admin-merge。後續 reduce PR **不帶 env**、走正常 ratchet 下降。
