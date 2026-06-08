@@ -22,11 +22,11 @@ import { getCorsHeaders } from '../../utils/cors'
 import { safeUserAudit } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env)
   // P1-17 Phase 3: deals 是 requisition→payment 的成交紀錄，併入 admin:payments:* 任一
   const role = await requireAnyScope(
@@ -131,12 +131,12 @@ export async function onRequestGet({ request, env }) {
   }, 200, cors)
 }
 
-function csvCell(v) {
+function csvCell(v: unknown) {
   if (v == null) return ''
   const s = String(v)
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
 }
-function csvResponse(rows, cors) {
+function csvResponse(rows: Record<string, unknown>[], cors: Record<string, string>) {
   const header = ['id','source_requisition_id','user_id','customer_name','customer_contact',
                   'customer_company','service_type','budget','timeline',
                   'total_amount_subunit','refunded_amount_subunit','currency',
