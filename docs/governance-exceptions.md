@@ -91,20 +91,21 @@ Cloudflare Pages 對 production deployment 的 static asset 有自己的 interna
 
 第一個 (B) locked-override PR：開 functions leaf 的 `noImplicitAny`（per-flag ladder rung 1，`strict` 仍 `false`），同 PR 收編 baseline、**不修任何 error**。完整 plan 見 `docs/plans/stage7-pr1-functions-noimplicitany.md`。
 
-- **觸發 commit**: `<squash-merge commit SHA 補註；PR #__；branch stage7-functions-noimplicitany>`
+- **觸發 commit**: PR **#35**；branch `stage7-functions-noimplicitany`；squash-merge commit SHA 待 post-merge 補註（per Codex Fork-2 ruling）
 - **leaf / flag**: `functions` / `noImplicitAny`（**來源 = ratchet `[OVERRIDE]` 輸出，非 `workflow_dispatch` UI input**）
-- **governance workflow run id**: `<dispatch 綠後、squash-merge 前補>`
-  （`.github/workflows/strict-leaf-governance.yml`；inputs: `leaf=functions` / `reason=`見下 / `base_ref=c694366b2dd2d80639c72daf32ccd038893dd3d9`）
+- **governance workflow run id**: `27112195993`（`strict-leaf-governance` workflow_dispatch，**success** 2026-06-08，33s；anti-spoof 過：`merge-base(HEAD,origin/main) = base_ref = c694366…`；override engaged）
+  （inputs: `leaf=functions` / `reason=`見下 / `base_ref=c694366b2dd2d80639c72daf32ccd038893dd3d9`）
 - **errorCount 0 → 1193**、**cleanFiles 257 → 158**
   - cleanFiles `257→158` = 過期 base baseline `257` → 實 clean `304` 刷新（`b63d971` 後新增 47 clean source）**減** 146 個 functions 檔因 noImplicitAny 落入 error；即 **`304 − 146 = 158`**。
-- **reason（= `RATCHET_ALLOW_BASELINE_RAISE` env value）**:
+- **reason（= `RATCHET_ALLOW_BASELINE_RAISE` env value，as dispatched）**:
   ```
-  Stage 7 PR-1: open functions leaf noImplicitAny (per-flag ladder rung 1; strict stays false); baseline errorCount 0->1193 / cleanFiles ->158; reduce PRs follow
+  Stage 7 PR-1: open functions leaf noImplicitAny  (per-flag ladder rung 1; strict stays false); baseline errorCount  0->1193 / cleanFiles ->158; reduce PRs follow
   ```
-- **ratchet `[OVERRIDE]` 行（gate of record = governance workflow run 輸出；本地 T4 帶同一 `RATCHET_BASE_REF` 復現一致）**:
+- **ratchet `[OVERRIDE]` 行（gate of record = governance workflow run 27112195993 實際輸出，逐字）**:
   ```
-  [OVERRIDE] leaf=functions flag=noImplicitAny errorCount 0→1193 cleanFiles 257→158 baseRef=c694366b2dd2d80639c72daf32ccd038893dd3d9 reason=Stage 7 PR-1: open functions leaf noImplicitAny (per-flag ladder rung 1; strict stays false); baseline errorCount 0->1193 / cleanFiles ->158; reduce PRs follow
+  [OVERRIDE] leaf=functions flag=noImplicitAny errorCount 0→1193 cleanFiles 257→158 baseRef=c694366b2dd2d80639c72daf32ccd038893dd3d9 reason=Stage 7 PR-1: open functions leaf noImplicitAny  (per-flag ladder rung 1; strict stays false); baseline errorCount  0->1193 / cleanFiles ->158; reduce PRs follow
   ```
+  > Note: the two double-spaces in `reason` (`noImplicitAny··(per-flag`, `errorCount··0->1193`) are dispatch paste artifacts from governance run 27112195993; override preconditions and the ratchet decision do not parse or depend on reason text（reason 為 opaque audit/log string）。
 
 ### 被豁免的 base-derived failures（逐字；無 env 時 `npm run typecheck:ratchet` 實測 150 行，全屬下列 5 類，**無任何 branch-local 規則觸發**）
 
@@ -126,4 +127,4 @@ Cloudflare Pages 對 production deployment 的 static asset 有自己的 interna
 
 ### CI gate 狀態
 
-一般 `ci.yml` 的 `typecheck:ratchet` step（不帶 `RATCHET_ALLOW_BASELINE_RAISE`）對本 PR **預期 RED**（上述 150 行 base-derived），屬上位 plan §3.6 Approval Record 的設計內 red、bounded per leaf（P3 機械保證同時最多一個 strict surface 未清零）。**gate of record = `strict-leaf-governance` workflow_dispatch run #`<id>`**（帶 env + base_ref，override 啟用後綠）。owner 於該 run 綠燈後 admin-merge。後續 reduce PR **不帶 env**、走正常 ratchet 下降。
+一般 `ci.yml` 的 `typecheck:ratchet` step（不帶 `RATCHET_ALLOW_BASELINE_RAISE`）對本 PR **預期 RED**（上述 150 行 base-derived），屬上位 plan §3.6 Approval Record 的設計內 red、bounded per leaf（P3 機械保證同時最多一個 strict surface 未清零）。**gate of record = `strict-leaf-governance` workflow_dispatch run #`27112195993`（success 2026-06-08）**（帶 env + base_ref，override 啟用後綠）。owner 於該 run 綠燈後 admin-merge。後續 reduce PR **不帶 env**、走正常 ratchet 下降。
