@@ -10,12 +10,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # typecheck-ratchet 需要 git diff base...HEAD，fetch-depth=0 取整個歷史
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           # wrangler 4.87.0 engines.node >=22.0.0；20 觸發 build:functions step
           # "Wrangler requires at least Node.js v22.0.0"。其他 workflow（deploy/
