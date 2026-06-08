@@ -19,7 +19,7 @@ const ORG_CREATE_RL_WINDOW_SEC = 60
 const ORG_CREATE_RL_MAX = 30
 const ALLOWED_BODY_KEYS: ReadonlySet<string> = new Set(['name', 'idempotency_key'])
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const { userId, error } = await requireRegularAccessToken(request, env)
   if (error) return error
 
@@ -36,7 +36,7 @@ export async function onRequestGet({ request, env }) {
     .bind(userId)
     .all()
 
-  const tenants = (rows.results ?? []).map((r) => ({
+  const tenants = (rows.results ?? []).map((r: Record<string, unknown>) => ({
     id:            r.id,
     type:          r.type,
     name:          r.name,
@@ -46,7 +46,7 @@ export async function onRequestGet({ request, env }) {
   return res({ tenants })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const { userId, error } = await requireRegularAccessToken(request, env)
   if (error) return error
 
@@ -101,7 +101,7 @@ export async function onRequestPost({ request, env }) {
   }
 }
 
-async function emitDenied(env, request, userId: number, action: string, reasonCode: string) {
+async function emitDenied(env: Env, request: Request, userId: number, action: string, reasonCode: string) {
   await safeUserAudit(env, {
     event_type: 'member.denied', severity: 'warn', user_id: userId, request,
     data: { action, reason_code: reasonCode },
