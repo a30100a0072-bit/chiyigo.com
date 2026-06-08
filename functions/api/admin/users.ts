@@ -19,7 +19,7 @@
 import { res, requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   // P1-17 Phase 3: GET 同時接受 admin:users:read 或 :write
   const { error } = await requireAnyScope(request, env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE)
   if (error) return error
@@ -63,7 +63,7 @@ export async function onRequestGet({ request, env }) {
   ])
 
   return res({
-    users: (rows.results ?? []).map(u => ({
+    users: (rows.results ?? []).map((u: Record<string, unknown>) => ({
       id:             u.id,
       email:          u.email,
       email_verified: u.email_verified === 1,
