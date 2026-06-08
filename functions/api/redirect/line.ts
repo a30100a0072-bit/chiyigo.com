@@ -10,7 +10,7 @@
  *                  預設值：https://line.me/ti/p/p8VUMxtZEc
  */
 
-export async function onRequestGet(context) {
+export async function onRequestGet(context: { request: Request; env: Env }) {
   const { request, env } = context
 
   const dest = env.LINE_OA_URL ?? 'https://line.me/ti/p/p8VUMxtZEc'

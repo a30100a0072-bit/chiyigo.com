@@ -8,7 +8,7 @@
 
 import { requireAuth, res } from '../../utils/auth'
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 

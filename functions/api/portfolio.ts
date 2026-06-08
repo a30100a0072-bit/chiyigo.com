@@ -1,4 +1,4 @@
-export async function onRequestGet({ env }) {
+export async function onRequestGet({ env }: { env: Env }) {
   try {
     const { results } = await env.chiyigo_db.prepare(
       `SELECT id, title, category, description, image_url, link_url, tags
