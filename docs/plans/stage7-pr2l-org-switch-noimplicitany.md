@@ -60,7 +60,7 @@ tenants mutating IAM 6 檔的**末批（第 6 / 6）**（Codex 建議序：tenan
 - 整合測試（grep 證實 direct-import 本 handler 的 test 檔）：`tests/integration/tenant-foundation.test.ts`（`import { onRequestPost as orgSwitch }`）
   - **實跑分支**：happy active member → 200 + 正確 `tenant_id`/`platform_role` + **JWT claim wiring e2e**（`tenant.switch.success`）／suspended tenant → 403 `TENANT_SWITCH_DENIED`／非 member（forged tenant_id）→ 403／suspended membership → 403／進他人 personal tenant → 403／`tenant_id` 非嚴格正整數 → 400 `ERR_VALIDATION`（8 種 bad value）／temp_bind token → 403 `NOT_A_REGULAR_TOKEN`／step-up（elevated:*）→ 403 `NOT_A_REGULAR_TOKEN`／非 chiyigo aud → 401（requireAuth aud gate）。
   - 跑：`npx vitest run --config vitest.workers.config.js tests/integration/tenant-foundation.test.ts`
-  - **測試覆蓋誠實**（PR-2i Codex Low finding 教訓）：上列為 endpoint 測例**實跑**分支（涵蓋 happy + 5 deny reason + 型別驗證 + 2 token-class gate + aud gate，覆蓋面廣）。**不宣稱實跑**（無 endpoint 測例）：`rate_limited`(429)、`INVALID_JSON`(400)、non-object-body(400)。本 PR type-only TS-erase 不碰任何分支。
+  - **測試覆蓋誠實**（PR-2i Codex Low finding 教訓）：上列為 endpoint 測例**實跑**分支（涵蓋 happy + **4 switch-deny 情境**〔suspended tenant / 非 member / suspended membership / 他人 personal，皆 403 `TENANT_SWITCH_DENIED`〕 + 型別驗證 + 2 token-class gate〔temp_bind / step-up，403 `NOT_A_REGULAR_TOKEN`〕 + aud gate〔401〕，覆蓋面廣）。**不宣稱實跑**（無 endpoint 測例）：`rate_limited`(429)、`INVALID_JSON`(400)、non-object-body(400)。本 PR type-only TS-erase 不碰任何分支。
 - 全 `tsc` 確認**只降這 2、tests-leaf 0 cascade**。
 - **硬驗收**：source diff **僅 1 site / 純 type annotation**；`requireRegularAccessToken` / `resolveIssuanceContextForTenant` fail-closed / claims 重建 / `signJwt` audience / RL（org_switch）/ 所有 audit（`tenant.switch.deny`/`tenant.switch.success`）/ SQL **byte-identical**；token re-issuance **零行邏輯改動**；ratchet 淨降剛好 **2** 無 cascade。
 
