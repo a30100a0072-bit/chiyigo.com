@@ -476,7 +476,6 @@ describe('POST /api/webhooks/payments/:vendor', () => {
 
   it('[Codex r1 P0-1] user DELETE intent → soft delete (deleted_at set，list 看不到，getPaymentIntent 預設 404)', async () => {
     const u = await seedUser({ email: 'soft@x' })
-    await setUserKycStatus(env, u.id, KYC_STATUS.VERIFIED)
     const intentId = await createPaymentIntent(env, {
       user_id: u.id, vendor: 'mock', vendor_intent_id: 'pi_soft', status: 'pending', currency: 'TWD',
     })
