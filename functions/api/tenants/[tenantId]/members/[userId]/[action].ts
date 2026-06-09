@@ -20,7 +20,7 @@ const ACTION_EVENT: Record<string, string> = {
 const RL_WINDOW_SEC = 60
 const RL_MAX = 60
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const tenantId = Number(params?.tenantId)
   const targetUserId = Number(params?.userId)
   const action = String(params?.action ?? '')
@@ -74,7 +74,7 @@ function denyResponse(result: MemberOutcome): Response {
   }
 }
 
-async function emitDenied(env, request, userId: number, tenantId: number, action: string, reasonCode: string) {
+async function emitDenied(env: Env, request: Request, userId: number, tenantId: number, action: string, reasonCode: string) {
   await safeUserAudit(env, {
     event_type: 'member.denied', severity: 'warn', user_id: userId, request,
     data: { action, tenant_id: tenantId, reason_code: reasonCode },
