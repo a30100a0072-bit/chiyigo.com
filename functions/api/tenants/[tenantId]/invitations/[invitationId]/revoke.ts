@@ -15,7 +15,7 @@ const MANAGER_ROLES: readonly PlatformRole[] = ['tenant_owner', 'tenant_admin']
 const RL_WINDOW_SEC = 60
 const RL_MAX = 60
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const tenantId = Number(params?.tenantId)
   const invitationId = Number(params?.invitationId)
   if (!Number.isInteger(tenantId) || tenantId <= 0) return res({ error: 'Invalid tenant id', code: 'ERR_VALIDATION' }, 400)
@@ -53,7 +53,7 @@ export async function onRequestPost({ request, env, params }) {
   }
 }
 
-async function emitDenied(env, request, userId: number, tenantId: number, reasonCode: string) {
+async function emitDenied(env: Env, request: Request, userId: number, tenantId: number, reasonCode: string) {
   await safeUserAudit(env, {
     event_type: 'member.denied', severity: 'warn', user_id: userId, request,
     data: { action: 'revoke_invitation', tenant_id: tenantId, reason_code: reasonCode },
