@@ -19,7 +19,7 @@ const ACCESS_TOKEN_TTL = '15m'
 const RL_WINDOW_SEC = 60
 const RL_MAX        = 20
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const { user, userId, error } = await requireRegularAccessToken(request, env)
   if (error) return error
 
