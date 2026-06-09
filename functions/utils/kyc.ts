@@ -42,7 +42,7 @@ const VALID_LEVELS = new Set<string>(Object.values(KYC_LEVEL))
  *
  * @returns {Promise<{ status: string, level: string, vendor: string|null, expires_at: string|null }>}
  */
-export async function getUserKycStatus(env, userId) {
+export async function getUserKycStatus(env: Env, userId: number) {
   if (!env?.chiyigo_db || !userId) {
     return { status: KYC_STATUS.UNVERIFIED, level: KYC_LEVEL.BASIC, vendor: null, expires_at: null }
   }
@@ -75,7 +75,7 @@ export async function getUserKycStatus(env, userId) {
  *
  * @param {object} patch  { status?, level?, vendor?, vendor_session_id?, vendor_review_id?, rejection_reason?, verified_at?, expires_at? }
  */
-export async function setUserKycStatus(env, userId, patch = {}) {
+export async function setUserKycStatus(env: Env, userId: number, patch = {}) {
   if (!env?.chiyigo_db || !userId) return
   const p = patch as {
     status?: string;
@@ -135,7 +135,7 @@ export async function setUserKycStatus(env, userId, patch = {}) {
  * @param {string}  [opts.requiredStatus='verified']
  * @param {string}  [opts.requiredLevel]    若指定 'enhanced'，basic 也算不夠
  */
-export async function requireKyc(request, env, opts: { requiredStatus?: string; requiredLevel?: string | null } = {}) {
+export async function requireKyc(request: Request, env: Env, opts: { requiredStatus?: string; requiredLevel?: string | null } = {}) {
   const requiredStatus = opts.requiredStatus ?? KYC_STATUS.VERIFIED
   const requiredLevel  = opts.requiredLevel  ?? null
 
@@ -201,12 +201,12 @@ export async function requireKyc(request, env, opts: { requiredStatus?: string; 
 
 import { mockKycAdapter } from './kyc-vendors/mock'
 
-const ADAPTERS = {
+const ADAPTERS: Partial<Record<string, typeof mockKycAdapter>> = {
   mock: mockKycAdapter,
   // sumsub:   () => import('./kyc-vendors/sumsub.js').then(m => m.sumsubKycAdapter),
   // persona:  () => import('./kyc-vendors/persona.js').then(m => m.personaKycAdapter),
 }
 
-export function resolveKycAdapter(vendor) {
+export function resolveKycAdapter(vendor: string) {
   return ADAPTERS[vendor] ?? null
 }
