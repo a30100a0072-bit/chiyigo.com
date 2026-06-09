@@ -10,7 +10,7 @@ tenants mutating IAM 6 檔的**第二批**（Codex 建議序：tenants-create〔
 
 ## Scout（對抗式驗證）
 
-`npx tsc -b tsconfig.solution.json` 實證，**10 errors / 2 files / 4 sites**，皆 TS7031/TS7006 pure noImplicitAny，無其他型別點、無 cascade：
+`npx tsc -b tsconfig.solution.json` 實證，**本 PR target scope 涵蓋 10 errors / 2 files / 4 sites**（repo 另有大量既有 ratchet errors、不在本 PR 範圍；本表僅列 target scope），皆 TS7031/TS7006 pure noImplicitAny，無其他型別點、無 cascade：
 
 | file | line:col | code | 位置 |
 |---|---|---|---|
