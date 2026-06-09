@@ -37,6 +37,8 @@ declare global {
 
     // ── External services (email / SMS / chat / IAM) ───────────────────
     RESEND_API_KEY?: string;
+    MAIL_FROM_ADDRESS?: string;
+    RESEND_TIMEOUT_MS?: string;
     IAM_BASE_URL?: string;
     IAM_SERVICE?: Fetcher;
     LINE_OA_URL?: string;

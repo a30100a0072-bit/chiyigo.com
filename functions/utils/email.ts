@@ -8,10 +8,12 @@ const DEFAULT_BASE_URL = 'https://chiyigo.com';
 // retry policy 延後到 F-2 金流 smoke 一起設計（屆時有 Resend 真實 5xx/429 訊號）。
 const RESEND_TIMEOUT_MS_DEFAULT = 5_000
 
-function fromOf(env)    { return env?.MAIL_FROM_ADDRESS ?? DEFAULT_FROM }
-function baseUrlOf(env) { return env?.IAM_BASE_URL      ?? DEFAULT_BASE_URL }
+type EmailEnv = Pick<Env, 'IAM_BASE_URL' | 'MAIL_FROM_ADDRESS' | 'RESEND_TIMEOUT_MS'>
 
-function parseTimeoutMs(env): number {
+function fromOf(env?: EmailEnv)    { return env?.MAIL_FROM_ADDRESS ?? DEFAULT_FROM }
+function baseUrlOf(env?: EmailEnv) { return env?.IAM_BASE_URL      ?? DEFAULT_BASE_URL }
+
+function parseTimeoutMs(env?: EmailEnv): number {
   const raw = env?.RESEND_TIMEOUT_MS
   if (raw == null || raw === '') return RESEND_TIMEOUT_MS_DEFAULT
   const n = Number(raw)
@@ -28,7 +30,7 @@ function parseTimeoutMs(env): number {
  * @param {string} token  raw hex token
  * @param {object} [env]
  */
-export async function sendDeleteConfirmationEmail(apiKey, to, token, env) {
+export async function sendDeleteConfirmationEmail(apiKey: string | undefined, to: string, token: string, env?: EmailEnv) {
   const BASE_URL = baseUrlOf(env)
   const link = `${BASE_URL}/confirm-delete.html?token=${token}`
 
@@ -65,7 +67,7 @@ export async function sendDeleteConfirmationEmail(apiKey, to, token, env) {
   })
 }
 
-async function sendEmail(apiKey, env, { to, subject, html, signal }: { to: string; subject: string; html: string; signal?: AbortSignal }) {
+async function sendEmail(apiKey: string | undefined, env: EmailEnv | undefined, { to, subject, html, signal }: { to: string; subject: string; html: string; signal?: AbortSignal }) {
   // caller 給 signal = caller 已自管 timeout / cancellation；原樣 pass 不 wrap。
   // 沒 signal 才建內部 timeout，避免裸 fetch 無限等 + Worker 卡到 wall-clock 終止。
   let actualSignal = signal
@@ -107,7 +109,7 @@ async function sendEmail(apiKey, env, { to, subject, html, signal }: { to: strin
  * @param {string} to      收件人信箱
  * @param {string} token   原始 token（hex，64 字元）
  */
-export async function sendVerificationEmail(apiKey, to, token, env, signal?) {
+export async function sendVerificationEmail(apiKey: string | undefined, to: string, token: string, env?: EmailEnv, signal?: AbortSignal) {
   const BASE_URL = baseUrlOf(env)
   // 改指向前端確認頁，使用者按下按鈕才 POST 核銷，避免郵件代理 / 預載提前消耗 token
   const link = `${BASE_URL}/verify-email.html?token=${token}`;
@@ -148,7 +150,7 @@ export async function sendVerificationEmail(apiKey, to, token, env, signal?) {
  * @param {string} to      被邀請人信箱
  * @param {string} token   原始邀請 token（hex，64 字元；僅存在於信件連結，DB 只存 hash）
  */
-export async function sendInvitationEmail(apiKey, to, token, env, signal?) {
+export async function sendInvitationEmail(apiKey: string | undefined, to: string, token: string, env?: EmailEnv, signal?: AbortSignal) {
   const BASE_URL = baseUrlOf(env)
   // 指向前端接受頁，使用者登入後按下按鈕才 POST /api/invitations/accept 核銷（避免郵件預載提前消耗）
   const link = `${BASE_URL}/accept-invitation.html?token=${token}`;
@@ -189,7 +191,7 @@ export async function sendInvitationEmail(apiKey, to, token, env, signal?) {
  * @param {string} to      收件人信箱
  * @param {string} token   原始 token（hex，64 字元）
  */
-export async function sendPasswordResetEmail(apiKey, to, token, env) {
+export async function sendPasswordResetEmail(apiKey: string | undefined, to: string, token: string, env?: EmailEnv) {
   const BASE_URL = baseUrlOf(env)
   const link = `${BASE_URL}/reset-password.html?token=${token}`;
 
@@ -231,7 +233,7 @@ export async function sendPasswordResetEmail(apiKey, to, token, env) {
  * @param {object} info    { deviceUuidPrefix, country, when }
  * @param {object} env
  */
-export async function sendNewDeviceAlertEmail(apiKey, to, info, env) {
+export async function sendNewDeviceAlertEmail(apiKey: string | undefined, to: string, info: { deviceUuidPrefix?: string; country?: string; when?: string }, env?: EmailEnv) {
   const BASE_URL = baseUrlOf(env)
   const dash = `${BASE_URL}/dashboard.html`
   const devLabel = info.deviceUuidPrefix ? `App 裝置 ${info.deviceUuidPrefix}…` : '新裝置'
@@ -285,7 +287,7 @@ export async function sendNewDeviceAlertEmail(apiKey, to, info, env) {
  * @param {object} info  { score, factors:[...], country, when }
  * @param {object} env
  */
-export async function sendRiskBlockedAlertEmail(apiKey, to, info, env) {
+export async function sendRiskBlockedAlertEmail(apiKey: string | undefined, to: string, info: { score?: number; factors?: string[]; country?: string; when?: string }, env?: EmailEnv) {
   const BASE_URL = baseUrlOf(env)
   const dash = `${BASE_URL}/dashboard.html`
   const reset = `${BASE_URL}/forgot-password.html`
