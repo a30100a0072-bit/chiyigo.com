@@ -8,7 +8,7 @@
  * @param {unknown} pw
  * @returns {{ ok: true } | { ok: false, error: string }}
  */
-export function validatePassword(pw) {
+export function validatePassword(pw: unknown) {
   if (typeof pw !== 'string') return { ok: false, error: 'Password must be a string' }
   if (pw.length < 8)          return { ok: false, error: 'Password must be at least 8 characters' }
   if (pw.length >= 12)        return { ok: true }
