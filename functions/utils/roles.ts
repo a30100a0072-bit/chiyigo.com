@@ -32,7 +32,7 @@ export const VALID_ROLES = Object.freeze([
 
 const VALID_ROLES_SET = new Set(VALID_ROLES)
 
-export function isValidRole(role) {
+export function isValidRole(role: unknown) {
   return typeof role === 'string' && VALID_ROLES_SET.has(role)
 }
 
@@ -66,11 +66,11 @@ const SUPPORT_DENIED_EVENT_PREFIXES = Object.freeze([
 /**
  * 對 support role 過濾 audit event；其他 role 一律回 true（看全套）。
  *
- * @param {string} eventType
+ * @param {unknown} eventType
  * @param {string} role
  * @returns {boolean} true = 可看；false = 應遮蔽
  */
-export function canRoleSeeAuditEvent(eventType, role) {
+export function canRoleSeeAuditEvent(eventType: unknown, role: string) {
   if (role === 'support') {
     if (typeof eventType !== 'string') return false
     if (SUPPORT_DENIED_EVENT_PREFIXES.some(p => eventType.startsWith(p))) return false
