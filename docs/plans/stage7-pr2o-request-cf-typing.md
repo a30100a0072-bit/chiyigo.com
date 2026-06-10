@@ -47,7 +47,9 @@ device-alerts 把 `env` 往下傳給 3 個函式：
 
 ---
 
-## 改動（source scope = 2 檔，皆 type-only）
+## 改動（source scope = 3 檔，皆 type-only / lint-infra）
+
+> **code-stage 實況補充**：plan 階段估 2 檔，coding 時 eslint `no-undef`（functions block 設 `'no-undef': 'error'`）旗標新 global 型別 `CfRequest` 未定義。新增 global ambient 型別**必須**同步在 `eslint.config.js` 的 `functionsServerGlobals` 註冊（與既有 `Env: 'readonly'` 同模式），否則 lint gate red。故實際 source scope = **3 檔**（+`eslint.config.js`），第 3 檔是新增 global 型別的**必要 lint-infra 前置**（性質同 PR-2m 的 env.d.ts 第 2 檔），純 lint 設定、零 runtime、不改 ratchet 計數。
 
 ### 1. `types/env.d.ts`（`declare global` 內，緊接 `interface Env { … }` 之後）
 
@@ -82,6 +84,13 @@ type CfRequest = Request & {
   - `checkNewDevice(env: AlertEnv, request: CfRequest, userId: number, email: string | null, deviceUuid: string | null)`
   - `checkCountryJump(env: AlertEnv, request: CfRequest, userId: number, _email: string | null)`
 - `email`/`deviceUuid` 取 `string | null`（忠實反映 caller 可能傳 null、`?? null` 流向；strictNullChecks OFF 下對 `to: string` 仍 assignable）；`userId: number`。
+
+### 3. `eslint.config.js`（`functionsServerGlobals`，緊接 `Env: 'readonly'`）
+
+```js
+CfRequest: 'readonly',
+```
+（新增 global ambient 型別的必要註冊，讓 `no-undef: error` 認得 type-position 的 `CfRequest`，與既有 `Env` 同模式；純 lint 設定、零 runtime。）
 
 ## 不碰（runtime byte-identical）
 

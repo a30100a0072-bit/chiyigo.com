@@ -38,6 +38,7 @@ const functionsServerGlobals = {
   // Ambient types from types/env.d.ts (TS-only; ESLint only needs to know
   // the names exist as globals so type-position references don't trip no-undef)
   Env: 'readonly',
+  CfRequest: 'readonly',
 }
 
 // Functions JS / TS 共用 rules（no-unused-vars 在 TS block 會被換成 @typescript-eslint 版）。
