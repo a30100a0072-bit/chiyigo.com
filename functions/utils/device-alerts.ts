@@ -21,6 +21,11 @@
 import { safeUserAudit, hashIdentifierForAudit } from './user-audit'
 import { sendNewDeviceAlertEmail } from './email'
 
+// 從 Env 衍生的窄型別（照 email.ts 的 EmailEnv 慣例，維持 Env 為單一真相源）。
+// chiyigo_db / RESEND_API_KEY = 本檔直接讀；後 3 key = forward 給
+// sendNewDeviceAlertEmail(env?: EmailEnv) 所需（email.ts 的 EmailEnv = Pick<Env, 那 3 key>）。
+type AlertEnv = Pick<Env, 'chiyigo_db' | 'RESEND_API_KEY' | 'IAM_BASE_URL' | 'MAIL_FROM_ADDRESS' | 'RESEND_TIMEOUT_MS'>
+
 /**
  * 主入口。caller 一律 fire-and-forget：
  *
@@ -30,7 +35,7 @@ import { sendNewDeviceAlertEmail } from './email'
  * 但 Cloudflare Workers 對未 await 的 fetch 會 kill；推薦呼叫前 await，整支已 try/catch
  * 包好不會擲。
  */
-export async function safeAlertAnomalies(env, request, { userId, email, deviceUuid }) {
+export async function safeAlertAnomalies(env: AlertEnv, request: CfRequest, { userId, email, deviceUuid }: { userId: number; email: string | null; deviceUuid: string | null }) {
   if (!env?.chiyigo_db || !userId) return
   await Promise.allSettled([
     checkNewDevice(env, request, userId, email, deviceUuid ?? null),
@@ -38,7 +43,7 @@ export async function safeAlertAnomalies(env, request, { userId, email, deviceUu
   ])
 }
 
-async function checkNewDevice(env, request, userId, email, deviceUuid) {
+async function checkNewDevice(env: AlertEnv, request: CfRequest, userId: number, email: string | null, deviceUuid: string | null) {
   if (!deviceUuid) return  // web → 跳過
   try {
     const row = await env.chiyigo_db.prepare(
@@ -84,7 +89,7 @@ async function checkNewDevice(env, request, userId, email, deviceUuid) {
   } catch { /* swallow */ }
 }
 
-async function checkCountryJump(env, request, userId, _email) {
+async function checkCountryJump(env: AlertEnv, request: CfRequest, userId: number, _email: string | null) {
   const currCountry = request?.cf?.country
   if (!currCountry) return  // 測試 / 本地環境沒 cf object
   try {

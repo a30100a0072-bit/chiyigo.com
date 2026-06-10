@@ -78,6 +78,21 @@ declare global {
     CRON_SECRET?: string;
     ALLOWED_ORIGINS?: string;
   }
+
+  /**
+   * Cloudflare 在 edge 為 inbound Request 注入的 `cf` metadata（geo/IP 等）。
+   * lib `Request`（WebWorker）無 `.cf`；local / integration-test 環境亦無
+   * （故 `cf?` optional）。窄到目前唯一讀取的 `country`；未來消費 colo/asn
+   * 等欄位時再明確擴充（勿一次搬官方完整 shape）。
+   *
+   * opt-in alias（非 `interface Request` 全域 merge）：只有顯式標 `request: CfRequest`
+   * 的參數才帶 `.cf`，不污染全 codebase 的 `request: Request`、不遮蔽錯誤。
+   */
+  type CfRequest = Request & {
+    cf?: {
+      country?: string
+    }
+  }
 }
 
 /**
