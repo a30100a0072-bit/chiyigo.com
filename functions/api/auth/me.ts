@@ -18,7 +18,7 @@
 
 import { requireAuth, res } from '../../utils/auth'
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   // ── 1. JWT 驗證（含 banned 檢查）────────────────────────────
   const { user, error } = await requireAuth(request, env)
   if (error) return error
@@ -66,7 +66,7 @@ export async function onRequestGet({ request, env }) {
     role:           userRow.role,
     status:         userRow.status,
     created_at:     userRow.created_at,
-    identities:     (identities ?? []).map(i => ({
+    identities:     (identities ?? []).map((i: Record<string, unknown>) => ({
       provider:     i.provider,
       display_name: i.display_name,
       avatar_url:   i.avatar_url,
