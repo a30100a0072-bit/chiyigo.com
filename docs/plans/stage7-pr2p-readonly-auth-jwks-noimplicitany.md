@@ -69,7 +69,7 @@ owner 提的 `.all<IdentityRow>()` 在本 repo **無效**：`@cloudflare/workers
 
 ## 驗證計劃（coding 階段）
 
-> ⚠ ratchet/tsc 量測前先 `rm -rf .tscache` 全重建（[[feedback_tsc_b_incremental_stale_after_ambient_dts]]）。**PowerShell 用 `$env:RATCHET_BASE_REF='bbfa0a4'`**（勿照字面跑 POSIX `VAR=x npm`，否則 fallback HEAD~1——PR-2o plan-gate nit）。
+> ⚠ ratchet/tsc 量測前先清 `.tscache` 全重建（PowerShell native `Remove-Item -Recurse -Force .tscache` 或 `tsc --force`，**勿照字面跑 POSIX `rm -rf`**——plan-gate nit）。**PowerShell 用 `$env:RATCHET_BASE_REF='bbfa0a4'`**（勿照字面跑 POSIX `VAR=x npm`，否則 fallback HEAD~1——PR-2o plan-gate nit）。
 
 - `$env:RATCHET_BASE_REF='bbfa0a4'; npm run typecheck:ratchet` green（current 1028→1022 / errorFiles 118→115 / cleanFiles 186→189）。
 - `npm run lint` green（`Record<string,unknown>` 在型別位置，比照 kyc.ts `Partial<Record<…>>` 既有先例不觸 no-undef）、`npm run build:functions` green。

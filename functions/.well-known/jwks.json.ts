@@ -26,7 +26,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
-export async function onRequestGet({ env }) {
+export async function onRequestGet({ env }: { env: Env }) {
   let keys
   try {
     keys = getPublicJwks(env)
