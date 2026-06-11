@@ -34,6 +34,8 @@ declare global {
     TOTP_ISSUER?: string;
     WEBAUTHN_ORIGINS?: string;
     TURNSTILE_SECRET_KEY?: string;
+    WALLET_SIWE_DOMAIN?: string;
+    WALLET_SIWE_URI?: string;
 
     // ── External services (email / SMS / chat / IAM) ───────────────────
     RESEND_API_KEY?: string;

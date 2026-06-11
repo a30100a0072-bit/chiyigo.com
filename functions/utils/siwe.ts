@@ -18,7 +18,11 @@ import { keccak_256 } from '@noble/hashes/sha3'
 const NONCE_TTL_SEC = 5 * 60
 const VERIFY_DOMAIN_DEFAULT = 'chiyigo.com'
 
-export function getSiweConfig(env) {
+// env 參數窄化（鏡像各函式實讀鍵 = 最小權限面；PR-2m EmailEnv / PR-2v Jwt*Env 前例）
+type SiweConfigEnv = Pick<Env, 'WALLET_SIWE_DOMAIN' | 'WALLET_SIWE_URI'>
+type SiweDbEnv = Pick<Env, 'chiyigo_db'>
+
+export function getSiweConfig(env: SiweConfigEnv) {
   return {
     domain: env?.WALLET_SIWE_DOMAIN || VERIFY_DOMAIN_DEFAULT,
     uri:    env?.WALLET_SIWE_URI    || `https://${env?.WALLET_SIWE_DOMAIN || VERIFY_DOMAIN_DEFAULT}`,
@@ -36,7 +40,7 @@ export function generateSiweNonce() {
 /**
  * Issue nonce + 寫 wallet_nonces。caller 需先確認 user 已登入 + address 格式 OK。
  */
-export async function issueWalletNonce(env, { userId, address, chainId = 1 }) {
+export async function issueWalletNonce(env: SiweDbEnv, { userId, address, chainId = 1 }: { userId: number; address: string; chainId?: number }) {
   const nonce = generateSiweNonce()
   const expiresAt = new Date(Date.now() + NONCE_TTL_SEC * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
@@ -53,7 +57,7 @@ export async function issueWalletNonce(env, { userId, address, chainId = 1 }) {
 /**
  * 一次性消耗 nonce。caller 拿 row（user_id / address / chain_id）。
  */
-export async function consumeWalletNonce(env, nonce) {
+export async function consumeWalletNonce(env: SiweDbEnv, nonce: string) {
   const row = await env.chiyigo_db
     .prepare(
       `SELECT id, user_id, address, chain_id, expires_at, consumed_at
@@ -70,7 +74,7 @@ export async function consumeWalletNonce(env, nonce) {
 }
 
 /** 0x 開頭 + 40 hex chars。 */
-export function isValidEthAddress(s) {
+export function isValidEthAddress(s: unknown) {
   return typeof s === 'string' && /^0x[a-fA-F0-9]{40}$/.test(s)
 }
 
@@ -82,7 +86,7 @@ const REQUIRED_FIELDS = ['URI', 'Version', 'Chain ID', 'Nonce', 'Issued At']
  * 解 SIWE 文本格式（spec：https://eips.ethereum.org/EIPS/eip-4361）。
  * 不寬鬆 — 缺欄位 / 順序錯都 throw。
  */
-export function parseSiweMessage(text) {
+export function parseSiweMessage(text: unknown) {
   if (typeof text !== 'string' || text.length === 0) throw new Error('Empty message')
   const lines = text.split('\n')
 
@@ -106,7 +110,7 @@ export function parseSiweMessage(text) {
   const statement = kvStart === 4 ? lines[3] : null
   // (empty line) 應出現在 kvStart-1（如有 statement 在 line 3）
 
-  const fields = {}
+  const fields: Record<string, string> = {}
   for (let i = kvStart; i < lines.length; i++) {
     const ln = lines[i]
     if (!ln) continue
@@ -136,7 +140,7 @@ export function parseSiweMessage(text) {
 
 const HEX_TABLE = '0123456789abcdef'
 
-function bytesToHex(bytes) {
+function bytesToHex(bytes: Uint8Array) {
   let s = ''
   for (let i = 0; i < bytes.length; i++) {
     s += HEX_TABLE[bytes[i] >> 4] + HEX_TABLE[bytes[i] & 0xf]
@@ -144,7 +148,7 @@ function bytesToHex(bytes) {
   return s
 }
 
-function hexToBytes(hex) {
+function hexToBytes(hex: string) {
   const h = hex.startsWith('0x') ? hex.slice(2) : hex
   if (h.length % 2 !== 0) throw new Error('Odd hex length')
   const out = new Uint8Array(h.length / 2)
@@ -153,7 +157,7 @@ function hexToBytes(hex) {
 }
 
 /** EIP-191 personal_sign 的 hash：keccak256("\x19Ethereum Signed Message:\n${len}${msg}") */
-function hashMessageEip191(text) {
+function hashMessageEip191(text: string) {
   const msgBytes    = new TextEncoder().encode(text)
   const prefixBytes = new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msgBytes.length}`)
   const full = new Uint8Array(prefixBytes.length + msgBytes.length)
@@ -166,7 +170,7 @@ function hashMessageEip191(text) {
  * ecrecover：用 signature + msgHash 還原 ETH address（lowercase 0x...）。
  * sig 格式 = 0x{r:32}{s:32}{v:1}（共 65 bytes / 130 hex）。
  */
-function recoverAddressFromSig(msgHash, sigHex) {
+function recoverAddressFromSig(msgHash: Uint8Array, sigHex: string) {
   const sigBytes = hexToBytes(sigHex)
   if (sigBytes.length !== 65) throw new Error('Signature must be 65 bytes')
   const r = sigBytes.slice(0, 32)
@@ -194,7 +198,7 @@ function recoverAddressFromSig(msgHash, sigHex) {
 }
 
 /** ISO 8601 → ms epoch；非法回 NaN */
-function parseIsoMs(s) {
+function parseIsoMs(s: string | null) {
   if (!s) return NaN
   const ms = Date.parse(s)
   return Number.isFinite(ms) ? ms : NaN
@@ -210,7 +214,7 @@ function parseIsoMs(s) {
  *  - domain 跟 server config 相符
  *  - uri 跟 server config 同 origin（防 sig 拿到別站重用）
  */
-export async function verifySiweMessage(env, { messageRaw, signature }) {
+export async function verifySiweMessage(env: SiweConfigEnv, { messageRaw, signature }: { messageRaw: string; signature: string }) {
   let parsed
   try { parsed = parseSiweMessage(messageRaw) }
   catch (e) { return { ok: false, error: `parse: ${e?.message ?? e}`.slice(0, 120) } }
