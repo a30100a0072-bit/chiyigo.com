@@ -34,7 +34,7 @@ const TOTP_RL_MAX        = 5
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: CfRequest; env: Env }) {
   // ── 1. 驗證 pre_auth_token（scope 必須為 'pre_auth'）──────────
   const { user, error } = await requireAuth(request, env, 'pre_auth')
   if (error) return error
@@ -141,7 +141,18 @@ export async function onRequestPost({ request, env }) {
   return res({ error: 'Invalid OTP or backup code', code: 'INVALID_OTP_OR_BACKUP_CODE' }, 401)
 }
 
-async function respondWithToken(userId, record, db, deviceUuid, platform, env, audience, request, riskClaims, method) {
+async function respondWithToken(
+  userId: number,
+  record: { email: string; email_verified: number; role: string; status: string; token_version: number | null },
+  db: Env['chiyigo_db'],
+  deviceUuid: string | null,
+  platform: string | null,
+  env: Env,
+  audience: string,
+  request: CfRequest,
+  riskClaims: { score: number; factors: string[]; country: string | null } | null,
+  method: 'totp' | 'backup_code',
+) {
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
     ...tenantClaims,
@@ -170,7 +181,7 @@ async function respondWithToken(userId, record, db, deviceUuid, platform, env, a
   // Phase E-2：risk check 已在 local/login.js password 階段做過，此處不重算；
   // 但把該階段塞進 pre_auth claims 的 risk 欄位帶過來，讓 audit 有完整 forensic
   if (request) {
-    const uaHash = await hashUa(request.headers.get('User-Agent') ?? '').catch(() => null)
+    const uaHash = await hashUa(request.headers.get('User-Agent') ?? '').catch((): null => null)
     const riskData = riskClaims
       ? { risk_score: riskClaims.score, risk_factors: riskClaims.factors }
       : {}
