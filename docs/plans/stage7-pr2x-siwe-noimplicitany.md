@@ -10,7 +10,7 @@ base main `6ffc69e`（接 PR-2w）。
 > - 2026-06-11 owner 當輪明示「開 PR-2x」= **SPEC_APPROVED**（沿用 chain 既定 spec 模板：scope = 本檔 noImplicitAny 清零、純 type-only reduce PR；Non-goals = 不碰 caller / tests / runtime 行為、不顯式標 return；§OD-1 的 env.d.ts 2 行為 plan 階段明示申報的 scope 裁決項，非靜默擴張）。
 > - 2026-06-11 Claude plan 自審到零 blocker（`PLAN_SELF_REVIEW_CLEAN`）。
 > - 2026-06-11 **A1 spike 已執行並全項達標**（見 §Spike 實證；單輪零修正），working tree 已 revert clean。
-> - ⏳ ChatGPT Architecture Gate（請特別裁 §OD-1）。
+> - 2026-06-11 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `33dc29d`）** — 0 Blocker / 0 Required Change / 2 Non-blocking Note；**OD-1 採納**（Env 補 2 optional keys = 補齊 binding SSOT、否決 inline weak type 與 future-debt 路線）；SSOT / Runtime 不變性 / ambient 變更三判斷全過（條件：code stage 六項 gate 必重跑，已在 §驗證計劃）。**N1**：`fields: Record<string, string>` 僅限 parser 內部、不得 export、不得升級為 shared SIWE contract。**N2**：`SiweConfigEnv`/`SiweDbEnv` 僅表達 binding 需求、模組私有不外拋、禁演化成 exported `SiweEnvContract` 第二契約（Arch 範例片段 `Pick<Env, "DB">` 為示意、實際鍵名 = `chiyigo_db`，與本 plan 凍結 diff 一致）。**OD-1 異議處理指令**：若 Codex 對 OD-1 有異議 → 退回討論回報 owner，**不得**改 inline weak type 直接實作。Arch 指定 Codex 檢查 7 點已併入 §驗證計劃。
 > - ⏳ Codex Plan Gate（Codex 輪不回送 GPT；若 Codex 修正推翻 Arch 架構級決策 → 回報 owner 裁定）。
 > - ⏳ `CODING_ALLOWED` → coding（凍結 diff 逐行重放）→ Codex Code Gate → owner 明示點頭 → squash-merge。
 
@@ -154,6 +154,14 @@ base main `6ffc69e`（接 PR-2w）。
 - targeted test：`npx vitest run --config vitest.workers.config.js tests/integration/wallet.test.ts`（13 例）。
 - baseline file 不得 `--update`（天花板 1119/175 保持）。
 - **硬驗收**：source diff 與本 doc §Spike 最終 diff **逐行一致**（2 檔，不得多檔）；超出 = scope creep = Gate fail。
+- **Arch Gate 指定 Codex 檢查 7 點**（`CHATGPT_ARCH_APPROVED` 附帶條件）：
+  1. **OD-1** — 採納 Env optional keys，不走 inline weak type
+  2. **Diff scope** — 僅 `functions/utils/siwe.ts` + `types/env.d.ts`
+  3. **Runtime tokens** — parser / crypto / nonce SQL 一字不動
+  4. **Return type** — 全不標註（防 caller drift）
+  5. **Ambient rebuild** — code stage 全程 forced full tsc（清 .tscache）
+  6. **`Record<string, string>`** — 僅限 parser 內部（N1）
+  7. **Private aliases** — 不 export、不形成 Env SSOT 外的第二契約（N2）
 - merge 後 smoke：wallet 端點皆需 auth → credential-free smoke = home / login 200（chain 預設）；SIWE 全鏈以 integration 13 例 + CI 全量為準。
 
 ## 流程定位
