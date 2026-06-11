@@ -11,8 +11,8 @@ base main `6ffc69e`（接 PR-2w）。
 > - 2026-06-11 Claude plan 自審到零 blocker（`PLAN_SELF_REVIEW_CLEAN`）。
 > - 2026-06-11 **A1 spike 已執行並全項達標**（見 §Spike 實證；單輪零修正），working tree 已 revert clean。
 > - 2026-06-11 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `33dc29d`）** — 0 Blocker / 0 Required Change / 2 Non-blocking Note；**OD-1 採納**（Env 補 2 optional keys = 補齊 binding SSOT、否決 inline weak type 與 future-debt 路線）；SSOT / Runtime 不變性 / ambient 變更三判斷全過（條件：code stage 六項 gate 必重跑，已在 §驗證計劃）。**N1**：`fields: Record<string, string>` 僅限 parser 內部、不得 export、不得升級為 shared SIWE contract。**N2**：`SiweConfigEnv`/`SiweDbEnv` 僅表達 binding 需求、模組私有不外拋、禁演化成 exported `SiweEnvContract` 第二契約（Arch 範例片段 `Pick<Env, "DB">` 為示意、實際鍵名 = `chiyigo_db`，與本 plan 凍結 diff 一致）。**OD-1 異議處理指令**：若 Codex 對 OD-1 有異議 → 退回討論回報 owner，**不得**改 inline weak type 直接實作。Arch 指定 Codex 檢查 7 點已併入 §驗證計劃。
-> - ⏳ Codex Plan Gate（Codex 輪不回送 GPT；若 Codex 修正推翻 Arch 架構級決策 → 回報 owner 裁定）。
-> - ⏳ `CODING_ALLOWED` → coding（凍結 diff 逐行重放）→ Codex Code Gate → owner 明示點頭 → squash-merge。
+> - 2026-06-11 **Codex Plan Gate：`CODEX_PLAN_APPROVED`（@ `b1e8c54`）** — 零 blocking finding；獨立核對：branch docs-only、base 942、siwe.ts 恰 26 errors、`WALLET_SIWE_*` 僅現於 siwe.ts 與 wallet integration test、production caller 限 nonce.ts/verify.ts；OD-1 方向確認（Pick 自 Env SSOT 衍生、Record 限 parser 內部未升級共享契約）；提醒 = ambient 變更全程 forced full tsc 不得靠 incremental cache（已是 §驗證計劃 SOP）。
+> - 2026-06-11 **`CODING_ALLOWED`** → coding（凍結 diff 逐行重放）→ 實跑 gates → 自審 → Codex Code Gate → owner 明示點頭 → squash-merge。
 
 ## ⚠ auth-flow 熱區敏感聲明（最高優先紀律）
 
