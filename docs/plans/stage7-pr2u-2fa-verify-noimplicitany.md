@@ -11,7 +11,8 @@ base main `7ca8456`（接 PR-2t）。
 > - 2026-06-11 Claude plan 自審到零 blocker（`PLAN_SELF_REVIEW_CLEAN`）。
 > - 2026-06-11 **A1 spike 已執行並全項達標**（見 §Spike 實證；PR-2t 前例之 Arch Gate 條件本 PR 前置完成），working tree 已 revert clean。
 > - 2026-06-11 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`** — Scope / SSOT / Contract / DB-Migration 四項全過；型別選型逐項裁可（`CfRequest` 複用 ✓、`Env['chiyigo_db']` ✓、`riskClaims` producer mirror ✓ 明示「不建議改成 unknown」、`record` inline 5 欄 ✓、`method` literal union ✓）。
-> - 下一關：**Codex Plan Gate**（過了才 `CODING_ALLOWED`）。Arch Gate 指定 Codex 只審 4 點：① `riskClaims` producer mirror 是否接受（不要求降為 unknown）② `record` inline shape 是否完全覆蓋實讀欄位 ③ `CfRequest` 對 handler destructure 是否無 contract drift ④ 凍結 diff 是否真 type-only、無 runtime side effect。
+> - 2026-06-11 **Codex Plan Gate：`CODEX_PLAN_APPROVED`（@ `bcc3b11`，findings: none）** — Arch Gate 指定 4 點全過：① riskClaims producer mirror 接受（producer typed → login 簽進 pre_auth → requireAuth 驗簽/scope，不要求降 unknown）② record 5 欄完全覆蓋 helper 實讀（totp_secret/totp_enabled 在 helper 呼叫前消費；users.email schema NOT NULL、token_version 出自 migration 0009）③ CfRequest 無 contract drift ④ 凍結 diff 真 type-only。**硬條件**：落地 source diff 與 §Spike 最終 diff 逐行一致；code gate 重跑全 gates（ratchet `RATCHET_BASE_REF='7ca8456'` / 全量 lint / build:functions / filtered forced tsc + tests-leaf / 兩個 targeted int suite）。
+> - `CODING_ALLOWED` 達成 → coding 階段（凍結 diff 逐行重放）。
 > - **Arch Gate coding 階段鎖定條件**（與本 doc §敏感聲明一致，重申）：只改本檔、runtime byte-identical、SQL / rate-limit / OTP regex / token TTL / scope / audit / error string / caller / tests / config 全不改、baseline file 不改（reduce PR 不 `--update`）、不得新增「順手修正」。
 
 ## ⚠ auth-flow 熱區敏感聲明（最高優先紀律）
