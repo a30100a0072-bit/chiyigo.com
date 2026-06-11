@@ -10,8 +10,8 @@ base main `e71dda3`（接 PR-2u）。
 > - 2026-06-11 owner 當輪明示 **SPEC_APPROVED**（scope = 本檔 noImplicitAny 清零、純 type-only reduce PR；Non-goals = 不碰 caller / tests / config / runtime 行為），並預授權 A1 spike + plan doc 落檔 commit feature branch。
 > - 2026-06-11 Claude plan 自審到零 blocker（`PLAN_SELF_REVIEW_CLEAN`）。
 > - 2026-06-11 **A1 spike 已執行並全項達標**（見 §Spike 實證；單輪零修正），working tree 已 revert clean。
-> - ⏳ ChatGPT Architecture Gate（本 doc 送審）。
-> - ⏳ Codex Plan Gate。
+> - 2026-06-11 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `7a72dd3`）** — 四問全過（治理 ✓ / SSOT ✓ jose 為型別本源 / 契約 ✓ return by inference 保持現狀 / migration N/A）；OD 全裁：**OD-1 採納**（`payload: JWTPayload`，限制：本 PR 不得新增 `ChiyigoJwtClaims` 或 requireAuth claim contract）、**OD-2 允許**（type-only import，限制：code-stage 必跑 `build:functions` 驗 emit 無 runtime import drift）、**OD-3 採納**（雙 alias，限制：alias 僅限本檔私有、不外拋、不提升為治理型別）。風險表採納項：`JwtVerifyEnv` 誤讀防禦 → **凍結 diff 補 1 行 fail-closed why-comment**（comment-only，tsc 輸出不變量，見 §Spike 凍結 diff 註記）。Arch Gate 指定 Codex 檢查 8 點已併入 §驗證計劃。
+> - ⏳ Codex Plan Gate（Codex 輪不回送 GPT；若 Codex 修正推翻 Arch 架構級決策 → 回報 owner 裁定）。
 > - ⏳ `CODING_ALLOWED` → coding（凍結 diff 逐行重放）→ Codex Code Gate → owner 明示點頭 → squash-merge。
 
 ## ⚠ auth-flow 熱區敏感聲明（最高優先紀律）
@@ -19,8 +19,8 @@ base main `e71dda3`（接 PR-2u）。
 `jwt.ts` = **全站 token 簽發/驗證 SSOT**（ES256 私鑰簽發、JWKS 多 key 驗證、key rotation 預備、模組級金鑰快取）— Tier-0 核心。所有 access / pre_auth / step-up / temp_bind / id_token 都經 `signJwt`；所有 `requireAuth` 都經 `verifyJwt`。owner / gate 紀律：**修法若非純型別、或會牽動 alg `'ES256'` / issuer `'https://chiyigo.com'` / 預設 aud `'chiyigo'`（Codex #1 攻擊面收斂決策）/ jti 自動補發邏輯 / kid fallback（`'key-1'` / `'__default__'`）/ 金鑰快取與 `_resetJwtCache` / JSON.parse fail-closed throw / JWKS stripWs 防護 / error message 字串 / caller / tests / config → 立刻停手回 `PLAN_DRAFT`，不硬寫。** TS erase 後 runtime 行為必須不變（常數 / 字串 / 既有註解 byte-identical；新增的型別宣告與 2 行 why-comment 除外）。
 
 **Coding 階段硬性邊界**：
-- 允許：參數型別標註（Convention A inline）/ 模組級 let 型別標註 / 既有 `as` cast 的 type-literal 成員補型別 / module-local `type` alias（`JwtSignEnv` / `JwtVerifyEnv`，PR-2m `EmailEnv` 前例）/ **1 行 type-only import**（`import type { JWTPayload, KeyLike } from 'jose'`，見 §Open Decisions OD-2）
-- 禁止：改 alg / iss / aud 預設、改 jti 補發、改 kid fallback、改快取邏輯、改 throw 字串、改既有註解、改 caller、改 tests、改 tsconfig / eslint / vitest、新增 any、新增 suppression、新增 runtime import、新增 package、改 JSDoc（stale `@param {object}` 文字保留，.ts 模式不讀 JSDoc 型別，純 docs）
+- 允許：參數型別標註（Convention A inline）/ 模組級 let 型別標註 / 既有 `as` cast 的 type-literal 成員補型別 / module-local `type` alias（`JwtSignEnv` / `JwtVerifyEnv`，PR-2m `EmailEnv` 前例；**Arch Gate 限制：本檔私有、不外拋**）/ **1 行 type-only import**（`import type { JWTPayload, KeyLike } from 'jose'`，OD-2 已裁允許）/ alias 區 3 行 why-comment（含 Arch Gate 採納的 fail-closed 行）
+- 禁止：改 alg / iss / aud 預設、改 jti 補發、改 kid fallback、改快取邏輯、改 throw 字串、改既有註解、改 caller、改 tests、改 tsconfig / eslint / vitest、新增 any、新增 suppression、新增 runtime import、新增 package、改 JSDoc（stale `@param {object}` 文字保留，.ts 模式不讀 JSDoc 型別，純 docs）、**顯式標 `signJwt` / `verifyJwt` return**（Arch Gate 禁止變動區：避免本輪製造消費端 drift）、新增 `ChiyigoJwtClaims` / requireAuth claim contract（OD-1 限制）
 
 ## Scout（對抗式驗證）
 
@@ -81,13 +81,17 @@ base main `e71dda3`（接 PR-2u）。
 
 **輔助 probe（standalone CLI tsc，非 leaf 量測）**：① `Record<string, unknown>` → `JWTPayload` 與 `new SignJWT(record)` 在 SNC-off 下 exit 0（assignable）；② `Awaited<ReturnType<typeof verifyJwt>>` = `JWTPayload`、`signJwt` = `string`（`const x: never = v` 錯誤訊息揭示法）— 證明 return 面今天已 typed、本 PR 不改變它。
 
-**Spike 最終 diff（= coding 階段唯一允許落地的 source diff，11 編輯點，+20/−14）**：
+**Spike 最終 diff（= coding 階段唯一允許落地的 source diff，11 編輯點，+21/−14）**：
+
+> 註記：spike 量測時為 +20/−14；Arch Gate 風險表採納後補第 3 行 why-comment（`JwtVerifyEnv` fail-closed 語意）。**comment-only 行，tsc 輸出 / emit / runtime 均為不變量**，spike 量測結果不受影響；code-stage 全 gates 照常重跑驗證。
+
 ```diff
  import { SignJWT, importJWK, jwtVerify, decodeProtectedHeader } from 'jose'
 +import type { JWTPayload, KeyLike } from 'jose'
 +
 +// env 參數窄化（鏡像各函式實讀鍵）：unit test 以 partial fake env 呼叫
-+// （tests/jwt.test.ts rotation 案例不帶 JWT_PUBLIC_KEY），標 full Env 會 tests-leaf TS2345
++// （tests/jwt.test.ts rotation 案例不帶 JWT_PUBLIC_KEY），標 full Env 會 tests-leaf TS2345。
++// JwtVerifyEnv 兩鍵型別 optional ≠ runtime 可全缺 — readPublicJwks 兩鍵皆缺時 fail-closed throw。
 +type JwtSignEnv = Pick<Env, 'JWT_PRIVATE_KEY'>
 +type JwtVerifyEnv = Partial<Pick<Env, 'JWT_PUBLIC_KEYS' | 'JWT_PUBLIC_KEY'>>
  
@@ -155,10 +159,12 @@ base main `e71dda3`（接 PR-2u）。
 > ⚠ ratchet/tsc 量測前清 `.tscache`（PowerShell `Remove-Item -Recurse -Force .tscache`）。**PowerShell 用 `$env:RATCHET_BASE_REF='e71dda3'`**（勿照字面跑 POSIX `VAR=x npm`）。
 
 - `$env:RATCHET_BASE_REF='e71dda3'; npm run typecheck:ratchet` green（989→954 / 110→109 / 194→195）。
-- `npm run lint` green（全量）、`npm run build:functions` green（同時驗 type-only import erase）。
-- filtered forced tsc：jwt.ts 0 殘留 + `tsc -b tsconfig.tests.json --force` exit 0。
+- `npm run lint` green（全量）、`npm run build:functions` green（同時驗 type-only import erase、emit 無 runtime import drift — OD-2 限制）。
+- filtered forced tsc：jwt.ts 0 殘留、**989→954 恰 −35 零新增**；`tsc -b tsconfig.tests.json --force` exit 0（防 `JwtVerifyEnv` 破 rotation fake env）。
 - targeted test：`npx vitest run tests/jwt.test.ts tests/auth.test.ts`（52 例；jwt.test flake 就 rerun）。
-- **硬驗收**：source diff 與本 doc §Spike 最終 diff **逐行一致**（人審 `git diff -- functions/utils/jwt.ts`）；超出 = scope creep = Gate fail。
+- baseline file 不得 `--update`（天花板 1119/175 保持）。
+- **硬驗收**：source diff 與本 doc §Spike 最終 diff **逐行一致**（人審 `git diff -- functions/utils/jwt.ts`），不得擴張 beyond 11 編輯點；超出 = scope creep = Gate fail。
+- merge 後 smoke：`/.well-known/jwks.json` GET 200 且 `keys[*].d` 不存在（Arch Gate 指定）。
 
 ## 流程定位
 
