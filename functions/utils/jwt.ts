@@ -26,15 +26,22 @@
  */
 
 import { SignJWT, importJWK, jwtVerify, decodeProtectedHeader } from 'jose'
+import type { JWTPayload, KeyLike } from 'jose'
+
+// env 參數窄化（鏡像各函式實讀鍵）：unit test 以 partial fake env 呼叫
+// （tests/jwt.test.ts rotation 案例不帶 JWT_PUBLIC_KEY），標 full Env 會 tests-leaf TS2345。
+// JwtVerifyEnv 兩鍵型別 optional ≠ runtime 可全缺 — readPublicJwks 兩鍵皆缺時 fail-closed throw。
+type JwtSignEnv = Pick<Env, 'JWT_PRIVATE_KEY'>
+type JwtVerifyEnv = Partial<Pick<Env, 'JWT_PUBLIC_KEYS' | 'JWT_PUBLIC_KEY'>>
 
 // 模組級快取
-let _signingKey   = null
-let _cachedKid    = null
-let _verifyingMap = null   // Map<kid, CryptoKey>，含一個 'default' fallback
+let _signingKey: KeyLike | Uint8Array | null = null
+let _cachedKid: string | null = null
+let _verifyingMap: Map<string, KeyLike | Uint8Array> | null = null   // Map<kid, CryptoKey>，含一個 'default' fallback
 
 // ── 私鑰（簽發 JWT） ─────────────────────────────────────────────
 
-async function getSigningKey(env) {
+async function getSigningKey(env: JwtSignEnv) {
   if (_signingKey) return { key: _signingKey, kid: _cachedKid }
 
   if (!env.JWT_PRIVATE_KEY)
@@ -57,7 +64,7 @@ async function getSigningKey(env) {
  * 解析 env 中的公鑰來源 → JWK 陣列。
  * 優先 JWT_PUBLIC_KEYS（陣列），fallback JWT_PUBLIC_KEY（單把）。
  */
-function readPublicJwks(env) {
+function readPublicJwks(env: JwtVerifyEnv) {
   if (env.JWT_PUBLIC_KEYS) {
     let arr
     try {
@@ -79,7 +86,7 @@ function readPublicJwks(env) {
   throw new Error('JWT_PUBLIC_KEY(S) is not configured')
 }
 
-async function getVerifyingMap(env) {
+async function getVerifyingMap(env: JwtVerifyEnv) {
   if (_verifyingMap) return _verifyingMap
   const jwks = readPublicJwks(env)
   const map = new Map()
@@ -98,7 +105,7 @@ async function getVerifyingMap(env) {
  * 依 JWT header 的 kid 選對應公鑰。
  * 缺 kid → 用第一把（active）作 fallback，向後相容沒帶 kid 的舊 token。
  */
-async function getVerifyingKey(env, kid) {
+async function getVerifyingKey(env: JwtVerifyEnv, kid: string | null) {
   const map = await getVerifyingMap(env)
   if (kid && map.has(kid)) return map.get(kid)
   return map.get('__default__')
@@ -119,7 +126,7 @@ async function getVerifyingKey(env, kid) {
  * Codex #1（2026-05-10）：簽發端預設 aud='chiyigo'，配合 verifyJwt 預設驗 'chiyigo'，
  * 把跨 app token 互打的攻擊面收斂到顯式 opt-out（mbti/talo/sport-app 走 resolveAud 帶值）。
  */
-export async function signJwt(payload, expiresIn, env, opts: { audience?: string | null } = {}) {
+export async function signJwt(payload: JWTPayload, expiresIn: string, env: JwtSignEnv, opts: { audience?: string | null } = {}) {
   const { key, kid } = await getSigningKey(env)
   // 自動補 jti（Phase B：精準 revoke 用）。caller 已自帶 jti 則尊重之。
   const enriched = payload.jti ? payload : { ...payload, jti: crypto.randomUUID() }
@@ -149,7 +156,7 @@ export async function signJwt(payload, expiresIn, env, opts: { audience?: string
  * Codex #1（2026-05-10）：預設驗 aud='chiyigo'，避免 mbti/talo/sport-app aud 的 token
  * 直接打 chiyigo resource API；跨 aud endpoint 必須 explicit `audience: null`。
  */
-export async function verifyJwt(token, env, opts: { audience?: string | string[] | null; issuer?: string | null } = {}) {
+export async function verifyJwt(token: string, env: JwtVerifyEnv, opts: { audience?: string | string[] | null; issuer?: string | null } = {}) {
   let kid = null
   try { kid = decodeProtectedHeader(token).kid ?? null } catch { /* malformed → 下方 verify 會 throw */ }
 
@@ -178,11 +185,11 @@ export async function verifyJwt(token, env, opts: { audience?: string | string[]
  * 取得單一公鑰 JWK（向後相容；推薦改用 getPublicJwks）。
  * 取陣列首筆。
  */
-export function getPublicJwk(env) {
+export function getPublicJwk(env: JwtVerifyEnv) {
   const [jwk] = readPublicJwks(env)
   const { kty, crv, x, y, kid, use, alg } = jwk
   return { kty, crv, x, y, kid, use: use ?? 'sig', alg: alg ?? 'ES256' } as
-    { kty; crv; x; y; kid; use; alg; d?: undefined }
+    { kty: string; crv: string; x: string; y: string; kid: string; use: string; alg: string; d?: undefined }
 }
 
 /**
@@ -196,8 +203,8 @@ export function getPublicJwk(env) {
  * @param {object} env
  * @returns {Array<{ kty, crv, x, y, kid, use, alg }>}
  */
-export function getPublicJwks(env) {
-  const stripWs = s => typeof s === 'string' ? s.replace(/\s+/g, '') : s
+export function getPublicJwks(env: JwtVerifyEnv) {
+  const stripWs = (s: unknown) => typeof s === 'string' ? s.replace(/\s+/g, '') : s
   return readPublicJwks(env).map(({ kty, crv, x, y, kid, use, alg }) => ({
     kty,
     crv,
@@ -206,7 +213,7 @@ export function getPublicJwks(env) {
     kid: stripWs(kid),
     use: use ?? 'sig',
     alg: alg ?? 'ES256',
-  })) as Array<{ kty; crv; x; y; kid; use; alg; d?: undefined }>
+  })) as Array<{ kty: string; crv: string; x: string; y: string; kid: string; use: string; alg: string; d?: undefined }>
 }
 
 // 測試用：清除模組級快取（vitest 在 keypair 切換時呼叫）
