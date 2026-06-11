@@ -10,7 +10,9 @@ base main `7ca8456`（接 PR-2t）。
 > - 2026-06-11 owner 當輪明示 SPEC_APPROVED（scope = 本檔 noImplicitAny 清零、純 type-only；Non-goals = 不碰 caller/tests/config/runtime 行為），並預授權 A1 spike + plan doc 落檔 commit feature branch。
 > - 2026-06-11 Claude plan 自審到零 blocker（`PLAN_SELF_REVIEW_CLEAN`）。
 > - 2026-06-11 **A1 spike 已執行並全項達標**（見 §Spike 實證；PR-2t 前例之 Arch Gate 條件本 PR 前置完成），working tree 已 revert clean。
-> - 下一關：**ChatGPT Architecture Gate** → **Codex Plan Gate**（過了才 `CODING_ALLOWED`）。
+> - 2026-06-11 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`** — Scope / SSOT / Contract / DB-Migration 四項全過；型別選型逐項裁可（`CfRequest` 複用 ✓、`Env['chiyigo_db']` ✓、`riskClaims` producer mirror ✓ 明示「不建議改成 unknown」、`record` inline 5 欄 ✓、`method` literal union ✓）。
+> - 下一關：**Codex Plan Gate**（過了才 `CODING_ALLOWED`）。Arch Gate 指定 Codex 只審 4 點：① `riskClaims` producer mirror 是否接受（不要求降為 unknown）② `record` inline shape 是否完全覆蓋實讀欄位 ③ `CfRequest` 對 handler destructure 是否無 contract drift ④ 凍結 diff 是否真 type-only、無 runtime side effect。
+> - **Arch Gate coding 階段鎖定條件**（與本 doc §敏感聲明一致，重申）：只改本檔、runtime byte-identical、SQL / rate-limit / OTP regex / token TTL / scope / audit / error string / caller / tests / config 全不改、baseline file 不改（reduce PR 不 `--update`）、不得新增「順手修正」。
 
 ## ⚠ auth-flow 熱區敏感聲明（最高優先紀律）
 
