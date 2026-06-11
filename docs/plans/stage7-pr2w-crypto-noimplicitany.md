@@ -10,7 +10,7 @@ base main `71402db`（接 PR-2v）。
 > - 2026-06-11 owner 當輪明示 **SPEC_APPROVED**（scope = 本檔 noImplicitAny 清零、純 type-only reduce PR；Non-goals = 不碰 caller / tests / config / runtime 行為、不顯式標 return），並預授權 A1 spike + plan doc 落檔 commit feature branch。
 > - 2026-06-11 Claude plan 自審到零 blocker（`PLAN_SELF_REVIEW_CLEAN`）。
 > - 2026-06-11 **A1 spike 已執行並全項達標**（見 §Spike 實證；單輪零修正），working tree 已 revert clean。
-> - ⏳ ChatGPT Architecture Gate。
+> - 2026-06-11 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `4ccc81c`）** — 審查面 9 項全過（scope / runtime drift / SSOT / auth contract / caller blast radius / DB N/A / rollback / baseline policy / OD 無需裁決）；**bufferToHex 選型裁定採 `ArrayBuffer | Uint8Array`**（minimum honest contract；否決 `BufferSource`〔過寬，DataView 等未使用面〕/ `ArrayBufferLike`〔SharedArrayBuffer 非必要面〕/ `ArrayLike<number>`〔一般 number array 誤納〕）；return 不標 = 正確選擇（避免 reduce PR 混入新公共契約）；Arch Gate 指定 Codex 檢查 5 點已併入 §驗證計劃。
 > - ⏳ Codex Plan Gate（Codex 輪不回送 GPT；若 Codex 修正推翻 Arch 架構級決策 → 回報 owner 裁定）。
 > - ⏳ `CODING_ALLOWED` → coding（凍結 diff 逐行重放）→ Codex Code Gate → owner 明示點頭 → squash-merge。
 
@@ -134,6 +134,12 @@ base main `71402db`（接 PR-2v）。
 - targeted test：`npx vitest run tests/crypto.test.ts`（12 例）。
 - baseline file 不得 `--update`（天花板 1119/175 保持）。
 - **硬驗收**：source diff 與本 doc §Spike 最終 diff **逐行一致**（人審 `git diff -- functions/utils/crypto.ts`），不得擴張 beyond 7 編輯點；超出 = scope creep = Gate fail。
+- **Arch Gate 指定 Codex 檢查 5 點**（`CHATGPT_ARCH_APPROVED` 附帶條件）：
+  1. **Diff freeze** — 實作 diff = plan 凍結 diff：僅 `functions/utils/crypto.ts`、+7/−7
+  2. **No return annotation** — 不得補任何 return type
+  3. **No alias / import** — 不得新增 type alias、import、helper、wrapper
+  4. **Runtime byte-identical** — TS erase / bundle 等價證明零 runtime token 變動（`npm run build:functions` 即此項驗證）
+  5. **Baseline unchanged** — 不得更新 canonical baseline ceiling（1119/175 保持）
 - merge 後 smoke：crypto.ts 無自身 endpoint、全為 helper。credential-free 替代 = 已登入 session 正常活動即覆蓋 `hashToken`（refresh 路徑）；owner 無痕登入一次可同時覆蓋 `verifyPassword` + `hashToken` 活路徑（沿用 [[reference_codex_prod_verification]] 模式，owner 裁量）。
 
 ## 流程定位
