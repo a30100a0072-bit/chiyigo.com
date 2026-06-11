@@ -16,7 +16,7 @@ base main `e71dda3`（接 PR-2u）。
 
 ## ⚠ auth-flow 熱區敏感聲明（最高優先紀律）
 
-`jwt.ts` = **全站 token 簽發/驗證 SSOT**（ES256 私鑰簽發、JWKS 多 key 驗證、key rotation 預備、模組級金鑰快取）— Tier-0 核心。所有 access / pre_auth / step-up / temp_bind / id_token 都經 `signJwt`；所有 `requireAuth` 都經 `verifyJwt`。owner / gate 紀律：**修法若非純型別、或會牽動 alg `'ES256'` / issuer `'https://chiyigo.com'` / 預設 aud `'chiyigo'`（Codex #1 攻擊面收斂決策）/ jti 自動補發邏輯 / kid fallback（`'key-1'` / `'__default__'`）/ 金鑰快取與 `_resetJwtCache` / JSON.parse fail-closed throw / JWKS stripWs 防護 / error message 字串 / caller / tests / config → 立刻停手回 `PLAN_DRAFT`，不硬寫。** TS erase 後 runtime 行為必須不變（常數 / 字串 / 既有註解 byte-identical；新增的型別宣告與 2 行 why-comment 除外）。
+`jwt.ts` = **全站 token 簽發/驗證 SSOT**（ES256 私鑰簽發、JWKS 多 key 驗證、key rotation 預備、模組級金鑰快取）— Tier-0 核心。所有 access / pre_auth / step-up / temp_bind / id_token 都經 `signJwt`；所有 `requireAuth` 都經 `verifyJwt`。owner / gate 紀律：**修法若非純型別、或會牽動 alg `'ES256'` / issuer `'https://chiyigo.com'` / 預設 aud `'chiyigo'`（Codex #1 攻擊面收斂決策）/ jti 自動補發邏輯 / kid fallback（`'key-1'` / `'__default__'`）/ 金鑰快取與 `_resetJwtCache` / JSON.parse fail-closed throw / JWKS stripWs 防護 / error message 字串 / caller / tests / config → 立刻停手回 `PLAN_DRAFT`，不硬寫。** TS erase 後 runtime 行為必須不變（常數 / 字串 / 既有註解 byte-identical；新增的型別宣告與 3 行 why-comment 除外）。
 
 **Coding 階段硬性邊界**：
 - 允許：參數型別標註（Convention A inline）/ 模組級 let 型別標註 / 既有 `as` cast 的 type-literal 成員補型別 / module-local `type` alias（`JwtSignEnv` / `JwtVerifyEnv`，PR-2m `EmailEnv` 前例；**Arch Gate 限制：本檔私有、不外拋**）/ **1 行 type-only import**（`import type { JWTPayload, KeyLike } from 'jose'`，OD-2 已裁允許）/ alias 區 3 行 why-comment（含 Arch Gate 採納的 fail-closed 行）
@@ -31,7 +31,7 @@ base main `e71dda3`（接 PR-2u）。
 - **TS7006 ×13**（8 函式的 env ×8、kid、payload、expiresIn、token、stripWs `s`）
 - **TS7008 ×14**（L185 / L209 兩個既有 `as` cast type literal 的 7 個 shorthand 成員 ×2 — **即 PR-1 量測 functions leaf TS7008 全部 14 個**）
 
-### 依賴邊界（jose v5.9.6 vendor 契約逐一驗證）
+### 依賴邊界（jose vendor 契約逐一驗證；package range `^5.9.6` / lock **5.10.0**，型別證據讀自 node_modules = 5.10.0）
 - `importJWK<KeyLikeType extends KeyLike = KeyLike>(jwk: JWK, alg?)` → `Promise<KeyLike | Uint8Array>`；`KeyLike = { type: string }` → 模組級 let 標 `KeyLike | Uint8Array | null` 鏡像 vendor return ✓
 - `ProduceJWT constructor(payload?: JWTPayload)`；`JWTPayload` = 已知 claims（`iss?/sub?/aud?/jti?/nbf?/exp?/iat?`）+ `[propName: string]: unknown` index
 - `SignJWT.sign(key: KeyLike | Uint8Array | JWK)`、`setProtectedHeader(JWTHeaderParameters)`（`kid?: string` ← `string | null` SNC-off ✓）、`setExpirationTime(number | string | Date)` ← `expiresIn: string` ✓
@@ -76,7 +76,7 @@ base main `e71dda3`（接 PR-2u）。
 | zero cascade（全 solution graph） | ✅ base/spike error 輸出逐行 sort-diff：**僅 35 行 jwt.ts 移除、零新增行**；`tsc -b tsconfig.tests.json --force` exit 0 |
 | targeted test runtime 不變 | ✅ `npx vitest run tests/jwt.test.ts tests/auth.test.ts` **52/52 passed**（jwt 20 + auth 32，標註套用狀態實跑；含 roundtrip / tamper / aud 矩陣 / jti / rotation 多 key / getPublicJwk(s) / requireAuth gates） |
 | lint | ✅ `npx eslint functions/utils/jwt.ts` exit 0（全量 lint 列 code-stage gate） |
-| 無新增檔案 / 無 caller/test/config diff | ✅ `git diff --stat` 僅 jwt.ts 1 檔（+20/−14） |
+| 無新增檔案 / 無 caller/test/config diff | ✅ `git diff --stat` 僅 jwt.ts 1 檔（spike 當時 +20/−14；凍結 diff 現為 +21/−14 = 補 1 行 comment-only，見下方註記） |
 | working tree revert clean | ✅ `git restore` 後 `git status --porcelain` 空、HEAD `e71dda3` |
 
 **輔助 probe（standalone CLI tsc，非 leaf 量測）**：① `Record<string, unknown>` → `JWTPayload` 與 `new SignJWT(record)` 在 SNC-off 下 exit 0（assignable）；② `Awaited<ReturnType<typeof verifyJwt>>` = `JWTPayload`、`signJwt` = `string`（`const x: never = v` 錯誤訊息揭示法）— 證明 return 面今天已 typed、本 PR 不改變它。
@@ -135,7 +135,7 @@ base main `e71dda3`（接 PR-2u）。
 -  })) as Array<{ kty; crv; x; y; kid; use; alg; d?: undefined }>
 +  })) as Array<{ kty: string; crv: string; x: string; y: string; kid: string; use: string; alg: string; d?: undefined }>
 ```
-（alg `'ES256'`、iss `'https://chiyigo.com'`、預設 aud `'chiyigo'`、jti 補發、kid fallback、快取邏輯、所有 throw 字串、所有既有註解 **byte-identical**；新增 = 1 行 type-only import + 2 行 why-comment + 2 行 type alias；TS erase 後 runtime 行為不變。）
+（alg `'ES256'`、iss `'https://chiyigo.com'`、預設 aud `'chiyigo'`、jti 補發、kid fallback、快取邏輯、所有 throw 字串、所有既有註解 **byte-identical**；新增 = 1 行 type-only import + 3 行 why-comment + 2 行 type alias；TS erase 後 runtime 行為不變。）
 
 ## 預期 ratchet
 
@@ -145,7 +145,7 @@ base main `e71dda3`（接 PR-2u）。
 
 ## Runtime 行為不變保證 / Rollback
 
-- 全部改動 = 型別標註 + type-only import + 2 行註解，TS erase / esbuild strip 後 runtime 行為不變；targeted unit 52/52 已在標註狀態實跑（含 rotation 多 key 與 cache reset 路徑）。
+- 全部改動 = 型別標註 + type-only import + 3 行註解，TS erase / esbuild strip 後 runtime 行為不變；targeted unit 52/52 已在標註狀態實跑（含 rotation 多 key 與 cache reset 路徑）。
 - rollback：單一 squash commit `git revert` 即完整回退；無 migration、無 deploy 行為差、baseline file 未動 → revert 後 ratchet 自然回 989，零殘留。
 
 ## 測試影響面（覆蓋誠實）
