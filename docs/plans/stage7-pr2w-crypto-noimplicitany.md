@@ -11,8 +11,8 @@ base main `71402db`（接 PR-2v）。
 > - 2026-06-11 Claude plan 自審到零 blocker（`PLAN_SELF_REVIEW_CLEAN`）。
 > - 2026-06-11 **A1 spike 已執行並全項達標**（見 §Spike 實證；單輪零修正），working tree 已 revert clean。
 > - 2026-06-11 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `4ccc81c`）** — 審查面 9 項全過（scope / runtime drift / SSOT / auth contract / caller blast radius / DB N/A / rollback / baseline policy / OD 無需裁決）；**bufferToHex 選型裁定採 `ArrayBuffer | Uint8Array`**（minimum honest contract；否決 `BufferSource`〔過寬，DataView 等未使用面〕/ `ArrayBufferLike`〔SharedArrayBuffer 非必要面〕/ `ArrayLike<number>`〔一般 number array 誤納〕）；return 不標 = 正確選擇（避免 reduce PR 混入新公共契約）；Arch Gate 指定 Codex 檢查 5 點已併入 §驗證計劃。
-> - ⏳ Codex Plan Gate（Codex 輪不回送 GPT；若 Codex 修正推翻 Arch 架構級決策 → 回報 owner 裁定）。
-> - ⏳ `CODING_ALLOWED` → coding（凍結 diff 逐行重放）→ Codex Code Gate → owner 明示點頭 → squash-merge。
+> - 2026-06-11 **Codex Plan Gate：`CODEX_PLAN_APPROVED`（@ `afc739d`）** — 零 blocking finding；1 個 non-blocking doc nit（hashToken 31 站分布 25 檔〔19 api + 6 utils〕，與 importer 31 檔口徑不同 — 已於本 doc 校正）；Code Gate 措辭指引：runtime equivalence 以**凍結 source diff + TS erasure 為證明主體**，`build:functions` 為輔助驗證（非逐 byte 比較）。
+> - 2026-06-11 **`CODING_ALLOWED`** → coding（凍結 diff 逐行重放）→ 實跑 gates → 自審 → Codex Code Gate → owner 明示點頭 → squash-merge。
 
 ## ⚠ auth-flow 熱區敏感聲明（最高優先紀律）
 
@@ -42,7 +42,7 @@ base main `71402db`（接 PR-2v）。
 ### 依賴邊界（caller 契約逐一驗證）
 
 - **型別本源 = Web Crypto 實際簽名（lib.dom，TS 5.9.3）**：`crypto.getRandomValues(new Uint8Array(n))` → `Uint8Array`（×3 站：L33/L39/L138）；`crypto.subtle.deriveBits(...)` / `crypto.subtle.digest(...)` → `Promise<ArrayBuffer>`（L70 `bits`、L102 `digest`；pkceVerify 的 digest L117 直接 `new Uint8Array(digest)`、不經 bufferToHex）→ `bufferToHex` 參數 = **`ArrayBuffer | Uint8Array` union 鏡像兩類實際流入**；`new Uint8Array(buffer)` 對該 union 過 lib.es5 `ArrayLike<number> | ArrayBufferLike` overload（spike 實證零 error）。
-- **production caller ×31 檔**（25 api + 6 utils；`hashToken` 外部 31 站最大面 — grep 35 行 − 本檔 3 行〔def + 內部 ×2〕− user-audit.ts L172 註解 1 行）：
+- **production caller ×31 檔**（crypto.ts importer 口徑：25 api + 6 utils）。最大面 = `hashToken` 外部 31 站、分布 **25 檔（19 api + 6 utils）**（grep 35 行 − 本檔 3 行〔def + 內部 ×2〕− user-audit.ts L172 註解 1 行；兩個「31」口徑不同：31 檔 = importer 數、31 站 = hashToken call site 數，Codex Plan Gate 校正紀錄）：
   - 已 typed clean 檔（cascade 敏感面，逐站驗）：`2fa/verify.ts`（PR-2u；`sanitized` 經 `typeof otp_code !== 'string'` guard → string ✓、`hashToken(refreshToken)` ← `generateSecureToken()` string ✓）、`oauth/[provider]/callback.ts`（同 refreshToken pattern ✓）、`billing.ts` / `credit.ts` / `members.ts`（`hashToken(canonicalJson({...}))` ← string ✓）、`invitations.ts`（`rawToken` string ✓）、`admin/cron/event-outbox.ts`（`row.stream_key` ← D1 row any ✓，[[feedback_d1database_resolves_any_no_workers_types]]）、`admin/event-dlq/[id]/replay.ts`（`String(dlqRow.stream_key)` ✓）。
   - 備用碼 5 站：step-up / 2fa-disable / regenerate 全 `String(backup_code).replace(...).toLowerCase()` → string ✓；2fa/verify typeof guard ✓；reset-password `sanitized` ← any body ✓；`code.code_hash` 全為 D1 row → any ✓。
   - `pkceVerify` 唯一站 oauth/token.ts：`code_verifier` ← any body ✓、`authCode.code_challenge` ← D1 row any ✓。
@@ -138,7 +138,7 @@ base main `71402db`（接 PR-2v）。
   1. **Diff freeze** — 實作 diff = plan 凍結 diff：僅 `functions/utils/crypto.ts`、+7/−7
   2. **No return annotation** — 不得補任何 return type
   3. **No alias / import** — 不得新增 type alias、import、helper、wrapper
-  4. **Runtime byte-identical** — TS erase / bundle 等價證明零 runtime token 變動（`npm run build:functions` 即此項驗證）
+  4. **Runtime byte-identical** — 以凍結 source diff 逐行一致 + TS erasure 為證明主體；`npm run build:functions` 為輔助驗證（非逐 byte 比較，Codex Plan Gate 措辭校正）
   5. **Baseline unchanged** — 不得更新 canonical baseline ceiling（1119/175 保持）
 - merge 後 smoke：crypto.ts 無自身 endpoint、全為 helper。credential-free 替代 = 已登入 session 正常活動即覆蓋 `hashToken`（refresh 路徑）；owner 無痕登入一次可同時覆蓋 `verifyPassword` + `hashToken` 活路徑（沿用 [[reference_codex_prod_verification]] 模式，owner 裁量）。
 
