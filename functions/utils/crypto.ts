@@ -12,13 +12,13 @@ const PBKDF2_KEY_LENGTH = 32; // bytes → 256 bits
 
 // ─── 內部工具 ────────────────────────────────────────────────
 
-function bufferToHex(buffer) {
+function bufferToHex(buffer: ArrayBuffer | Uint8Array) {
   return Array.from(new Uint8Array(buffer))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
 
-function hexToBuffer(hex) {
+function hexToBuffer(hex: string) {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
@@ -48,7 +48,7 @@ export function generateSecureToken() {
  * @param {string} saltHex   hex 格式 salt（來自 generateSalt()）
  * @returns {Promise<string>} hex 格式 hash
  */
-export async function hashPassword(password, saltHex) {
+export async function hashPassword(password: string, saltHex: string) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
@@ -77,7 +77,7 @@ export async function hashPassword(password, saltHex) {
  * @param {string} storedHashHex 資料庫中的 hash（hex）
  * @returns {Promise<boolean>}
  */
-export async function verifyPassword(password, saltHex, storedHashHex) {
+export async function verifyPassword(password: string, saltHex: string, storedHashHex: string) {
   const inputHash = await hashPassword(password, saltHex);
   // 使用 timingSafeEqual 防計時攻擊（固定長度 hex 字串，逐字元比較）
   if (inputHash.length !== storedHashHex.length) return false;
@@ -96,7 +96,7 @@ export async function verifyPassword(password, saltHex, storedHashHex) {
  * @param {string} token  原始 Token（hex 字串）
  * @returns {Promise<string>} hex 格式 SHA-256 hash
  */
-export async function hashToken(token) {
+export async function hashToken(token: string) {
   const enc = new TextEncoder();
   const digest = await crypto.subtle.digest('SHA-256', enc.encode(token));
   return bufferToHex(digest);
@@ -111,7 +111,7 @@ export async function hashToken(token) {
  * @param {string} codeChallenge  BASE64URL(SHA-256(verifier))（authorize 時儲存）
  * @returns {Promise<boolean>}
  */
-export async function pkceVerify(codeVerifier, codeChallenge) {
+export async function pkceVerify(codeVerifier: string, codeChallenge: string) {
   const enc    = new TextEncoder();
   const digest = await crypto.subtle.digest('SHA-256', enc.encode(codeVerifier));
   const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)))
@@ -151,7 +151,7 @@ export async function generateBackupCodes() {
  * @param {string} storedHash 資料庫中的 code_hash
  * @returns {Promise<boolean>}
  */
-export async function verifyBackupCode(inputCode, storedHash) {
+export async function verifyBackupCode(inputCode: string, storedHash: string) {
   // 移除 dash，取得原始 hex
   const raw = inputCode.replace(/-/g, '').toLowerCase();
   const inputHash = await hashToken(raw);
