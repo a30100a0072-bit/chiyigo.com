@@ -41,7 +41,7 @@ export const RISK_LEVEL_MEDIUM = 30   // ≥ audit warn
  * 用 SHA-256 hash UA，取前 12 hex 當識別。
  * 不是判 UA 完全相同（Chrome 升版會破），但對「換瀏覽器 / 換 OS / curl」夠靈敏。
  */
-export async function hashUa(ua) {
+export async function hashUa(ua: string) {
   if (!ua) return null
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ua))
   return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('').slice(0, 12)
@@ -57,14 +57,25 @@ export async function hashUa(ua) {
  *
  * 永遠不 throw；任何 query 失敗回 { score: 0, factors: [], error }
  */
-export async function computeRiskScore(env, request, { userId, email }) {
+export async function computeRiskScore(
+  env: Env,
+  request: CfRequest,
+  { userId, email }: { userId: number | null; email: string | null },
+): Promise<{
+  score: number
+  factors: string[]
+  country: string | null
+  ua_hash: string | null
+  hour_utc: number
+  error?: string
+}> {
   const country = request?.cf?.country ?? null
   const ua      = request?.headers?.get('User-Agent') ?? ''
-  const uaHash  = await hashUa(ua).catch(() => null)
+  const uaHash  = await hashUa(ua).catch((): null => null)
   const hourUtc = new Date().getUTCHours()
 
   let score = 0
-  const factors = []
+  const factors: string[] = []
 
   if (!env?.chiyigo_db || !userId) {
     return { score, factors, country, ua_hash: uaHash, hour_utc: hourUtc }
@@ -80,8 +91,9 @@ export async function computeRiskScore(env, request, { userId, email }) {
       )
       .bind(userId, TIME_TYPICAL_LOOKBACK)
       .all()
-    const recentLogins = (rs.results ?? []).map(r => {
-      let data = {}
+    const recentLogins: Array<Record<string, unknown> & { created_at_ms: number }> =
+      (rs.results ?? []).map((r: { event_data?: string; created_at?: string }) => {
+      let data: Record<string, unknown> = {}
       try { data = JSON.parse(r.event_data ?? '{}') } catch {}
       let createdMs = NaN
       if (r.created_at) createdMs = Date.parse(r.created_at.replace(' ', 'T') + 'Z')
@@ -144,11 +156,11 @@ export async function computeRiskScore(env, request, { userId, email }) {
 }
 
 // 對外給 caller 一個 quick check 的 helper（不算分，只查 deny 與否）
-export function shouldDenyByRisk(score) {
+export function shouldDenyByRisk(score: number) {
   return score >= RISK_LEVEL_HIGH
 }
 
-export function isRiskMedium(score) {
+export function isRiskMedium(score: number) {
   return score >= RISK_LEVEL_MEDIUM && score < RISK_LEVEL_HIGH
 }
 
