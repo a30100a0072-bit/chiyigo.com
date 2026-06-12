@@ -91,7 +91,9 @@ export const SCOPES = Object.freeze({
  *
  * 拓展時：新加 admin:foo:bar fine scope，記得在這裡 register coarse → fine 對應。
  */
-const SCOPE_HIERARCHY = Object.freeze({
+// 寬 view（string-keyed lookup table）：查詢鍵來自 untrusted claim / Object.keys，
+// runtime 契約本就是「任意 key 查表、miss 走 fallback」；readonly 防止誤改 RBAC SSOT 內容。
+const SCOPE_HIERARCHY: Record<string, readonly string[]> = Object.freeze({
   [SCOPES.ADMIN_USERS]: [
     SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE,
   ],
@@ -120,7 +122,7 @@ const SCOPE_HIERARCHY = Object.freeze({
 })
 
 /** 把 set 內所有 coarse scope 的 fine 子項一併加入；不影響原有 fine scope。*/
-function expandHierarchy(set) {
+function expandHierarchy(set: Set<string>) {
   for (const coarse of Object.keys(SCOPE_HIERARCHY)) {
     if (set.has(coarse)) {
       for (const fine of SCOPE_HIERARCHY[coarse]) set.add(fine)
@@ -140,7 +142,7 @@ export const KNOWN_ELEVATED_SCOPES = new Set<string>([
 ])
 
 /** 該 scope 是否為「高權限」類型（必走 step-up flow）*/
-export function isElevatedScope(s) {
+export function isElevatedScope(s: unknown) {
   return typeof s === 'string' && KNOWN_ELEVATED_SCOPES.has(s)
 }
 
@@ -161,7 +163,7 @@ export function isElevatedScope(s) {
  *   - finance / support 嚴格只給 fine scope，**禁** admin:users / admin:clients / admin:audit
  *     coarse（避免 hierarchy 展開後拿到 *_WRITE 升權）
  */
-const ROLE_BASE_SCOPES = {
+const ROLE_BASE_SCOPES: Record<string, readonly string[]> = {
   // ── current production roles ─────────────────────────────────
   player:    [SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE],
   moderator: [SCOPES.READ_PROFILE, SCOPES.WRITE_PROFILE],
@@ -204,8 +206,10 @@ const ROLE_BASE_SCOPES = {
 }
 
 /** 取 role 內建 scope；未知 role → 空陣列 */
-export function scopesForRole(role) {
-  return ROLE_BASE_SCOPES[role] ?? []
+export function scopesForRole(role: unknown) {
+  // role 為 untrusted claim（可為任意 JSON 值）；JS 物件索引本就把 key coerce 成
+  // string，未知 key 由 ?? [] fallback 接住（deny by default），cast 僅鏡像此語意。
+  return ROLE_BASE_SCOPES[role as string] ?? []
 }
 
 // ── token scope 計算（簽發端用）──────────────────────────
@@ -217,7 +221,7 @@ export function scopesForRole(role) {
  * @param {string} [oidcScope]   authorize 階段傳的 scope param（空白分隔），可空
  * @returns {string} 空白分隔的 scope 字串（OIDC 慣例）
  */
-export function buildTokenScope(role, oidcScope = '') {
+export function buildTokenScope(role: string, oidcScope = '') {
   const oidcParts = (typeof oidcScope === 'string' ? oidcScope : '')
     .split(/\s+/).filter(Boolean)
   const merged = new Set([...oidcParts, ...scopesForRole(role)])
@@ -226,14 +230,20 @@ export function buildTokenScope(role, oidcScope = '') {
 
 // ── token scope 檢查（resource server 用）────────────────
 
+// untrusted JWT payload view：claim 名任意、值一律 unknown（本模組只讀 scope / role，
+// 各自靠 typeof guard / lookup fallback 防禦）。index-signature 型可收 jose JWTPayload
+// （requireAuth user 實際流入型別）且非 weak type；`| string` = 垃圾輸入防禦面
+// （tests 鎖「非物件 → 空 set / false」fallback 行為）。模組私有，不外拋。
+type ScopeClaims = Record<string, unknown>
+
 /**
  * 從 JWT payload 取「實際生效」scope set。
  *
  * 防衛：scope claim 缺值（舊 token / 非 IAM 簽的 token）→ fallback 用 role 推導。
  * 確保 Phase C-2 部署時既有 admin session 不會立刻失效。
  */
-export function effectiveScopesFromJwt(payload) {
-  if (!payload || typeof payload !== 'object') return new Set()
+export function effectiveScopesFromJwt(payload: ScopeClaims | string) {
+  if (!payload || typeof payload !== 'object') return new Set<string>()
   const tokenScopes = (typeof payload.scope === 'string' ? payload.scope : '')
     .split(/\s+/).filter(Boolean)
   const roleScopes  = scopesForRole(payload.role)
@@ -242,11 +252,11 @@ export function effectiveScopesFromJwt(payload) {
   return expandHierarchy(new Set([...tokenScopes, ...roleScopes]))
 }
 
-export function hasScope(payload, scope) {
+export function hasScope(payload: ScopeClaims | string, scope: string) {
   return effectiveScopesFromJwt(payload).has(scope)
 }
 
-export function hasAllScopes(payload, scopes) {
+export function hasAllScopes(payload: ScopeClaims | string, scopes: string[]) {
   const eff = effectiveScopesFromJwt(payload)
   return scopes.every(s => eff.has(s))
 }
@@ -258,7 +268,7 @@ export function hasAllScopes(payload, scopes) {
  * 必須是 step-up flow 簽出來的 step_up_token 才有那 scope。一般 access_token
  * 即使 role=admin 也不該有 elevated:*。
  */
-export function hasExactScopeInToken(payload, scope) {
+export function hasExactScopeInToken(payload: ScopeClaims | string, scope: string) {
   if (!payload || typeof payload !== 'object') return false
   const tokenScopes = (typeof payload.scope === 'string' ? payload.scope : '')
     .split(/\s+/).filter(Boolean)
