@@ -24,6 +24,9 @@ export default defineWorkersConfig({
             // F-3 Phase 2：archive worker integration test 直接 import handler 並帶 bearer
             CRON_SECRET: 'test-cron-secret',
             ARCHIVE_ENV: 'test',
+            // PAY-002：test 為 non-production；明確 ECPAY_MODE=sandbox 才允許 ECPay 公開 sandbox creds
+            // fallback（新 getCreds fail-closed 規則）。否則既有 payment-ecpay 整合測試會 reject。
+            ECPAY_MODE: 'sandbox',
           },
         },
       },

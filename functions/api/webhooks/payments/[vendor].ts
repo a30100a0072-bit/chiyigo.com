@@ -44,18 +44,39 @@ export async function onRequestPost({ request, env, params }) {
     : (extra = {}) => res({ ok: true, ...(extra.deduplicated ? { deduplicated: true } : {}) })
 
   if (!parsed.ok) {
-    await safeUserAudit(env, {
-      event_type: 'payment.webhook.fail', severity: 'warn', request,
-      // reason_code = PR 3.1d 穩定 bucket key（codex M-1）；raw parser error 留 reason 欄不參與分群
-      data: { vendor, reason_code: DEBUG_REASON_CODES.WEBHOOK_PARSE_FAILED, reason: parsed.error },
-    })
-    await dlqInsert(env, {
-      vendor,
-      raw_body: rawBody,
-      error_stage: 'parse',
-      error_message: parsed.error || 'parse failed',
-      http_status_returned: 401,
-    })
+    if (parsed.error === 'vendor_misconfigured') {
+      // PAY-002：vendor creds 缺 / prod 禁 sandbox / sandbox 未明確 → adapter fail-closed。
+      // 重用既有 payment.vendor.misconfigured（已分類 DEBUG_FAILURE）寫 critical；.code 機讀。
+      await safeUserAudit(env, {
+        event_type: 'payment.vendor.misconfigured', severity: 'critical', request,
+        data: {
+          vendor,
+          stage:       'webhook',
+          reason_code: DEBUG_REASON_CODES.VENDOR_CREDS_MISSING,
+          code:        parsed.code ?? null,
+        },
+      })
+      await dlqInsert(env, {
+        vendor,
+        raw_body:             rawBody,
+        error_stage:          'vendor_misconfigured',
+        error_message:        `ecpay creds misconfigured: ${parsed.code ?? 'config'}`,
+        http_status_returned: 200,
+      })
+    } else {
+      await safeUserAudit(env, {
+        event_type: 'payment.webhook.fail', severity: 'warn', request,
+        // reason_code = PR 3.1d 穩定 bucket key（codex M-1）；raw parser error 留 reason 欄不參與分群
+        data: { vendor, reason_code: DEBUG_REASON_CODES.WEBHOOK_PARSE_FAILED, reason: parsed.error },
+      })
+      await dlqInsert(env, {
+        vendor,
+        raw_body: rawBody,
+        error_stage: 'parse',
+        error_message: parsed.error || 'parse failed',
+        http_status_returned: 401,
+      })
+    }
     if (typeof adapter.failureResponse === 'function') {
       return adapter.failureResponse(parsed.error)
     }

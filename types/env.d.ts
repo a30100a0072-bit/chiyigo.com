@@ -50,6 +50,8 @@ declare global {
     ALERT_WEBHOOK_URL?: string;
 
     // ── Payments ───────────────────────────────────────────────────────
+    // PAY-002：prod 不需設（unset 即視為 prod）且禁 'sandbox'；非 prod 走 'sandbox' 才允許公開 creds。
+    ECPAY_MODE?: 'prod' | 'sandbox';
     ECPAY_MERCHANT_ID?: string;
     ECPAY_HASH_KEY?: string;
     ECPAY_HASH_IV?: string;

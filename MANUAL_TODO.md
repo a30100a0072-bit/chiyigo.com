@@ -90,9 +90,9 @@ GitHub repo → Settings → Secrets and variables → Actions → New repositor
 
 ## 6. ECPay 綠界金流 — 申請正式商店（沒申請仍可用沙箱不會壞）
 
-**現況**：env 沒設 `ECPAY_*` 時 fallback 沙箱公開 creds（新 MerchantID `3002607` / 舊 `2000132` 已停用），prod 部署照樣能跑但走測試環境 → **不會誤扣真錢**，只是真用戶付不了款。
+**現況（PAY-002 hotfix 後，secure-by-default）**：production（`ENVIRONMENT=production`，wrangler.toml 已設）**缺任一 `ECPAY_*` secret → fail-closed**：webhook 直接 reject（`0|vendor_misconfigured` + critical audit `payment.vendor.misconfigured` + DLQ）、checkout 回 500。**production 永不 fallback 公開 sandbox creds**（舊版未設 `ECPAY_MODE` 會 fail-OPEN 到公開金鑰、可被偽造 webhook，已修；見 `docs/audit/01-payments.md` PAY-002）。公開 sandbox creds 只在「非 production + 明確 `ECPAY_MODE=sandbox` + 無真 creds」可用（本機 / staging 測試）。
 
-**⚠️ 守門生效（commit 25ac234，2026-05-06）**：`ECPAY_MODE='prod'` 一旦存在，三把金鑰任一缺就 throw 500 `PAYMENT_VENDOR_MISCONFIGURED`，不會偷用 sandbox creds。設定順序務必對，不然中間會卡 throw。
+**⚠️ secure-by-default（PAY-002，取代舊 commit 25ac234 守門）**：production 判斷來自 `ENVIRONMENT`（非 `ECPAY_MODE`）。`ECPAY_MODE` 在 prod **不需設**（unset 即視為 prod），且 **`ECPAY_MODE=sandbox` 在 prod 會被拒**。
 
 ### 6.1 申請特店帳號（個人戶可開，免月費）
 - 去 https://www.ecpay.com.tw → 申請特店
@@ -103,26 +103,21 @@ GitHub repo → Settings → Secrets and variables → Actions → New repositor
 
 ### 6.2 拿到後設定 Pages secret（未申請前可跳過）
 
-**順序很重要**：先設三把 creds，**最後**才設 `ECPAY_MODE=prod`。
-反過來 → `ECPAY_MODE=prod` 已存在但其他三把還沒設好的那段時間，所有付款 checkout 會回 500（守門生效）。
+**PAY-002 後：production 只需設三把 secret，不需設 `ECPAY_MODE`。**（`ENVIRONMENT=production` 已在 wrangler.toml；prod 下 `ECPAY_MODE` unset 即視為 prod。⚠️ 別在 prod 設 `ECPAY_MODE=sandbox` → 會被 fail-closed 拒。）
+**⚠️ 上線阻斷（預期行為）**：三把設齊前，production 的 ECPay webhook / checkout 一律 fail-closed（reject / 500），防 PAY-002 偽造。設齊三把即恢復。
 
 ```bash
-# 1. 先設三把正式 creds（這時 ECPAY_MODE 還沒設 / 還是空 → 走 sandbox 不影響線上）
+# 設三把正式 creds（設齊即上線；不需再設 ECPAY_MODE）
 wrangler pages secret put ECPAY_MERCHANT_ID  --project-name chiyigo-com
 wrangler pages secret put ECPAY_HASH_KEY     --project-name chiyigo-com
 wrangler pages secret put ECPAY_HASH_IV      --project-name chiyigo-com
 
-# 2. 確認三把都進去（CF dashboard → Settings → Variables and Secrets，看 ECPAY_* 都在）
-
-# 3. 最後一步：切 prod 模式
-wrangler pages secret put ECPAY_MODE         --project-name chiyigo-com   # 填 prod
-
-# 4. 驗證：登入後 hit POST /api/auth/payments/checkout/ecpay
-#    response.fields.MerchantID 應該是你的正式 7 碼 ID（不是 sandbox 3002607）
+# 確認三把都進去（CF dashboard → Settings → Variables and Secrets，看 ECPAY_* 都在）
+# 驗證：登入後 hit POST /api/auth/payments/checkout/ecpay
+#   response.fields.MerchantID 應該是你的正式 7 碼 ID（不是 sandbox 3002607）
 ```
 
-**回退方式**（萬一正式 creds 設錯想暫時退回 sandbox）：
-**四把全刪**。只刪 `ECPAY_MODE` 不夠 — sandbox 模式下程式邏輯是「env 有就用 env、沒有才 fallback」，所以你正式 ID/Key/IV 還在的話會被送去 sandbox URL，ECPay 沙箱認不得正式 MerchantID 直接拒。要回 sandbox 就連那三把一起刪乾淨。
+**回退方式**（正式 creds 設錯想暫時退回 sandbox）：**把三把 `ECPAY_*` 全刪**。production 缺 creds → fail-closed（不偷送 sandbox），需 creds 設對才恢復；本機 / 非 prod 測試才走 `ECPAY_MODE=sandbox` 公開 creds。
 
 ### 6.3 ECPay 後台設 ReturnURL 白名單
 - ECPay 商家後台 → 系統開發管理 → 系統介接設定
