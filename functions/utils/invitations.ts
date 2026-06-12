@@ -119,7 +119,7 @@ export async function createInvitation(db: ChiyigoDb, input: CreateInvitationInp
   if (typeof input.platformRole !== 'string' || !INVITABLE_ROLES.has(input.platformRole)) return { outcome: 'invalid', code: 'ERR_VALIDATION' }
   // ISO-CROSS-01: inviting someone as a manager-level role (tenant_admin/billing_admin) is owner-only, aligning
   // with the OWNER_ONLY gate on PATCH /role -- otherwise a tenant_admin could mint peer managers via invitation
-  // what they cannot do via promotion. deny-by-default: any non-owner inviter is rejected for these roles.
+  // what they cannot do via promotion. Deny-by-default -- a non-owner inviter is rejected for these roles.
   if (OWNER_ONLY_INVITE_ROLES.has(input.platformRole) && input.inviterPlatformRole !== 'tenant_owner') {
     return { outcome: 'inviter_role_insufficient' }
   }
