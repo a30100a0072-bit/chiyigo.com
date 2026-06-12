@@ -17,6 +17,11 @@ const OWNER_ONLY: readonly PlatformRole[] = ['tenant_owner']
 const ACTION_EVENT: Record<string, string> = {
   suspend: 'member.suspended', reactivate: 'member.reactivated', offboard: 'member.offboarded',
 }
+// Prototype-safe allowlist (own keys only). A plain `ACTION_EVENT[action]` truthy check is bypassed by
+// Object.prototype keys (toString/constructor/__proto__/valueOf/hasOwnProperty resolve to truthy inherited
+// members), which would route an unknown action to the dispatch `else` (= offboard). Same pattern as
+// audit-archive/retry.ts: gate on Set membership first, then index the map.
+const ALLOWED_ACTIONS: ReadonlySet<string> = new Set(Object.keys(ACTION_EVENT))
 const RL_WINDOW_SEC = 60
 const RL_MAX = 60
 
@@ -26,8 +31,8 @@ export async function onRequestPost({ request, env, params }: { request: Request
   const action = String(params?.action ?? '')
   if (!Number.isInteger(tenantId) || tenantId <= 0) return res({ error: 'Invalid tenant id', code: 'ERR_VALIDATION' }, 400)
   if (!Number.isInteger(targetUserId) || targetUserId <= 0) return res({ error: 'Invalid user id', code: 'ERR_VALIDATION' }, 400)
-  const eventType = ACTION_EVENT[action]
-  if (!eventType) return res({ error: 'Unknown member action', code: 'NOT_FOUND' }, 404)
+  if (!ALLOWED_ACTIONS.has(action)) return res({ error: 'Unknown member action', code: 'NOT_FOUND' }, 404)
+  const eventType = ACTION_EVENT[action]   // action is now guaranteed an own key -> eventType is a string
 
   const gate = await requireActiveTenantRole(request, env, tenantId, OWNER_ONLY)
   if (gate.ok === false) {
@@ -47,7 +52,8 @@ export async function onRequestPost({ request, env, params }: { request: Request
   let result: MemberOutcome
   if (action === 'suspend') result = await suspendMember(env.chiyigo_db, target)
   else if (action === 'reactivate') result = await reactivateMember(env.chiyigo_db, target)
-  else result = await offboardMember(env.chiyigo_db, target)
+  else if (action === 'offboard') result = await offboardMember(env.chiyigo_db, target)
+  else return res({ error: 'Unexpected action', code: 'INTERNAL_ERROR' }, 500)   // unreachable post-allowlist; guards a future ACTION_EVENT key added without a dispatch arm
 
   if (result.outcome === 'applied') {
     const data: Record<string, unknown> = { tenant_id: tenantId, sub: String(targetUserId) }

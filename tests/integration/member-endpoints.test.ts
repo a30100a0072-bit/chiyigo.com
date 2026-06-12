@@ -241,3 +241,31 @@ describe('member mutations + role', () => {
     expect(await auditCount('invitation.revoked')).toBe(1)
   })
 })
+
+describe('ISO-ENUM-1: member action allowlist is prototype-safe', () => {
+  // ACTION_EVENT[<Object.prototype key>] is a truthy inherited member, so a plain `!ACTION_EVENT[action]` guard
+  // let unknown actions through to the dispatch `else` (= offboard) + lost the HTTP audit row (event_type was a
+  // function). Each evil key uses a FRESH target: pre-fix the call is DESTRUCTIVE (offboards), so a shared target
+  // would be gone after the first key and mask per-key behavior (Codex Code-Gate binding #1).
+  for (const evil of ['toString', 'constructor', '__proto__', 'valueOf', 'hasOwnProperty']) {
+    it(`owner POST .../${evil} -> 404 NOT_FOUND, target NOT offboarded`, async () => {
+      const { tenantId, ownerId } = await orgWithOwner()
+      const m = await user()
+      await seedMembership({ tenantId, userId: m.id, role: 'member', status: 'active' })
+      const r = await call(memberAction, req('POST', await token(ownerId)), { tenantId: String(tenantId), userId: String(m.id), action: evil })
+      expect(r.status).toBe(404)                                  // pre-fix: 200 (fell through to offboard)
+      expect((await r.json() as { code: string }).code).toBe('NOT_FOUND')
+      const row = await db.prepare(`SELECT status FROM organization_members WHERE tenant_id = ? AND user_id = ?`).bind(tenantId, m.id).first()
+      expect(row?.status).toBe('active')                          // pre-fix: row DELETEd by the else=offboard fallthrough
+    })
+  }
+
+  it('valid offboard still writes the member.offboarded HTTP audit row (regression: audit not lost)', async () => {
+    const { tenantId, ownerId } = await orgWithOwner()
+    const ownerB = await user()
+    await seedMembership({ tenantId, userId: ownerB.id, role: 'tenant_owner', status: 'active' })
+    const r = await call(memberAction, req('POST', await token(ownerId)), { tenantId: String(tenantId), userId: String(ownerB.id), action: 'offboard' })
+    expect(r.status).toBe(200)
+    expect(await auditCount('member.offboarded')).toBe(1)        // event_type is the literal string -> audit row present
+  })
+})
