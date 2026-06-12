@@ -9,8 +9,9 @@ base main `592a8b2`（接 PR-2x）。
 > **Gate 紀錄（Dual Gate Workflow）**：
 > - 2026-06-12 owner 當輪明示開第 9 棒 scopes.ts = **SPEC_APPROVED**（沿用 chain 既定 spec 模板：scope = 本檔 noImplicitAny 清零、純 type-only reduce PR；Non-goals = 不碰 caller / tests / config / runtime 行為、不顯式標 return；同輪預授權 A1 spike + plan doc 落檔 commit feature branch）。
 > - 2026-06-12 **A1 spike 已執行並全項達標**（見 §Spike 實證；主方案＋OD-1 變體兩輪量測皆零修正），working tree 已 revert clean。
-> - ChatGPT Architecture Gate：待送（裁 OD-1 + 審 §唯一 cast）。
-> - Codex Plan Gate：待送。
+> - 2026-06-12 Claude plan 自審到零 blocker（`PLAN_SELF_REVIEW_CLEAN`，4 輪：r2 修 caller 檔數 19・補 strict-rung L39；r3 補 standalone probe 實證否決案、修正機制歸因為 weak-type 檢查）。
+> - 2026-06-12 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `1411b38`）** — **0 Blocking finding**。Approved scope（Codex 對帳基準）：① 14 errors → 0；② type-only；③ 僅 1 個 production 檔；④ **OD-1 採納**（`new Set<string>()` 入凍結 diff = 主方案）；⑤ **唯一允許 cast = `ROLE_BASE_SCOPES[role as string] ?? []`**。Non-blocking debts（確認登記、不擋本 PR）：(a) `hasExactScopeInToken` 無直接 unit 覆蓋；(b) strict-rung nullable 流入維持 SNC 已知債（見 §測試影響面）。
+> - Codex Plan Gate：待送（Codex 輪不回送 ChatGPT；若 Codex 對已 approve 架構決策有異議 → 回報 owner 裁定）。
 
 ## ⚠ auth-flow 熱區敏感聲明（最高優先紀律）
 
@@ -57,7 +58,7 @@ oidcScope（L220 default `''` 推斷 string）非 error、不動（無 error 驅
 
 ### Open Decisions（prose 裁決，[[feedback_gate1_forks_prose_ruling]]）
 
-- **OD-1 `new Set()` → `new Set<string>()`（L236 guard 分支 return；建議採納）**：非 error 驅動，但屬**本 PR 標註後新產生的型別劣化收口** — base 下 `effectiveScopesFromJwt` return 推斷 any（caller 全吃 any）；標 payload 後兩個 return 分支推斷分裂成 `Set<unknown> | Set<string>` union。現有 caller 全 `.has()`（union 上可呼叫、兩變體 spike 皆零 cascade 實證），但 union 留給未來 iteration-site caller（`for…of` / spread 元素變 unknown）一個 latent footgun。type-arg 是 expression-level annotation（非 return 標註，不違「不標 return」紀律），檔內 L133 `new Set<string>([...])` 既有慣例。**兩變體皆已 spike 實證**（採納 = 主方案凍結 diff；不採納 = 902 / 零新增 / tests-leaf exit 0 同樣全綠）→ Arch 否決即從凍結 diff 移除該行 type-arg（−1 編輯點、+21/−11），無需重新 spike。
+- **OD-1 `new Set()` → `new Set<string>()`（L236 guard 分支 return）— ✅ 2026-06-12 Arch 裁決：採納**（凍結 diff 維持主方案含 type-arg）。原 prose：非 error 驅動，但屬**本 PR 標註後新產生的型別劣化收口** — base 下 `effectiveScopesFromJwt` return 推斷 any（caller 全吃 any）；標 payload 後兩個 return 分支推斷分裂成 `Set<unknown> | Set<string>` union。現有 caller 全 `.has()`（union 上可呼叫、兩變體 spike 皆零 cascade 實證），但 union 留給未來 iteration-site caller（`for…of` / spread 元素變 unknown）一個 latent footgun。type-arg 是 expression-level annotation（非 return 標註，不違「不標 return」紀律），檔內 L133 `new Set<string>([...])` 既有慣例。**兩變體皆已 spike 實證**（採納 = 主方案凍結 diff；不採納 = 902 / 零新增 / tests-leaf exit 0 同樣全綠）→ Arch 否決即從凍結 diff 移除該行 type-arg（−1 編輯點、+21/−11），無需重新 spike。
 
 ## Spike 實證（A1，2026-06-12，已 revert）
 
@@ -80,7 +81,7 @@ oidcScope（L220 default `''` 推斷 string）非 error、不動（無 error 驅
 
 **輔助 probe（standalone tsc，否決案證據；throwaway 檔已刪）**：`declare const u: JWTPayload` 分別傳入兩種參數型別 — `{ scope?: unknown; role?: string } | string` → **TS2345 `Type 'JWTPayload' has no properties in common with type 'Precise'`**（weak-type 檢查；`| string` union 與 source index signature 皆不豁免）；`Record<string, unknown> | string` → **exit 通過**。
 
-**Spike 最終 diff（= coding 階段唯一允許落地的 source diff，13 編輯點，1 檔 +22/−12；OD-1 否決則移除 `new Set<string>()` 行的 type-arg）**：
+**Spike 最終 diff（= coding 階段唯一允許落地的 source diff，13 編輯點，1 檔 +22/−12；OD-1 已採納 → 含 `new Set<string>()` 的主方案即凍結版）**：
 
 ```diff
 --- functions/utils/scopes.ts
@@ -171,8 +172,14 @@ oidcScope（L220 default `''` 推斷 string）非 error、不動（無 error 驅
 - filtered forced tsc：scopes.ts 0 殘留、sort-diff 重放（移除 14+1 行、零新增）；`tsc -b tsconfig.tests.json --force` exit 0。
 - targeted test：`npx vitest run tests/scopes.test.ts`（38 例，unit lane 默認 config — 注意**不是** workers config）。
 - baseline file 不得 `--update`（天花板 1119/175 保持）。
-- **硬驗收**：source diff 與本 doc §Spike 最終 diff **逐行一致**（1 檔，不得多檔；OD-1 裁決後以裁決版為準）；超出 = scope creep = Gate fail。
-- Arch Gate 指定 Codex 檢查點：待 `CHATGPT_ARCH_APPROVED` 後併入本節。
+- **硬驗收**：source diff 與本 doc §Spike 最終 diff **逐行一致**（1 檔，不得多檔；OD-1 已採納 → 主方案含 `new Set<string>()` 即凍結版）；超出 = scope creep = Gate fail。
+- **Arch Gate approved-scope 對帳基準（`CHATGPT_ARCH_APPROVED` 附帶，Codex / code stage 逐項複核）**：
+  1. 14 errors → 0（不多不少；ratchet 916→902）
+  2. type-only（TS erase 後 runtime 行為不變、scope 字串與四張清單 byte-identical）
+  3. 僅 1 個 production 檔（`functions/utils/scopes.ts`，無 ambient / config / tests 改動）
+  4. OD-1 採納：`new Set<string>()` 在凍結 diff 內
+  5. 唯一允許 cast：`ROLE_BASE_SCOPES[role as string] ?? []`（全檔不得出現第二個 `as`）
+  6. Non-blocking debts 照登記不擴 scope：(a) `hasExactScopeInToken` 直接 unit 留 backlog；(b) strict-rung nullable 債留 strict 棒
 - merge 後 smoke：scope 守門全需 auth → credential-free smoke = home / login 200（chain 預設）；RBAC 全鏈以 unit 38 例 + CI 全量 integration 為準。
 
 ## 流程定位
