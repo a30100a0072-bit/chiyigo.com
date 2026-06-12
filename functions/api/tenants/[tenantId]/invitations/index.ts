@@ -61,7 +61,8 @@ export async function onRequestPost({ request, env, params }: { request: Request
     return res({ error: 'email and platform_role are required strings', code: 'ERR_VALIDATION' }, 400)
   }
 
-  const result = await createInvitation(env.chiyigo_db, { tenantId, email, platformRole, invitedByUserId: userId })
+  // inviterPlatformRole = the live, DB-derived role from the gate (NEVER from body/token claim) -- ISO-CROSS-01.
+  const result = await createInvitation(env.chiyigo_db, { tenantId, email, platformRole, invitedByUserId: userId, inviterPlatformRole: gate.role })
   switch (result.outcome) {
     case 'created':
       await safeUserAudit(env, {
@@ -82,6 +83,9 @@ export async function onRequestPost({ request, env, params }: { request: Request
     case 'already_member':
       await emitDenied(env, request, userId, tenantId, 'already_member')
       return res({ error: 'This email is already a member', code: 'ALREADY_MEMBER' }, 409)
+    case 'inviter_role_insufficient':
+      await emitDenied(env, request, userId, tenantId, 'inviter_role_insufficient')
+      return res({ error: 'Only a tenant owner can invite a manager-level member', code: 'INVITER_ROLE_INSUFFICIENT' }, 403)
     case 'tenant_ineligible':
       await emitDenied(env, request, userId, tenantId, 'tenant_ineligible')
       return res({ error: 'Tenant not eligible for invitations', code: 'TENANT_INELIGIBLE' }, 422)

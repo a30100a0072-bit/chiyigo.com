@@ -44,7 +44,7 @@ describe('createInvitation', () => {
   it('creates a pending invite with a hashed token + lowercased email', async () => {
     const owner = await user()
     const tid = await orgTenant()
-    const r = await createInvitation(db, { tenantId: tid, email: 'BOB@X.io', platformRole: 'member', invitedByUserId: owner.id })
+    const r = await createInvitation(db, { tenantId: tid, email: 'BOB@X.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     expect(r.outcome).toBe('created')
     if (r.outcome !== 'created') return
     expect(r.invitationId).toBeGreaterThan(0)
@@ -56,7 +56,7 @@ describe('createInvitation', () => {
   it('rejects platform_role=tenant_owner (cannot invite to owner)', async () => {
     const owner = await user()
     const tid = await orgTenant()
-    expect((await createInvitation(db, { tenantId: tid, email: 'a@x.io', platformRole: 'tenant_owner', invitedByUserId: owner.id })).outcome).toBe('invalid')
+    expect((await createInvitation(db, { tenantId: tid, email: 'a@x.io', platformRole: 'tenant_owner', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })).outcome).toBe('invalid')
   })
 
   it('rejects an already-active/suspended member email (already_member)', async () => {
@@ -64,14 +64,14 @@ describe('createInvitation', () => {
     const tid = await orgTenant()
     const bob = await user('bob@x.io')
     await seedMembership({ tenantId: tid, userId: bob.id, role: 'member', status: 'active' })
-    expect((await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })).outcome).toBe('already_member')
+    expect((await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })).outcome).toBe('already_member')
   })
 
   it('re-invite supersedes the old pending (exactly one live invite)', async () => {
     const owner = await user()
     const tid = await orgTenant()
-    const first = await createInvitation(db, { tenantId: tid, email: 'c@x.io', platformRole: 'member', invitedByUserId: owner.id })
-    const second = await createInvitation(db, { tenantId: tid, email: 'c@x.io', platformRole: 'tenant_admin', invitedByUserId: owner.id })
+    const first = await createInvitation(db, { tenantId: tid, email: 'c@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
+    const second = await createInvitation(db, { tenantId: tid, email: 'c@x.io', platformRole: 'tenant_admin', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     expect(first.outcome).toBe('created')
     expect(second.outcome).toBe('created')
     expect(await pendingCount(tid, 'c@x.io')).toBe(1)
@@ -81,7 +81,20 @@ describe('createInvitation', () => {
   it('rejects a non-active / non-org tenant (tenant_ineligible)', async () => {
     const owner = await user()
     const suspended = await orgTenant('suspended')
-    expect((await createInvitation(db, { tenantId: suspended, email: 'a@x.io', platformRole: 'member', invitedByUserId: owner.id })).outcome).toBe('tenant_ineligible')
+    expect((await createInvitation(db, { tenantId: suspended, email: 'a@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })).outcome).toBe('tenant_ineligible')
+  })
+
+  it('ISO-CROSS-01: a tenant_admin inviter cannot grant manager roles (owner-only); can invite a member', async () => {
+    const admin = await user()
+    const tid = await orgTenant()
+    const adminInvite = (email: string, role: string) =>
+      createInvitation(db, { tenantId: tid, email, platformRole: role, invitedByUserId: admin.id, inviterPlatformRole: 'tenant_admin' })
+    expect((await adminInvite('a@x.io', 'tenant_admin')).outcome).toBe('inviter_role_insufficient')
+    expect((await adminInvite('b@x.io', 'billing_admin')).outcome).toBe('inviter_role_insufficient')
+    expect(await pendingCount(tid, 'a@x.io')).toBe(0)                        // rejected -> no invite row
+    expect((await adminInvite('c@x.io', 'member')).outcome).toBe('created')  // admin CAN invite a plain member
+    // owner CAN grant manager-level roles
+    expect((await createInvitation(db, { tenantId: tid, email: 'd@x.io', platformRole: 'tenant_admin', invitedByUserId: admin.id, inviterPlatformRole: 'tenant_owner' })).outcome).toBe('created')
   })
 })
 
@@ -119,7 +132,7 @@ describe('acceptInvitation', () => {
 
   it('happy: consumes the invite + creates an active membership, exactly once', async () => {
     const { owner, tid, invitee } = await setup()
-    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed failed')
     const acc = await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id })
     // toMatchObject (not toEqual): the 'joined' outcome now carries `emitted` (PR5 5b emission identity).
@@ -134,7 +147,7 @@ describe('acceptInvitation', () => {
   it('email mismatch (different account email) -> email_mismatch', async () => {
     const { owner, tid } = await setup()
     const eve = await user('eve@x.io')
-    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed')
     expect((await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: eve.id })).outcome).toBe('email_mismatch')
     expect(await membership(tid, eve.id)).toBeNull()
@@ -142,7 +155,7 @@ describe('acceptInvitation', () => {
 
   it('matching email but UNVERIFIED -> email_mismatch', async () => {
     const { owner, tid, invitee } = await setup({ inviteeVerified: 0 })
-    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed')
     expect((await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id })).outcome).toBe('email_mismatch')
   })
@@ -169,7 +182,7 @@ describe('acceptInvitation', () => {
 
   it('accepted-by-self replay: ACTIVE -> replay; SUSPENDED -> membership_not_active; OFFBOARDED -> already_resolved (R3)', async () => {
     const { owner, tid, invitee } = await setup()
-    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed')
     expect((await acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id })).outcome).toBe('joined')
 
@@ -190,7 +203,7 @@ describe('acceptInvitation', () => {
 
   it('concurrent double-accept of the same token -> exactly one joins, exactly one membership row', async () => {
     const { owner, tid, invitee } = await setup()
-    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed')
     const [r1, r2] = await Promise.all([
       acceptInvitation(db, { rawToken: inv.rawToken, acceptingUserId: invitee.id }),
@@ -210,7 +223,7 @@ describe('acceptInvitation', () => {
   // pre-fix RED, so we force the exact race with a one-shot db.batch spy + a production-equivalent winner.
   it('same-user concurrent loser -> replay (NOT expired) and writes neither membership nor member.joined', async () => {
     const { owner, tid, invitee } = await setup()
-    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed')
     const tokenHash = await hashToken(inv.rawToken)
 
@@ -233,7 +246,7 @@ describe('acceptInvitation', () => {
 
   it('same-user concurrent loser whose membership is now suspended -> membership_not_active (NOT expired)', async () => {
     const { owner, tid, invitee } = await setup()
-    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed')
     const tokenHash = await hashToken(inv.rawToken)
 
@@ -251,7 +264,7 @@ describe('acceptInvitation', () => {
 
   it('same-user concurrent loser whose membership was offboarded -> already_resolved (NOT expired)', async () => {
     const { owner, tid, invitee } = await setup()
-    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'bob@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed')
     const tokenHash = await hashToken(inv.rawToken)
 
@@ -274,7 +287,7 @@ describe('revokeInvitation + list', () => {
     const owner = await user()
     const tid = await orgTenant()
     const otherTid = await orgTenant()
-    const inv = await createInvitation(db, { tenantId: tid, email: 'd@x.io', platformRole: 'member', invitedByUserId: owner.id })
+    const inv = await createInvitation(db, { tenantId: tid, email: 'd@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     if (inv.outcome !== 'created') throw new Error('seed')
     // cross-tenant guard: revoking via the wrong tenant id -> not_found
     expect((await revokeInvitation(db, { tenantId: otherTid, invitationId: inv.invitationId, actorUserId: owner.id })).outcome).toBe('not_found')
@@ -286,8 +299,8 @@ describe('revokeInvitation + list', () => {
   it('lists pending invites (DTO, no token_hash)', async () => {
     const owner = await user()
     const tid = await orgTenant()
-    await createInvitation(db, { tenantId: tid, email: 'e1@x.io', platformRole: 'member', invitedByUserId: owner.id })
-    await createInvitation(db, { tenantId: tid, email: 'e2@x.io', platformRole: 'tenant_admin', invitedByUserId: owner.id })
+    await createInvitation(db, { tenantId: tid, email: 'e1@x.io', platformRole: 'member', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
+    await createInvitation(db, { tenantId: tid, email: 'e2@x.io', platformRole: 'tenant_admin', invitedByUserId: owner.id, inviterPlatformRole: 'tenant_owner' })
     const list = await listPendingInvitations(db, tid)
     expect(list.length).toBe(2)
     expect(Object.keys(list[0])).not.toContain('token_hash')

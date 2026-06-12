@@ -21,7 +21,7 @@ describe('[PR5-5b] member.invited emission', () => {
   it('createInvitation emits member.invited with the REAL (post-insert) invitationId + valid contract', async () => {
     const inviter = await seedUser({ email: 'owner@x.io' })
     const t = await seedTenant({ type: 'organization' })
-    const r = await createInvitation(db, { tenantId: t.id, email: 'invitee@x.io', platformRole: 'member', invitedByUserId: inviter.id })
+    const r = await createInvitation(db, { tenantId: t.id, email: 'invitee@x.io', platformRole: 'member', invitedByUserId: inviter.id, inviterPlatformRole: 'tenant_owner' })
     expect(r.outcome).toBe('created')
     const invitationId = r.outcome === 'created' ? r.invitationId : 0
     const sk = `tenant:${t.id}:member:invitee@x.io`
@@ -39,8 +39,8 @@ describe('[PR5-5b] member.invited emission', () => {
   it('re-invite (same email supersedes) emits a SECOND member.invited at contiguous seq 2', async () => {
     const inviter = await seedUser({ email: 'owner@x.io' })
     const t = await seedTenant({ type: 'organization' })
-    await createInvitation(db, { tenantId: t.id, email: 'invitee@x.io', platformRole: 'member', invitedByUserId: inviter.id })
-    await createInvitation(db, { tenantId: t.id, email: 'invitee@x.io', platformRole: 'tenant_admin', invitedByUserId: inviter.id })
+    await createInvitation(db, { tenantId: t.id, email: 'invitee@x.io', platformRole: 'member', invitedByUserId: inviter.id, inviterPlatformRole: 'tenant_owner' })
+    await createInvitation(db, { tenantId: t.id, email: 'invitee@x.io', platformRole: 'tenant_admin', invitedByUserId: inviter.id, inviterPlatformRole: 'tenant_owner' })
     const out = await rows(`tenant:${t.id}:member:invitee@x.io`)
     expect(out.map(r => r.stream_seq)).toEqual([1, 2])
     expect(out.map(r => r.event_type)).toEqual(['member.invited', 'member.invited'])

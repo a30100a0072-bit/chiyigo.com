@@ -132,6 +132,35 @@ describe('POST /api/tenants/:tenantId/invitations (invite)', () => {
     const r = await call(invite, req('POST', await token(ownerId), { email: 'b@x.io', platform_role: 'member', x: 1 }), { tenantId: String(tenantId) })
     expect(r.status).toBe(400)
   })
+
+  // ISO-CROSS-01: the endpoint must derive inviterPlatformRole from the LIVE gate role (DB membership), not the
+  // token's global role. The actor's token role is 'player' (token()); only the seeded tenant_admin membership
+  // drives the decision -- this exercises the gate.role wiring end-to-end (Codex Code-Gate binding #2).
+  it('tenant_admin inviting a manager role -> 403 INVITER_ROLE_INSUFFICIENT + member.denied; no invite row', async () => {
+    const { tenantId } = await orgWithOwner()
+    const admin = await user()
+    await seedMembership({ tenantId, userId: admin.id, role: 'tenant_admin', status: 'active' })
+    const r = await call(invite, req('POST', await token(admin.id), { email: 'newadmin@x.io', platform_role: 'tenant_admin' }), { tenantId: String(tenantId) })
+    expect(r.status).toBe(403)
+    expect((await r.json() as { code: string }).code).toBe('INVITER_ROLE_INSUFFICIENT')
+    expect(await auditCount('member.denied')).toBe(1)
+    const inv = await db.prepare(`SELECT COUNT(*) AS c FROM invitations WHERE tenant_id = ? AND email = 'newadmin@x.io'`).bind(tenantId).first<{ c: number }>()
+    expect(Number(inv?.c)).toBe(0)
+  })
+
+  it('tenant_admin CAN still invite a plain member -> 201 (regression)', async () => {
+    const { tenantId } = await orgWithOwner()
+    const admin = await user()
+    await seedMembership({ tenantId, userId: admin.id, role: 'tenant_admin', status: 'active' })
+    const r = await call(invite, req('POST', await token(admin.id), { email: 'plain@x.io', platform_role: 'member' }), { tenantId: String(tenantId) })
+    expect(r.status).toBe(201)
+  })
+
+  it('owner CAN invite a manager role -> 201 (regression)', async () => {
+    const { tenantId, ownerId } = await orgWithOwner()
+    const r = await call(invite, req('POST', await token(ownerId), { email: 'mgr@x.io', platform_role: 'tenant_admin' }), { tenantId: String(tenantId) })
+    expect(r.status).toBe(201)
+  })
 })
 
 describe('POST /api/invitations/accept', () => {

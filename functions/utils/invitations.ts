@@ -18,6 +18,7 @@
 
 import { generateSecureToken, hashToken } from './crypto'
 import { emitMemberInvited, emitMemberJoined, type EmitIdentity } from './domain-event-emit'
+import { type PlatformRole } from './tenant-context'
 
 type ChiyigoDb = Env['chiyigo_db']
 
@@ -25,6 +26,8 @@ const MAX_EMAIL_LEN = 320
 const DEFAULT_TTL_SECONDS = 7 * 24 * 3600   // 7 days
 const MAX_TTL_SECONDS = 30 * 24 * 3600      // 30 days
 const INVITABLE_ROLES: ReadonlySet<string> = new Set(['tenant_admin', 'billing_admin', 'member'])
+// ISO-CROSS-01: granting a manager-level role is owner-only (mirrors the OWNER_ONLY gate on PATCH /role).
+const OWNER_ONLY_INVITE_ROLES: ReadonlySet<string> = new Set(['tenant_admin', 'billing_admin'])
 // well-formed enough for an invite address; the endpoint may validate more strictly at the boundary.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -34,6 +37,7 @@ export type InviteCreateOutcome =
   | { outcome: 'created'; invitationId: number; rawToken: string; email: string; platformRole: string; emitted: EmitIdentity }
   | { outcome: 'already_member' }                 // email already maps to an active/suspended member
   | { outcome: 'tenant_ineligible' }              // not an active organization tenant
+  | { outcome: 'inviter_role_insufficient' }      // ISO-CROSS-01: only an owner may invite a manager-level role
   | { outcome: 'invalid'; code: string }
 
 export type InviteAcceptOutcome =
@@ -104,6 +108,8 @@ export interface CreateInvitationInput {
   email: string
   platformRole: string
   invitedByUserId: number
+  /** Live platform_role of the inviter (from the endpoint gate). Manager-level invites are owner-only (ISO-CROSS-01). */
+  inviterPlatformRole: PlatformRole
   ttlSeconds?: number
 }
 
@@ -111,6 +117,12 @@ export async function createInvitation(db: ChiyigoDb, input: CreateInvitationInp
   if (!input || typeof input !== 'object') return { outcome: 'invalid', code: 'ERR_VALIDATION' }
   if (!isPositiveInt(input.tenantId) || !isPositiveInt(input.invitedByUserId)) return { outcome: 'invalid', code: 'ERR_VALIDATION' }
   if (typeof input.platformRole !== 'string' || !INVITABLE_ROLES.has(input.platformRole)) return { outcome: 'invalid', code: 'ERR_VALIDATION' }
+  // ISO-CROSS-01: inviting someone as a manager-level role (tenant_admin/billing_admin) is owner-only, aligning
+  // with the OWNER_ONLY gate on PATCH /role -- otherwise a tenant_admin could mint peer managers via invitation
+  // what they cannot do via promotion. deny-by-default: any non-owner inviter is rejected for these roles.
+  if (OWNER_ONLY_INVITE_ROLES.has(input.platformRole) && input.inviterPlatformRole !== 'tenant_owner') {
+    return { outcome: 'inviter_role_insufficient' }
+  }
   if (typeof input.email !== 'string') return { outcome: 'invalid', code: 'ERR_VALIDATION' }
   const email = normalizeEmail(input.email)
   if (email.length === 0 || email.length > MAX_EMAIL_LEN || !EMAIL_RE.test(email)) return { outcome: 'invalid', code: 'ERR_VALIDATION' }
