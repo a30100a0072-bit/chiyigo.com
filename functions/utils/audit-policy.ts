@@ -310,6 +310,7 @@ const READ_AUDIT = [
   'admin.deals.exported',                      // PR 1.2：admin CSV export deals
   'admin.deals.read',                          // PR 1.2：admin 讀 deals list
   'admin.payment_webhook_dlq.read',
+  'domain.event.dlq_list',                     // EVT-001b：admin 讀 event DLQ list（redacted，stream_key→hash）
   'admin.payments.intents.exported',           // PR 1.2：admin CSV export payment intents
   'admin.payments.intents.read',               // PR 1.2：admin 讀 payment intents list
   'admin.refund_requests.read',

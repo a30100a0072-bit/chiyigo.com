@@ -36,11 +36,16 @@ async function seedOutbox(o: {
 async function seedProjection(streamKey: string, lastAppliedSeq: number, denied = 0): Promise<void> {
   await db.prepare(`INSERT INTO event_deny_state (stream_key, event_type, deny_effect, denied, tenant_id, last_applied_seq) VALUES (?, 'member.suspended', 'deny', ?, 1, ?)`).bind(streamKey, denied, lastAppliedSeq).run()
 }
-interface ConsumerReport { swept: number; claimed: number; delivered: number; noop: number; retried: number; dlq: number; gap: number; fenced: number; errors: unknown[] }
+interface ConsumerReport { swept: number; claimed: number; delivered: number; noop: number; retried: number; dlq: number; gap: number; fenced: number; blocked_backlog: number; oldest_blocked_age_s: number; dlq_unreplayed: number; errors: unknown[] }
 async function runConsumer(): Promise<{ status: number; report: ConsumerReport }> {
   const req = new Request('http://x/api/admin/cron/event-outbox', { method: 'POST', headers: { Authorization: 'Bearer test-cron-secret', 'Content-Type': 'application/json' } })
   const resp = await onRequestPost({ request: req, env })
   return { status: resp.status, report: (await resp.json()) as ConsumerReport }
+}
+// EVT-001: read the latest consumer_run audit (severity + parsed data) to assert the standing-state warn signal.
+async function consumerRunAudit(): Promise<{ severity: string; data: Record<string, unknown> } | null> {
+  const r = await db.prepare(`SELECT severity, event_data FROM audit_log WHERE event_type='domain.event.consumer_run' ORDER BY id DESC LIMIT 1`).first<{ severity: string; event_data: string }>()
+  return r ? { severity: r.severity, data: JSON.parse(r.event_data) } : null
 }
 async function proj(streamKey: string) { return db.prepare(`SELECT denied, last_applied_seq FROM event_deny_state WHERE stream_key=?`).bind(streamKey).first<{ denied: number; last_applied_seq: number }>() }
 async function outbox(streamKey: string, seq: number) { return db.prepare(`SELECT status, attempts FROM event_outbox WHERE stream_key=? AND stream_seq=?`).bind(streamKey, seq).first<{ status: string; attempts: number }>() }
@@ -174,5 +179,66 @@ describe('[PR5-5b] event outbox consumer', () => {
     expect(r2.report.delivered).toBe(1)
     expect(await outbox(K, 1)).toEqual({ status: 'done', attempts: 2 })
     expect(await proj(K)).toEqual({ denied: 1, last_applied_seq: 1 })
+  })
+
+  // EVT-002: a transient fault on the PRIOR-READ (outside the old apply try/catch) must go to failTransition
+  // (retry+backoff), NOT escape to the per-row catch as an orphaned 'processing' row that burns the retry budget.
+  it('EVT-002: prior-read transient fault -> failTransition retry (pending), NOT orphaned processing', async () => {
+    await seedOutbox({ streamKey: K, seq: 1 })
+    const realPrepare = db.prepare.bind(db)
+    // Throw ONLY for the deliver() prior-read; pass every other prepare through to the real DB.
+    vi.spyOn(db, 'prepare').mockImplementation((sql: string) => {
+      if (typeof sql === 'string' && sql.includes('SELECT last_applied_seq, denied FROM event_deny_state')) {
+        throw new Error('transient d1 fault on prior-read')
+      }
+      return realPrepare(sql)
+    })
+    const r1 = await runConsumer()
+    vi.restoreAllMocks()
+    // post-fix: routed through failTransition -> retried, re-enqueued pending, NO orphan error.
+    // pre-fix RED: report.retried===0, errors.length===1, the row stuck in 'processing'.
+    expect(r1.report.retried).toBe(1)
+    expect(r1.report.errors.length).toBe(0)
+    expect(await outbox(K, 1)).toEqual({ status: 'pending', attempts: 1 })
+    // and it remains deliverable (never mis-DLQ'd): next run delivers it cleanly.
+    const r2 = await runConsumer()
+    expect(r2.report.delivered).toBe(1)
+    expect(await dlqCount('max_attempts')).toBe(0)
+    expect(await proj(K)).toEqual({ denied: 1, last_applied_seq: 1 })
+  })
+
+  // EVT-001: a stream blocked behind a dead (poison) predecessor is surfaced on EVERY run via blocked_backlog +
+  // a warn consumer_run audit, not just the run that first DLQ'd it.
+  it('EVT-001: blocked-behind-dead backlog surfaces a standing warn signal every run', async () => {
+    await seedOutbox({ streamKey: K, seq: 1, data: {} })          // poison: missing required fields -> validation_failed
+    await seedOutbox({ streamKey: K, seq: 2 })                    // valid successor, head-of-line blocked behind seq 1
+    const r1 = await runConsumer()
+    expect(r1.report.dlq).toBe(1)
+    expect((await outbox(K, 1))!.status).toBe('dead')
+    expect(r1.report.blocked_backlog).toBe(1)
+    expect(r1.report.oldest_blocked_age_s).toBeGreaterThanOrEqual(0)
+    expect(r1.report.dlq_unreplayed).toBe(1)
+    const a1 = await consumerRunAudit()
+    expect(a1?.severity).toBe('warn')
+    expect(a1?.data.blocked_backlog).toBe(1)
+
+    // a LATER run that DLQs nothing new still reports the blocked stream as a standing warn (the EVT-001 point).
+    const r2 = await runConsumer()
+    expect(r2.report.dlq).toBe(0)
+    expect(r2.report.claimed).toBe(0)            // seq 2 stays head-of-line blocked
+    expect(r2.report.blocked_backlog).toBe(1)
+    const a2 = await consumerRunAudit()
+    expect(a2?.severity).toBe('warn')            // still warn, not back to info
+  })
+
+  // EVT-001: a clean run with no DLQ and no blocked stream stays info (no false alarm).
+  it('EVT-001: clean run -> info severity, blocked_backlog 0', async () => {
+    await seedOutbox({ streamKey: K, seq: 1 })
+    const r = await runConsumer()
+    expect(r.report.delivered).toBe(1)
+    expect(r.report.blocked_backlog).toBe(0)
+    expect(r.report.dlq_unreplayed).toBe(0)
+    const a = await consumerRunAudit()
+    expect(a?.severity).toBe('info')
   })
 })
