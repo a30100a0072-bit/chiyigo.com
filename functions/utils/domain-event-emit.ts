@@ -238,14 +238,22 @@ export interface AccountEmitInput {
   actorUserId: number
 }
 
-/** account.disabled — admin ban. data {sub}(bound); streamKey account:<sub>; tenant null; actor = the admin. */
-export function emitAccountDisabled(db: ChiyigoDb, input: AccountEmitInput, meta: EmitMeta): EmitResult {
+/**
+ * account.disabled — admin ban (no reason) OR self-delete (reason='account_deleted', EVT-003). data {sub}(bound) +
+ * optional {reason}(bound); streamKey account:<sub>; tenant null; actor = the admin (ban) or the user themselves
+ * (self-delete). reason is the frozen contract's OPTIONAL key, so omitting it (ban) is byte-identical to before.
+ */
+export function emitAccountDisabled(db: ChiyigoDb, input: AccountEmitInput, meta: EmitMeta, opts: { reason?: string } = {}): EmitResult {
   const sub = String(input.targetUserId)
   const actorSub = String(input.actorUserId)
-  const streamKey = deriveStreamKeyValidated('account.disabled', null, actorSub, { sub }, meta)
+  const hasReason = typeof opts.reason === 'string' && opts.reason.length > 0
+  const dataForValidation: Record<string, unknown> = hasReason ? { sub, reason: opts.reason } : { sub }
+  const streamKey = deriveStreamKeyValidated('account.disabled', null, actorSub, dataForValidation, meta)
+  const dataSql = hasReason ? `json_object('sub', ?, 'reason', ?)` : `json_object('sub', ?)`
+  const dataBinds: unknown[] = hasReason ? [sub, opts.reason] : [sub]
   return emitResult('account.disabled', streamKey, null, meta, [
     seqUpsert(db, streamKey),
-    outboxInsert(db, { eventId: meta.eventId, eventType: 'account.disabled', streamKey, tenantId: null, actorSub, occurredAt: meta.occurredAt }, `json_object('sub', ?)`, [sub]),
+    outboxInsert(db, { eventId: meta.eventId, eventType: 'account.disabled', streamKey, tenantId: null, actorSub, occurredAt: meta.occurredAt }, dataSql, dataBinds),
   ])
 }
 

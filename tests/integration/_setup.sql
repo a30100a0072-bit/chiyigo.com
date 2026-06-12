@@ -38,6 +38,15 @@ CREATE TABLE IF NOT EXISTS email_verifications (
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- password_resets：mirror prod migrations/0000_base.sql (EVT-003 exercises account/delete/confirm batch which
+-- DELETEs from this table -- absent from the test schema only because no test drove that handler before).
+-- NOTE keep this comment free of the statement-separator char -- resetDb splits _setup.sql on it.
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT    PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT    NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
