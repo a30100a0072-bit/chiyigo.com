@@ -1,6 +1,7 @@
 # EVT-003 修補 Plan：account hard-delete 事件化（delete-emit）
 
-> Gate State: **PLAN_REVISED**（Codex Plan Gate r1 = Revise Required；findings 已修，見 §8 → 送 Codex 確認）
+> Gate State: **CODEX_PLAN_APPROVED**（r2 APPROVE，無 blocker；下一步 Code → Code Gate）
+> **Codex r2 Code-Gate watch item**：§3-A-3b' 的 batch-level CAS 直測 helper **不得無謂擴大 public runtime surface**——測試組裝 statement 用既有 export（`emitAccountDisabled`/`emitMemberOffboarded` 等）或 test-local 組裝，不為測試新增 production export。
 > 來源 finding：`docs/audit/03-event-consistency.md` §2 EVT-003（P2）。
 > owner 裁決（2026-06-12 via GPT）：(1) reuse `account.disabled` + optional `reason:'account_deleted'`，不新增事件型別、不動 0051 CHECK；(2) **membership 殘留同一顆 PR 修**（同 transaction offboard + 每筆 emit `member.offboarded`）；(3) `users` hard-delete mutation 必加 CAS guard；repro 必覆蓋三件：delete 成功 emit、membership offboard emits、重複 delete 不重複 emit。
 > Dual Gate Workflow：本 plan 過 Codex Plan Gate 才進 Code。報告語言繁中；code identifier 保留原文。

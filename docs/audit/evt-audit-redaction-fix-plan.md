@@ -1,6 +1,6 @@
 # EVT-006 修補 Plan：admin/revoke device_uuid 稽核 redaction（audit-redaction tiny PR）
 
-> Gate State: **PLAN_REVISED**（Codex Plan Gate r1 = Revise Required；finding 已修，見 §5 → 送 Codex 確認）
+> Gate State: **CODEX_PLAN_APPROVED**（r2 APPROVE，無 blocker；下一步 Code → Code Gate）
 > 來源 finding：`docs/audit/03-event-consistency.md` §2 EVT-006（P3，trivial）。owner 裁決（2026-06-12）：tiny PR 窗內修。
 > Dual Gate Workflow：本 plan 過 Codex Plan Gate 才進 Code。
 

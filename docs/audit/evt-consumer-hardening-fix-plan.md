@@ -1,6 +1,7 @@
 # EVT-001 + EVT-002 修補 Plan：consumer 觀測補強 + 錯誤處理對齊（consumer-hardening）
 
-> Gate State: **PLAN_REVISED**（Codex Plan Gate r1 = Revise Required；finding 已修，見 §7 → 送 Codex 確認）
+> Gate State: **CODEX_PLAN_APPROVED**（r2 APPROVE，無 blocker；下一步 Code → Code Gate）
+> **Codex r2 Code-Gate watch item**：DLQ list 端點的 `before=<id>` 分頁須 **deterministic order**（明確 `ORDER BY id DESC`，cursor 對齊排序鍵；不可依賴隱式 rowid 順序）。
 > 來源 finding：`docs/audit/03-event-consistency.md` §2 EVT-001（P2）+ EVT-002（P2）。owner 裁決（2026-06-12）：兩條併一顆 PR（同檔 `event-outbox.ts`）。
 > Dual Gate Workflow：本 plan 過 Codex Plan Gate 才進 Code。報告語言繁中；code identifier 保留原文。
 
@@ -57,7 +58,7 @@ WHERE o.status = 'pending'
 ### 2.3 EVT-001b：`GET /api/admin/event-dlq` list 端點（新檔）
 
 - **Gate（§5 OD-1）**：`requireRole(admin)` + effective scope `admin:events:replay`（與 replay 同 scope；**不**要求 step-up——read-only、回應全 redacted；step-up 一次性 jti 留給 mutating replay）。per-user rate limit（同 replay 的 kind 或新 kind `event_dlq_list`）。
-- Query：`replayed=0`（預設只列未 replay）、cursor `before=<id>`、`LIMIT 50`。
+- Query：`replayed=0`（預設只列未 replay）、cursor `before=<id>`、`LIMIT 50`。**deterministic order（Codex r2 watch）**：`ORDER BY id DESC`（id = AUTOINCREMENT PK，全序）；`before=<id>` 譯為 `WHERE id < ?`，cursor 鍵與排序鍵同為 `id`，不依賴隱式 rowid。回 `next_before`（本頁最後一列 id）供下一頁。
 - 回應 DTO（**INV-EVT-9 紀律**）：`id, event_id, event_type, stream_seq, tenant_id, dlq_reason, attempts, failed_at, replayed_at, stream_key_hash`（`hashToken(stream_key)`）、`last_error`（截 200 字）。**絕不回 raw stream_key / data_json**。
 - audit：`domain.event.dlq_list`（info，counts only）。
 
