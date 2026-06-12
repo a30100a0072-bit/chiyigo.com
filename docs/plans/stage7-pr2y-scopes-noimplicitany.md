@@ -58,7 +58,7 @@ oidcScope（L220 default `''` 推斷 string）非 error、不動（無 error 驅
 
 ### Open Decisions（prose 裁決，[[feedback_gate1_forks_prose_ruling]]）
 
-- **OD-1 `new Set()` → `new Set<string>()`（L236 guard 分支 return）— ✅ 2026-06-12 Arch 裁決：採納**（凍結 diff 維持主方案含 type-arg）。原 prose：非 error 驅動，但屬**本 PR 標註後新產生的型別劣化收口** — base 下 `effectiveScopesFromJwt` return 推斷 any（caller 全吃 any）；標 payload 後兩個 return 分支推斷分裂成 `Set<unknown> | Set<string>` union。現有 caller 全 `.has()`（union 上可呼叫、兩變體 spike 皆零 cascade 實證），但 union 留給未來 iteration-site caller（`for…of` / spread 元素變 unknown）一個 latent footgun。type-arg 是 expression-level annotation（非 return 標註，不違「不標 return」紀律），檔內 L133 `new Set<string>([...])` 既有慣例。**兩變體皆已 spike 實證**（採納 = 主方案凍結 diff；不採納 = 902 / 零新增 / tests-leaf exit 0 同樣全綠）→ Arch 否決即從凍結 diff 移除該行 type-arg（−1 編輯點、+21/−11），無需重新 spike。
+- **OD-1 `new Set()` → `new Set<string>()`（L236 guard 分支 return）— ✅ 2026-06-12 Arch 裁決：採納**（凍結 diff 維持主方案含 type-arg）。原 prose：非 error 驅動，但屬**本 PR 標註後新產生的型別劣化收口** — base 下 `effectiveScopesFromJwt` return 推斷 any（caller 全吃 any）；標 payload 後兩個 return 分支推斷分裂成 `Set<unknown> | Set<string>` union。現有 caller 全 `.has()`（union 上可呼叫、兩變體 spike 皆零 cascade 實證），但 union 留給未來 iteration-site caller（`for…of` / spread 元素變 unknown）一個 latent footgun。type-arg 是 expression-level annotation（非 return 標註，不違「不標 return」紀律），檔內 L133 `new Set<string>([...])` 既有慣例。**兩變體皆已 spike 實證**（量測記錄見 §Spike 實證）。裁決已完成：**主方案含 type-arg 為唯一允許落地版**。
 
 ## Spike 實證（A1，2026-06-12，已 revert）
 
@@ -123,11 +123,11 @@ oidcScope（L220 default `''` 推斷 string）非 error、不動（無 error 驅
 + type ScopeClaims = Record<string, unknown>
 +
 
-@@ L235-236
+@@ L235-236（第二行的 `new Set<string>()` type-arg = §OD-1 已採納項）
 - export function effectiveScopesFromJwt(payload) {
 -   if (!payload || typeof payload !== 'object') return new Set()
 + export function effectiveScopesFromJwt(payload: ScopeClaims | string) {
-+   if (!payload || typeof payload !== 'object') return new Set<string>()   ← §OD-1
++   if (!payload || typeof payload !== 'object') return new Set<string>()
 
 @@ L245
 - export function hasScope(payload, scope) {
