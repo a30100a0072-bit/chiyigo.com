@@ -280,8 +280,9 @@ describe('registry coverage', () => {
     //   guard 用；emission 本身走既有 domain.event.emitted，無新 domain.event.* type）→ 207。
     // Fork 2 Route B (2026-06-07) 加 1 個 auth.refresh.grace_orphan（security_signal；owner-ratified 1b = no downgrade）。
     //   grace-path device mismatch 走既有 auth.refresh.fail/grace_device_mismatch（reason_code，無新 event type）→ 208。
+    // EVT-001b (2026-06-12) 加 1 個 domain.event.dlq_list（read_audit；admin 讀 event DLQ list 端點）→ 209。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(208)
+    expect(_registrySize).toBe(209)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

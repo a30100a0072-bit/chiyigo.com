@@ -36,6 +36,10 @@ interface RunReport {
   run_id: string
   swept: number; claimed: number; delivered: number; noop: number
   retried: number; dlq: number; gap: number; fenced: number
+  // EVT-001: persistent observability of streams blocked behind a dead (poison/max-attempt/gap) predecessor, plus the
+  // standing unreplayed-DLQ depth. Computed once at run end (not per-row) so a blocked stream is visible EVERY run,
+  // not just on the run that first DLQ'd it.
+  blocked_backlog: number; oldest_blocked_age_s: number; dlq_unreplayed: number
   errors: { event_id: string; message: string }[]
 }
 
@@ -143,22 +147,31 @@ async function deliver(db: ChiyigoDb, env: Env, row: OutboxRow, runToken: string
     return
   }
 
-  const prior = await db.prepare(`SELECT last_applied_seq, denied FROM event_deny_state WHERE stream_key=?`).bind(row.stream_key).first<{ last_applied_seq: number; denied: number }>()
-  const priorSeq = prior ? prior.last_applied_seq : 0
-  const priorDenied: DenyBit = prior && prior.denied === 1 ? 1 : 0
-  const decision = projectionDecision(event, priorSeq, priorDenied)
-
-  if (decision.kind === 'gap') { await dlqTransition(db, env, row, runToken, 'gap_detected', `gap: expected ${decision.expected}, got ${row.stream_seq}`, report); return }
-
-  if (decision.kind === 'noop') { // already applied -> just finalize (owner-CAS)
-    const r = await db.prepare(`UPDATE event_outbox SET status='done', processed_at=datetime('now'), lease_until=NULL WHERE id=? AND status='processing' AND locked_by=?`).bind(row.id, runToken).run()
-    if (r.meta.changes === 1) { report.noop++; await auditEvent(env, 'domain.event.delivered', 'info', row, { idempotent: true }) }
-    else report.fenced++
-    return
-  }
-
-  // apply: ONE atomic batch -> projection upsert (CAS on last_applied_seq) + mark-done (owner-CAS AND changes()=1).
+  // EVT-002: the prior-read + decision + gap/noop/apply all run under ONE try whose catch goes to failTransition,
+  // identical to the apply path. Previously the prior-read SELECT and the noop mark-done sat OUTSIDE the try, so a
+  // transient D1 fault there escaped to the per-row catch in onRequestPost -> the row was left orphaned in
+  // 'processing' with attempts already incremented and NO backoff, burning the retry budget via lease-expiry reclaims
+  // until sweep mis-DLQ'd a deliverable event as 'max_attempts'. Now every transient fault on a claimed row gets the
+  // same bounded retry+backoff (failTransition DLQs only at MAX). gap/validation stay their own DLQ paths (poison,
+  // not transient); their internal db.batch is atomic, so a transient throw there rolls back and failTransition
+  // retries -- correct. safeUserAudit never throws to its caller, so the audit calls below cannot trigger a spurious
+  // retry of an already-committed row.
   try {
+    const prior = await db.prepare(`SELECT last_applied_seq, denied FROM event_deny_state WHERE stream_key=?`).bind(row.stream_key).first<{ last_applied_seq: number; denied: number }>()
+    const priorSeq = prior ? prior.last_applied_seq : 0
+    const priorDenied: DenyBit = prior && prior.denied === 1 ? 1 : 0
+    const decision = projectionDecision(event, priorSeq, priorDenied)
+
+    if (decision.kind === 'gap') { await dlqTransition(db, env, row, runToken, 'gap_detected', `gap: expected ${decision.expected}, got ${row.stream_seq}`, report); return }
+
+    if (decision.kind === 'noop') { // already applied -> just finalize (owner-CAS)
+      const r = await db.prepare(`UPDATE event_outbox SET status='done', processed_at=datetime('now'), lease_until=NULL WHERE id=? AND status='processing' AND locked_by=?`).bind(row.id, runToken).run()
+      if (r.meta.changes === 1) { report.noop++; await auditEvent(env, 'domain.event.delivered', 'info', row, { idempotent: true }) }
+      else report.fenced++
+      return
+    }
+
+    // apply: ONE atomic batch -> projection upsert (CAS on last_applied_seq) + mark-done (owner-CAS AND changes()=1).
     const b = await db.batch([
       db.prepare(
         `INSERT INTO event_deny_state (stream_key, event_type, deny_effect, denied, tenant_id, last_applied_seq)
@@ -190,7 +203,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const limit = posInt(env.EVENT_OUTBOX_CLAIM_LIMIT, 50)
   const backoff = backoffSeconds(env)
   const runToken = crypto.randomUUID()
-  const report: RunReport = { run_id: runToken, swept: 0, claimed: 0, delivered: 0, noop: 0, retried: 0, dlq: 0, gap: 0, fenced: 0, errors: [] }
+  const report: RunReport = { run_id: runToken, swept: 0, claimed: 0, delivered: 0, noop: 0, retried: 0, dlq: 0, gap: 0, fenced: 0, blocked_backlog: 0, oldest_blocked_age_s: 0, dlq_unreplayed: 0, errors: [] }
 
   await sweepExhausted(db, env, max, report)
   const claimed = await claim(db, runToken, max, leaseSecs, limit)
@@ -200,11 +213,30 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     catch (e) { report.errors.push({ event_id: row.event_id, message: String((e as { message?: unknown })?.message ?? e) }) }
   }
 
-  // run report audit -- COUNTS ONLY, no streamKeys.
+  // EVT-001: standing-state observability (NOT just this run's deltas). blocked = pending rows held behind a 'dead'
+  // predecessor on the same stream (the head-of-line-blocked backlog, which is silent in the per-run counts once the
+  // first DLQ audit fired); oldest_blocked_age_s = age of the oldest such row; dlq_unreplayed = current DLQ depth.
+  // COUNTS ONLY, no streamKeys (INV-EVT-9). A blocked stream now surfaces a warn on EVERY run until cleared.
+  const blockedRow = await db.prepare(
+    `SELECT COUNT(*) AS blocked,
+            CAST((julianday('now') - julianday(MIN(o.created_at))) * 86400 AS INTEGER) AS oldest_age_s
+       FROM event_outbox o
+      WHERE o.status = 'pending'
+        AND EXISTS (SELECT 1 FROM event_outbox d
+                     WHERE d.stream_key = o.stream_key AND d.stream_seq < o.stream_seq AND d.status = 'dead')`,
+  ).first<{ blocked: number; oldest_age_s: number | null }>()
+  const dlqRow = await db.prepare(`SELECT COUNT(*) AS n FROM event_dlq WHERE replayed_at IS NULL`).first<{ n: number }>()
+  report.blocked_backlog = blockedRow ? blockedRow.blocked : 0
+  report.oldest_blocked_age_s = blockedRow && blockedRow.oldest_age_s !== null ? blockedRow.oldest_age_s : 0
+  report.dlq_unreplayed = dlqRow ? dlqRow.n : 0
+
+  // run report audit -- COUNTS ONLY, no streamKeys. warn whenever this run DLQ'd OR a stream is blocked behind a dead
+  // row (the actionable signal). dlq_unreplayed alone does NOT raise severity (it would warn forever until an admin
+  // replays -- alarm fatigue; blocked_backlog already carries the "a stream is stuck" action).
   await safeUserAudit(env, {
     event_type: 'domain.event.consumer_run',
-    severity: report.dlq > 0 ? 'warn' : 'info',
-    data: { run_id: report.run_id, swept: report.swept, claimed: report.claimed, delivered: report.delivered, noop: report.noop, retried: report.retried, dlq: report.dlq, gap: report.gap, fenced: report.fenced, errors: report.errors.length },
+    severity: report.dlq > 0 || report.blocked_backlog > 0 ? 'warn' : 'info',
+    data: { run_id: report.run_id, swept: report.swept, claimed: report.claimed, delivered: report.delivered, noop: report.noop, retried: report.retried, dlq: report.dlq, gap: report.gap, fenced: report.fenced, blocked_backlog: report.blocked_backlog, oldest_blocked_age_s: report.oldest_blocked_age_s, dlq_unreplayed: report.dlq_unreplayed, errors: report.errors.length },
   })
   return res(report, report.errors.length ? 500 : 200)
 }

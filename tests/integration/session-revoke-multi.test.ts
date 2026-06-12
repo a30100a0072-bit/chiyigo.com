@@ -386,9 +386,10 @@ describe('[PR5-5d-2] resolveLargeNThreshold (strict) + registry guard', () => {
     }
   })
   it('audit-policy registry — large-N reuses existing endpoint types, no new type of its own', () => {
-    // PR5-5d-2 large-N itself adds NO audit type. The GLOBAL registry size is 208 as of Fork 2 Route B
-    // (auth.refresh.grace_orphan, 2026-06-07) — keep this in lockstep with audit-policy.test.ts's _registrySize assertion.
-    expect(_registrySize).toBe(208)
+    // PR5-5d-2 large-N itself adds NO audit type. The GLOBAL registry size is 209 as of EVT-001b
+    // (domain.event.dlq_list, 2026-06-12; was 208 at Fork 2 Route B) — keep this in lockstep with
+    // audit-policy.test.ts's _registrySize assertion.
+    expect(_registrySize).toBe(209)
   })
 })
 
