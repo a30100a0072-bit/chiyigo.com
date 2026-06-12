@@ -78,9 +78,32 @@ describe('[EVT-001b] GET /api/admin/event-dlq', () => {
     expect(page2.next_before).toBeNull()                    // last page (fewer than limit)
   })
 
-  it('non-admin -> 403', async () => {
+  it('malformed limit (abc / empty / 0) -> 200, falls back/clamps (no NaN bind, no 500)', async () => {
+    await seedDlq('ev-1'); await seedDlq('ev-2'); await seedDlq('ev-3')
+    // ?limit=abc and ?limit= must NOT 500: default to 50 -> all 3 rows.
+    const abc = await get(await accessToken(adminId), '?limit=abc')
+    expect(abc.status).toBe(200)
+    expect((await abc.json() as { rows: unknown[] }).rows.length).toBe(3)
+    const empty = await get(await accessToken(adminId), '?limit=')
+    expect(empty.status).toBe(200)
+    expect((await empty.json() as { rows: unknown[] }).rows.length).toBe(3)
+    // ?limit=0 clamps to 1.
+    const zero = await get(await accessToken(adminId), '?limit=0')
+    expect(zero.status).toBe(200)
+    expect((await zero.json() as { rows: unknown[] }).rows.length).toBe(1)
+  })
+
+  it('non-admin (player) -> 403 (role gate)', async () => {
     const { id } = await seedUser({ email: 'p@x.io', role: 'player' })
     expect((await get(await accessToken(id, 'player', 'p@x.io'))).status).toBe(403)
+  })
+
+  // Auth contract is role + scope. finance/support are below admin and lack admin:events:replay, so the deny path is
+  // exercised (they 403 at requireRole, before the scope check; the scope gate is defense-in-depth, unreachable-deny
+  // for a true admin token because effectiveScopesFromJwt re-derives admin's scopes from the role).
+  it('insufficient role/scope (finance) -> 403', async () => {
+    const { id } = await seedUser({ email: 'fin@x.io', role: 'finance' })
+    expect((await get(await accessToken(id, 'finance', 'fin@x.io'))).status).toBe(403)
   })
 
   it('no token -> 401', async () => {

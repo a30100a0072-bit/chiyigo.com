@@ -47,7 +47,10 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
 
   const url = new URL(request.url)
   const unreplayedOnly = url.searchParams.get('replayed') !== '1' // default: only unreplayed (the actionable set)
-  const limit = Math.min(PAGE_MAX, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10)))
+  // Validate `limit` as a non-negative integer BEFORE clamping. parseInt('abc'/''/null) -> NaN, and Math.min/max
+  // propagate NaN, which would bind NaN into `LIMIT ?` (D1 undefined behavior). A malformed value falls back to 50.
+  const limitRaw = url.searchParams.get('limit')
+  const limit = limitRaw !== null && /^\d+$/.test(limitRaw) ? Math.min(PAGE_MAX, Math.max(1, parseInt(limitRaw, 10))) : 50
   const beforeRaw = url.searchParams.get('before')
   const before = beforeRaw !== null && /^\d+$/.test(beforeRaw) ? parseInt(beforeRaw, 10) : null
 
