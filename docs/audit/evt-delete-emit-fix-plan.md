@@ -1,6 +1,6 @@
 # EVT-003 修補 Plan：account hard-delete 事件化（delete-emit）
 
-> Gate State: **PLAN_DRAFT**（自審後 → 送 Codex Plan Gate）
+> Gate State: **PLAN_REVISED**（Codex Plan Gate r1 = Revise Required；findings 已修，見 §8 → 送 Codex 確認）
 > 來源 finding：`docs/audit/03-event-consistency.md` §2 EVT-003（P2）。
 > owner 裁決（2026-06-12 via GPT）：(1) reuse `account.disabled` + optional `reason:'account_deleted'`，不新增事件型別、不動 0051 CHECK；(2) **membership 殘留同一顆 PR 修**（同 transaction offboard + 每筆 emit `member.offboarded`）；(3) `users` hard-delete mutation 必加 CAS guard；repro 必覆蓋三件：delete 成功 emit、membership offboard emits、重複 delete 不重複 emit。
 > Dual Gate Workflow：本 plan 過 Codex Plan Gate 才進 Code。報告語言繁中；code identifier 保留原文。
@@ -42,7 +42,7 @@ WHERE om.user_id = ? AND t.type <> 'personal'
                      AND o2.platform_role = 'tenant_owner' AND o2.status = 'active')
 ```
 
-命中 → **409 `SOLE_TENANT_OWNER`**（回 blocking tenant 數，不洩 tenant 名）＋ **token 不消耗**（user 轉移 ownership 後可重試同一信）。＝ **§7 Open Decision OD-1 的 Option A（推薦預設，等 owner 確認）**。
+命中 → **409 `SOLE_TENANT_OWNER`**（回 blocking tenant 數，不洩 tenant 名）＋ **token 不消耗**（user 轉移 ownership 後可重試同一信）。＝ **OD-1 Option A（owner 已裁，§7）**。本檢查覆蓋的是 **deterministic / pre-read 時點**的 sole-owner；TOCTOU 殘差見 §2.4。
 
 ### 2.3 membership 枚舉（read-only，pre-batch）
 
@@ -73,7 +73,8 @@ WHERE om.user_id = ? AND t.type <> 'personal' AND om.status IN ('active','suspen
 
 - `banBatch[0].meta.changes !== 1` 同款判定：**users UPDATE 0-row →（已被並發刪除）回 404 `ACCOUNT_NOT_FOUND`**，無事件（CAS 保證重複 delete 不重複 emit——owner repro 要件 3）。
 - 每個 membership DELETE 的 emit 由其自身 changes()=1 gating（多 streamKey 同 batch＝session-revoke multi-family 已證明 pattern）。
-- **TOCTOU 殘差（顯式可觀測，非靜默）**：若 2.2 與 batch 之間發生 race 使某 membership 的 last-owner guard 0-row → 該 membership 留存＋不發事件（= 現狀殘留行為），post-commit 逐筆檢查 batch results，0-row 的 membership 寫一筆 **critical audit `account.delete.membership_skipped`**（含 tenant_id）供人工跟進。帳號本體照常刪除（guard 保住「永不移除最後 active owner」不變量，殘差列可觀測）。
+- **TOCTOU 殘差（誠實定位：可觀測的人工補救債，非絕對 fail-closed）**：§2.2 的 409 只覆蓋 deterministic / pre-read 時點；若 pre-check 與 batch 之間發生 race 使某 membership 的 last-owner guard 0-row → **帳號照刪、該 membership 留存且不發事件**——statement guard 保住的是 row-level「永不移除最後 active owner」不變量，**不等於**避免「唯一 owner 是已刪 user」的管理孤兒態。此殘差以 post-commit 逐筆檢查 batch results、對 0-row membership 寫 **critical audit `account.delete.membership_skipped`**（含 tenant_id）轉為可觀測的人工補救項（manual remediation debt）。**Code Gate 必驗此 audit 路徑**（§5 AC）。
+- **既有 requisition soft-delete 原樣保留**：`confirm.ts:67-72` 的 best-effort `UPDATE requisition SET deleted_at...`（try/catch 吞 column-may-not-exist）**不動、不入 batch、不入 changes() 鏈**——batch 重寫時顯式保留，§3-B 加 regression 鎖定。
 
 ### 2.5 `emitAccountDisabled` 增加 optional reason
 
@@ -92,12 +93,18 @@ vitest + local D1（沿用 `event-outbox-emission.test.ts` harness + `_setup.sql
 **A. repro（pre-fix 紅 → fix 後綠）**
 1. **delete 成功 emit**：seed user B（active、1 refresh、1 local_account、delete token）→ confirm → assert `event_outbox` 有 `account.disabled` @ `account:<B>`，`json_extract(data_json,'$.reason')='account_deleted'`。pre-fix＝0 row（紅）。
 2. **membership offboard emits**：seed user C 為 org tenant T1 member + T2 suspended member（皆非 sole owner）→ confirm → assert `organization_members` 兩列被 DELETE + `event_outbox` 兩筆 `member.offboarded`（`tenant:T1:member:<C>`、`tenant:T2:member:<C>`）+ 1 筆 `account.disabled`。pre-fix＝membership 留存、0 事件（紅）。
-3. **重複 delete 不重複 emit**：對已刪 user 以第二張有效 token 再 confirm → 404 + outbox 計數不變（驗 CAS）；同 token 並發雙 confirm → 恰一個 200，outbox 恰一組事件（驗 2.1 atomic consume）。
+3. **重複 delete 不重複 emit**（拆兩案——batch 尾端 `DELETE FROM email_verifications WHERE user_id=?` 會清掉該 user 全部 token，故 sequential 第二張 token 在 lookup/consume 就被擋，**到不了 users CAS**）：
+   - **3a（token 防線）**：第一次 confirm 成功後，以同 token（或刪號前發的第二張 token——已被 batch 清掉）再 confirm → **400 `INVALID_DELETION_TOKEN`** 且 outbox 計數不變。
+   - **3b（pre-read 防線 regression）**：對已刪 user **人工 seed** 一張 post-delete 的有效 `email_verifications` token（直接 INSERT）→ confirm 在 `:38-44` pre-read 即回 **404 `ACCOUNT_NOT_FOUND`**、outbox 計數不變。（**精度註**：此路徑到不了 batch——pre-read 先擋；它驗的是第一道防線，非 CAS 本體。）
+   - **3b'（users CAS 本體，batch 層直測——確定性覆蓋 TOCTOU 窗）**：以與 handler 同款 helper 直接組 §2.4 的 statement 陣列，對同一 user **連跑兩次 batch**：第一次 users UPDATE changes=1 + 事件齊；第二次 **users CAS 0-row、seqUpsert/outboxInsert 全 0-row、outbox 計數不變**——不經 HTTP pre-read 干擾，直接證明 CAS + emit gating。
+   - **3c（atomic consume）**：同 token 並發雙 confirm → 恰一個 200，outbox 恰一組事件（驗 §2.1 `changes===1`）。
 
 **B. regression**
 - sole-owner：user D 為 org tenant 唯一 active owner → confirm → **409 `SOLE_TENANT_OWNER`**、token 未消耗（可重試）、零 mutation 零事件。
 - ban 路徑不回歸：ban 仍 emit 無 reason 的 `account.disabled`（emitAccountDisabled 簽名相容）。
 - consumer 端到端：跑 5b consumer → `event_deny_state` `account:<B>` denied=1、各 member streamKey denied=1（contiguity 過 real consumer）。
+- **requisition soft-delete 不回歸**：seed user 帶 1 筆 requisition → confirm 後 assert 該 requisition `deleted_at IS NOT NULL`（鎖定 §2.4 顯式保留項）。
+- `unban.ts` negative test（OD-3，owner 已核對 target lookup 有 `deleted_at IS NULL`）：對已刪 user unban → 404、無 `account.reenabled` emit。
 - 既有 51 affected tests 全綠。
 
 ---
@@ -120,8 +127,9 @@ vitest + local D1（沿用 `event-outbox-emission.test.ts` harness + `_setup.sql
 |---|---|
 | repro | §3-A 三件 pre-fix 紅、fix 後綠 |
 | 冪等 | 重複/並發 delete 恰一組事件、恰一次 token_version bump 路徑可證 |
-| 不變量 | 永不移除最後 active owner（409 前置 + statement guard 縱深）；personal tenant 不動 |
-| 觀測 | membership_skipped 殘差 critical audit；emit identities post-commit audit（hash redacted） |
+| 不變量 | deterministic sole-owner fail-closed（409 前置）+ row-level last-owner guard（batch 內縱深）；TOCTOU 殘差＝可觀測人工補救債（非絕對 fail-closed，§2.4）；personal tenant 不動 |
+| 觀測 | **`account.delete.membership_skipped` audit 路徑 Code Gate 必驗**；emit identities post-commit audit（hash redacted） |
+| 保留項 | requisition soft-delete（`confirm.ts:67-72`）原樣保留 + regression 鎖定 |
 | gates | typecheck / lint / 相關 integration tests / build:functions 全綠；ratchet 零新增 |
 
 ## 6. Non-goals
@@ -131,8 +139,16 @@ vitest + local D1（沿用 `event-outbox-emission.test.ts` harness + `_setup.sql
 - 不動 0051 CHECK、不新增事件型別（owner 裁決）。
 - 不改 personal tenant 生命週期（0047 CHECK 結構性排除）。
 
-## 7. Open Decisions
+## 7. Resolved Decisions（owner 2026-06-12 定案）
 
-- **OD-1（owner 裁，本 plan 預設 A）**：sole-owner org tenant 的刪號行為——**A=409 fail-closed（推薦）** / B=照刪留無主 tenant / C=連 tenant 一起處置。利弊見審計報告交接（A 保不變量、可重試；代價＝sole owner 需先轉移 ownership 才能自助刪號）。
-- **OD-2（Codex 可裁）**：N>17 memberships → 409 overflow（推薦：簡單、原子性完整、現實不可達）vs 分 chunk forward-progress（session-revoke 同款；複雜度高、跨 chunk 非原子）。
-- **OD-3（Code 階段驗證）**：`unban.ts` target lookup 是否 `deleted_at IS NULL`（防「對已刪帳號 unban → 發 reenabled undeny」）；若無，加一行 guard + negative test（同 PR 順手，2 行內）。
+- **OD-1 → A（fail-closed）**：B 會製造無主 org tenant；C scope 爆炸不入本 PR。覆蓋語意＝deterministic/pre-read sole-owner；TOCTOU 殘差為可觀測人工補救債（§2.4，Code Gate 驗 membership_skipped audit）。
+- **OD-2 → N>17 一律 409 overflow**（owner 同意；不做跨 chunk 非原子設計）。
+- **OD-3 → 已核對**：`functions/api/admin/users/[id]/unban.ts` target lookup **已有** `deleted_at IS NULL`；Code 階段只補 negative test（§3-B），不加 guard。
+
+## 8. Codex Plan Gate r1 對照（2026-06-12）
+
+| Finding | 修訂 |
+|---|---|
+| 「第二張有效 token sequential → 404」預期不成立（batch 尾端清掉該 user 全部 token，sequential 第二張在 lookup/consume 就擋成 400） | §3-A-3 拆成 3a（token 防線→400）/ 3b（seeded post-delete token→pre-read 404 regression）/ 3b'（CAS 本體 batch 層直測——**自審補充**：Codex 建議的 seeded-token 路徑實際會先被 `:38-44` pre-read 擋下到不了 CAS，故 CAS 用 batch 直測拿確定性）/ 3c（同 token 並發 atomic consume） |
+| 漏寫既有 requisition soft-delete 保留（`confirm.ts:67-72` best-effort try/catch） | §2.4 補顯式保留項 + §3-B regression + §5 AC 保留項列 |
+| OD-1 race 殘差不得宣稱絕對 fail-closed | §2.2/§2.4/§5 措辭降格：A covers deterministic/pre-read；TOCTOU 殘差＝observable manual-remediation debt；Code Gate 必驗 membership_skipped audit |

@@ -1,6 +1,6 @@
 # EVT-001 + EVT-002 修補 Plan：consumer 觀測補強 + 錯誤處理對齊（consumer-hardening）
 
-> Gate State: **PLAN_DRAFT**（自審後 → 送 Codex Plan Gate）
+> Gate State: **PLAN_REVISED**（Codex Plan Gate r1 = Revise Required；finding 已修，見 §7 → 送 Codex 確認）
 > 來源 finding：`docs/audit/03-event-consistency.md` §2 EVT-001（P2）+ EVT-002（P2）。owner 裁決（2026-06-12）：兩條併一顆 PR（同檔 `event-outbox.ts`）。
 > Dual Gate Workflow：本 plan 過 Codex Plan Gate 才進 Code。報告語言繁中；code identifier 保留原文。
 
@@ -78,9 +78,9 @@ WHERE o.status = 'pending'
 3. replay seq1 對應 dlq id 後 run ×2 → blocked_backlog 歸 0（poison 案例則維持 >0——用可修復的 max_attempts 案例做歸零驗證）。
 
 **C. DLQ list 端點**
-- admin + scope → 200，列出未 replay 列，欄位齊 + `stream_key_hash` 存在 + **無** `stream_key`/`data_json` 字樣（regression grep 斷言）；非 admin / 缺 scope → 403；cursor 分頁正確。
+- admin + scope → 200，列出未 replay 列，欄位齊；redaction 斷言走 **property 層級**（避免 grep 字樣撞到 `stream_key_hash` 自身）：每個 item assert `'stream_key' in item === false`、`'data_json' in item === false`、`typeof item.stream_key_hash === 'string'`；非 admin / 缺 scope → 403；cursor 分頁正確。
 
-**D. regression**：既有 event-outbox-consumer / event-dlq-replay 全綠（severity 與 report 欄位 additive，不動既有斷言對象）。
+**D. regression**：既有 event-outbox-consumer / event-dlq-replay 全綠（report 欄位 additive 不動既有欄位斷言；severity 語意變更若撞既有「後續 run = info」斷言，該斷言隨新語意顯式更新並列入 diff 說明）。
 
 ---
 
@@ -101,4 +101,8 @@ WHERE o.status = 'pending'
 
 ## 6. Acceptance Criteria
 
-typecheck / lint / build:functions / 相關 tests 全綠、ratchet 零新增；§3-A/B repro pre-fix 紅 post-fix 綠；severity additive 不破既有斷言；list 端點 INV-EVT-9 redaction 經 grep 斷言鎖定。
+typecheck / lint / build:functions / 相關 tests 全綠、ratchet 零新增；§3-A/B repro pre-fix 紅 post-fix 綠；report 欄位 additive、severity 語意變更顯式列 diff；list 端點 INV-EVT-9 redaction 以 property 層級斷言鎖定（無 `stream_key`/`data_json` property、`stream_key_hash` 為 string）。
+
+## 7. Codex Plan Gate r1 對照（2026-06-12）
+
+- **Finding「redaction 測試措辭自撞」→ 已修**：§3-C 由「grep 無 `stream_key` 字樣」（會撞 `stream_key_hash` 自身）改為 property 層級斷言：`'stream_key' in item === false`、`'data_json' in item === false`、允許並要求 `stream_key_hash`。§6 AC 同步。
