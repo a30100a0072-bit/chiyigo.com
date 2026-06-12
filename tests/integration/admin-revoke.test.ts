@@ -207,6 +207,29 @@ describe('POST /api/admin/revoke', () => {
     expect(r.status).toBe(400)
   })
 
+  // EVT-006：device_uuid 不得明文入 audit_log，須走 keyed-HMAC（與 devices/logout.ts 同欄位名）。
+  it("mode='device' audit_log redacts device_uuid to HMAC16 (EVT-006)", async () => {
+    const { id: adminId } = await seedUser({ email: 'a@x', role: 'admin' })
+    const { id: targetId } = await seedUser({ email: 'u@x' })
+    await seedRefresh(targetId, 'device-secret-uuid')
+
+    const adminTok = await adminToken(adminId)
+    const r = await call(adminTok, { mode: 'device', user_id: targetId, device_uuid: 'device-secret-uuid' })
+    expect(r.status).toBe(200)
+
+    const row = await env.chiyigo_db
+      .prepare(`SELECT event_data FROM audit_log WHERE event_type = 'admin.token.revoked.device' AND user_id = ? ORDER BY id DESC LIMIT 1`)
+      .bind(targetId).first()
+    const data = JSON.parse(row.event_data)
+    // 明文 device_uuid 不得落庫；改記 hmac16 + salted。
+    expect(data.device_uuid).toBeUndefined()
+    expect(typeof data.device_uuid_hmac16).toBe('string')
+    expect(data.device_uuid_hmac16.length).toBe(16)
+    expect(typeof data.salted).toBe('boolean')
+    // redaction 不可洩漏原值。
+    expect(row.event_data).not.toContain('device-secret-uuid')
+  })
+
   // ── audit log ────────────────────────────────────────────────────
   it('每次 revoke 寫入 admin_audit_log（action 對應 mode）', async () => {
     const { id: adminId } = await seedUser({ email: 'a@x', role: 'admin' })
