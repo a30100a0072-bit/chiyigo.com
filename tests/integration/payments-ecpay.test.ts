@@ -493,3 +493,64 @@ describe('端到端：checkout → ECPay webhook → succeeded', () => {
     expect(audit).not.toBeNull()
   })
 })
+
+// PAY-002 (P0) handler-level regression — docs/audit/pay-002-hotfix-plan.md §5 末列。
+// 證明「不是只修 adapter」：production 缺 creds 時 handler 真的 reject + critical audit + DLQ。
+describe('PAY-002 handler-level：prod 缺 creds → reject + critical audit + DLQ', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+
+  it('production 缺 ECPay creds 的 webhook → 0|vendor_misconfigured + critical audit + DLQ', async () => {
+    // prodEnv：production 但三把 creds 全缺、ECPAY_MODE 清空（蓋掉 test binding 的 'sandbox'）
+    // → getCreds fail-closed (secret_missing)。spread pattern 經 Codex Plan Gate r2 確認可接受。
+    const prodEnv = {
+      ...env,
+      ENVIRONMENT:       'production',
+      ECPAY_MODE:        undefined,
+      ECPAY_MERCHANT_ID: undefined,
+      ECPAY_HASH_KEY:    undefined,
+      ECPAY_HASH_IV:     undefined,
+      chiyigo_db:        env.chiyigo_db,
+    }
+
+    // payment_webhook_dlq 可能不被 resetDb 清 → 用 specific-filter before/after delta（Codex Code 注意點）。
+    const dlqBefore = await env.chiyigo_db.prepare(
+      `SELECT COUNT(*) AS c FROM payment_webhook_dlq WHERE vendor='ecpay' AND error_stage='vendor_misconfigured'`,
+    ).first()
+
+    // 攻擊者用公開金鑰自簽；但 prod 真 creds 缺 → getCreds 在驗章前就 fail-closed，故 mac 不影響結果。
+    const params: Record<string, string> = {
+      MerchantID: '3002607', MerchantTradeNo: 'cy-prod-misconfig',
+      RtnCode: '1', RtnMsg: 'Succeeded', TradeNo: 'TN_MISCFG',
+      TradeAmt: '100', PaymentType: 'Credit_CreditCard',
+    }
+    params.CheckMacValue = await ecpayCheckMacValue(params, SANDBOX.HashKey, SANDBOX.HashIV)
+
+    const resp = await webhookHandler({
+      request: ecpayWebhookReq(params), env: prodEnv, params: { vendor: 'ecpay' },
+    })
+
+    // (1) reject：ECPay failureResponse → 0|vendor_misconfigured（status 200，ECPay 看 body 不看 code）
+    expect(resp.status).toBe(200)
+    expect(await resp.text()).toBe('0|vendor_misconfigured')
+
+    // (2) critical audit：重用 payment.vendor.misconfigured；event_data JSON.parse 驗 reason_code / code / stage
+    const auditRow = await env.chiyigo_db.prepare(
+      `SELECT severity, event_data FROM audit_log
+        WHERE event_type='payment.vendor.misconfigured'
+        ORDER BY id DESC LIMIT 1`,
+    ).first()
+    expect(auditRow).toBeTruthy()
+    expect(auditRow.severity).toBe('critical')
+    const data = JSON.parse(auditRow.event_data)
+    expect(data.reason_code).toBe('vendor_creds_missing')
+    expect(data.code).toBe('secret_missing')
+    expect(data.stage).toBe('webhook')
+
+    // (3) DLQ：specific-filter delta +1（不吃舊 row）
+    const dlqAfter = await env.chiyigo_db.prepare(
+      `SELECT COUNT(*) AS c FROM payment_webhook_dlq WHERE vendor='ecpay' AND error_stage='vendor_misconfigured'`,
+    ).first()
+    expect(Number(dlqAfter.c) - Number(dlqBefore.c)).toBe(1)
+  })
+})

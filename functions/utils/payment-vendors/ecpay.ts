@@ -42,33 +42,57 @@ const SANDBOX_CREDS = {
   hashIV:     'EkRm7iFT261dpevs',
 }
 
+// PAY-002 (docs/audit/pay-002-hotfix-plan.md)：getCreds 解析失敗時拋此 typed error，
+// 帶機讀 `.code` 供 caller 寫 audit（禁 parse message）。
+class EcpayConfigError extends Error {
+  code: string
+  constructor(code: string, message: string) {
+    super(message)
+    this.name = 'EcpayConfigError'
+    this.code = code
+  }
+}
+
+// PAY-002 secure-by-default credential resolution。
+//
+// 為何用 ENVIRONMENT 而非 ECPAY_MODE 當 production SoT：
+//   ECPAY_MODE 在 prod 常未設 → 舊邏輯 `isProd = ECPAY_MODE==='prod'` 為 false →
+//   fail-OPEN 到程式內公開 sandbox HashKey/HashIV（L41-42，亦見 ECPay 官方文件），
+//   任何人可偽造 webhook 簽章。改用 wrangler.toml [vars] 的 ENVIRONMENT（prod 必設，
+//   .dev.vars 本機覆寫 'development'，miniflare test = 'test'）。
+//
+// 不變量：SANDBOX_CREDS 公開金鑰「有且僅有」非 production + 明確 ECPAY_MODE='sandbox'
+//   + 無真實 creds 一條路徑可達；其餘一律真實 creds 或 fail-closed throw。
 function getCreds(env) {
-  const isProd = env?.ECPAY_MODE === 'prod'
-  // Production 嚴格禁止 fallback 沙箱公開 creds：少設任何一把就 throw，
-  // 避免「mode=prod 但忘設金鑰 → 用 sandbox MerchantID 3002607 簽出 production
-  // checkout URL」這種會把訂單導去沙箱的隱性故障。Sandbox 仍允許未設環境變數
-  // 時用公開 creds 跑（方便本機 / staging 測試）。
-  if (isProd) {
-    const missing = []
-    if (!env?.ECPAY_MERCHANT_ID) missing.push('ECPAY_MERCHANT_ID')
-    if (!env?.ECPAY_HASH_KEY)    missing.push('ECPAY_HASH_KEY')
-    if (!env?.ECPAY_HASH_IV)     missing.push('ECPAY_HASH_IV')
-    if (missing.length > 0) {
-      throw new Error(`ECPay production credentials missing: ${missing.join(', ')}`)
+  const isProduction = env?.ENVIRONMENT === 'production'
+  const mode = env?.ECPAY_MODE
+  const hasAll3 = !!(env?.ECPAY_MERCHANT_ID && env?.ECPAY_HASH_KEY && env?.ECPAY_HASH_IV)
+
+  if (isProduction) {
+    // production：禁 sandbox 模式；必備三把真 creds；永不 fallback 公開金鑰。
+    if (mode === 'sandbox') {
+      throw new EcpayConfigError('mode_mismatch', 'ECPAY_MODE=sandbox is forbidden in production')
     }
-    return {
-      merchantId: env.ECPAY_MERCHANT_ID,
-      hashKey:    env.ECPAY_HASH_KEY,
-      hashIV:     env.ECPAY_HASH_IV,
-      isProd:     true,
+    if (!hasAll3) {
+      throw new EcpayConfigError('secret_missing', 'ECPay production credentials missing')
     }
+    return { merchantId: env.ECPAY_MERCHANT_ID, hashKey: env.ECPAY_HASH_KEY, hashIV: env.ECPAY_HASH_IV, isProd: true }
   }
-  return {
-    merchantId: env?.ECPAY_MERCHANT_ID ?? SANDBOX_CREDS.merchantId,
-    hashKey:    env?.ECPAY_HASH_KEY    ?? SANDBOX_CREDS.hashKey,
-    hashIV:     env?.ECPAY_HASH_IV     ?? SANDBOX_CREDS.hashIV,
-    isProd:     false,
+
+  // non-production
+  if (hasAll3) {
+    // 顯式真 creds（staging 對真帳號測試）；prod URL 由明確 ECPAY_MODE='prod' 決定。
+    return { merchantId: env.ECPAY_MERCHANT_ID, hashKey: env.ECPAY_HASH_KEY, hashIV: env.ECPAY_HASH_IV, isProd: mode === 'prod' }
   }
+  if (mode === 'sandbox') {
+    // ★ 唯一允許公開 sandbox creds 的路徑。
+    return { merchantId: SANDBOX_CREDS.merchantId, hashKey: SANDBOX_CREDS.hashKey, hashIV: SANDBOX_CREDS.hashIV, isProd: false }
+  }
+  // 非 production、無真 creds、又未明確 sandbox → fail-closed（不沉默 fallback 公開金鑰）。
+  throw new EcpayConfigError(
+    'sandbox_requires_explicit_mode',
+    'ECPay sandbox fallback requires explicit ECPAY_MODE=sandbox in non-production',
+  )
 }
 
 export function getEcpayCheckoutUrl(env) {
@@ -125,7 +149,16 @@ export const ecpayPaymentAdapter = {
    * 失敗回 ok:false；caller 應回非 "1|OK" 讓 ECPay 重送。
    */
   async parseWebhook(request, env) {
-    const { hashKey, hashIV } = getCreds(env)
+    // PAY-002：getCreds fail-closed throw（缺 creds / prod 禁 sandbox / sandbox 未明確）→
+    // 回 ok:false 讓 handler 走 critical audit + DLQ + reject（不在此 throw，否則 handler
+    // 對 parseWebhook 無外層 catch 會跳過 audit/DLQ 路徑）。.code 機讀供 handler audit。
+    let creds
+    try {
+      creds = getCreds(env)
+    } catch (e) {
+      return { ok: false, error: 'vendor_misconfigured', code: e?.code ?? 'config' }
+    }
+    const { hashKey, hashIV } = creds
     const rawBody = await request.text()
     const params = Object.fromEntries(new URLSearchParams(rawBody))
 
