@@ -500,6 +500,23 @@ describe('POST /api/admin/users/:id/unban', () => {
     expect(r.body.code).toBe('USER_NOT_BANNED')
   })
 
+  // EVT-003 OD-3: a deleted (hard-delete via account/delete/confirm) account must NOT be unbannable -- the target
+  // lookup's `deleted_at IS NULL` excludes it -> 404, and NO account.reenabled is emitted (a reenabled on a deleted
+  // account would wrongly undeny it in the projection / future RP pull).
+  it('deleted user → 404 USER_NOT_FOUND, no account.reenabled emit (OD-3)', async () => {
+    const { id: aid } = await seedUser({ email: 'a@x', role: 'admin' })
+    const { id: tid } = await seedUser({ email: 't@x' })
+    await setStatus(tid, 'banned')
+    await env.chiyigo_db.prepare(`UPDATE users SET deleted_at = datetime('now') WHERE id = ?`).bind(tid).run()
+    const r = await callUnban(await tokenFor(aid, 'admin'), tid)
+    expect(r.status).toBe(404)
+    expect(r.body.code).toBe('USER_NOT_FOUND')
+    const ev = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS c FROM event_outbox WHERE event_type = 'account.reenabled' AND stream_key = ?`)
+      .bind(`account:${tid}`).first()
+    expect(Number(ev.c)).toBe(0)
+  })
+
   it('解封同層 admin → 403 CANNOT_TARGET_EQUAL_OR_HIGHER_ROLE', async () => {
     const { id: a1 } = await seedUser({ email: 'a1@x', role: 'admin' })
     const { id: a2 } = await seedUser({ email: 'a2@x', role: 'admin' })

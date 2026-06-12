@@ -142,6 +142,8 @@ const IMMUTABLE = [
   ...ARCHIVE_OPS_IMMUTABLE,
   ...SYSTEM_OPS_IMMUTABLE,
   'account.delete',
+  'account.delete.membership_skipped',   // EVT-003：刪號 batch 內某 membership 因 last-owner guard/並發而留存（人工補救債）
+  'account.delete.membership_overflow',  // EVT-003：刪號者 org membership 數超過 batch 上限，fail-closed 409
   'account.email.verify',
   'account.password.change',
   'account.password.reset_request',
