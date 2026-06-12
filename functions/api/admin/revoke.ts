@@ -41,7 +41,7 @@ import { res } from '../../utils/auth'
 import { requireRole, actorOutranksTarget, isKnownRole, safeRoleString } from '../../utils/requireRole'
 import { revokeJti } from '../../utils/revocation'
 import { appendAuditLog } from '../../utils/audit-log'
-import { safeUserAudit, auditDomainEventEmitted } from '../../utils/user-audit'
+import { safeUserAudit, auditDomainEventEmitted, hashIdentifierForAudit } from '../../utils/user-audit'
 import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE, resolveLargeNThreshold } from '../../utils/session-revoke'
 
 const VALID_MODES = new Set(['jti', 'user', 'device'])
@@ -190,6 +190,12 @@ export async function onRequestPost({ request, env }) {
   // post-commit、best-effort：每個已 emit 的 family 記一筆 redacted domain.event.emitted（部分失敗時也對已 commit 的記）。
   for (const id of result.emittedIdentities) await auditDomainEventEmitted(env, id)
 
+  // EVT-006：device_uuid 是 client 識別符且參與 refresh device-binding（refresh.ts），不可明文入 audit_log（防 DB 外洩
+  // 後反查 + 配合被竊 refresh token 通過綁定）。改 keyed-HMAC，與 devices/logout.ts / device-alerts.ts 同 domain/同欄位名。
+  // deviceUuid 在 mode=device 恆 non-null（上方已驗，空值回 400），故無需 null 分支。
+  const sig = await hashIdentifierForAudit(env, 'device-uuid', deviceUuid)
+  const deviceAudit = { device_uuid_hmac16: sig.hex.slice(0, 16), salted: sig.salted }
+
   // chunk 部分失敗、前面 chunk 已 commit → forward-progress。寫一筆**獨立的 partial-failure 稽核**（partial:true +
   // counts），ops 才能區分「完整成功」與「只完成前幾個 chunk 後失敗」（plan §5）；回 NON-2xx + counts，client retry 剩下的。
   if (result.outcome === 'incomplete') {
@@ -197,7 +203,7 @@ export async function onRequestPost({ request, env }) {
       event_type: 'admin.token.revoked.device', severity: 'critical',
       user_id: targetId, request,
       data: {
-        partial: true, site: 'admin.revoke.device', admin_id: Number(user.sub), device_uuid: deviceUuid,
+        partial: true, site: 'admin.revoke.device', admin_id: Number(user.sub), ...deviceAudit,
         revoked: result.revoked, emitted: result.emitted, remaining: result.remaining,
         chunk_size: SESSION_REVOKE_CHUNK_SIZE, ...largeNData,
       },
@@ -214,7 +220,7 @@ export async function onRequestPost({ request, env }) {
   await safeUserAudit(env, {
     event_type: 'admin.token.revoked.device', severity: 'critical',
     user_id: targetId, request,
-    data: { admin_id: Number(user.sub), device_uuid: deviceUuid, refresh_revoked: result.revoked, ...largeNData },
+    data: { admin_id: Number(user.sub), ...deviceAudit, refresh_revoked: result.revoked, ...largeNData },
   })
   return res({ mode, user_id: targetId, device_uuid: deviceUuid, refresh_revoked: result.revoked })
 }
