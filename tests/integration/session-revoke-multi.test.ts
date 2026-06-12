@@ -362,6 +362,16 @@ describe('[PR5-5d-2 c5] admin/revoke mode=device — multi-family', () => {
     expect(a?.large_n).toBe(true)
     expect(a?.n).toBe(2)
     expect(a?.threshold).toBe(1)
+    // EVT-006: the partial-path audit must redact device_uuid identically to the ok path (this was the original
+    // leak site; ok + partial both go through the shared deviceAudit spread).
+    expect(a?.device_uuid).toBeUndefined()
+    expect(typeof a?.device_uuid_hmac16).toBe('string')
+    expect((a?.device_uuid_hmac16 as string).length).toBe(16)
+    expect(typeof a?.salted).toBe('boolean')
+    const rawPartial = await db
+      .prepare(`SELECT event_data FROM audit_log WHERE event_type = 'admin.token.revoked.device' AND user_id = ? ORDER BY id DESC LIMIT 1`)
+      .bind(target.id).first<{ event_data: string }>()
+    expect(rawPartial?.event_data).not.toContain('dev-Z')
   })
 })
 
