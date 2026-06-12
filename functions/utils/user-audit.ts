@@ -159,7 +159,16 @@ export async function safeUserAudit(env, entry) {
       // 多 ~100ms 延遲可接受；webhook URL 缺值 / Discord 失敗都吞掉不擋主流程。
       try { await notifyCritical(env, { ...entry, severity, ipHash, traceId }) } catch { /* swallow */ }
     }
-  } catch { /* 表不存在 / D1 暫時失效 — 不擋主流程 */ }
+  } catch (e) {
+    // audit 寫入失敗一律吞（不擋主流程），但**不再靜默**：留一筆 log 訊號供 tail / 監控偵測 audit-loss。
+    // event_type 可能非 string（如 caller 誤傳 function，ISO-ENUM-1 即此情形）→ 以 typeof 安全描述輸出；
+    // 此 log 本身不得 throw（已失敗路徑），故不記 entry.data（可能含 PII，且既有 redact 紀律）。
+    const etDesc = typeof entry?.event_type === 'string' ? entry.event_type : `<${typeof entry?.event_type}>`
+    console.error('[audit-loss] safeUserAudit swallowed an error; audit_log row not written', {
+      event_type: etDesc,
+      message: e instanceof Error ? e.message : String(e),
+    })
+  }
 }
 
 /**
