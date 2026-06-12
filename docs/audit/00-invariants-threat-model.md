@@ -35,10 +35,14 @@
 | 事件一致性 + DLQ | 正確性 | `domain-events.ts`、`domain-event-emit.ts`、`cron/event-outbox.ts`、`event-dlq/[id]/replay.ts`、`deny-state-projection.ts`、`session-revoke.ts`、`users/[id]/{ban,unban}.ts` | `03-event-consistency.md` |
 | 安全邊界 Security | 安全 | 4 個 `_middleware.ts`、`auth.ts`、`jwt.ts`、`revocation.ts`、`brute-force.ts`、`step-up.ts`、refresh token 系列、OAuth/OIDC surface、`webauthn.ts`、`turnstile.ts` | `04-security-boundary.md` |
 | 整合 Integration | 全部 | 跨領域鏈、雙 role 軸交互、completeness critic | `05-integration.md` |
+| 設定/環境漂移 + CI 供應鏈 Config（**P7，2026-06-12 擴編**） | 安全+穩定 | `functions/**` 全部 `env.X` 讀取點 vs `types/env.d.ts` vs `wrangler.toml`/`MANUAL_TODO.md` 三方對帳（PAY-002 根因類別整面掃）、`.github/workflows/*`（action pinning / secret 暴露面 / `pull_request_target` 類陷阱）、`migrations/*` up/down 完整性、`package.json` pin 政策 | `06-config-supply-chain.md` |
+| 前端 Client-side（**P8，2026-06-12 擴編**） | 安全 | `src/js/**`（token/refresh 處理、跨分頁 auth 同步 BroadcastChannel/Web Locks、device_uuid 紀律）、DOM XSS sinks（innerHTML / i18n 注入）、postMessage surface、CSP 回歸 | `07-frontend.md` |
 
 最終彙整 → `STAGE8-BACKLOG.md`（按 P0→P3 排序的待辦）。
 
 **深度權重**：金流與隔離最高（Tier-0 最重 + B2B 未來），各排 2 個工作段；事件與安全邊界各 1.5 段。
+
+**2026-06-12 擴編裁決（owner 第二輪拍板）**：實際節奏遠快於原 7 段預估（6/12 一天消化 P0+P1+hotfix+P2），故：(a) P3/P4 **加深**（並發競態實測、P4 全端點四欄矩陣、property/fuzz、P2 也強制 repro）；(b) **加寬** P7/P8 兩域；(c) DoS / rate-limit / 觀測整面（原 P9 候選）**併入 P4 矩陣**；(d) 跨 repo SSO seam（P10 候選）僅在全部完成仍有餘裕時再議；(e) **F-3 audit-archive pipeline 不審**（owner 2026-06-11 DORMANT/wait-only 紀律優先，留金流完整 smoke 那輪順帶複查）。
 
 ---
 
@@ -130,6 +134,21 @@
 - **INV-SEC-10** state-changing 跨域請求受 Origin / CORS credentials 控制；CSP 嚴格（Phase D 已完成，僅查回歸）。
 - **INV-SEC-11** secrets 不 hardcode；走 env / Wrangler secret。
 - **獵捕重點**：refresh rotation race；jti revocation（`revoked_jti`）；OAuth/OIDC surface（`authorize`/`code`/`end-session`/`backchannel`/`frontchannel-logout`/PKCE/nonce/aud）；webauthn register/login verify；rate limit 覆蓋缺口；較新端點的 input validation 缺口；`tryDecodeAuthSub` 確認永不被信任。
+- **加深要求（2026-06-12 擴編）**：(a) **全端點四欄矩陣** —— 列舉**全部** API 端點（不只 tenant-scoped），逐一記錄 auth gate × input validation × rate limit × audit 四欄（PAY-006 已證 `RateLimitKind` 覆蓋有洞，整面掃同類）；(b) refresh rotation race 寫**真並發 repro test**（非僅讀碼推理）；(c) 順帶複查 `webhooks/kyc/[vendor].ts` 是否 ISO-ENUM-2 同款 vendor 派發。
+
+### 設定/環境漂移 + CI 供應鏈（P7；INV 細目於該域起手讀檔後補全，此處為 hunt 種子）
+- **種子 1（PAY-002 根因類別）**：每個 `functions/**` 的 `env.X` 讀取點，X 必出現在 `types/env.d.ts` 的 `Env` 介面；缺漏即候選 finding（型別系統看不到 → 容易漏設 → 未設行為不可控）。
+- **種子 2**：每把 secret / flag 的「未設」行為必 fail-closed；`?? fallback` 到 hardcode 值（尤其公開值）一律候選 finding。
+- **種子 3**：`.github/workflows/*` —— action 必 pin（tag/SHA）、secret 不入 log、無 `pull_request_target` 類注入面、deploy 權限最小化。
+- **種子 4**：`migrations/*` up/down 配對完整；不可 rollback 變更是否依 baseline 明列。
+- **種子 5**：production 依賴 pin exact version、lockfile 一致。
+
+### 前端 Client-side（P8；INV 細目於該域起手讀檔後補全，此處為 hunt 種子）
+- **種子 1**：DOM XSS sinks —— `innerHTML` / `insertAdjacentHTML` / i18n 字串注入點整面列舉，逐一驗 source 是否可被 user / 外部資料污染。
+- **種子 2**：client 端 token/refresh 紀律回歸 —— refresh 只讀既有 `chiyigo.device_uuid`、缺則不打 refresh（read-only fail-closed）；不 client-abort 進行中的 rotation。
+- **種子 3**：跨分頁 auth 同步（BroadcastChannel / Web Locks）的訊息信任面；postMessage origin 檢查。
+- **種子 4**：CSP 回歸（Phase A–D 已完成，只查回歸與新增頁面是否守規）。
+- **種子 5**：前端不決定任何安全結果（payment success / auth state 均以 server 為準）的整面複查。
 
 ### 整合 Integration
 - 端到端鏈一致性：`refund→credit→outbox→deny`；`login→tenant resolve→token claims`；`ban→account.disabled→deny-state→enforcement`。
@@ -147,6 +166,8 @@
 | 隔離 | 讀/改他租戶或他人資料、自升權限 | `[tenantId]`/`[userId]`/`[id]` path param IDOR、token claim 偽造、admin 端點 | 跨租戶資料、membership、billing/credit、entitlement |
 | 事件 | 帳本不平 / deny 失效 / 重複套用 / 順序亂 | 並發 cron、replay 端點、corrupt outbox row、gap 注入 | event_deny_state 一致性、hard-revoke 有效性 |
 | 安全邊界 | token theft / replay / 提權 / brute force / session 劫持 | login、refresh、step-up、OAuth callback、webauthn、CRON | token 完整性、session、帳號、secret |
+| 設定/CI（P7） | 讓系統在錯誤設定下靜默 fail-open；經 CI/依賴鏈注入 | 未設 env / secret、workflow 觸發面、依賴升版 | secret、部署完整性、預設安全行為 |
+| 前端（P8） | XSS / client token 竊取 / UI 欺騙 | DOM 注入點、postMessage、跨分頁訊息 | session token、user 操作意圖 |
 
 ---
 
@@ -183,6 +204,14 @@ blast radius: 影響面
 - **執行模式**：每領域開一個 multi-agent **workflow**，fan-out 多個 Fable 5 subagent 並行找線索 + 對抗式驗證；Claude 主線負責系統級綜合與裁決。最大化 6/22 收窗前 Fable 5 吞吐。
 - **Gate 時機**：**Hybrid**。金流報告 + 本不變量 doc 完成後做一次**小型校準 Gate**（只驗 §2 心智模型對不對，趁只污染 1 份報告時便宜抓系統性誤讀）；末期（6/23–25）再做完整 Gate 審所有 finding。
 - **P0 處置**：live-exploitable P0 立即通報 + 提供 hotfix 選項，其餘照常 defer 進 backlog。
+- **擴編裁決（owner 2026-06-12 第二輪）**：
+  - **修復紅線**：P0–P2 **窗內修**（Dual Gate，沿 ISO-ENUM-1 / ISO-CROSS-01 / audit-loss 前例，於各域收尾時即修）；P3 留 Opus 6/26 起，但窗內先寫好 pre-fix-fail **regression pack**（expected-fail / `.skip` 標記進 repo，Opus 接手即修即驗）。
+  - **repro 門檻下修**：P2 finding 也強制 pre-fix-fail repro test（原僅 P0/P1）。
+  - **每域小校準 Gate**：P3、P4 報告完各做一次（原僅金流後一次）。
+  - **末期完整 Gate 提前進窗內**（目標 6/19–6/20），Gate findings 當場用 Fable 5 處置；6/23–25 變 buffer。
+  - **第二輪 loop-until-dry**：P5 completeness critic 後對缺口開第二輪 finder，連續兩輪零新發現才收（已知起手缺口：`admin/payments/webhook-dlq.ts`、`admin/payments/aggregate.ts`、`payment-return/ecpay.ts`）。
+  - **PAY-004 獨立 PR 窗內 land**（業務裁決已定案）。
+  - **Stage 7 維持暫停**：審計包接近完成時再由 owner 動態裁決是否解除。
 
 ---
 
