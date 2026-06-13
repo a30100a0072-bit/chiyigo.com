@@ -25,6 +25,7 @@ type RateLimitKind =
   | 'oauth_authorize'   // SEC-CEREMONY-DOS：authorize 端 pkce_sessions 寫入節流
   | 'webauthn'          // SEC-CEREMONY-DOS：webauthn login-options/login-verify ceremony 節流
   | '2fa'
+  | 'reset_2fa'         // SEC-RESET-2FA-BF：reset-password 的 TOTP 第二因子驗證節流（防無限暴破）
   | '2fa_setup'
   | '2fa_activate'
   | '2fa_disable'

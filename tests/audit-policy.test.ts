@@ -232,6 +232,17 @@ describe('classifyAuditEvent — P4 P2 hardening', () => {
   })
 })
 
+// P4 SEC-RESET-2FA-BF（2026-06-13）：reset-password TOTP 第二因子的失敗信號（security_signal）
+// + 節流命中（telemetry）顯式分類。
+describe('classifyAuditEvent — P4 SEC-RESET-2FA-BF', () => {
+  it.each([
+    ['account.password.reset.totp_fail',          AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['account.password.reset.totp_rate_limited',  AUDIT_CATEGORY.TELEMETRY],
+  ])('%s → %s', (e, expected) => {
+    expect(classifyAuditEvent(e)).toBe(expected)
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -298,8 +309,11 @@ describe('registry coverage', () => {
     // P4 SEC-CEREMONY-DOS + SEC-ADMIN-ENUM (2026-06-13) 加 4 個：
     //   admin.users.read / admin.metrics.read（read_audit；admin list/metrics 枚舉觀測）
     //   auth.authorize.rate_limited / webauthn.login.rate_limited（telemetry；ceremony 節流命中）→ 215。
+    // P4 SEC-RESET-2FA-BF (2026-06-13) 加 2 個：
+    //   account.password.reset.totp_fail（security_signal；reset TOTP 驗證失敗暴破信號）
+    //   account.password.reset.totp_rate_limited（telemetry；reset TOTP 節流命中）→ 217。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(215)
+    expect(_registrySize).toBe(217)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
