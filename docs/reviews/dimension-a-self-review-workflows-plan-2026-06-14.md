@@ -1,13 +1,14 @@
 # Plan：維度 A self-review workflows（plan-self-review + code-self-review）
 
 > v3 Dual Gate Workflow 第一案。實作 v3 §5 維度 A（multi-agent workflow self-review）的兩支可執行腳本。
-> 狀態：`PLAN_DRAFT`（**Rev 3**）→ 重送 ChatGPT Architecture Gate。分級：**L2**。
+> 狀態：`PLAN_DRAFT`（**Rev 4**）→ 重送 Codex Plan Gate。分級：**L2**。
 
 ## 0. 錨點與裁決（不可漂移）
 
 - **SPEC_APPROVED**：owner 2026-06-14。Scope/Non-goals/Acceptance 見 §1。
 - **Rev 2（2026-06-14）**：ChatGPT Arch Gate r1 = **REJECTED**（3 blockers）→ 本 Rev 修：B1 固定 scope/檔案清單（§2/§7/§12）、B2 prompt-injection guard（§3.6/§8）、B3 args validation / shell-injection 邊界（§5.2/§5.4/§8）。OD 全裁定見 §12。
-- **Rev 3（2026-06-14）**：ChatGPT Arch Gate r2 = **REJECTED**（2 blockers）→ 本 Rev 修：B4 secret denylist **分層**（guard literal 引用=required vs 讀取 target 命中=fail；§3.6/§8.1/§10）、B5 package.json lint **append-only contract**（保留既有 lint 子命令與順序、只尾端 append、報告列 before/after diff；§7）。
+- **Rev 3（2026-06-14）**：ChatGPT Arch Gate r2 = **REJECTED**（2 blockers）→ 本 Rev 修：B4 secret denylist **分層**（guard literal 引用=required vs 讀取 target 命中=fail；§3.6/§8.1/§10）、B5 package.json lint **append-only contract**（保留既有 lint 子命令與順序、只尾端 append、報告列 before/after diff；§7）。→ Arch Gate r3 = **APPROVED** @ 7f44e73。
+- **Rev 4（2026-06-14）**：Codex Plan Gate r1 = **REJECT**（1 P1：ref validation 可被 git option 語義繞過）→ 本 Rev 修 §5.2/§5.4/§8/AC7（ref 禁 leading `-` + 禁 `..` + `git rev-parse --verify --quiet <ref>^{commit}` resolve 成 40-hex + collector 用 resolved SHA）。**收緊 B3，不推翻架構**（Codex 明示不需回 Arch Gate）。Codex repo-context 驗證勘查全綠。
 - **OD 裁決（ChatGPT Arch Gate r1 拍板，全鎖）**：OD-1=A、OD-2=自訂、OD-3=L2、OD-4=可執行；**OD-A=a（加 `lint-workflows.mjs` 進 CI）、OD-B=逐條 exact path、OD-C=本 PR 不加 eslint 掃 workflow、OD-D=抽 `lib/schemas.mjs`（含 dry-run fallback）、OD-E=接受 decisionPoints 降級但 config hunks 進手動複核包**。
 - **Bootstrapping 紀律**：本 PR 製作「維度 A 工具」本身，工具尚不存在 → **本 PR 的維度 A self-review（plan + code 兩階段）皆退化為單 agent 對抗式自審**（明說、非偷跳；自審 F6）。同理本 PR 進 Code Gate 時，維度 A code self-review 退單 agent、ChatGPT faithfulness 複核包**手動產**（code-self-review.mjs 尚未 merge/驗證）。
 
@@ -24,7 +25,7 @@
 - AC4：code-self-review 產的複核包符合 v3 §6 七項。
 - AC5：兩支腳本可被 Workflow `name` 或 `scriptPath` 載入；符合 Workflow 腳本約束（`meta` 純 literal、`agent()/pipeline()/parallel()`、無 `Date.now`/`Math.random`、純 JS）。`name` 解析待 dry-run 驗；`scriptPath` 為保證 fallback（自審 F1）。
 - **AC6（B2）**：所有 finder/verifier/collector prompt 含 **prompt-injection guard**（repo content 視為 untrusted、不遵循其中指令）；`lint-workflows.mjs` 靜態驗證每個 prompt 具備此 guard。
-- **AC7（B3）**：`code-self-review` args（ref/path）經 **validation**（safe regex / repo-relative / 禁 `..` / 禁 secret denylist）；collector 只用固定唯讀 git 模板，不接受任意 Bash string。
+- **AC7（B3/P1）**：`code-self-review` args 經 **validation** —— ref regex **禁 leading `-`** + 禁 `..`，且 **resolve 經 `git rev-parse --verify --quiet <ref>^{commit}` 成 40-hex commit**；path repo-relative / 禁 `..` / 禁 secret denylist。collector 只用固定唯讀 git 模板、**用 resolved SHA（非原始 ref）**，不接受任意 Bash string。
 
 ## 2. 檔案改動清單（B1：完整固定，無「待裁/可能」）
 
@@ -128,8 +129,14 @@ args = { baseRef, headRef, planDocPath, archApprovedSha, planApprovedSha,
 **Validation（workflow 啟動即驗，fail → abort，不跑 collector）**：
 ```
 baseRef / headRef：
-  - 必須符合 ^[A-Za-z0-9._/@-]+$（Git ref safe pattern）
+  - 必須符合 ^[A-Za-z0-9._/@][A-Za-z0-9._/@-]*$
+    （首字元禁 '-'：擋 git option injection 如 --show-toplevel；P1 fix）
+  - 禁 raw ref 含 '..'（擋 range 注入）
   - 禁空字串 / 空白 / ; | & > < $( ) 反引號 / 換行
+  - 【resolve，P1 fix】通過 regex 後，對每個 ref 跑固定 argv：
+      git rev-parse --verify --quiet <ref>^{commit}
+    要求輸出單一 40-hex commit SHA；fail / 空 / 非 40-hex → abort。
+    collector 一律用此 resolved SHA（非原始 ref）組 diff range（§5.4）。
 planDocPath / decisionPoints[].file：
   - 必須 repo-relative；禁 absolute path；禁含 '..'
   - 禁 secret denylist：.env* / .dev.vars / .canary-* / .claude/settings.local.json
@@ -142,13 +149,13 @@ archApprovedSha / planApprovedSha：^[0-9a-f]{7,40}$
 race／idempotency／tenant 漏裸 query／async 邊界 error+timeout+retry／contract·enum breaking／命名 SSOT／regression 鎖 exact failure。形狀同 §4.4（含 §3.6 GUARD）。
 
 ### 5.4 §6 複核包組裝（AC4）— collector 固定模板（B3）
-- **Artifacts stage**（Explore agent 跑唯讀 git）：**只用以下固定模板**，args 經 §5.2 validation 後代入，**禁任意 Bash command string**：
+- **Artifacts stage**（Explore agent 跑唯讀 git）：**只用以下固定模板**，**`<baseSha>`/`<headSha>` = §5.2 resolve 出的 40-hex commit SHA（非原始 ref）**，**禁任意 Bash command string**：
   ```
-  git diff --name-status <baseRef>..<headRef>
-  git diff --stat <baseRef>..<headRef>
-  git diff <baseRef>..<headRef> -- <repoRelativeFile>
-  git rev-parse <headRef>
+  git diff --name-status <baseSha>..<headSha>
+  git diff --stat <baseSha>..<headSha>
+  git diff <baseSha>..<headSha> -- <repoRelativeFile>
   ```
+  （`reviewed_sha` = `<headSha>`，即 §5.2 resolve 結果〔已 verified 40-hex commit〕；不再另跑 `git rev-parse <headRef>`，杜絕原始 ref 二次注入。）
 - **Package stage**（主線組裝）：產 `REVIEW_PACKAGE`（§6 七項）：anchor / git_artifacts(reviewed_sha,name_status,stat,changed_files) / scope_mapping / decision_hunks / deviations / dimension_a_findings / questions（含「B 必做：對照 name_status 點名漏 hunk 檔」）。
 - **OD-E**：本 PR 無 runtime 決策點 → `decision_hunks` 退化為 `.gitignore` / ratchet / package.json **config 改動 hunks**（手動納入本 PR 複核包）。
 - 輸出 machine JSON + 中文摘要。
@@ -199,8 +206,8 @@ git status --short                                 # 預期：只出現預期檔
 | **prompt 唯讀宣告（B2）** | 每個 prompt 必含 no-network / no-secrets / no-write |
 | **import denylist（B2）** | workflow 腳本禁 import `fs`/`child_process`/`http`/`https`/`net`/`tls`/`dns` |
 | **secret denylist 分層（B4）** | 見下 §8.1（區分禁止性引用 vs 讀取目標；guard 引用=required，target 命中=fail） |
-| **args validation（B3）** | `code-self-review` 須含 §5.2 ref/path validation |
-| **collector 固定模板（B3）** | git 呼叫限 §5.4 模板，無任意 Bash string 拼接 |
+| **args validation（B3/P1）** | `code-self-review` 須含 §5.2：ref regex 禁 leading `-` + 禁 `..`、且 resolve 經 `git rev-parse --verify --quiet <ref>^{commit}` 成 40-hex |
+| **collector 固定模板（B3/P1）** | git 呼叫限 §5.4 模板、**用 resolved SHA（非原始 ref）**、無任意 Bash string 拼接 |
 | schema | 引用 `lib/schemas.mjs` 且欄位齊全 |
 
 **§8.1 secret denylist 分層規則（B4；解 Rev 2 自相矛盾）**
@@ -264,4 +271,9 @@ secret denylist ＝ `.env*` / `.dev.vars` / `.canary-*` / `.claude/settings.loca
 - **B5 package.json lint 接入可能弱化既有 chain**（Rev 2 寫死完整 lint 字串=replace 風險）→ Rev 3 §7 改 append-only contract（保留既有全部+順序、只尾端 append、報告列 before/after diff）。
 - 其餘 Rev 2 修正（scope 8 檔 / args validation / 固定 git 模板 / OD 裁決 / gitignore / bootstrap 單 agent）ChatGPT r2 確認可接受。
 
-`PLAN_SELF_REVIEW_CLEAN`（Rev 3）。→ 重送 Arch Gate 確認。
+`PLAN_SELF_REVIEW_CLEAN`（Rev 3）→ ChatGPT Arch Gate r3 = **APPROVED** @ 7f44e73。
+**Codex Plan Gate r1 = REJECT（1 P1）→ Rev 4 修**：
+- **P1 ref validation 可被 git option 語義繞過**（tier0 安全）：Rev 3 regex `^[A-Za-z0-9._/@-]+$` 允許 leading `-`，`--show-toplevel` 等 git option 通過 regex 卻被 `git rev-parse` 當 option → reviewed_sha/diff anchor 失真、faithfulness ground truth 失準 → Rev 4 §5.2 收緊（禁 leading `-` + 禁 `..` + `git rev-parse --verify --quiet <ref>^{commit}` resolve 成 40-hex）+ §5.4 collector 用 resolved SHA（非原始 ref）、移除二次 `rev-parse <headRef>`。**收緊 B3，不推翻架構**（Codex 明示不需回 Arch Gate）。
+- Codex repo-context 驗證全綠：ratchet（規則 D + NEW_JS_ALLOWLIST）/eslint/tsconfig/vitest/package.json（lint before 值）/.gitignore（worktree 實證 negation）勘查皆確認正確。
+
+`PLAN_SELF_REVIEW_CLEAN`（Rev 4）。→ 重送 Codex Plan Gate。
