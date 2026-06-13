@@ -23,7 +23,7 @@ import { generateSecureToken, hashToken } from '../../../../utils/crypto'
 import { getProvider } from '../../../../utils/oauth-providers'
 import { resolveAud } from '../../../../utils/cors'
 import { refreshCookie, readOAuthDeviceCookie, CLEAR_OAUTH_DEVICE_COOKIE } from '../../../../utils/cookies'
-import { safeUserAudit } from '../../../../utils/user-audit'
+import { safeUserAudit, hashIdentifierForAudit } from '../../../../utils/user-audit'
 import { safeAlertAnomalies } from '../../../../utils/device-alerts'
 import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../../utils/risk-score'
 import { sendRiskBlockedAlertEmail } from '../../../../utils/email'
@@ -81,7 +81,8 @@ async function handle(context) {
     .prepare(`
       DELETE FROM oauth_states
       WHERE state_token = ? AND expires_at > datetime('now')
-      RETURNING code_verifier, nonce, redirect_uri, platform, client_callback, aud
+      RETURNING code_verifier, nonce, redirect_uri, platform, client_callback, aud,
+                purpose, elevation_user_id, session_id, action
     `)
     .bind(state)
     .first()
@@ -91,7 +92,10 @@ async function handle(context) {
     return htmlError('登入階段已過期或無效，請重新登入。')
   }
 
-  const { code_verifier, nonce: expectedNonce, redirect_uri, platform, client_callback, aud: storedAud } = stateRow
+  const {
+    code_verifier, nonce: expectedNonce, redirect_uri, platform, client_callback, aud: storedAud,
+    purpose: statePurpose, elevation_user_id: elevationUserId, session_id: elevationSessionId, action: elevationAction,
+  } = stateRow
   const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
 
   // ── 3. 換取 access_token ─────────────────────────────────────
@@ -116,6 +120,40 @@ async function handle(context) {
   }
 
   const { provider_id, email, name, avatar, email_verified } = profile
+
+  // ── 5a. Elevation 模式（SEC-FACTOR-ADD-A，purpose=elevation）──
+  // **不** bind、**不** login。驗 reauth 回來的 (provider, provider_id) match 當前 user 既綁 identity →
+  // 建 one-time exchange code（2min、session 綁、action 透傳）→ fragment redirect（grant_token 不入 URL，
+  // 由 /elevation/exchange 經 POST body 鑄出）。不 match → provider_mismatch（critical，泛化錯誤）。
+  if (statePurpose === 'elevation') {
+    const elevUserId = Number(elevationUserId)
+    if (!elevUserId || !Number.isFinite(elevUserId) || !elevationSessionId || !elevationAction) {
+      return Response.redirect(`${baseUrl}/dashboard.html?elev_error=invalid_state`, 302)
+    }
+    const existing = await db
+      .prepare('SELECT 1 FROM user_identities WHERE user_id = ? AND provider = ? AND provider_id = ? LIMIT 1')
+      .bind(elevUserId, provider, provider_id).first()
+    if (!existing) {
+      await safeUserAudit(env, {
+        event_type: 'auth.elevation.provider_mismatch', severity: 'critical',
+        user_id: elevUserId, request, data: { provider, action: elevationAction },
+      })
+      return Response.redirect(`${baseUrl}/dashboard.html?elev_error=provider_mismatch`, 302)
+    }
+    // match → 建 one-time exchange code（provider_id 只存 keyed-HMAC，不存明文）
+    const exchangeCode      = generateSecureToken()
+    const exchangeCodeHash  = await hashToken(exchangeCode)
+    const providerIdSig     = await hashIdentifierForAudit(env, 'oauth-provider-id', String(provider_id))
+    const exchangeExpiresAt = new Date(Date.now() + 2 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19)
+    await db
+      .prepare(`INSERT INTO elevation_exchanges
+                  (exchange_code_hash, user_id, session_id, provider, provider_id_hash, action, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .bind(exchangeCodeHash, elevUserId, elevationSessionId, provider, providerIdSig.hex.slice(0, 32), elevationAction, exchangeExpiresAt)
+      .run()
+    // fragment（#）交付一次性 exchange code：降 server/referrer 暴露；grant_token 永不入 URL（OD-3 contract）
+    return Response.redirect(`${baseUrl}/dashboard.html#elev_exchange=${encodeURIComponent(exchangeCode)}`, 302)
+  }
 
   // ── 5. 綁定模式（is_binding）─────────────────────────────────
   if (client_callback?.startsWith('binding:')) {

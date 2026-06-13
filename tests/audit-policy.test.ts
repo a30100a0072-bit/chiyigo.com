@@ -243,6 +243,20 @@ describe('classifyAuditEvent — P4 SEC-RESET-2FA-BF', () => {
   })
 })
 
+// SEC-FACTOR-ADD-A PR-A2（2026-06-13）：factor-add elevation 的 1 telemetry（started）
+// + 4 security_signal（succeeded/failed/provider_mismatch/replay_detected）顯式分類。
+describe('classifyAuditEvent — SEC-FACTOR-ADD-A elevation', () => {
+  it.each([
+    ['auth.elevation.started',           AUDIT_CATEGORY.TELEMETRY],
+    ['auth.elevation.succeeded',         AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['auth.elevation.failed',            AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['auth.elevation.provider_mismatch', AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['auth.elevation.replay_detected',   AUDIT_CATEGORY.SECURITY_SIGNAL],
+  ])('%s → %s', (e, expected) => {
+    expect(classifyAuditEvent(e)).toBe(expected)
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -312,8 +326,11 @@ describe('registry coverage', () => {
     // P4 SEC-RESET-2FA-BF (2026-06-13) 加 2 個：
     //   account.password.reset.totp_fail（security_signal；reset TOTP 驗證失敗暴破信號）
     //   account.password.reset.totp_rate_limited（telemetry；reset TOTP 節流命中）→ 217。
+    // SEC-FACTOR-ADD-A PR-A2 (2026-06-13) 加 5 個 factor-add elevation event：
+    //   auth.elevation.started（telemetry）+ .succeeded/.failed/.provider_mismatch/.replay_detected
+    //   （security_signal；後二者 critical severity）→ 222。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(217)
+    expect(_registrySize).toBe(222)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

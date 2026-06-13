@@ -14,6 +14,8 @@ import { getProvider, SUPPORTED_PROVIDERS } from '../../../../utils/oauth-provid
 import { requireAuth, res } from '../../../../utils/auth'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit'
 import { resolveAud } from '../../../../utils/cors'
+import { safeUserAudit } from '../../../../utils/user-audit'
+import { isFactorAddAction, sidFromUser } from '../../../../utils/elevation'
 
 const STATE_BYTES       = 16   // 128 bits
 const VERIFIER_BYTES    = 32   // 256 bits
@@ -115,6 +117,37 @@ export async function onRequestGet(context) {
     bindingUserId = Number(user.sub)
   }
 
+  // ── Elevation 模式（SEC-FACTOR-ADD-A，purpose=elevation）──────
+  // OAuth-reauth 鑄 factor-add grant：不 bind；驗當前 user 確有此 provider 既綁 identity；
+  // callback 驗 provider_id match 既綁 → 建 one-time exchange code → /elevation/exchange 換 grant。
+  const isElevation     = url.searchParams.get('purpose') === 'elevation'
+  const elevationAction = url.searchParams.get('action')
+  let elevationUserId: number | null = null
+  let elevationSid: string | null = null
+  if (isElevation) {
+    if (!isFactorAddAction(elevationAction))
+      return res({ error: 'action must be add_passkey | bind_wallet | bind_identity', code: 'INVALID_ACTION' }, 400)
+    const { user, error: authError } = await requireAuth(request, env)
+    if (authError) return authError
+    elevationUserId = Number(user.sub)
+    elevationSid = sidFromUser(user)
+    // sid fail-closed（PR-0）：無 per-login sid 不得啟動 factor-add elevation
+    if (!elevationSid)
+      return res({ error: 'Session not eligible for factor-add elevation; re-login required', code: 'ELEVATION_SID_REQUIRED' }, 403)
+    // 必須對「既綁」provider 重新 reauth（泛化錯誤，不洩漏該 provider 是否屬他人）
+    const existing = await env.chiyigo_db
+      .prepare('SELECT 1 FROM user_identities WHERE user_id = ? AND provider = ? LIMIT 1')
+      .bind(elevationUserId, provider).first()
+    if (!existing)
+      return res({ error: 'OAuth re-auth elevation unavailable for this provider', code: 'ELEVATION_PROVIDER_NOT_BOUND' }, 400)
+    if (ip) {
+      const { blocked } = await checkRateLimit(env.chiyigo_db, { kind: 'elevation_oauth_start', userId: elevationUserId, windowSeconds: 300, max: 10 })
+      if (blocked) return res({ error: 'Too many elevation requests. Please try again later.', code: 'RATE_LIMITED' }, 429)
+      await recordRateLimit(env.chiyigo_db, { kind: 'elevation_oauth_start', userId: elevationUserId })
+    }
+    await safeUserAudit(env, { event_type: 'auth.elevation.started', user_id: elevationUserId, request, data: { method: 'oauth_reauth', action: elevationAction, provider } })
+  }
+
   // ── 2. State（CSRF）+ PKCE + nonce（OIDC）──────────────────
   const state = randomHex(STATE_BYTES)
   const usePkce = !PKCE_UNSUPPORTED.has(provider)
@@ -168,10 +201,14 @@ export async function onRequestGet(context) {
     await env.chiyigo_db
       .prepare(`
         INSERT INTO oauth_states
-          (state_token, code_verifier, nonce, redirect_uri, platform, client_callback, expires_at, ip_address, aud, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          (state_token, code_verifier, nonce, redirect_uri, platform, client_callback, expires_at, ip_address, aud, created_at,
+           purpose, elevation_user_id, session_id, action)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?)
       `)
-      .bind(state, code_verifier, nonce, redirect_uri, platform, client_callback ?? '', expires_at, ip, audience)
+      .bind(
+        state, code_verifier, nonce, redirect_uri, platform, client_callback ?? '', expires_at, ip, audience,
+        isElevation ? 'elevation' : null, isElevation ? elevationUserId : null, isElevation ? elevationSid : null, isElevation ? elevationAction : null,
+      )
       .run()
   } catch {
     return res({ error: 'OAuth 狀態儲存失敗，請重試', code: 'OAUTH_STATE_SAVE_FAILED' }, 500)
@@ -196,8 +233,8 @@ export async function onRequestGet(context) {
   if (provider === 'discord') authUrl.searchParams.set('prompt', 'consent')
   if (provider === 'google')  authUrl.searchParams.set('access_type', 'online')
 
-  // 綁定模式：回傳 JSON，讓前端 JS 讀取後自行跳轉（不可用 302，因為需先帶 Authorization header）
-  if (isBinding) {
+  // 綁定 / elevation 模式：回傳 JSON，讓前端 JS 讀取後自行跳轉（不可用 302，因為需先帶 Authorization header）
+  if (isBinding || isElevation) {
     return res({ redirect_url: authUrl.toString() })
   }
 

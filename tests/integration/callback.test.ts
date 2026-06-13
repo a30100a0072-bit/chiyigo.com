@@ -217,6 +217,57 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
     expect(rt.n).toBe(0)
   })
 
+  // PR-A2（SEC-FACTOR-ADD-A）：OAuth-reauth elevation callback 分支（purpose=elevation）。
+  async function seedElevState(stateToken: string, userId: number, { sid = 'SE', action = 'add_passkey' } = {}) {
+    const exp = new Date(Date.now() + 600_000).toISOString().replace('T', ' ').slice(0, 19)
+    await env.chiyigo_db.prepare(`
+      INSERT INTO oauth_states (state_token, code_verifier, nonce, redirect_uri, platform, expires_at, purpose, elevation_user_id, session_id, action)
+      VALUES (?, 'verifier-xyz', NULL, 'https://chiyigo.com/api/auth/oauth/google/callback', 'web', ?, 'elevation', ?, ?, ?)
+    `).bind(stateToken, exp, userId, sid, action).run()
+  }
+
+  it('PR-A2 elevation: provider_id match 既綁 → 建 exchange + fragment redirect，無 login/bind 副作用', async () => {
+    const u = await seedUser({ email: 'elev@example.com' })
+    await env.chiyigo_db.prepare(`INSERT INTO user_identities (user_id, provider, provider_id) VALUES (?, 'google', 'g-elev')`).bind(u.id).run()
+    await seedElevState('st-elev', u.id, { sid: 'SE', action: 'bind_wallet' })
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({ sub: 'g-elev', email: 'elev@example.com', email_verified: true }) }
+    fetchPlan.profileBody = { sub: 'g-elev', email: 'elev@example.com', email_verified: true, name: '' }
+
+    const res = await callCb(cbReq('st-elev'))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location') ?? '').toContain('#elev_exchange=')
+    // exchange row 建立（session/action 透傳；provider_id 只存 hash）
+    const ex = await env.chiyigo_db.prepare(`SELECT * FROM elevation_exchanges WHERE user_id = ?`).bind(u.id).first()
+    expect(ex).toBeTruthy()
+    expect(ex.action).toBe('bind_wallet')
+    expect(ex.session_id).toBe('SE')
+    expect(ex.provider).toBe('google')
+    // 無 login/bind 副作用：無 refresh token、無新 identity
+    const rt = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM refresh_tokens WHERE user_id = ?`).bind(u.id).first()
+    expect(Number(rt.c)).toBe(0)
+    const idCount = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM user_identities WHERE user_id = ?`).bind(u.id).first()
+    expect(Number(idCount.c)).toBe(1)  // 仍只有種子那一筆
+  })
+
+  it('PR-A2 elevation: provider_id MISMATCH（攻擊者自己的 OAuth 帳號）→ provider_mismatch + 無 exchange', async () => {
+    const u = await seedUser({ email: 'elev2@example.com' })
+    await env.chiyigo_db.prepare(`INSERT INTO user_identities (user_id, provider, provider_id) VALUES (?, 'google', 'g-legit')`).bind(u.id).run()
+    await seedElevState('st-elev2', u.id, { sid: 'SE2', action: 'add_passkey' })
+    // reauth 回來的是攻擊者自己的 google 帳號 g-attacker（≠ 既綁 g-legit）
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({ sub: 'g-attacker', email: 'attacker@example.com', email_verified: true }) }
+    fetchPlan.profileBody = { sub: 'g-attacker', email: 'attacker@example.com', email_verified: true, name: '' }
+
+    const res = await callCb(cbReq('st-elev2'))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location') ?? '').toContain('elev_error=provider_mismatch')
+    const ex = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM elevation_exchanges WHERE user_id = ?`).bind(u.id).first()
+    expect(Number(ex.c)).toBe(0)
+    const audit = await env.chiyigo_db.prepare(`SELECT 1 FROM audit_log WHERE event_type='auth.elevation.provider_mismatch' AND user_id = ?`).bind(u.id).first()
+    expect(audit).toBeTruthy()
+  })
+
   it('信箱碰撞 + trustEmail=true (google) + email_verified=true → 靜默綁定（C2）', async () => {
     const u = await seedUser({ email: 'collide@example.com', password: 'OldPass#1234', emailVerified: 0 })
     fetchPlan.tokenBody = {
