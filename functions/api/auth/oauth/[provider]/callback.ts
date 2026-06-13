@@ -24,6 +24,7 @@ import { getProvider } from '../../../../utils/oauth-providers'
 import { resolveAud } from '../../../../utils/cors'
 import { refreshCookie, readOAuthDeviceCookie, CLEAR_OAUTH_DEVICE_COOKIE } from '../../../../utils/cookies'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../../utils/user-audit'
+import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit'
 import { safeAlertAnomalies } from '../../../../utils/device-alerts'
 import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../../utils/risk-score'
 import { sendRiskBlockedAlertEmail } from '../../../../utils/email'
@@ -97,6 +98,18 @@ async function handle(context) {
     purpose: statePurpose, elevation_user_id: elevationUserId, session_id: elevationSessionId, action: elevationAction,
   } = stateRow
   const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
+
+  // SEC-FACTOR-ADD-A：elevation callback 在 provider token-exchange 前 per-user 節流
+  // （Codex Code Gate r1 watch item；flow 已被 elevation_oauth_start + one-time state + exchange
+  // 三層 bound，本層為 defense-in-depth，限 reauth callback 的 provider fetch 量）。
+  if (statePurpose === 'elevation') {
+    const elevUid = Number(elevationUserId)
+    if (Number.isFinite(elevUid)) {
+      const { blocked } = await checkRateLimit(db, { kind: 'elevation_oauth_callback', userId: elevUid, windowSeconds: 300, max: 10 })
+      if (blocked) return Response.redirect(`${baseUrl}/dashboard.html?elev_error=rate_limited`, 302)
+      await recordRateLimit(db, { kind: 'elevation_oauth_callback', userId: elevUid })
+    }
+  }
 
   // ── 3. 換取 access_token ─────────────────────────────────────
   let providerTokens

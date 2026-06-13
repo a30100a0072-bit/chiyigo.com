@@ -268,6 +268,26 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
     expect(audit).toBeTruthy()
   })
 
+  it('PR-A2 elevation callback RL（Codex watch item）：達 per-user 上限 → rate_limited，token-exchange 前擋', async () => {
+    const u = await seedUser({ email: 'elevrl@example.com' })
+    await env.chiyigo_db.prepare(`INSERT INTO user_identities (user_id, provider, provider_id) VALUES (?, 'google', 'g-rl')`).bind(u.id).run()
+    // 預填 10 筆 elevation_oauth_callback 計數（達 max=10）→ 下一次 callback checkRateLimit 即 blocked
+    for (let i = 0; i < 10; i++) {
+      await env.chiyigo_db.prepare(`INSERT INTO login_attempts (kind, user_id) VALUES ('elevation_oauth_callback', ?)`).bind(u.id).run()
+    }
+    await seedElevState('st-elevrl', u.id, { sid: 'SRL', action: 'add_passkey' })
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({ sub: 'g-rl', email: 'elevrl@example.com', email_verified: true }) }
+    fetchPlan.profileBody = { sub: 'g-rl', email: 'elevrl@example.com', email_verified: true, name: '' }
+
+    const res = await callCb(cbReq('st-elevrl'))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location') ?? '').toContain('elev_error=rate_limited')
+    // RL 命中 → 無 exchange 建立（token-exchange 前已擋）
+    const ex = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM elevation_exchanges WHERE user_id = ?`).bind(u.id).first()
+    expect(Number(ex.c)).toBe(0)
+  })
+
   it('信箱碰撞 + trustEmail=true (google) + email_verified=true → 靜默綁定（C2）', async () => {
     const u = await seedUser({ email: 'collide@example.com', password: 'OldPass#1234', emailVerified: 0 })
     fetchPlan.tokenBody = {
