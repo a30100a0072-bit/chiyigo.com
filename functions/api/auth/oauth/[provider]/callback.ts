@@ -25,6 +25,7 @@ import { resolveAud } from '../../../../utils/cors'
 import { refreshCookie, readOAuthDeviceCookie, CLEAR_OAUTH_DEVICE_COOKIE } from '../../../../utils/cookies'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit'
+import { consumeFactorAddGrantStmt } from '../../../../utils/elevation'
 import { safeAlertAnomalies } from '../../../../utils/device-alerts'
 import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../../utils/risk-score'
 import { sendRiskBlockedAlertEmail } from '../../../../utils/email'
@@ -83,7 +84,7 @@ async function handle(context) {
       DELETE FROM oauth_states
       WHERE state_token = ? AND expires_at > datetime('now')
       RETURNING code_verifier, nonce, redirect_uri, platform, client_callback, aud,
-                purpose, elevation_user_id, session_id, action
+                purpose, elevation_user_id, session_id, action, factor_add_grant_hash
     `)
     .bind(state)
     .first()
@@ -96,6 +97,7 @@ async function handle(context) {
   const {
     code_verifier, nonce: expectedNonce, redirect_uri, platform, client_callback, aud: storedAud,
     purpose: statePurpose, elevation_user_id: elevationUserId, session_id: elevationSessionId, action: elevationAction,
+    factor_add_grant_hash: bindingGrantHash,
   } = stateRow
   const baseUrl = env.IAM_BASE_URL ?? 'https://chiyigo.com'
 
@@ -174,6 +176,11 @@ async function handle(context) {
     if (!bindingUserId || !Number.isFinite(bindingUserId))
       return Response.redirect(`${baseUrl}/dashboard.html?bind_error=invalid_state`, 302)
 
+    // SEC-FACTOR-ADD PR-A3：綁新 OAuth identity = factor-add，必須帶 factor_add_binding grant
+    // （init validate-not-consume 已存 factor_add_grant_hash；此處 consume + INSERT 同 batch）。
+    if (statePurpose !== 'factor_add_binding' || !bindingGrantHash || !elevationSessionId)
+      return Response.redirect(`${baseUrl}/dashboard.html?bind_error=elevation_required`, 302)
+
     // 確認帳號仍有效
     const bindUser = await db
       .prepare('SELECT status FROM users WHERE id = ? AND deleted_at IS NULL')
@@ -194,14 +201,19 @@ async function handle(context) {
       return Response.redirect(`${baseUrl}/dashboard.html?bind_error=${errCode}`, 302)
     }
 
-    // 執行綁定
-    await db
-      .prepare(`
+    // 執行綁定：grant consume（CAS）+ user_identities INSERT 同一 atomic db.batch（both-or-neither）。
+    // S1 consume 失敗（changes≠1）→ S2 gated INSERT 不插 → 不綁、replay_detected。
+    const batch = await db.batch([
+      consumeFactorAddGrantStmt(env, { grantTokenHash: String(bindingGrantHash), userId: bindingUserId, sid: String(elevationSessionId), action: 'bind_identity' }),
+      db.prepare(`
         INSERT INTO user_identities (user_id, provider, provider_id, display_name, avatar_url)
-        VALUES (?, ?, ?, ?, ?)
-      `)
-      .bind(bindingUserId, provider, provider_id, name ?? null, avatar ?? null)
-      .run()
+        SELECT ?, ?, ?, ?, ? WHERE changes() = 1
+      `).bind(bindingUserId, provider, provider_id, name ?? null, avatar ?? null),
+    ])
+    if (batch[0].meta.changes !== 1) {
+      await safeUserAudit(env, { event_type: 'auth.elevation.replay_detected', severity: 'critical', user_id: bindingUserId, request, data: { stage: 'oauth_binding_consume', provider } })
+      return Response.redirect(`${baseUrl}/dashboard.html?bind_error=elevation_consumed`, 302)
+    }
 
     return Response.redirect(`${baseUrl}/dashboard.html?bind=success&provider=${provider}`, 302)
   }

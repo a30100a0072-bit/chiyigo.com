@@ -15,7 +15,7 @@ import { requireAuth, res } from '../../../../utils/auth'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit'
 import { resolveAud } from '../../../../utils/cors'
 import { safeUserAudit } from '../../../../utils/user-audit'
-import { isFactorAddAction, sidFromUser } from '../../../../utils/elevation'
+import { isFactorAddAction, sidFromUser, requireFactorAddGrant } from '../../../../utils/elevation'
 
 const STATE_BYTES       = 16   // 128 bits
 const VERIFIER_BYTES    = 32   // 256 bits
@@ -109,12 +109,18 @@ export async function onRequestGet(context) {
   if (!['web', 'pc', 'mobile'].includes(platform))
     return res({ error: 'platform 必須為 web、pc 或 mobile', code: 'INVALID_PLATFORM' }, 400)
 
-  // ── 綁定模式：JWT 驗證，取得當前登入用戶 ───────────────────
+  // ── 綁定模式（is_binding）：SEC-FACTOR-ADD PR-A3 — 綁新 OAuth identity 是 factor-add，需 grant ──
+  // validate-not-consume（action='bind_identity'）；grant_hash 存進 oauth_states，callback 才 consume
+  // （與 user_identities INSERT 同 batch；因 binding 的真正寫入點在 callback 的 async roundtrip 後）。
   let bindingUserId = null
+  let bindingSid: string | null = null
+  let bindingGrantHash: string | null = null
   if (isBinding) {
-    const { user, error: authError } = await requireAuth(request, env)
-    if (authError) return authError
-    bindingUserId = Number(user.sub)
+    const { userId: bUid, sid: bSid, grantTokenHash, error: gErr } = await requireFactorAddGrant(request, env, { action: 'bind_identity' })
+    if (gErr) return gErr
+    bindingUserId   = bUid
+    bindingSid      = bSid
+    bindingGrantHash = grantTokenHash
   }
 
   // ── Elevation 模式（SEC-FACTOR-ADD-A，purpose=elevation）──────
@@ -197,17 +203,26 @@ export async function onRequestGet(context) {
   const expires_at = new Date(Date.now() + STATE_TTL_MINUTES * 60_000)
     .toISOString().replace('T', ' ').slice(0, 19)
 
+  // SEC-FACTOR-ADD-A：oauth_states elevation 欄承載兩流程——
+  //   purpose='elevation'（A2：OAuth-reauth 鑄 grant，無 grant_hash）
+  //   purpose='factor_add_binding'（A3：is_binding factor-add，存 factor_add_grant_hash 供 callback consume）
+  const statePurpose   = isElevation ? 'elevation' : (isBinding ? 'factor_add_binding' : null)
+  const stateElevUser  = isElevation ? elevationUserId : (isBinding ? bindingUserId : null)
+  const stateSessionId = isElevation ? elevationSid : (isBinding ? bindingSid : null)
+  const stateAction    = isElevation ? elevationAction : (isBinding ? 'bind_identity' : null)
+  const stateGrantHash = isBinding ? bindingGrantHash : null
+
   try {
     await env.chiyigo_db
       .prepare(`
         INSERT INTO oauth_states
           (state_token, code_verifier, nonce, redirect_uri, platform, client_callback, expires_at, ip_address, aud, created_at,
-           purpose, elevation_user_id, session_id, action)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?)
+           purpose, elevation_user_id, session_id, action, factor_add_grant_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?)
       `)
       .bind(
         state, code_verifier, nonce, redirect_uri, platform, client_callback ?? '', expires_at, ip, audience,
-        isElevation ? 'elevation' : null, isElevation ? elevationUserId : null, isElevation ? elevationSid : null, isElevation ? elevationAction : null,
+        statePurpose, stateElevUser, stateSessionId, stateAction, stateGrantHash,
       )
       .run()
   } catch {

@@ -376,6 +376,28 @@ export async function enableTotp(userId, base32Secret) {
 }
 
 /**
+ * Insert an elevation_grants row (migration 0054, SEC-FACTOR-ADD-A PR-A3 gate). Returns the plaintext
+ * grant_token (caller sends it in the X-Factor-Add-Grant header; DB stores hashToken). Defaults to a
+ * live, unconsumed factor_add grant.
+ */
+export async function seedFactorAddGrant(
+  userId: number,
+  { sid = 'sess-1', action = 'add_passkey', method = 'totp', ttlSec = 300, consumed = false, provider = null as string | null, providerIdHash = null as string | null } = {},
+) {
+  const grantToken = generateSecureToken()
+  const grantHash = await hashToken(grantToken)
+  const exp = new Date(Date.now() + ttlSec * 1000).toISOString().replace('T', ' ').slice(0, 19)
+  const consumedAt = consumed ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null
+  await env.chiyigo_db
+    .prepare(`INSERT INTO elevation_grants
+                (grant_token_hash, user_id, session_id, purpose, action, method, provider, provider_id_hash, expires_at, consumed_at)
+              VALUES (?, ?, ?, 'factor_add', ?, ?, ?, ?, ?, ?)`)
+    .bind(grantHash, userId, sid, action, method, provider, providerIdHash, exp, consumedAt)
+    .run()
+  return grantToken
+}
+
+/**
  * Insert a backup code for user. Returns plaintext code (20 hex chars, no dashes).
  */
 export async function seedBackupCode(userId, { used = false } = {}) {
