@@ -153,6 +153,8 @@ async function respondWithToken(
   riskClaims: { score: number; factors: string[]; country: string | null } | null,
   method: 'totp' | 'backup_code',
 ) {
+  // PR-0（sid claim）：per-login session_id 同寫 refresh row 與 access sid claim。
+  const sessionId = crypto.randomUUID()
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
     ...tenantClaims,
@@ -163,6 +165,7 @@ async function respondWithToken(
     status:         record.status,
     ver:            record.token_version ?? 0,
     scope:          buildTokenScope(record.role),
+    sid:            sessionId,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken     = generateSecureToken()
@@ -175,7 +178,7 @@ async function respondWithToken(
   await db.prepare(`
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
     VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
-  `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt, audience, crypto.randomUUID()).run()
+  `).bind(userId, refreshTokenHash, deviceUuid ?? null, refreshExpiresAt, audience, sessionId).run()
 
   // Phase D-4：登入完成 audit + 異常裝置警示
   // Phase E-2：risk check 已在 local/login.js password 階段做過，此處不重算；

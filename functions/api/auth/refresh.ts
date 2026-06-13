@@ -297,6 +297,8 @@ export async function onRequestPost({ request, env }) {
     ver:            user.token_version ?? 0,
     // P1-5：buildTokenScope 帶第二參，保留原本 OIDC scope（openid/email/...）
     scope:          buildTokenScope(user.role, tokenRow.scope ?? ''),
+    // PR-0（sid claim）：rotation 保留同一 per-login session_id（preservedSessionId 跨輪不變）。
+    sid:            preservedSessionId,
   }, ACCESS_TOKEN_TTL, env, { audience: effectiveAud })
 
   // Web → 新 Cookie；App → JSON body

@@ -187,6 +187,8 @@ export async function onRequestPost(context) {
   if (userRow.status === 'banned') return res({ error: '此帳號已被停用', code: 'ACCOUNT_DISABLED' }, 403)
 
   // ── 6. 簽發 Access Token ───────────────────────────────────────
+  // PR-0（sid claim）：per-login session_id 同寫 refresh row 與 access sid claim。
+  const sessionId = crypto.randomUUID()
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
     ...tenantClaims,
@@ -198,6 +200,7 @@ export async function onRequestPost(context) {
     ver:            userRow.token_version ?? 0,
     scope:          buildTokenScope(userRow.role),
     provider,
+    sid:            sessionId,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   // ── 7. 建立 Refresh Token ──────────────────────────────────────
@@ -217,7 +220,7 @@ export async function onRequestPost(context) {
   await db.prepare(`
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
     VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
-  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience, crypto.randomUUID()).run()
+  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience, sessionId).run()
 
   await safeUserAudit(env, { event_type: 'oauth.bind_email.success', user_id: userId, request, data: { provider } })
 

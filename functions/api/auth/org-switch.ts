@@ -71,6 +71,9 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   // 保留 auth-context claim（webauthn/step-up 後的 session 連續性），present 才帶
   if (user.amr !== undefined) claims.amr = user.amr
   if (user.acr !== undefined) claims.acr = user.acr
+  // PR-0（sid claim）：org-switch 重發不換 session，preserve 當前 token 的 per-login sid；
+  // 舊 token 無 sid → 重發亦無 sid（factor-add elevation 對該 token fail-closed，符契約）。
+  if (user.sid !== undefined) claims.sid = user.sid
 
   const accessToken = await signJwt(claims, ACCESS_TOKEN_TTL, env, { audience: 'chiyigo' })
 

@@ -287,6 +287,8 @@ async function handle(context) {
   const audience = storedAud
     ? resolveAud(storedAud)
     : ((platform === 'pc' && client_callback) ? resolveAud(client_callback) : 'chiyigo')
+  // PR-0（sid claim）：per-login session_id 同寫 refresh row 與 access sid claim。
+  const sessionId = crypto.randomUUID()
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
     ...tenantClaims,
@@ -298,6 +300,7 @@ async function handle(context) {
     ver:            userRow.token_version ?? 0,
     scope:          buildTokenScope(userRow.role),
     provider,
+    sid:            sessionId,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   // ── 9. 依 platform 回傳 ──────────────────────────────────────
@@ -331,7 +334,7 @@ async function handle(context) {
   await db.prepare(`
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
     VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
-  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience, crypto.randomUUID()).run()
+  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience, sessionId).run()
 
   // Phase D-4：登入 audit + 異常裝置警示。webDeviceUuid 有值 → 視作真實裝置，
   // 觸發新裝置 email；NULL → 只跑 country jump（OAuth 舊行為）

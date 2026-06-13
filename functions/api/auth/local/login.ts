@@ -223,6 +223,9 @@ export async function onRequestPost({ request, env }) {
   }
 
   // ── 6b. 無 2FA → 簽發完整 Access Token + Refresh Token ──────
+  // PR-0（sid claim）：per-login session_id 同時寫進 refresh row 與 access token sid claim，
+  // 供 factor-add elevation 綁定（SEC-FACTOR-ADD-A）；缺 sid 的舊 token elevation fail-closed。
+  const sessionId = crypto.randomUUID()
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(record.user_id))
   const accessToken = await signJwt({
     ...tenantClaims,
@@ -233,6 +236,7 @@ export async function onRequestPost({ request, env }) {
     status:         record.status,
     ver:            record.token_version ?? 0,
     scope:          buildTokenScope(record.role),
+    sid:            sessionId,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken    = generateSecureToken()
@@ -246,7 +250,7 @@ export async function onRequestPost({ request, env }) {
   await db.prepare(`
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
     VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
-  `).bind(record.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience, crypto.randomUUID()).run()
+  `).bind(record.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience, sessionId).run()
 
   const payload = {
     access_token:   accessToken,

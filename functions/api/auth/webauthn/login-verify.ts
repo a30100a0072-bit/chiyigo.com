@@ -222,6 +222,8 @@ export async function onRequestPost({ request, env }) {
   // amr：passkey 帶 UV 視為「擁有 + 知識」雙因子；無 UV 只算 'webauthn'
   const amr = userVerified ? ['webauthn', 'mfa'] : ['webauthn']
 
+  // PR-0（sid claim）：per-login session_id 同寫 refresh row 與 access sid claim。
+  const sessionId = crypto.randomUUID()
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(cred.user_id))
   const accessToken = await signJwt({
     ...tenantClaims,
@@ -233,6 +235,7 @@ export async function onRequestPost({ request, env }) {
     ver:            cred.token_version ?? 0,
     scope:          buildTokenScope(cred.role),
     amr,
+    sid:            sessionId,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   const refreshToken     = generateSecureToken()
@@ -245,7 +248,7 @@ export async function onRequestPost({ request, env }) {
   await env.chiyigo_db.prepare(
     `INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
      VALUES (?, ?, ?, ?, datetime('now'), ?, ?)`,
-  ).bind(cred.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience, crypto.randomUUID()).run()
+  ).bind(cred.user_id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience, sessionId).run()
 
   // Codex r9-4：credential_id_prefix → keyed HMAC（同 register/delete 同 domain）
   const credSig = await hashIdentifierForAudit(env, 'credential-id', credentialId)
