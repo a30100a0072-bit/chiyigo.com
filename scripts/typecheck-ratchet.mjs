@@ -127,6 +127,11 @@ const NEW_JS_ALLOWLIST = new Set([
   'scripts/lib/ratchet-override.mjs',
   // PR-0 (Stage 7)：tests-leaf strict preflight（開 tests strict 前 gate；node 跑，非 app source）
   'scripts/strict-tests-preflight.mjs',
+  // v3 dimension-A self-review workflow tools（governance infra；非 application source）
+  '.claude/workflows/plan-self-review.mjs',
+  '.claude/workflows/code-self-review.mjs',
+  '.claude/workflows/lib/schemas.mjs',
+  'scripts/lint-workflows.mjs',
 ])
 
 // PR-55（Stage 4.5a 治理收尾）：Stage 4.5a browser pipeline 結構不變式
