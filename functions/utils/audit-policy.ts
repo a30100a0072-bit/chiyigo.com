@@ -221,6 +221,7 @@ const IMMUTABLE = [
 
 const SECURITY_SIGNAL = [
   'account.password.reset.backup_code_fail',
+  'account.password.reset.totp_fail',          // SEC-RESET-2FA-BF：reset TOTP 驗證失敗（暴破偵測信號）
   'admin.unknown_role_actor',
   'admin.unknown_role_target',
   'auth.country_jump',
@@ -274,6 +275,7 @@ const SECURITY_SIGNAL = [
 ]
 
 const TELEMETRY = [
+  'account.password.reset.totp_rate_limited',  // SEC-RESET-2FA-BF：reset TOTP 驗證節流命中
   'admin.read.rate_limited',
   'auth.authorize.rate_limited',   // SEC-CEREMONY-DOS：oauth authorize per-IP 節流命中
   'auth.login.rate_limited',

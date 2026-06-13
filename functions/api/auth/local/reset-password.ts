@@ -21,6 +21,7 @@ import {
 import { validatePassword } from '../../../utils/password'
 import { bumpTokenVersion, res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 
 export async function onRequestPost({ request, env }) {
   let body
@@ -78,6 +79,19 @@ export async function onRequestPost({ request, env }) {
     if (!totp_code)
       return res({ requires_2fa: true, error: '2FA verification required', code: 'TFA_VERIFICATION_REQUIRED' }, 403)
 
+    // SEC-RESET-2FA-BF：TOTP 失敗不消耗 token（line ~130 才核銷）→ 同 token 在 1h TTL 內可無限
+    // 重試暴破第二因子。沿 2fa/verify / step-up 既有 convention 加 per-user 節流（5/5min→429），
+    // 失敗計數 + audit（原本 TOTP-fail 路徑零稽核）。backup_code path 本就 atomic 消耗 token（單發）。
+    const ip = request.headers.get('CF-Connecting-IP') ?? null
+    const rl = await checkRateLimit(db, { kind: 'reset_2fa', userId, windowSeconds: 300, max: 5 })
+    if (rl.blocked) {
+      await safeUserAudit(env, {
+        event_type: 'account.password.reset.totp_rate_limited', severity: 'warn',
+        user_id: userId, request,
+      })
+      return res({ error: 'Too many 2FA attempts. Please try again later.', code: 'RATE_LIMITED' }, 429)
+    }
+
     const sanitized = totp_code.replace(/[\s-]/g, '')
     let passed = false
 
@@ -110,6 +124,7 @@ export async function onRequestPost({ request, env }) {
         }
       }
       if (!passed) {
+        await recordRateLimit(db, { kind: 'reset_2fa', userId, ip })
         await safeUserAudit(env, {
           event_type: 'account.password.reset.backup_code_fail', severity: 'warn',
           user_id: userId, request, data: { token_consumed: true },
@@ -121,7 +136,15 @@ export async function onRequestPost({ request, env }) {
       }
     }
 
-    if (!passed) return res({ error: 'Invalid 2FA code', code: 'INVALID_OTP' }, 401)
+    if (!passed) {
+      // SEC-RESET-2FA-BF：原本此路徑零稽核 + token 未消耗 → 暴破無痕。補計數 + audit。
+      await recordRateLimit(db, { kind: 'reset_2fa', userId, ip })
+      await safeUserAudit(env, {
+        event_type: 'account.password.reset.totp_fail', severity: 'warn',
+        user_id: userId, request,
+      })
+      return res({ error: 'Invalid 2FA code', code: 'INVALID_OTP' }, 401)
+    }
   }
 
   // ── 4. 原子核銷 token（若 backup_code path 已消耗則 skip）──────
