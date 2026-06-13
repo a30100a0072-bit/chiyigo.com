@@ -18,11 +18,23 @@
 
 import { res, requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
+import { safeUserAudit } from '../../utils/user-audit'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
 export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   // P1-17 Phase 3: GET 同時接受 admin:users:read 或 :write
-  const { error } = await requireAnyScope(request, env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE)
+  const { user, error } = await requireAnyScope(request, env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE)
   if (error) return error
+
+  // SEC-ADMIN-ENUM：全站 user email(PII) 列表，與 deals/audit/payments 同類 list 端點對齊，
+  // 補 per-admin rate-limit + read-audit（先前缺兩者 → bulk 枚舉無痕無限速）。
+  const adminId = Number(user.sub)
+  const rl = await checkRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId, windowSeconds: 60, max: 60 })
+  if (rl.blocked) {
+    await safeUserAudit(env, { event_type: 'admin.read.rate_limited', severity: 'warn', user_id: adminId, request, data: { endpoint: 'users' } })
+    return res({ error: 'Too many requests', code: 'RATE_LIMITED' }, 429)
+  }
+  await recordRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId })
 
   const url    = new URL(request.url)
   const page   = Math.max(1, parseInt(url.searchParams.get('page')  ?? '1', 10))
@@ -62,15 +74,23 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
     `).bind(...bindings, limit, offset).all(),
   ])
 
+  const usersOut = (rows.results ?? []).map((u: Record<string, unknown>) => ({
+    id:             u.id,
+    email:          u.email,
+    email_verified: u.email_verified === 1,
+    role:           u.role,
+    status:         u.status,
+    created_at:     u.created_at,
+  }))
+
+  // SEC-ADMIN-ENUM read-audit：誰、何時、用什麼 filter 枚舉了多少筆（對齊 deals.ts:101）。
+  await safeUserAudit(env, {
+    event_type: 'admin.users.read', severity: 'info', user_id: adminId, request,
+    data: { filters: { status, role, q, page, limit }, result_count: usersOut.length },
+  })
+
   return res({
-    users: (rows.results ?? []).map((u: Record<string, unknown>) => ({
-      id:             u.id,
-      email:          u.email,
-      email_verified: u.email_verified === 1,
-      role:           u.role,
-      status:         u.status,
-      created_at:     u.created_at,
-    })),
+    users: usersOut,
     total: countRow?.total ?? 0,
     page,
     limit,

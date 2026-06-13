@@ -275,9 +275,11 @@ const SECURITY_SIGNAL = [
 
 const TELEMETRY = [
   'admin.read.rate_limited',
+  'auth.authorize.rate_limited',   // SEC-CEREMONY-DOS：oauth authorize per-IP 節流命中
   'auth.login.rate_limited',
   'auth.refresh.rate_limited',
   'auth.step_up.rate_limited',
+  'webauthn.login.rate_limited',   // SEC-CEREMONY-DOS：webauthn login ceremony per-IP 節流命中
   'billing.grant.idempotent_replay', // PR2：manual grant idempotency replay（非錯誤，計量用）
   'billing.credit.idempotent_replay', // PR3：credit op idempotency replay（非錯誤，計量用）
   // PR4：accept re-click 等冪重放 / org-create same-key+payload replay（非錯誤，計量用）
@@ -311,6 +313,8 @@ const READ_AUDIT = [
   'admin.audit.read',
   'admin.deals.exported',                      // PR 1.2：admin CSV export deals
   'admin.deals.read',                          // PR 1.2：admin 讀 deals list
+  'admin.metrics.read',                        // SEC-ADMIN-ENUM：admin 讀全站 metrics（含 hashed top-IP）
+  'admin.users.read',                          // SEC-ADMIN-ENUM：admin 讀全站 user 列表（PII 枚舉面）
   'admin.payment_webhook_dlq.read',
   'domain.event.dlq_list',                     // EVT-001b：admin 讀 event DLQ list（redacted，stream_key→hash）
   'admin.payments.intents.exported',           // PR 1.2：admin CSV export payment intents

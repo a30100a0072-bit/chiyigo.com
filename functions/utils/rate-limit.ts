@@ -22,6 +22,8 @@ type RateLimitKind =
   | 'email_send'
   | 'oauth_init'
   | 'oauth_token'
+  | 'oauth_authorize'   // SEC-CEREMONY-DOS：authorize 端 pkce_sessions 寫入節流
+  | 'webauthn'          // SEC-CEREMONY-DOS：webauthn login-options/login-verify ceremony 節流
   | '2fa'
   | '2fa_setup'
   | '2fa_activate'

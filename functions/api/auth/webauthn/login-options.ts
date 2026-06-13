@@ -22,6 +22,8 @@ import { generateAuthenticationOptions } from '@simplewebauthn/server'
 import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { getRpConfig, saveChallenge, listUserCredentials } from '../../../utils/webauthn'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
+import { safeUserAudit } from '../../../utils/user-audit'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -29,6 +31,20 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
+
+  // SEC-CEREMONY-DOS：匿名端點，每次 saveChallenge 無條件寫一筆 webauthn_challenges
+  // （反枚舉設計，連未知 email 也寫）；未節流 → 可被無界灌爆 D1。per-IP 節流；webauthn
+  // kind 與 login-verify 共用計數（一次登入 = options + verify 兩筆，max 寬鬆容重試）。
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
+  if (ip) {
+    const { blocked } = await checkRateLimit(env.chiyigo_db, { kind: 'webauthn', ip, windowSeconds: 60, max: 30 })
+    if (blocked) {
+      await safeUserAudit(env, { event_type: 'webauthn.login.rate_limited', severity: 'warn', request })
+      return res({ error: 'Too many requests. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+    }
+    await recordRateLimit(env.chiyigo_db, { kind: 'webauthn', ip })
+  }
+
   let body
   try { body = await request.json() } catch { body = {} }
   const email = typeof body?.email === 'string' ? body.email.toLowerCase().trim() : null

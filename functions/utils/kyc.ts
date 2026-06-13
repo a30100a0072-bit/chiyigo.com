@@ -208,5 +208,10 @@ const ADAPTERS: Partial<Record<string, typeof mockKycAdapter>> = {
 }
 
 export function resolveKycAdapter(vendor: string) {
+  // SEC-KYC-ENUM-2（ISO-ENUM-2 同款）：純物件字面量索引會命中原型鏈鍵
+  // （__proto__ / constructor / toString）→ 回傳 truthy 的 Object 成員繞過下游
+  // nullish 守門 → handler 走到 adapter.parseWebhook(undefined) → TypeError → 500。
+  // own-property 守門：未知 / 原型鏈鍵一律 null → handler 回 400 UNKNOWN_KYC_VENDOR。
+  if (!Object.prototype.hasOwnProperty.call(ADAPTERS, vendor)) return null
   return ADAPTERS[vendor] ?? null
 }
