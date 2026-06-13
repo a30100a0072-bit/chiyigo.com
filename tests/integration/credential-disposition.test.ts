@@ -259,6 +259,53 @@ describe('admin runner endpoint — double-gate', () => {
     const runAudit = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE event_type='account.credential.disposition.run'`).first()
     expect(runAudit.n).toBeGreaterThanOrEqual(1)
   })
+
+  // ── Codex Code Gate r1 P1: STRICT body schema (reject, never coerce). Each negative mints a fresh
+  // one-time step-up token; validation runs BEFORE the rate-limit so these never consume RL slots. ──
+  it('P1 validation: invalid JSON → 400 INVALID_JSON', async () => {
+    const u = await seedUser({ email: 'vj@x', role: 'admin' })
+    const tok = await adminStepUpToken(u.id)
+    const r = await runHandler({ request: new Request('http://x/api/admin/credential-disposition/run', { method: 'POST', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' }, body: 'not-json{' }), env })
+    expect(r.status).toBe(400)
+    expect((await r.json()).code).toBe('INVALID_JSON')
+  })
+
+  it('P1 validation: array / non-object body → 400', async () => {
+    const u = await seedUser({ email: 'va@x', role: 'admin' })
+    const r = await runHandler({ request: post(await adminStepUpToken(u.id), [] as unknown as object), env })
+    expect(r.status).toBe(400)
+    expect((await r.json()).code).toBe('ERR_VALIDATION')
+  })
+
+  it('P1 validation: unknown field → 400', async () => {
+    const u = await seedUser({ email: 'vu@x', role: 'admin' })
+    const r = await runHandler({ request: post(await adminStepUpToken(u.id), { dryRun: true, evil: 1 }), env })
+    expect(r.status).toBe(400)
+  })
+
+  it('P1 validation: dryRun non-boolean → 400 (no coercion of "false")', async () => {
+    const u = await seedUser({ email: 'vd@x', role: 'admin' })
+    const r = await runHandler({ request: post(await adminStepUpToken(u.id), { dryRun: 'false' }), env })
+    expect(r.status).toBe(400)
+  })
+
+  it('P1 validation: types empty / invalid entry → 400 (no silent filter)', async () => {
+    const u = await seedUser({ email: 've@x', role: 'admin' })
+    const r1 = await runHandler({ request: post(await adminStepUpToken(u.id), { dryRun: true, types: [] }), env })
+    expect(r1.status).toBe(400)
+    const r2 = await runHandler({ request: post(await adminStepUpToken(u.id), { dryRun: true, types: ['passkey', 'evil'] }), env })
+    expect(r2.status).toBe(400)
+  })
+
+  it('P1 validation: maxPerRun non-positive-int / over-cap → 400', async () => {
+    const u = await seedUser({ email: 'vm@x', role: 'admin' })
+    const r1 = await runHandler({ request: post(await adminStepUpToken(u.id), { dryRun: true, maxPerRun: 0 }), env })
+    expect(r1.status).toBe(400)
+    const r2 = await runHandler({ request: post(await adminStepUpToken(u.id), { dryRun: true, maxPerRun: 2.5 }), env })
+    expect(r2.status).toBe(400)
+    const r3 = await runHandler({ request: post(await adminStepUpToken(u.id), { dryRun: true, maxPerRun: 99999 }), env })
+    expect(r3.status).toBe(400)
+  })
 })
 
 describe('list DTO — disposition flag exposure (high/unknown visible, low not, no raw signal)', () => {

@@ -18,6 +18,7 @@ import { runDisposition, type CredentialType } from '../../../utils/credential-d
 
 const RL_WINDOW_SEC = 300
 const RL_MAX = 3                                  // anti-reentry: only a few runs per 5 min
+const MAX_PER_RUN_CAP = 1000                      // strict upper bound on the per-call batch size
 const ALL_TYPES: CredentialType[] = ['passkey', 'wallet', 'identity']
 
 export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
@@ -30,15 +31,38 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
     return res({ error: 'admin:users:write scope required', code: 'INSUFFICIENT_SCOPE', required: 'admin:users:write' }, 403)
   }
 
-  // ── input (validate-once allowlist) ──────────────────────────────────────
-  let body: Record<string, unknown> = {}
-  try { body = (await request.json()) as Record<string, unknown> } catch { body = {} }
-  const dryRun = body.dryRun !== false           // default TRUE (conservative; explicit false to write)
-  const maxPerRun = Number.isFinite(body.maxPerRun) ? Math.trunc(body.maxPerRun as number) : 200
+  // ── input: STRICT runtime schema (Codex Code Gate r1 — high-sensitivity admin runner; reject, never coerce) ──
+  // allowlist { dryRun?: boolean, types?: non-empty (passkey|wallet|identity)[], maxPerRun?: 1..MAX_PER_RUN_CAP int }.
+  // invalid JSON → 400; non-object / array / null body → 400; unknown key → 400; wrong type/value → 400.
+  let raw: unknown
+  try { raw = await request.json() } catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return res({ error: 'Body must be a JSON object', code: 'ERR_VALIDATION' }, 400)
+  }
+  const body = raw as Record<string, unknown>
+  for (const k of Object.keys(body)) {
+    if (k !== 'dryRun' && k !== 'types' && k !== 'maxPerRun') return res({ error: `Unknown field: ${k}`, code: 'ERR_VALIDATION' }, 400)
+  }
+  // dryRun: optional, default TRUE (conservative, per plan section 2); if present MUST be a boolean (no coercion).
+  if ('dryRun' in body && typeof body.dryRun !== 'boolean') return res({ error: 'dryRun must be a boolean', code: 'ERR_VALIDATION' }, 400)
+  const dryRun = body.dryRun === undefined ? true : body.dryRun as boolean
+  // types: optional; if present MUST be a non-empty array, every element in the allowlist (no silent filtering).
   let types: CredentialType[] = ALL_TYPES.slice()
-  if (Array.isArray(body.types)) {
-    types = (body.types as unknown[]).filter((t): t is CredentialType => ALL_TYPES.includes(t as CredentialType))
-    if (types.length === 0) return res({ error: 'types must be a non-empty subset of passkey|wallet|identity', code: 'ERR_VALIDATION' }, 400)
+  if ('types' in body) {
+    const t = body.types
+    if (!Array.isArray(t) || t.length === 0 || !t.every((x): x is CredentialType => ALL_TYPES.includes(x as CredentialType))) {
+      return res({ error: 'types must be a non-empty array of passkey|wallet|identity', code: 'ERR_VALIDATION' }, 400)
+    }
+    types = t as CredentialType[]
+  }
+  // maxPerRun: optional, default 200; if present MUST be a positive integer within the cap (no truncation/fallback).
+  let maxPerRun = 200
+  if ('maxPerRun' in body) {
+    const m = body.maxPerRun
+    if (typeof m !== 'number' || !Number.isInteger(m) || m <= 0 || m > MAX_PER_RUN_CAP) {
+      return res({ error: `maxPerRun must be a positive integer <= ${MAX_PER_RUN_CAP}`, code: 'ERR_VALIDATION' }, 400)
+    }
+    maxPerRun = m
   }
 
   // ── anti-reentry rate-limit (per-row CAS is the real concurrency guarantee) ──
