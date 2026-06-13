@@ -41,6 +41,7 @@ import { refreshCookie, isWebClient } from '../../../utils/cookies'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 import { buildTokenScope } from '../../../utils/scopes'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 import { safeAlertAnomalies } from '../../../utils/device-alerts'
 import { computeRiskScore, shouldDenyByRisk, isRiskMedium } from '../../../utils/risk-score'
 import { sendRiskBlockedAlertEmail } from '../../../utils/email'
@@ -54,6 +55,18 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
+
+  // SEC-CEREMONY-DOS：passkey 登入端點無速限（assertion 密碼學不可暴破，但無界呼叫會
+  // 灌 D1 query / risk-score 計算）；per-IP 節流，webauthn kind 與 login-options 共用計數。
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
+  if (ip) {
+    const { blocked } = await checkRateLimit(env.chiyigo_db, { kind: 'webauthn', ip, windowSeconds: 60, max: 30 })
+    if (blocked) {
+      await safeUserAudit(env, { event_type: 'webauthn.login.rate_limited', severity: 'warn', request })
+      return res({ error: 'Too many requests. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+    }
+    await recordRateLimit(env.chiyigo_db, { kind: 'webauthn', ip })
+  }
 
   let body
   try { body = await request.json() }

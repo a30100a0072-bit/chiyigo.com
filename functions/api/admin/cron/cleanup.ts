@@ -56,6 +56,10 @@ const TASKS = [
   // wallet_nonces: 過期即刪（Phase F-3；5min TTL，consumed 也跟著清）
   { name: 'wallet_nonces',       sql: `DELETE FROM wallet_nonces       WHERE expires_at < datetime('now')` },
 
+  // webauthn_challenges: 過期即刪（SEC-CEREMONY-DOS；5min TTL，consume 後本就刪除，
+  // 但未消耗的 challenge（login-options 洪泛 / 使用者放棄 ceremony）無排程 GC 會永久累積）
+  { name: 'webauthn_challenges', sql: `DELETE FROM webauthn_challenges  WHERE expires_at < datetime('now')` },
+
   // kyc_webhook_events: 留 90 天（dedupe 視窗 — vendor 重送窗口都不會這麼長）
   { name: 'kyc_webhook_events',  sql: `DELETE FROM kyc_webhook_events  WHERE processed_at < datetime('now', '-90 days')` },
 

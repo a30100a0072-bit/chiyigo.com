@@ -39,6 +39,8 @@
 import { generateSecureToken } from '../../../utils/crypto'
 import { res } from '../../../utils/auth'
 import { getAllowedRedirectUris } from '../../../utils/oauth-clients'
+import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
+import { safeUserAudit } from '../../../utils/user-audit'
 import {
   readRefreshCookie,
   findActiveUserByRefreshCookie,
@@ -97,6 +99,19 @@ export async function onRequestGet({ request, env }) {
   if (!isAllowedRedirectUri(redirectUri))
     return res({ error: 'redirect_uri not allowed', code: 'REDIRECT_URI_NOT_ALLOWED' }, 400)
 
+  // SEC-CEREMONY-DOS：authorize 每次（silent SSO 發 auth_code / fall-through 寫 pkce_sessions）
+  // 都對 D1 寫一筆；未驗身分 + 無節流 → 可被無界灌爆 D1 寫入額度。per-IP 節流（沿 init.ts
+  // oauth_init pattern；限額較寬，容多 RP / 多分頁 OIDC 流）。block 命中發 telemetry audit。
+  const ip = request.headers.get('CF-Connecting-IP') ?? null
+  if (ip) {
+    const { blocked } = await checkRateLimit(env.chiyigo_db, { kind: 'oauth_authorize', ip, windowSeconds: 60, max: 60 })
+    if (blocked) {
+      await safeUserAudit(env, { event_type: 'auth.authorize.rate_limited', severity: 'warn', request })
+      return res({ error: 'Too many authorize requests. Please slow down.', code: 'RATE_LIMITED' }, 429)
+    }
+    await recordRateLimit(env.chiyigo_db, { kind: 'oauth_authorize', ip })
+  }
+
   // ── Silent SSO（OIDC prompt 處理）──────────────────────────────
   // prompt=login 一律跳過 silent，強制顯示 login UI（即使有 session）。
   // 其他情況試讀 refresh cookie；查到 active user 就直接 issue auth_code 跳轉。
@@ -130,7 +145,7 @@ export async function onRequestGet({ request, env }) {
   const sessionKey = generateSecureToken()
   const expiresAt  = new Date(Date.now() + SESSION_TTL_MS)
     .toISOString().replace('T', ' ').slice(0, 19)
-  const ip         = request.headers.get('CF-Connecting-IP') ?? null
+  // ip 已於上方 rate-limit 區塊宣告（CF-Connecting-IP）
 
   await env.chiyigo_db
     .prepare(`

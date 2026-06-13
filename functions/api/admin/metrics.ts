@@ -13,14 +13,26 @@
  *  ai:         ai_audit 24h 狀態分布
  */
 
-import { requireAnyScope } from '../../utils/auth'
+import { res, requireAnyScope } from '../../utils/auth'
 import { SCOPES } from '../../utils/scopes'
 import { verifyAuditChain } from '../../utils/audit-log'
+import { safeUserAudit, hashIdentifierForAudit } from '../../utils/user-audit'
+import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
 export async function onRequestGet({ request, env }) {
   // P1-17 Phase 3: metrics 主要是用戶/session 統計 → 收進 admin:users:read|write
-  const { error } = await requireAnyScope(request, env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE)
+  const { user, error } = await requireAnyScope(request, env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE)
   if (error) return error
+
+  // SEC-ADMIN-ENUM：與 admin/users 同類觀測缺口 — 補 per-admin rate-limit + read-audit；
+  // 回傳的 top-IP 由 raw 改 keyed-HMAC16（raw IP 為 PII，support role 亦可讀）。
+  const adminId = Number(user.sub)
+  const rl = await checkRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId, windowSeconds: 60, max: 60 })
+  if (rl.blocked) {
+    await safeUserAudit(env, { event_type: 'admin.read.rate_limited', severity: 'warn', user_id: adminId, request, data: { endpoint: 'metrics' } })
+    return res({ error: 'Too many requests', code: 'RATE_LIMITED' }, 429)
+  }
+  await recordRateLimit(env.chiyigo_db, { kind: 'admin_read', userId: adminId })
 
   const db = env.chiyigo_db
 
@@ -96,6 +108,18 @@ export async function onRequestGet({ request, env }) {
   // ── 整理輸出 ───────────────────────────────────────────────────
   const byKey = (rows, key) => Object.fromEntries((rows.results ?? []).map(r => [r[key], r.n]))
 
+  // SEC-ADMIN-ENUM：top-IP 由 raw 改 keyed-HMAC16（domain 'metrics-ip'），保留「重複 offender
+  // 可關聯」用途但不外洩 raw IP（PII）。salted 旗標供下游偵測 prod 缺 AUDIT_IP_SALT。
+  const hashTopIps = (rows: { results?: { ip: unknown; n: unknown }[] }) =>
+    Promise.all((rows.results ?? []).map(async r => {
+      const sig = await hashIdentifierForAudit(env, 'metrics-ip', String(r.ip))
+      return { ip_hmac16: sig.hex.slice(0, 16), salted: sig.salted, count: r.n }
+    }))
+  const [loginTopIpsHashed, oauthInitTopIpsHashed] = await Promise.all([
+    hashTopIps(loginTopIps),
+    hashTopIps(oauthInitTopIps),
+  ])
+
   const payload = {
     generated_at: new Date().toISOString(),
 
@@ -110,12 +134,12 @@ export async function onRequestGet({ request, env }) {
 
     auth: {
       login_failures_24h:        loginFail24h?.n ?? 0,
-      login_top_ips_24h:         (loginTopIps.results ?? []).map(r => ({ ip: r.ip, count: r.n })),
+      login_top_ips_24h:         loginTopIpsHashed,
       login_rate_blocked_24h:    loginRateBlocked?.n ?? 0,
       twofa_failures_24h:        twofaFail24h?.n ?? 0,
       twofa_locked_users_5min:   twofaLockedUsers?.n ?? 0,
       oauth_init_calls_1h:       oauthInit1h?.n ?? 0,
-      oauth_init_top_ips_1h:     (oauthInitTopIps.results ?? []).map(r => ({ ip: r.ip, count: r.n })),
+      oauth_init_top_ips_1h:     oauthInitTopIpsHashed,
       email_send_calls_24h:      emailSend24h?.n ?? 0,
     },
 
@@ -139,6 +163,12 @@ export async function onRequestGet({ request, env }) {
       rate_limited_24h: aiRateLimited24h?.n ?? 0,
     },
   }
+
+  // SEC-ADMIN-ENUM read-audit：誰、何時讀了全站 metrics（對齊 admin/users / deals）。
+  await safeUserAudit(env, {
+    event_type: 'admin.metrics.read', severity: 'info', user_id: adminId, request,
+    data: { chain_valid: chain?.valid ?? null },
+  })
 
   return new Response(JSON.stringify(payload), {
     status:  200,

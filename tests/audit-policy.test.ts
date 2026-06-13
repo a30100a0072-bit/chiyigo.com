@@ -219,6 +219,19 @@ describe('classifyAuditEvent — PR5 5d-2 session.integrity_violation', () => {
   })
 })
 
+// P4 P2 機械補強（2026-06-13）：SEC-ADMIN-ENUM 的 2 個 read_audit（admin list/metrics 枚舉觀測）
+// + SEC-CEREMONY-DOS 的 2 個 telemetry（ceremony per-IP 節流命中）顯式分類。
+describe('classifyAuditEvent — P4 P2 hardening', () => {
+  it.each([
+    ['admin.users.read',              AUDIT_CATEGORY.READ_AUDIT],
+    ['admin.metrics.read',            AUDIT_CATEGORY.READ_AUDIT],
+    ['auth.authorize.rate_limited',   AUDIT_CATEGORY.TELEMETRY],
+    ['webauthn.login.rate_limited',   AUDIT_CATEGORY.TELEMETRY],
+  ])('%s → %s', (e, expected) => {
+    expect(classifyAuditEvent(e)).toBe(expected)
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -282,8 +295,11 @@ describe('registry coverage', () => {
     //   grace-path device mismatch 走既有 auth.refresh.fail/grace_device_mismatch（reason_code，無新 event type）→ 208。
     // EVT-001b (2026-06-12) 加 1 個 domain.event.dlq_list（read_audit；admin 讀 event DLQ list 端點）→ 209。
     // EVT-003 (2026-06-12) 加 2 個 account.delete.membership_skipped / account.delete.membership_overflow（immutable）→ 211。
+    // P4 SEC-CEREMONY-DOS + SEC-ADMIN-ENUM (2026-06-13) 加 4 個：
+    //   admin.users.read / admin.metrics.read（read_audit；admin list/metrics 枚舉觀測）
+    //   auth.authorize.rate_limited / webauthn.login.rate_limited（telemetry；ceremony 節流命中）→ 215。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(211)
+    expect(_registrySize).toBe(215)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
