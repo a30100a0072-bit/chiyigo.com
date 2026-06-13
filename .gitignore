@@ -3,7 +3,11 @@ node_modules/
 .dev.vars
 dist/
 *.local
-.claude/
+# .claude/ is local-only EXCEPT .claude/workflows/ (v3 dimension-A governance tools,
+# tracked + versioned). settings.local.json / scheduled_tasks.lock stay ignored.
+.claude/*
+!.claude/workflows/
+!.claude/workflows/**
 
 # 註：public/*.html 是 npm run build 的產物（來源：src/pages + src/partials），
 # 但因 Cloudflare Pages 新版 dashboard UI 無法設 build command，故仍 commit 進 repo。
