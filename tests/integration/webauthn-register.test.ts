@@ -444,4 +444,33 @@ describe('POST /api/auth/webauthn/register-verify', () => {
     ).bind('cred-replay-2').first()
     expect(dup.n).toBe(0)
   })
+
+  // F3（Codex Code Gate non-blocking）：credential UNIQUE 撞 → 409，但 grant consume 與 INSERT 同一
+  // db.batch（單一 transaction），INSERT 撞 UNIQUE → 整批 rollback → grant.consumed_at 仍 NULL → 使用者
+  // 可換一個 authenticator 用同一張 grant 重試，不用重跑整套 elevation。此測試把該 rollback 語意機械鎖死。
+  it('F3: credential UNIQUE 撞 → 409 且 grant 未被消耗（batch rollback，grant 可重試）', async () => {
+    const u = await seedUser({ email: 'f3@x' })
+    const tok = await userToken(u.id, 'f3@x')
+    const grant = await grantFor(u.id)
+    await seedChallenge(u.id, 'ch-f3')
+    // 預先佔用 credential_id → 下方 INSERT 會撞 UNIQUE(credential_id)
+    await env.chiyigo_db.prepare(
+      `INSERT INTO user_webauthn_credentials (user_id, credential_id, public_key) VALUES (?, ?, ?)`,
+    ).bind(u.id, 'cred-f3-dup', 'pk').run()
+    mockState.verifyResult = happyVerifyResult('cred-f3-dup')
+
+    const resp = await verifyHandler({
+      request: bearer('http://x/api/auth/webauthn/register-verify', tok, {
+        response: fakeCredResponse('ch-f3'),
+      }, grant),
+      env,
+    })
+    expect(resp.status).toBe(409)
+
+    // F3 lock：UNIQUE 撞使整批 transaction rollback → consume 一併還原 → grant 仍可用
+    const grantRow = await env.chiyigo_db.prepare(
+      `SELECT consumed_at FROM elevation_grants WHERE user_id = ? AND action = 'add_passkey'`,
+    ).bind(u.id).first()
+    expect(grantRow?.consumed_at).toBeNull()
+  })
 })
