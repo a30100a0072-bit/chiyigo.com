@@ -23,6 +23,18 @@ function listMjs(dir) {
   return out
 }
 
+// Extract the balanced `export const meta = { ... }` block (brace-matched) for pure-literal checks.
+function extractMetaBlock(src) {
+  const m = src.match(/export const meta = \{/)
+  if (!m) return null
+  let depth = 0
+  for (let i = m.index + m[0].length - 1; i < src.length; i++) {
+    if (src[i] === '{') depth++
+    else if (src[i] === '}') { depth--; if (depth === 0) return src.slice(m.index, i + 1) }
+  }
+  return null
+}
+
 const IMPORT_DENYLIST = [
   'fs', 'node:fs', 'fs/promises', 'node:fs/promises', 'child_process', 'node:child_process',
   'http', 'node:http', 'https', 'node:https', 'net', 'node:net', 'tls', 'node:tls', 'dns', 'node:dns',
@@ -57,12 +69,27 @@ for (const file of files) {
   }
 
   if (isWorkflowEntry(file)) {
-    // meta-first is a workflow-entry contract; the shared lib (schemas.mjs) has no meta.
-    if (!src.includes('export const meta = {')) err(file, 'missing `export const meta = {`')
+    // meta-first + pure-literal contract; the shared lib (schemas.mjs) has no meta.
+    const meta = extractMetaBlock(src)
+    if (!meta) {
+      err(file, 'missing or unbalanced `export const meta = { ... }`')
+    } else {
+      if (!/^(\s*(\/\/[^\n]*|\/\*[\s\S]*?\*\/)\s*)*export const meta = \{/.test(src)) {
+        err(file, '`export const meta` must be the first statement (meta-first)')
+      }
+      if (/\.\.\./.test(meta) || /`|\$\{/.test(meta) || /\bfunction\b|=>/.test(meta) || /\brequire\s*\(/.test(meta)) {
+        err(file, 'meta must be a pure literal (no spread / template / function / require)')
+      }
+    }
     if (!/\bGUARD\b/.test(src)) err(file, 'workflow entry must reference the injection GUARD (B2/AC6)')
-    if (!/agent\s*\(/.test(src)) err(file, 'workflow entry has no agent() call')
-    if (!/agentType:\s*'Explore'/.test(src)) err(file, "agent() must use agentType:'Explore' (read-only)")
-    if (!/\bschema:\s*\w/.test(src)) err(file, 'agent() must pass a schema (deterministic output)')
+    // full enforcement: EVERY agent() call must carry agentType:'Explore' + a schema (not just once).
+    const nAgent = (src.match(/\bagent\s*\(/g) || []).length
+    const nExplore = (src.match(/agentType:\s*'Explore'/g) || []).length
+    const nSchema = (src.match(/\bschema:\s*[A-Za-z_{]/g) || []).length
+    if (nAgent === 0) err(file, 'workflow entry has no agent() call')
+    else if (nExplore < nAgent || nSchema < nAgent) {
+      err(file, `every agent() must use agentType:'Explore' + schema (agent=${nAgent}, Explore=${nExplore}, schema=${nSchema})`)
+    }
   }
 }
 

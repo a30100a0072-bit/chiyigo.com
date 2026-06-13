@@ -22,17 +22,29 @@ for (const dp of (Array.isArray(a.decisionPoints) ? a.decisionPoints : [])) {
 if (!/^[0-9a-f]{7,40}$/.test(String(a.archApprovedSha || ''))) bad('archApprovedSha must be 7-40 hex')
 if (!/^[0-9a-f]{7,40}$/.test(String(a.planApprovedSha || ''))) bad('planApprovedSha must be 7-40 hex')
 
-// ---- Artifacts: resolve refs to 40-hex commits, then diff on RESOLVED SHAs only (section 5.4; P1) ----
+// ---- Artifacts: resolve refs to 40-hex commits; diff + per-decision-point hunks on RESOLVED SHAs (section 5.4; P1) ----
+const decisionFiles = (Array.isArray(a.decisionPoints) ? a.decisionPoints : []).map((dp) => dp.file)
 phase('Artifacts')
 const ARTIFACTS_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['base_sha', 'reviewed_sha', 'name_status', 'stat', 'changed_files'],
+  required: ['base_sha', 'reviewed_sha', 'name_status', 'stat', 'changed_files', 'decision_hunks'],
   properties: {
     base_sha: { type: 'string' }, reviewed_sha: { type: 'string' },
     name_status: { type: 'string' }, stat: { type: 'string' },
     changed_files: { type: 'array', items: { type: 'string' } },
+    decision_hunks: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        required: ['file', 'hunk'],
+        properties: { file: { type: 'string' }, hunk: { type: 'string' } },
+      },
+    },
   },
 }
+const decisionDiffLines = decisionFiles.length
+  ? decisionFiles.map((f) => `    git diff BASE_SHA..HEAD_SHA -- ${f}`).join('\n')
+  : '    (no decision-point files declared)'
 const artifacts = await agent(`${GUARD}
 
 You are a READ-ONLY git collector. Run ONLY these fixed steps; no other command, no write op, no network.
@@ -43,13 +55,25 @@ Step 1 -- resolve each ref to a single commit SHA (reject if not exactly one 40-
 Step 2 -- using ONLY the resolved SHAs (never the raw refs), run:
     git diff --name-status BASE_SHA..HEAD_SHA
     git diff --stat BASE_SHA..HEAD_SHA
-Return base_sha=BASE_SHA, reviewed_sha=HEAD_SHA, name_status, stat, and the changed-file list.`,
+Step 3 -- capture FULL hunks for each decision-point file (resolved SHAs only):
+${decisionDiffLines}
+  Return decision_hunks as [{file, hunk}] -- hunk = the full git diff output for that file
+  (empty string only if the file truly has no diff in this range).
+Return base_sha, reviewed_sha=HEAD_SHA, name_status, stat, changed_files, and decision_hunks.`,
   { agentType: 'Explore', phase: 'Artifacts', label: 'git-artifacts', schema: ARTIFACTS_SCHEMA })
 
 if (!artifacts ||
   !RESOLVED_SHA_PATTERN.test(String(artifacts.base_sha || '')) ||
   !RESOLVED_SHA_PATTERN.test(String(artifacts.reviewed_sha || ''))) {
   bad(`collector did not return resolved 40-hex SHAs: ${JSON.stringify(artifacts)}`)
+}
+// fail-closed (P1): every declared decision-point file must be in changed_files with a non-empty hunk.
+const changedSet = new Set(Array.isArray(artifacts.changed_files) ? artifacts.changed_files : [])
+const hunkByFile = new Map((Array.isArray(artifacts.decision_hunks) ? artifacts.decision_hunks : []).map((h) => [h.file, h.hunk]))
+for (const f of decisionFiles) {
+  if (!changedSet.has(f)) bad(`decision-point file not in changed_files (plan mis-marked or unchanged): ${f}`)
+  const hunk = hunkByFile.get(f)
+  if (typeof hunk !== 'string' || hunk.trim().length === 0) bad(`decision-point file has empty hunk (fail-closed): ${f}`)
 }
 
 // ---- semantic-dimension finders (section 5.3) ----
@@ -107,14 +131,17 @@ const reviewPackage = {
     stat: artifacts.stat,
     changed_files: artifacts.changed_files,
   },
-  // main thread fills these from the plan before sending to ChatGPT faithfulness:
+  // decision_hunks: MECHANICAL from the collector (section 5.4/P1) -- not main-thread-curated.
+  // scope_mapping & deviations are SEMANTIC -> the main thread fills them from the plan before
+  // sending to ChatGPT faithfulness (section 5.4 "Package stage = main-thread assembly").
   scope_mapping: [],
-  decision_hunks: [], // OD-E: config-change hunks for this PR; runtime PRs add security/state hunks
+  decision_hunks: Array.isArray(artifacts.decision_hunks) ? artifacts.decision_hunks : [],
   deviations: [],
   dimension_a_findings: dimensionAFindings,
   questions: [
     'Does the implementation betray the approved architecture / OD rulings / smuggle scope creep?',
     'B MUST cross-check git_artifacts.name_status and name any changed file lacking a hunk.',
+    'MAIN THREAD must fill scope_mapping (plan scope-item -> changed files) and deviations before sending.',
   ],
 }
 log('=== CODE-SELF-REVIEW + FAITHFULNESS PACKAGE (JSON) ===')

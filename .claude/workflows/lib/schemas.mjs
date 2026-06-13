@@ -93,10 +93,14 @@ export function isSafeRef(ref) {
   return typeof ref === 'string' && ref.length > 0 && REF_PATTERN.test(ref) && !ref.includes('..')
 }
 
-/** Repo-relative read-target check: reject absolute, '..', or any secret-denylist hit. */
+/** Repo-relative read-target check: reject absolute (posix / windows drive / UNC / backslash),
+ *  URL-like scheme, home '~', '..', or any secret-denylist hit. */
 export function isSafeReadPath(p) {
   if (typeof p !== 'string' || p.length === 0) return false
-  if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return false // posix / windows absolute
+  if (p.startsWith('/') || p.startsWith('\\')) return false // posix absolute / windows UNC or backslash-absolute
+  if (/^[A-Za-z]:/.test(p)) return false // windows drive (C:\...)
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(p)) return false // URL-like scheme (file:, http:, ...)
+  if (p.startsWith('~')) return false // home expansion
   if (p.split(/[/\\]/).includes('..')) return false
   const lower = p.toLowerCase()
   for (const s of SECRET_DENYLIST) {
