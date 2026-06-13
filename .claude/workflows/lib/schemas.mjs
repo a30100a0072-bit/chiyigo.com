@@ -93,15 +93,18 @@ export function isSafeRef(ref) {
   return typeof ref === 'string' && ref.length > 0 && REF_PATTERN.test(ref) && !ref.includes('..')
 }
 
-/** Repo-relative read-target check: reject absolute (posix / windows drive / UNC / backslash),
- *  URL-like scheme, home '~', '..', or any secret-denylist hit. */
+// Positive allowlist for repo-relative paths (P1). Excludes whitespace, shell metachars
+// (; | & < > $ ( ) { } [ ]), quotes, backtick, backslash, and colon -- so an args path
+// cannot inject extra tokens into the fixed `git diff -- <file>` template. Mirrors the
+// ref allowlist (REF_PATTERN): both ref and path feed git, both need a positive allowlist.
+export const REPO_PATH_PATTERN = /^[A-Za-z0-9._/@-]+$/
+
+/** Repo-relative read-target check: positive allowlist + reject leading '/' / '..' / secret. */
 export function isSafeReadPath(p) {
   if (typeof p !== 'string' || p.length === 0) return false
-  if (p.startsWith('/') || p.startsWith('\\')) return false // posix absolute / windows UNC or backslash-absolute
-  if (/^[A-Za-z]:/.test(p)) return false // windows drive (C:\...)
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(p)) return false // URL-like scheme (file:, http:, ...)
-  if (p.startsWith('~')) return false // home expansion
-  if (p.split(/[/\\]/).includes('..')) return false
+  if (!REPO_PATH_PATTERN.test(p)) return false // rejects whitespace/shell metachar/quote/backslash/colon/~/parens
+  if (p.startsWith('/')) return false // posix absolute (allowlist permits '/', so block leading '/')
+  if (p.split('/').includes('..')) return false // parent traversal
   const lower = p.toLowerCase()
   for (const s of SECRET_DENYLIST) {
     if (lower.includes(s.toLowerCase())) return false

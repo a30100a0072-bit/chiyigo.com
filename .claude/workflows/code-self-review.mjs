@@ -24,6 +24,16 @@ if (!/^[0-9a-f]{7,40}$/.test(String(a.planApprovedSha || ''))) bad('planApproved
 
 // ---- Artifacts: resolve refs to 40-hex commits; diff + per-decision-point hunks on RESOLVED SHAs (section 5.4; P1) ----
 const decisionFiles = (Array.isArray(a.decisionPoints) ? a.decisionPoints : []).map((dp) => dp.file)
+// fail-closed (P1): require >=1 decision point, else the faithfulness package would carry empty
+// decision_hunks (curated-diff regression). Waiving requires an explicit flag + reason (docs-only/non-code).
+if (decisionFiles.length === 0) {
+  if (a.allowNoDecisionPoints !== true) {
+    bad('no decisionPoints declared; set allowNoDecisionPoints:true + noDecisionPointsReason for docs-only/non-code PRs')
+  }
+  if (typeof a.noDecisionPointsReason !== 'string' || !a.noDecisionPointsReason.trim()) {
+    bad('allowNoDecisionPoints requires a non-empty noDecisionPointsReason')
+  }
+}
 phase('Artifacts')
 const ARTIFACTS_SCHEMA = {
   type: 'object', additionalProperties: false,

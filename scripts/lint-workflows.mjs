@@ -6,8 +6,8 @@
 // the import-denylist below applies only to .claude/workflows/**.mjs.
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-// SSOT for the expected GUARD / secret denylist (section 8.1 expected-value source).
-import { GUARD, SECRET_DENYLIST } from '../.claude/workflows/lib/schemas.mjs'
+// SSOT for the expected GUARD / secret denylist (section 8.1) + validators for the self-check.
+import { GUARD, SECRET_DENYLIST, isSafeReadPath, isSafeRef } from '../.claude/workflows/lib/schemas.mjs'
 
 const WF_DIR = '.claude/workflows'
 const errors = []
@@ -112,6 +112,16 @@ try {
 if (!GUARD.includes('.env') || !GUARD.includes('.dev.vars') || !GUARD.includes('.canary-')) {
   err('lib/schemas.mjs', 'GUARD missing required secret-denylist forbid-declaration (section 8.1)')
 }
+
+// validator self-check (section 8 layer 2; P1): known-bad inputs MUST be rejected, good ones accepted.
+const BAD_PATHS = ['foo;git status', 'foo|git status', 'a&b', 'a b', 'foo\nbar', '/etc/passwd', '../x', '..\\x', '~/x', 'C:\\x', '\\\\srv\\share', 'file:x', '.dev.vars', 'x.env', 'a$(b)', 'a`b`', "a'b", 'a"b', 'a{b}', 'a<b']
+for (const bp of BAD_PATHS) if (isSafeReadPath(bp)) err('schemas.mjs', `isSafeReadPath must reject: ${JSON.stringify(bp)}`)
+const GOOD_PATHS = ['docs/reviews/x.md', '.gitignore', 'scripts/lint-workflows.mjs', 'a/b/c.mjs', '.claude/workflows/lib/schemas.mjs']
+for (const gp of GOOD_PATHS) if (!isSafeReadPath(gp)) err('schemas.mjs', `isSafeReadPath must accept: ${JSON.stringify(gp)}`)
+const BAD_REFS = ['--show-toplevel', '-x', 'a..b', 'a b', 'a;b', 'a|b', 'a\nb', '']
+for (const br of BAD_REFS) if (isSafeRef(br)) err('schemas.mjs', `isSafeRef must reject: ${JSON.stringify(br)}`)
+const GOOD_REFS = ['main', 'HEAD', '7da1f9c0', 'feat/x', 'origin/main', '@']
+for (const gr of GOOD_REFS) if (!isSafeRef(gr)) err('schemas.mjs', `isSafeRef must accept: ${JSON.stringify(gr)}`)
 
 if (errors.length) {
   console.error('[lint-workflows] FAIL:')
