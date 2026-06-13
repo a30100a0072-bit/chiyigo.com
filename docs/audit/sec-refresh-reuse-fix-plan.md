@@ -1,9 +1,11 @@
 # SEC-REFRESH-REUSE (P1) — Refresh Reuse Family-Revoke Fix Plan
 
-狀態：`PLAN_DRAFT`（送審 `CHATGPT_ARCH_APPROVED`）
+狀態：`PLAN_DRAFT`（**ChatGPT Arch Gate = APPROVED_WITH_REQUIRED_CLARIFICATIONS → C1/C2/C3 已補,送審** `CODEX_PLAN_APPROVED`）
 動工分級：**L2 + 高風險加碼**（auth 熱路徑 + distributed session state → 補 state-transition 表 / idempotency / abuse-cap / failure-mode / Ordering-B tradeoff 顯式化）
 前置：SEC-FACTOR-ADD ADD-A 全系列已收尾（#74/#75/#77/#78/#79/#80）。
 Spec：owner 2026-06-13 prose ruling（Option B + PT-2 truth table + 2 hard locks）= `SPEC_APPROVED`。
+
+**Arch Gate clarifications 已補（本版）**：C1 `family_revoked` 只在 CAS `changes>0` emit、`changes=0` 走既有 fail event 不冒充（§5/§7）；C2 casByFamily DB error → 401 `SESSION_REVOKED` + `family_revoke_error` audit(非 family_revoked)、fail-secure（§4）；C3 前端只對 `SESSION_REVOKED` 清 token，generic 401/403/429/network/malformed 皆不清（§10）；OD-SR-A cap 常數集中、OD-SR-B 前端覆蓋裁定（§11）。
 
 ---
 
@@ -74,30 +76,40 @@ incoming refresh token → lookup refresh_tokens by token_hash
 - **idempotency 不變量**：`WHERE revoked_at IS NULL` → family 已撤則 `changes=0`（no-op）。首撤 `changes>0`。**這是 OD-SR-2 hard lock 的根**：revoke 本身永遠嘗試（不被 cap gate），idempotency 決定是否真撤。
 - 單表單 family → 不需 batch（一句 UPDATE）；非跨 binding。
 - presented token 本身已 revoked（在此分支），casByFamily 撤的是**其 family 的 live head**（successor），不是 presented token。
-- **failure-mode（fail-secure）**：casByFamily 包 try/catch；DB error → **仍回 401**（既有 reuse 路徑本就不簽新 token，維持 fail-secure）+ emit `auth.refresh.fail` reason=`family_revoke_error`（既有 event,warn）。revoke 未成 → 下次同 family reuse 呈現再撤（idempotent，最終一致）。攻擊者 successor 最多多撐到下次受害者/任一方 out-of-grace 呈現。
+- **failure-mode（fail-secure；C2）**：casByFamily 包 try/catch；DB error →
+  - requester：**回 401 `SESSION_REVOKED`**（不簽新 token;client 清本地 token 安全——presented token 確實該作廢）。
+  - audit：**`auth.refresh.fail` reason_code=`family_revoke_error`**(既有 SECURITY_SIGNAL/warn event,可查可告警) ——**絕不** emit `family_revoked`(C1：未實撤不可謊稱已撤)。
+  - 一致性：revoke 未成 → 下次同 family reuse 呈現再撤(idempotent,最終一致);攻擊者 successor 最多多撐到任一方下次 out-of-grace 呈現。
+  - 監控：`family_revoke_error` 計數設 alert threshold(持續 error = DB/邏輯異常)。
 
 ## 5. abuse cap 設計（OD-SR-2 hard lock：cap 不得阻 first revoke）
 
 **順序鐵律：revoke 先於 cap-gate；cap 只壓 audit 噪音，不 gate revoke。**
 
+named constants（OD-SR-A 裁定;**禁 magic number**）：
 ```
-genuine-reuse（§3 family-revoke 類）：
-1. const r = casByFamily(...).run()            ← 永遠跑（idempotent，不被 cap 擋）
-2. if (r.changes > 0):                          ← 首撤 = 真的殺了 live successor
-      emit auth.refresh.family_revoked critical { revoke_count: r.changes, sub_path, abuse_capped:false, ... }
-      recordRateLimit(refresh_family_revoke, user+session)
-   else:                                        ← family 已撤（repeated replay）
-      const capped = checkRateLimit(refresh_family_revoke, user+session, 5/600s).blocked
-      if (!capped):
-        emit auth.refresh.family_revoked warn(降級) { revoke_count:0, abuse_capped:true-soon, ... }
-        recordRateLimit(...)
-      // capped → 完全不 emit（純降噪）
-3. 一律 return 401 SESSION_REVOKED
+REFRESH_FAMILY_REVOKE_AUDIT_CAP             = 5     // 每 window 內重複(changes=0)audit 上限
+REFRESH_FAMILY_REVOKE_AUDIT_WINDOW_SECONDS  = 600
 ```
 
-- **cap key = per-user + per-session_id**（kind=`refresh_family_revoke`，windowSeconds=600，max=5）。
-- **hard lock 滿足**：step 1 的 revoke **不在 cap 之後、不被 cap 跳過**；cap 只在 `changes=0`（已撤）分支壓重複 audit。攻擊者打滿 cap **無法**讓**新** genuine-reuse family（changes>0）的首撤被跳過——因為首撤走 step 2 的 `changes>0` 分支，與 cap 無關。
-- 防 audit/DB flood：同一已撤 family 被重放 N 次 → 只第一次（或 cap 內）出降級 audit,之後純 no-op。
+```
+genuine-reuse（§3 family-revoke 類）：
+1. const r = casByFamily(env.chiyigo_db, userId, presentedFamilyRef).run()   ← 永遠跑(idempotent,不被 cap 擋)
+2. if (r.meta.changes > 0):                     ← 首撤 = 真的撤到 ≥1 active row(殺了 live successor)
+      emit auth.refresh.family_revoked CRITICAL { revoke_count: r.meta.changes, sub_path, reason, abuse_capped:false, session_id_hmac16 }
+   else:                                        ← changes=0：family 早已撤(repeated replay) 或 本就無 live successor
+      // C1：changes=0 沒撤到任何 active row → **不得** emit family_revoked(不可謊稱已撤)
+      const capped = checkRateLimit(refresh_family_revoke, user+session, CAP/WINDOW).blocked
+      if (!capped):
+        recordRateLimit(refresh_family_revoke, user+session)
+        emit auth.refresh.fail WARN { reason_code:'reuse_detected_family_already_revoked', sub_path }   ← 既有 fail event,**非** family_revoked
+      // capped → 不 emit(純降噪)
+3. return 401 SESSION_REVOKED（一律;client 清 token 安全）
+```
+
+- **cap key = per-(user_id, session_id)**（kind=`refresh_family_revoke`）。
+- **C1**：`auth.refresh.family_revoked` **只在 `changes>0`** emit;`changes=0` 走既有 `auth.refresh.fail`(reason 區分 already-revoked),不可冒充 family_revoked,觀測語意不失真。
+- **hard lock(OD-SR-2)滿足**：step 1 revoke **不在 cap 之後、不被 cap 跳過**;cap 只在 `changes=0` 分支壓**重複** audit。攻擊者打滿 family A 的 cap **無法**讓**另一** genuine-reuse family B 首撤被跳過——B 首撤走 `changes>0` 分支,與 cap 無關,且 cap key 含 session_id(A≠B)。**cap 不可能成 bypass**。
 
 ## 6. SESSION_REVOKED 信號 + 前端（OD-SR-3 hard lock）
 
@@ -108,6 +120,7 @@ genuine-reuse（§3 family-revoke 類）：
 ## 7. audit event `auth.refresh.family_revoked`（OD-SR-4）
 
 - 註冊 audit-policy **SECURITY_SIGNAL**（critical severity → cold_class `security_critical`）；registry **225→226** + **兩處 lockstep**（`audit-policy.test:333` + `session-revoke-multi.test:392`）+ 顯式分類 describe（同 PR-A4 慣例）。
+- **emit 條件（C1）**：**只在 family-revoke CAS `changes>0`** 時 emit（真撤到 ≥1 active row）。`changes=0`（repeated/已撤）走 `auth.refresh.fail`、DB error 走 `auth.refresh.fail` reason=`family_revoke_error`——**皆非** family_revoked。觀測上 `family_revoked` 計數 ⟺ 真實 family 撤除事件。
 - **payload 最小化**：`{ reason ∈ (genuine_reuse_outside_grace|device_null_candidate|dead_successor), sub_path, session_id_hmac16, revoke_count, abuse_capped }`。**無** raw token / raw device / raw provider；`session_id` 走 `hashIdentifierForAudit` keyed-HMAC。
 - safe：emit 失敗不影響 revoke 已寫入的事實（revoke 在 emit 前）。
 
@@ -141,14 +154,16 @@ PT-2 **故意接受**：極少數 out-of-grace 良性 orphan（>30s 延遲重試
 | out-of-grace genuine reuse | family-revoke + 401 SESSION_REVOKED + `auth.refresh.family_revoked` critical |
 | device-null candidate | family-revoke |
 | dead/missing successor | family-revoke |
-| repeated replay（已撤 family） | idempotent no-op（changes=0）+ audit capped/降級 |
-| **cap 不阻 first revoke（OD-SR-2 hard lock）** | 先打滿 cap（同 session 重放）→ 對**另一個** genuine-reuse family 首次呈現 → **仍 family-revoke（changes>0）** |
+| repeated replay（已撤 family，changes=0） | idempotent no-op;emit `auth.refresh.fail` reason=`reuse_detected_family_already_revoked`;**不** emit family_revoked(C1) |
+| **C1：changes=0 不冒充 family_revoked** | family 已撤後再 reuse → audit 無 `auth.refresh.family_revoked` row(只 fail/already_revoked) |
+| **C2：DB error fail-secure** | casByFamily throw（mock）→ 401 `SESSION_REVOKED` + audit `auth.refresh.fail` reason=`family_revoke_error`;**不簽新 token**、**不** emit family_revoked |
+| **cap 不阻 first revoke（OD-SR-2 hard lock）** | 先打滿 family A 的 cap（changes=0 重放）→ 對**另一** genuine-reuse family B 首次呈現 → **仍 family-revoke（changes>0）+ critical** |
 | no cross-family | family-revoke 後,同 user **其他** session_id family 的 live token **未**被撤 |
 | audit registry | 226 雙 lockstep |
-| 前端 generic 401 | **不**清 session |
-| 前端 `SESSION_REVOKED` | 清 session + 導 login |
+| **前端（C3）** | (a) 401 `SESSION_REVOKED` → 清 token + 導 login;(b) generic 401 → **不**清;(c) 403 / 429 / network error → **不**清;(d) malformed / code 缺 response → **不**清 |
 
-## 11. Open Decisions（送 Arch Gate prose；無重大分叉,列 nuance）
+## 11. Decisions（Arch Gate 已裁 + C1/C2/C3 已補）
 
-- **OD-SR-A（cap window/max 精調）**：5/600s 為起手;Arch/Codex 可建議調整（near-zero 流量下不敏感）。
-- **OD-SR-B（前端測試覆蓋）**：若 repo 無前端單元測試框架,SESSION_REVOKED 前端行為以手動驗 + 後端 contract test（回正確 code）守,Arch Gate 確認是否足夠或要補前端測試。
+- **OD-SR-A → 裁定**：cap = **5 / 600s** 起手;**常數集中**（`REFRESH_FAMILY_REVOKE_AUDIT_CAP` / `_WINDOW_SECONDS`，§5，禁 magic number）。
+- **OD-SR-B → 裁定**：前端覆蓋 = **後端 contract test（回正確 code）+ focused `api.ts` test + manual smoke**（**manual-only 不足**）;§10 前端 (a)–(d) 已列。若 repo 無前端測試框架,以可跑的 `api.ts` focused test 守 SESSION_REVOKED-vs-generic 分流。
+- **Arch Gate C1/C2/C3 已補**：C1（`family_revoked` 只在 `changes>0`，§5/§7）、C2（DB error → 401 SESSION_REVOKED + `family_revoke_error`，§4）、C3（前端只對 `SESSION_REVOKED` 清，§10 (a)–(d)）。
