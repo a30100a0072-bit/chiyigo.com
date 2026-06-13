@@ -215,6 +215,14 @@ async function handle(context) {
       return Response.redirect(`${baseUrl}/dashboard.html?bind_error=elevation_consumed`, 302)
     }
 
+    // SEC-FACTOR-ADD-A PR-A4：綁定成功 audit（給未來 disposition 的 add-time context）。
+    // payload 無明文 provider_id（keyed-HMAC）；safe-audit 失敗不中斷綁定主流程（OD-5）。
+    const bindSig = await hashIdentifierForAudit(env, 'oauth-provider-id', String(provider_id))
+    await safeUserAudit(env, {
+      event_type: 'oauth.identity.bind.success', severity: 'info', user_id: bindingUserId, request,
+      data: { provider, provider_id_hmac16: bindSig.hex.slice(0, 16), salted: bindSig.salted },
+    })
+
     return Response.redirect(`${baseUrl}/dashboard.html?bind=success&provider=${provider}`, 302)
   }
 

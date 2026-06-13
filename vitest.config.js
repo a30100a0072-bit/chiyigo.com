@@ -44,6 +44,7 @@ export default defineConfig({
         'functions/utils/revocation.{js,ts}',         // revoked_jti CRUD
         'functions/utils/role-change.{js,ts}',        // UPDATE + bumpTokenVersion + audit chain
         'functions/utils/elevation.{js,ts}',          // factor-add elevation grants/exchanges + second-factor verify（elevation_grants/backup_codes D1，integration-tested）
+        'functions/utils/credential-disposition.{js,ts}', // PR-A4：classifyRisk + disposition runner（audit_log/credential tables D1，integration-tested：credential-disposition）
         'functions/utils/totp.{js,ts}',               // used_totp PK replay-safe
         'functions/utils/webauthn.{js,ts}',           // consumeChallenge atomic + D1
         'functions/utils/brute-force.{js,ts}',        // ip_blacklist CRUD

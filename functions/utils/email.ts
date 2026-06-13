@@ -279,6 +279,57 @@ export async function sendNewDeviceAlertEmail(apiKey: string | undefined, to: st
 }
 
 /**
+ * SEC-FACTOR-ADD ADD-A PR-A4：高風險 credential disposition 通知。
+ * 對 high-risk tier credential 的擁有者寄出「某登入因子因安全複查需重新確認」。
+ * 不含 credential 明文識別碼（PII-safe）；只說明類型 + 引導至 dashboard。
+ */
+export async function sendCredentialReverificationEmail(
+  apiKey: string | undefined,
+  to: string,
+  info: { credentialType: 'passkey' | 'wallet' | 'identity' },
+  env?: EmailEnv,
+) {
+  const BASE_URL = baseUrlOf(env)
+  const dash = `${BASE_URL}/dashboard.html`
+  const label = info.credentialType === 'passkey' ? 'Passkey 通行金鑰'
+    : info.credentialType === 'wallet' ? '加密錢包綁定'
+    : '第三方登入帳號'
+
+  const html = `
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:system-ui,sans-serif;color:#e2e8f0">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:40px auto">
+    <tr><td style="padding:32px;background:#1e293b;border-radius:12px">
+      <h1 style="margin:0 0 8px;font-size:22px;color:#f8fafc">🔐 帳號安全複查</h1>
+      <p style="margin:0 0 16px;color:#94a3b8;font-size:14px">
+        我們對帳號的登入因子做了一次安全複查，發現你的一項 <strong style="color:#e2e8f0">${label}</strong>
+        需要你重新確認，以排除被冒用的可能。
+      </p>
+      <p style="margin:0 0 20px;color:#fbbf24;font-size:13px;font-weight:600">
+        若這項因子是你本人新增的，請至 dashboard 重新驗證後即可繼續使用；若你不認得，請立即移除並修改密碼。
+      </p>
+      <a href="${dash}"
+         style="display:inline-block;padding:12px 24px;background:#6366f1;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px">
+        開啟 Dashboard 確認
+      </a>
+      <p style="margin:24px 0 0;color:#475569;font-size:12px">
+        Chiyigo 不會透過 email 索取密碼或 2FA 驗證碼。
+      </p>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim()
+
+  return sendEmail(apiKey, env, {
+    to,
+    subject: '🔐 Chiyigo 帳號安全複查 — 登入因子需重新確認',
+    html,
+  })
+}
+
+/**
  * Phase E-2：高風險登入被擋下提醒。
  * caller 在 risk score ≥ 70 時呼叫；email 用於告知本人「我們擋了一次嫌疑登入」。
  *

@@ -197,6 +197,7 @@ const IMMUTABLE = [
   'oauth.bind_email.success',
   'oauth.code.exchange.success',
   'oauth.end_session',
+  'oauth.identity.bind.success',                 // SEC-FACTOR-ADD-A PR-A4：OAuth identity 綁定成功（add-time context，對齊 wallet.bind.success）
   'oauth.identity.unbind',
   'payment.checkout.created',
   'payment.intent.anonymized',                  // PR 1.2：admin 對 succeeded intent 做 PII 抹除（forensic trail，永久保留）
@@ -220,6 +221,9 @@ const IMMUTABLE = [
 ]
 
 const SECURITY_SIGNAL = [
+  // SEC-FACTOR-ADD-A PR-A4：existing-credential disposition（per-row finding + run lifecycle）
+  'account.credential.disposition',            // per-row：high/unknown credential 處置（hashed id，無明文）
+  'account.credential.disposition.run',        // run lifecycle：phase=start/dry_run/complete/failed + counts
   'account.password.reset.backup_code_fail',
   'account.password.reset.totp_fail',          // SEC-RESET-2FA-BF：reset TOTP 驗證失敗（暴破偵測信號）
   // SEC-FACTOR-ADD-A（ADD-A PR-A2）：factor-add elevation 結果信號

@@ -190,8 +190,14 @@ CREATE TABLE IF NOT EXISTS user_identities (
   avatar_url   TEXT,
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT,
+  requires_reverification INTEGER NOT NULL DEFAULT 0,
+  disposition_reason TEXT,
+  disposition_at TEXT,
+  disposition_by TEXT,
   UNIQUE(provider, provider_id)
 );
+CREATE INDEX IF NOT EXISTS idx_user_identities_reverif
+  ON user_identities(requires_reverification) WHERE requires_reverification = 1;
 
 -- PKCE sessions: chiyigo IAM acts as Authorization Server (RFC 7636 + OIDC)
 CREATE TABLE IF NOT EXISTS pkce_sessions (
@@ -363,8 +369,14 @@ CREATE TABLE IF NOT EXISTS user_wallets (
   nickname      TEXT,
   signed_at     TEXT    NOT NULL DEFAULT (datetime('now')),
   last_used_at  TEXT,
+  requires_reverification INTEGER NOT NULL DEFAULT 0,
+  disposition_reason TEXT,
+  disposition_at TEXT,
+  disposition_by TEXT,
   UNIQUE(user_id, address)
 );
+CREATE INDEX IF NOT EXISTS idx_user_wallets_reverif
+  ON user_wallets(requires_reverification) WHERE requires_reverification = 1;
 
 CREATE TABLE IF NOT EXISTS wallet_nonces (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -397,8 +409,14 @@ CREATE TABLE IF NOT EXISTS user_webauthn_credentials (
   backup_eligible   INTEGER NOT NULL DEFAULT 0,
   backup_state      INTEGER NOT NULL DEFAULT 0,
   created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
-  last_used_at      TEXT
+  last_used_at      TEXT,
+  requires_reverification INTEGER NOT NULL DEFAULT 0,
+  disposition_reason TEXT,
+  disposition_at TEXT,
+  disposition_by TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_user_webauthn_credentials_reverif
+  ON user_webauthn_credentials(requires_reverification) WHERE requires_reverification = 1;
 
 CREATE TABLE IF NOT EXISTS webauthn_challenges (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,

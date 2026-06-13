@@ -41,7 +41,7 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0001..0054 forward 已實作（見 line 448 describe）；本 case
+// 至少要有 targeted smoke。完整 0001..0055 forward 已實作（見 line 448 describe）；本 case
 // 維持手建 fixture 形式作 0037 issued_aud 行為的 targeted 驗證。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
@@ -95,6 +95,8 @@ import up0053    from '../../migrations/0053_refresh_token_successor_hash.sql?ra
 import down0053  from '../../migrations/down/0053_refresh_token_successor_hash.down.sql?raw'
 import up0054    from '../../migrations/0054_elevation_grants.sql?raw'
 import down0054  from '../../migrations/down/0054_elevation_grants.down.sql?raw'
+import up0055    from '../../migrations/0055_credential_disposition.sql?raw'
+import down0055  from '../../migrations/down/0055_credential_disposition.down.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -106,7 +108,7 @@ const ALL_UPS = [
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
   up0041, up0042, up0043, up0044, up0045, up0046, up0047, up0048,
-  up0049, up0050, up0051, up0052, up0053, up0054,
+  up0049, up0050, up0051, up0052, up0053, up0054, up0055,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -295,7 +297,7 @@ describe('migrations smoke', () => {
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
 // 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
-// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0054 已實作於下方
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0055 已實作於下方
 // 「full forward chain」describe（line 448）。本 case 維持手建 fixture 形式作 0037
 // issued_aud 行為 targeted 驗證。
 //
@@ -390,10 +392,10 @@ describe('migrations smoke 0037 targeted', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full forward chain 0001..0054 vs prod snapshot
+// Full forward chain 0001..0055 vs prod snapshot
 //
 // 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
-// 完整 forward 變得可行。本 describe 驗 _base + 0001..0054 跑完後的 schema shape
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0055 跑完後的 schema shape
 // 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
 //
 // 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
@@ -453,7 +455,7 @@ const EXPECTED_COLUMNS = {
   requisition: ['budget', 'company', 'contact', 'created_at', 'deleted_at', 'id', 'message', 'name', 'owner_guest_id', 'owner_user_id', 'service_type', 'source_ip', 'status', 'tg_message_id', 'timeline', 'user_id'],
   local_accounts: ['password_hash', 'password_salt', 'totp_enabled', 'totp_secret', 'user_id'],
   backup_codes: ['code_hash', 'id', 'used_at', 'user_id'],
-  user_identities: ['avatar_url', 'created_at', 'display_name', 'id', 'metadata', 'provider', 'provider_id', 'updated_at', 'user_id'],
+  user_identities: ['avatar_url', 'created_at', 'display_name', 'disposition_at', 'disposition_by', 'disposition_reason', 'id', 'metadata', 'provider', 'provider_id', 'requires_reverification', 'updated_at', 'user_id'],
   password_resets: ['expires_at', 'token_hash', 'user_id'],
   refresh_tokens: ['auth_time', 'device_info', 'device_uuid', 'expires_at', 'id', 'issued_aud', 'revoked_at', 'scope', 'session_id', 'successor_token_hash', 'token_hash', 'user_id'],
   oauth_states: ['action', 'aud', 'client_callback', 'code_verifier', 'created_at', 'elevation_user_id', 'expires_at', 'factor_add_grant_hash', 'ip_address', 'nonce', 'platform', 'purpose', 'redirect_uri', 'session_id', 'state_token'],
@@ -494,7 +496,7 @@ const EXPECTED_REQUISITION_INDEXES = [
   'idx_requisition_ip',         // 0006
 ]
 
-describe('full forward chain 0001..0054 vs prod snapshot', () => {
+describe('full forward chain 0001..0055 vs prod snapshot', () => {
   beforeAll(async () => {
     await dropAllTables()
     await execAll(baseSql)
@@ -1178,6 +1180,94 @@ describe('migrations smoke 0054 targeted (elevation grants/exchanges + oauth_sta
     await execAll(up0054)
     expect(await tableExists('elevation_grants')).toBe(true)
     expect(await columnExists('oauth_states', 'action')).toBe(true)
+  })
+})
+
+// PR-A4 (SEC-FACTOR-ADD ADD-A): 0055 adds disposition columns to the three credential tables. down is a
+// conservative TABLE-REBUILD (Arch Gate F1, not DROP COLUMN). This round-trip proves down removes the 4 columns
+// while PRESERVING every original credential row + restoring original indexes, and re-up brings the columns back.
+// Builds its OWN pre-0055 fixtures + dropAllTables, so it sits independently of the full-forward block.
+describe('migrations smoke 0055 targeted (credential disposition columns + table-rebuild down round-trip)', () => {
+  const COLS = ['requires_reverification', 'disposition_reason', 'disposition_at', 'disposition_by']
+  const TABLES = ['user_webauthn_credentials', 'user_wallets', 'user_identities']
+
+  beforeAll(async () => {
+    await dropAllTables()
+    // minimal users (credential tables FK user_id -> users(id))
+    await env.chiyigo_db.prepare(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT)`).run()
+    await env.chiyigo_db.prepare(`INSERT INTO users (id, email) VALUES (1, 'u1@x')`).run()
+    // pre-0055 ORIGINAL schemas (no disposition columns) — must match 0021 / 0023 / 0000_base
+    await env.chiyigo_db.prepare(`
+      CREATE TABLE user_webauthn_credentials (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        credential_id TEXT NOT NULL UNIQUE, public_key TEXT NOT NULL,
+        counter INTEGER NOT NULL DEFAULT 0, transports TEXT, aaguid TEXT, nickname TEXT,
+        backup_eligible INTEGER NOT NULL DEFAULT 0, backup_state INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT
+      )`).run()
+    await env.chiyigo_db.prepare(`CREATE INDEX idx_user_webauthn_credentials_user ON user_webauthn_credentials(user_id)`).run()
+    await env.chiyigo_db.prepare(`
+      CREATE TABLE user_wallets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        address TEXT NOT NULL, chain_id INTEGER NOT NULL DEFAULT 1, nickname TEXT,
+        signed_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT,
+        UNIQUE(user_id, address)
+      )`).run()
+    await env.chiyigo_db.prepare(`
+      CREATE TABLE user_identities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL, provider_id TEXT NOT NULL, display_name TEXT, avatar_url TEXT, metadata TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(provider, provider_id)
+      )`).run()
+    // seed one row per table (data-preservation anchors)
+    await env.chiyigo_db.prepare(`INSERT INTO user_webauthn_credentials (id, user_id, credential_id, public_key) VALUES (7, 1, 'cred-keep', 'pk')`).run()
+    await env.chiyigo_db.prepare(`INSERT INTO user_wallets (id, user_id, address) VALUES (8, 1, '0xabc')`).run()
+    await env.chiyigo_db.prepare(`INSERT INTO user_identities (id, user_id, provider, provider_id) VALUES (9, 1, 'google', 'g-keep')`).run()
+    await execAll(up0055)
+  })
+
+  it('up: 三表各加 4 disposition 欄 + partial reverif index 到位', async () => {
+    for (const t of TABLES) {
+      for (const c of COLS) expect(await columnExists(t, c)).toBe(true)
+    }
+    expect(await indexExists('idx_user_webauthn_credentials_reverif')).toBe(true)
+    expect(await indexExists('idx_user_wallets_reverif')).toBe(true)
+    expect(await indexExists('idx_user_identities_reverif')).toBe(true)
+    // default 正確
+    const row = await env.chiyigo_db.prepare(`SELECT requires_reverification AS r FROM user_webauthn_credentials WHERE id=7`).first()
+    expect(row.r).toBe(0)
+  })
+
+  it('down (table-rebuild): 4 欄移除、三表存活、既有 credential 資料零損失', async () => {
+    await execAll(down0055)
+    for (const t of TABLES) {
+      expect(await tableExists(t)).toBe(true)
+      for (const c of COLS) expect(await columnExists(t, c)).toBe(false)
+    }
+    // 原欄位 + 資料保留（id/credential_id/address/provider 全在）
+    const w = await env.chiyigo_db.prepare(`SELECT id, user_id, credential_id, public_key FROM user_webauthn_credentials WHERE id=7`).first()
+    expect(w).toMatchObject({ id: 7, user_id: 1, credential_id: 'cred-keep', public_key: 'pk' })
+    const wal = await env.chiyigo_db.prepare(`SELECT id, address, chain_id FROM user_wallets WHERE id=8`).first()
+    expect(wal).toMatchObject({ id: 8, address: '0xabc', chain_id: 1 })
+    const idn = await env.chiyigo_db.prepare(`SELECT id, provider, provider_id FROM user_identities WHERE id=9`).first()
+    expect(idn).toMatchObject({ id: 9, provider: 'google', provider_id: 'g-keep' })
+    // 原 index 重建、reverif partial index 消失
+    expect(await indexExists('idx_user_wallets_address')).toBe(true)
+    expect(await indexExists('idx_user_identities_reverif')).toBe(false)
+    // UNIQUE 約束重建：重複 (user_id,address) 被拒
+    await expect(env.chiyigo_db.prepare(`INSERT INTO user_wallets (user_id, address) VALUES (1, '0xabc')`).run()).rejects.toThrow()
+  })
+
+  it('re-up after down restores disposition columns (forward idempotent)', async () => {
+    await execAll(up0055)
+    for (const t of TABLES) for (const c of COLS) expect(await columnExists(t, c)).toBe(true)
+    // 資料仍在
+    const w = await env.chiyigo_db.prepare(`SELECT credential_id FROM user_webauthn_credentials WHERE id=7`).first()
+    expect(w.credential_id).toBe('cred-keep')
   })
 })
 

@@ -43,6 +43,7 @@ type RateLimitKind =
   | 'elevation_oauth_start'
   | 'elevation_oauth_callback'
   | 'elevation_exchange'
+  | 'credential_disposition_run'   // SEC-FACTOR-ADD-A PR-A4：admin disposition runner 防重入
 
 interface RateLimitScope {
   kind: RateLimitKind
