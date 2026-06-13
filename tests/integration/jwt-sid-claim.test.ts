@@ -71,7 +71,7 @@ describe('PR-0 sid claim — access token sid == refresh session_id', () => {
   })
 
   it('refresh rotation → 新 access sid == 原 session_id（跨輪保留）', async () => {
-    const u = await seedUser({ email: 'rt@x.com', password: 'GoodPass#1234' })
+    await seedUser({ email: 'rt@x.com', password: 'GoodPass#1234' })  // 僅需建 user 副作用，回傳值不用
     // 非 web login 取 refresh_token（body）+ 原 access sid
     const loginRes = await callFunction(loginPost, jsonPost('http://x/api/auth/local/login',
       { email: 'rt@x.com', password: 'GoodPass#1234' }, { 'CF-Connecting-IP': IP }))
