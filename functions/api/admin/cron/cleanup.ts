@@ -60,6 +60,11 @@ const TASKS = [
   // 但未消耗的 challenge（login-options 洪泛 / 使用者放棄 ceremony）無排程 GC 會永久累積）
   { name: 'webauthn_challenges', sql: `DELETE FROM webauthn_challenges  WHERE expires_at < datetime('now')` },
 
+  // elevation_grants / elevation_exchanges: 過期即刪（SEC-FACTOR-ADD-A factor-add elevation；grant 5min /
+  // exchange 2min TTL，consume 後留 consumed_at；未消耗或已用的過期 row 無 reader，排程 GC）
+  { name: 'elevation_grants',    sql: `DELETE FROM elevation_grants     WHERE expires_at < datetime('now')` },
+  { name: 'elevation_exchanges', sql: `DELETE FROM elevation_exchanges  WHERE expires_at < datetime('now')` },
+
   // kyc_webhook_events: 留 90 天（dedupe 視窗 — vendor 重送窗口都不會這麼長）
   { name: 'kyc_webhook_events',  sql: `DELETE FROM kyc_webhook_events  WHERE processed_at < datetime('now', '-90 days')` },
 

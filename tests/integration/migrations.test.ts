@@ -41,7 +41,7 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0001..0053 forward 已實作（見 line 448 describe）；本 case
+// 至少要有 targeted smoke。完整 0001..0054 forward 已實作（見 line 448 describe）；本 case
 // 維持手建 fixture 形式作 0037 issued_aud 行為的 targeted 驗證。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
@@ -93,6 +93,8 @@ import up0052    from '../../migrations/0052_refresh_token_session_id.sql?raw'
 import down0052  from '../../migrations/down/0052_refresh_token_session_id.down.sql?raw'
 import up0053    from '../../migrations/0053_refresh_token_successor_hash.sql?raw'
 import down0053  from '../../migrations/down/0053_refresh_token_successor_hash.down.sql?raw'
+import up0054    from '../../migrations/0054_elevation_grants.sql?raw'
+import down0054  from '../../migrations/down/0054_elevation_grants.down.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -104,7 +106,7 @@ const ALL_UPS = [
   up0025, up0026, up0027, up0028, up0029, up0030, up0031, up0032,
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
   up0041, up0042, up0043, up0044, up0045, up0046, up0047, up0048,
-  up0049, up0050, up0051, up0052, up0053,
+  up0049, up0050, up0051, up0052, up0053, up0054,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -293,7 +295,7 @@ describe('migrations smoke', () => {
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
 // 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
-// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0053 已實作於下方
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0054 已實作於下方
 // 「full forward chain」describe（line 448）。本 case 維持手建 fixture 形式作 0037
 // issued_aud 行為 targeted 驗證。
 //
@@ -388,10 +390,10 @@ describe('migrations smoke 0037 targeted', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full forward chain 0001..0053 vs prod snapshot
+// Full forward chain 0001..0054 vs prod snapshot
 //
 // 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
-// 完整 forward 變得可行。本 describe 驗 _base + 0001..0053 跑完後的 schema shape
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0054 跑完後的 schema shape
 // 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
 //
 // 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
@@ -440,6 +442,8 @@ const EXPECTED_TABLES = [
   'invitations', 'org_create_operations',
   // PR5 migration 0051: event outbox + sequence + dlq + deny-state projection
   'event_outbox', 'event_stream_sequences', 'event_dlq', 'event_deny_state',
+  // migration 0054: SEC-FACTOR-ADD-A factor-add elevation grant + OAuth exchange code
+  'elevation_grants', 'elevation_exchanges',
 ].sort()
 
 // Per-table expected column sets（baseline 12 表 + 部分 ALTER 重點目標）
@@ -452,7 +456,7 @@ const EXPECTED_COLUMNS = {
   user_identities: ['avatar_url', 'created_at', 'display_name', 'id', 'metadata', 'provider', 'provider_id', 'updated_at', 'user_id'],
   password_resets: ['expires_at', 'token_hash', 'user_id'],
   refresh_tokens: ['auth_time', 'device_info', 'device_uuid', 'expires_at', 'id', 'issued_aud', 'revoked_at', 'scope', 'session_id', 'successor_token_hash', 'token_hash', 'user_id'],
-  oauth_states: ['aud', 'client_callback', 'code_verifier', 'created_at', 'expires_at', 'ip_address', 'nonce', 'platform', 'redirect_uri', 'state_token'],
+  oauth_states: ['action', 'aud', 'client_callback', 'code_verifier', 'created_at', 'elevation_user_id', 'expires_at', 'factor_add_grant_hash', 'ip_address', 'nonce', 'platform', 'purpose', 'redirect_uri', 'session_id', 'state_token'],
   pkce_sessions: ['code_challenge', 'created_at', 'expires_at', 'ip_address', 'nonce', 'redirect_uri', 'scope', 'session_key', 'state'],
   auth_codes: ['auth_time', 'code_challenge', 'code_hash', 'expires_at', 'nonce', 'redirect_uri', 'scope', 'state', 'user_id'],
   email_verifications: ['created_at', 'expires_at', 'id', 'ip_address', 'token_hash', 'token_type', 'used_at', 'user_id'],
@@ -490,7 +494,7 @@ const EXPECTED_REQUISITION_INDEXES = [
   'idx_requisition_ip',         // 0006
 ]
 
-describe('full forward chain 0001..0053 vs prod snapshot', () => {
+describe('full forward chain 0001..0054 vs prod snapshot', () => {
   beforeAll(async () => {
     await dropAllTables()
     await execAll(baseSql)
@@ -499,7 +503,7 @@ describe('full forward chain 0001..0053 vs prod snapshot', () => {
     }
   })
 
-  it('table set 對齊 prod snapshot（51 表）', async () => {
+  it('table set 對齊 prod snapshot（53 表）', async () => {
     const tables = await listTables()
     expect(tables).toEqual(EXPECTED_TABLES)
   })
@@ -1096,6 +1100,84 @@ describe('migrations smoke 0053 targeted (refresh_tokens.successor_token_hash ro
   it('re-up after down restores the column (forward idempotent)', async () => {
     await execAll(up0053)
     expect(await columnExists('refresh_tokens', 'successor_token_hash')).toBe(true)
+  })
+})
+
+// migration 0054 elevation_grants + elevation_exchanges + oauth_states elevation cols (SEC-FACTOR-ADD-A) — targeted round-trip.
+// Builds a pre-0054 oauth_states fixture (no elevation columns), applies up0054, verifies the two new tables + the 5
+// nullable oauth_states columns + indexes, the grant CHECK / UNIQUE constraints, then down drops them (reversible on
+// this D1 engine) with re-up restoring. Builds its OWN fixture + dropAllTables, so it sits BEFORE the 0038 block.
+describe('migrations smoke 0054 targeted (elevation grants/exchanges + oauth_states elevation cols round-trip)', () => {
+  beforeAll(async () => {
+    await dropAllTables()
+    // pre-0054 oauth_states shape (no elevation columns)
+    await env.chiyigo_db.prepare(`
+      CREATE TABLE oauth_states (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        state_token     TEXT    NOT NULL UNIQUE,
+        code_verifier   TEXT,
+        nonce           TEXT,
+        redirect_uri    TEXT,
+        platform        TEXT,
+        client_callback TEXT,
+        ip_address      TEXT,
+        aud             TEXT,
+        expires_at      TEXT    NOT NULL,
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+      )
+    `).run()
+    await env.chiyigo_db.prepare(
+      `INSERT INTO oauth_states (state_token, expires_at) VALUES ('st-legacy', datetime('now','+10 minutes'))`,
+    ).run()
+    await execAll(up0054)
+  })
+
+  it('up: 兩新表 + oauth_states 5 elevation 欄 + index 到位', async () => {
+    expect(await tableExists('elevation_grants')).toBe(true)
+    expect(await tableExists('elevation_exchanges')).toBe(true)
+    for (const c of ['purpose', 'elevation_user_id', 'session_id', 'action', 'factor_add_grant_hash']) {
+      expect(await columnExists('oauth_states', c)).toBe(true)
+    }
+    expect(await indexExists('idx_elevation_grants_expires')).toBe(true)
+    expect(await indexExists('idx_elevation_exchanges_session')).toBe(true)
+  })
+
+  it('elevation_grants CHECK + UNIQUE：非白名單 action 被拒、合法 row 入、grant_token_hash 重複被拒', async () => {
+    await expect(env.chiyigo_db.prepare(
+      `INSERT INTO elevation_grants (grant_token_hash, user_id, session_id, purpose, action, method, expires_at)
+       VALUES ('g_bad', 1, 's1', 'factor_add', 'NOT_AN_ACTION', 'totp', datetime('now','+5 minutes'))`,
+    ).run()).rejects.toThrow()
+
+    await env.chiyigo_db.prepare(
+      `INSERT INTO elevation_grants (grant_token_hash, user_id, session_id, purpose, action, method, expires_at)
+       VALUES ('g_ok', 1, 's1', 'factor_add', 'add_passkey', 'totp', datetime('now','+5 minutes'))`,
+    ).run()
+
+    await expect(env.chiyigo_db.prepare(
+      `INSERT INTO elevation_grants (grant_token_hash, user_id, session_id, purpose, action, method, expires_at)
+       VALUES ('g_ok', 1, 's1', 'factor_add', 'add_passkey', 'totp', datetime('now','+5 minutes'))`,
+    ).run()).rejects.toThrow()
+  })
+
+  it('down: 兩表 + 5 欄移除（reversible）；oauth_states 與既有欄/資料存活', async () => {
+    await execAll(down0054)
+    expect(await tableExists('elevation_grants')).toBe(false)
+    expect(await tableExists('elevation_exchanges')).toBe(false)
+    for (const c of ['purpose', 'elevation_user_id', 'session_id', 'action', 'factor_add_grant_hash']) {
+      expect(await columnExists('oauth_states', c)).toBe(false)
+    }
+    expect(await tableExists('oauth_states')).toBe(true)
+    expect(await columnExists('oauth_states', 'state_token')).toBe(true)
+    const r = await env.chiyigo_db.prepare(
+      `SELECT state_token FROM oauth_states WHERE state_token='st-legacy'`,
+    ).first()
+    expect(r.state_token).toBe('st-legacy')
+  })
+
+  it('re-up after down restores tables + columns (forward idempotent)', async () => {
+    await execAll(up0054)
+    expect(await tableExists('elevation_grants')).toBe(true)
+    expect(await columnExists('oauth_states', 'action')).toBe(true)
   })
 })
 
