@@ -239,6 +239,23 @@ blast radius: 全站 user email + role + status（PII）可被任一 admin:users
 
 每顆走：feature branch → repro pre-fix RED → 實作 → gates 全綠（lint/typecheck/相關 test/build:functions/ratchet）→ 自審到零 → Codex Code Gate → squash-merge。**禁直推 main**（沿 6/12 push 政策）。
 
+### 小校準 Gate 校正（雙 Gate ratified，2026-06-13；code 前必落 plan）
+
+**P4 小校準 Gate ✅ 完成**：ChatGPT Architecture Gate + Codex Plan Gate 皆 **APPROVED WITH CORRECTIONS**。兩條 binding 校正：
+
+- **PT-6（ADD-A 的 code 前置 BLOCKER，非 residual）**：`step-up.ts:108` 強制 `totp_enabled` + `change-password` 本身需 step-up（`change-password.ts:43`）→ 無 TOTP/純 OAuth 用戶無 elevation bootstrap。**Codex 裁決：reject first-factor-add 豁免**（否則被盜 token 仍能加第一把 rogue factor、P1 沒關）。ADD-A 必須**二選一寫死**：
+  - **嚴格版**：no-TOTP/no-password 用戶先走 dashboard email reset 設密碼（`dashboard.ts:1022` / `forgot-password.ts:32`）→ 啟 TOTP/step-up → 才能 add factor。
+  - **UX 版**：擴充 elevation primitive — local no-TOTP 可用 `current_password`；OAuth-only 須對**既綁 provider** 重新 OAuth reauth 後才 mint `elevated:account`。
+  - **禁用「剛登入/access token still fresh」當 elevation**（=被盜 token 前提本身）。**↑ 待 owner 裁 strict vs UX。**
+- **PT-2（SEC-REFRESH sub-path 明確拆，禁把 `reuse_detected` 當單一觸發 `refresh.ts:164`）**：
+  - `successor_token_hash` NULL（logout/admin/device 已撤）→ **不** family-revoke、**不** critical theft audit、最多 warn/no-op 401（避免 false alarm）。
+  - `grace_device_mismatch`（`refresh.ts:133`）→ **不** 撤（維持 round-2 H）。
+  - proven benign grace orphan → **不** 撤。
+  - **唯 rotation-revoked 且非 proven benign**（out-of-grace / device-null candidate / dead-missing successor）→ 才用**被呈現 token 的 `session_id` family** revoke + idempotent audit + abuse cap。
+- **Observability（Codex）**：ADD-A 保留三路 factor-add audit；SEC-REFRESH 把 no-op replay / family-revoke / abuse-cap 命中拆成可查 reason code。
+- **PT-5 確認**：3 路 factor-add（register-verify / wallet-verify / oauth init is_binding）窮舉；`oauth/bind-email` **非**第四條（temp_bind 一次性 token + email collision 拒絕）。
+- **CODING 狀態**：P2 機械補強 + SEC-RESET-2FA-BF = **CODING_ALLOWED**；ADD-A / SEC-REFRESH = **NOT YET CODING_ALLOWED** until PT-6（owner strict/UX）+ PT-2 拆解落 plan。
+
 ---
 
 ## 6. 小校準 Gate 問題 + P3 backlog
