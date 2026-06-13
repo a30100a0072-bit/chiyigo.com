@@ -6,8 +6,11 @@
 // the import-denylist below applies only to .claude/workflows/**.mjs.
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-// SSOT for the expected GUARD / secret denylist (section 8.1) + validators for the self-check.
-import { GUARD, SECRET_DENYLIST, isSafeReadPath, isSafeRef } from '../.claude/workflows/lib/schemas.mjs'
+// SSOT for the expected GUARD / patterns / denylist + validators (self-check + drift-guard).
+import {
+  GUARD, SECRET_DENYLIST, isSafeReadPath, isSafeRef,
+  REPO_PATH_PATTERN, REF_PATTERN, RESOLVED_SHA_PATTERN,
+} from '../.claude/workflows/lib/schemas.mjs'
 
 const WF_DIR = '.claude/workflows'
 const errors = []
@@ -90,6 +93,15 @@ for (const file of files) {
     else if (nExplore < nAgent || nSchema < nAgent) {
       err(file, `every agent() must use agentType:'Explore' + schema (agent=${nAgent}, Explore=${nExplore}, schema=${nSchema})`)
     }
+    // OD-D: Workflow runtime rejects static import -> entries must be self-contained (inline SSOT).
+    if (/^\s*import\s[^\n]*\sfrom\s/m.test(src)) {
+      err(file, 'workflow entry must NOT use static import (runtime rejects it; inline the SSOT -- OD-D)')
+    }
+    // drift-guard: the inlined SSOT must byte-match lib/schemas.mjs (normalize CRLF for compare).
+    const norm = src.replace(/\r\n/g, '\n')
+    if (!norm.includes(GUARD)) err(file, 'inlined GUARD drifted from lib SSOT')
+    if (!norm.includes(REPO_PATH_PATTERN.source)) err(file, 'inlined REPO_PATH_PATTERN drifted from lib SSOT')
+    for (const s of SECRET_DENYLIST) if (!norm.includes(`'${s}'`)) err(file, `inlined SECRET_DENYLIST missing '${s}'`)
   }
 }
 
@@ -104,6 +116,9 @@ try {
   if (/\$\{a\.baseRef\}\s*\.\.\s*\$\{a\.headRef\}/.test(src) || /<baseRef>\.\.<headRef>/.test(src)) {
     err(codeSr, 'collector builds diff range from raw refs (P1: must use resolved SHA)')
   }
+  // drift-guard: inlined ref validators must byte-match lib SSOT.
+  if (!src.includes(REF_PATTERN.source)) err(codeSr, 'inlined REF_PATTERN drifted from lib SSOT')
+  if (!src.includes(RESOLVED_SHA_PATTERN.source)) err(codeSr, 'inlined RESOLVED_SHA_PATTERN drifted from lib SSOT')
 } catch {
   err(codeSr, 'code-self-review.mjs missing or unreadable')
 }
