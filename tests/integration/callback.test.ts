@@ -335,6 +335,13 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
       `SELECT consumed_at FROM elevation_grants WHERE user_id = ? AND action = 'bind_identity'`,
     ).bind(u.id).first()
     expect(grantRow?.consumed_at).not.toBeNull()
+
+    // PR-A4 OD-5：綁定成功 emit oauth.identity.bind.success（payload 無明文 provider_id）
+    const bindAudit = await env.chiyigo_db.prepare(
+      `SELECT event_data FROM audit_log WHERE event_type = 'oauth.identity.bind.success' AND user_id = ?`,
+    ).bind(u.id).first()
+    expect(bindAudit).toBeTruthy()
+    expect(String(bindAudit.event_data)).not.toContain('g-bind-ok')   // no plaintext provider_id
   })
 
   // P1-closure RED：pre-PR-A3 binding state（無 factor proof）→ callback 不得綁。

@@ -257,6 +257,18 @@ describe('classifyAuditEvent — SEC-FACTOR-ADD-A elevation', () => {
   })
 })
 
+// SEC-FACTOR-ADD-A PR-A4（2026-06-13）：credential disposition 2 security_signal
+// + oauth.identity.bind.success 1 immutable（對齊 wallet.bind.success）顯式分類。
+describe('classifyAuditEvent — SEC-FACTOR-ADD-A PR-A4 credential disposition', () => {
+  it.each([
+    ['account.credential.disposition',     AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['account.credential.disposition.run', AUDIT_CATEGORY.SECURITY_SIGNAL],
+    ['oauth.identity.bind.success',        AUDIT_CATEGORY.IMMUTABLE],
+  ])('%s → %s', (e, expected) => {
+    expect(classifyAuditEvent(e)).toBe(expected)
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -329,8 +341,11 @@ describe('registry coverage', () => {
     // SEC-FACTOR-ADD-A PR-A2 (2026-06-13) 加 5 個 factor-add elevation event：
     //   auth.elevation.started（telemetry）+ .succeeded/.failed/.provider_mismatch/.replay_detected
     //   （security_signal；後二者 critical severity）→ 222。
-    // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言。
-    expect(_registrySize).toBe(222)
+    // SEC-FACTOR-ADD-A PR-A4 (2026-06-13) 加 3 個 credential disposition / oauth bind event：
+    //   account.credential.disposition + account.credential.disposition.run（security_signal）
+    //   + oauth.identity.bind.success（immutable，對齊 wallet.bind.success）→ 225。
+    // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言（含 session-revoke-multi.test lockstep）。
+    expect(_registrySize).toBe(225)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

@@ -14,6 +14,7 @@
 
 import { requireAuth, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
+import { publicReasonCode } from '../../../utils/credential-disposition'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -28,7 +29,7 @@ export async function onRequestGet({ request, env }) {
   const rs = await env.chiyigo_db
     .prepare(
       `SELECT id, nickname, transports, aaguid, backup_eligible, backup_state,
-              created_at, last_used_at
+              created_at, last_used_at, requires_reverification, disposition_reason
          FROM user_webauthn_credentials
         WHERE user_id = ?
         ORDER BY created_at DESC`,
@@ -45,6 +46,9 @@ export async function onRequestGet({ request, env }) {
     backup_state:     !!r.backup_state,
     created_at:       r.created_at,
     last_used_at:     r.last_used_at,
+    // SEC-FACTOR-ADD-A PR-A4：user-visible disposition flag + 最小化 reason（不洩 raw high:<signal>）
+    requires_reverification: !!r.requires_reverification,
+    disposition_reason:      publicReasonCode(r.requires_reverification, r.disposition_reason),
   }))
 
   return res({ credentials }, 200, cors)

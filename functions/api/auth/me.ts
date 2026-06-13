@@ -17,6 +17,7 @@
  */
 
 import { requireAuth, res } from '../../utils/auth'
+import { publicReasonCode } from '../../utils/credential-disposition'
 
 export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   // ── 1. JWT 驗證（含 banned 檢查）────────────────────────────
@@ -49,7 +50,8 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
   // ── 3. 查詢已綁定的第三方平台身分 ───────────────────────────
   const { results: identities } = await db
     .prepare(`
-      SELECT provider, display_name, avatar_url, created_at
+      SELECT provider, display_name, avatar_url, created_at,
+             requires_reverification, disposition_reason
       FROM user_identities
       WHERE user_id = ?
       ORDER BY created_at ASC
@@ -71,6 +73,9 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
       display_name: i.display_name,
       avatar_url:   i.avatar_url,
       linked_at:    i.created_at,
+      // SEC-FACTOR-ADD-A PR-A4：user-visible disposition flag + 最小化 reason（不洩 raw high:<signal>）
+      requires_reverification: !!i.requires_reverification,
+      disposition_reason:      publicReasonCode(i.requires_reverification as number, i.disposition_reason as string | null),
     })),
   })
 }
