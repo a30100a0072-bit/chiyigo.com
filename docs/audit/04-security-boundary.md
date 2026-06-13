@@ -11,13 +11,13 @@
 
 **整體姿態：身份/RBAC gate 面（INV-SEC-1）整面健全——104 端點四欄矩陣逐一驗證，無任何端點「漏呼叫 gate 而裸奔」。** 缺口集中在三類**非 gate** 軸：(a) **強認證因子的新增/移除 step-up 非對稱**（headline P1）、(b) **第二因子與 ceremony 端點的 rate-limit / 暴力破解觀測缺口**（reset-2FA brute force P1 + ceremony DoS P2）、(c) **enumeration / 觀測一致性**（admin/users PII 枚舉 P2）。token 機制核心（refresh rotation atomic batch、jwt ES256+iss+aud 鎖定、step-up jti atomic consume + DB-live 再驗、OAuth code DELETE...RETURNING 原子消費 + PKCE S256 強制 + redirect_uri exact match）在獨立讀碼下全部穩健。
 
-**Headline（P1）：偷一次 15min access token → 永久帳號接管 + 繞過 2FA。** 新增認證因子（passkey 註冊 `webauthn/register-verify`、wallet 綁定 `wallet/verify`）**只需 `requireAuth`（一般 access token），不需 step-up**；但移除同類因子（`credentials/[id]` DELETE、`wallet/[id]` DELETE）**卻需 step-up**。`reset-password` / `bumpTokenVersion` 強制下線時**不清除已註冊的 passkey / wallet**；passkey 登入（`login-verify`）重簽時讀 DB 當前 `token_version`、不受 bump 影響、也不檢查 `totp_enabled`。⇒ 攻擊者用被盜 token 註冊自己控制的 passkey 後，**改密碼 / 停 2FA / token_version bump 都殺不掉它**；若受害者未啟用 TOTP，連 step-up 都不可用（step-up 強制 `totp_enabled=1`），**無法經 API 移除這把 rogue passkey**。`2fa/activate` 明文要求 `current_password` 正是為了防被盜 token 接管，但新增更強、更持久的 passkey 因子卻無任何二次驗證——這條設計非對稱直接抵銷整個 step-up 威脅模型。
+**Headline（P1）：偷一次 15min access token → 永久帳號接管 + 繞過 2FA。** 新增認證因子（passkey 註冊 `webauthn/register-verify`、wallet 綁定 `wallet/verify`、**OAuth 身分綁定 `oauth/[provider]/init?is_binding=true`**）**只需 `requireAuth`（一般 access token），不需 step-up**；但移除 passkey/wallet 類因子（`credentials/[id]` DELETE、`wallet/[id]` DELETE）**卻需 step-up**。（OAuth 身分綁定的第三條路徑為 Codex 包準備時補發現，2026-06-13，落在 finder 切角之間的縫。）`reset-password` / `bumpTokenVersion` 強制下線時**不清除已註冊的 passkey / wallet**；passkey 登入（`login-verify`）重簽時讀 DB 當前 `token_version`、不受 bump 影響、也不檢查 `totp_enabled`。⇒ 攻擊者用被盜 token 註冊自己控制的 passkey 後，**改密碼 / 停 2FA / token_version bump 都殺不掉它**；若受害者未啟用 TOTP，連 step-up 都不可用（step-up 強制 `totp_enabled=1`），**無法經 API 移除這把 rogue passkey**。`2fa/activate` 明文要求 `current_password` 正是為了防被盜 token 接管，但新增更強、更持久的 passkey 因子卻無任何二次驗證——這條設計非對稱直接抵銷整個 step-up 威脅模型。
 
 **8 條 findings（confirmed）+ 2 條對抗式駁回。** P3 細項另 13 條進 backlog。
 
 | ID | 嚴重度 | 一句話 | 處置 |
 |---|---|---|---|
-| **SEC-FACTOR-ADD** | **P1** | 新增 passkey/wallet 只需 requireAuth（移除才需 step-up）+ reset/bump 不清因子 + passkey 登入不檢查 2FA → 被盜 15min token 永久接管 + 繞 2FA | 窗內修（§5；headline） |
+| **SEC-FACTOR-ADD** | **P1** | 新增 passkey/wallet/**OAuth 身分**只需 requireAuth（移除才需 step-up）+ reset/bump 不清因子 + passkey 登入不檢查 2FA → 被盜 15min token 永久接管 + 繞 2FA（3 端點，第 3 條 OAuth binding 為 Codex 包準備時補發現） | 窗內修（§5；headline） |
 | **SEC-RESET-2FA-BF** | **P1** | `reset-password` 的 TOTP 第二因子：失敗不消耗 token + 零 rate-limit + 零 audit → 1h token 窗內可無限暴破 ~333k 碼空間，破解即接管，全程靜默 | 窗內修（§5） |
 | **SEC-REFRESH-REUSE** | **P1（需 owner 架構裁決）** | refresh reuse 偵測**不撤 token family** → 被盜 token 輪換後攻擊者保留 live 隱形 session、受害者反被踢；但 naive 修法會重開 Fork2 round-2 H 刻意關閉的反向向量（revoked token 反殺 live successor） | §5：先 owner 裁 tradeoff |
 | **SEC-CEREMONY-DOS** | **P2** | `authorize` / `webauthn/login-options` / `login-verify` 匿名 + 無 rate-limit + 每請求寫 D1 row；`webauthn_challenges` **不在 cleanup 清單** → 無界灌爆 D1 寫入額度（破 $0 約束）+ 表永久膨脹（兩 finder 獨立命中） | 窗內修（§5） |
@@ -62,6 +62,7 @@
 |---|---|---|---|---|---|
 | `webauthn/register-verify` | requireAuth ✅ | ✅ | none | register.success ✅ | **缺 step-up（新增因子）→ SEC-FACTOR P1** |
 | `wallet/verify` | requireAuth ✅ | ✅ | none | bind.success critical ✅ | **缺 step-up（綁定金流前置因子）→ SEC-FACTOR P1** |
+| `oauth/[provider]/init?is_binding` | requireAuth ✅ | ✅ | oauth_init 10/IP ✅ | none ⚠ | **缺 step-up（綁新 OAuth 登入身分）→ SEC-FACTOR P1（第 3 路徑）** |
 | `local/reset-password` | token-IS-auth ✅ | ✅ | **TOTP 步驟 none** | **TOTP-fail 無 audit** | **2FA 暴破 + 零觀測 → SEC-RESET-2FA-BF P1** |
 | `auth/refresh` | refresh+device ✅ | ✅ | refresh 30/min ✅ | 完整 ✅ | reuse 分支不撤 family → SEC-REFRESH P1 |
 | `webauthn/login-options` | public ✅ | ✅ | **none（匿名）** | none | **無界寫 D1 + 不在 cleanup → SEC-CEREMONY-DOS P2** |
@@ -92,9 +93,11 @@ ID         : SEC-FACTOR-ADD
 違反條款    : INV-SEC-1（敏感操作授權一致性）+ INV-SEC-5（persistence）+ Tier-0 Security
 證據        : functions/api/auth/webauthn/register-verify.ts:38（新增 passkey 只 requireAuth）+ :81（requireUserVerification:false → 可用非 UV/虛擬 authenticator）
             functions/api/auth/wallet/verify.ts:41（綁 wallet 只 requireAuth）
+            **第三條路徑（Codex 包準備時補發現，2026-06-13）**：functions/api/auth/oauth/[provider]/init.ts:112-116（is_binding=true 綁新 OAuth 身分只 requireAuth）+ functions/api/auth/oauth/[provider]/callback.ts:121-153（callback 綁定模式 INSERT user_identities(user_id, provider, provider_id)）→ 攻擊者用自己的 Google/Discord 帳號綁到受害者 user_id，之後該 provider 登入即以受害者身份發 token（OAuth 登入路徑 callback.ts:237+ 不需密碼、重讀當前 token_version）。**此路徑落在 finder 切角之間的縫**（dd-strong-auth 只看 passkey/wallet、dd-oauth 看 callback 但未框成 factor-add P1）→ ADD-A scope 應含此第三端點。
             對照（非對稱反證）：functions/api/auth/webauthn/credentials/[id].ts:74（DELETE 需 requireStepUp(ELEVATED_ACCOUNT,'remove_passkey')）+ :8-10 註解自承「delete=移除 second factor，等同改密碼強度，必須走 step-up」
                               functions/api/auth/wallet/[id].ts:32（解綁需 step-up）
                               functions/api/auth/2fa/activate.ts（啟用 2FA 需 current_password 防被盜 token 接管）
+            注：identity/unbind 為 requireAuth + last-auth-method guard（非 step-up），故 OAuth 身分軸 add/remove 皆 requireAuth——對稱性與 passkey/wallet（remove 需 step-up）不同，但 add 側同樣是「被盜 token 即可植入永久登入因子」
             持久性：functions/utils/auth.ts:109-117 bumpTokenVersion 只 bump token_version + 撤 refresh_tokens，**不刪** user_webauthn_credentials / user_wallets（grep 確認唯二 DELETE 點是兩個 step-up delete 端點）
             functions/api/auth/local/reset-password.ts:144-160 reset 密碼亦不清因子
             functions/api/auth/webauthn/login-verify.ts:220（重簽讀 DB 當前 token_version → 不受 bump 影響）+ 全檔不檢查 totp_enabled
@@ -104,7 +107,7 @@ ID         : SEC-FACTOR-ADD
             2. 此後攻擊者用 login-verify 永久登入：(a) 繞過受害者 TOTP（passkey 登入不檢查 totp_enabled）；(b) 受害者改密碼 / 停 2FA / admin bumpTokenVersion 皆不清此 passkey，login-verify 讀當前 token_version 重簽仍有效；(c) 若受害者未啟用 TOTP → step-up 不可用 → 連 API 都無法移除這把 rogue passkey。
             wallet 變體：綁攻擊者 wallet → 未來提款/對帳目的地接管（金流前置）。
 blast radius: 全帳號永久接管 + 2FA 繞過（passkey）；提款目的地接管（wallet）。**survives password reset / 2FA disable / token_version bump** — 標準補救手段全失效。
-修復方向    : register-verify 與 wallet/verify 比照 delete 端點改 requireStepUp(ELEVATED_ACCOUNT, 'add_passkey'/'bind_wallet')，或至少要求 current_password 再驗（對齊 2fa/activate）。並評估 reset-password / bumpTokenVersion 強制下線情境是否一併撤銷/標記「非當前 session 註冊」的因子。
+修復方向    : register-verify、wallet/verify **與 oauth init is_binding** 三端點比照 delete 端點改 requireStepUp(ELEVATED_ACCOUNT, 'add_passkey'/'bind_wallet'/'bind_identity')，或至少要求 current_password 再驗（對齊 2fa/activate）。並評估 reset-password / bumpTokenVersion 強制下線情境是否一併撤銷/標記「非當前 session 註冊」的因子。**ADD-A 封閉 live P1 = 三端點 step-up + 一次性盤點既有 passkey/wallet/user_identities**。
 信心度      : high
 需 Gate 複核: yes（auth/step-up 熱區）
 建議修者    : Opus（窗內 Dual Gate）
@@ -229,7 +232,9 @@ blast radius: 全站 user email + role + status（PII）可被任一 admin:users
 
 1. **SEC-CEREMONY-DOS（P2）+ SEC-ADMIN-ENUM（P2）+ SEC-KYC-ENUM-2（P3 順帶）** — 機械性補強（加 RateLimitKind + read-audit + cleanup task + 原型鏈守門），無設計爭議，first-do-no-harm 最小 diff。可一顆或兩顆 PR。
 2. **SEC-RESET-2FA-BF（P1）** — 加 reset_2fa rate-limit kind + TOTP-fail audit + 失敗達上限作廢 token。沿既有 2fa convention，scope 清楚。
-3. **SEC-FACTOR-ADD（P1，headline）** — register-verify + wallet/verify 改 requireStepUp（或 current_password）。**需裁決**：reset/bump 是否一併撤非當前 session 註冊的因子（建議至少標記 + 通知，避免反向把合法新裝置因子也撤掉）。auth/step-up 熱區，**必送 Codex**。
+3. **SEC-FACTOR-ADD-A（P1，headline；3 端點）** — register-verify + wallet/verify + **oauth init is_binding** 改 requireStepUp（或 current_password）+ 一次性盤點既有 passkey/wallet/user_identities（防修補前已植入）。auth/step-up 熱區，**必送 Codex**。
+   - **SEC-FACTOR-ADD-B（hardening，另 PR）** — factor reverification schema（assurance_level / created_session_id / requires_reverification）+ reset/bump 強制下線時標記非當前 session 因子。**非 P1 必要條件**（ADD-A 已封閉 live P1；ADD-B 為前向 hardening，含 schema 變更慢工另裁）。
+   - **不採納** passkey-login 強制疊 TOTP（破壞 phishing-resistant 設計；UV passkey=合法 MFA，code 已標 amr）；登入端 non-UV 單因子殘留屬 P3 SEC-AMR-INCONSISTENT。
 4. **SEC-REFRESH-REUSE（P1，需 owner 架構裁決）** — **不進實作前先請 owner 裁 tradeoff**：是否採 OAuth BCP（reuse→撤 family，接受 benign re-login 成本）並重新評估 Fork2 round-2 H 的反向保護。裁決前只寫 pre-fix-fail regression（含對稱保護回歸：device-mismatch-on-revoked NO family-revoke + grace_orphan benign 必須仍綠）。**必送 Codex + owner ruling**。
 
 每顆走：feature branch → repro pre-fix RED → 實作 → gates 全綠（lint/typecheck/相關 test/build:functions/ratchet）→ 自審到零 → Codex Code Gate → squash-merge。**禁直推 main**（沿 6/12 push 政策）。
