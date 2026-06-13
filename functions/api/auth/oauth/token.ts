@@ -135,10 +135,12 @@ export async function onRequestPost({ request, env }) {
   // silent refresh 後 access_token 仍帶 openid/email 等
   // Codex r9-5：issued_aud 鎖定發行時的 audience；refresh.ts 用此簽新 token 防 body.aud 切換
   // PR5 5d-1b: + a fresh per-login session_id (the session.revoked family id, preserved across rotation).
+  // PR-0（sid claim）：同一 session_id 寫進 refresh row 與下方 access token sid claim。
+  const sessionId = crypto.randomUUID()
   await db
     .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, scope, issued_aud, session_id)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime, authCode.scope ?? null, aud, crypto.randomUUID())
+    .bind(user.id, refreshTokenHash, deviceUuid, refreshExpiresAt, newAuthTime, authCode.scope ?? null, aud, sessionId)
     .run()
 
   // 簽發 Access Token（ES256，15 分鐘） — 用上面決定好的 aud
@@ -152,6 +154,7 @@ export async function onRequestPost({ request, env }) {
     status:         user.status,
     ver:            user.token_version ?? 0,
     scope:          buildTokenScope(user.role, authCode.scope),
+    sid:            sessionId,
   }, '15m', env, { audience: aud })
 
   // OIDC：scope 含 openid → 加發 id_token

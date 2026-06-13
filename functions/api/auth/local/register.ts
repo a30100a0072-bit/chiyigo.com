@@ -188,10 +188,12 @@ export async function onRequestPost({ request, env, waitUntil }) {
 
   // Codex r9-5：issued_aud 鎖定發行時的 audience（防 refresh body.aud 切換）
   // PR5 5d-1b: + a fresh per-login session_id (the session.revoked family id, preserved across rotation).
+  // PR-0（sid claim）：同一 session_id 寫進 refresh row 與下方 access token sid claim。
+  const sessionId = crypto.randomUUID()
   await db
     .prepare(`INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
               VALUES (?, ?, ?, ?, datetime('now'), ?, ?)`)
-    .bind(user.id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience, crypto.randomUUID())
+    .bind(user.id, refreshTokenHash, device_uuid ?? null, refreshExpiresAt, audience, sessionId)
     .run()
 
   // ── 9. 簽發 Access Token（ES256）────────────────────────────
@@ -206,6 +208,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
     status:         user.status,
     ver:            user.token_version ?? 0,
     scope:          buildTokenScope(user.role),
+    sid:            sessionId,
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   await safeUserAudit(env, { event_type: 'account.register', user_id: user.id, request })

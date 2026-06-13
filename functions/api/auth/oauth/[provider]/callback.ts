@@ -287,6 +287,11 @@ async function handle(context) {
   const audience = storedAud
     ? resolveAud(storedAud)
     : ((platform === 'pc' && client_callback) ? resolveAud(client_callback) : 'chiyigo')
+  // PR-0（sid claim）：sid ⟺ 後端有對應 refresh_tokens.session_id row。
+  // 僅 web path（下方）建 refresh row；pc/mobile 為 direct-return 的 access-only token
+  // （無 refresh row）→ **不帶 sid**，使其 factor-add elevation fail-closed（Codex Code Gate r1）。
+  const isWebReturn = platform !== 'pc' && platform !== 'mobile'
+  const sessionId = isWebReturn ? crypto.randomUUID() : null
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
     ...tenantClaims,
@@ -298,6 +303,7 @@ async function handle(context) {
     ver:            userRow.token_version ?? 0,
     scope:          buildTokenScope(userRow.role),
     provider,
+    ...(sessionId ? { sid: sessionId } : {}),
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   // ── 9. 依 platform 回傳 ──────────────────────────────────────
@@ -331,7 +337,7 @@ async function handle(context) {
   await db.prepare(`
     INSERT INTO refresh_tokens (user_id, token_hash, device_uuid, expires_at, auth_time, issued_aud, session_id)
     VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
-  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience, crypto.randomUUID()).run()
+  `).bind(userId, refreshTokenHash, webDeviceUuid, refreshExpiresAt, audience, sessionId).run()
 
   // Phase D-4：登入 audit + 異常裝置警示。webDeviceUuid 有值 → 視作真實裝置，
   // 觸發新裝置 email；NULL → 只跑 country jump（OAuth 舊行為）
