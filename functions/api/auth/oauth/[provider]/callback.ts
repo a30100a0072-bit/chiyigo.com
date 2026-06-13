@@ -287,8 +287,11 @@ async function handle(context) {
   const audience = storedAud
     ? resolveAud(storedAud)
     : ((platform === 'pc' && client_callback) ? resolveAud(client_callback) : 'chiyigo')
-  // PR-0（sid claim）：per-login session_id 同寫 refresh row 與 access sid claim。
-  const sessionId = crypto.randomUUID()
+  // PR-0（sid claim）：sid ⟺ 後端有對應 refresh_tokens.session_id row。
+  // 僅 web path（下方）建 refresh row；pc/mobile 為 direct-return 的 access-only token
+  // （無 refresh row）→ **不帶 sid**，使其 factor-add elevation fail-closed（Codex Code Gate r1）。
+  const isWebReturn = platform !== 'pc' && platform !== 'mobile'
+  const sessionId = isWebReturn ? crypto.randomUUID() : null
   const tenantClaims = await resolveActiveTenantClaims(env.chiyigo_db, Number(userId))
   const accessToken = await signJwt({
     ...tenantClaims,
@@ -300,7 +303,7 @@ async function handle(context) {
     ver:            userRow.token_version ?? 0,
     scope:          buildTokenScope(userRow.role),
     provider,
-    sid:            sessionId,
+    ...(sessionId ? { sid: sessionId } : {}),
   }, ACCESS_TOKEN_TTL, env, { audience })
 
   // ── 9. 依 platform 回傳 ──────────────────────────────────────

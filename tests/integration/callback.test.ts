@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
+import { jwtVerify, importJWK } from 'jose'
 import {
   resetDb, seedUser, ensureJwtKeys,
   googleSignIdToken, googleJwksBody,
@@ -174,6 +175,46 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
     ).bind(u.id).first()
     expect(rt.n).toBe(1)
     expect(rt.sid).toBeTruthy()  // PR5 5d-1b: oauth callback stamps a non-null per-login session_id
+  })
+
+  // PR-0（Codex Code Gate r1 blocker）：pc/mobile direct-callback 是 access-only token（無 refresh row）
+  // → 不得帶 sid（否則 sid 指向不存在的 session）。factor-add elevation 對該 token fail-closed。
+  async function sidFromLocation(loc: string) {
+    const m = loc.match(/access_token=([^&]+)/)
+    const token = decodeURIComponent(m?.[1] ?? '')
+    const pub = await importJWK(JSON.parse(env.JWT_PUBLIC_KEY), 'ES256')
+    const { payload } = await jwtVerify(token, pub, { algorithms: ['ES256'] })
+    return { token, sid: payload.sid }
+  }
+
+  it('PR-0: pc direct-callback → access token 不帶 sid + 不建 refresh row（access-only）', async () => {
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({ sub: 'g-pc', email: 'pc@example.com', email_verified: true }) }
+    fetchPlan.profileBody = { sub: 'g-pc', email: 'pc@example.com', email_verified: true, name: 'PC User' }
+    const state = await seedOauthState({ platform: 'pc', clientCallback: 'http://127.0.0.1:8080/callback' })
+    const res = await callCb(cbReq(state))
+    expect(res.status).toBe(302)
+    const { token, sid } = await sidFromLocation(res.headers.get('Location') ?? '')
+    expect(token).toBeTruthy()
+    expect(sid).toBeUndefined()   // pre-fix(#74 buggy): sid 存在 → RED
+    const u = await env.chiyigo_db.prepare('SELECT id FROM users WHERE email = ?').bind('pc@example.com').first()
+    const rt = await env.chiyigo_db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?').bind(u.id).first()
+    expect(rt.n).toBe(0)   // access-only：無 refresh row（契約一致：無 row ⟺ 無 sid）
+  })
+
+  it('PR-0: mobile direct-callback → access token 不帶 sid + 不建 refresh row', async () => {
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({ sub: 'g-mob', email: 'mob@example.com', email_verified: true }) }
+    fetchPlan.profileBody = { sub: 'g-mob', email: 'mob@example.com', email_verified: true, name: 'Mob User' }
+    const state = await seedOauthState({ platform: 'mobile' })
+    const res = await callCb(cbReq(state))
+    expect(res.status).toBe(302)
+    const { token, sid } = await sidFromLocation(res.headers.get('Location') ?? '')
+    expect(token).toBeTruthy()
+    expect(sid).toBeUndefined()
+    const u = await env.chiyigo_db.prepare('SELECT id FROM users WHERE email = ?').bind('mob@example.com').first()
+    const rt = await env.chiyigo_db.prepare('SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ?').bind(u.id).first()
+    expect(rt.n).toBe(0)
   })
 
   it('信箱碰撞 + trustEmail=true (google) + email_verified=true → 靜默綁定（C2）', async () => {
