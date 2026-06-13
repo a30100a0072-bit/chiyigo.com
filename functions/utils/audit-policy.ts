@@ -222,6 +222,11 @@ const IMMUTABLE = [
 const SECURITY_SIGNAL = [
   'account.password.reset.backup_code_fail',
   'account.password.reset.totp_fail',          // SEC-RESET-2FA-BF：reset TOTP 驗證失敗（暴破偵測信號）
+  // SEC-FACTOR-ADD-A（ADD-A PR-A2）：factor-add elevation 結果信號
+  'auth.elevation.succeeded',
+  'auth.elevation.failed',
+  'auth.elevation.provider_mismatch',          // critical：OAuth reauth 的 provider_id 不 match 既綁 identity
+  'auth.elevation.replay_detected',            // critical：exchange code / grant 重放
   'admin.unknown_role_actor',
   'admin.unknown_role_target',
   'auth.country_jump',
@@ -276,6 +281,7 @@ const SECURITY_SIGNAL = [
 
 const TELEMETRY = [
   'account.password.reset.totp_rate_limited',  // SEC-RESET-2FA-BF：reset TOTP 驗證節流命中
+  'auth.elevation.started',                    // SEC-FACTOR-ADD-A：factor-add elevation 起手（高頻觀測）
   'admin.read.rate_limited',
   'auth.authorize.rate_limited',   // SEC-CEREMONY-DOS：oauth authorize per-IP 節流命中
   'auth.login.rate_limited',

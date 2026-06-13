@@ -37,6 +37,12 @@ type RateLimitKind =
   | 'member_invite'
   | 'member_mutate'
   | 'event_replay'
+  // SEC-FACTOR-ADD-A（ADD-A PR-A2）：factor-add elevation 五面節流
+  | 'elevation_totp'
+  | 'elevation_password'
+  | 'elevation_oauth_start'
+  | 'elevation_oauth_callback'
+  | 'elevation_exchange'
 
 interface RateLimitScope {
   kind: RateLimitKind
