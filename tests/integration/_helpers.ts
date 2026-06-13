@@ -137,6 +137,8 @@ export async function resetDb() {
     env.chiyigo_db.prepare('DELETE FROM oauth_clients'),
     env.chiyigo_db.prepare('DELETE FROM user_webauthn_credentials'),
     env.chiyigo_db.prepare('DELETE FROM webauthn_challenges'),
+    env.chiyigo_db.prepare('DELETE FROM elevation_grants'),       // migration 0054
+    env.chiyigo_db.prepare('DELETE FROM elevation_exchanges'),    // migration 0054
     env.chiyigo_db.prepare('DELETE FROM ip_blacklist'),
     env.chiyigo_db.prepare('DELETE FROM user_wallets'),
     env.chiyigo_db.prepare('DELETE FROM wallet_nonces'),

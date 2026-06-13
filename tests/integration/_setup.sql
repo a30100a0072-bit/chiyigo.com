@@ -110,7 +110,41 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   ip_address      TEXT,
   aud             TEXT,
   expires_at      TEXT    NOT NULL,
-  created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  purpose               TEXT,
+  elevation_user_id     INTEGER,
+  session_id            TEXT,
+  action                TEXT,
+  factor_add_grant_hash TEXT
+);
+
+CREATE TABLE IF NOT EXISTS elevation_grants (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  grant_token_hash  TEXT NOT NULL UNIQUE,
+  user_id           INTEGER NOT NULL,
+  session_id        TEXT NOT NULL,
+  purpose           TEXT NOT NULL CHECK (purpose = 'factor_add'),
+  action            TEXT NOT NULL CHECK (action IN ('add_passkey', 'bind_wallet', 'bind_identity')),
+  method            TEXT NOT NULL CHECK (method IN ('totp', 'current_password', 'oauth_reauth')),
+  provider          TEXT,
+  provider_id_hash  TEXT,
+  expires_at        TEXT NOT NULL,
+  consumed_at       TEXT,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  risk_reason       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS elevation_exchanges (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  exchange_code_hash  TEXT NOT NULL UNIQUE,
+  user_id             INTEGER NOT NULL,
+  session_id          TEXT NOT NULL,
+  provider            TEXT NOT NULL,
+  provider_id_hash    TEXT NOT NULL,
+  action              TEXT NOT NULL CHECK (action IN ('add_passkey', 'bind_wallet', 'bind_identity')),
+  expires_at          TEXT NOT NULL,
+  consumed_at         TEXT,
+  created_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS ai_audit (
