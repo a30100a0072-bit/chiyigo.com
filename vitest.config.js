@@ -50,6 +50,9 @@ export default defineConfig({
         'functions/utils/user-audit.{js,ts}',         // audit_log INSERT + Discord webhook
         'functions/utils/device-alerts.{js,ts}',      // D1 lookup + email send
         'functions/utils/backchannel.{js,ts}',        // D1 oauth_clients + fetch logout
+        'functions/utils/session-revoke.{js,ts}',     // revokeSessionFamilies 批次撤銷（refresh_tokens D1，integration-tested：session-revoke-multi）
+        'functions/utils/tenant-context.{js,ts}',     // tenant 解析 + membership 查詢（D1，integration-tested：tenant-foundation）
+        'functions/utils/domain-event-emit.{js,ts}',  // event_outbox 寫入（D1 batch，integration-tested：event-outbox-emission/consumer）
 
         // (B) 外部 API call（要 mock fetch 才能單測，目前由 integration 真打測試環境）
         'functions/utils/email.{js,ts}',              // Resend API send paths
