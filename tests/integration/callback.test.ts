@@ -3,11 +3,16 @@ import { env } from 'cloudflare:test'
 import { jwtVerify, importJWK } from 'jose'
 import {
   resetDb, seedUser, ensureJwtKeys,
-  googleSignIdToken, googleJwksBody,
+  googleSignIdToken, googleJwksBody, seedFactorAddGrant,
 } from './_helpers'
+import { hashToken } from '../../functions/utils/crypto'
+import { signJwt } from '../../functions/utils/jwt'
 import {
   onRequestGet as cbGet,
 } from '../../functions/api/auth/oauth/[provider]/callback'
+import {
+  onRequestGet as initGet,
+} from '../../functions/api/auth/oauth/[provider]/init'
 
 const BASE = 'http://localhost/api/auth/oauth'
 
@@ -226,6 +231,24 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
     `).bind(stateToken, exp, userId, sid, action).run()
   }
 
+  // PR-A3（SEC-FACTOR-ADD P1）：is_binding factor-add 分支。對齊 init.ts 寫入語意——
+  //   client_callback='binding:<id>'、purpose='factor_add_binding'、session_id=sid、action='bind_identity'、
+  //   factor_add_grant_hash=grantHash。withGrant=false 模擬 pre-PR-A3 / 被竄改 state（無 elevation proof）。
+  async function seedBindingState(
+    stateToken: string, userId: number,
+    { sid = 'BS', grantHash = null as string | null, withGrant = true } = {},
+  ) {
+    const exp = new Date(Date.now() + 600_000).toISOString().replace('T', ' ').slice(0, 19)
+    await env.chiyigo_db.prepare(`
+      INSERT INTO oauth_states (state_token, code_verifier, nonce, redirect_uri, platform, client_callback, expires_at, purpose, elevation_user_id, session_id, action, factor_add_grant_hash)
+      VALUES (?, 'verifier-xyz', NULL, 'https://chiyigo.com/api/auth/oauth/google/callback', 'web', ?, ?, ?, ?, ?, 'bind_identity', ?)
+    `).bind(
+      stateToken, `binding:${userId}`, exp,
+      withGrant ? 'factor_add_binding' : null, userId, sid,
+      withGrant ? grantHash : null,
+    ).run()
+  }
+
   it('PR-A2 elevation: provider_id match 既綁 → 建 exchange + fragment redirect，無 login/bind 副作用', async () => {
     const u = await seedUser({ email: 'elev@example.com' })
     await env.chiyigo_db.prepare(`INSERT INTO user_identities (user_id, provider, provider_id) VALUES (?, 'google', 'g-elev')`).bind(u.id).run()
@@ -286,6 +309,74 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
     // RL 命中 → 無 exchange 建立（token-exchange 前已擋）
     const ex = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM elevation_exchanges WHERE user_id = ?`).bind(u.id).first()
     expect(Number(ex.c)).toBe(0)
+  })
+
+  // ── PR-A3（SEC-FACTOR-ADD P1 封閉）：is_binding 綁新 OAuth identity 需 factor-add grant ──
+  it('PR-A3 binding: factor_add_binding state + 有效 grant → 綁定成功 + identity 寫入 + grant 消耗', async () => {
+    const u = await seedUser({ email: 'bind-ok@example.com' })
+    const grantToken = await seedFactorAddGrant(u.id, { sid: 'BS-OK', action: 'bind_identity' })
+    const grantHash  = await hashToken(grantToken)
+    await seedBindingState('st-bind-ok', u.id, { sid: 'BS-OK', grantHash })
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({ sub: 'g-bind-ok', email: 'bind-ok@example.com', email_verified: true }) }
+    fetchPlan.profileBody = { sub: 'g-bind-ok', email: 'bind-ok@example.com', email_verified: true, name: 'BindOK' }
+
+    const res = await callCb(cbReq('st-bind-ok'))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location') ?? '').toContain('bind=success')
+
+    const ident = await env.chiyigo_db.prepare(
+      'SELECT user_id FROM user_identities WHERE provider = ? AND provider_id = ?',
+    ).bind('google', 'g-bind-ok').first()
+    expect(ident?.user_id).toBe(u.id)
+
+    // grant 必被消耗（atomic batch S1）
+    const grantRow = await env.chiyigo_db.prepare(
+      `SELECT consumed_at FROM elevation_grants WHERE user_id = ? AND action = 'bind_identity'`,
+    ).bind(u.id).first()
+    expect(grantRow?.consumed_at).not.toBeNull()
+  })
+
+  // P1-closure RED：pre-PR-A3 binding state（無 factor proof）→ callback 不得綁。
+  // pre-fix（無 gate）此情境會 INSERT identity（= 偷到 access token 即可加因子）；post-fix → elevation_required。
+  it('PR-A3 binding: 無 factor_add grant 的 binding state → bind_error=elevation_required，無 identity 寫入', async () => {
+    const u = await seedUser({ email: 'bind-nogr@example.com' })
+    await seedBindingState('st-bind-nogr', u.id, { sid: 'BS-NG', withGrant: false })
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({ sub: 'g-bind-nogr', email: 'bind-nogr@example.com', email_verified: true }) }
+    fetchPlan.profileBody = { sub: 'g-bind-nogr', email: 'bind-nogr@example.com', email_verified: true, name: 'X' }
+
+    const res = await callCb(cbReq('st-bind-nogr'))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location') ?? '').toContain('bind_error=elevation_required')
+    const cnt = await env.chiyigo_db.prepare(
+      'SELECT COUNT(*) AS n FROM user_identities WHERE provider_id = ?',
+    ).bind('g-bind-nogr').first()
+    expect(cnt.n).toBe(0)
+  })
+
+  // P1-closure：grant 已消耗（replay 同一 binding state）→ CAS changes=0 → 不綁 + replay_detected。
+  it('PR-A3 binding: grant 已消耗（replay）→ bind_error=elevation_consumed + 無 identity + replay audit', async () => {
+    const u = await seedUser({ email: 'bind-rp@example.com' })
+    const grantToken = await seedFactorAddGrant(u.id, { sid: 'BS-RP', action: 'bind_identity', consumed: true })
+    const grantHash  = await hashToken(grantToken)
+    await seedBindingState('st-bind-rp', u.id, { sid: 'BS-RP', grantHash })
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer',
+      id_token: await googleSignIdToken({ sub: 'g-bind-rp', email: 'bind-rp@example.com', email_verified: true }) }
+    fetchPlan.profileBody = { sub: 'g-bind-rp', email: 'bind-rp@example.com', email_verified: true, name: 'X' }
+
+    const res = await callCb(cbReq('st-bind-rp'))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location') ?? '').toContain('bind_error=elevation_consumed')
+    const cnt = await env.chiyigo_db.prepare(
+      'SELECT COUNT(*) AS n FROM user_identities WHERE provider_id = ?',
+    ).bind('g-bind-rp').first()
+    expect(cnt.n).toBe(0)
+
+    const audit = await env.chiyigo_db.prepare(
+      `SELECT 1 FROM audit_log WHERE event_type = 'auth.elevation.replay_detected' AND user_id = ?`,
+    ).bind(u.id).first()
+    expect(audit).toBeTruthy()
   })
 
   it('信箱碰撞 + trustEmail=true (google) + email_verified=true → 靜默綁定（C2）', async () => {
@@ -411,5 +502,86 @@ describe('GET /api/auth/oauth/[provider]/callback', () => {
     ).bind('google', 'g-return').first()
     expect(ident.display_name).toBe('NewName')
     expect(ident.avatar_url).toBe('new.png')
+  })
+})
+
+// ── PR-A3（SEC-FACTOR-ADD P1）：init is_binding 入口 gate ───────────────────────
+// callback 是 consume 端；init 是 validate 端。init 要求 factor-add grant 才肯起 binding OAuth flow
+// 並把 grant_hash 寫進 oauth_states 供 callback consume。此處鎖 init 側的 fail-closed + state 正確性。
+describe('GET /api/auth/oauth/[provider]/init — SEC-FACTOR-ADD P1 binding gate', () => {
+  async function bindUserToken(userId: number, sid: string) {
+    return signJwt(
+      { sub: String(userId), email: 'b@x', role: 'player', status: 'active', ver: 0,
+        scope: 'read:profile write:profile', sid },
+      '15m', env, { audience: 'chiyigo' },
+    )
+  }
+  function initBindReq(token: string, grantToken: string | null = null) {
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+    if (grantToken) headers['X-Factor-Add-Grant'] = grantToken
+    // 不帶 CF-Connecting-IP → 跳過 per-IP rate limit，隔離 gate 行為
+    return new Request('http://localhost/api/auth/oauth/google/init?platform=web&is_binding=true', { method: 'GET', headers })
+  }
+  function callInit(req) {
+    return initGet({ request: req, env, params: { provider: 'google' } })
+  }
+
+  it('P1: is_binding 無 grant header → 403 FACTOR_ADD_GRANT_REQUIRED + 不建 binding state', async () => {
+    const u = await seedUser({ email: 'init-nogr@example.com' })
+    const tok = await bindUserToken(u.id, 'IB-NG')
+    const res = await callInit(initBindReq(tok))
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('FACTOR_ADD_GRANT_REQUIRED')
+    const cnt = await env.chiyigo_db.prepare(
+      `SELECT COUNT(*) AS n FROM oauth_states WHERE client_callback = ?`,
+    ).bind(`binding:${u.id}`).first()
+    expect(cnt.n).toBe(0)
+  })
+
+  it('P1: is_binding 但 access token 無 sid → 403 ELEVATION_SID_REQUIRED（fail-closed）', async () => {
+    const u = await seedUser({ email: 'init-nosid@example.com' })
+    const noSidTok = await signJwt(
+      { sub: String(u.id), email: 'init-nosid@example.com', role: 'player', status: 'active', ver: 0,
+        scope: 'read:profile write:profile' },
+      '15m', env, { audience: 'chiyigo' },
+    )
+    const grant = await seedFactorAddGrant(u.id, { sid: 'IB-NS', action: 'bind_identity' })
+    const res = await callInit(initBindReq(noSidTok, grant))
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('ELEVATION_SID_REQUIRED')
+  })
+
+  it('P1: is_binding + 有效 bind_identity grant → 200 redirect_url + binding state（purpose=factor_add_binding + grant_hash）', async () => {
+    const u = await seedUser({ email: 'init-ok@example.com' })
+    const sid = 'IB-OK'
+    const tok = await bindUserToken(u.id, sid)
+    const grantToken = await seedFactorAddGrant(u.id, { sid, action: 'bind_identity' })
+    const grantHash  = await hashToken(grantToken)
+    const res = await callInit(initBindReq(tok, grantToken))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.redirect_url).toMatch(/google/i)
+
+    const st = await env.chiyigo_db.prepare(
+      `SELECT purpose, session_id, action, factor_add_grant_hash FROM oauth_states WHERE client_callback = ?`,
+    ).bind(`binding:${u.id}`).first()
+    expect(st).toBeTruthy()
+    expect(st.purpose).toBe('factor_add_binding')
+    expect(st.session_id).toBe(sid)
+    expect(st.action).toBe('bind_identity')
+    expect(st.factor_add_grant_hash).toBe(grantHash)  // init validate-not-consume：hash 透傳給 callback
+  })
+
+  it('P1: is_binding + cross-action grant（add_passkey）→ 403 + 不建 binding state', async () => {
+    const u = await seedUser({ email: 'init-xact@example.com' })
+    const sid = 'IB-XA'
+    const tok = await bindUserToken(u.id, sid)
+    const wrongGrant = await seedFactorAddGrant(u.id, { sid, action: 'add_passkey' })  // 非 bind_identity
+    const res = await callInit(initBindReq(tok, wrongGrant))
+    expect(res.status).toBe(403)
+    const cnt = await env.chiyigo_db.prepare(
+      `SELECT COUNT(*) AS n FROM oauth_states WHERE client_callback = ?`,
+    ).bind(`binding:${u.id}`).first()
+    expect(cnt.n).toBe(0)
   })
 })

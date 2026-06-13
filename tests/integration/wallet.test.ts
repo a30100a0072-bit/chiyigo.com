@@ -15,9 +15,12 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { env } from 'cloudflare:test'
 import { secp256k1 } from '@noble/curves/secp256k1'
 import { keccak_256 } from '@noble/hashes/sha3'
-import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
+import { resetDb, ensureJwtKeys, seedUser, seedFactorAddGrant } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
 import { SCOPES } from '../../functions/utils/scopes'
+
+// SEC-FACTOR-ADD PR-A3：wallet/verify 綁 factor-add grant，grant 綁 per-login sid。
+const W_SID = 'w-sess'
 import { _internal as siweInternal } from '../../functions/utils/siwe'
 
 import { onRequestPost as nonceHandler  } from '../../functions/api/auth/wallet/nonce'
@@ -72,7 +75,7 @@ function buildSiweMessage({ domain = 'localhost', address, uri = 'http://localho
 async function userToken(userId, email = 'w@x') {
   return signJwt(
     { sub: String(userId), email, role: 'player', status: 'active', ver: 0,
-      scope: 'read:profile write:profile' },
+      scope: 'read:profile write:profile', sid: W_SID },
     '15m', env, { audience: 'chiyigo' },
   )
 }
@@ -86,12 +89,19 @@ async function stepUpToken(userId, action) {
   )
 }
 
-function bearer(method, url, token, body = null) {
+function bearer(method, url, token, body = null, grantToken = null) {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+  if (grantToken) headers['X-Factor-Add-Grant'] = grantToken
   return new Request(url, {
     method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   })
+}
+
+// seed 一張 bind_wallet grant（sid=W_SID 對齊 userToken）
+async function walletGrant(userId: number) {
+  return seedFactorAddGrant(userId, { sid: W_SID, action: 'bind_wallet' })
 }
 
 describe('POST /api/auth/wallet/nonce', () => {
@@ -162,22 +172,49 @@ describe('POST /api/auth/wallet/verify', () => {
     return nonce
   }
 
+  // SEC-FACTOR-ADD P1：偷到 access token 但無 factor-add grant → 不得綁 wallet（pre-fix RED）
+  it('無 X-Factor-Add-Grant header → 403 FACTOR_ADD_GRANT_REQUIRED（無 wallet 寫入）', async () => {
+    const u = await seedUser({ email: 'wgate@x' })
+    const tok = await userToken(u.id)
+    const w = createWallet()
+    const nonce = await setupNonce(u.id, w.address)
+    const messageRaw = buildSiweMessage({ address: w.address, nonce })
+    const signature = signMessage(w.priv, messageRaw)
+    const resp = await verifyHandler({
+      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature }),  // 無 grant
+      env,
+    })
+    expect(resp.status).toBe(403)
+    expect((await resp.json()).code).toBe('FACTOR_ADD_GRANT_REQUIRED')
+    const cnt = await env.chiyigo_db.prepare(
+      'SELECT COUNT(*) AS n FROM user_wallets WHERE user_id = ?',
+    ).bind(u.id).first()
+    expect(cnt.n).toBe(0)
+  })
+
   it('正確簽章 → 200 + INSERT + critical audit + nonce consumed', async () => {
     const u = await seedUser({ email: 'v1@x' })
     const tok = await userToken(u.id)
+    const grant = await walletGrant(u.id)
     const w = createWallet()
     const nonce = await setupNonce(u.id, w.address)
     const messageRaw = buildSiweMessage({ address: w.address, nonce })
     const signature = signMessage(w.priv, messageRaw)
 
     const resp = await verifyHandler({
-      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature, nickname: 'My Wallet' }),
+      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature, nickname: 'My Wallet' }, grant),
       env,
     })
     expect(resp.status).toBe(200)
     const body = await resp.json()
     expect(body.address).toBe(w.address.toLowerCase())
     expect(body.nickname).toBe('My Wallet')
+
+    // SEC-FACTOR-ADD：成功綁定後 grant 必被消耗（atomic batch）
+    const grantRow = await env.chiyigo_db.prepare(
+      `SELECT consumed_at FROM elevation_grants WHERE user_id = ? AND action = 'bind_wallet'`,
+    ).bind(u.id).first()
+    expect(grantRow?.consumed_at).not.toBeNull()
 
     const wRow = await env.chiyigo_db.prepare(
       `SELECT user_id, nickname FROM user_wallets WHERE address = ?`,
@@ -199,13 +236,14 @@ describe('POST /api/auth/wallet/verify', () => {
     const a = await seedUser({ email: 'va@x' })
     const b = await seedUser({ email: 'vb@x' })
     const tokB = await userToken(b.id)
+    const grantB = await walletGrant(b.id)
     const w = createWallet()
     const nonce = await setupNonce(a.id, w.address)
     const messageRaw = buildSiweMessage({ address: w.address, nonce })
     const signature  = signMessage(w.priv, messageRaw)
 
     const resp = await verifyHandler({
-      request: bearer('POST', 'http://x/', tokB, { message: messageRaw, signature }), env,
+      request: bearer('POST', 'http://x/', tokB, { message: messageRaw, signature }, grantB), env,
     })
     expect(resp.status).toBe(401)
     const audit = await env.chiyigo_db.prepare(
@@ -217,13 +255,14 @@ describe('POST /api/auth/wallet/verify', () => {
   it('簽章被別 wallet 偽造 → 400 SIGNATURE_INVALID', async () => {
     const u = await seedUser({ email: 'v2@x' })
     const tok = await userToken(u.id)
+    const grant = await walletGrant(u.id)
     const w    = createWallet()
     const fake = createWallet()
     const nonce = await setupNonce(u.id, w.address)
     const messageRaw = buildSiweMessage({ address: w.address, nonce })
     const sigByFake  = signMessage(fake.priv, messageRaw)  // 用 fake 簽 → recover 出來 ≠ message.address
     const resp = await verifyHandler({
-      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature: sigByFake }), env,
+      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature: sigByFake }, grant), env,
     })
     expect(resp.status).toBe(400)
     expect((await resp.json()).code).toBe('SIGNATURE_INVALID')
@@ -232,6 +271,7 @@ describe('POST /api/auth/wallet/verify', () => {
   it('nonce 已被消耗 → 401', async () => {
     const u = await seedUser({ email: 'v3@x' })
     const tok = await userToken(u.id)
+    const grant = await walletGrant(u.id)
     const w = createWallet()
     const nonce = await setupNonce(u.id, w.address)
     await env.chiyigo_db.prepare(
@@ -240,7 +280,7 @@ describe('POST /api/auth/wallet/verify', () => {
     const messageRaw = buildSiweMessage({ address: w.address, nonce })
     const signature = signMessage(w.priv, messageRaw)
     const resp = await verifyHandler({
-      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature }), env,
+      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature }, grant), env,
     })
     expect(resp.status).toBe(401)
   })
@@ -248,12 +288,13 @@ describe('POST /api/auth/wallet/verify', () => {
   it('domain 不符 → 400 SIGNATURE_INVALID（防 phishing 重用 sig）', async () => {
     const u = await seedUser({ email: 'v4@x' })
     const tok = await userToken(u.id)
+    const grant = await walletGrant(u.id)
     const w = createWallet()
     const nonce = await setupNonce(u.id, w.address)
     const messageRaw = buildSiweMessage({ address: w.address, nonce, domain: 'evil.com' })
     const signature = signMessage(w.priv, messageRaw)
     const resp = await verifyHandler({
-      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature }), env,
+      request: bearer('POST', 'http://x/', tok, { message: messageRaw, signature }, grant), env,
     })
     expect(resp.status).toBe(400)
   })

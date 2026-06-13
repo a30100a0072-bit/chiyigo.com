@@ -13,6 +13,7 @@
 
 import { generateSecureToken, hashToken, verifyBackupCode } from './crypto'
 import { verifyTotpReplaySafe } from './totp'
+import { requireAuth, res } from './auth'
 
 // elevation_grants / elevation_exchanges 的 action 白名單（與 migration 0054 CHECK 對齊）
 const FACTOR_ADD_ACTIONS = new Set(['add_passkey', 'bind_wallet', 'bind_identity'])
@@ -110,4 +111,78 @@ export async function mintFactorAddGrant(
     .run()
 
   return { grant_token: grantToken, expires_in: GRANT_TTL_SEC }
+}
+
+// grant_token 由 client 經 X-Factor-Add-Grant header 帶入（與 body 分離，避免 gate/handler 雙讀 body）。
+const GRANT_HEADER = 'X-Factor-Add-Grant'
+
+interface FactorAddGate {
+  user: Record<string, unknown> | null
+  userId: number
+  sid: string
+  grantTokenHash: string
+  error: Response | null
+}
+
+/**
+ * factor-add 端點 gate（PR-A3，SEC-FACTOR-ADD P1 封閉）。**validate-not-consume**：驗 grant 有效
+ * （存在 + 未消費 + 未過期 + 比對 user_id+sid+action+purpose）但**不**消費；回 grantTokenHash 供 caller
+ * 在 factor-add 寫入的**同一 db.batch** 內以 consumeFactorAddGrantStmt 做 CAS consume（both-or-neither）。
+ *
+ * pre-read 用與 consume CAS 完全相同的 predicate（feedback_gating_preread_not_narrower_than_cas）：
+ * 並發兩請求可同時通過 pre-read，但只有一個贏 CAS consume → 只有一個寫 credential。
+ *
+ * 同步路徑（register-verify / wallet-verify）：caller 拿 grantTokenHash 自建 batch。
+ * async 路徑（oauth is_binding）：init 用此 validate + 存 factor_add_grant_hash 進 oauth_states，
+ * callback 才 consume（見 callback factor_add_binding 分派）。
+ */
+export async function requireFactorAddGrant(
+  request: Request,
+  env: Env,
+  { action }: { action: string },
+): Promise<FactorAddGate> {
+  const fail = (error: Response): FactorAddGate => ({ user: null, userId: 0, sid: '', grantTokenHash: '', error })
+
+  const { user, error } = await requireAuth(request, env)
+  if (error) return fail(error)
+
+  const sid = sidFromUser(user)
+  if (!sid)
+    return fail(res({ error: 'Session not eligible for factor-add; re-login required', code: 'ELEVATION_SID_REQUIRED' }, 403))
+
+  const grantToken = request.headers.get(GRANT_HEADER) ?? request.headers.get(GRANT_HEADER.toLowerCase())
+  if (!grantToken)
+    return fail(res({ error: 'Factor-add elevation required', code: 'FACTOR_ADD_GRANT_REQUIRED' }, 403))
+
+  const userId = Number(user.sub)
+  const grantTokenHash = await hashToken(grantToken)
+  const row = await env.chiyigo_db
+    .prepare(`
+      SELECT id FROM elevation_grants
+      WHERE grant_token_hash = ? AND user_id = ? AND session_id = ? AND action = ? AND purpose = 'factor_add'
+        AND consumed_at IS NULL AND expires_at > datetime('now')
+    `)
+    .bind(grantTokenHash, userId, sid, action).first()
+  if (!row)
+    return fail(res({ error: 'Factor-add elevation grant invalid, expired, used, or wrong action', code: 'FACTOR_ADD_ELEVATION_REQUIRED' }, 403))
+
+  return { user, userId, sid, grantTokenHash, error: null }
+}
+
+/**
+ * grant consume 的 CAS UPDATE 句（caller 放進 factor-add 寫入的同一 db.batch 當 S1；factor-add
+ * INSERT 用 `... WHERE changes()=1` gate 在其後當 S2）。批次後檢查 S1.changes===1 才算 consume 成功。
+ * predicate 與 requireFactorAddGrant pre-read 一致；consumed_at IS NULL 對並發做 row-level 序列化。
+ */
+export function consumeFactorAddGrantStmt(
+  env: Env,
+  { grantTokenHash, userId, sid, action }: { grantTokenHash: string; userId: number; sid: string; action: string },
+) {
+  return env.chiyigo_db
+    .prepare(`
+      UPDATE elevation_grants SET consumed_at = datetime('now')
+      WHERE grant_token_hash = ? AND user_id = ? AND session_id = ? AND action = ? AND purpose = 'factor_add'
+        AND consumed_at IS NULL AND expires_at > datetime('now')
+    `)
+    .bind(grantTokenHash, userId, sid, action)
 }

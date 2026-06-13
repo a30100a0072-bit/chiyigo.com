@@ -24,10 +24,11 @@
  */
 
 import { verifyRegistrationResponse } from '@simplewebauthn/server'
-import { requireAuth, res } from '../../../utils/auth'
+import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
+import { requireFactorAddGrant, consumeFactorAddGrantStmt } from '../../../utils/elevation'
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -35,10 +36,10 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
-  const { user, error } = await requireAuth(request, env)
+  // SEC-FACTOR-ADD（PR-A3）：新增 passkey 需 factor-add elevation grant（X-Factor-Add-Grant header）。
+  // validate-not-consume；grant consume 與下方 credential INSERT 同一 db.batch（both-or-neither）。
+  const { userId, sid, grantTokenHash, error } = await requireFactorAddGrant(request, env, { action: 'add_passkey' })
   if (error) return error
-
-  const userId = Number(user.sub)
 
   let body
   try { body = await request.json() }
@@ -115,19 +116,29 @@ export async function onRequestPost({ request, env }) {
   const publicKeyB64 = bytesToBase64url(publicKeyBytes)
 
   try {
-    const ins = await env.chiyigo_db
-      .prepare(
-        `INSERT INTO user_webauthn_credentials
-           (user_id, credential_id, public_key, counter, transports, aaguid,
-            nickname, backup_eligible, backup_state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        userId, credentialID, publicKeyB64, counter,
-        transports ? JSON.stringify(transports) : null,
-        aaguid, nickname, backupEligible, backupState,
-      )
-      .run()
+    // SEC-FACTOR-ADD（PR-A3）：grant consume + credential INSERT 同一 atomic db.batch。
+    //   S1 = consume CAS（consumed_at IS NULL row-level 序列化）；S2 = INSERT ... WHERE changes()=1
+    //   （只在 S1 真的 consume 了 grant 時才插）。S1.changes!==1 → grant 已被並發消費/失效 → 不插、403。
+    const batch = await env.chiyigo_db.batch([
+      consumeFactorAddGrantStmt(env, { grantTokenHash, userId, sid, action: 'add_passkey' }),
+      env.chiyigo_db
+        .prepare(
+          `INSERT INTO user_webauthn_credentials
+             (user_id, credential_id, public_key, counter, transports, aaguid,
+              nickname, backup_eligible, backup_state)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1`,
+        )
+        .bind(
+          userId, credentialID, publicKeyB64, counter,
+          transports ? JSON.stringify(transports) : null,
+          aaguid, nickname, backupEligible, backupState,
+        ),
+    ])
+    if (batch[0].meta.changes !== 1) {
+      await safeUserAudit(env, { event_type: 'auth.elevation.replay_detected', severity: 'critical', user_id: userId, request, data: { stage: 'register_verify_consume' } })
+      return res({ error: 'Factor-add elevation grant already used or invalid', code: 'FACTOR_ADD_GRANT_CONSUMED' }, 403, cors)
+    }
+    const ins = batch[1]
 
     // Codex r9-4：credential_id_prefix → keyed HMAC（domain='credential-id'）
     const sig = await hashIdentifierForAudit(env, 'credential-id', credentialID)

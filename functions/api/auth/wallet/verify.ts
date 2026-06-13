@@ -25,10 +25,11 @@
  *   409 → 已綁
  */
 
-import { requireAuth, res } from '../../../utils/auth'
+import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { verifySiweMessage, consumeWalletNonce } from '../../../utils/siwe'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
+import { requireFactorAddGrant, consumeFactorAddGrantStmt } from '../../../utils/elevation'
 
 const NICKNAME_MAX = 64
 
@@ -38,9 +39,10 @@ export async function onRequestOptions({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
-  const { user, error } = await requireAuth(request, env)
+  // SEC-FACTOR-ADD（PR-A3）：綁 wallet 需 factor-add elevation grant（validate-not-consume；
+  // consume 與下方 user_wallets INSERT 同一 db.batch）。
+  const { userId, sid, grantTokenHash, error } = await requireFactorAddGrant(request, env, { action: 'bind_wallet' })
   if (error) return error
-  const userId = Number(user.sub)
 
   let body
   try { body = await request.json() }
@@ -93,13 +95,21 @@ export async function onRequestPost({ request, env }) {
 
   // 3. INSERT；UNIQUE(user_id, address) 撞 → 409
   try {
-    const ins = await env.chiyigo_db
-      .prepare(
-        `INSERT INTO user_wallets (user_id, address, chain_id, nickname)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .bind(userId, address, chainId ?? nonceRow.chain_id ?? 1, nickname)
-      .run()
+    // SEC-FACTOR-ADD（PR-A3）：grant consume + wallet INSERT 同一 atomic db.batch（both-or-neither）。
+    const batch = await env.chiyigo_db.batch([
+      consumeFactorAddGrantStmt(env, { grantTokenHash, userId, sid, action: 'bind_wallet' }),
+      env.chiyigo_db
+        .prepare(
+          `INSERT INTO user_wallets (user_id, address, chain_id, nickname)
+           SELECT ?, ?, ?, ? WHERE changes() = 1`,
+        )
+        .bind(userId, address, chainId ?? nonceRow.chain_id ?? 1, nickname),
+    ])
+    if (batch[0].meta.changes !== 1) {
+      await safeUserAudit(env, { event_type: 'auth.elevation.replay_detected', severity: 'critical', user_id: userId, request, data: { stage: 'wallet_verify_consume' } })
+      return res({ error: 'Factor-add elevation grant already used or invalid', code: 'FACTOR_ADD_GRANT_CONSUMED' }, 403, cors)
+    }
+    const ins = batch[1]
 
     // Codex r9-4：address_prefix → keyed HMAC（同 wallet/[id] 同 domain）
     const sig = await hashIdentifierForAudit(env, 'wallet-address', address)
