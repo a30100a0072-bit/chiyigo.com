@@ -60,6 +60,11 @@ class ApiError extends Error {
                 headers: { 'Content-Type': 'application/json', 'X-Device-Id': _devId },
                 body: '{}',
             });
+            // SEC-REFRESH-REUSE (OD-SR-3)：/api/auth/refresh 本身回 401 SESSION_REVOKED（family-revoke 觸發點）= SESSION_
+            // REVOKED 最常見來源（victim 拿被撤 token 走 silent-refresh）。在 `!r.ok → false`（會被上層折成 SESSION_EXPIRED）
+            // 之前先硬登出（正確 code）。_throwSessionRevoked 清 token + 導 login + throw，往上傳到 apiFetch。
+            if (r.status === 401 && await _peekErrorCode(r) === 'SESSION_REVOKED')
+                _throwSessionRevoked(r);
             if (!r.ok)
                 return false;
             const data = await r.json().catch(() => null);
@@ -72,7 +77,11 @@ class ApiError extends Error {
             }
             return false;
         }
-        catch {
+        catch (e) {
+            // 不可吞 SESSION_REVOKED 硬登出（_throwSessionRevoked 丟的 ApiError）→ rethrow 讓 apiFetch 以正確 code 結束；
+            // 其餘（網路錯 / parse 錯）維持原本 fail-soft return false（silent-refresh 失敗 → 上層走 SESSION_EXPIRED）。
+            if (e instanceof ApiError && e.code === 'SESSION_REVOKED')
+                throw e;
             return false;
         }
     }
@@ -101,6 +110,21 @@ class ApiError extends Error {
         })();
         return _refreshInflight;
     }
+    // SEC-REFRESH-REUSE：window.silentRefresh 對外保持 Promise<boolean> 契約。外部 caller（auth-ui / sidebar-auth /
+    // dashboard / admin-* / ai-assistant / accept-invitation）寫 `const ok = await silentRefresh(); if (!ok) → login`。
+    // SESSION_REVOKED 已在 _doRefreshOnce 內硬登出（_redirectToLogin 導頁），故對外 caller 吸收該 throw → 回 false
+    // （導頁已發生，false 觸發的 redirect 同址冪等）。apiFetch 直接用 _silentRefresh（會 throw），以正確 SESSION_REVOKED
+    // code 結束 —— 兩條路徑分離：內部 throw 給 apiFetch、對外 boolean 給其餘 caller。
+    async function _silentRefreshBoolean() {
+        try {
+            return await _silentRefresh();
+        }
+        catch (e) {
+            if (e instanceof ApiError && e.code === 'SESSION_REVOKED')
+                return false;
+            throw e;
+        }
+    }
     function _redirectToLogin() {
         try {
             sessionStorage.removeItem('access_token');
@@ -110,6 +134,23 @@ class ApiError extends Error {
         if (!/\/login(\.html)?$/.test(location.pathname)) {
             location.href = '/login.html';
         }
+    }
+    // SEC-REFRESH-REUSE (OD-SR-3)：peek 一個 401 response 的 `code`，讀 body clone（**不**消耗原 body，原 body 仍由下方
+    // 解析成 thrown ApiError）。供「初次 401（silent-refresh 之前）」與「refresh 後 retry 仍 401」兩處共用同一判斷。
+    async function _peekErrorCode(r) {
+        try {
+            const b = await r.clone().json();
+            return b?.code ?? null;
+        }
+        catch {
+            return null;
+        } // 非 JSON / malformed body → 視為非 SESSION_REVOKED
+    }
+    // SEC-REFRESH-REUSE：SESSION_REVOKED 401 = 後端 refresh reuse 偵測已撤掉整個 session family → 立即硬登出（清
+    // access_token + 導 /login）並丟出該 distinct code。**只**此 code 清/導（防誤登出）。永遠 throw（回傳 never）。
+    function _throwSessionRevoked(r) {
+        _redirectToLogin();
+        throw new ApiError({ status: 401, traceId: r.headers.get('X-Request-Id'), code: 'SESSION_REVOKED', message: 'Session revoked' });
     }
     async function _doFetch(url, init) {
         const opts = { ...init };
@@ -141,6 +182,12 @@ class ApiError extends Error {
                 message: (netErr instanceof Error ? netErr.message : null) || 'Network error',
             });
         }
+        // SEC-REFRESH-REUSE (OD-SR-3 hard lock)：code==='SESSION_REVOKED' 的 401 = 後端偵測到 refresh reuse 已把整個
+        // session family 撤掉。silent-refresh 已無意義（family 已死），必須立即硬登出。**在 silent-refresh 分支之前**
+        // detect（該分支對任何 401 都觸發，且早於下方 body parse，會白白燒一輪 refresh）。**只**此 code 清 token+導 login；
+        // generic 401 / 403 / 429 / network / malformed 一律不清不導（防誤登出）。skipRefresh 不影響此判斷（語意即硬登出）。
+        if (res.status === 401 && await _peekErrorCode(res) === 'SESSION_REVOKED')
+            _throwSessionRevoked(res);
         // 401 → silent refresh → retry 一次；refresh 失敗或 retry 還 401 → redirect login
         if (res.status === 401 && !skipRefresh) {
             const refreshed = await _silentRefresh();
@@ -155,6 +202,10 @@ class ApiError extends Error {
                 throw new ApiError({ status: 0, traceId: null, code: 'NETWORK_ERROR', message: (netErr instanceof Error ? netErr.message : null) || 'Network error' });
             }
             if (res.status === 401) {
+                // retry 仍 401：refresh→retry 窗內若 family 被撤 → SESSION_REVOKED 也要以正確 code 硬登出（否則丟錯 code）；
+                // 其餘 401 = session expired 硬停。
+                if (await _peekErrorCode(res) === 'SESSION_REVOKED')
+                    _throwSessionRevoked(res);
                 _redirectToLogin();
                 throw new ApiError({ status: 401, traceId: res.headers.get('X-Request-Id'), code: 'SESSION_EXPIRED', message: 'Session expired' });
             }
@@ -208,6 +259,7 @@ class ApiError extends Error {
             TOTP_REQUIRED: '需要兩步驟驗證碼',
             TOKEN_REVOKED: '登入狀態已失效，請重新登入',
             SESSION_EXPIRED: '登入狀態已失效，請重新登入',
+            SESSION_REVOKED: '登入狀態已失效，請重新登入',
             UNAUTHORIZED: '未授權，請重新登入',
             RATE_LIMITED: '請求次數過多，請稍後再試',
             ACCOUNT_BANNED: '此帳號已被停用，請聯繫客服',
@@ -395,6 +447,7 @@ class ApiError extends Error {
             TOTP_REQUIRED: 'Two-factor verification required',
             TOKEN_REVOKED: 'Session expired, please log in again',
             SESSION_EXPIRED: 'Session expired, please log in again',
+            SESSION_REVOKED: 'Session expired, please log in again',
             UNAUTHORIZED: 'Unauthorized, please log in again',
             RATE_LIMITED: 'Too many requests, please try again later',
             ACCOUNT_BANNED: 'This account has been suspended, please contact support',
@@ -582,6 +635,7 @@ class ApiError extends Error {
             TOTP_REQUIRED: '二段階認証コードが必要です',
             TOKEN_REVOKED: 'セッションの有効期限が切れました。再度ログインしてください',
             SESSION_EXPIRED: 'セッションの有効期限が切れました。再度ログインしてください',
+            SESSION_REVOKED: 'セッションの有効期限が切れました。再度ログインしてください',
             UNAUTHORIZED: '認証されていません。再度ログインしてください',
             RATE_LIMITED: 'リクエストが多すぎます。しばらくしてから再度お試しください',
             ACCOUNT_BANNED: 'このアカウントは停止されています。サポートまでご連絡ください',
@@ -769,6 +823,7 @@ class ApiError extends Error {
             TOTP_REQUIRED: '2단계 인증 코드가 필요합니다',
             TOKEN_REVOKED: '세션이 만료되었습니다. 다시 로그인해주세요',
             SESSION_EXPIRED: '세션이 만료되었습니다. 다시 로그인해주세요',
+            SESSION_REVOKED: '세션이 만료되었습니다. 다시 로그인해주세요',
             UNAUTHORIZED: '인증되지 않았습니다. 다시 로그인해주세요',
             RATE_LIMITED: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요',
             ACCOUNT_BANNED: '이 계정은 정지되었습니다. 고객센터로 문의해주세요',
@@ -1031,6 +1086,6 @@ class ApiError extends Error {
     window.tApiError = tApiError;
     window.tApiErrorData = tApiErrorData;
     window.formatApiError = formatApiError;
-    window.silentRefresh = _silentRefresh;
+    window.silentRefresh = _silentRefreshBoolean;
     window.__apiErrorI18n = API_ERROR_I18N;
 })();

@@ -44,6 +44,19 @@ type RateLimitKind =
   | 'elevation_oauth_callback'
   | 'elevation_exchange'
   | 'credential_disposition_run'   // SEC-FACTOR-ADD-A PR-A4：admin disposition runner 防重入
+  // SEC-REFRESH-REUSE（P1）：refresh family-revoke 的「重複(changes=0)replay」audit 降噪 cap，
+  // per-(user, session) 用 template literal kind（login_attempts.kind 已是 TEXT，**無 migration**）。
+  // prefix 固定 → 其餘 union 成員的 typo 防護不被弱化；只此前綴開放，仍經 familyRevokeCapKind() 封裝產出。
+  | `refresh_family_revoke:${string}`
+
+/**
+ * SEC-REFRESH-REUSE：把 session_id 的 keyed-HMAC 包成 family-revoke abuse-cap 的 RateLimitKind。
+ * 集中產出，禁散落字串拼接（避免 prefix typo 繞過 typo 防護）。caller 傳入已 hash 的 session id
+ * （`hashIdentifierForAudit` 產物，不存明文 session）。
+ */
+export function familyRevokeCapKind(sessionIdHmac: string): RateLimitKind {
+  return `refresh_family_revoke:${sessionIdHmac}`
+}
 
 interface RateLimitScope {
   kind: RateLimitKind

@@ -28,9 +28,10 @@ import { resolveActiveTenantClaims } from '../../utils/tenant-context'
 import { getCorsHeaders, resolveAud } from '../../utils/cors'
 import { res } from '../../utils/auth'
 import { refreshCookie } from '../../utils/cookies'
-import { safeUserAudit } from '../../utils/user-audit'
+import { safeUserAudit, hashIdentifierForAudit } from '../../utils/user-audit'
 import { buildTokenScope } from '../../utils/scopes'
-import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
+import { checkRateLimit, recordRateLimit, familyRevokeCapKind } from '../../utils/rate-limit'
+import { casByFamily, FAMILY_REF_SQL } from '../../utils/session-revoke'
 
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
@@ -38,6 +39,11 @@ const REFRESH_TOKEN_DAYS = 7
 // re-presented just-revoked token is classified as a benign rotation-orphan (auth.refresh.grace_orphan) instead of
 // reuse. Owner-ratified 30s (Gate-1, 2026-06-07). Magic number → named constant (unit: seconds).
 const REFRESH_GRACE_SECONDS = 30
+// SEC-REFRESH-REUSE（P1，OD-SR-A）：family-revoke 的「重複(changes=0)replay」audit 降噪 cap，per-(user, session)。
+// cap **只壓重複 audit 噪音、不 gate revoke**（OD-SR-2 hard lock：first revoke 走 changes>0 分支，永不經 cap）。
+// 匯出供測試引用（禁 magic number 散落 test）。單位：次 / 秒。
+export const REFRESH_FAMILY_REVOKE_AUDIT_CAP            = 5
+export const REFRESH_FAMILY_REVOKE_AUDIT_WINDOW_SECONDS = 600
 
 export async function onRequestOptions({ request, env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
@@ -128,41 +134,126 @@ export async function onRequestPost({ request, env }) {
   // auth.refresh.grace_orphan instead of the FALSE reuse_detected. Everything else keeps reuse_detected -- token-theft
   // detection is preserved. Owner-ratified: grace_orphan is a SECURITY_SIGNAL/warn (no retention downgrade); 30s window.
   if (tokenRow.revoked_at) {
+    // SEC-REFRESH-REUSE (PT-2 truth table, §3): classify the revoked-token reuse sub-path. Only a PROVEN non-benign
+    // rotation reuse (a rotation-stamped successor + NOT a benign in-grace orphan) family-revokes the family's single
+    // live head (= an attacker's persistent successor). The three benign sub-paths (successor NULL / grace_device_
+    // mismatch / benign grace orphan) keep their EXISTING read-only behavior — a revoked token must NOT kill a live
+    // successor there (round-2 H binding invariant). familyRevokeReason stays null for every NON-revoke sub-path.
+    let familyRevokeReason: 'genuine_reuse_outside_grace' | 'device_null_candidate' | 'dead_successor' | null = null
+
     if (tokenRow.grace_candidate) {
       const deviceBound = tokenRow.device_uuid !== null && tokenRow.device_uuid !== ''
       if (deviceBound && tokenRow.device_uuid !== (device_uuid ?? '')) {
         // device-bound candidate from a wrong/absent device: keep a security signal, NO quota, NO family-revoke
-        // (family-revoke stays on the LIVE-token path only -- a revoked token may not kill the live successor).
+        // (round-2 H: a wrong-device revoked token may not kill the live successor session).
         await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'grace_device_mismatch' } })
         return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
       }
       if (deviceBound) {
         // correct-device candidate: only NOW spend the refresh rate-limit (device check is before rate-limit so a
         // wrong-device replay cannot burn the victim quota), then a read-only successor-liveness check. A TRUE orphan
-        // never used its successor, so it is still live -> benign. A dead/missing successor = chain advanced / session
-        // ended -> keep the reuse_detected signal.
-        const { blocked } = await checkRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, windowSeconds: 60, max: 30 })
-        if (blocked) {
-          await safeUserAudit(env, { event_type: 'auth.refresh.rate_limited', severity: 'warn', user_id: tokenRow.user_id, request })
-          return res({ error: 'Too many refresh attempts. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+        // never used its successor, so it is still live -> benign. A dead/missing successor = chain advanced.
+        // C2 fail-secure: this classification I/O (checkRateLimit / recordRateLimit / successor-liveness SELECT) runs
+        // BEFORE the family-revoke try and leads into the dead_successor sub-path, so a throw here must ALSO fail-secure
+        // (Codex r1 blocker — otherwise /api middleware surfaces a 500). Normal 429 / grace_orphan returns stay inside.
+        try {
+          const { blocked } = await checkRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, windowSeconds: 60, max: 30 })
+          if (blocked) {
+            await safeUserAudit(env, { event_type: 'auth.refresh.rate_limited', severity: 'warn', user_id: tokenRow.user_id, request })
+            return res({ error: 'Too many refresh attempts. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+          }
+          await recordRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, ip })
+          const successorLive = await db
+            .prepare(`SELECT 1 AS ok FROM refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > datetime('now')`)
+            .bind(tokenRow.successor_token_hash)
+            .first()
+          if (successorLive) {
+            // benign rotation-orphan: same device, live (unused) successor, within window. Distinct non-alarming
+            // security signal instead of the FALSE reuse_detected. Still 401 (no resurrection -- Route B).
+            await safeUserAudit(env, { event_type: 'auth.refresh.grace_orphan', severity: 'warn', user_id: tokenRow.user_id, request })
+            return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
+          }
+          // dead/missing successor (chain advanced / session ended) -> proven non-benign -> family-revoke (§4/§5).
+          familyRevokeReason = 'dead_successor'
+        } catch {
+          // C2 fail-secure: a throw in the correct-device classification I/O → 401 SESSION_REVOKED + family_revoke_error
+          // (the presented token IS revoked, so clearing it client-side is safe). NEVER a 500. sub_path omitted: the
+          // throw can predate the orphan-vs-dead determination, so the exact reason is indeterminate here.
+          await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'family_revoke_error' } })
+          return res({ error: 'Session has been revoked', code: 'SESSION_REVOKED' }, 401, cors)
         }
-        await recordRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, ip })
-        const successorLive = await db
-          .prepare(`SELECT 1 AS ok FROM refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > datetime('now')`)
-          .bind(tokenRow.successor_token_hash)
-          .first()
-        if (successorLive) {
-          // benign rotation-orphan: same device, live (unused) successor, within window. Distinct non-alarming
-          // security signal instead of the FALSE reuse_detected. Still 401 (no resurrection -- Route B).
-          await safeUserAudit(env, { event_type: 'auth.refresh.grace_orphan', severity: 'warn', user_id: tokenRow.user_id, request })
-          return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
-        }
-        // dead/missing successor -> fall through to reuse_detected below.
+      } else {
+        // device-null candidate (web: cannot confirm same device) -> proven non-benign -> family-revoke (§4/§5).
+        familyRevokeReason = 'device_null_candidate'
       }
-      // device-null candidate -> fall through to reuse_detected (cannot confirm same device -> stay a security signal).
+    } else if (tokenRow.successor_token_hash) {
+      // NOT a grace candidate but WAS rotation-revoked (successor stamped) => out-of-grace genuine reuse -> family-revoke.
+      familyRevokeReason = 'genuine_reuse_outside_grace'
     }
-    // genuine reuse: out of window / revoked by logout-admin-device (successor_token_hash NULL) / device-null candidate
-    // / dead-or-missing successor. (refresh rotation 設計下偷 token 必中此分支)
+    // else: successor_token_hash IS NULL (revoked by logout / admin / device-mismatch, NOT a rotation) -> NO
+    // family-revoke; keep the existing read-only reuse_detected signal at the end of this block.
+
+    if (familyRevokeReason) {
+      // ── family-revoke: §4 GLOBAL COUNT preflight + single-head CAS + §5 abuse cap ──────────────────────────────
+      // presentedFamilyRef aligns with FAMILY_REF_SQL (session-revoke.ts) so the runtime ref never diverges from the
+      // DB family identity. casByFamily revokes the family's ONE current live head (the attacker's successor); it is
+      // PK-pinned → changes() ∈ {0,1}. A 2-live-head family breaks the EXACTLY-ONE-LIVE-HEAD invariant → fail closed.
+      // C2 fail-secure: the WHOLE block (preflight COUNT, single-head CAS, keyed-HMAC, abuse-cap rate-limit, audit
+      // emits) is under one try → ANY throw falls to the single catch below = 401 SESSION_REVOKED +
+      // auth.refresh.fail/family_revoke_error. NEVER a 500, never a false family_revoked, never a new token. The
+      // hmac / checkRateLimit / recordRateLimit calls are NOT swallow-safe (unlike safeUserAudit), so they MUST be
+      // inside the try (the original narrow try left them exposed — Codex/workflow blocker).
+      const presentedFamilyRef = tokenRow.session_id ?? `legacy_${tokenRow.id}`
+      const userIdNum = Number(tokenRow.user_id)
+      try {
+        const headRow = await db
+          .prepare(`SELECT COUNT(*) AS heads FROM refresh_tokens WHERE user_id = ? AND ${FAMILY_REF_SQL} = ? AND revoked_at IS NULL`)
+          .bind(userIdNum, presentedFamilyRef)
+          .first()
+        const heads = Number(headRow?.heads ?? 0)
+        if (heads > 1) {
+          // FAIL CLOSED — EXACTLY-ONE-LIVE-HEAD invariant broken (a single-head CAS would revoke 1 and leave another
+          // live). Revoke nothing; emit the existing critical forensic session.integrity_violation, NOT family_revoked.
+          await safeUserAudit(env, { event_type: 'session.integrity_violation', severity: 'critical', user_id: tokenRow.user_id, request, data: { heads, site: 'auth.refresh' } })
+          return res({ error: 'Session has been revoked', code: 'SESSION_REVOKED' }, 401, cors)
+        }
+        // heads === 1 → revoke the single live head; heads === 0 → no live successor (changes stays 0, NOT family_revoked).
+        const revokedChanges = heads === 1 ? Number((await casByFamily(db, userIdNum, presentedFamilyRef).run())?.meta?.changes ?? 0) : 0
+        // session id → keyed-HMAC (no plaintext session in audit / cap key); reused for the audit payload AND the cap key.
+        const sessionIdHmac16 = (await hashIdentifierForAudit(env, 'session-id-audit', presentedFamilyRef)).hex.slice(0, 16)
+        if (revokedChanges > 0) {
+          // C1: changes>0 ⟺ we revoked ≥1 active head (the attacker's successor) → emit the critical family_revoked.
+          await safeUserAudit(env, {
+            event_type: 'auth.refresh.family_revoked', severity: 'critical', user_id: tokenRow.user_id, request,
+            data: { reason: familyRevokeReason, sub_path: familyRevokeReason, session_id_hmac16: sessionIdHmac16, revoke_count: revokedChanges, abuse_capped: false },
+          })
+        } else {
+          // changes===0 (family already revoked / heads===0): C1 forbids emitting family_revoked (we revoked nothing).
+          // Record a distinct reuse_detected_family_already_revoked instead, capped per-(user, session) to bound the
+          // audit/DB noise of a replay storm. The cap NEVER gates the revoke above (OD-SR-2 hard lock): the first real
+          // revoke is the changes>0 branch, which never reaches here, and the cap key is session-scoped (A≠B).
+          const capKind = familyRevokeCapKind(sessionIdHmac16)
+          const { blocked: capped } = await checkRateLimit(db, { kind: capKind, userId: tokenRow.user_id, windowSeconds: REFRESH_FAMILY_REVOKE_AUDIT_WINDOW_SECONDS, max: REFRESH_FAMILY_REVOKE_AUDIT_CAP })
+          if (!capped) {
+            await recordRateLimit(db, { kind: capKind, userId: tokenRow.user_id })
+            await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'reuse_detected_family_already_revoked', sub_path: familyRevokeReason } })
+          }
+          // capped → suppress (pure noise reduction); still 401 SESSION_REVOKED below.
+        }
+      } catch {
+        // C2 fail-secure (catches preflight / CAS / keyed-HMAC / abuse-cap throws): 401 SESSION_REVOKED (the presented
+        // token IS revoked, so clearing it client-side is safe) + auth.refresh.fail/family_revoke_error. If the CAS
+        // already committed before a later throw, the revoke STANDS (revoke is the SoT; audit is best-effort, plan §7)
+        // and a subsequent same-family reuse re-attempts idempotently. NEVER claim a false family_revoked here.
+        await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'family_revoke_error', sub_path: familyRevokeReason } })
+        return res({ error: 'Session has been revoked', code: 'SESSION_REVOKED' }, 401, cors)
+      }
+      return res({ error: 'Session has been revoked', code: 'SESSION_REVOKED' }, 401, cors)
+    }
+
+    // genuine reuse WITHOUT family-revoke: successor_token_hash NULL (revoked by logout / admin / device-mismatch,
+    // not a rotation). Keep the existing read-only reuse_detected security signal (token theft via rotation reuse
+    // takes the family-revoke branch above instead).
     await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'reuse_detected' } })
     return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
   }
