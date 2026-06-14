@@ -146,7 +146,7 @@ async function handle(context) {
       return Response.redirect(`${baseUrl}/dashboard.html?elev_error=invalid_state`, 302)
     }
     const existing = await db
-      .prepare('SELECT 1 FROM user_identities WHERE user_id = ? AND provider = ? AND provider_id = ? LIMIT 1')
+      .prepare('SELECT requires_reverification AS rr FROM user_identities WHERE user_id = ? AND provider = ? AND provider_id = ? LIMIT 1')
       .bind(elevUserId, provider, provider_id).first()
     if (!existing) {
       await safeUserAudit(env, {
@@ -154,6 +154,18 @@ async function handle(context) {
         user_id: elevUserId, request, data: { provider, action: elevationAction },
       })
       return Response.redirect(`${baseUrl}/dashboard.html?elev_error=provider_mismatch`, 302)
+    }
+    // OD-3 D1（permanent-persistence seam，hard blocker）：matched identity flagged → 不得當 factor-add elevation
+    // proof。擋在鑄 exchange code / factor-add grant 之前 —— 植入的 identity 本就由攻擊者掌握，用它自證去鑄新
+    // （未被 flag、可獨立登入、永久存活的）因子會繞回 #78 gate；reverify（owner-vouch）或刪除後才放行。
+    if (existing.rr) {
+      const rvSig = await hashIdentifierForAudit(env, 'oauth-provider-id', String(provider_id))
+      await safeUserAudit(env, {
+        event_type: 'auth.credential.reverification_required', severity: 'warn',
+        user_id: elevUserId, request,
+        data: { method: `oauth_reauth_elevation:${provider}`, action: elevationAction, provider_id_hmac16: rvSig.hex.slice(0, 16), salted: rvSig.salted },
+      })
+      return Response.redirect(`${baseUrl}/dashboard.html?elev_error=reverification_required`, 302)
     }
     // match → 建 one-time exchange code（provider_id 只存 keyed-HMAC，不存明文）
     const exchangeCode      = generateSecureToken()
@@ -250,7 +262,7 @@ async function handle(context) {
   // 5b. 檢查 user_identities 是否已有此 provider_id（既有綁定）
   const existingIdentity = await db
     .prepare(`
-      SELECT ui.user_id FROM user_identities ui
+      SELECT ui.user_id, ui.requires_reverification FROM user_identities ui
       JOIN users u ON u.id = ui.user_id
       WHERE ui.provider = ? AND ui.provider_id = ? AND u.deleted_at IS NULL
     `)
@@ -260,6 +272,17 @@ async function handle(context) {
   let userId
 
   if (existingIdentity) {
+    // OD-3：flagged identity 使用前強制 re-verify。擋在 display_name/avatar UPDATE 與簽 token 之前
+    // → deny path 不寫 profile、不簽 token；redirect 回登入頁帶 reverification_required（redirect surface 契約）。
+    if (existingIdentity.requires_reverification) {
+      const rvSig = await hashIdentifierForAudit(env, 'oauth-provider-id', String(provider_id))
+      await safeUserAudit(env, {
+        event_type: 'auth.credential.reverification_required', severity: 'warn',
+        user_id: existingIdentity.user_id, request,
+        data: { method: `oauth_login:${provider}`, provider_id_hmac16: rvSig.hex.slice(0, 16), salted: rvSig.salted },
+      })
+      return Response.redirect(`${baseUrl}/login.html?reverification_required=1&provider=${provider}`, 302)
+    }
     // 既有綁定：更新 display_name / avatar
     userId = existingIdentity.user_id
     await db.prepare(`

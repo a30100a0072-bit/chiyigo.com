@@ -18,6 +18,7 @@ import { clearReverificationFlag } from '../../functions/utils/credential-reveri
 import { onRequestGet as meHandler } from '../../functions/api/auth/me'
 import { onRequestPost as reverifyHandler } from '../../functions/api/auth/credential/reverify'
 import { onRequestPost as adminClearHandler } from '../../functions/api/admin/credential-reverification/clear'
+import { onRequestGet as initHandler } from '../../functions/api/auth/oauth/[provider]/init'
 
 const PW = 'OldPass#1234'   // seedUser() default password
 
@@ -347,5 +348,41 @@ describe('OD-3 step 5 — clearReverificationFlag CAS loser', () => {
     const second = await clearReverificationFlag(env, { type: 'identity', id: idId, userId: u.id, actorType: 'self', clearMethod: 'password', request: new Request('http://x') })
     expect(second.cleared).toBe(false)
     expect(await clearAudits()).toHaveLength(1)   // only the winner emitted
+  })
+})
+
+// step 6 — init.ts supplementary early block (plan §6.3): elevation OAuth-reauth init refuses to
+// start the roundtrip when every bound identity for the provider is flagged (belt-and-suspenders ahead of 5a).
+describe('OD-3 — init elevation requires_reverification early block', () => {
+  beforeAll(() => { Object.assign(env, { GOOGLE_CLIENT_ID: 'gid', GOOGLE_CLIENT_SECRET: 'gsec' }) })
+  async function elevToken(userId: number): Promise<string> {
+    return signJwt({ sub: String(userId), email: 'u@x', role: 'player', status: 'active', ver: 0, scope: 'read:profile', sid: 'SID-1' }, '15m', env, { audience: 'chiyigo' })
+  }
+  function callInit(token: string, provider = 'google', qs = 'purpose=elevation&action=add_passkey') {
+    return initHandler({
+      request: new Request(`http://x/api/auth/oauth/${provider}/init?${qs}`, { headers: { Authorization: `Bearer ${token}`, 'CF-Connecting-IP': '1.2.3.4' } }),
+      env, params: { provider }, waitUntil: () => {}, data: {}, next: async () => new Response('next'),
+    })
+  }
+
+  it('all identities for provider flagged -> 403 CREDENTIAL_REVERIFICATION_REQUIRED, no oauth_states written', async () => {
+    const u = await seedUser({ email: 'i1@x' })
+    await seedIdentity(u.id, 'google', 'g-flag', { flagged: true, reason: 'unknown_context' })
+    const res = await callInit(await elevToken(u.id))
+    const body = await res.json() as Record<string, unknown>
+    expect(res.status).toBe(403)
+    expect(body.code).toBe('CREDENTIAL_REVERIFICATION_REQUIRED')
+    // block precedes PKCE/state persistence -> no roundtrip started
+    const st = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM oauth_states WHERE elevation_user_id=?`).bind(u.id).first()
+    expect(Number(st.c)).toBe(0)
+  })
+
+  it('a non-flagged identity exists for provider -> proceeds (200 + redirect_url) [regression]', async () => {
+    const u = await seedUser({ email: 'i2@x' })
+    await seedIdentity(u.id, 'google', 'g-ok', { flagged: false })
+    const res = await callInit(await elevToken(u.id))
+    const body = await res.json() as Record<string, unknown>
+    expect(res.status).toBe(200)
+    expect(typeof body.redirect_url).toBe('string')
   })
 })

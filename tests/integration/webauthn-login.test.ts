@@ -371,3 +371,36 @@ describe('POST /api/auth/webauthn/login-verify', () => {
     expect(rt.device_uuid).toBe('dev-app-001')
   })
 })
+
+// OD-3 credential requires_reverification enforcement — passkey login surface (plan §6.3 / §12).
+describe('OD-3 — passkey login-verify requires_reverification block', () => {
+  it('flagged passkey -> 403 CREDENTIAL_REVERIFICATION_REQUIRED, counter unchanged, no token', async () => {
+    const u = await seedUser({ email: 'pk-flag@x' })
+    await seedCredential(u.id, 'cred-flag', 7)
+    await env.chiyigo_db.prepare(
+      `UPDATE user_webauthn_credentials SET requires_reverification=1, disposition_reason='unknown_context' WHERE credential_id='cred-flag'`,
+    ).run()
+    await seedChallenge('chal-flag', u.id)
+    mockState.verifyResult = { verified: true, authenticationInfo: { newCounter: 99, userVerified: true } }
+    mockState.verifyThrows = null
+    const resp = await verifyHandler({ request: jsonPost('http://x/api/auth/webauthn/login-verify', { response: fakeAssertion('chal-flag', 'cred-flag') }), env })
+    const body = await resp.json() as Record<string, unknown>
+    expect(resp.status).toBe(403)
+    expect(body.code).toBe('CREDENTIAL_REVERIFICATION_REQUIRED')
+    expect(body.access_token).toBeUndefined()
+    // deny path: block is BEFORE the counter update -> counter stays at the seeded value (no credential-row write)
+    const row = await env.chiyigo_db.prepare(`SELECT counter FROM user_webauthn_credentials WHERE credential_id='cred-flag'`).first()
+    expect(Number(row.counter)).toBe(7)
+  })
+  it('unflagged passkey -> still logs in (200 + access_token) [regression]', async () => {
+    const u = await seedUser({ email: 'pk-ok@x' })
+    await seedCredential(u.id, 'cred-ok', 0)
+    await seedChallenge('chal-ok', u.id)
+    mockState.verifyResult = { verified: true, authenticationInfo: { newCounter: 1, userVerified: true } }
+    mockState.verifyThrows = null
+    const resp = await verifyHandler({ request: jsonPost('http://x/api/auth/webauthn/login-verify', { response: fakeAssertion('chal-ok', 'cred-ok') }), env })
+    const body = await resp.json() as Record<string, unknown>
+    expect(resp.status).toBe(200)
+    expect(String(body.access_token)).toMatch(/^eyJ/)
+  })
+})

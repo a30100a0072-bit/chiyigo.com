@@ -592,3 +592,64 @@ describe('GET /api/auth/oauth/[provider]/init — SEC-FACTOR-ADD P1 binding gate
     expect(cnt.n).toBe(0)
   })
 })
+
+// OD-3 credential requires_reverification enforcement — OAuth surfaces (plan §6.3 / §12).
+// 5b = identity login (existingIdentity branch); 5a = factor-add elevation OAuth-reauth (D1 seam).
+describe('OD-3 — OAuth callback requires_reverification block', () => {
+  async function seedElev(stateToken: string, userId: number, action = 'add_passkey') {
+    const exp = new Date(Date.now() + 600_000).toISOString().replace('T', ' ').slice(0, 19)
+    await env.chiyigo_db.prepare(`
+      INSERT INTO oauth_states (state_token, code_verifier, nonce, redirect_uri, platform, expires_at, purpose, elevation_user_id, session_id, action)
+      VALUES (?, 'verifier-xyz', NULL, 'https://chiyigo.com/api/auth/oauth/google/callback', 'web', ?, 'elevation', ?, 'SE', ?)
+    `).bind(stateToken, exp, userId, action).run()
+  }
+  async function googleProfile(sub: string, email: string) {
+    fetchPlan.tokenBody = { access_token: 'fake-tok', token_type: 'Bearer', id_token: await googleSignIdToken({ sub, email, email_verified: true }) }
+    fetchPlan.profileBody = { sub, email, email_verified: true, name: 'NEW' }
+  }
+
+  it('5b login: flagged existing identity -> 302 ?reverification_required=1, no profile update, no token', async () => {
+    const u = await seedUser({ email: '5b@example.com' })
+    await env.chiyigo_db.prepare(
+      `INSERT INTO user_identities (user_id, provider, provider_id, display_name, requires_reverification, disposition_reason) VALUES (?, 'google', 'g-5b', 'OLD', 1, 'unknown_context')`,
+    ).bind(u.id).run()
+    await seedOauthState({ state: 'st-5b' })
+    await googleProfile('g-5b', '5b@example.com')
+    const res = await callCb(cbReq('st-5b'))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location') ?? '').toContain('reverification_required=1')
+    // block precedes display_name UPDATE + token mint
+    const idRow = await env.chiyigo_db.prepare(`SELECT display_name FROM user_identities WHERE provider='google' AND provider_id='g-5b'`).first()
+    expect(idRow.display_name).toBe('OLD')
+    const rt = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM refresh_tokens WHERE user_id=?`).bind(u.id).first()
+    expect(Number(rt.c)).toBe(0)
+  })
+
+  it('5a elevation (D1 seam): flagged identity -> 302 ?elev_error=reverification_required, NO exchange/grant minted', async () => {
+    const u = await seedUser({ email: '5a@example.com' })
+    await env.chiyigo_db.prepare(
+      `INSERT INTO user_identities (user_id, provider, provider_id, requires_reverification, disposition_reason) VALUES (?, 'google', 'g-5a', 1, 'unknown_context')`,
+    ).bind(u.id).run()
+    await seedElev('st-5a', u.id, 'add_passkey')
+    await googleProfile('g-5a', '5a@example.com')
+    const res = await callCb(cbReq('st-5a'))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('Location') ?? '').toContain('elev_error=reverification_required')
+    // D1: no exchange code -> downstream factor-add grant can never mint
+    const ex = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM elevation_exchanges WHERE user_id=?`).bind(u.id).first()
+    expect(Number(ex.c)).toBe(0)
+  })
+
+  it('5b login: UNFLAGGED existing identity -> still logs in + updates profile [regression]', async () => {
+    const u = await seedUser({ email: '5bok@example.com' })
+    await env.chiyigo_db.prepare(
+      `INSERT INTO user_identities (user_id, provider, provider_id, display_name) VALUES (?, 'google', 'g-5bok', 'OLD')`,
+    ).bind(u.id).run()
+    await seedOauthState({ state: 'st-5bok' })
+    await googleProfile('g-5bok', '5bok@example.com')
+    const res = await callCb(cbReq('st-5bok'))
+    expect(res.status).toBe(200)   // web login HTML bridge
+    const rt = await env.chiyigo_db.prepare(`SELECT COUNT(*) AS c FROM refresh_tokens WHERE user_id=?`).bind(u.id).first()
+    expect(Number(rt.c)).toBe(1)
+  })
+})
