@@ -441,6 +441,12 @@ class ApiError extends Error {
             LINKED_INTENT_NOT_FOUND: '找不到關聯的付款單',
             USER_ALREADY_BANNED: '此使用者已被停用',
             USER_NOT_BANNED: '此使用者並未被停用',
+            // OD-3 credential requires_reverification（登入被擋 + 會員中心自助 reverify）
+            CREDENTIAL_REVERIFICATION_REQUIRED: '此登入方式需重新驗證後才能使用，請改用其他方式登入並至會員中心完成驗證',
+            CREDENTIAL_NOT_FLAGGED: '此項目目前不需重新驗證',
+            CREDENTIAL_REVERIFICATION_HIGH_RISK: '此項目需由客服審查或移除，無法自助重新驗證',
+            CREDENTIAL_REVERIFICATION_NO_TRUSTED_CHANNEL: '目前沒有可用的驗證管道，請先設定密碼或聯絡客服',
+            CREDENTIAL_REVERIFICATION_PROOF_FAILED: '驗證失敗，請確認驗證碼或密碼是否正確',
         },
         en: {
             INVALID_OTP: 'Invalid code, please try again',
@@ -629,6 +635,12 @@ class ApiError extends Error {
             LINKED_INTENT_NOT_FOUND: 'Linked payment intent not found',
             USER_ALREADY_BANNED: 'User is already banned',
             USER_NOT_BANNED: 'User is not banned',
+            // OD-3 credential requires_reverification
+            CREDENTIAL_REVERIFICATION_REQUIRED: 'This login method needs re-verification before it can be used. Please log in another way and complete re-verification in your account settings.',
+            CREDENTIAL_NOT_FLAGGED: 'This item does not currently need re-verification.',
+            CREDENTIAL_REVERIFICATION_HIGH_RISK: 'This item requires support review or removal and cannot be self-reverified.',
+            CREDENTIAL_REVERIFICATION_NO_TRUSTED_CHANNEL: 'No trusted verification channel is available. Please set a password or contact support.',
+            CREDENTIAL_REVERIFICATION_PROOF_FAILED: 'Verification failed. Please check your code or password.',
         },
         ja: {
             INVALID_OTP: '認証コードが正しくありません',
@@ -817,6 +829,12 @@ class ApiError extends Error {
             LINKED_INTENT_NOT_FOUND: '関連する決済情報が見つかりません',
             USER_ALREADY_BANNED: 'このユーザーは既に停止されています',
             USER_NOT_BANNED: 'このユーザーは停止されていません',
+            // OD-3 credential requires_reverification
+            CREDENTIAL_REVERIFICATION_REQUIRED: 'このログイン方法は再認証が必要です。別の方法でログインし、アカウント設定で再認証を完了してください',
+            CREDENTIAL_NOT_FLAGGED: 'この項目は現在、再認証の必要はありません',
+            CREDENTIAL_REVERIFICATION_HIGH_RISK: 'この項目はサポートによる審査または削除が必要で、セルフ再認証はできません',
+            CREDENTIAL_REVERIFICATION_NO_TRUSTED_CHANNEL: '利用可能な認証手段がありません。パスワードを設定するか、サポートにお問い合わせください',
+            CREDENTIAL_REVERIFICATION_PROOF_FAILED: '認証に失敗しました。コードまたはパスワードを確認してください',
         },
         ko: {
             INVALID_OTP: '인증 코드가 올바르지 않습니다',
@@ -1005,6 +1023,12 @@ class ApiError extends Error {
             LINKED_INTENT_NOT_FOUND: '연결된 결제 정보를 찾을 수 없습니다',
             USER_ALREADY_BANNED: '이 사용자는 이미 정지되었습니다',
             USER_NOT_BANNED: '이 사용자는 정지되지 않았습니다',
+            // OD-3 credential requires_reverification
+            CREDENTIAL_REVERIFICATION_REQUIRED: '이 로그인 방법은 다시 인증해야 사용할 수 있습니다. 다른 방법으로 로그인한 뒤 회원 센터에서 재인증을 완료해 주세요',
+            CREDENTIAL_NOT_FLAGGED: '이 항목은 현재 재인증이 필요하지 않습니다',
+            CREDENTIAL_REVERIFICATION_HIGH_RISK: '이 항목은 고객센터 검토 또는 삭제가 필요하며 셀프 재인증을 할 수 없습니다',
+            CREDENTIAL_REVERIFICATION_NO_TRUSTED_CHANNEL: '사용 가능한 인증 수단이 없습니다. 비밀번호를 설정하거나 고객센터에 문의해 주세요',
+            CREDENTIAL_REVERIFICATION_PROOF_FAILED: '인증에 실패했습니다. 코드 또는 비밀번호를 확인해 주세요',
         },
     };
     // 後端尚未附 code: 的 handler，用英文 string 映射回 code（漸進遷移用）

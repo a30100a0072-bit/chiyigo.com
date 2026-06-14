@@ -42,6 +42,13 @@
             showNotice('✓ 2FA 已停用。為了安全，所有裝置已登出，請重新登入。', 'ok');
             history.replaceState(null, '', '/login.html');
         }
+        else if (p.has('reverification_required')) {
+            // OD-3：被擋的第三方登入（flagged identity）跳回登入頁。owner-vouch 模型 → 引導改用其他因子登入後到會員中心 reverify。
+            const prov = p.get('provider') || '';
+            const provLabel = prov ? prov.charAt(0).toUpperCase() + prov.slice(1) + ' ' : '此第三方';
+            showNotice(provLabel + '帳號需重新驗證後才能登入，請改用密碼或 passkey 登入，並至會員中心完成驗證。', 'err');
+            history.replaceState(null, '', '/login.html');
+        }
     })();
     // Theme toggle
     function applyTheme(isDark) {
