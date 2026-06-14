@@ -44,6 +44,9 @@ type RateLimitKind =
   | 'elevation_oauth_callback'
   | 'elevation_exchange'
   | 'credential_disposition_run'   // SEC-FACTOR-ADD-A PR-A4：admin disposition runner 防重入
+  // OD-3 credential reverification enforcement
+  | 'credential_reverification'        // self-service reverify（/api/auth/credential/reverify，per-user）
+  | 'credential_reverification_clear'  // admin clear（/api/admin/credential-reverification/clear，per-admin 低 max）
   // SEC-REFRESH-REUSE（P1）：refresh family-revoke 的「重複(changes=0)replay」audit 降噪 cap，
   // per-(user, session) 用 template literal kind（login_attempts.kind 已是 TEXT，**無 migration**）。
   // prefix 固定 → 其餘 union 成員的 typo 防護不被弱化；只此前綴開放，仍經 familyRevokeCapKind() 封裝產出。

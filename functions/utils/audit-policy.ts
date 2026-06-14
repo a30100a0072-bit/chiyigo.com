@@ -224,6 +224,9 @@ const SECURITY_SIGNAL = [
   // SEC-FACTOR-ADD-A PR-A4：existing-credential disposition（per-row finding + run lifecycle）
   'account.credential.disposition',            // per-row：high/unknown credential 處置（hashed id，無明文）
   'account.credential.disposition.run',        // run lifecycle：phase=start/dry_run/complete/failed + counts
+  // OD-3 credential requires_reverification enforcement（使用前強制 re-verify）
+  'auth.credential.reverification_required',   // 4 use surface（passkey/oauth login/bind-email/factor-add elevation reauth）擋下 flagged credential
+  'account.credential.reverification_cleared', // self/admin clear 成功（merged event：actor_type/clear_method/credential_tier payload；動態 severity，admin+high→critical→security_critical 與 flagging 對稱）
   'account.password.reset.backup_code_fail',
   'account.password.reset.totp_fail',          // SEC-RESET-2FA-BF：reset TOTP 驗證失敗（暴破偵測信號）
   // SEC-FACTOR-ADD-A（ADD-A PR-A2）：factor-add elevation 結果信號

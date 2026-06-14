@@ -357,8 +357,11 @@ describe('registry coverage', () => {
     //   + oauth.identity.bind.success（immutable，對齊 wallet.bind.success）→ 225。
     // SEC-REFRESH-REUSE PR (2026-06-14) 加 1 個 auth.refresh.family_revoked（security_signal；critical severity；
     //   refresh reuse 偵測 family-revoke 撤掉攻擊者 successor 的訊號）→ 226。
+    // OD-3 credential reverification enforcement PR (2026-06-14) 加 2 個 security_signal：
+    //   auth.credential.reverification_required（4 use-surface block）+ account.credential.reverification_cleared
+    //   （merged self/admin clear，動態 severity：admin+high→critical→security_critical）→ 228。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言（含 session-revoke-multi.test lockstep）。
-    expect(_registrySize).toBe(226)
+    expect(_registrySize).toBe(228)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {
