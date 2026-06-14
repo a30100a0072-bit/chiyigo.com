@@ -221,9 +221,16 @@ UPDATE <table> SET requires_reverification = 0
 ## 10. 部署架構
 
 - **無 migration** → 無 D1 apply。push-main 自動部署；前端 JS/HTML 改 → `npm run build` → cache-bust `?v=`（HEAD hash）。
-- **pre-existing dirty worktree baseline（branch 起手，2026-06-14；owner 裁決：不清/不 normalize/不 stage）**：開 branch 時 working tree 已有 **21 個 `public/js/*.js` modified**，inventory 確認**全為 EOL/autocrlf noise、零真實內容差異**——`core.autocrlf=true`、無 `.gitattributes`；default `git diff`＝空；autocrlf=false RAW 僅 **3 檔**（`auth-ui.js`/`dashboard.js`/`portfolio.js`）190/190 對稱 CRLF↔LF flip，`--ignore-space-at-eol` 後歸零；其餘 **18 檔**純 index phantom（連 raw 都無差異）。**紀律**：本 PR 只挑檔 stage 自己改的檔，每次 commit 前 `git diff --name-only --cached` 人工核對；**禁 `git add -A`/`.`/`public/js`**；PR 報告明列未納入的 pre-existing noise。autocrlf=true 在 `git add` 正規化 EOL → rebuild 的 `auth-ui.js`/`login.js`/`dashboard.js`/`api.js` staged diff 只含真實內容（不挾 CRLF churn）；`portfolio.js` 本 PR 不碰、維持 noise。
+- **pre-existing dirty worktree baseline（branch 起手，2026-06-14；owner 裁決：不清/不 normalize/不 stage）**：開 branch 時 working tree 已有 **21 個 `public/js/*.js` modified**，inventory 確認**全為 EOL/autocrlf noise、零真實內容差異**——`core.autocrlf=true`、無 `.gitattributes`；default `git diff`＝空；autocrlf=false RAW 僅 **3 檔**有 byte 差（`auth-ui.js` **5/5**、`dashboard.js` **177/177**、`portfolio.js` **8/8** raw numstat，皆對稱 CRLF↔LF flip，`--ignore-space-at-eol` 後歸零）；其餘 **18 檔**純 index phantom（連 raw 都無差異）。**`api.js` Step 7 前為乾淨**（不在這 21 內）。**紀律**：本 PR 只挑檔 stage 自己改的檔，每次 commit 前 `git diff --name-only --cached` 人工核對；**禁 `git add -A`/`.`/`public/js`**；PR 報告明列未納入的 pre-existing noise。autocrlf=true 在 `git add` 正規化 EOL → rebuild 的 `api.js`/`login.js`/`dashboard.js` staged diff 只含真實內容（不挾 CRLF churn）。**Step 7 實際結果**：`api.js`/`login.js`/`dashboard.js` 已 commit 真實內容（`5d4efc92`）；`auth-ui.js` rebuild 後與 committed **byte-identical（無真實變更）→ 未 stage**；`portfolio.js` 本 PR 不碰、維持 noise；剩餘 **19 檔** phantom/EOL（17 A + 2 B：`auth-ui.js`/`portfolio.js`）全零真實內容、未 stage。
 - **⚠ pre-merge safety gate（OD-ENF-4）**：merge 前確認 (a) owner 有可用非-OAuth 登入（password/passkey 未 flagged）；(b) 5 個 flagged identity 都在 owner 能用其他因子進的帳號；(c) admin clear fallback 可用。
 - post-merge dogfood（OD-ENF-4）：owner dashboard 對 1 個 flagged identity 走 self-service reverify（TOTP）→ 成功 → 再清剩 4；任一失敗 → admin clear fallback + blocker，不卡 P4 closure。
+- **manual smoke checklist（Step 8；前端無 E2E framework，靠 integration test + build + 手動 smoke）**：owner 用無痕視窗逐項——
+  1. **light + dark 各切一次**：dashboard flagged identity（`needs_review`）顯示 amber badge「需重新驗證」+「重新驗證」鈕；確認 badge/modal 在兩主題下對比度 OK（chrome 用 CSS var 自適應）。
+  2. 點「重新驗證」→ modal 開；TOTP 帳號輸入 OTP/備用碼、無 TOTP 有密碼帳號輸入密碼 → 成功 toast + badge 消失（flag 清、`loadProfile` 重渲染）。
+  3. high-risk（`security_review`）identity → red badge「安全審查中」、**無 reverify 鈕、只有解綁**。
+  4. flagged OAuth 帳號登入 → 跳 `/login.html?reverification_required=1&provider=…` → login 頁顯示提示。
+  5. flagged identity 走 factor-add（OAuth reauth 新增 passkey/wallet）→ 回 dashboard 顯示 `elev_error` 提示 toast。
+  6. 在地化：故意輸錯 proof → modal 內顯示在地化錯誤（`CREDENTIAL_REVERIFICATION_PROOF_FAILED`）；切語系確認 4 語系碼都接得上。
 
 ---
 
@@ -274,6 +281,16 @@ UPDATE <table> SET requires_reverification = 0
 | frontend | login 頁接 `?reverification_required=`；api.ts `API_ERROR_I18N` 註冊全部 reverify code（含 4 個 reverify-response code）；dashboard 渲染 flagged 項「重新驗證/刪除/客服」+ tier 分流；**identity reachability**（me.ts DTO 含 id → 組得出 credential_id） |
 | gates | typecheck:ratchet 零新增 / lint / test:cov / test:int / build / CI |
 
+**§12 closure（Step 8 實測 2026-06-15，全 gate 綠）**
+
+- gates：`typecheck:ratchet` 898（0 new，cleanFiles 225）／`lint` clean／`test:cov` **90.28% stmts・92.77% branches**（threshold 80）unit 全綠／**`test:int` 75 files・1326 tests・0 failed**／`build:functions` compiled／`npm run build`（step 7，committed `5d4efc92`+cache-bust `be3c1c20`，public/js 與 source 一致）／`git diff --check` clean。target main CI 於 merge 前再查。
+- 矩陣→測試檔對應：self reverify（8）+ admin clear（8）+ clear-core CAS loser + tier-gate + token-class + init block = **`cred-reverify-enforcement.test.ts`**；4 enforce surface = **`webauthn-login`**（passkey flagged/unflagged）/**`callback`**（5b login + **5a D1 seam** + 5b unflagged regression）/**`oauth-bind-email`**（bind-email flagged，jti 未消費）/**`cred-reverify-enforcement`**（init elevation early block）；registry **228** = `audit-policy.test.ts:364` + `session-revoke-multi.test.ts:393` + category-sum（`:291`）；frontend = me.ts DTO id（step-4 4 tests）+ build + §10 manual smoke checklist（前端無 E2E framework，owner accept）。
+- **pre-fix RED 已實證**（Phase 2 step 6）：stash 移除 5 個 enforce edit 後跑測試 → 恰好 5 個 flagged-block test fail（passkey/5b/5a/bind-email/init），3 個 unflagged regression 維持綠；最關鍵 5a 失敗訊息 `Location=#elev_exchange`（flagged identity 真的鑄出 elevation exchange）。
+- **OD-CLEAR=A**（code+test 雙證）：clear-core CAS `SET requires_reverification=0` 不碰 `disposition_*`（`credential-reverification.ts:72-73`）；audit 帶 `pre_clear_reason/by/at` 快照（`:97-99`）；test 斷言 `disposition_reason` 保留 + `pre_clear_reason` 快照（`cred-reverify-enforcement.test.ts:150,156`）。
+- **D1（SEC-1）reconfirm**：callback 5a flagged identity → `elevation_exchanges` count = 0（不鑄 exchange/grant），redirect `?elev_error=reverification_required`（`callback.test.ts` 5a seam test）。
+- **零副作用 reconfirm**：passkey counter 不變 + 無 access_token／callback 5b `display_name` 不改 + refresh 0／bind-email jti 未消費（第二次同 token 仍 403）／callback 5a 無 exchange／全 deny path 不簽 token-or-grant。
+- **no-migration / public/js isolation**：見 §10（git diff 無 `migrations/`、`_setup.sql` 未改；staged 僅 step-7 intentional outputs；剩 19 phantom/EOL 零真實內容、未 stage）。
+
 ---
 
 ## 13. Gate watch items（給 ChatGPT Arch + Codex Plan/Code）
@@ -307,6 +324,7 @@ UPDATE <table> SET requires_reverification = 0
 - **high-tier flag 連帶 session revocation**（R2 選配；屬 disposition runner/另案）。
 - **global `users.status='suspended'` 無 login/step-up enforcement**（repo-wide parity gap；本 PR 維持 parity）。
 - **未來「週期性 re-flag」系統**（若有）：不可裸用 `disposition_at IS NULL` 當可見性 gate。
+- **i18nize dynamic reverify modal chrome（Step 7 follow-up，owner accept non-blocking）**：dashboard reverify modal 的 chrome（標題／輸入 placeholder／取消·確認鈕）目前硬寫 zh-TW，對齊 `dashboard.ts` 既有動態 modal 慣例（`req-detail-modal` 同款硬寫）。持久 UI（badge／button／toast）已 4 語系 i18n。未來補 ~5 key × 4 語系把 modal chrome 也 i18n 化。
 
 ---
 
