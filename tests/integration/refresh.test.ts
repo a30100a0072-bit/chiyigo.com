@@ -9,11 +9,11 @@
  *  - 舊 token rotation 後寫入新列繼承 device_uuid
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { generateSecureToken, hashToken } from '../../functions/utils/crypto'
-import { onRequestPost as refreshHandler } from '../../functions/api/auth/refresh'
+import { onRequestPost as refreshHandler, REFRESH_FAMILY_REVOKE_AUDIT_CAP } from '../../functions/api/auth/refresh'
 import { decodeJwt } from 'jose'
 
 async function seedRefresh(userId, {
@@ -232,13 +232,20 @@ describe('POST /api/auth/refresh — Fork 2 Route B rotation-orphan grace', () =
     expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(0)  // crucial: NOT the false token-theft signal
   })
 
-  it('out-of-window replay → reuse_detected (not grace_orphan)', async () => {
+  // SEC-REFRESH-REUSE: out-of-grace genuine reuse now routes to the family-revoke handler (SESSION_REVOKED), no longer
+  // the read-only reuse_detected. seedOrphanPair seeds NULL session_id → predecessor & successor land in DIFFERENT
+  // legacy families → the preflight sees heads=0 → changes=0 → reuse_detected_family_already_revoked (still an
+  // auth.refresh.fail event, NEVER a false family_revoked, NEVER grace_orphan). Real heads=1 revokes: see the
+  // SEC-REFRESH-REUSE describe block.
+  it('out-of-window replay → family-revoke path (SESSION_REVOKED), not grace_orphan, no false family_revoked', async () => {
     const u = await seedUser({ email: 'graceB@x' })
-    const pred = await seedOrphanPair(u.id, { revokedSecondsAgo: 120 })  // > 30s window
+    const pred = await seedOrphanPair(u.id, { revokedSecondsAgo: 120 })  // > 30s window → out-of-grace genuine reuse
     const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-x' } }))
     expect(r.status).toBe(401)
+    expect(r.body.code).toBe('SESSION_REVOKED')
     expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(0)
     expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(1)
+    expect(await countAudit(u.id, 'auth.refresh.family_revoked')).toBe(0)
   })
 
   it('revoked by logout/admin (successor_token_hash NULL) → reuse_detected, never grace_orphan', async () => {
@@ -251,13 +258,18 @@ describe('POST /api/auth/refresh — Fork 2 Route B rotation-orphan grace', () =
     expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(1)
   })
 
-  it('dead successor (chain advanced / session ended) → reuse_detected, not grace_orphan', async () => {
+  // SEC-REFRESH-REUSE: a dead/missing successor is proven non-benign → routes to family-revoke (SESSION_REVOKED). The
+  // successor here is revoked, so the family has 0 live heads → changes=0 → reuse_detected_family_already_revoked
+  // (still auth.refresh.fail, no false family_revoked, never grace_orphan).
+  it('dead successor (chain advanced / session ended) → family-revoke path (SESSION_REVOKED), not grace_orphan', async () => {
     const u = await seedUser({ email: 'graceD@x' })
     const pred = await seedOrphanPair(u.id, { successorRevoked: true })
     const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-x' } }))
     expect(r.status).toBe(401)
+    expect(r.body.code).toBe('SESSION_REVOKED')
     expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(0)
     expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(1)
+    expect(await countAudit(u.id, 'auth.refresh.family_revoked')).toBe(0)
   })
 
   it('device mismatch on a revoked candidate → grace_device_mismatch, NO family-revoke, NO quota (round-2 H + round-3)', async () => {
@@ -281,7 +293,10 @@ describe('POST /api/auth/refresh — Fork 2 Route B rotation-orphan grace', () =
     expect(await refreshQuotaUsed(u.id)).toBe(0)
   })
 
-  it('device-null revoked candidate → reuse_detected (cannot confirm same device)', async () => {
+  // SEC-REFRESH-REUSE: a device-null candidate (web, cannot confirm same device) is proven non-benign → routes to
+  // family-revoke (SESSION_REVOKED). NULL session_id → successor in a different legacy family → heads=0 → changes=0 →
+  // reuse_detected_family_already_revoked (still auth.refresh.fail, no false family_revoked).
+  it('device-null revoked candidate → family-revoke path (SESSION_REVOKED), not grace_orphan', async () => {
     const u = await seedUser({ email: 'graceF@x' })
     const successorPlain = await seedRefresh(u.id, { deviceUuid: null })
     const successorHash  = await hashToken(successorPlain)
@@ -292,9 +307,12 @@ describe('POST /api/auth/refresh — Fork 2 Route B rotation-orphan grace', () =
       body: '{}',
     })
     const resp = await refreshHandler({ request: req, env })
+    const body = await resp.json() as { code?: string }
     expect(resp.status).toBe(401)
+    expect(body.code).toBe('SESSION_REVOKED')
     expect(await countAudit(u.id, 'auth.refresh.grace_orphan')).toBe(0)
     expect(await countAudit(u.id, 'auth.refresh.fail')).toBe(1)
+    expect(await countAudit(u.id, 'auth.refresh.family_revoked')).toBe(0)
   })
 
   it('rotation stamps successor_token_hash on the revoked old row (= the new live row token_hash)', async () => {
@@ -513,5 +531,209 @@ describe('POST /api/auth/refresh — anonymous web probe (P3 noise reduction)', 
     const r = await call(req)
     expect(r.status).toBe(400)
     expect(r.body.code).toBe('REFRESH_TOKEN_REQUIRED')
+  })
+})
+
+// SEC-REFRESH-REUSE (P1) — refresh reuse 偵測到 proven non-benign 時 family-revoke 撤掉攻擊者持久 successor（§10 矩陣）。
+// presentedFamilyRef = session_id（rotation 跨輪保留），故受害者的舊 token 可撤掉攻擊者的 live successor head。
+// 核心契約：§4 GLOBAL COUNT preflight 三路（heads>1 fail-closed / heads=1 single-head CAS / heads=0 no-op）、
+// revoke-before-cap（cap 只壓 changes=0 audit 噪音、不阻 first revoke）、family_revoked 只在 changes>0、401 SESSION_REVOKED。
+describe('POST /api/auth/refresh — SEC-REFRESH-REUSE family-revoke (§10)', () => {
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => { await resetDb() })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  async function liveHeads(userId: number, sessionId: string): Promise<number> {
+    const r = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM refresh_tokens WHERE user_id = ? AND session_id = ? AND revoked_at IS NULL`)
+      .bind(userId, sessionId).first<{ n: number }>()
+    return r?.n ?? 0
+  }
+  async function auditCount(userId: number, eventType: string): Promise<number> {
+    const r = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE user_id = ? AND event_type = ?`)
+      .bind(userId, eventType).first<{ n: number }>()
+    return r?.n ?? 0
+  }
+  async function lastAudit(userId: number, eventType: string): Promise<{ severity: string; data: Record<string, unknown> } | null> {
+    const r = await env.chiyigo_db
+      .prepare(`SELECT severity, event_data FROM audit_log WHERE user_id = ? AND event_type = ? ORDER BY id DESC LIMIT 1`)
+      .bind(userId, eventType).first<{ severity: string; event_data: string }>()
+    return r ? { severity: r.severity, data: JSON.parse(r.event_data) as Record<string, unknown> } : null
+  }
+  // seed a LIVE successor (the rotated head, e.g. the attacker's) + the revoked predecessor (the victim's old token),
+  // BOTH sharing one session_id family. Returns the predecessor plaintext (the victim re-presents it). device=null = web.
+  async function seedReuseFamily(userId: number, {
+    sessionId, device = null, predRevokedSecondsAgo = 5, successorLive = true,
+  }: { sessionId: string; device?: string | null; predRevokedSecondsAgo?: number; successorLive?: boolean }): Promise<string> {
+    const successorPlain = await seedRefresh(userId, { deviceUuid: device, sessionId, revoked: !successorLive })
+    const successorHash  = await hashToken(successorPlain)
+    return await seedRefresh(userId, { deviceUuid: device, sessionId, revokedSecondsAgo: predRevokedSecondsAgo, successorTokenHash: successorHash })
+  }
+  function cookieReq(token: string): Request {
+    return new Request('http://x/api/auth/refresh', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: `chiyigo_refresh=${token}` }, body: '{}',
+    })
+  }
+
+  it('attacker-first (core pre-fix-fail): victim presents old web token → attacker live successor REVOKED + 401 SESSION_REVOKED + family_revoked critical', async () => {
+    const u = await seedUser({ email: 'sr-atk@x' })
+    // web session (device null). Attacker rotated R_n → live successor (same session_id S). Victim presents R_n.
+    const pred = await seedReuseFamily(u.id, { sessionId: 'S', device: null })
+    expect(await liveHeads(u.id, 'S')).toBe(1)              // pre-condition: attacker's successor is live
+    const resp = await refreshHandler({ request: cookieReq(pred), env })
+    const body = await resp.json() as { code?: string }
+    expect(resp.status).toBe(401)
+    expect(body.code).toBe('SESSION_REVOKED')
+    // POST-FIX: the family's live head (the attacker's successor) is revoked. PRE-FIX: it stays live (RED).
+    expect(await liveHeads(u.id, 'S')).toBe(0)
+    const fr = await lastAudit(u.id, 'auth.refresh.family_revoked')
+    expect(fr?.severity).toBe('critical')
+    expect(fr?.data.reason).toBe('device_null_candidate')
+    expect(fr?.data.revoke_count).toBe(1)
+    expect(fr?.data.abuse_capped).toBe(false)
+    expect(typeof fr?.data.session_id_hmac16).toBe('string')
+    expect((fr?.data.session_id_hmac16 as string).length).toBe(16)
+    // no new token issued (fail-secure: the reuse path never rotates)
+    const setCookie = resp.headers.get('Set-Cookie')
+    expect(setCookie ?? '').not.toMatch(/chiyigo_refresh=/)
+  })
+
+  it('victim-first Ordering-B + no cross-family: out-of-grace old token → family-revoke; a DIFFERENT session_id family is untouched', async () => {
+    const u = await seedUser({ email: 'sr-vf@x' })
+    const pred = await seedReuseFamily(u.id, { sessionId: 'S', device: null, predRevokedSecondsAgo: 120 })  // out-of-grace
+    await seedRefresh(u.id, { deviceUuid: null, sessionId: 'S2' })  // an unrelated live login — MUST NOT be revoked
+    expect(await liveHeads(u.id, 'S')).toBe(1)
+    expect(await liveHeads(u.id, 'S2')).toBe(1)
+    const resp = await refreshHandler({ request: cookieReq(pred), env })
+    expect(resp.status).toBe(401)
+    expect((await resp.json() as { code?: string }).code).toBe('SESSION_REVOKED')
+    expect(await liveHeads(u.id, 'S')).toBe(0)     // S's live head revoked (accepted Ordering-B re-login cost)
+    expect(await liveHeads(u.id, 'S2')).toBe(1)    // no cross-family: the other login survives
+    const fr = await lastAudit(u.id, 'auth.refresh.family_revoked')
+    expect(fr?.data.reason).toBe('genuine_reuse_outside_grace')
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(1)
+  })
+
+  it('heads>1 invariant breach: 2 live heads in the family → session.integrity_violation fail-closed + 401 SESSION_REVOKED, NO revoke, NO family_revoked', async () => {
+    const u = await seedUser({ email: 'sr-iv@x' })
+    await seedRefresh(u.id, { deviceUuid: 'dev-A', sessionId: 'S' })  // two live heads sharing session_id S
+    await seedRefresh(u.id, { deviceUuid: 'dev-B', sessionId: 'S' })  // = EXACTLY-ONE-LIVE-HEAD invariant breach
+    const pred = await seedRefresh(u.id, { deviceUuid: null, sessionId: 'S', revokedSecondsAgo: 120, successorTokenHash: await hashToken(generateSecureToken()) })
+    expect(await liveHeads(u.id, 'S')).toBe(2)
+    const resp = await refreshHandler({ request: cookieReq(pred), env })
+    expect(resp.status).toBe(401)
+    expect((await resp.json() as { code?: string }).code).toBe('SESSION_REVOKED')
+    expect(await liveHeads(u.id, 'S')).toBe(2)                                   // fail-closed: nothing revoked
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(0)        // NOT family_revoked
+    const iv = await lastAudit(u.id, 'session.integrity_violation')
+    expect(iv?.severity).toBe('critical')
+    expect(iv?.data.heads).toBe(2)
+    expect(iv?.data.site).toBe('auth.refresh')
+  })
+
+  it('C2 DB error fail-secure: preflight throws → 401 SESSION_REVOKED + auth.refresh.fail/family_revoke_error, NO family_revoked, successor untouched', async () => {
+    const u = await seedUser({ email: 'sr-dberr@x' })
+    const pred = await seedReuseFamily(u.id, { sessionId: 'S', device: null })
+    const origPrepare = env.chiyigo_db.prepare.bind(env.chiyigo_db)
+    // throw ONLY for the family-revoke COUNT preflight; the token lookup (+ everything else) still works.
+    vi.spyOn(env.chiyigo_db, 'prepare').mockImplementation((sql: string) => {
+      if (typeof sql === 'string' && sql.includes('COUNT(*) AS heads FROM refresh_tokens')) throw new Error('forced db error')
+      return origPrepare(sql)
+    })
+    const resp = await refreshHandler({ request: cookieReq(pred), env })
+    vi.restoreAllMocks()
+    expect(resp.status).toBe(401)
+    expect((await resp.json() as { code?: string }).code).toBe('SESSION_REVOKED')
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(0)        // C1/C2: never claim a revoke that didn't happen
+    const f = await lastAudit(u.id, 'auth.refresh.fail')
+    expect(f?.data.reason_code).toBe('family_revoke_error')
+    expect(await liveHeads(u.id, 'S')).toBe(1)                                   // revoke never ran; successor still live
+  })
+
+  it('C2 fail-secure (post-CAS): a throw in the abuse-cap path (changes=0) → 401 SESSION_REVOKED + family_revoke_error, NOT 500', async () => {
+    // Locks the widened try/catch: the cap's checkRateLimit (a login_attempts query) runs AFTER the preflight/CAS and
+    // was OUTSIDE the original narrow try (pre-fix → unhandled throw → 500). device-null heads=0 reaches the changes=0
+    // cap branch and (this path) does NOT hit the earlier refresh rate-limit, so the FIRST login_attempts query is the cap.
+    const u = await seedUser({ email: 'sr-cap-throw@x' })
+    const pred = await seedRefresh(u.id, { deviceUuid: null, sessionId: 'S', revokedSecondsAgo: 120, successorTokenHash: await hashToken(generateSecureToken()) })
+    const origPrepare = env.chiyigo_db.prepare.bind(env.chiyigo_db)
+    vi.spyOn(env.chiyigo_db, 'prepare').mockImplementation((sql: string) => {
+      if (typeof sql === 'string' && sql.includes('FROM login_attempts')) throw new Error('forced cap db error')
+      return origPrepare(sql)
+    })
+    const resp = await refreshHandler({ request: cookieReq(pred), env })
+    vi.restoreAllMocks()
+    expect(resp.status).toBe(401)
+    expect((await resp.json() as { code?: string }).code).toBe('SESSION_REVOKED')
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(0)
+    expect((await lastAudit(u.id, 'auth.refresh.fail'))?.data.reason_code).toBe('family_revoke_error')
+  })
+
+  it('C1 repeated replay (changes=0): re-presenting after the family is already revoked → 401 SESSION_REVOKED + reuse_detected_family_already_revoked, NO new family_revoked', async () => {
+    const u = await seedUser({ email: 'sr-rep@x' })
+    const pred = await seedReuseFamily(u.id, { sessionId: 'S', device: null })
+    // 1st presentation: a real revoke (changes>0) → family_revoked
+    const r1 = await refreshHandler({ request: cookieReq(pred), env })
+    expect(r1.status).toBe(401)
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(1)
+    expect(await liveHeads(u.id, 'S')).toBe(0)
+    // 2nd presentation of the SAME old token: family already revoked (changes=0) → NO new family_revoked (C1)
+    const r2 = await refreshHandler({ request: cookieReq(pred), env })
+    expect(r2.status).toBe(401)
+    expect((await r2.json() as { code?: string }).code).toBe('SESSION_REVOKED')
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(1)        // STILL 1 — changes=0 never impersonates
+    const f = await lastAudit(u.id, 'auth.refresh.fail')
+    expect(f?.data.reason_code).toBe('reuse_detected_family_already_revoked')
+  })
+
+  it('OD-SR-2 hard lock — cap never blocks a first revoke: family A audit cap saturated (changes=0 replays) → family B FIRST reuse still family-revokes (changes>0 + critical)', async () => {
+    const u = await seedUser({ email: 'sr-cap@x' })
+    // family A: NO live head (only a revoked predecessor stamped with a successor) → every presentation is changes=0.
+    const predA = await seedRefresh(u.id, { deviceUuid: null, sessionId: 'A', revokedSecondsAgo: 120, successorTokenHash: await hashToken(generateSecureToken()) })
+    // saturate family A's per-(user, session) audit cap (CAP changes=0 presentations record CAP login_attempts rows).
+    for (let i = 0; i < REFRESH_FAMILY_REVOKE_AUDIT_CAP; i++) await refreshHandler({ request: cookieReq(predA), env })
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(0)        // family A never had a live head → never revoked
+
+    // family B: a DISTINCT session with a LIVE head — its FIRST reuse must still revoke (changes>0), cap notwithstanding.
+    const predB = await seedReuseFamily(u.id, { sessionId: 'B', device: null, predRevokedSecondsAgo: 120 })
+    expect(await liveHeads(u.id, 'B')).toBe(1)
+    const respB = await refreshHandler({ request: cookieReq(predB), env })
+    expect(respB.status).toBe(401)
+    expect((await respB.json() as { code?: string }).code).toBe('SESSION_REVOKED')
+    expect(await liveHeads(u.id, 'B')).toBe(0)                                   // B's live head revoked despite A's cap being full
+    const fr = await lastAudit(u.id, 'auth.refresh.family_revoked')
+    expect(fr?.severity).toBe('critical')
+    expect(fr?.data.reason).toBe('genuine_reuse_outside_grace')
+    expect(fr?.data.abuse_capped).toBe(false)
+  })
+
+  it('dead_successor reason with a real revoke: chain advanced to a live head further down the same family → heads=1 revoke + family_revoked reason=dead_successor', async () => {
+    const u = await seedUser({ email: 'sr-dead@x' })
+    // family S: a live head H (chain advanced) + a dead intermediate successor + the predecessor pointing at it.
+    await seedRefresh(u.id, { deviceUuid: 'dev-x', sessionId: 'S' })                 // H — current live head
+    const deadSucc = await seedRefresh(u.id, { deviceUuid: 'dev-x', sessionId: 'S', revoked: true })  // dead intermediate
+    const pred = await seedRefresh(u.id, { deviceUuid: 'dev-x', sessionId: 'S', revokedSecondsAgo: 5, successorTokenHash: await hashToken(deadSucc) })
+    expect(await liveHeads(u.id, 'S')).toBe(1)
+    // correct device + in-grace candidate whose stamped successor is DEAD → dead_successor → family-revoke.
+    const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-x' } }))
+    expect(r.status).toBe(401)
+    expect(r.body.code).toBe('SESSION_REVOKED')
+    expect(await liveHeads(u.id, 'S')).toBe(0)                                       // H (the advanced live head) revoked
+    expect((await lastAudit(u.id, 'auth.refresh.family_revoked'))?.data.reason).toBe('dead_successor')
+  })
+
+  it('successor_token_hash NULL (revoked by logout/admin) → NO family-revoke, stays reuse_detected + REFRESH_TOKEN_REVOKED', async () => {
+    // negative: a non-rotation revoke (successor NULL) must NOT route to family-revoke — keeps the read-only signal.
+    const u = await seedUser({ email: 'sr-neg@x' })
+    await seedRefresh(u.id, { deviceUuid: null, sessionId: 'S' })  // an unrelated live head — MUST stay live
+    const pred = await seedRefresh(u.id, { deviceUuid: null, sessionId: 'S', revoked: true })  // revoked, NO successor stamp
+    const resp = await refreshHandler({ request: cookieReq(pred), env })
+    const body = await resp.json() as { code?: string }
+    expect(resp.status).toBe(401)
+    expect(body.code).toBe('REFRESH_TOKEN_REVOKED')                             // NOT SESSION_REVOKED
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(0)
+    expect((await lastAudit(u.id, 'auth.refresh.fail'))?.data.reason_code).toBe('reuse_detected')
+    expect(await liveHeads(u.id, 'S')).toBe(1)                                  // the live head is untouched (no revoke)
   })
 })

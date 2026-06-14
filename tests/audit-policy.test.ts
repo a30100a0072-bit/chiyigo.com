@@ -269,6 +269,17 @@ describe('classifyAuditEvent — SEC-FACTOR-ADD-A PR-A4 credential disposition',
   })
 })
 
+// SEC-REFRESH-REUSE PR（2026-06-14）：refresh family-revoke 的 critical 訊號 → security_signal
+// （critical severity → classifyForCold = security_critical）。
+describe('classifyAuditEvent — SEC-REFRESH-REUSE family_revoked', () => {
+  it('auth.refresh.family_revoked → security_signal', () => {
+    expect(classifyAuditEvent('auth.refresh.family_revoked')).toBe(AUDIT_CATEGORY.SECURITY_SIGNAL)
+  })
+  it('auth.refresh.family_revoked (critical) → security_critical cold_class', () => {
+    expect(classifyForCold('auth.refresh.family_revoked', 'critical')).toBe('security_critical')
+  })
+})
+
 describe('registry coverage', () => {
   it('registry 大小 = 5 類加總（無重複歸類，無遺漏）', () => {
     const sum =
@@ -344,8 +355,10 @@ describe('registry coverage', () => {
     // SEC-FACTOR-ADD-A PR-A4 (2026-06-13) 加 3 個 credential disposition / oauth bind event：
     //   account.credential.disposition + account.credential.disposition.run（security_signal）
     //   + oauth.identity.bind.success（immutable，對齊 wallet.bind.success）→ 225。
+    // SEC-REFRESH-REUSE PR (2026-06-14) 加 1 個 auth.refresh.family_revoked（security_signal；critical severity；
+    //   refresh reuse 偵測 family-revoke 撤掉攻擊者 successor 的訊號）→ 226。
     // 新增 audit event 必須同 PR 補進 audit-policy.js + 同步更新本斷言（含 session-revoke-multi.test lockstep）。
-    expect(_registrySize).toBe(225)
+    expect(_registrySize).toBe(226)
   })
 
   it('listEventsByCategory 各類有合理數量（防整類被誤刪）', () => {

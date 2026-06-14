@@ -246,6 +246,10 @@ const SECURITY_SIGNAL = [
   // "1b" = SECURITY_SIGNAL/warn（NO retention downgrade — kept at security forensic tier, just a distinct event type so
   // theft analytics can exclude the benign pattern）。grace-path device mismatch reuses auth.refresh.fail/grace_device_mismatch.
   'auth.refresh.grace_orphan',
+  // SEC-REFRESH-REUSE（P1）：refresh reuse 偵測到「proven non-benign」→ family-revoke 撤掉攻擊者持久 successor
+  // 後的 critical 訊號（severity critical → cold_class security_critical）。**只在 CAS changes>0（真撤到 live head）
+  // 才 emit**（C1）；changes=0 / DB error 走既有 auth.refresh.fail（reason 區分），不冒充本事件。
+  'auth.refresh.family_revoked',
   'auth.risk.blocked',
   'auth.risk.medium',
   'auth.step_up.fail',
