@@ -670,6 +670,25 @@ describe('POST /api/auth/refresh — SEC-REFRESH-REUSE family-revoke (§10)', ()
     expect((await lastAudit(u.id, 'auth.refresh.fail'))?.data.reason_code).toBe('family_revoke_error')
   })
 
+  it('C2 fail-secure (correct-device pre-family-revoke I/O): successor-liveness SELECT throws on a grace candidate → 401 SESSION_REVOKED + family_revoke_error, NOT 500', async () => {
+    // Codex r1 blocker: the correct-device classification I/O (rate-limit + `SELECT 1 AS ok ...` successor-liveness)
+    // runs BEFORE the family-revoke try. A throw there must ALSO fail-secure, not surface a 500.
+    const u = await seedUser({ email: 'sr-grace-throw@x' })
+    const successorPlain = await seedRefresh(u.id, { deviceUuid: 'dev-x', sessionId: 'S' })  // in-grace candidate, correct device
+    const pred = await seedRefresh(u.id, { deviceUuid: 'dev-x', sessionId: 'S', revokedSecondsAgo: 5, successorTokenHash: await hashToken(successorPlain) })
+    const origPrepare = env.chiyigo_db.prepare.bind(env.chiyigo_db)
+    vi.spyOn(env.chiyigo_db, 'prepare').mockImplementation((sql: string) => {
+      if (typeof sql === 'string' && sql.includes('SELECT 1 AS ok FROM refresh_tokens')) throw new Error('forced successor-liveness db error')
+      return origPrepare(sql)
+    })
+    const r = await call(refreshReq({ token: pred, headers: { 'X-Device-Id': 'dev-x' } }))
+    vi.restoreAllMocks()
+    expect(r.status).toBe(401)
+    expect(r.body.code).toBe('SESSION_REVOKED')
+    expect((await lastAudit(u.id, 'auth.refresh.fail'))?.data.reason_code).toBe('family_revoke_error')
+    expect(await auditCount(u.id, 'auth.refresh.family_revoked')).toBe(0)
+  })
+
   it('C1 repeated replay (changes=0): re-presenting after the family is already revoked → 401 SESSION_REVOKED + reuse_detected_family_already_revoked, NO new family_revoked', async () => {
     const u = await seedUser({ email: 'sr-rep@x' })
     const pred = await seedReuseFamily(u.id, { sessionId: 'S', device: null })

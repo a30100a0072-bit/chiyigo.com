@@ -31,7 +31,12 @@ function memStore(init: Record<string, string> = {}): MemStore {
 }
 
 type ApiFetch = (input: string, init?: { skipRefresh?: boolean }) => Promise<unknown>
-interface LoadedApi { apiFetch: ApiFetch; sessionStorage: MemStore; location: { pathname: string; href: string } }
+interface LoadedApi {
+  apiFetch: ApiFetch
+  silentRefresh: () => Promise<boolean>
+  sessionStorage: MemStore
+  location: { pathname: string; href: string }
+}
 
 // Run the shipped classic bundle in a sandbox with injected browser stubs; window.apiFetch lands on the win stub.
 // A fresh load per test = fresh module closure (no _refreshInflight / token state leak across cases).
@@ -44,7 +49,7 @@ function loadApi(fetchImpl: () => Promise<Response>, opts: { token?: string | nu
   const navigator = {}  // no .locks → silent-refresh would fall to _doRefreshOnce (never reached in these tests)
   const run = compileFunction(API_JS, ['window', 'sessionStorage', 'localStorage', 'location', 'navigator', 'fetch'])
   run(win, sessionStorage, localStorage, location, navigator, fetchImpl)
-  return { apiFetch: win.apiFetch as ApiFetch, sessionStorage, location }
+  return { apiFetch: win.apiFetch as ApiFetch, silentRefresh: win.silentRefresh as () => Promise<boolean>, sessionStorage, location }
 }
 
 function jsonResp(status: number, body: unknown): Response {
@@ -104,6 +109,32 @@ describe('apiFetch — SEC-REFRESH-REUSE SESSION_REVOKED handling (OD-SR-B / C3)
       expect(sessionStorage.getItem('access_token')).toBe('tok-123')
       expect(location.href).toBe('')
     }
+  })
+
+  it('(g) window.silentRefresh keeps its Promise<boolean> contract: SESSION_REVOKED → resolves false (NOT throw) after hard-logout', async () => {
+    // external callers (auth-ui / sidebar-auth / dashboard / admin-* / ai-assistant) do `const ok = await
+    // silentRefresh(); if (!ok) location.href='/login'`. A SESSION_REVOKED must NOT throw out of window.silentRefresh
+    // (would be an unhandled rejection for ~7 callers); _doRefreshOnce already hard-logs-out, so the public export
+    // absorbs the throw → false. apiFetch (test f) still gets the throw via the internal _silentRefresh.
+    const fetchMock = vi.fn(async () => jsonResp(401, { error: 'revoked', code: 'SESSION_REVOKED' }))
+    const { silentRefresh, sessionStorage, location } = loadApi(fetchMock)
+    await expect(silentRefresh()).resolves.toBe(false)          // resolves false, does NOT throw
+    expect(sessionStorage.getItem('access_token')).toBeNull()   // _doRefreshOnce hard-logged-out (cleared)
+    expect(location.href).toBe('/login.html')                   // ...and redirected
+  })
+
+  it('(f) PRIMARY path: generic 401 → silent-refresh → /api/auth/refresh ITSELF returns 401 SESSION_REVOKED → clears + redirects with SESSION_REVOKED', async () => {
+    // The most common SESSION_REVOKED source: the refresh endpoint is where family-revoke fires (victim presents the
+    // revoked token during silent-refresh). _doRefreshOnce must surface it as SESSION_REVOKED, not flatten to false →
+    // SESSION_EXPIRED.
+    const fetchMock = vi.fn(async (url: unknown) => {
+      if (String(url).includes('/api/auth/refresh')) return jsonResp(401, { error: 'revoked', code: 'SESSION_REVOKED' })
+      return jsonResp(401, { error: 'expired', code: 'UNAUTHORIZED' })  // initial request
+    })
+    const { apiFetch, sessionStorage, location } = loadApi(fetchMock as unknown as () => Promise<Response>)
+    await expect(apiFetch('/api/foo')).rejects.toMatchObject({ status: 401, code: 'SESSION_REVOKED' })
+    expect(sessionStorage.getItem('access_token')).toBeNull()   // cleared
+    expect(location.href).toBe('/login.html')                   // redirected
   })
 
   it('(e) generic 401 → silent-refresh succeeds → RETRY returns 401 SESSION_REVOKED → clears + redirects with SESSION_REVOKED code', async () => {

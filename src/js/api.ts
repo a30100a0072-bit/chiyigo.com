@@ -128,6 +128,10 @@ interface Window {
         headers: { 'Content-Type': 'application/json', 'X-Device-Id': _devId },
         body: '{}',
       })
+      // SEC-REFRESH-REUSE (OD-SR-3)：/api/auth/refresh 本身回 401 SESSION_REVOKED（family-revoke 觸發點）= SESSION_
+      // REVOKED 最常見來源（victim 拿被撤 token 走 silent-refresh）。在 `!r.ok → false`（會被上層折成 SESSION_EXPIRED）
+      // 之前先硬登出（正確 code）。_throwSessionRevoked 清 token + 導 login + throw，往上傳到 apiFetch。
+      if (r.status === 401 && await _peekErrorCode(r) === 'SESSION_REVOKED') _throwSessionRevoked(r)
       if (!r.ok) return false
       const data = await r.json().catch(() => null) as { access_token?: string } | null
       if (data?.access_token) {
@@ -135,7 +139,12 @@ interface Window {
         return true
       }
       return false
-    } catch { return false }
+    } catch (e) {
+      // 不可吞 SESSION_REVOKED 硬登出（_throwSessionRevoked 丟的 ApiError）→ rethrow 讓 apiFetch 以正確 code 結束；
+      // 其餘（網路錯 / parse 錯）維持原本 fail-soft return false（silent-refresh 失敗 → 上層走 SESSION_EXPIRED）。
+      if (e instanceof ApiError && e.code === 'SESSION_REVOKED') throw e
+      return false
+    }
   }
 
   async function _silentRefresh(): Promise<boolean> {
@@ -156,6 +165,16 @@ interface Window {
       } finally { setTimeout(() => { _refreshInflight = null }, 0) }
     })()
     return _refreshInflight
+  }
+
+  // SEC-REFRESH-REUSE：window.silentRefresh 對外保持 Promise<boolean> 契約。外部 caller（auth-ui / sidebar-auth /
+  // dashboard / admin-* / ai-assistant / accept-invitation）寫 `const ok = await silentRefresh(); if (!ok) → login`。
+  // SESSION_REVOKED 已在 _doRefreshOnce 內硬登出（_redirectToLogin 導頁），故對外 caller 吸收該 throw → 回 false
+  // （導頁已發生，false 觸發的 redirect 同址冪等）。apiFetch 直接用 _silentRefresh（會 throw），以正確 SESSION_REVOKED
+  // code 結束 —— 兩條路徑分離：內部 throw 給 apiFetch、對外 boolean 給其餘 caller。
+  async function _silentRefreshBoolean(): Promise<boolean> {
+    try { return await _silentRefresh() }
+    catch (e) { if (e instanceof ApiError && e.code === 'SESSION_REVOKED') return false; throw e }
   }
 
   function _redirectToLogin(): void {
@@ -1108,6 +1127,6 @@ interface Window {
   window.tApiError        = tApiError
   window.tApiErrorData    = tApiErrorData
   window.formatApiError   = formatApiError
-  window.silentRefresh    = _silentRefresh
+  window.silentRefresh    = _silentRefreshBoolean
   window.__apiErrorI18n   = API_ERROR_I18N
 })()

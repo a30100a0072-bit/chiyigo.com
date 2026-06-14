@@ -153,24 +153,35 @@ export async function onRequestPost({ request, env }) {
         // correct-device candidate: only NOW spend the refresh rate-limit (device check is before rate-limit so a
         // wrong-device replay cannot burn the victim quota), then a read-only successor-liveness check. A TRUE orphan
         // never used its successor, so it is still live -> benign. A dead/missing successor = chain advanced.
-        const { blocked } = await checkRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, windowSeconds: 60, max: 30 })
-        if (blocked) {
-          await safeUserAudit(env, { event_type: 'auth.refresh.rate_limited', severity: 'warn', user_id: tokenRow.user_id, request })
-          return res({ error: 'Too many refresh attempts. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+        // C2 fail-secure: this classification I/O (checkRateLimit / recordRateLimit / successor-liveness SELECT) runs
+        // BEFORE the family-revoke try and leads into the dead_successor sub-path, so a throw here must ALSO fail-secure
+        // (Codex r1 blocker — otherwise /api middleware surfaces a 500). Normal 429 / grace_orphan returns stay inside.
+        try {
+          const { blocked } = await checkRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, windowSeconds: 60, max: 30 })
+          if (blocked) {
+            await safeUserAudit(env, { event_type: 'auth.refresh.rate_limited', severity: 'warn', user_id: tokenRow.user_id, request })
+            return res({ error: 'Too many refresh attempts. Please slow down.', code: 'RATE_LIMITED' }, 429, cors)
+          }
+          await recordRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, ip })
+          const successorLive = await db
+            .prepare(`SELECT 1 AS ok FROM refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > datetime('now')`)
+            .bind(tokenRow.successor_token_hash)
+            .first()
+          if (successorLive) {
+            // benign rotation-orphan: same device, live (unused) successor, within window. Distinct non-alarming
+            // security signal instead of the FALSE reuse_detected. Still 401 (no resurrection -- Route B).
+            await safeUserAudit(env, { event_type: 'auth.refresh.grace_orphan', severity: 'warn', user_id: tokenRow.user_id, request })
+            return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
+          }
+          // dead/missing successor (chain advanced / session ended) -> proven non-benign -> family-revoke (§4/§5).
+          familyRevokeReason = 'dead_successor'
+        } catch {
+          // C2 fail-secure: a throw in the correct-device classification I/O → 401 SESSION_REVOKED + family_revoke_error
+          // (the presented token IS revoked, so clearing it client-side is safe). NEVER a 500. sub_path omitted: the
+          // throw can predate the orphan-vs-dead determination, so the exact reason is indeterminate here.
+          await safeUserAudit(env, { event_type: 'auth.refresh.fail', severity: 'warn', user_id: tokenRow.user_id, request, data: { reason_code: 'family_revoke_error' } })
+          return res({ error: 'Session has been revoked', code: 'SESSION_REVOKED' }, 401, cors)
         }
-        await recordRateLimit(db, { kind: 'refresh', userId: tokenRow.user_id, ip })
-        const successorLive = await db
-          .prepare(`SELECT 1 AS ok FROM refresh_tokens WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > datetime('now')`)
-          .bind(tokenRow.successor_token_hash)
-          .first()
-        if (successorLive) {
-          // benign rotation-orphan: same device, live (unused) successor, within window. Distinct non-alarming
-          // security signal instead of the FALSE reuse_detected. Still 401 (no resurrection -- Route B).
-          await safeUserAudit(env, { event_type: 'auth.refresh.grace_orphan', severity: 'warn', user_id: tokenRow.user_id, request })
-          return res({ error: 'Refresh token has been revoked', code: 'REFRESH_TOKEN_REVOKED' }, 401, cors)
-        }
-        // dead/missing successor (chain advanced / session ended) -> proven non-benign -> family-revoke (§4/§5).
-        familyRevokeReason = 'dead_successor'
       } else {
         // device-null candidate (web: cannot confirm same device) -> proven non-benign -> family-revoke (§4/§5).
         familyRevokeReason = 'device_null_candidate'
