@@ -27,8 +27,9 @@ export type ClearActorType = 'self' | 'admin'
 export type ClearMethod = 'totp' | 'backup_code' | 'password' | 'admin_clear'
 
 // type -> table SSOT. Keys are a fixed allowlist (callers validate `type` before calling), so the
-// table-name interpolation below is injection-safe.
-const TABLE_BY_TYPE: Record<CredentialType, string> = {
+// table-name interpolation below is injection-safe. Exported so the reverify / admin-clear endpoints
+// resolve the table through the same single mapping.
+export const CREDENTIAL_TABLE: Record<CredentialType, string> = {
   passkey:  'user_webauthn_credentials',
   wallet:   'user_wallets',
   identity: 'user_identities',
@@ -55,7 +56,7 @@ export async function clearReverificationFlag(
   opts: ClearReverificationOpts,
 ): Promise<{ cleared: boolean }> {
   const { type, id, userId, actorType, clearMethod, request, actorId, reason, dormant } = opts
-  const table = TABLE_BY_TYPE[type]
+  const table = CREDENTIAL_TABLE[type]
   const db = env.chiyigo_db
 
   // pre-clear snapshot (user-scoped): read disposition_* BEFORE the CAS for the audit forensic record +
