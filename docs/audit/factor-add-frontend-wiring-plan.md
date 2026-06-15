@@ -1,6 +1,6 @@
 # FACTOR-ADD 前端 elevation 接線修補 plan（Stage 1：TOTP / password elevation）
 
-> **狀態**：`PLAN_ARCH_APPROVED`（dimension-A self-review ✅ §12；Arch Gate r1 REVISE → 修 C1/C2 §13 → **ChatGPT Arch Gate r2 ＝ APPROVED**，鎖定條件見 §14）→ **送 Codex Plan Gate**。**plan 過 gate 才進 Code 階段。**
+> **狀態**：`PLAN_CODING_ALLOWED`（self-review ✅ §12；**Arch Gate r2 ＝ APPROVED** §13/§14；**Codex Plan Gate ＝ CODING_ALLOWED** §15，無 blocker）→ **Code 階段（實作中）**。
 > **分級**：L2（前端 feature 接線）+ **敏感熱區**（auth / factor-add / token）→ 三道基本外部審查全走（GPT Arch + Codex Plan + Codex Code）。
 > **前置裁決**：owner = **Option 2**（Stage 1 先上 TOTP/password elevation，OAuth-only 留 Stage 2）；**插隊在「回 Stage 7 strict」之前**。
 > **後端**：**零改動、無 migration**。整套 elevation primitive（`/api/auth/elevation/{totp,password,exchange}` + `init`/`callback` elevation 分支）已於 #77（PR-A2）/ #78（PR-A3）建全並測全綠。本 PR 只補**前端 ceremony 驅動**。
@@ -250,6 +250,7 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
 - **R2**：`bind_identity` grant 在 provider 同意期間逾 5min → 需重綁（OD-4）。
 - **R3**：若 OD-3 退為「抽純函式測」，modal/DOM 互動層無自動化覆蓋，靠 prod 無痕驗收。
 - **R4**：factor-add grant 綁 sid-字串；access token 殘留 15min 內、session 撤銷後 grant 仍可消費（既有 access-token tradeoff，見 OD-5／§8）。
+- **R5（Codex Plan Gate）**：Stage 1 僅 **same-origin**（dashboard same-origin `apiFetch`，不觸發 CORS preflight）。跨 origin factor-add caller 需後端 `cors.ts` 加 `X-Factor-Add-Grant` allow-header＝另案 backend plan（本 PR 不做，§14 後端零改）。
 
 ---
 
@@ -308,3 +309,11 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
 | revoked session tradeoff | 本 PR 不處理、另案 hardening（OD-5/R4） |
 
 **Codex Plan Gate 須驗（Arch r2 待辦）**：對照 repo 實際 `functions/api/auth/oauth/[provider]/init.ts` 確認 binding init **確回 JSON `{redirect_url}`（非 302）**；若契約與 §4.3／§13 r2 證據不符 → 退回修 C1。
+
+---
+
+## 15. Codex Plan Gate ＝ CODING_ALLOWED（無 blocker）
+
+對照 `HEAD=199197d4`、branch `feat/factor-add-elevation-ux`、工作樹乾淨。6 驗證點全成立：**C1 transport**（`init.ts:258` 回 JSON `{redirect_url}`、`bindProvider` 兩段式）／**gate 契約**（`elevation.ts:153` 讀 `X-Factor-Add-Grant`、按 user/sid/action/purpose 驗、同 batch consume）／**elevation 端點**（`totp.ts`/`password.ts` body 契約 + `{grant_token,expires_in}`、TTL 300s `elevation.ts:77`）／**apiFetch header merge**（`api.ts:208` `new Headers(opts.headers||{})` 不覆寫 caller header）／**test harness**（`api-session-revoked.test.ts` node:vm + `dashboard.ts:2319` document-level click delegation 可驅動三 caller 並 spy `apiFetch` request boundary）／**action 白名單**（`elevation.ts:19` 含 `bind_identity`）。
+
+**非 blocker（記 R5）**：`cors.ts:40` allow-headers 未含 `X-Factor-Add-Grant`，但 Stage 1 dashboard 是 same-origin `apiFetch`、不觸發 preflight → 不受影響；依 §14 後端零改、本 PR 不動 `cors.ts`。
