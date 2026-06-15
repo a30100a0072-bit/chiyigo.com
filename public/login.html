@@ -9,14 +9,14 @@
   <script>(function(){var s=localStorage.getItem('theme');document.documentElement.classList.add(s==='light'?'theme-light':'theme-dark')})();</script>
   <!-- login-boot.js：iOS 偵測 / ?next= sessionStorage / 已登入早跳轉
        須同步載入（不加 defer），在 body 解析前跑 -->
-  <script src="/js/login-boot.js?v=0f25ff3d"></script>
+  <script src="/js/login-boot.js?v=47456c4133d2"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/_tokens.css?v=0f25ff3d" />
-  <link rel="stylesheet" href="/css/_components.css?v=0f25ff3d" />
-  <link rel="stylesheet" href="/css/login.css?v=0f25ff3d" />
-  <script defer src="/js/notify.js?v=0f25ff3d"></script>
-  <script defer src="/js/confirm-dialog.js?v=0f25ff3d"></script>
-  <link rel="stylesheet" href="/css/sidebar-auth.css?v=0f25ff3d" />
+  <link rel="stylesheet" href="/css/_tokens.css?v=bcfcaec4a30b" />
+  <link rel="stylesheet" href="/css/_components.css?v=7f3b35c0cc33" />
+  <link rel="stylesheet" href="/css/login.css?v=83a377532546" />
+  <script defer src="/js/notify.js?v=45eccb2ab378"></script>
+  <script defer src="/js/confirm-dialog.js?v=b6f4c6247dbe"></script>
+  <link rel="stylesheet" href="/css/sidebar-auth.css?v=1db92bb63c78" />
   <!-- explicit rendering：避免同頁 2 個 .cf-turnstile 同時跑 challenge 造成 iOS Safari 主執行緒卡頓 -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onloadTurnstile" async defer></script>
 </head>
@@ -357,9 +357,9 @@
 
   </div>
 
-  <script src="/js/api.js?v=0f25ff3d"></script>
-  <script src="/js/auth-ui.js?v=0f25ff3d"></script>
-  <script src="/js/sidebar-auth.js?v=0f25ff3d" defer></script>
-  <script src="/js/login.js?v=0f25ff3d" defer></script>
+  <script src="/js/api.js?v=ec9818c43932"></script>
+  <script src="/js/auth-ui.js?v=e259c14302e6"></script>
+  <script src="/js/sidebar-auth.js?v=b96871031c96" defer></script>
+  <script src="/js/login.js?v=24707693e8e5" defer></script>
 </body>
 </html>
