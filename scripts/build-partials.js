@@ -75,7 +75,7 @@ async function buildPage(filename) {
   const withI18n = await injectI18n(filename, raw)
   const tpl = Handlebars.compile(withI18n, { noEscape: true })
   const rendered = tpl({})
-  // P2-8：HTML 出檔前統一注入 ?v=<git-hash>，蓋掉手寫的 ?v=
+  // P2-8：HTML 出檔前統一注入 ?v=<content-hash>，蓋掉手寫的 ?v=
   // 並清掉「整行皆空白」的行（Handlebars 巢狀 partial 縮排會把 partial 內的空行渲染成
   // 純空白行 → git diff --check / PR hygiene 會抱怨）。只清整行空白、不動有內容行的尾隨
   // 空白，故不影響 <pre>/<textarea> 內容（站內 textarea 皆空 default、無多行內容）。
@@ -162,7 +162,8 @@ async function buildJs() {
 
 // ── CSS copy ────────────────────────────────────────────
 // 把 src/css/*.css 直接 copy 到 public/css/，排除 tailwind.css 入口
-// (那個由 tailwind CLI 透過 npm run build:css 處理)
+// （tailwind.css 改由 ensureTailwind() 在 PASS-1 render 後以本地 Tailwind CLI 產出，見 buildAll
+//  two-pass 註解；獨立的 npm run build:css 僅保留為手動工具，非此 orchestrator 路徑）
 async function buildCss() {
   let count = 0
   try {

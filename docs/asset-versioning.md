@@ -48,8 +48,11 @@ wrangler pages deploy public --project-name chiyigo-com --branch main --commit-h
 - **`CF_PAGES_COMMIT_SHA` 不適用**（那是 Cloudflare Pages Git-integration build 環境變數；本 repo 走
   wrangler Direct Upload，無 deploy-time build）。
 
-> **Cloudflare dashboard 的 Build command**：本 repo 無法證明其為空 →
-> **owner-unverified / not repo-verifiable**。本變更 **不修改** dashboard 設定或任何跨帳號部署設定。
+> **Cloudflare dashboard 的 Build command**：owner 已於 2026-06-15 在 Cloudflare dashboard（Workers &
+> Pages → chiyigo-com → Settings → Pages configuration → Build）親自確認 **Git repository 未連接**
+> （顯示「Connect」）→ Git Integration build inactive、**Build command N/A** → production 確為 **Direct
+> Upload committed `public/`**。狀態：**owner-confirmed**（未修改任何 dashboard 設定）。本變更亦 **不修改**
+> dashboard 設定或任何跨帳號部署設定。
 > 其他 repo 是否共用本 `build-partials`：無 npm package / submodule / shared-script consumer 證據 →
 > **not repo-verifiable; owner states no shared repo consumer**。
 
