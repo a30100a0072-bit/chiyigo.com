@@ -317,3 +317,19 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
 對照 `HEAD=199197d4`、branch `feat/factor-add-elevation-ux`、工作樹乾淨。6 驗證點全成立：**C1 transport**（`init.ts:258` 回 JSON `{redirect_url}`、`bindProvider` 兩段式）／**gate 契約**（`elevation.ts:153` 讀 `X-Factor-Add-Grant`、按 user/sid/action/purpose 驗、同 batch consume）／**elevation 端點**（`totp.ts`/`password.ts` body 契約 + `{grant_token,expires_in}`、TTL 300s `elevation.ts:77`）／**apiFetch header merge**（`api.ts:208` `new Headers(opts.headers||{})` 不覆寫 caller header）／**test harness**（`api-session-revoked.test.ts` node:vm + `dashboard.ts:2319` document-level click delegation 可驅動三 caller 並 spy `apiFetch` request boundary）／**action 白名單**（`elevation.ts:19` 含 `bind_identity`）。
 
 **非 blocker（記 R5）**：`cors.ts:40` allow-headers 未含 `X-Factor-Add-Grant`，但 Stage 1 dashboard 是 same-origin `apiFetch`、不觸發 preflight → 不受影響；依 §14 後端零改、本 PR 不動 `cors.ts`。
+
+---
+
+## 16. dimension-A code-self-review 裁決（workflow `wf_f9cb9f8c`，feat `661d76b9`）
+
+7 維 semantic finder（race／idempotency／tenant-scope／async-boundary／contract-enum／naming-ssot／regression-lock）→ 36 findings（31 accepted）。**多數 accepted ＝ 驗證者確認正確**：4 個 tier0 全是「test correctly locks the regression」PASS（三 caller wiring + grant-leak）；contract findings 確認 header／error-code／grant 契約正確、無 backend gap。主線獨立裁決，**actionable 3 項已修**（fix `749ced39` + cache-bust `b0379dad`）：
+
+| # | 維度 | 修補 |
+|---|---|---|
+| #3/#6 | idempotency t1/t2 | elevation modal submit 加 `submitting` in-flight guard（Enter 鍵繞過 `button.disabled` 會 double-mint 一張浪費的 grant；backend CAS 仍保證唯一寫入，但前端不該多打） |
+| #16 | contract-enum t2 | `dashboard.json` 有 **ko** block（4 語），9 個 factor-add modal key 原只加 zh-TW/en/ja → 補 ko（否則 ko 用戶見 zh-TW fallback） |
+| #29 | regression-lock t1 | 補 response-shape guard 的 fail-closed test（elevation 無 `grant_token` → 不打 factor-add、modal 顯錯、submit 可重試） |
+
+**駁回（§14 鎖定／OD 已裁／設計誤解）**：backend idempotency-key header／DB timeout／grant-TTL 調整（#1/#2/#4/#7/#8/#12/#13）＝後端零改、OD-4 已裁；apiFetch AbortController/timeout（#9/#10/#11）＝既有 infra、本 PR 不碰（gold-plating）；#22「error-code i18n 搬到 dashboard.json」＝誤解（`api.ts` `API_ERROR_I18N` 是全站 error-code i18n SSOT，放置正確）；naming doc nit（#20/#21/#23）＝`ERR_KEY` 已有 inline 註解，低優先。
+
+**gates 全綠（r2）**：ratchet 898／lint／unit **692**＋cov 90.28%／wiring test **6/6**（test:int 1328·build:functions 不受影響＝functions/ 零改）。
