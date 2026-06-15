@@ -123,6 +123,10 @@ const NEW_JS_ALLOWLIST = new Set([
   SELF_FILE,
   'scripts/verify-browser-pipeline.mjs',
   'scripts/lib/inject-i18n.js',
+  // asset-versioning hardening：content-hash ?v= SSOT，build-partials.js 與 verify-browser-pipeline.mjs
+  //   共用同一條 hash/match path（同 inject-i18n.js 類別：純 build/verify infrastructure，非 application
+  //   source；node 直接跑 ESM .mjs，無法改 .ts）
+  'scripts/lib/asset-versioning.mjs',
   // PR-0 (Stage 7)：locked override pure 決策邏輯（ratchet 本體 + vitest 共用；見該檔註解）
   'scripts/lib/ratchet-override.mjs',
   // PR-0 (Stage 7)：tests-leaf strict preflight（開 tests strict 前 gate；node 跑，非 app source）

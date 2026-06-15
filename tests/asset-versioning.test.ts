@@ -128,6 +128,10 @@ describe('extractAssetRefs — verifier input extraction', () => {
   it('version is null when a non-v query is present (verifier → mismatch)', () => {
     expect(extractAssetRefs('<script src="/js/a.js?foo=1"></script>')[0].version).toBe(null)
   })
+  it('non-v query is rejected even alongside a valid v (mirrors producer fail-closed)', () => {
+    // pre-fix this returned 'abc' (verifier would accept what injectCacheBust refuses); now null → fail
+    expect(extractAssetRefs('<script src="/js/a.js?foo=1&v=abc"></script>')[0].version).toBe(null)
+  })
 })
 
 describe('verifier core — stale ?v= is detectable via the shared helper', () => {

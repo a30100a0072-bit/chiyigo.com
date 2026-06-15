@@ -159,8 +159,15 @@ export function extractAssetRefs(html) {
     if (isProtocolRelative(assetPath)) continue
     let version = null
     if (rawQuery) {
-      const mv = rawQuery.match(/[?&]v=([^&]*)/)
-      version = mv ? mv[1] : null
+      // Mirror the producer's conservative rule (assertQuerySupported): a query with ANY non-v
+      // param is unsupported, so the verifier treats it as "no valid version" → mismatch/fail,
+      // rejecting exactly what injectCacheBust refuses to produce (no produce/verify asymmetry).
+      const params = rawQuery.slice(1).split('&').filter((s) => s.length > 0)
+      const hasNonV = params.some((s) => !/^v=/.test(s))
+      if (!hasNonV) {
+        const mv = rawQuery.match(/[?&]v=([^&]*)/)
+        version = mv ? mv[1] : null
+      }
     }
     refs.push({ attr, assetPath, version })
   }
