@@ -1,6 +1,6 @@
 # FACTOR-ADD 前端 elevation 接線 plan（Stage 2：OAuth-only OAuth-reauth elevation）
 
-> **狀態**：`PLAN_DRAFT` → 待 dimension-A plan-self-review（§12）→ ChatGPT Arch Gate（§13）→ Codex Plan Gate（§14）。
+> **狀態**：`PLAN_SELF_REVIEWED`（dimension-A self-review ✅ §12：workflow `wf_0f503e7c-d69`，1 實質修 HR-F3 + 9 文件自足補強）→ 待 ChatGPT Arch Gate（§13）→ Codex Plan Gate（§14）。
 > **分級**：L2（前端 feature 接線）+ **敏感熱區**（auth / factor-add / token / OAuth roundtrip）→ 三道基本外部審查全走（GPT Arch + Codex Plan + Codex Code）+ §5 高風險加碼 4 件。
 > **前置裁決**：owner = **Option 2**；Stage 1（TOTP/password elevation）已 MERGED #84 `285b8987`，本 PR 接續 Stage 1 的 §1.2 OUT 項。
 > **後端**：**零改動、無 migration**。整套 OAuth-reauth elevation primitive（`init?purpose=elevation` + `callback` 5a + `/api/auth/elevation/exchange`）已於 #77（PR-A2）建全並測全綠。本 PR 只補**前端跨 redirect ceremony 驅動**。
@@ -153,8 +153,13 @@ async function resumeFactorAddFromExchange(
   if (!code) return;
   if (!ctx || !isFactorAddActionClient(ctx.action)) { showBindToast(T('elev_resume_lost'), 'warn'); return; }
   try {
+    // skipRefresh（HR-F3 fix）：exchange code 是 one-time。若用 apiFetch 預設 401→silent-refresh→retry，
+    // 對「code 無效/過期/replay」的 401 `EXCHANGE_CODE_INVALID` 會 retry 同一死 code、第二次仍 401 →
+    // apiFetch 把它誤判成 SESSION_EXPIRED 並**硬登出**（`api.ts:256-261`，footgun）。改 skipRefresh:true：
+    // SESSION_REVOKED 仍硬登出（`api.ts:244` 的檢查在 skipRefresh 之前、不受其影響）；其餘 401 直接以原 code
+    // 拋 ApiError → resume catch → 友善錯誤、不登出。token 過期（罕見）→ 不 auto-refresh、走重啟（§5.2/R6）。
     const data = await window.apiFetch<{ grant_token?: string }>('/api/auth/elevation/exchange', {
-      method: 'POST', body: JSON.stringify({ code }),
+      method: 'POST', body: JSON.stringify({ code }), skipRefresh: true,
     });
     if (typeof data?.grant_token !== 'string' || !data.grant_token) { showBindToast(T('elev_exchange_failed'), 'err'); return; }
     const grant = { grant_token: data.grant_token };
@@ -168,6 +173,8 @@ async function resumeFactorAddFromExchange(
 ```
 - `isFactorAddActionClient(a): a is FactorAddAction` — 前端本地 runtime guard（`['add_passkey','bind_wallet','bind_identity'].includes(a)`），擋 sessionStorage 被竄改的 action。後端 grant action-bound CAS 仍是最終 fail-closed 防線（竄改只會讓 ceremony 失敗，無安全破口）。
 - `bind_identity` dispatch 額外驗 `targetProvider ∈ BIND_PROVIDERS`（防竄改值被插進 init URL path）。
+  - **`BIND_PROVIDERS` ＝既有 module-level `const`（`src/js/dashboard.ts:720`）**：`[{id,label,color}]` 四筆 `google/discord/line/facebook`。**靜態白名單、非 server-sourced → 無 TOCTOU**（與 `window.__reauthProviders` 不同，後者是 UX hint 容 TOCTOU）。module const 在任何 caller 之前初始化；`checkElevExchange` IIFE 與 `resumeFactorAddFromExchange` 皆在 module eval 後（async）才存取，無 TDZ。
+  - **apple 不在 BIND_PROVIDERS**（後端 `init.ts:96` apple 回 `APPLE_LOGIN_NOT_AVAILABLE` 503，本就不可綁）→ 前端白名單 4 筆刻意為後端可綁集合子集。竄改 `targetProvider` 為 apple/未知值 → dispatch 不命中 → `elev_resume_lost`（§7.2 tamper test）。
 - 無 context（fragment 在、context 不在）→ resume-lost 文案，**不** exchange（沒 context 無從得知 resume 哪條 ceremony；code 自然 2min 過期，無害）。
 - resume 用 **preset grant** 路徑（§4），不再彈 modal。
 
@@ -205,6 +212,33 @@ function readAndClearReauthPending(): { action?: string; targetProvider?: string
 - 寫入時機：**只在 init 成功、導頁前**（init 失敗不留陳舊 context）。
 - 清除時機：(a) resume 讀即清；(b) `checkBindResult` 的 `elev_error` 分支清（redirect 出去但 callback 回 error，resume 不會觸發，須主動清）；(c) 新一次 reauth 覆寫。
 - ts + TTL = 陳舊防禦（[[feedback_irreversible_action_full_review]] 級的縱深，非 load-bearing；真正一次性由後端 exchange code 2min one-time CAS 保證）。
+- **存活性（HR-F5）**：sessionStorage 綁 tab+origin、**與 HTML 版本無關** → roundtrip 期間即使有新 deploy 換了 `?v=` cache-bust hash、回跳載入新 `dashboard.js`，pending context 仍在（新 bundle 讀同一 key）。**per-tab 隔離**：多分頁各自獨立 reauth 不互擾（sessionStorage 非跨 tab 共享）。此性質與既有 OAuth login 的 `_cross_app_redirect`／`access_token`（`callback.ts:472-484`）相同、已在 prod 驗證。
+
+### 3.7 `checkBindResult` 的 `elev_error` 全集處理（error path，對稱 §3.4 happy path）
+
+> SS-F1/F4：§3.4 給了 happy-path（`#elev_exchange`）pseudocode，error-path（`?elev_error=`）也須在設計層給出，避免 implementer 從 §5.2/§7 拼湊。
+
+`checkBindResult`（既有 IIFE `dashboard.ts:688`）已處理 `?bind=`/`?bind_error=`/`?elev_error=reverification_required`。Stage 2 把 `elev_error` 擴成**全集 + 統一清理**：
+```ts
+const elevError = sp.get('elev_error');
+if (elevError) {
+  history.replaceState(null, '', '/dashboard.html');   // 先剝 URL（與 §3.4 line 145 一致）
+  readAndClearReauthPending();                          // 清陳舊 pending context（redirect 出去但 callback 回 error）
+  // elev_error param（後端 callback 名）→ i18n key（前端名）的顯式 map，鏡射 Stage 1 bind_error→bind_err_* 慣例
+  const ELEV_ERR_KEY = {
+    provider_mismatch:       'elev_err_provider_mismatch',
+    rate_limited:            'elev_err_rate_limited',
+    invalid_state:           'elev_err_invalid_state',
+    reverification_required: 'elev_reverify_required',   // 重用 Stage 1 既有 key（不另造，[[feedback_state_machine_naming_no_alias]]）
+  };
+  setTimeout(() => showBindToast(T(ELEV_ERR_KEY[elevError] ?? 'elev_err_generic'), 'warn'), 600);
+  return;                                                // 不續 exchange；未知 code → fallback elev_err_generic（fail-closed）
+}
+```
+- **順序固定**：剝 URL → 清 context → toast（與 happy path 一致）。
+- **NS-F5（param vs key 前綴）**：`elev_error=<x>` 是後端 callback 參數名；`elev_err_<x>` 是前端 i18n key。兩者用**顯式 `ELEV_ERR_KEY` map** 橋接（非字串拼接），與 Stage 1 `bind_error`→`bind_err_*`（`dashboard.ts:701` `ERR_KEY`）同慣例 → 非 drift、無隱式耦合。
+- **NS-F1（`bind_error` vs `elev_error` 兩 namespace）**：兩者都是**後端 callback 決定、frozen（後端零改）**：`?bind_error=`＝binding callback（`factor_add_binding`，`callback.ts:189-227`，含 `elevation_consumed` 逾時）；`?elev_error=`＝elevation callback（`purpose=elevation` 5a，`callback.ts:111/146/156/168`）。前端只**鏡射**，**不**重命名（不可改後端）。`checkBindResult` 同時處理兩 namespace（Stage 1 已處理 `bind_error`、Stage 2 補 `elev_error` 全集）。
+- 取代既有 line 694 的單一 `reverification_required` 分支。
 
 ---
 
@@ -259,17 +293,19 @@ function readAndClearReauthPending(): { action?: string; targetProvider?: string
 | resume 後 WebAuthn/SIWE 取消 | 還原按鈕；grant 未 consume，5min 後自然失效（無副作用）|
 | `bind_identity` 第二段 binding 逾 grant 5min TTL | callback `bind_error=elevation_consumed` → `checkBindResult` 既有「逾時請重綁」|
 | 取 grant 後直接關頁 | 無副作用（grant 失效）|
-| reauth roundtrip 期間 access token 過期（<15min 窗）| exchange `apiFetch` 401 → silent-refresh → retry（既有 api.ts）；refresh 死則 SESSION_EXPIRED 硬登出 |
+| **grant 在 exchange 後、register-verify/wallet-verify 前逾 5min**（慢速 WebAuthn/SIWE，HR-F6）| 寫入端回 403 `FACTOR_ADD_ELEVATION_REQUIRED` → caller `catch` 走 `tApiError` 友善錯誤 → 使用者重啟（與 bind_identity 的 `elevation_consumed` 同類、不同 code/path）|
+| **exchange 階段 access token 過期**（罕見：token 將屆期 + 慢速 roundtrip）| exchange 用 `skipRefresh:true`（HR-F3）→ 401 不 auto-refresh → `elev_exchange_failed` err → 使用者重啟 reauth。換取「不對 invalid code 誤登出」；token 15min/code 2min，此窗極窄（§5.4／R6）|
 
 ### 5.3 Idempotency 策略
 - 寫入路徑既有按鈕 `disabled` 防雙擊；reauth modal provider 按鈕 + exchange submit 各有 `submitting` in-flight guard（防 Enter/雙擊 double-mint）。
 - exchange code one-time CAS + grant one-time CAS（後端）：並發只有一個成功，另一個回 `EXCHANGE_CODE_INVALID`／`FACTOR_ADD_GRANT_CONSUMED`，前端翻成友善訊息。
 - pending context 寫入即覆寫（單一 in-flight reauth），resume 讀即清 → 不會 resume 兩次。
 
-### 5.4 Retry + timeout 策略
-- reauth init 失敗（403/網路）→ modal 內可重試，上界＝後端 RL（`elevation_oauth_start` 10/300s，429 即止）。
-- exchange 失敗（401）→ 不自動重試（code 已 one-time consume/過期，重試無意義）→ 顯示 err，使用者需重啟整個 reauth。
-- 所有外呼走 `apiFetch`（既有 timeout/retry 紀律）；無新增 long-running/stream，無需 AbortSignal 新設計。
+### 5.4 Retry + timeout 策略（HR-F3：明確區分各呼叫的 refresh 行為，消 §5.2 矛盾）
+- **reauth init**（`openReauthElevationModal`）→ **走 apiFetch 預設**（401 token 過期 → silent-refresh → retry；init 無 one-time payload，retry 安全可自我恢復）。init 失敗（403/網路）→ modal 內可重試，上界＝後端 RL（`elevation_oauth_start` 10/300s，429 即止）。
+- **exchange**（`/elevation/exchange`）→ **`skipRefresh:true`、不自動重試**。理由：exchange code one-time，retry 同一死 code 無意義且觸發 apiFetch 把 `EXCHANGE_CODE_INVALID` 401 誤判 `SESSION_EXPIRED` → 登出（footgun，§3.4）。401 → 直接顯示 `elev_exchange_failed`/`tApiError`，使用者重啟。**唯 `SESSION_REVOKED` 仍硬登出**（`api.ts:244` ungated）。
+- **factor-add 寫入**（register-verify/wallet-verify/binding init）→ **走 apiFetch 預設**：grant 只在寫入成功時 consume，401（token 過期、pre-consume）→ silent-refresh → retry 帶同一 grant → 成功（grant 不浪費，retry 安全）。
+- 所有外呼走 `apiFetch`（既有 timeout 紀律）；無新增 long-running/stream，無需 AbortSignal 新設計。
 
 ---
 
@@ -282,7 +318,8 @@ function readAndClearReauthPending(): { action?: string; targetProvider?: string
 - `elev_reauth_no_candidate`（無可用 reauth provider 引導）。
 - `elev_resume_lost`（fragment 在但 context 遺失）。
 - `elev_exchange_failed`（exchange 無 grant）。
-- `elev_err_provider_mismatch`、`elev_err_rate_limited`、`elev_err_invalid_state`（callback `?elev_error=`；`reverification_required` 重用 Stage 1 既有 `elev_reverify_required`）。
+- `elev_err_provider_mismatch`、`elev_err_rate_limited`、`elev_err_invalid_state`、`elev_err_generic`（未知 `elev_error` 的 fallback）（callback `?elev_error=`；`reverification_required` 重用 Stage 1 既有 `elev_reverify_required`）。
+- **sealed-union 型別（AC-F2）**：前端定義 `type ElevError = 'provider_mismatch' | 'rate_limited' | 'invalid_state' | 'reverification_required'` 供 `ELEV_ERR_KEY` map key 對齊（與 `FactorAddAction` 同型，新增 callback error code 須同步改型別+map+i18n+後端＝breaking，tsc 即擋）。**不**在 callback 回應加 version 欄（over-engineering：callback 是 302 redirect 不是 JSON contract；§14 拒）。
 
 ### 6.2 `api.ts` API_ERROR_I18N 補碼（四語，防洩後端英文原文）
 - `EXCHANGE_CODE_INVALID`（exchange 401）、`EXCHANGE_CODE_REQUIRED`（exchange 400）、`ELEVATION_PROVIDER_NOT_BOUND`（init 400）。
@@ -313,8 +350,15 @@ function readAndClearReauthPending(): { action?: string; targetProvider?: string
 | R4 | resume exchange fail-closed（exchange 回 `{}`）| **不**打任何 factor-add 端點；`elev_exchange_failed` err |
 | R5 | resume context 竄改 action（pending `{action:'bogus'}`）| `elev_resume_lost`；不 dispatch |
 | R6 | resume context 陳舊（ts 超 TTL）| 視同無 context → resume-lost；不 exchange |
+| R7 | resume `bind_identity` 但 `targetProvider` 不在 BIND_PROVIDERS（pending `{bind_identity,'evil'}`，SB-F2）| 不 dispatch、**不**呼 `bindProvider`；`elev_resume_lost` |
+| R8 | exchange 呼叫帶 `skipRefresh:true`（HR-F3）| spy 記錄的 `/elevation/exchange` call `init.skipRefresh === true`（dashboard 端責任；apiFetch 「invalid-code 不誤登出」行為由 `api-session-revoked.test.ts` 覆蓋）|
 | L1 | grant_token / exchange code 洩漏防護 | 整個 resume：grant/code **不**入 storageWrites（除 removeItem）、不入 console、不入 DOM textContent/innerHTML/value |
 | E1 | `elev_error=provider_mismatch`（search）+ pending 在 | `checkBindResult` warn；pending `removeItem` 被呼（清陳舊）；URL 剝除 |
+| E2 | `elev_error=rate_limited` + pending 在 | `elev_err_rate_limited` warn；pending removeItem；URL 剝除 |
+| E3 | `elev_error=invalid_state` + pending 在 | `elev_err_invalid_state` warn；pending removeItem；URL 剝除 |
+| E4 | `elev_error=reverification_required` | `elev_reverify_required` warn（重用 Stage 1 key）；URL 剝除 |
+| E5 | `elev_error=<unknown>` | `elev_err_generic` fallback warn（fail-closed）|
+- **migration 前置（MIG-F4）**：Stage 2 為 frontend-only、不新增 migration。所依賴的 0054（elevation_grants/elevation_exchanges/oauth_states elevation 欄）/ 0055（requires_reverification）round-trip 已在 `tests/integration/migrations.test.ts`（0054 §1108-1184、0055 §1190-1272）覆蓋；本 PR 前端測試**假設** post-0054/0055 schema 已存在（prod 自 #75/#80 已套），不再重驗 migration。
 - CI 對齊（[[feedback_pre_merge_gate_checklist_match_ci]]）：本機跑齊 lint / ratchet / test:int / **test:cov** / build:functions，全綠才宣告。
 
 ---
@@ -327,11 +371,17 @@ function readAndClearReauthPending(): { action?: string; targetProvider?: string
 - **竄改防禦**：pending context 的 action 經本地 runtime guard + 後端 action-bound CAS 雙重把關；targetProvider 經 BIND_PROVIDERS 白名單；竄改最壞只造成 ceremony 失敗（後端 fail-closed），無提權。
 - **OD-3 一致**：前端候選只列非-flagged provider（UX 早擋）；後端 callback 5a 對 flagged matched identity 不鑄 exchange（SoT）。§0.2 已釐清與 OD-3 self-reverify 的差異。
 - **same-origin（R5 inherited）**：Stage 2 的 init / exchange 都是 dashboard same-origin `apiFetch`，不觸發 CORS preflight；exchange 用 Authorization + body，不用 `X-Factor-Add-Grant` header（grant header 只在 resume 後的 factor-add 寫入用，亦 same-origin）。`cors.ts` 不需改。
+- **tenant-scope（TS-F3/F4，user-scoped by design）**：elevation grant/exchange 綁 `user_id + session_id`、**刻意非 tenant-scoped**——它們新增的 factor（passkey/wallet/OAuth identity）都是 **user-global**（跨租戶共用，非 tenant 資源），故 elevation 是「證明帳號擁有權」的 step-up、不涉 tenant 邊界（migration 0054 表無 `tenant_id` 為正確設計，非遺漏）。**token refresh 期間 tenant 重 derive**（`refresh.ts` → personal_tenant）對 factor-add **無影響**：exchange/grant CAS 只比對 user+session（不讀 tenant claim），factor-add 寫入也不依 tenant context。此為後端既有行為、Stage 2 frontend 不觸碰；若未來 elevation 變成 tenant 特權操作前置，須重審（非本 PR scope）。
 - **revoked session 殘留（inherited R4／OD-5）**：grant/exchange 綁 sid-字串、非 live session row；access token 殘留 ≤15min 內，pre-mint grant/code 於 session 撤銷後仍可能被消費。維持既有 access-token tradeoff（frontend PR 不改後端時序）；鑄 exchange 已需通過 OAuth-reauth（≈帳號已 compromise，factor-add 保護本就失效）→ 邊際風險可忽略。後端加碼屬獨立決策。
 
 ---
 
 ## 9. 變更檔清單 + 部署
+
+### 9.0 Prerequisites & Contract Phase（MIG-F1/F2）
+- **Prerequisites（上游 migration）**：0054（elevation_grants/elevation_exchanges/oauth_states elevation 欄，#75）+ 0055（requires_reverification，#80）**已 applied+verified prod**；target 環境須已套兩者（prod 已套）。本 PR **不新增** migration。
+- **Contract phase：不適用**。Stage 2 純前端、無 schema 改動 → 無 expand/migrate/contract。
+- **不新增 schema 依賴**：Stage 2 前端**不直接** query D1，全走後端端點；0054/0055 的 runtime 依賴**早已**隨 #77/#78/#80/#83 在 prod 生效（後端既有）。故「rollback 0054/0055.down 會打斷 runtime」對既有後端**已成立**、非 Stage 2 引入；真要 rollback schema 須先回退那些後端 PR（一向如此），本 PR 不改變該 invariant。
 
 | 檔 | 變更 |
 |---|---|
@@ -361,6 +411,8 @@ function readAndClearReauthPending(): { action?: string; targetProvider?: string
   - 傾向：**sessionStorage + ts/TTL**（cheap 縱深；真正一次性靠後端 exchange code 2min CAS）。確認 sessionStorage 跨 OAuth roundtrip 存活（同 tab+同 origin 導外回來保留，既有 OAuth login `_cross_app_redirect` 已依賴此性質，`callback.ts:474-477`）。
 - **OD-5（grant TTL 跨 bind_identity 雙 redirect，inherited Stage 1 OD-4）**：5min grant 需覆蓋 exchange→init→target 同意→callback。慢速使用者可能逾時→`elevation_consumed`。
   - 傾向：**Stage 2 接受逾時即重綁**（frontend-only 不改 TTL）；後端調 TTL = 獨立決策，記 residual。
+- **OD-7（exchange 401 的 refresh 處理，HR-F3）**：exchange 用 `skipRefresh:true`、所有 401 視為「exchange 失敗→重啟」（簡單、消除 invalid-code 誤登出 footgun）**vs** 手動分支（對「非 EXCHANGE_CODE_* 的 401」`silentRefresh()` 一次再重打，保住「token 恰過期但 code 仍有效」的 auto-recover）。
+  - 傾向：**`skipRefresh:true` 簡單版**（baseline 不過度工程；scenario-2 罕見、退化僅「重啟」非登出）。手動分支列 fallback（R6），gate 認為值得保 auto-recover 再加。
 
 ---
 
@@ -370,11 +422,46 @@ function readAndClearReauthPending(): { action?: string; targetProvider?: string
 - **R3**：grant/exchange 綁 sid-字串；access token 殘留 15min 內、session 撤銷後仍可消費（既有 access-token tradeoff，§8）。
 - **R4（inherited Stage 1 R5）**：Stage 2 僅 same-origin；跨 origin factor-add caller 需後端 `cors.ts` 加 `X-Factor-Add-Grant` allow-header＝另案 backend plan（本 PR 不做）。
 - **R5**：reauth provider 候選用 `window.__reauthProviders`（UX hint，TOCTOU 容許）；flag 在 dashboard session 中途變動時，前端可能列出已 flagged 的 provider → init 403 graceful（§5.2）。
+- **R6（HR-F3 trade-off）**：exchange 用 `skipRefresh:true` → 罕見情境（access token 恰在 roundtrip 中過期 + exchange code 仍有效）不 auto-refresh、退回「重啟 reauth」。換取「對 invalid/expired/replay code 的 401 不誤登出」（更常見、傷害更大）。token 15min/code 2min，重疊窗極窄；接受此退化。若 gate 要求保住該情境，fallback＝resume 對「非 EXCHANGE_CODE_* 的 401」手動 `silentRefresh()` 一次再重打（多一分支，§10 OD-7）。
 
 ---
 
-## 12. dimension-A plan-self-review 裁決
-> （待跑 `.claude/workflows/plan-self-review.mjs`，scriptPath 調用，`args.planDocPath` 指本檔 → 主線獨立讀 plan 裁決後填）
+## 12. dimension-A plan-self-review 裁決（workflow `wf_0f503e7c-d69`，44 agents，7 維 × finder→對抗式 verify）
+
+> v3 紀律：workflow raw 輸出**非**結論。以下為主線獨立讀 plan + 核對 code（`dashboard.ts`/`api.ts`/`elevation.ts`/`callback.ts`）後的裁決。workflow 回報 **accepted 18 / suspicious_input 0**；其中**多數實為「確認 plan 已列的 scope 項」或「文件可更自足」**，**唯 1 條為實質正確性修補（HR-F3）**。**無 Tier-0 設計洞、無需後端改動。**
+
+### 12.1 實質正確性修補（已改 plan 設計）
+| ID | 維度 | 裁決 | 落點 |
+|---|---|---|---|
+| **HR-F3** | high-risk-idempotency t1 | **採納（最有價值）** | §5.2／§5.4 自相矛盾（exchange 是否 auto-retry）＋**logout footgun**：`/elevation/exchange` 走 apiFetch 預設 401→refresh→retry，會對 `EXCHANGE_CODE_INVALID` retry 死 code、第二次 401 被 `api.ts:256-261` 誤判 `SESSION_EXPIRED` **登出**。→ **fix：exchange 帶 `skipRefresh:true`**（§3.4）；§5.2/§5.4 重寫對齊（SESSION_REVOKED 仍硬登出；token 過期罕見→重啟＝R6）；新增 §7.2 R8 斷言。 |
+
+### 12.2 文件/規格自足性（已補 plan，無設計變更）
+| ID | 維度 | 落點 |
+|---|---|---|
+| SB-F2（+ security BIND_PROVIDERS 重複指控） | security-boundary t2 | §3.4：`BIND_PROVIDERS` 來源（`dashboard.ts:720`、4 筆、靜態白名單無 TOCTOU、apple 排除理由）＋ §7.2 R7 tamper test |
+| SS-F1／SS-F4／NS-F5／NS-F1／AC-F6（handlers） | spec-scope t1 / naming t2 / api t1 | **新增 §3.7**：`checkBindResult` `elev_error` 全集 error-path pseudocode ＋ 顯式 `ELEV_ERR_KEY` map（param→i18n key，鏡射 Stage 1 `bind_error`→`bind_err_*`）＋ `bind_error`/`elev_error` 兩 namespace 皆後端 frozen 的釐清 |
+| SS-F2 | spec-scope t2 | §7.2 新增 E2/E3/E4/E5（rate_limited/invalid_state/reverification_required/unknown fallback） |
+| HR-F6 | high-risk t2 | §5.2 新增「grant 在 exchange 後、寫入前逾 5min」failure row（403 `FACTOR_ADD_ELEVATION_REQUIRED`→重啟） |
+| HR-F5 | high-risk t2 | §3.6：sessionStorage 跨 cache-bust reload 存活 + per-tab 隔離 note |
+| TS-F3／TS-F4 | tenant-scope t2 | §8：elevation user+session-scoped by design（factors user-global，0054 無 tenant_id 為正確）；token-refresh tenant 重 derive 對 factor-add 無影響 |
+| MIG-F1／MIG-F2 | migration t2 | §9.0 Prerequisites & Contract Phase（0054/0055 已 prod；無 expand/migrate/contract；不新增 schema 依賴） |
+| MIG-F4 | migration t3 | §7：migration round-trip 由 `migrations.test.ts` 覆蓋、前端測試假設 post-0054/0055 |
+| AC-F2 | api-contract t2 | §6.1：`type ElevError` sealed union note；**拒** callback response version 欄（302 非 JSON contract，over-eng） |
+
+### 12.3 已在 scope（workflow 標 accepted＝確認需求正確，非 plan 缺口，無改）
+- **AC-F1**（API_ERROR_I18N 缺 EXCHANGE_CODE_*/ELEVATION_PROVIDER_NOT_BOUND）＝plan §6.2 **已列**要補（draft 尚未 implement 故 api.ts 現缺＝預期）。
+- **AC-F7**（Window `__reauthProviders` 型別）＝plan §3.5 **已列**「Window interface 補 `__reauthProviders?: string[]`」。
+- **AC-F6**（elev_error handlers 未 implement）＝plan §1.1 item 5 **已列**「elev_error 全集處理」；§3.7 補上 pseudocode。
+
+### 12.4 主線駁回（同意 verifier refuted，或 verifier accept 但主線降判）
+- security：fragment code 非空驗（§3.4 `if(!code)return` 已有）、ts/TTL clock-skew（明標 non-load-bearing，後端 CAS 為 SoT）、action 後端契約未載（§0.1 已載）、elev_error 未驗（§3.7 i18n map 即隱式白名單）＝皆 refuted。
+- tenant：elevation_grants/exchanges 無 `tenant_id`＝**正確設計**（factors user-global），非缺口（verifier 自身亦 refuted F1/F2）。
+- api：init/exchange response version 欄＝over-engineering（refuted）；action sealed enum「未集中宣告」＝已三處強制（refuted）。
+- naming：`elev_`(前端)/`elevation_`(後端) 分層、`checkElevExchange`/`resumeFactorAddFromExchange` 命名＝**刻意的 stage 邊界**（refuted）；`elev_reauth_no_candidate` 單 key 統一兩 0-候選情境（refuted）。
+- migration：oauth_states `session_id` 契約不清（init.ts:218 寫、callback 讀驗，load-bearing 已實作，refuted）。
+- idempotency：exchange 並發/idempotency-key（後端 one-time CAS 已是 idempotency primitive，refuted）。
+
+**結論：plan 經 1 實質修（HR-F3）+ 9 項文件自足補強後，無殘留 Tier-0 設計洞、後端零改不變、可送 ChatGPT Arch Gate。**
 
 ## 13. ChatGPT Arch Gate 裁決
 > （待 Arch Gate r1 後填）
