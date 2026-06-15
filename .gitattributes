@@ -4,8 +4,8 @@
 # truth for text files.
 * text=auto eol=lf
 
-# Windows PowerShell scripts keep CRLF in the working tree.
-# Git's EOL handling does not touch the UTF-8 BOM these scripts require.
+# Windows PowerShell scripts: pin CRLF in the working tree by convention.
+# (Git never rewrites a UTF-8 BOM, so any script that needs one keeps it.)
 *.ps1 text eol=crlf
 
 # Ship assets: declare binary explicitly so no text heuristic can corrupt them.
