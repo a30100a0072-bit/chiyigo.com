@@ -457,6 +457,12 @@ describe('OD-3 — bind-email requires_reverification block', () => {
     expect(res.status).toBe(403)
     expect((await res.json()).code).toBe('CREDENTIAL_REVERIFICATION_REQUIRED')
 
+    // Codex P2: this security signal is account-attributable — the audit binds the affected user_id.
+    const auditRow = await env.chiyigo_db
+      .prepare(`SELECT user_id FROM audit_log WHERE event_type='auth.credential.reverification_required' ORDER BY id DESC LIMIT 1`)
+      .first()
+    expect(Number(auditRow?.user_id)).toBe(Number(uid))
+
     // jti NOT consumed: same token again still hits the reverification gate (not LINK_ALREADY_USED)
     const res2 = await callBindEmail({ token, email: 'newbe@example.com' })
     expect(res2.status).toBe(403)

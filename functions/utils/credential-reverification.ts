@@ -59,48 +59,64 @@ export async function clearReverificationFlag(
   const table = CREDENTIAL_TABLE[type]
   const db = env.chiyigo_db
 
-  // pre-clear snapshot (user-scoped): read disposition_* BEFORE the CAS for the audit forensic record +
-  // the tier that drives dynamic severity. Reading by id+userId never touches another user's row.
-  const pre = await db
-    .prepare(`SELECT disposition_reason, disposition_by, disposition_at FROM ${table} WHERE id = ? AND user_id = ?`)
-    .bind(id, userId)
-    .first()
-  const preReason: string | null = pre?.disposition_reason ?? null
+  try {
+    // pre-clear snapshot (user-scoped): read disposition_* BEFORE the CAS for the audit forensic record +
+    // the tier that drives dynamic severity. Reading by id+userId never touches another user's row.
+    const pre = await db
+      .prepare(`SELECT disposition_reason, disposition_by, disposition_at FROM ${table} WHERE id = ? AND user_id = ?`)
+      .bind(id, userId)
+      .first()
+    const preReason: string | null = pre?.disposition_reason ?? null
 
-  // CAS: flip 1->0 only; do NOT overwrite disposition_* (OD-CLEAR=A). The user_id predicate is the ownership
-  // gate for self (token.sub) and a no-op uniformity bind for admin (row.user_id read by the caller).
-  const upd = await db
-    .prepare(`UPDATE ${table} SET requires_reverification = 0 WHERE id = ? AND user_id = ? AND requires_reverification = 1`)
-    .bind(id, userId)
-    .run()
-  if ((upd?.meta?.changes ?? 0) !== 1) return { cleared: false }   // CAS loser / already cleared -> no success audit
+    // CAS: flip 1->0 only; do NOT overwrite disposition_* (OD-CLEAR=A). The user_id predicate is the ownership
+    // gate for self (token.sub) and a no-op uniformity bind for admin (row.user_id read by the caller).
+    const upd = await db
+      .prepare(`UPDATE ${table} SET requires_reverification = 0 WHERE id = ? AND user_id = ? AND requires_reverification = 1`)
+      .bind(id, userId)
+      .run()
+    if ((upd?.meta?.changes ?? 0) !== 1) return { cleared: false }   // CAS loser / already cleared -> no success audit
 
-  // success audit (CAS winner only). Dynamic severity (Arch C3): admin+high=critical / admin=warn / self=info.
-  const credentialTier = dispositionTierFromReason(preReason)
-  const severity = actorType === 'admin'
-    ? (credentialTier === 'high' ? 'critical' : 'warn')
-    : 'info'
-  const sig = await hashIdentifierForAudit(env, 'credential-disposition', `${type}:${id}`)
-  await safeUserAudit(env, {
-    event_type: 'account.credential.reverification_cleared',
-    severity,
-    user_id: userId,
-    request,
-    data: {
-      credential_type:  type,
-      actor_type:       actorType,
-      clear_method:     clearMethod,
-      credential_tier:  credentialTier,
-      result:           'cleared',
-      id_hmac16:        sig.hex.slice(0, 16),
-      salted:           sig.salted,
-      pre_clear_reason: preReason,
-      pre_clear_by:     pre?.disposition_by ?? null,
-      pre_clear_at:     pre?.disposition_at ?? null,
-      ...(actorType === 'admin' ? { admin_actor: actorId ?? null, reason: reason ?? null } : {}),
-      ...(dormant ? { dormant: true } : {}),
-    },
-  })
+    // success audit (CAS winner only). Dynamic severity (Arch C3): admin+high=critical / admin=warn / self=info.
+    const credentialTier = dispositionTierFromReason(preReason)
+    const severity = actorType === 'admin'
+      ? (credentialTier === 'high' ? 'critical' : 'warn')
+      : 'info'
+    const sig = await hashIdentifierForAudit(env, 'credential-disposition', `${type}:${id}`)
+    await safeUserAudit(env, {
+      event_type: 'account.credential.reverification_cleared',
+      severity,
+      user_id: userId,
+      request,
+      data: {
+        credential_type:  type,
+        actor_type:       actorType,
+        clear_method:     clearMethod,
+        credential_tier:  credentialTier,
+        result:           'cleared',
+        id_hmac16:        sig.hex.slice(0, 16),
+        salted:           sig.salted,
+        pre_clear_reason: preReason,
+        pre_clear_by:     pre?.disposition_by ?? null,
+        pre_clear_at:     pre?.disposition_at ?? null,
+        ...(actorType === 'admin' ? { admin_actor: actorId ?? null, reason: reason ?? null } : {}),
+        ...(dormant ? { dormant: true } : {}),
+      },
+    })
 
-  return { cleared: true }
+    return { cleared: true }
+  } catch (e) {
+    // OD-3 plan §8/§10 (Codex Plan P2-3): a clear-path D1 / HMAC failure is a SystemError, NOT a fake
+    // registry audit event. Emit a structured error log (clear-specific context + traceId) and re-throw so
+    // the calling endpoint maps it to 500 and _middleware fires the 5xx alert. No success audit on this path
+    // (the throw precedes the audit; safeUserAudit itself swallows its own write errors so never reaches here).
+    console.error(JSON.stringify({
+      level:           'error',
+      event:           'credential.reverification.clear_error',
+      actor_type:      actorType,
+      credential_type: type,
+      trace_id:        request?.headers?.get('X-Request-Id') ?? null,
+      error:           e instanceof Error ? e.message : String(e),
+    }))
+    throw e
+  }
 }

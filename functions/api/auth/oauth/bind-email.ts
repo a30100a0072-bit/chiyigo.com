@@ -109,14 +109,16 @@ export async function onRequestPost(context) {
   // OD-3：flagged identity 使用前強制 re-verify。**read-only 預檢、在 consumeJtiOnce 之前** → flagged 不消費
   // temp_bind link（合法用戶 reverify 後可用同一連結重試）、不簽 token。new identity（無 row）為 flag=0、不受影響。
   const rvFlagRow = await env.chiyigo_db
-    .prepare(`SELECT ui.requires_reverification AS rr FROM user_identities ui
+    .prepare(`SELECT ui.user_id AS user_id, ui.requires_reverification AS rr FROM user_identities ui
               JOIN users u ON u.id = ui.user_id
               WHERE ui.provider = ? AND ui.provider_id = ? AND u.deleted_at IS NULL`)
     .bind(provider, provider_id).first()
   if (rvFlagRow?.rr) {
     const rvSig = await hashIdentifierForAudit(env, 'oauth-provider-id', String(provider_id))
+    // bind affected user_id so this security signal is account-attributable (parity with the other 3 surfaces; Codex P2).
     await safeUserAudit(env, {
-      event_type: 'auth.credential.reverification_required', severity: 'warn', request,
+      event_type: 'auth.credential.reverification_required', severity: 'warn',
+      user_id: Number(rvFlagRow.user_id), request,
       data: { method: `oauth_login:${provider}`, provider_id_hmac16: rvSig.hex.slice(0, 16), salted: rvSig.salted },
     })
     return res({ error: 'This identity requires re-verification before use', code: 'CREDENTIAL_REVERIFICATION_REQUIRED' }, 403)

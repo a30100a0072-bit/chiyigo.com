@@ -70,10 +70,16 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   const rowUserId = Number(row.user_id)
 
   // ── clear (CAS; already-clear -> cleared:false idempotent). Wallet flag is informational-only -> dormant audit. ──
-  const { cleared } = await clearReverificationFlag(env, {
-    type: credType, id: credentialId, userId: rowUserId,
-    actorType: 'admin', clearMethod: 'admin_clear', actorId, reason,
-    dormant: credType === 'wallet', request,
-  })
+  // A clear-path D1 failure is a SystemError -> 500 (the clear-core emits the structured log); no success audit.
+  let cleared = false
+  try {
+    cleared = (await clearReverificationFlag(env, {
+      type: credType, id: credentialId, userId: rowUserId,
+      actorType: 'admin', clearMethod: 'admin_clear', actorId, reason,
+      dormant: credType === 'wallet', request,
+    })).cleared
+  } catch {
+    return res({ error: 'Failed to clear reverification flag', code: 'CREDENTIAL_REVERIFICATION_CLEAR_FAILED' }, 500)
+  }
   return res({ ok: true, cleared })   // count/bool only — no credential detail
 }

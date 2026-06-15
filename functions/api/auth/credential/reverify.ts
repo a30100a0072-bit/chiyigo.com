@@ -119,9 +119,15 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
   }
 
   // 7. clear (CAS; loser -> cleared:false, no success audit). Only through the shared clear-core.
+  // A clear-path D1 failure is a SystemError -> 500 (the clear-core emits the structured log); no success audit.
   await clearRateLimit(db, { kind: 'credential_reverification', userId })
-  const { cleared } = await clearReverificationFlag(env, {
-    type: credType, id: credentialId, userId, actorType: 'self', clearMethod, request,
-  })
+  let cleared = false
+  try {
+    cleared = (await clearReverificationFlag(env, {
+      type: credType, id: credentialId, userId, actorType: 'self', clearMethod, request,
+    })).cleared
+  } catch {
+    return res({ error: 'Failed to clear reverification flag', code: 'CREDENTIAL_REVERIFICATION_CLEAR_FAILED' }, 500)
+  }
   return res({ ok: true, cleared })
 }

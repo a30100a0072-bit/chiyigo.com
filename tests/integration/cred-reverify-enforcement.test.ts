@@ -9,7 +9,7 @@
  * NOTE: seedUser() already creates a local_accounts row with password PW (and no TOTP). So a "password account"
  * is just seedUser; enableTotp() promotes it to a 2FA account; removeLocalAccount() makes it OAuth-only.
  */
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
@@ -348,6 +348,57 @@ describe('OD-3 step 5 — clearReverificationFlag CAS loser', () => {
     const second = await clearReverificationFlag(env, { type: 'identity', id: idId, userId: u.id, actorType: 'self', clearMethod: 'password', request: new Request('http://x') })
     expect(second.cleared).toBe(false)
     expect(await clearAudits()).toHaveLength(1)   // only the winner emitted
+  })
+})
+
+// Codex Code Gate P1 — a clear-path D1 failure must be a SystemError (structured log + 500), NOT a fake
+// registry audit event, and must not emit a success audit (plan §8/§10 line 201).
+describe('OD-3 — clear-path D1 failure (Codex P1)', () => {
+  it('clear-core: D1 throw -> structured SystemError log (clear-specific + traceId) + re-throw, no success audit', async () => {
+    const u = await seedUser({ email: 'p1h@x' })
+    const idId = await seedIdentity(u.id, 'google', 'g-p1h', { flagged: true, reason: 'unknown_context' })
+    // fake env whose D1 throws on the first prepare (the pre-clear SELECT); real env.chiyigo_db is untouched.
+    const brokenEnv = { ...env, chiyigo_db: { prepare() { throw new Error('D1 boom') } } }
+    const errLines: string[] = []
+    const origErr = console.error
+    console.error = (m: string) => { errLines.push(m) }
+    let threwBoom = false
+    try {
+      await clearReverificationFlag(brokenEnv, {
+        type: 'identity', id: idId, userId: u.id, actorType: 'self', clearMethod: 'password',
+        request: new Request('http://x', { headers: { 'X-Request-Id': 'trace-p1h' } }),
+      })
+    } catch (e) { threwBoom = e instanceof Error && e.message === 'D1 boom' } finally { console.error = origErr }
+    expect(threwBoom).toBe(true)                 // re-thrown so the endpoint/middleware maps to 500
+    expect(errLines.length).toBeGreaterThan(0)
+    const logged = JSON.parse(errLines[0]) as Record<string, unknown>
+    expect(logged.level).toBe('error')
+    expect(logged.event).toBe('credential.reverification.clear_error')
+    expect(logged.actor_type).toBe('self')
+    expect(logged.trace_id).toBe('trace-p1h')    // structured log carries traceId (plan §8)
+    // real DB untouched: flag still set, and NO success audit ledger event (not faked)
+    expect((await flagOf('user_identities', idId)).flag).toBe(1)
+    expect(await clearAudits()).toHaveLength(0)
+  })
+
+  it('reverify endpoint: clear-path D1 throw -> 500 CREDENTIAL_REVERIFICATION_CLEAR_FAILED, flag untouched, no success audit', async () => {
+    const u = await seedUser({ email: 'p1e@x' })
+    const idId = await seedIdentity(u.id, 'google', 'g-p1e', { flagged: true, reason: 'unknown_context' })
+    const realPrepare = env.chiyigo_db.prepare.bind(env.chiyigo_db)
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // throw ONLY on the clear-core pre-SELECT (3-col disposition snapshot); all earlier gates use the real DB.
+    const prepSpy = vi.spyOn(env.chiyigo_db, 'prepare').mockImplementation((sql: string) => {
+      if (sql.includes('disposition_reason, disposition_by, disposition_at')) throw new Error('D1 boom')
+      return realPrepare(sql)
+    })
+    let r: { status: number; body: Record<string, unknown> }
+    try {
+      r = await callReverify(await regularToken(u.id), { type: 'identity', credential_id: idId, password: PW })
+    } finally { prepSpy.mockRestore(); errSpy.mockRestore() }
+    expect(r.status).toBe(500)
+    expect(r.body.code).toBe('CREDENTIAL_REVERIFICATION_CLEAR_FAILED')
+    expect((await flagOf('user_identities', idId)).flag).toBe(1)   // clear never committed
+    expect(await clearAudits()).toHaveLength(0)                    // no success audit on the failure path
   })
 })
 
