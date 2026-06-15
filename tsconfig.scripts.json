@@ -25,7 +25,8 @@
   },
   "include": [
     "scripts/**/*.js",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "scripts/lib/asset-versioning.mjs"
   ],
   "exclude": [
     "scripts/fixtures/**"

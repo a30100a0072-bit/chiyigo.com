@@ -15,41 +15,19 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { execSync, execFileSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import Handlebars from 'handlebars'
 import { injectI18n } from './lib/inject-i18n.js'
+import { assetVersion, resolveAssetPath, injectCacheBust } from './lib/asset-versioning.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// P2-8：build-time cache-bust 版號（git short hash），全站 <script src> / <link href> 統一蓋。
-// 失敗（沒裝 git / 不在 repo）退回 timestamp，不擋 build。
-// BUILD_VER env override：cache-bust commit 重跑 build 時鎖定目標 hash，保證 idempotent。
-function resolveBuildVer() {
-  const envVer = process.env.BUILD_VER && process.env.BUILD_VER.trim()
-  if (envVer && /^[0-9a-zA-Z._-]{1,40}$/.test(envVer)) return envVer
-  try {
-    const h = execSync('git rev-parse --short=8 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString().trim()
-    if (/^[0-9a-f]{6,12}$/.test(h)) return h
-  } catch { /* fall through */ }
-  return 'b' + Date.now().toString(36)
-}
-const BUILD_VER = resolveBuildVer()
-
-// 規則：只蓋 src 開頭是 / 的本地資源（避開 CDN / 跨網域）。
-//   - 已有 ?v=... → 取代為 build hash（可手動 bump 但被自動覆蓋為一致）
-//   - 已有其他 ?query → 後綴 &v=hash
-//   - 沒 query → 加 ?v=hash
-const ASSET_RE = /\b(src|href)="(\/[^"#?]+\.(?:js|css|mjs))(\?[^"#]*)?(#[^"]*)?"/g
-function injectCacheBust(html) {
-  return html.replace(ASSET_RE, (_, attr, p, query, hash) => {
-    let q
-    if (!query) q = `?v=${BUILD_VER}`
-    else if (/[?&]v=/.test(query)) q = query.replace(/([?&])v=[^&]*/, `$1v=${BUILD_VER}`)
-    else q = `${query}&v=${BUILD_VER}`
-    return `${attr}="${p}${q}${hash || ''}"`
-  })
-}
+// Cache-bust `?v=` is per-file content hash via scripts/lib/asset-versioning.mjs (that file
+// explains why git-HEAD versioning was replaced). Tailwind is special-cased: tailwind.config.cjs
+// scans the generated public HTML, so tailwind.css is built only AFTER pages render — PASS-1
+// emits a sentinel for its ?v=, and patchTailwindVer (PASS-2) replaces it with the real hash.
+const TAILWIND_PATH = '/css/tailwind.css'
+const TAILWIND_SENTINEL = '__TAILWIND_VER_PENDING__'
 const ROOT = path.resolve(__dirname, '..')
 const SRC_PAGES = path.join(ROOT, 'src/pages')
 const SRC_PARTIALS = path.join(ROOT, 'src/partials')
@@ -101,7 +79,7 @@ async function buildPage(filename) {
   // 並清掉「整行皆空白」的行（Handlebars 巢狀 partial 縮排會把 partial 內的空行渲染成
   // 純空白行 → git diff --check / PR hygiene 會抱怨）。只清整行空白、不動有內容行的尾隨
   // 空白，故不影響 <pre>/<textarea> 內容（站內 textarea 皆空 default、無多行內容）。
-  const out = injectCacheBust(rendered).replace(/^[ \t]+$/gm, '')
+  const out = injectCacheBust(rendered, pass1Ver).replace(/^[ \t]+$/gm, '')
   await fs.mkdir(path.dirname(outPath), { recursive: true })
   await fs.writeFile(outPath, out, 'utf8')
 }
@@ -203,8 +181,58 @@ async function buildCss() {
   return count
 }
 
+// PASS-1 version resolver: content-hash every local asset EXCEPT /css/tailwind.css. Tailwind
+// scans the rendered public HTML, so its file exists only after pages render; defer its ?v= to
+// a sentinel that PASS-2 patches. (function decl → hoisted, so buildPage above can reference it.)
+function pass1Ver(assetPath) {
+  if (assetPath === TAILWIND_PATH) return TAILWIND_SENTINEL
+  return assetVersion(resolveAssetPath(assetPath, OUT_DIR))
+}
+
+// Build final public/css/tailwind.css via the local Tailwind CLI (execFileSync, no shell string).
+// MUST run after PASS-1 renders pages — Tailwind's content source is ./public/**/*.html + js.
+function ensureTailwind() {
+  const tailwindCli = path.join(ROOT, 'node_modules', 'tailwindcss', 'lib', 'cli.js')
+  execFileSync(
+    process.execPath,
+    [tailwindCli, '-c', 'tailwind.config.cjs', '-i', 'src/css/tailwind.css', '-o', 'public/css/tailwind.css', '--minify'],
+    { cwd: ROOT, stdio: ['ignore', 'inherit', 'inherit'], maxBuffer: 16 * 1024 * 1024 },
+  )
+}
+
+// PASS-2: replace tailwind.css's deferred sentinel with its real content hash. Targeted literal
+// substitution only; the reverse-check proves no other HTML byte changed (build-time guard for
+// the "PASS-2 must not re-render / drift" invariant — owner hard gate).
+async function patchTailwindVer() {
+  const twVer = assetVersion(resolveAssetPath(TAILWIND_PATH, OUT_DIR))
+  const needle = `${TAILWIND_PATH}?v=${TAILWIND_SENTINEL}`
+  const replacement = `${TAILWIND_PATH}?v=${twVer}`
+  let patched = 0
+  const files = await fs.readdir(OUT_DIR)
+  for (const f of files) {
+    if (!f.endsWith('.html')) continue
+    const p = path.join(OUT_DIR, f)
+    const html = await fs.readFile(p, 'utf8')
+    if (!html.includes(TAILWIND_SENTINEL)) continue
+    const next = html.split(needle).join(replacement)
+    if (next.includes(TAILWIND_SENTINEL)) {
+      throw new Error(`PASS-2: ${f} still has tailwind sentinel after patch (unexpected reference shape)`)
+    }
+    if (next.split(replacement).join(needle) !== html) {
+      throw new Error(`PASS-2: non-targeted change detected in ${f} — only tailwind.css ?v= may change`)
+    }
+    await fs.writeFile(p, next, 'utf8')
+    patched++
+  }
+  return { patched, twVer }
+}
+
 async function buildAll() {
   const partialCount = await loadPartials()
+  // assets-first / HTML-last (two-pass): JS + non-tailwind CSS must exist before pages render so
+  // PASS-1 can content-hash them; tailwind.css is built after (it scans the pages) then patched.
+  const jsCount = await buildJs()
+  const cssCount = await buildCss()
   let pageCount = 0
   try {
     const files = await fs.readdir(SRC_PAGES)
@@ -216,10 +244,10 @@ async function buildAll() {
   } catch (e) {
     if (e.code !== 'ENOENT') throw e
   }
-  const jsCount = await buildJs()
-  const cssCount = await buildCss()
+  ensureTailwind()
+  const { patched, twVer } = await patchTailwindVer()
   const ts = new Date().toLocaleTimeString()
-  console.log(`[${ts}] built ${pageCount} pages, ${jsCount} js, ${cssCount} css, ${partialCount} partials`)
+  console.log(`[${ts}] built ${pageCount} pages, ${jsCount} js, ${cssCount} css, ${partialCount} partials; tailwind ?v=${twVer} (${patched} page(s))`)
 }
 
 // ── Watch mode ──────────────────────────────────────────
