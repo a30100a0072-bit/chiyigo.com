@@ -291,6 +291,13 @@ UPDATE <table> SET requires_reverification = 0
 - **零副作用 reconfirm**：passkey counter 不變 + 無 access_token／callback 5b `display_name` 不改 + refresh 0／bind-email jti 未消費（第二次同 token 仍 403）／callback 5a 無 exchange／全 deny path 不簽 token-or-grant。
 - **no-migration / public/js isolation**：見 §10（git diff 無 `migrations/`、`_setup.sql` 未改；staged 僅 step-7 intentional outputs；剩 19 phantom/EOL 零真實內容、未 stage）。
 
+**Codex Code Gate r1（2026-06-15）→ REJECT〔2 finding〕→ fixed `633b9c69` → 待 r2**
+
+- **P1**（observability / plan-contract，plan §8 line 201）：clear-path D1/HMAC 失敗原本沒走 structured SystemError log（只靠 `_middleware` 泛用 500）。修：`clearReverificationFlag` 包 try/catch → 結構化 error log（`event=credential.reverification.clear_error` + actor_type + credential_type + trace_id）+ re-throw；reverify / admin clear 兩 endpoint catch → `500 CREDENTIAL_REVERIFICATION_CLEAR_FAILED`；失敗路徑**不發 success audit**；**非 registry event**，registry 維持 **228**。
+- **P2**（forensics）：bind-email flagged block 的 `auth.credential.reverification_required` audit 缺 affected `user_id`（其餘 4 surface 皆帶）。修：block query 補 `ui.user_id`、audit 帶 `user_id` → security signal 可歸屬帳戶。
+- 3 條 regression test（**stash 實證 pre-fix RED**：移除 fix 後恰好這 3 條 fail）；gates：ratchet 898（0 new）／lint／build:functions／affected int **89 pass**；**backend-only，無 frontend / public/js 變更**。
+- non-blocking note（admin clear `reason` raw text 入 audit）→ §14 backlog（plan 允許 `[admin_actor, reason]`，故非 blocker）。
+
 ---
 
 ## 13. Gate watch items（給 ChatGPT Arch + Codex Plan/Code）
@@ -325,6 +332,7 @@ UPDATE <table> SET requires_reverification = 0
 - **global `users.status='suspended'` 無 login/step-up enforcement**（repo-wide parity gap；本 PR 維持 parity）。
 - **未來「週期性 re-flag」系統**（若有）：不可裸用 `disposition_at IS NULL` 當可見性 gate。
 - **i18nize dynamic reverify modal chrome（Step 7 follow-up，owner accept non-blocking）**：dashboard reverify modal 的 chrome（標題／輸入 placeholder／取消·確認鈕）目前硬寫 zh-TW，對齊 `dashboard.ts` 既有動態 modal 慣例（`req-detail-modal` 同款硬寫）。持久 UI（badge／button／toast）已 4 語系 i18n。未來補 ~5 key × 4 語系把 modal chrome 也 i18n 化。
+- **admin clear `reason` → reason_code / ticket_id（Codex Code Gate r1 non-blocking）**：admin clear 的 `reason` 目前是 raw free text 並入 `account.credential.reverification_cleared` audit payload。plan 明列允許 `[admin_actor, reason]`，故**非 blocker**；但若日後嚴格執行「audit 不落任何 free-text（僅 hmac / enum / code）」，可改成 `reason_code` enum 或 `ticket_id`，或入庫前 redact。
 
 ---
 
