@@ -699,10 +699,12 @@ async function armOrConfirmPayDelete(id) {
   if (!bindOk && !bindError) return;
   history.replaceState(null, '', '/dashboard.html');
   const ERR_KEY = {
-    already_linked:  'bind_err_already',
-    identity_taken:  'bind_err_taken',
-    invalid_state:   'bind_err_state',
-    account_invalid: 'bind_err_account',
+    already_linked:     'bind_err_already',
+    identity_taken:     'bind_err_taken',
+    invalid_state:      'bind_err_state',
+    account_invalid:    'bind_err_account',
+    elevation_required: 'bind_err_elevation_required',   // callback: factor_add_binding state 缺 / grant 不符
+    elevation_consumed: 'bind_err_elevation_consumed',   // callback: grant 在 provider 同意期間逾 TTL / 已用
   };
   setTimeout(() => {
     if (bindOk === 'success') {
@@ -770,8 +772,14 @@ function renderBindingSection(identities) {
 async function bindProvider(provider) {
   const btn = document.getElementById(`bind-btn-${provider}`) as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
+  // SEC-FACTOR-ADD Stage 1：綁新 OAuth identity = factor-add，先取 elevation grant，再以 header 出示給 init。
+  // grant 掛在 apiFetch（可帶 custom header）；init 回的 redirect_url 才由 window.location.href 導頁（導頁不帶 header）。
+  const grant = await obtainFactorAddGrant('bind_identity');
+  if (!grant) { if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); } return; }
   try {
-    const data = await window.apiFetch<{ redirect_url?: string }>(`/api/auth/oauth/${provider}/init?is_binding=true`);
+    const data = await window.apiFetch<{ redirect_url?: string }>(`/api/auth/oauth/${provider}/init?is_binding=true`, {
+      headers: { 'X-Factor-Add-Grant': grant.grant_token },
+    });
     if (!data?.redirect_url) {
       showBindToast(T('bind_fail'), 'err');
       if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); }
@@ -869,6 +877,82 @@ function openReverifyModal(provider: string, credentialId: number, useTotp: bool
   };
   document.getElementById('reverify-submit')?.addEventListener('click', submit);
   input?.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+}
+
+// ── SEC-FACTOR-ADD Stage 1：新增登入因子前的 factor-add elevation ───────────────
+// 新增 passkey / 綁 wallet / 綁 OAuth identity 皆為 factor-add，後端要求先出示一張 one-time、5min、
+// session(sid) 綁定的 elevation grant（X-Factor-Add-Grant header）。這裡用「獨立持有的因子」（TOTP/備用
+// 碼，或無 2FA 時用目前密碼）證明本人後向 /elevation/{totp,password} 鑄 grant。grant 只存記憶體、用完
+// 即棄（不進 URL / storage / log）。OAuth-only（無 TOTP 無密碼）Stage 1 不支援，顯示引導（Stage 2 補）。
+type FactorAddAction = 'add_passkey' | 'bind_wallet' | 'bind_identity';
+
+async function obtainFactorAddGrant(action: FactorAddAction): Promise<{ grant_token: string } | null> {
+  const hasTotp = !!window.__totpEnabled;
+  const hasPw   = !!window.__hasPassword;
+  // __totpEnabled / __hasPassword 僅 UX hint（決定問哪種因子）；最終授權由後端 elevation 端點 fail-closed 判定。
+  if (!hasTotp && !hasPw) { showBindToast(T('factor_add_no_channel'), 'warn'); return null; }
+  return openElevationModal(action, hasTotp);
+}
+
+function openElevationModal(action: FactorAddAction, useTotp: boolean): Promise<{ grant_token: string } | null> {
+  return new Promise<{ grant_token: string } | null>(resolve => {
+    document.getElementById('elevation-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'elevation-modal';
+    modal.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4';
+    const inputType = useTotp ? 'text' : 'password';
+    modal.innerHTML = `
+      <div class="relative w-full max-w-md rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] p-5">
+        <h3 class="text-base font-semibold text-[var(--text)] mb-1">${T('factor_add_modal_title')}</h3>
+        <p class="text-xs text-[var(--text-muted)] mb-4">${T('factor_add_modal_hint')}</p>
+        <input id="elevation-input" type="${inputType}" autocomplete="${useTotp ? 'one-time-code' : 'current-password'}"
+          ${useTotp ? 'inputmode="numeric"' : ''} placeholder="${useTotp ? T('factor_add_ph_totp') : T('factor_add_ph_pw')}"
+          class="w-full px-3 py-2 rounded-lg bg-[#1a1a22] border border-[var(--border-bright)] text-[var(--text)] text-sm mb-2 outline-none focus:border-brand-400" />
+        <p id="elevation-err" class="text-xs text-red-400 mb-3 hidden"></p>
+        <div class="flex justify-end gap-2">
+          <button id="elevation-cancel" class="px-3 py-1.5 rounded-lg bg-[#1a1a22] hover:bg-[#23232c] border border-[var(--border-bright)] text-[var(--text)] text-xs transition-all">${T('factor_add_cancel')}</button>
+          <button id="elevation-submit" class="px-3 py-1.5 rounded-lg bg-brand-500/15 hover:bg-brand-500/20 border border-brand-500/30 text-brand-300 text-xs font-semibold transition-all">${T('factor_add_confirm')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const input = document.getElementById('elevation-input') as HTMLInputElement | null;
+    const errEl = document.getElementById('elevation-err');
+    input?.focus();
+    let settled = false;
+    let submitting = false;   // in-flight guard: Enter-key submit bypasses button.disabled (code-review SR #3/#6)
+    const finish = (v: { grant_token: string } | null) => { if (settled) return; settled = true; modal.remove(); resolve(v); };
+    modal.addEventListener('click', e => { if (e.target === modal) finish(null); });
+    document.getElementById('elevation-cancel')?.addEventListener('click', () => finish(null));
+    const submit = async () => {
+      if (submitting) return;   // ignore re-entry (double click / repeated Enter) while a mint is in flight
+      const v = (input?.value ?? '').trim();
+      if (!v) { input?.focus(); return; }
+      submitting = true;
+      const sBtn = document.getElementById('elevation-submit') as HTMLButtonElement | null;
+      if (sBtn) { sBtn.disabled = true; sBtn.textContent = T('btn_loading'); }
+      if (errEl) errEl.classList.add('hidden');
+      const showErr = (text: string) => {
+        submitting = false;   // allow retry after a failed mint
+        if (errEl) { errEl.textContent = text; errEl.classList.remove('hidden'); }
+        if (sBtn) { sBtn.disabled = false; sBtn.textContent = T('factor_add_confirm'); }
+      };
+      try {
+        const endpoint = useTotp ? '/api/auth/elevation/totp' : '/api/auth/elevation/password';
+        const body = useTotp ? { action, otp_code: v } : { action, current_password: v };
+        const data = await window.apiFetch<{ grant_token?: string; expires_in?: number }>(endpoint, {
+          method: 'POST',
+          body:   JSON.stringify(body),
+        });
+        // 回應形狀守衛：grant_token 必為非空字串，否則 fail-closed（不拿空 grant 續 ceremony）。
+        if (typeof data?.grant_token !== 'string' || !data.grant_token) { showErr(T('net_err')); return; }
+        finish({ grant_token: data.grant_token });
+      } catch (e) {
+        showErr(window.tApiError(e, T('net_err')));
+      }
+    };
+    document.getElementById('elevation-submit')?.addEventListener('click', submit);
+    input?.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  });
 }
 
 let _toastTimer;
@@ -1750,6 +1834,9 @@ async function addPasskey() {
     msg.classList.remove('hidden');
   };
   if (btn) btn.disabled = true;
+  // SEC-FACTOR-ADD Stage 1：新增 passkey = factor-add，先取 elevation grant（避免無法 elevate 卻先叫出 authenticator）。
+  const grant = await obtainFactorAddGrant('add_passkey');
+  if (!grant) { if (btn) btn.disabled = false; return; }
   showMsg(T('passkey_adding'), 'ok');
   try {
     const opts = await window.apiFetch<Record<string, unknown> & {
@@ -1784,6 +1871,7 @@ async function addPasskey() {
     };
     await window.apiFetch('/api/auth/webauthn/register-verify', {
       method: 'POST',
+      headers: { 'X-Factor-Add-Grant': grant.grant_token },
       body:   JSON.stringify({ response: responseJson, nickname: T('passkey_default_nickname') }),
     });
     showMsg(T('passkey_add_success'), 'ok');
@@ -1964,6 +2052,9 @@ async function addWallet() {
   };
 
   if (btn) btn.disabled = true;
+  // SEC-FACTOR-ADD Stage 1：綁 wallet = factor-add，先取 elevation grant，再以 header 出示給 wallet/verify。
+  const grant = await obtainFactorAddGrant('bind_wallet');
+  if (!grant) { if (btn) btn.disabled = false; return; }
   showMsg(T('wallet_connecting'), 'ok');
 
   try {
@@ -2032,6 +2123,7 @@ async function addWallet() {
     // 4) verify + bind
     await window.apiFetch('/api/auth/wallet/verify', {
       method: 'POST',
+      headers: { 'X-Factor-Add-Grant': grant.grant_token },
       body:   JSON.stringify({ message: messageRaw, signature }),
     });
 
