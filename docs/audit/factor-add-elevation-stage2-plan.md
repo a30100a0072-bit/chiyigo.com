@@ -1,6 +1,6 @@
 # FACTOR-ADD 前端 elevation 接線 plan（Stage 2：OAuth-only OAuth-reauth elevation）
 
-> **狀態**：`PLAN_SELF_REVIEWED`（dimension-A self-review ✅ §12：workflow `wf_0f503e7c-d69`，1 實質修 HR-F3 + 9 文件自足補強）→ 待 ChatGPT Arch Gate（§13）→ Codex Plan Gate（§14）。
+> **狀態**：`PLAN_ARCH_APPROVED`（dimension-A self-review ✅ §12〔1 實質修 HR-F3 + 9 文件補強〕＋ **ChatGPT Arch Gate ✅ APPROVED §13**〔無 blocking C-item；A1–A5 hardening 已採納〕）→ 待 Codex Plan Gate（§14）。
 > **分級**：L2（前端 feature 接線）+ **敏感熱區**（auth / factor-add / token / OAuth roundtrip）→ 三道基本外部審查全走（GPT Arch + Codex Plan + Codex Code）+ §5 高風險加碼 4 件。
 > **前置裁決**：owner = **Option 2**；Stage 1（TOTP/password elevation）已 MERGED #84 `285b8987`，本 PR 接續 Stage 1 的 §1.2 OUT 項。
 > **後端**：**零改動、無 migration**。整套 OAuth-reauth elevation primitive（`init?purpose=elevation` + `callback` 5a + `/api/auth/elevation/exchange`）已於 #77（PR-A2）建全並測全綠。本 PR 只補**前端跨 redirect ceremony 驅動**。
@@ -131,9 +131,10 @@ async function startOAuthReauthElevation(
 - 回傳 `Promise<{grant_token}|null>`；語意：
   - 取消 / 點遮罩 / Esc → `resolve(null)`（caller 還原按鈕）。
   - 選 provider（async handler，含 `submitting` in-flight guard）：
-    1. `apiFetch<{redirect_url?}>(GET /api/auth/oauth/<p>/init?purpose=elevation&action=<action>)`（same-origin，header 走 `apiFetch` 自動 Authorization）。
+    1. `apiFetch<{redirect_url?}>(GET /api/auth/oauth/${encodeURIComponent(reauthProvider)}/init?purpose=elevation&action=${action})`（same-origin，header 走 `apiFetch` 自動 Authorization）。**A1**：`encodeURIComponent` reauth provider path segment（即使候選已 §3.5 whitelist 過、server-sourced string 仍不裸進 path，defense-in-depth）。
     2. 失敗 / 無 `redirect_url` → modal 內顯示錯誤（`tApiError`，403/429 走 API_ERROR_I18N 友善碼）+ 重置 `submitting` 可重試；**不** persist、**不**導頁。
-    3. 成功 → `persistReauthPending({ action, targetProvider, ts: Date.now() })` → `window.location.href = data.redirect_url`，modal 切「前往中」狀態。**Promise 不 resolve**（整頁導航即將拆掉執行環境；await 永不完成是預期，非 leak）。
+    3. 成功 → **先 persist 再導頁，且 persist 須成功**（A2）：`if (!persistReauthPending({ action, targetProvider, ts: Date.now() })) { modal 顯示 T('elev_reauth_storage_blocked') 錯誤 + 重置 submitting；不導頁；return; }` → 通過才 `window.location.href = data.redirect_url`，modal 切「前往中」狀態。**Promise 不 resolve**（整頁導航即將拆掉執行環境；await 永不完成是預期，非 leak）。
+      - **A2 理由**：`persistReauthPending` 回 `boolean`（§3.6）；storage 被封鎖（無痕/隱私模式邊角）時若仍導頁，使用者會白做整段 OAuth roundtrip 才撞 `resume-lost`。先確認 persist 成功再導頁＝避免該 silent 失敗。
 - **為何 dedicated（OD-3-frontend）**：與 Stage 1 elevation modal（收 OTP/密碼、單頁 resolve grant）控制流不同（這裡是「選 provider → 導頁、不在本頁 resolve」）；與 reverify modal（fire-and-forget reload）也不同。三者都在安全邊界，硬抽象會耦合三條安全流程。抽象判斷不過關（僅此一 caller 群、讀者更難懂），複製 ~15 行 markup 成本低、隔離性高（[[feedback_security_boundary_pr_first_do_no_harm]]）。
 
 ### 3.4 `#elev_exchange` fragment handler + resume
@@ -181,20 +182,27 @@ async function resumeFactorAddFromExchange(
 ### 3.5 `loadProfile` 補 `window.__reauthProviders`
 ```ts
 // data.identities：[{ provider, requires_reverification, ... }]
+// A1 hardening：交集 BIND_PROVIDERS（已知 OAuth 集合）→ server-sourced provider 不裸放進 reauth 候選/path。
+const KNOWN = new Set(BIND_PROVIDERS.map(b => b.id));
 window.__reauthProviders = [...new Set(
-  (data.identities ?? []).filter(i => !i.requires_reverification).map(i => i.provider)
+  (data.identities ?? [])
+    .filter(i => !i.requires_reverification)
+    .map(i => i.provider)
+    .filter(p => KNOWN.has(p))          // A1：只留已知 provider（防 enum 漂移 / 髒值進 path）
 )];
 ```
 - 最小化：只存「可用於 reauth 的 provider 字串陣列」（非整包 identities）。Window interface 補 `__reauthProviders?: string[]`。
-- 純 UX hint；後端 init 對 bound + 非-flagged 再驗一次（SoT）。
+- 純 UX hint；後端 init 對 bound + 非-flagged 再驗一次（SoT）。reauth 候選 ⊆ `BIND_PROVIDERS`（可綁＝可 reauth；apple 不在集合）。
+- **TDZ 安全**：此段在 `loadProfile` 的 `await /api/auth/me` **之後**（與既有 `__hasPassword`/`__totpEnabled` 同處 ~`dashboard.ts:226`），執行已是 module eval 後的 microtask → `BIND_PROVIDERS`（const `:720`）早已初始化，引用無 TDZ。
 
 ### 3.6 pending context 持久化（sessionStorage）
 ```ts
 const REAUTH_PENDING_KEY = 'factor_add_reauth_pending';
 const REAUTH_PENDING_TTL_MS = 10 * 60 * 1000;   // > grant 5min + 容裕；防陳舊 context
 
-function persistReauthPending(ctx: { action: string; targetProvider?: string; ts: number }): void {
-  try { sessionStorage.setItem(REAUTH_PENDING_KEY, JSON.stringify(ctx)); } catch { /* storage blocked */ }
+function persistReauthPending(ctx: { action: string; targetProvider?: string; ts: number }): boolean {
+  // A2：回 boolean。寫入失敗（storage blocked）→ 回 false，caller 不導頁（避免 roundtrip 後 silent resume-lost）。
+  try { sessionStorage.setItem(REAUTH_PENDING_KEY, JSON.stringify(ctx)); return true; } catch { return false; }
 }
 function readAndClearReauthPending(): { action?: string; targetProvider?: string } | null {
   let raw: string | null = null;
@@ -316,6 +324,7 @@ if (elevError) {
 - `elev_reauth_provider_btn`（「用 ${p} 重新驗證」，`${p}` 模板填 provider label）。
 - `elev_reauth_redirecting`（導頁中狀態）、`elev_reauth_cancel`。
 - `elev_reauth_no_candidate`（無可用 reauth provider 引導）。
+- `elev_reauth_storage_blocked`（A2：sessionStorage 被封鎖無法持久化 pending → 提示改用一般視窗/解除隱私限制再試）。
 - `elev_resume_lost`（fragment 在但 context 遺失）。
 - `elev_exchange_failed`（exchange 無 grant）。
 - `elev_err_provider_mismatch`、`elev_err_rate_limited`、`elev_err_invalid_state`、`elev_err_generic`（未知 `elev_error` 的 fallback）（callback `?elev_error=`；`reverification_required` 重用 Stage 1 既有 `elev_reverify_required`）。
@@ -344,6 +353,8 @@ if (elevError) {
 | O2 | OAuth-only outbound `bind_identity` target=google（reauthProviders=['discord']）| reauth modal 候選排除 google；選 discord → `init?purpose=elevation&action=bind_identity` for discord；persist `{action:'bind_identity', targetProvider:'google'}`；`loc.href`=redirect_url |
 | O3 | OAuth-only 無候選（reauthProviders=[] 或只剩 target）| 引導 toast；**不**打任何 init/elevation；無 persist |
 | O4 | reauth init 失敗（init 回 `{}`/403）| modal 內 err；**不** persist；**不**導頁 |
+| O5 | `persistReauthPending` 寫入失敗（sessionStorage.setItem throw，A5）| modal 顯示 `elev_reauth_storage_blocked` err；**不**導頁（`loc.href` 不變）；無 pending 殘留 |
+| O6 | `__reauthProviders` 含髒值/未知 provider（A4）| 髒值不列入候選按鈕（§3.5 filter）；選合法候選 → init path 為 `encodeURIComponent` 後的 provider；全髒 → `elev_reauth_no_candidate` |
 | R1 | resume `add_passkey`（hash=`#elev_exchange=CODE`, pending `{add_passkey}`）| `POST /elevation/exchange {code:'CODE'}` 被呼；`register-verify` 帶 `X-Factor-Add-Grant`==grant；fragment 已剝除（`history.replaceState` 呼叫 / hash 清空）；pending `removeItem` 被呼 |
 | R2 | resume `bind_identity`（hash + pending `{bind_identity, google}`）| exchange → `bindProvider('google')` → `init?is_binding` for google 帶 header → `loc.href`=binding redirect |
 | R3 | resume 無 context（hash 在、pending 無）| `elev_resume_lost` warn；**不**打 exchange |
@@ -368,7 +379,7 @@ if (elevError) {
 - **後端 0 改動**：gate / CAS / TTL / sid / OD-3 callback 5a flag-block 全不變，SEC-FACTOR-ADD P1 封閉性完好。本 PR 只讓前端「合法驅動既有 OAuth-reauth elevation」。
 - **不擴攻擊面**：exchange code 2min/one-time/session-bound（後端）；grant 5min/one-time/sid+action-bound（後端）；前端不持久化 grant/code（記憶體即棄）。
 - **grant/code 不入 URL/log/storage**：exchange code 由 fragment 交付（瀏覽器不送 server、不入 Referer）→ 立即 `history.replaceState` 剝除 → POST body 換 grant；grant_token 只在記憶體傳到 header。sessionStorage 只放非敏感路由 context。
-- **竄改防禦**：pending context 的 action 經本地 runtime guard + 後端 action-bound CAS 雙重把關；targetProvider 經 BIND_PROVIDERS 白名單；竄改最壞只造成 ceremony 失敗（後端 fail-closed），無提權。
+- **竄改防禦（A3，措辭精確）**：pending context 的 action 經本地 runtime guard + 後端 action-bound CAS 雙重把關；targetProvider 經 BIND_PROVIDERS 白名單。竄改 `action`/未知 `targetProvider` → ceremony 失敗（fail-closed）。竄改 `targetProvider` 為**另一合法** BIND_PROVIDERS 值（如 google→discord）→ 可能改成綁該 provider（非必然失敗）；但**綁的仍是使用者本人在該 provider 的 OAuth 同意結果**（第二段 binding callback 是 user 自己的授權），grant action-bound + one-time、後端 CAS 為 SoT → **無提權、不綁到攻擊者帳號**，且需 same-origin script / 本機 storage 竄改前提（≈瀏覽器已失陷）。
 - **OD-3 一致**：前端候選只列非-flagged provider（UX 早擋）；後端 callback 5a 對 flagged matched identity 不鑄 exchange（SoT）。§0.2 已釐清與 OD-3 self-reverify 的差異。
 - **same-origin（R5 inherited）**：Stage 2 的 init / exchange 都是 dashboard same-origin `apiFetch`，不觸發 CORS preflight；exchange 用 Authorization + body，不用 `X-Factor-Add-Grant` header（grant header 只在 resume 後的 factor-add 寫入用，亦 same-origin）。`cors.ts` 不需改。
 - **tenant-scope（TS-F3/F4，user-scoped by design）**：elevation grant/exchange 綁 `user_id + session_id`、**刻意非 tenant-scoped**——它們新增的 factor（passkey/wallet/OAuth identity）都是 **user-global**（跨租戶共用，非 tenant 資源），故 elevation 是「證明帳號擁有權」的 step-up、不涉 tenant 邊界（migration 0054 表無 `tenant_id` 為正確設計，非遺漏）。**token refresh 期間 tenant 重 derive**（`refresh.ts` → personal_tenant）對 factor-add **無影響**：exchange/grant CAS 只比對 user+session（不讀 tenant claim），factor-add 寫入也不依 tenant context。此為後端既有行為、Stage 2 frontend 不觸碰；若未來 elevation 變成 tenant 特權操作前置，須重審（非本 PR scope）。
@@ -463,8 +474,20 @@ if (elevError) {
 
 **結論：plan 經 1 實質修（HR-F3）+ 9 項文件自足補強後，無殘留 Tier-0 設計洞、後端零改不變、可送 ChatGPT Arch Gate。**
 
-## 13. ChatGPT Arch Gate 裁決
-> （待 Arch Gate r1 後填）
+## 13. ChatGPT Arch Gate 裁決 ＝ **APPROVED**（無 blocking C-item）
+
+r1 裁決＝**APPROVED**（C1：無需阻擋的架構/安全/完整性缺口）。A–F 六點全通過、OD-1..7 全裁「A＝採傾向」。鎖定區確認：OD-3 不放寬、exchange one-time 不 retry、grant/code 不落持久層、resume 顯式傳 grant、後端 gate/CAS/TTL 不變。
+
+**5 個非-blocking A-item（Gate 說「可順手改」）→ 本 plan 全數採納（cheap hardening，Codex Plan Gate 前先落 plan）：**
+| A | 採納 | 落點 |
+|---|---|---|
+| A1 | **採納** | §3.5 `__reauthProviders` filter 到 `BIND_PROVIDERS` 已知集合；§3.3 init path `encodeURIComponent(reauthProvider)`（server-sourced string 不裸進 path，defense-in-depth）|
+| A2 | **採納** | §3.6 `persistReauthPending()` 回 `boolean`；§3.3 寫入失敗（storage blocked）→ **不導頁** + modal 顯示錯誤（避免 roundtrip 後 silent `resume-lost`）|
+| A3 | **採納（措辭改窄）** | §8：竄改 `targetProvider` 為另一合法 `BIND_PROVIDERS` 值 → 可能改變第二段要綁的 provider（非必然失敗）；但第二段仍是**使用者本人在該 provider 的 OAuth 同意**（綁的是 user 自己的 identity）、grant action-bound + one-time → **無提權**、需 same-origin script / local tamper 前提 |
+| A4 | **採納** | §7.2 新增 R9：reauth candidate provider 不在已知集合 → 不列入候選（防 provider enum 漂移）|
+| A5 | **採納** | §7.2 新增 O5：`persistReauthPending` 寫入失敗 → 不導頁 + 顯示錯誤 |
+
+**→ 下一步：Codex Plan Gate。**
 
 ## 14. Codex Plan Gate 裁決
 > （待 Codex Plan Gate 後填）
