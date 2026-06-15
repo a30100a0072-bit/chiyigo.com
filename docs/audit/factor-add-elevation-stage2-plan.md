@@ -1,6 +1,6 @@
 # FACTOR-ADD 前端 elevation 接線 plan（Stage 2：OAuth-only OAuth-reauth elevation）
 
-> **狀態**：`CODE_FAITHFULNESS_APPROVED`（**Dual Gate v3 全閉環**：Plan＝self-review §12 ＋ ChatGPT Arch APPROVED §13 ＋ Codex Plan CODING_ALLOWED §14｜Code＝code-self-review §15〔RACE-3 fix + O7〕＋ Codex Code CODE_APPROVED §16 ＋ **ChatGPT Faithfulness APPROVED §17**〔code @ `bae2e9b3`〕）→ **ready squash-merge**（待 owner 授權 push/PR）。
+> **狀態**：`MERGED`（**#85 `cf1794e9`，2026-06-15 + Cloudflare Pages deploy success**；main CI 全綠）。**Dual Gate v3 全閉環**：Plan＝self-review §12 ＋ ChatGPT Arch APPROVED §13 ＋ Codex Plan CODING_ALLOWED §14｜Code＝code-self-review §15〔RACE-3 fix + O7〕＋ Codex Code CODE_APPROVED §16 ＋ ChatGPT Faithfulness APPROVED §17。**下一步＝owner prod 無痕驗收 + 回 JS→TS Stage 7 strict（或 owner 排序）**。
 > **分級**：L2（前端 feature 接線）+ **敏感熱區**（auth / factor-add / token / OAuth roundtrip）→ 三道基本外部審查全走（GPT Arch + Codex Plan + Codex Code）+ §5 高風險加碼 4 件。
 > **前置裁決**：owner = **Option 2**；Stage 1（TOTP/password elevation）已 MERGED #84 `285b8987`，本 PR 接續 Stage 1 的 §1.2 OUT 項。
 > **後端**：**零改動、無 migration**。整套 OAuth-reauth elevation primitive（`init?purpose=elevation` + `callback` 5a + `/api/auth/elevation/exchange`）已於 #77（PR-A2）建全並測全綠。本 PR 只補**前端跨 redirect ceremony 驅動**。
