@@ -1,6 +1,6 @@
 # FACTOR-ADD 前端 elevation 接線修補 plan（Stage 1：TOTP / password elevation）
 
-> **狀態**：`PLAN_REVISED`（dimension-A self-review ✅ §12；**ChatGPT Arch Gate r1 ＝ REVISE**〔C1 `bind_identity` transport／C2 測試 wiring〕→ **已修，見 §13**）→ **回送 Arch Gate r2 確認** → Codex Plan Gate。**plan 過 gate 才進 Code 階段。**
+> **狀態**：`PLAN_ARCH_APPROVED`（dimension-A self-review ✅ §12；Arch Gate r1 REVISE → 修 C1/C2 §13 → **ChatGPT Arch Gate r2 ＝ APPROVED**，鎖定條件見 §14）→ **送 Codex Plan Gate**。**plan 過 gate 才進 Code 階段。**
 > **分級**：L2（前端 feature 接線）+ **敏感熱區**（auth / factor-add / token）→ 三道基本外部審查全走（GPT Arch + Codex Plan + Codex Code）。
 > **前置裁決**：owner = **Option 2**（Stage 1 先上 TOTP/password elevation，OAuth-only 留 Stage 2）；**插隊在「回 Stage 7 strict」之前**。
 > **後端**：**零改動、無 migration**。整套 elevation primitive（`/api/auth/elevation/{totp,password,exchange}` + `init`/`callback` elevation 分支）已於 #77（PR-A2）/ #78（PR-A3）建全並測全綠。本 PR 只補**前端 ceremony 驅動**。
@@ -287,3 +287,24 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
 **Scope/基線判定（Gate）**：未違反金融級 auth 基線；`requireFactorAddGrant`／grant one-time CAS／5min TTL／action whitelist／migration 0054 均**鎖定不放寬**。
 
 **下一步**：回送 **Arch Gate r2** 確認 C1/C2 修補 → **Codex Plan Gate**。
+
+---
+
+## 14. ChatGPT Arch Gate r2 ＝ APPROVED + Codex Plan Gate 前鎖定條件
+
+**r2 裁決＝APPROVED → 可進 Codex Plan Gate**。C1（transport）／C2（測試 wiring）both closed，**無剩餘 C 項**。OD 最終裁決：OD-1 **A**／OD-2 **A**／OD-3 **A-required**（fallback 必測 request boundary）／OD-4 **A**／OD-5 **A**。
+
+**鎖定條件（Arch r2 要求寫進 plan，防 Codex 誤改範圍）：**
+| 項目 | 鎖定 |
+|---|---|
+| 後端 | **零改動** |
+| migration | **零改動** |
+| `requireFactorAddGrant` | 不可放寬／不移除 |
+| grant token | 不進 URL／storage／console／error log |
+| OAuth binding | 只用既有 JSON `{redirect_url}` transport（§4.3） |
+| test | 必覆蓋三 caller 的 header + action wiring（§7） |
+| OAuth-only | Stage 1 只顯示引導、不嘗試 exchange |
+| TTL | 維持 5min、不調高 |
+| revoked session tradeoff | 本 PR 不處理、另案 hardening（OD-5/R4） |
+
+**Codex Plan Gate 須驗（Arch r2 待辦）**：對照 repo 實際 `functions/api/auth/oauth/[provider]/init.ts` 確認 binding init **確回 JSON `{redirect_url}`（非 302）**；若契約與 §4.3／§13 r2 證據不符 → 退回修 C1。
