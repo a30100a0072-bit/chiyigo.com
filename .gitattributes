@@ -1,0 +1,16 @@
+# Why: system core.autocrlf=true (Git for Windows default) + no .gitattributes
+# rewrote every checkout to CRLF while the Node build and editors wrote LF,
+# producing perpetual phantom-modified files. Pin LF as the single source of
+# truth for text files.
+* text=auto eol=lf
+
+# Windows PowerShell scripts keep CRLF in the working tree.
+# Git's EOL handling does not touch the UTF-8 BOM these scripts require.
+*.ps1 text eol=crlf
+
+# Ship assets: declare binary explicitly so no text heuristic can corrupt them.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.gif  binary
