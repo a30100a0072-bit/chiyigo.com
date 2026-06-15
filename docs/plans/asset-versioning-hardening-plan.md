@@ -1,6 +1,10 @@
 # Asset Versioning Hardening Plan — content-hash `?v=` + CI guard
 
-> **狀態**：`PLAN_DRAFT Rev 2（locked）`。ChatGPT Arch `REVISE_REQUIRED`（H1/H2/H3/M1–M4）已全納；**sub-OD-3=(i) 兩段式 + OD-E 措辭 已由 owner LOCKED（2026-06-15）、無 open OD**。dim-A self-reviewed。**待重送 ChatGPT Arch Gate → Codex Plan Gate → `CODING_ALLOWED`**。本文 plan-only，未動 code/branch/scripts/package/workflow/public artifacts、未 pop stash。
+> **STATUS: CLOSED / IMPLEMENTED**（2026-06-15）。This plan has been superseded by the implemented
+> asset-versioning hardening work. Implementation landed in **PR #90** (`d7b7c122`); follow-up docs
+> cleanup landed in **PR #91** (`67e5e2bb`). This document is retained as historical planning context
+> only —— the forward-looking 「待…／`CODING_ALLOWED` false」 language below reflects the state at draft
+> time, not current state.
 > **分級**：L2（build pipeline + CI gate；frontend asset versioning）。敏感熱區＝**部署可重現性 / build SoT** → 三道基本外部審查全走。
 > **背景錨點**：#89（squash `9e92754e`）已**止血** split-brain `?v=`（203× `749ced39` + 11× `96d2b662` → `0f25ff3d`）。本 plan **根治**版本規則。
 > **⚠ Rev 2 重大變更**：H3 證 `tailwind.config.cjs` 掃 `./public/**/*.html` → sub-OD-1=(a) 廢止，**改 §3.3 sub-OD-3=(i) 兩段式（owner locked）**。sub-OD-2（同 PR 兩 commit）、OD-E（Direct Upload）不變。
@@ -151,7 +155,7 @@ build 與 verify 共用，單一來源：
 ## 11. Open Decisions — **全部 LOCKED（無 open OD）**
 - **sub-OD-3 → (i) 兩段式**（owner 2026-06-15）；sub-OD-1=(a) 廢止；(ii) src-scan 暫緩另開 spike/plan。
 - **OD-E → §6 LOCKED 措辭**（repo-verifiable Direct Upload；dashboard `owner-unverified / not repo-verifiable`；其他 repo 共用 `not repo-verifiable; owner states no shared repo consumer`）。
-- **CODING_ALLOWED 仍 false** — 待 ChatGPT Arch Gate（Rev 2 重送）→ Codex Plan Gate 通過。
+- ~~**CODING_ALLOWED 仍 false** — 待 ChatGPT Arch Gate（Rev 2 重送）→ Codex Plan Gate 通過。~~ → **已 granted、實作完成並 merged（PR #90 `d7b7c122`，docs cleanup #91 `67e5e2bb`）；本段為 plan-time 歷史。**
 
 ---
 
