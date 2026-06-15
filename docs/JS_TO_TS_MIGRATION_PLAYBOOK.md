@@ -102,31 +102,14 @@ env:
 
 ### Why 不用 subshell 算 hash（shell-context 注意）
 
-**bash / git-bash**：
-```bash
-# ❌ 在 PowerShell 跑會留字面字串；在 bash 雙引號內才會展開
-git commit -m "... $(git rev-parse HEAD)"
-
-# ✅ 兩個 shell 都最穩妥的版本：先算好 hash 再 commit
-hash=$(git rev-parse --short HEAD)
-git commit -m "... $hash"
-```
-
-**PowerShell**：
-```powershell
-# PowerShell 的子表達式語法是 $(...) 但是放在 double-quoted string 內才會展開；
-# 上面 git-bash 那行直接複製到 PowerShell 也會展開（不是字面字串）。
-# 真正會留字面字串的情境是「shell escaping 不一致」，例如雙引號被 HEREDOC 包住、
-# 或 git commit -m 走 -F /dev/stdin / @'...'@ here-string 時。
-
-# ✅ 最穩妥：先算 hash 變數，subject 直接帶字串字面
-$hash = git rev-parse --short HEAD
-git commit -m "chore(cache-bust): hash sync — <prev> -> $hash (...)"
-```
-
-**最低風險寫法**（跨 shell 通用）：直接手寫 hash 字面，不依賴 shell 展開。每次 cache-bust commit 前先 `git rev-parse --short HEAD` 看一次，貼進 subject。
-
-**教訓來源**：cache-bust commit subject 留下 `$(...)` 字面 string 的多次案例；codex r2 review 點名語境不精準（2026-05-19）。
+> **2026-06-15 SUPERSEDED**：`?v=` 改為 per-file content-hash 後，`npm run build` 會把每個資產的
+> content-hash 直接寫進 committed HTML —— **cache-bust commit subject 不再需要、也不該手動計算或貼入
+> 任何 git HEAD hash**。下列關於「subshell（`$(...)`）在不同 shell 是否展開、跨 shell escaping、手抄
+> hex typo」的全部注意事項一律 **moot**。cache-bust commit 維持純 `?v=` sync 即可（見上方 §「Why
+> 拆兩段」）。詳見 `docs/asset-versioning.md`。
+>
+> 歷史教訓（git-HEAD era）：cache-bust commit subject 留下未展開 subshell 字面字串的多次案例；codex
+> r2 review 點名語境不精準（2026-05-19）。
 
 ---
 
