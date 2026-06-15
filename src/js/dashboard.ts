@@ -1087,6 +1087,9 @@ function openReauthElevationModal(action: FactorAddAction, candidates: string[],
           const data = await window.apiFetch<{ redirect_url?: string }>(
             `/api/auth/oauth/${encodeURIComponent(p)}/init?purpose=elevation&action=${action}`,
           );
+          // RACE-3：init 往返期間使用者可能已取消/點遮罩（finish(null) 設 settled）→ 不可再 persist/導頁（違反取消意圖）。
+          // 此時 modal 已移除；init 建的 oauth_state 未消費、10min 後自然過期。直接 return（不導頁）。
+          if (settled) return;
           if (!data?.redirect_url) { showErr(T('net_err')); return; }
           // A2：成功才 persist；storage blocked → 不導頁（避免 roundtrip 後 silent resume-lost）。
           if (!persistReauthPending({ action, targetProvider, ts: Date.now() })) { showErr(T('elev_reauth_storage_blocked')); return; }

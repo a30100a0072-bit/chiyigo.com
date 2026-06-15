@@ -278,6 +278,22 @@ describe('Stage 2 outbound (OAuth-only OAuth-reauth start)', () => {
     const init = d.calls.find(c => c.url.includes('/init?purpose=elevation'))
     expect(init?.url).toBe('/api/auth/oauth/discord/init?purpose=elevation&action=add_passkey')
   })
+
+  it('O7 dismiss (cancel) while init in-flight -> no navigate, no persist (RACE-3)', async () => {
+    const d = loadDashboard({ totp: false, hasPw: false, reauthProviders: ['discord'] })
+    d.dispatchClick(clickTarget({ id: 'passkey-add-btn' }))
+    await flush()
+    const handler = d.els['reauth-elev-btn-discord']?.listeners['click']?.[0]
+    if (typeof handler !== 'function') throw new Error('reauth provider handler not registered')
+    const p = handler()                                   // provider click -> init apiFetch in-flight (not yet resolved)
+    const cancel = d.els['reauth-elev-cancel']?.listeners['click']?.[0]
+    if (typeof cancel === 'function') cancel()            // user dismisses (finish(null) -> settled=true) before init resolves
+    await p
+    await flush()
+    expect(d.calls.some(c => c.url.includes('/init?purpose=elevation'))).toBe(true)   // init did fire...
+    expect(d.loc.href).not.toBe(ELEV_REDIRECT)            // ...but post-cancel we must NOT navigate
+    expect(d.storageWrites.some(w => w.key === PENDING_KEY)).toBe(false)              // and must NOT persist
+  })
 })
 
 // ── RESUME: #elev_exchange -> exchange -> resume ceremony with the grant ──
