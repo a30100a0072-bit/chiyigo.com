@@ -86,14 +86,14 @@ interface Loaded {
   dispatchClick(target: StubEl): void
 }
 
-function loadDashboard(opts: { totp: boolean; hasPw: boolean }): Loaded {
+function loadDashboard(opts: { totp: boolean; hasPw: boolean; badGrant?: boolean }): Loaded {
   const els: Record<string, StubEl> = {}
   const getEl = (id: string): StubEl => (els[id] ||= makeEl(id))
   const calls: Array<{ url: string; init: ReqInit }> = []
 
   const apiFetch = async (url: string, init?: ReqInit): Promise<unknown> => {
     calls.push({ url, init: init ?? {} })
-    if (url.startsWith('/api/auth/elevation/')) return { grant_token: GRANT, expires_in: 300 }
+    if (url.startsWith('/api/auth/elevation/')) return opts.badGrant ? {} : { grant_token: GRANT, expires_in: 300 }
     if (url.includes('register-options')) return { challenge: 'AAAA', user: { id: 'AAAA', name: 'a', displayName: 'a' }, rp: { id: 'r', name: 'r' }, pubKeyCredParams: [], excludeCredentials: [] }
     if (url.includes('register-verify')) return { id: 1, created_at: 'now' }
     if (url.includes('wallet/nonce')) return { domain: 'chiyigo.com', uri: 'https://chiyigo.com', chain_id: 1, nonce: 'nonce123', expires_at: '2099-01-01 00:00:00', address: ADDR }
@@ -253,5 +253,23 @@ describe('dashboard factor-add caller wiring (SEC-FACTOR-ADD Stage 1, Arch Gate 
     const consoleOut = spies.flatMap(s => s.mock.calls).flat().map(a => String(a)).join(' ')
     expect(consoleOut.includes(GRANT)).toBe(false)
     expect(Object.values(d.els).some(el => [el.textContent, el.innerHTML, el.value].some(s => s.includes(GRANT)))).toBe(false)
+  })
+
+  it('elevation returns no grant_token -> fail-closed (SR #4): no factor-add call, modal error, submit re-enabled', async () => {
+    const d = loadDashboard({ totp: true, hasPw: true, badGrant: true })
+    d.dispatchClick(clickTarget({ id: 'passkey-add-btn' }))
+    const submitEl = d.els['elevation-submit']
+    if (!submitEl) throw new Error('elevation modal did not open')
+    if (d.els['elevation-input']) d.els['elevation-input'].value = '123456'
+    const handler = submitEl.listeners['click']?.[0]
+    if (typeof handler !== 'function') throw new Error('submit handler missing')
+    await handler()
+    await flush()
+    // elevation was attempted, but the response-shape guard blocked the ceremony (no grant_token)
+    expect(d.calls.some(c => c.url.startsWith('/api/auth/elevation/'))).toBe(true)
+    expect(d.calls.some(c => c.url.includes('register-verify'))).toBe(false)
+    // modal stayed open with an error and the submit button was re-enabled for retry
+    expect(d.els['elevation-err']?.textContent).toBeTruthy()
+    expect(d.els['elevation-submit']?.disabled).toBe(false)
   })
 })

@@ -919,16 +919,20 @@ function openElevationModal(action: FactorAddAction, useTotp: boolean): Promise<
     const errEl = document.getElementById('elevation-err');
     input?.focus();
     let settled = false;
+    let submitting = false;   // in-flight guard: Enter-key submit bypasses button.disabled (code-review SR #3/#6)
     const finish = (v: { grant_token: string } | null) => { if (settled) return; settled = true; modal.remove(); resolve(v); };
     modal.addEventListener('click', e => { if (e.target === modal) finish(null); });
     document.getElementById('elevation-cancel')?.addEventListener('click', () => finish(null));
     const submit = async () => {
+      if (submitting) return;   // ignore re-entry (double click / repeated Enter) while a mint is in flight
       const v = (input?.value ?? '').trim();
       if (!v) { input?.focus(); return; }
+      submitting = true;
       const sBtn = document.getElementById('elevation-submit') as HTMLButtonElement | null;
       if (sBtn) { sBtn.disabled = true; sBtn.textContent = T('btn_loading'); }
       if (errEl) errEl.classList.add('hidden');
       const showErr = (text: string) => {
+        submitting = false;   // allow retry after a failed mint
         if (errEl) { errEl.textContent = text; errEl.classList.remove('hidden'); }
         if (sBtn) { sBtn.disabled = false; sBtn.textContent = T('factor_add_confirm'); }
       };
