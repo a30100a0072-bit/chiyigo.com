@@ -26,6 +26,9 @@ interface Window {
   __hasPassword?: boolean;
   __totpEnabled?: boolean;
   __userEmail?: string;
+  // SEC-FACTOR-ADD Stage 2：可用於 OAuth-reauth elevation 的既綁、非-flagged provider（loadProfile 算出，
+  // 交集 BIND_PROVIDERS 已知集合）。純 UX hint；後端 init 對 bound + 非-flagged 為 SoT。
+  __reauthProviders?: string[];
   // 第三方：QRCode CDN (cdn.jsdelivr.net qrcode@1.5.0)
   QRCode?: {
     toCanvas: (canvas: HTMLElement | null, text: string, opts?: Record<string, unknown>) => Promise<void>;
@@ -234,6 +237,16 @@ async function loadProfile() {
     // Wallets/Payments/Deals）+ silent refresh 同時跑會給 401 race。改成 async sequential
     // 鏈，每個 await 完再下一個；watchdog 取消上一個 race。視覺體驗仍即時（每段都獨立 render）。
     window.__totpEnabled = !!data.totp_enabled;
+    // SEC-FACTOR-ADD Stage 2：OAuth-reauth elevation 候選＝有「非-flagged identity」的既綁 provider，
+    // 交集 BIND_PROVIDERS 已知集合（A1：server-sourced provider 不裸進候選/path）。在 await 之後執行＝BIND_PROVIDERS 已初始化（無 TDZ）。
+    const _knownReauth = new Set(BIND_PROVIDERS.map(b => b.id));
+    const _identities = (data.identities ?? []) as Array<{ provider?: string; requires_reverification?: boolean }>;
+    window.__reauthProviders = [...new Set(
+      _identities
+        .filter(i => !i.requires_reverification)
+        .map(i => i.provider)
+        .filter((p): p is string => typeof p === 'string' && _knownReauth.has(p)),
+    )];
     (async () => {
       try {
         await loadRequisitions();
@@ -684,16 +697,53 @@ async function armOrConfirmPayDelete(id) {
   }, 4000);
 }
 
+// ── SEC-FACTOR-ADD Stage 2：OAuth-reauth elevation 的 pending-action 跨 redirect 持久化 ───
+// 只存「要 resume 的 action（+ bind_identity 的 target provider）」這類**非敏感路由 context**；
+// grant_token / exchange code 永不入 storage。寫入時機＝init 成功、導頁前；讀取＝resume / elev_error 即清。
+const REAUTH_PENDING_KEY    = 'factor_add_reauth_pending';
+const REAUTH_PENDING_TTL_MS = 10 * 60 * 1000;   // > grant 5min + 容裕；陳舊防禦（非 load-bearing，後端 exchange 2min one-time CAS 為 SoT）
+function persistReauthPending(ctx: { action: string; targetProvider?: string; ts: number }): boolean {
+  // 回 boolean（A2）：storage blocked → false，caller 不導頁（避免 roundtrip 後 silent resume-lost）。
+  try { sessionStorage.setItem(REAUTH_PENDING_KEY, JSON.stringify(ctx)); return true; } catch { return false; }
+}
+function readAndClearReauthPending(): { action?: string; targetProvider?: string } | null {
+  let raw: string | null = null;
+  try { raw = sessionStorage.getItem(REAUTH_PENDING_KEY); sessionStorage.removeItem(REAUTH_PENDING_KEY); }
+  catch { return null; }
+  if (!raw) return null;
+  try {
+    const ctx = JSON.parse(raw);
+    if (!ctx || typeof ctx.ts !== 'number' || Date.now() - ctx.ts > REAUTH_PENDING_TTL_MS) return null;   // 陳舊 → 視同無
+    return ctx;
+  } catch { return null; }
+}
+
+// 前端本地 runtime guard：擋 sessionStorage 被竄改的 action（後端 grant action-bound CAS 為最終 fail-closed 防線）。
+// 定義於此（早於 checkElevExchange IIFE）：resume 同步前綴會用到，避免 load-time TDZ。
+const FACTOR_ADD_ACTIONS_CLIENT = ['add_passkey', 'bind_wallet', 'bind_identity'];
+function isFactorAddActionClient(a: unknown): a is FactorAddAction {
+  return typeof a === 'string' && FACTOR_ADD_ACTIONS_CLIENT.includes(a);
+}
+
 // ── 綁定結果 URL 參數處理（OAuth callback 跳回後顯示 Toast）───
 ;(function checkBindResult() {
   const sp = new URLSearchParams(location.search);
   const bindOk    = sp.get('bind');
   const bindError = sp.get('bind_error');
   const provider  = sp.get('provider') ?? '';
-  // OD-3：factor-add elevation 的 OAuth-reauth 用到 flagged identity → callback 擋下後回 dashboard 帶此參數。
-  if (sp.get('elev_error') === 'reverification_required') {
+  // SEC-FACTOR-ADD Stage 2：elevation callback 失敗回 dashboard 帶 ?elev_error=<code>（全集）。
+  // 後端 callback 名（elev_error param）→ 前端 i18n key 的顯式 map，鏡射 bind_error→bind_err_* 慣例（非字串拼接）。
+  const elevError = sp.get('elev_error');
+  if (elevError) {
     history.replaceState(null, '', '/dashboard.html');
-    setTimeout(() => showBindToast(T('elev_reverify_required'), 'warn'), 600);
+    readAndClearReauthPending();   // redirect 出去但 callback 回 error → resume 不會觸發，主動清陳舊 pending
+    const ELEV_ERR_KEY = {
+      provider_mismatch:       'elev_err_provider_mismatch',
+      rate_limited:            'elev_err_rate_limited',
+      invalid_state:           'elev_err_invalid_state',
+      reverification_required: 'elev_reverify_required',   // 重用 Stage 1 既有 key（不另造）
+    };
+    setTimeout(() => showBindToast(T(ELEV_ERR_KEY[elevError] ?? 'elev_err_generic'), 'warn'), 600);
     return;
   }
   if (!bindOk && !bindError) return;
@@ -713,6 +763,21 @@ async function armOrConfirmPayDelete(id) {
       showBindToast(T(ERR_KEY[bindError] ?? 'bind_fail'), 'err');
     }
   }, 600);
+})();
+
+// ── SEC-FACTOR-ADD Stage 2：OAuth-reauth elevation 回跳的 #elev_exchange fragment handler ───
+// callback 5a 成功 → 302 dashboard.html#elev_exchange=<code>（fragment：瀏覽器不送 server、不入 referer）。
+// 讀 code → 立即剝除 fragment → 讀並清 pending context → 換 grant → resume 原 ceremony（preset grant，§3.4）。
+;(function checkElevExchange() {
+  const m = (location.hash || '').match(/[#&]elev_exchange=([^&]+)/);
+  if (!m) return;
+  let code = '';
+  try { code = decodeURIComponent(m[1]); } catch { code = m[1]; }
+  history.replaceState(null, '', '/dashboard.html');   // 立即剝除 fragment（防 reload 重觸 / 殘留）
+  const ctx = readAndClearReauthPending();              // 同步讀並清（捕捉 load-time 狀態）
+  // defer 到 module 完全初始化後再 resume：resume 同步前綴會用到本檔稍後宣告的 helper（showBindToast 等）；
+  // 在 IIFE 內直接呼叫會撞 load-time TDZ。code/ctx 已同步擷取進閉包，延後不影響正確性。
+  setTimeout(() => { void resumeFactorAddFromExchange(code, ctx); }, 0);
 })();
 
 // ── 帳號綁定 ─────────────────────────────────────────────────
@@ -769,12 +834,13 @@ function renderBindingSection(identities) {
   document.getElementById('bind-section').classList.remove('hidden');
 }
 
-async function bindProvider(provider) {
+async function bindProvider(provider, presetGrant?: { grant_token: string }) {
   const btn = document.getElementById(`bind-btn-${provider}`) as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
   // SEC-FACTOR-ADD Stage 1：綁新 OAuth identity = factor-add，先取 elevation grant，再以 header 出示給 init。
   // grant 掛在 apiFetch（可帶 custom header）；init 回的 redirect_url 才由 window.location.href 導頁（導頁不帶 header）。
-  const grant = await obtainFactorAddGrant('bind_identity');
+  // Stage 2：resume 路徑帶 presetGrant（OAuth-reauth exchange 換來的 grant，target=本 provider）→ 跳過 reauth；OAuth-only 初次則由 obtainFactorAddGrant 走 reauth（帶 targetProvider）。
+  const grant = presetGrant ?? await obtainFactorAddGrant('bind_identity', { targetProvider: provider });
   if (!grant) { if (btn) { btn.disabled = false; btn.textContent = T('bind_btn'); } return; }
   try {
     const data = await window.apiFetch<{ redirect_url?: string }>(`/api/auth/oauth/${provider}/init?is_binding=true`, {
@@ -886,12 +952,13 @@ function openReverifyModal(provider: string, credentialId: number, useTotp: bool
 // 即棄（不進 URL / storage / log）。OAuth-only（無 TOTP 無密碼）Stage 1 不支援，顯示引導（Stage 2 補）。
 type FactorAddAction = 'add_passkey' | 'bind_wallet' | 'bind_identity';
 
-async function obtainFactorAddGrant(action: FactorAddAction): Promise<{ grant_token: string } | null> {
+async function obtainFactorAddGrant(action: FactorAddAction, opts?: { targetProvider?: string }): Promise<{ grant_token: string } | null> {
   const hasTotp = !!window.__totpEnabled;
   const hasPw   = !!window.__hasPassword;
   // __totpEnabled / __hasPassword 僅 UX hint（決定問哪種因子）；最終授權由後端 elevation 端點 fail-closed 判定。
-  if (!hasTotp && !hasPw) { showBindToast(T('factor_add_no_channel'), 'warn'); return null; }
-  return openElevationModal(action, hasTotp);
+  if (hasTotp || hasPw) return openElevationModal(action, hasTotp);
+  // OAuth-only（無 TOTP 無密碼）：Stage 2 — 用既綁 provider OAuth-reauth 鑄 grant（Stage 1 此分支原只彈引導文案）。
+  return startOAuthReauthElevation(action, opts?.targetProvider);
 }
 
 function openElevationModal(action: FactorAddAction, useTotp: boolean): Promise<{ grant_token: string } | null> {
@@ -953,6 +1020,107 @@ function openElevationModal(action: FactorAddAction, useTotp: boolean): Promise<
     document.getElementById('elevation-submit')?.addEventListener('click', submit);
     input?.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
   });
+}
+
+// ── SEC-FACTOR-ADD Stage 2：OAuth-only 帳號的 OAuth-reauth elevation ───────────────
+// OAuth-only（無 TOTP 無密碼）唯一可信 elevation 管道＝用既綁 provider 重新 OAuth 授權證明本人：
+// 選 reauth provider → init?purpose=elevation → 整頁導去 provider → callback 5a → #elev_exchange →
+// /elevation/exchange 換 grant → resume 原 ceremony（add_passkey / bind_wallet / bind_identity）。
+// 註：isFactorAddActionClient / FACTOR_ADD_ACTIONS_CLIENT 定義在上方 pending-context 區
+//     （checkElevExchange 在 load 時同步呼叫 resumeFactorAddFromExchange，其同步前綴會用到 → 須早於該 IIFE 初始化）。
+
+// OAuth-only 入口：選候選 provider 做 reauth。targetProvider＝bind_identity 要綁的「新」provider（排除，不能拿它自己 reauth）。
+async function startOAuthReauthElevation(action: FactorAddAction, targetProvider?: string): Promise<{ grant_token: string } | null> {
+  const candidates = (window.__reauthProviders ?? []).filter(p => p !== targetProvider);
+  if (!candidates.length) { showBindToast(T('elev_reauth_no_candidate'), 'warn'); return null; }
+  return openReauthElevationModal(action, candidates, targetProvider);
+}
+
+// dedicated reauth modal（OD-3-frontend）：列候選 provider 按鈕。選一個 → init → 整頁導頁（成功時 promise 不 resolve）。
+// 取消 / 遮罩 / init 失敗 → resolve(null)（caller 還原按鈕）。
+function openReauthElevationModal(action: FactorAddAction, candidates: string[], targetProvider?: string): Promise<{ grant_token: string } | null> {
+  return new Promise<{ grant_token: string } | null>(resolve => {
+    document.getElementById('reauth-elev-modal')?.remove();
+    const labelOf = (p: string) => BIND_PROVIDERS.find(b => b.id === p)?.label ?? p;
+    const modal = document.createElement('div');
+    modal.id = 'reauth-elev-modal';
+    modal.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4';
+    // p ∈ candidates ⊆ BIND_PROVIDERS（已 whitelist），用於 id / data-attr 安全；label 仍 esc 防禦。
+    const btns = candidates.map(p =>
+      `<button id="reauth-elev-btn-${p}" data-reauth-provider="${p}"
+         class="w-full px-3 py-2 rounded-lg bg-brand-500/15 hover:bg-brand-500/20 border border-brand-500/30 text-brand-300 text-sm font-semibold transition-all">
+         ${T('elev_reauth_provider_btn').replace('${p}', esc(labelOf(p)))}</button>`).join('');
+    modal.innerHTML = `
+      <div class="relative w-full max-w-md rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] p-5">
+        <h3 class="text-base font-semibold text-[var(--text)] mb-1">${T('elev_reauth_modal_title')}</h3>
+        <p id="reauth-elev-hint" class="text-xs text-[var(--text-muted)] mb-4">${T('elev_reauth_modal_hint')}</p>
+        <div class="flex flex-col gap-2">${btns}</div>
+        <p id="reauth-elev-err" class="text-xs text-red-400 mt-3 hidden"></p>
+        <div class="flex justify-end mt-3">
+          <button id="reauth-elev-cancel" class="px-3 py-1.5 rounded-lg bg-[#1a1a22] hover:bg-[#23232c] border border-[var(--border-bright)] text-[var(--text)] text-xs transition-all">${T('elev_reauth_cancel')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const errEl = document.getElementById('reauth-elev-err');
+    let settled = false;
+    let submitting = false;   // in-flight guard：擋重複點擊在 init 往返期間 double-fire
+    const finish = (v: { grant_token: string } | null) => { if (settled) return; settled = true; modal.remove(); resolve(v); };
+    const setBtnsDisabled = (d: boolean) => candidates.forEach(p => {
+      const b = document.getElementById('reauth-elev-btn-' + p) as HTMLButtonElement | null;
+      if (b) b.disabled = d;
+    });
+    const showErr = (text: string) => {
+      submitting = false;
+      setBtnsDisabled(false);   // 失敗 → 重新可點
+      if (errEl) { errEl.textContent = text; errEl.classList.remove('hidden'); }
+    };
+    modal.addEventListener('click', e => { if (e.target === modal) finish(null); });
+    document.getElementById('reauth-elev-cancel')?.addEventListener('click', () => finish(null));
+    candidates.forEach(p => {
+      document.getElementById('reauth-elev-btn-' + p)?.addEventListener('click', async () => {
+        if (submitting) return;
+        submitting = true;
+        if (errEl) errEl.classList.add('hidden');
+        setBtnsDisabled(true);
+        try {
+          // same-origin apiFetch（自動帶 Authorization）；A1：encodeURIComponent provider path segment（縱深）。
+          const data = await window.apiFetch<{ redirect_url?: string }>(
+            `/api/auth/oauth/${encodeURIComponent(p)}/init?purpose=elevation&action=${action}`,
+          );
+          if (!data?.redirect_url) { showErr(T('net_err')); return; }
+          // A2：成功才 persist；storage blocked → 不導頁（避免 roundtrip 後 silent resume-lost）。
+          if (!persistReauthPending({ action, targetProvider, ts: Date.now() })) { showErr(T('elev_reauth_storage_blocked')); return; }
+          const hint = document.getElementById('reauth-elev-hint');
+          if (hint) hint.textContent = T('elev_reauth_redirecting');
+          // 整頁導去 provider；promise 不 resolve（導航即將拆掉執行環境，await 永不完成是預期，非 leak）。
+          window.location.href = data.redirect_url;
+        } catch (e) {
+          showErr(window.tApiError(e, T('net_err')));
+        }
+      });
+    });
+  });
+}
+
+// #elev_exchange resume：換 grant → 以 preset grant 續原 ceremony（不再彈 modal）。
+async function resumeFactorAddFromExchange(code: string, ctx: { action?: string; targetProvider?: string } | null): Promise<void> {
+  if (!code) return;
+  if (!ctx || !isFactorAddActionClient(ctx.action)) { showBindToast(T('elev_resume_lost'), 'warn'); return; }
+  try {
+    // skipRefresh（HR-F3）：exchange code 是 one-time。預設 401→silent-refresh→retry 會 retry 死 code、
+    // 第二次仍 401 → apiFetch 誤判 SESSION_EXPIRED 把使用者登出。skipRefresh 下 SESSION_REVOKED 仍硬登出（api.ts 內），
+    // 其餘 401（如 EXCHANGE_CODE_INVALID）直接以 code 拋出 → 友善錯誤、不登出。
+    const data = await window.apiFetch<{ grant_token?: string }>('/api/auth/elevation/exchange', {
+      method: 'POST', body: JSON.stringify({ code }), skipRefresh: true,
+    });
+    if (typeof data?.grant_token !== 'string' || !data.grant_token) { showBindToast(T('elev_exchange_failed'), 'err'); return; }
+    const grant = { grant_token: data.grant_token };
+    if (ctx.action === 'add_passkey')      await addPasskey(grant);
+    else if (ctx.action === 'bind_wallet') await addWallet(grant);
+    else if (ctx.action === 'bind_identity' && BIND_PROVIDERS.some(b => b.id === ctx.targetProvider))
+      await bindProvider(ctx.targetProvider as string, grant);
+    else showBindToast(T('elev_resume_lost'), 'warn');   // targetProvider 不在白名單（竄改）→ 不 dispatch
+  } catch (e) { showBindToast(window.tApiError(e, T('net_err')), 'err'); }
 }
 
 let _toastTimer;
@@ -1823,7 +1991,7 @@ async function confirmPasskeyRemove(id) {
   }
 }
 
-async function addPasskey() {
+async function addPasskey(presetGrant?: { grant_token: string }) {
   if (!passkeySupported()) return;
   const btn = document.getElementById('passkey-add-btn') as HTMLButtonElement | null;
   const msg = document.getElementById('passkey-add-msg');
@@ -1835,7 +2003,8 @@ async function addPasskey() {
   };
   if (btn) btn.disabled = true;
   // SEC-FACTOR-ADD Stage 1：新增 passkey = factor-add，先取 elevation grant（避免無法 elevate 卻先叫出 authenticator）。
-  const grant = await obtainFactorAddGrant('add_passkey');
+  // Stage 2：resume 路徑帶 presetGrant（OAuth-reauth exchange 換來的 grant）→ 跳過 modal/reauth。
+  const grant = presetGrant ?? await obtainFactorAddGrant('add_passkey');
   if (!grant) { if (btn) btn.disabled = false; return; }
   showMsg(T('passkey_adding'), 'ok');
   try {
@@ -2038,7 +2207,7 @@ function buildSiweMessageClient({ domain, address, uri, chainId, nonce, expiresA
   ].join('\n');
 }
 
-async function addWallet() {
+async function addWallet(presetGrant?: { grant_token: string }) {
   const provider = walletProvider();
   if (!provider) return;
 
@@ -2053,7 +2222,8 @@ async function addWallet() {
 
   if (btn) btn.disabled = true;
   // SEC-FACTOR-ADD Stage 1：綁 wallet = factor-add，先取 elevation grant，再以 header 出示給 wallet/verify。
-  const grant = await obtainFactorAddGrant('bind_wallet');
+  // Stage 2：resume 路徑帶 presetGrant（OAuth-reauth exchange 換來的 grant）→ 跳過 modal/reauth。
+  const grant = presetGrant ?? await obtainFactorAddGrant('bind_wallet');
   if (!grant) { if (btn) btn.disabled = false; return; }
   showMsg(T('wallet_connecting'), 'ok');
 

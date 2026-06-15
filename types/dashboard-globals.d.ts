@@ -36,5 +36,7 @@ declare global {
     __hasPassword?: boolean;
     __totpEnabled?: boolean;
     __userEmail?: string;
+    // SEC-FACTOR-ADD Stage 2：OAuth-reauth elevation 候選 provider（既綁、非-flagged，交集 BIND_PROVIDERS）。
+    __reauthProviders?: string[];
   }
 }
