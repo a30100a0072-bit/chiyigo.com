@@ -90,13 +90,15 @@ env:
 每個 rename PR 落地必須是**兩個獨立 commit**：
 
 1. **refactor commit**：`git mv` + 必要 inline TS + test importer 修正
-2. **build → cache-bust commit**：`npm run build` 重新 build static HTML，把 `?v=<hash>` 同步到新 HEAD short hash
+2. **build → cache-bust commit**：`npm run build` 重 build static HTML，把 `?v=` 同步到資產的 content-hash
 
 ### Why 拆兩段
 
-- `?v=` 用 git HEAD short hash 算（**與是否動 frontend 無關**），所以即使純 backend rename 也要 cache-bust commit
-- build 抓的是 commit 前 HEAD（舊 hash），所以順序必須是「refactor commit → build → cache-bust commit」，不能反過來
-- cache-bust commit 必須**純 hash sync**：grep `git diff --cached` 過濾非 `?v=` 行應為 0；嚴禁挾帶 i18n / runtime drift
+> **2026-06-15 SUPERSEDED**：`?v=` 改為 **per-file content-hash**（`scripts/lib/asset-versioning.mjs`；舊「git HEAD short hash」規則作廢，詳見 `docs/asset-versioning.md`）。以下隨之調整：
+> - `?v=` **只在資產內容（`public/js`、`public/css`）真的變動時才變** —— 純 backend rename 不動 frontend → **無 `?v=` 變動、無需 cache-bust commit**（不再「與是否動 frontend 無關」）。
+> - 不再有「build 抓 commit 前 HEAD」的時序陷阱（content-hash 與 git HEAD 無關、squash 後不再 stale）。
+> - 動到 frontend 資產時：跑 `npm run build`（內部 two-pass content-hash），`public/` 與 `src/` 一起 commit；CI `verify:browser-pipeline` 會驗 committed HTML `?v=` 與資產 content-hash 一致。
+- cache-bust commit 仍必須**純 hash sync**：`git diff --cached` 過濾非 `?v=` 行應為 0；嚴禁挾帶 i18n / runtime drift
 
 ### Why 不用 subshell 算 hash（shell-context 注意）
 

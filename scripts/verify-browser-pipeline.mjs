@@ -24,6 +24,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
 import { injectI18n, I18N_RESIDUAL } from './lib/inject-i18n.js'
+import { extractAssetRefs, assetVersion, resolveAssetPath } from './lib/asset-versioning.mjs'
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
 const ROOT = path.join(__dirname, '..')
@@ -167,6 +168,46 @@ function deriveOutputPath(tsconfig, sourceRelative) {
   }
   const jsRel = rel.replace(/\.ts$/, '.js')
   return path.join(ROOT, outDir, jsRel)
+}
+
+// Asset content-hash governance (asset-versioning hardening): verify every committed
+// public/*.html `?v=` equals the content hash of the committed asset it points at.
+// Reads the committed tree ONLY — never runs a build / regenerates artifacts (H1), so a
+// stale committed `?v=` (asset changed without rebuilding HTML — the #89 split-brain class)
+// is caught instead of being masked by a fresh in-CI build. Uses the same SSOT helper as
+// build-partials so the matcher and hash can never diverge between produce and verify.
+function verifyHtmlAssetVersions() {
+  const PUBLIC = path.join(ROOT, 'public')
+  let htmlFiles
+  try {
+    htmlFiles = fs.readdirSync(PUBLIC).filter((f) => f.endsWith('.html'))
+  } catch (e) {
+    fail(`HTML asset ?v= verify：無法讀 public/（${e.message}）`)
+  }
+  let checked = 0
+  for (const f of htmlFiles) {
+    const html = fs.readFileSync(path.join(PUBLIC, f), 'utf8')
+    for (const ref of extractAssetRefs(html)) {
+      let expected
+      try {
+        expected = assetVersion(resolveAssetPath(ref.assetPath, PUBLIC))
+      } catch (e) {
+        // missing asset / path escape / unsupported root → fail closed
+        fail(`${f}: 本地資產 ${ref.assetPath} → ${e.message}`)
+      }
+      if (ref.version === null) {
+        fail(`${f}: 本地資產 ${ref.assetPath} 缺 ?v= 或帶不支援 query（expected ?v=${expected}）`)
+      }
+      if (ref.version !== expected) {
+        fail(
+          `${f}: 本地資產 ${ref.assetPath} ?v=${ref.version} 與 committed 內容 hash 不符（expected ?v=${expected}）` +
+            `；改了資產卻沒 rebuild HTML？請跑 npm run build 後 commit`,
+        )
+      }
+      checked++
+    }
+  }
+  console.log(`✓ HTML asset ?v= governance OK（${htmlFiles.length} pages，${checked} 個本地 ref 全等於 committed content-hash）`)
 }
 
 async function main() {
@@ -372,7 +413,10 @@ async function main() {
     console.log(`✓ module prod emit OK（${manifest.module.length} entries：ES module shape + temp+inject/committed byte-equal）`)
   }
 
-  // 11. 清乾淨
+  // 11. HTML asset ?v= content-hash governance — committed tree only, NO build (H1).
+  verifyHtmlAssetVersions()
+
+  // 12. 清乾淨
   cleanTmp()
 
   console.log('=== browser pipeline canary OK ===')

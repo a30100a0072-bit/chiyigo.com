@@ -6,7 +6,7 @@
   "scripts": {
     "build:partials": "node scripts/build-partials.js",
     "build:css": "tailwindcss -c tailwind.config.cjs -i src/css/tailwind.css -o public/css/tailwind.css --minify",
-    "build": "npm run build:partials && npm run build:css && npm run lint:handlers && npm run lint:archive-no-delete && npm run lint:migrations",
+    "build": "npm run build:partials && npm run lint:handlers && npm run lint:archive-no-delete && npm run lint:migrations",
     "build:watch": "node scripts/build-partials.js --watch",
     "test": "vitest run",
     "test:watch": "vitest",

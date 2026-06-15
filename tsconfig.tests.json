@@ -32,6 +32,7 @@
     "functions/.well-known/**/*.ts",
     "scripts/audit-archive-forensic-classify.mjs",
     "scripts/lib/ratchet-override.mjs",
+    "scripts/lib/asset-versioning.mjs",
     "docs/fixtures/**/*.json",
     "types/env.d.ts",
     "types/raw-imports.d.ts"
