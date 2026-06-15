@@ -121,6 +121,31 @@ export function publicReasonCode(requiresReverification: number, reason: string 
   return 'security_review'   // collapses every high:<signal> into one opaque public code
 }
 
+/**
+ * Disposition tier of a flagged credential, derived from its disposition_reason. SSOT for the clear-audit
+ * `credential_tier` field and the dynamic clear severity (cred-reverify plan Arch C3). The A4 runner only ever
+ * writes `high:<signal>` / `unknown_context` onto flagged rows (`low_reviewed` never flags), but this is total
+ * over any input — NULL / '' / malformed → 'unknown' (never throws).
+ */
+export function dispositionTierFromReason(reason: string | null): 'high' | 'unknown_context' | 'unknown' {
+  if (typeof reason !== 'string') return 'unknown'
+  if (reason.startsWith('high:')) return 'high'
+  if (reason === 'unknown_context') return 'unknown_context'
+  return 'unknown'
+}
+
+/**
+ * Fail-closed whitelist gate for SELF-service reverification (cred-reverify plan Arch C2). ONLY a credential whose
+ * disposition_reason is EXACTLY 'unknown_context' may be self-reverified; every other value — `high:<signal>`,
+ * NULL, '', or any unknown/malformed tier — denies (high-risk credentials must be deleted or admin-cleared).
+ * The /credential/reverify endpoint MUST decide via this single SSOT helper and MUST NOT inline-match
+ * disposition_reason strings (deny-by-default at one site, so a future signal that forgets the `high:` prefix
+ * can never silently become self-reverifiable).
+ */
+export function isSelfReverifyAllowed(reason: string | null): boolean {
+  return reason === 'unknown_context'
+}
+
 interface RunOpts {
   dryRun: boolean
   types: CredentialType[]

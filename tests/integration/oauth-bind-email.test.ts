@@ -441,3 +441,31 @@ describe('bind-email 入口校驗', () => {
     expect((await res.json()).code).toBe('INVALID_REQUEST_FORMAT')
   })
 })
+
+// OD-3 credential requires_reverification enforcement — bind-email surface (plan §6.3 / §12).
+// Read-only flag pre-check runs BEFORE consumeJtiOnce, so a blocked token is never burned.
+describe('OD-3 — bind-email requires_reverification block', () => {
+  it('flagged identity -> 403 CREDENTIAL_REVERIFICATION_REQUIRED, temp_bind jti NOT consumed, no token', async () => {
+    const ins = await env.chiyigo_db.prepare(`INSERT INTO users (email, email_verified) VALUES ('be@example.com', 1)`).run()
+    const uid = ins.meta.last_row_id
+    await env.chiyigo_db.prepare(
+      `INSERT INTO user_identities (user_id, provider, provider_id, requires_reverification, disposition_reason) VALUES (?, 'discord', 'discord-uid-flag', 1, 'unknown_context')`,
+    ).bind(uid).run()
+    const token = await signTempBind({ sub: 'discord-uid-flag', provider: 'discord', name: 'X' })
+
+    const res = await callBindEmail({ token, email: 'newbe@example.com' })
+    expect(res.status).toBe(403)
+    expect((await res.json()).code).toBe('CREDENTIAL_REVERIFICATION_REQUIRED')
+
+    // Codex P2: this security signal is account-attributable — the audit binds the affected user_id.
+    const auditRow = await env.chiyigo_db
+      .prepare(`SELECT user_id FROM audit_log WHERE event_type='auth.credential.reverification_required' ORDER BY id DESC LIMIT 1`)
+      .first()
+    expect(Number(auditRow?.user_id)).toBe(Number(uid))
+
+    // jti NOT consumed: same token again still hits the reverification gate (not LINK_ALREADY_USED)
+    const res2 = await callBindEmail({ token, email: 'newbe@example.com' })
+    expect(res2.status).toBe(403)
+    expect((await res2.json()).code).toBe('CREDENTIAL_REVERIFICATION_REQUIRED')
+  })
+})

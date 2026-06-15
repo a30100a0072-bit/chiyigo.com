@@ -386,10 +386,11 @@ describe('[PR5-5d-2] resolveLargeNThreshold (strict) + registry guard', () => {
     }
   })
   it('audit-policy registry — large-N reuses existing endpoint types, no new type of its own', () => {
-    // PR5-5d-2 large-N itself adds NO audit type. The GLOBAL registry size is 226 as of
-    // SEC-REFRESH-REUSE (2026-06-14; +1 auth.refresh.family_revoked over PR-A4's 225). Keep this
-    // in lockstep with audit-policy.test.ts's _registrySize assertion — that file carries the full 209→226 history.
-    expect(_registrySize).toBe(226)
+    // PR5-5d-2 large-N itself adds NO audit type. The GLOBAL registry size is 228 as of the OD-3 credential
+    // reverification enforcement PR (2026-06-14; +2 security_signal — auth.credential.reverification_required +
+    // account.credential.reverification_cleared — over SEC-REFRESH-REUSE's 226). Keep this in lockstep with
+    // audit-policy.test.ts's _registrySize assertion — that file carries the full 209→228 history.
+    expect(_registrySize).toBe(228)
   })
 })
 

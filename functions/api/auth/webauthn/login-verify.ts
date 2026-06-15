@@ -102,6 +102,7 @@ export async function onRequestPost({ request, env }) {
              c.public_key    AS public_key,
              c.counter       AS counter,
              c.transports    AS transports,
+             c.requires_reverification AS requires_reverification,
              u.email         AS email,
              u.email_verified AS email_verified,
              u.role          AS role,
@@ -174,6 +175,18 @@ export async function onRequestPost({ request, env }) {
       user_id: cred.user_id, request,
     })
     return res({ error: 'Account is banned', code: 'ACCOUNT_BANNED' }, 403, cors)
+  }
+
+  // 4.6 OD-3：flagged credential 使用前強制 re-verify。assertion 已驗過，但擋在 counter/last_used update
+  // 與簽 token 之前 → deny path 不寫 credential row、不簽 token（只有持有 passkey 者能到此，非枚舉洩漏）。
+  if (cred.requires_reverification) {
+    const rvSig = await hashIdentifierForAudit(env, 'credential-id', credentialId)
+    await safeUserAudit(env, {
+      event_type: 'auth.credential.reverification_required', severity: 'warn',
+      user_id: cred.user_id, request,
+      data: { method: 'webauthn', credential_id_hmac16: rvSig.hex.slice(0, 16), salted: rvSig.salted },
+    })
+    return res({ error: 'This credential requires re-verification before use', code: 'CREDENTIAL_REVERIFICATION_REQUIRED' }, 403, cors)
   }
 
   // 4.5 Phase E-2 risk score（Passkey 分支）

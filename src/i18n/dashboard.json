@@ -1,5 +1,11 @@
 {
   "zh-TW": {
+    "reverify_badge_needs": "需重新驗證",
+    "reverify_badge_high": "安全審查中",
+    "reverify_btn": "重新驗證",
+    "reverify_success": "✓ 已重新驗證，此登入方式已恢復使用",
+    "reverify_no_channel": "需先設定密碼或啟用 2FA 才能自助重新驗證，請先完成設定或聯絡客服",
+    "elev_reverify_required": "你的第三方身分需重新驗證後才能新增驗證因子，請先於「帳號綁定」完成重新驗證",
     "back_home": "返回首頁",
     "logout_header": "登出",
     "loading_text": "載入中…",
@@ -255,6 +261,12 @@
     "del_otp_required": "刪除帳號需先啟用 2FA。請至上方「兩步驟驗證」啟用後再操作。"
   },
   "en": {
+    "reverify_badge_needs": "Needs re-verification",
+    "reverify_badge_high": "Under review",
+    "reverify_btn": "Re-verify",
+    "reverify_success": "✓ Re-verified — this login method is active again",
+    "reverify_no_channel": "Self re-verification needs a password or 2FA. Please set one up or contact support.",
+    "elev_reverify_required": "Your linked account needs re-verification before you can add a new factor. Please re-verify it under Account Links first.",
     "back_home": "Back to Home",
     "logout_header": "Log Out",
     "loading_text": "Loading…",
@@ -510,6 +522,12 @@
     "del_otp_required": "Account deletion requires 2FA. Enable it in the Two-Factor Authentication section first."
   },
   "ja": {
+    "reverify_badge_needs": "再認証が必要",
+    "reverify_badge_high": "審査中",
+    "reverify_btn": "再認証",
+    "reverify_success": "✓ 再認証が完了し、このログイン方法が再び利用可能になりました",
+    "reverify_no_channel": "セルフ再認証にはパスワードまたは2FAが必要です。設定するかサポートにお問い合わせください",
+    "elev_reverify_required": "新しい認証要素を追加する前に、連携アカウントの再認証が必要です。先に「アカウント連携」で再認証してください",
     "back_home": "ホームに戻る",
     "logout_header": "ログアウト",
     "loading_text": "読み込み中…",
@@ -765,6 +783,12 @@
     "del_otp_required": "アカウント削除には2FAが必要です。先に「二段階認証」を有効化してください。"
   },
   "ko": {
+    "reverify_badge_needs": "재인증 필요",
+    "reverify_badge_high": "심사 중",
+    "reverify_btn": "재인증",
+    "reverify_success": "✓ 재인증되었습니다. 이 로그인 방법을 다시 사용할 수 있습니다",
+    "reverify_no_channel": "셀프 재인증에는 비밀번호 또는 2FA가 필요합니다. 먼저 설정하거나 고객센터에 문의해 주세요",
+    "elev_reverify_required": "새 인증 요소를 추가하려면 먼저 연결된 계정을 재인증해야 합니다. '계정 연결'에서 먼저 재인증해 주세요",
     "back_home": "홈으로 돌아가기",
     "logout_header": "로그아웃",
     "loading_text": "로딩 중…",

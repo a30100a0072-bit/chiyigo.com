@@ -141,11 +141,18 @@ export async function onRequestGet(context) {
     if (!elevationSid)
       return res({ error: 'Session not eligible for factor-add elevation; re-login required', code: 'ELEVATION_SID_REQUIRED' }, 403)
     // 必須對「既綁」provider 重新 reauth（泛化錯誤，不洩漏該 provider 是否屬他人）
+    // ORDER BY requires_reverification ASC → 取最小 rr：有任一 non-flagged identity 則 rr=0，全 flagged 則 rr=1。
     const existing = await env.chiyigo_db
-      .prepare('SELECT 1 FROM user_identities WHERE user_id = ? AND provider = ? LIMIT 1')
+      .prepare('SELECT requires_reverification AS rr FROM user_identities WHERE user_id = ? AND provider = ? ORDER BY requires_reverification ASC LIMIT 1')
       .bind(elevationUserId, provider).first()
     if (!existing)
       return res({ error: 'OAuth re-auth elevation unavailable for this provider', code: 'ELEVATION_PROVIDER_NOT_BOUND' }, 400)
+    // OD-3（supplementary 早擋；load-bearing 在 callback 5a）：該 provider 的所有既綁 identity 都 flagged →
+    // 不開啟 elevation reauth（省一次無謂 OAuth roundtrip）。emit reverification_required（無 provider_id，尚未 reauth）。
+    if (existing.rr) {
+      await safeUserAudit(env, { event_type: 'auth.credential.reverification_required', severity: 'warn', user_id: elevationUserId, request, data: { method: `oauth_reauth_elevation:${provider}`, action: elevationAction } })
+      return res({ error: 'This identity requires re-verification before use', code: 'CREDENTIAL_REVERIFICATION_REQUIRED' }, 403)
+    }
     if (ip) {
       const { blocked } = await checkRateLimit(env.chiyigo_db, { kind: 'elevation_oauth_start', userId: elevationUserId, windowSeconds: 300, max: 10 })
       if (blocked) return res({ error: 'Too many elevation requests. Please try again later.', code: 'RATE_LIMITED' }, 429)

@@ -690,6 +690,12 @@ async function armOrConfirmPayDelete(id) {
   const bindOk    = sp.get('bind');
   const bindError = sp.get('bind_error');
   const provider  = sp.get('provider') ?? '';
+  // OD-3：factor-add elevation 的 OAuth-reauth 用到 flagged identity → callback 擋下後回 dashboard 帶此參數。
+  if (sp.get('elev_error') === 'reverification_required') {
+    history.replaceState(null, '', '/dashboard.html');
+    setTimeout(() => showBindToast(T('elev_reverify_required'), 'warn'), 600);
+    return;
+  }
   if (!bindOk && !bindError) return;
   history.replaceState(null, '', '/dashboard.html');
   const ERR_KEY = {
@@ -724,6 +730,27 @@ function renderBindingSection(identities) {
     const identity    = (identities ?? []).find(i => i.provider === id);
     const displayName = identity?.display_name ?? '';
     const dot         = `<span class="inline-block w-2 h-2 rounded-full mr-2 bind-dot" data-provider="${id}"></span>`;
+    // OD-3：flagged identity → tier-aware。disposition_reason 'needs_review'（unknown_context）可自助 reverify；
+    // 'security_review'（high:）只能解綁 / 聯絡客服（與後端 isSelfReverifyAllowed fail-closed whitelist 對齊）。
+    const flagged          = linked && !!identity?.requires_reverification;
+    const selfReverifiable = flagged && identity?.disposition_reason === 'needs_review';
+    const badge = flagged
+      ? `<span class="shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold ${selfReverifiable
+            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+            : 'bg-red-500/15 text-red-400 border border-red-500/25'}">${selfReverifiable ? T('reverify_badge_needs') : T('reverify_badge_high')}</span>`
+      : '';
+    const reverifyBtn = selfReverifiable
+      ? `<button data-reverify="${id}" data-rid="${identity?.id ?? ''}"
+           class="shrink-0 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-400 text-xs font-semibold transition-all">
+           ${T('reverify_btn')}</button>`
+      : '';
+    const sideBtn = linked
+      ? `<button id="unbind-btn-${id}" data-unbind="${id}" data-i18n="unbind_btn"
+           class="shrink-0 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
+           ${T('unbind_btn')}</button>`
+      : `<button id="bind-btn-${id}" data-bind="${id}" data-i18n="bind_btn"
+           class="shrink-0 px-3 py-1.5 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
+           ${T('bind_btn')}</button>`;
     return `
       <div class="flex items-center justify-between px-5 py-3.5">
         <div class="flex items-center gap-2 min-w-0">
@@ -732,17 +759,9 @@ function renderBindingSection(identities) {
           ${linked && displayName
             ? `<span class="text-xs text-[var(--text-muted)] truncate max-w-[120px]">${esc(displayName)}</span>`
             : ''}
+          ${badge}
         </div>
-        ${linked
-          ? `<button id="unbind-btn-${id}" data-unbind="${id}" data-i18n="unbind_btn"
-               class="shrink-0 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all">
-               ${T('unbind_btn')}
-             </button>`
-          : `<button id="bind-btn-${id}" data-bind="${id}" data-i18n="bind_btn"
-               class="shrink-0 px-3 py-1.5 rounded-lg bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 text-brand-400 text-xs font-semibold transition-all">
-               ${T('bind_btn')}
-             </button>`
-        }
+        <div class="flex items-center gap-2 shrink-0">${reverifyBtn}${sideBtn}</div>
       </div>`;
   }).join('');
   document.getElementById('bind-section').classList.remove('hidden');
@@ -784,6 +803,72 @@ async function unbindProvider(provider) {
     }
     if (btn) { btn.disabled = false; btn.textContent = T('unbind_btn'); }
   }
+}
+
+// ── OD-3：flagged identity 自助重新驗證（owner-vouch）──────────────
+// 透過「獨立持有的因子」（TOTP/備用碼，或無 2FA 時用密碼）證明本人，後端清除 requires_reverification。
+// 不是重新跑 OAuth（植入的 identity 由攻擊者掌握，自證無意義）。channel 由帳號狀態決定，非由使用者選。
+async function reverifyIdentity(provider: string, credentialId: number) {
+  if (!credentialId) return;
+  const hasTotp = !!window.__totpEnabled;
+  const hasPw   = !!window.__hasPassword;
+  // OAuth-only（無 TOTP 也無密碼）→ 無可信管道，引導設密碼 / 聯絡客服（與後端 NO_TRUSTED_CHANNEL 對齊）。
+  if (!hasTotp && !hasPw) { showBindToast(T('reverify_no_channel'), 'warn'); return; }
+  openReverifyModal(provider, credentialId, hasTotp);
+}
+
+function openReverifyModal(provider: string, credentialId: number, useTotp: boolean) {
+  document.getElementById('reverify-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'reverify-modal';
+  modal.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4';
+  const inputType = useTotp ? 'text' : 'password';
+  const placeholder = useTotp ? '兩步驟驗證碼或備用救援碼' : '目前登入密碼';
+  modal.innerHTML = `
+    <div class="relative w-full max-w-md rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-bright)] p-5">
+      <h3 class="text-base font-semibold text-[var(--text)] mb-1">重新驗證身分</h3>
+      <p class="text-xs text-[var(--text-muted)] mb-4">為確認是你本人操作，請完成驗證後即可恢復「${esc(provider)}」登入。</p>
+      <input id="reverify-input" type="${inputType}" autocomplete="${useTotp ? 'one-time-code' : 'current-password'}"
+        ${useTotp ? 'inputmode="numeric"' : ''} placeholder="${placeholder}"
+        class="w-full px-3 py-2 rounded-lg bg-[#1a1a22] border border-[var(--border-bright)] text-[var(--text)] text-sm mb-2 outline-none focus:border-brand-400" />
+      <p id="reverify-err" class="text-xs text-red-400 mb-3 hidden"></p>
+      <div class="flex justify-end gap-2">
+        <button id="reverify-cancel" class="px-3 py-1.5 rounded-lg bg-[#1a1a22] hover:bg-[#23232c] border border-[var(--border-bright)] text-[var(--text)] text-xs transition-all">取消</button>
+        <button id="reverify-submit" class="px-3 py-1.5 rounded-lg bg-brand-500/15 hover:bg-brand-500/20 border border-brand-500/30 text-brand-300 text-xs font-semibold transition-all">確認</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const input = document.getElementById('reverify-input') as HTMLInputElement | null;
+  const errEl = document.getElementById('reverify-err');
+  input?.focus();
+  const close = () => modal.remove();
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  document.getElementById('reverify-cancel')?.addEventListener('click', close);
+  const submit = async () => {
+    const v = (input?.value ?? '').trim();
+    if (!v) { input?.focus(); return; }
+    const btn = document.getElementById('reverify-submit') as HTMLButtonElement | null;
+    if (btn) { btn.disabled = true; btn.textContent = T('btn_loading'); }
+    if (errEl) errEl.classList.add('hidden');
+    try {
+      // 後端 verifySecondFactor 同時驗 TOTP 與備用碼；6 位純數字當 otp_code，其餘當 backup_code（欄位語意對齊）。
+      const proof = useTotp
+        ? (/^\d{6}$/.test(v) ? { otp_code: v } : { backup_code: v })
+        : { password: v };
+      await window.apiFetch('/api/auth/credential/reverify', {
+        method: 'POST',
+        body:   JSON.stringify({ type: 'identity', credential_id: credentialId, ...proof }),
+      });
+      close();
+      showBindToast(T('reverify_success'), 'ok');
+      loadProfile();
+    } catch (e) {
+      if (errEl) { errEl.textContent = window.tApiError(e, T('net_err')); errEl.classList.remove('hidden'); }
+      if (btn) { btn.disabled = false; btn.textContent = '確認'; }
+    }
+  };
+  document.getElementById('reverify-submit')?.addEventListener('click', submit);
+  input?.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 }
 
 let _toastTimer;
@@ -2237,7 +2322,7 @@ document.addEventListener('click', e => {
   const eyeBtn = (e.target as Element | null)?.closest('[data-toggle-pwd]') as HTMLElement | null;
   if (eyeBtn) { togglePassword(eyeBtn.dataset.togglePwd, eyeBtn.dataset.toggleEye); return; }
 
-  const t = (e.target as Element | null)?.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-refund-intent], [data-req-open-id]') as HTMLElement | null;
+  const t = (e.target as Element | null)?.closest('button, a, tr, [data-action], [data-revoke-id], [data-req-del-id], [data-unbind], [data-bind], [data-open-modal], [data-load-page], [data-pay-del-id], [data-pay-refund-intent], [data-req-open-id], [data-reverify]') as HTMLElement | null;
   if (!t) return;
   // List 上的 revoked 永久刪除按鈕（要在 reqOpenId 之前，因為按鈕在 row 內）
   if (t.dataset.reqDelId) return armOrConfirmReqListDelete(Number(t.dataset.reqDelId));
@@ -2285,5 +2370,6 @@ document.addEventListener('click', e => {
   if (t.dataset.revokeId) return armRevoke(Number(t.dataset.revokeId));
   if (t.dataset.unbind)   return unbindProvider(t.dataset.unbind);
   if (t.dataset.bind)     return bindProvider(t.dataset.bind);
+  if (t.dataset.reverify) return reverifyIdentity(t.dataset.reverify, Number(t.dataset.rid));
 });
 })();

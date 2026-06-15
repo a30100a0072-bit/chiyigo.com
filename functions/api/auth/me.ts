@@ -50,7 +50,7 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
   // ── 3. 查詢已綁定的第三方平台身分 ───────────────────────────
   const { results: identities } = await db
     .prepare(`
-      SELECT provider, display_name, avatar_url, created_at,
+      SELECT id, provider, display_name, avatar_url, created_at,
              requires_reverification, disposition_reason
       FROM user_identities
       WHERE user_id = ?
@@ -69,6 +69,9 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
     status:         userRow.status,
     created_at:     userRow.created_at,
     identities:     (identities ?? []).map((i: Record<string, unknown>) => ({
+      // OD-3：expose stable row id (= credential_id used by self-reverify / dashboard actions).
+      // Provider_id / raw OAuth subject is deliberately NOT exposed (it never was).
+      id:           i.id,
       provider:     i.provider,
       display_name: i.display_name,
       avatar_url:   i.avatar_url,
