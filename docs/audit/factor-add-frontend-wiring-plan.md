@@ -1,6 +1,6 @@
 # FACTOR-ADD 前端 elevation 接線修補 plan（Stage 1：TOTP / password elevation）
 
-> **狀態**：`PLAN_DRAFT`（dimension-A self-review workflow ✅ 跑畢，7 維 14 accepted → 主線獨立裁決後套入，逐項裁決見 §12）→ 送 ChatGPT Arch Gate + Codex Plan Gate（Dual Gate v3）。**plan 過 gate 才進 Code 階段。**
+> **狀態**：`PLAN_REVISED`（dimension-A self-review ✅ §12；**ChatGPT Arch Gate r1 ＝ REVISE**〔C1 `bind_identity` transport／C2 測試 wiring〕→ **已修，見 §13**）→ **回送 Arch Gate r2 確認** → Codex Plan Gate。**plan 過 gate 才進 Code 階段。**
 > **分級**：L2（前端 feature 接線）+ **敏感熱區**（auth / factor-add / token）→ 三道基本外部審查全走（GPT Arch + Codex Plan + Codex Code）。
 > **前置裁決**：owner = **Option 2**（Stage 1 先上 TOTP/password elevation，OAuth-only 留 Stage 2）；**插隊在「回 Stage 7 strict」之前**。
 > **後端**：**零改動、無 migration**。整套 elevation primitive（`/api/auth/elevation/{totp,password,exchange}` + `init`/`callback` elevation 分支）已於 #77（PR-A2）/ #78（PR-A3）建全並測全綠。本 PR 只補**前端 ceremony 驅動**。
@@ -86,6 +86,7 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
   2. 皆無 → `showBindToast(T('factor_add_no_channel'), 'warn'); return null;`（OAuth-only，Stage 1 不續）。
   3. 否則 `openElevationModal({ action, useTotp: hasTotp })` → 回 `Promise<{grant_token}|null>`（modal 內完成 POST `/elevation/*`，成功 resolve grant、取消/失敗 resolve null）。
 - **回傳語意**：成功 = `{ grant_token }`；取消/無管道/逾失敗 = `null`（caller 一律 `if (!grant) { 還原按鈕; return; }`）。
+- **`__totpEnabled`/`__hasPassword` 僅 UX hint、非安全來源（Arch A4）**：後端為 SoT。若 flag stale 選錯 endpoint（如誤判無 TOTP 走 password → 403 `ELEVATION_USE_TOTP`），前端 catch 後提示重整或 refetch `/api/auth/me` 再試，**不**把 flag 當授權依據（最終由後端 elevation 端點 fail-closed 判定）。
 
 ### 3.2 elevation 提示 modal（**dedicated**；OD-1）
 
@@ -125,8 +126,9 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
 - 簽章取消（4001/AbortError，:2023）→ grant 未 consume，同上無害。
 
 ### 4.3 `bindProvider`（`dashboard.ts:770`）+ `checkBindResult`
-- 在 `init?is_binding=true`（:774）**之前**取 grant；該 `apiFetch` 帶 header。
-- `init` 為 **validate-not-consume**：驗 grant 有效後把 `grant_hash` 存進 `oauth_states`，回 `redirect_url`；前端整頁 redirect 到 provider；`callback` 在 binding INSERT 同 batch consume grant。
+- **Transport（C1 證明，frontend-only 成立）**：`init?is_binding`／elevation 模式**不回 302**，而是回 **JSON `{ redirect_url }`**（`init.ts:258-261`，註解明示「不可用 302，因為需先帶 Authorization header」）。現行 `bindProvider`（:774-780）**已是兩段式**：`apiFetch(GET init)` → 讀 `data.redirect_url` → `window.location.href = redirect_url`。**header 掛在 `apiFetch`（一般 fetch，可帶 custom header），導頁是其後獨立的 `window.location.href`、本身不需 header** → 無 opaque-redirect 問題（top-level navigation 從不參與 header 傳遞）。故 `X-Factor-Add-Grant` 只需加進**既有那個 `apiFetch`**，**無後端改動、不移出 scope**。
+- 接線：在 `apiFetch(init?is_binding=true)`（:774）**之前**取 grant；該 `apiFetch` 加 `headers: { 'X-Factor-Add-Grant': grant.grant_token }`。
+- `init` 為 **validate-not-consume**：驗 grant 有效 → 存 `grant_hash` 進 `oauth_states` → 回 `redirect_url`；`window.location.href` 導去 provider；`callback` 在 binding INSERT 同 batch consume grant。
 - **`checkBindResult`（:701-706）補 `bind_error` map（SR #1/#7/#11）**：明確新增兩鍵——
   - `elevation_required: 'bind_err_elevation_required'`（callback `:194`，grant 在 init 後 / state 不符）
   - `elevation_consumed: 'bind_err_elevation_consumed'`（callback `:227`，grant 在 provider 同意期間逾 5min TTL／已消費）
@@ -177,6 +179,7 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
   - elevation modal：title／提示／OTP·密碼 placeholder／`elevation_rate_limited`（429 節流）／取消。
   - `bind_err_elevation_required`、`bind_err_elevation_consumed`（**key 名鏡射後端 code** `elevation_required`/`elevation_consumed`，SR #11；user-facing value 可寫「逾時請重綁」）。
 - **錯誤碼 → 友善文案 map（防禦縱深）**：在 `src/js/api.ts` 的 `API_ERROR_I18N` 補 `FACTOR_ADD_GRANT_REQUIRED`/`FACTOR_ADD_ELEVATION_REQUIRED`/`FACTOR_ADD_GRANT_CONSUMED`/`ELEVATION_SID_REQUIRED`/`ELEVATION_REQUIRES_2FA`/`ELEVATION_USE_TOTP`/`ELEVATION_NO_PASSWORD` 等碼，避免再洩後端英文原文（即本次 toast 醜陋的根源）。
+- **403/429 分流（Arch A3）**：四種 elevation-gate 失敗給**不同**使用者文案——`FACTOR_ADD_GRANT_REQUIRED`（需先完成驗證）／`FACTOR_ADD_ELEVATION_REQUIRED`（驗證已失效或過期，請重試）／`ELEVATION_SID_REQUIRED`（請重新登入）／`RATE_LIMITED`（嘗試過多，稍後再試），避免使用者與 debug path 混淆。
 
 ---
 
@@ -184,14 +187,17 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
 
 > root cause 正是「無 dashboard 全鏈路測試」。Stage 1 **必須**補一條能抓到「caller 沒先 elevate / 沒帶 header」的測試，否則盲點復發。
 
-- **全鏈路 test（核心，關盲點）**：載入 build 後的 `public/js/dashboard.js`（node:vm，沿用 api test「eval built bundle」既有 pattern，見 memory 前端 api 8 test），stub `document`/`location`/`window.apiFetch`/`__totpEnabled`/`__hasPassword`，觸發三條 caller，斷言：
-  1. 先呼叫 `/api/auth/elevation/totp`（或 `/password`）取 grant；
-  2. 後續 factor-add 呼叫**確實帶 `X-Factor-Add-Grant` header 且值 == grant_token**；
-  3. OAuth-only（兩旗標皆 false）→ 不打任何 factor-add 端點、顯示引導。
+- **per-caller wiring test（核心，C2 必修，關 root-cause 盲點）**：沿用既有 `tests/api-session-revoked.test.ts` 的 **node:vm `compileFunction` + 注入 browser global stub** harness（repo 無 jsdom，**不新增套件**），載入 build 後的 `public/js/dashboard.js`，stub `document`（最小 element registry + addEventListener/createElement/querySelector 供 modal）／`location`／`navigator.credentials`／`window.ethereum`／`window.apiFetch`（spy router）／`__totpEnabled`/`__hasPassword`。**三條 caller 各驗**：
+  | caller | 斷言 |
+  |---|---|
+  | `add_passkey` | 先 POST `/elevation/{totp,password}` 取 grant；`register-verify` request **帶 `X-Factor-Add-Grant`==grant** 且 action=`add_passkey` |
+  | `bind_wallet` | 同上；`wallet/verify` 帶 header 且 action=`bind_wallet` |
+  | `bind_identity` | `init?is_binding` 的 `apiFetch` 帶 header 且 action=`bind_identity`；transport＝先 fetch 拿 `redirect_url` 再 `location.href`（§4.3） |
+  | OAuth-only | 兩 flag 皆 false → **不打任何 elevation/factor-add 端點** + 顯示引導 |
 - **method 選擇 unit**：`__totpEnabled`→totp 端點、`!totp&&pw`→password 端點、body 形狀正確。
 - **grant_token 洩漏防護 test（SR #3，auth 衛生）**：mock `console.*` + `localStorage`/`sessionStorage`，斷言整個 ceremony 全程**無任何呼叫參數含 grant_token**；錯誤路徑斷言傳給 `tApiError` 的是 code/status（非整個 response body）。配 code-review checklist：grep `dashboard.ts` 確無 `console\..*grant` / `localStorage.*grant` / `sessionStorage.*grant`（[[feedback_security]] log 禁洩 token）。
 - **per-caller action 正確性 test（SR #13）**：斷言三 caller 各送對的 action（addPasskey→`add_passkey`、addWallet→`bind_wallet`、bindProvider→`bind_identity`）＝防前端送錯 action 的 regression（後端 cross-action 比對仍是最終 fail-closed 防線）。
-- **可行性（→ OD-3）**：`dashboard.js` 在 IIFE/載入期有 DOM 觸碰（`checkBindResult` 立即執行），node:vm 需 stub。若 bundle 不易 vm-eval，退而求其次＝把「elevation 網路步驟」抽成可測純函式 + 對它 node:vm 測，DOM/modal 部分以 prod 無痕驗收（[[feedback_prod_verify_incognito]]）補。**送 gate 裁可測邊界。**
+- **fallback 邊界（C2：不得降為純函式-only）**：`dashboard.js` 載入期有 DOM 觸碰（`checkBindResult` IIFE），node:vm 需 stub document。若整支 bundle 太脆，**不**退回「純函式 + prod 無痕」；改把每條 caller 的「附 grant 送 factor-add request」抽成薄 seam，harness 以 stubbed apiFetch 驅動、**仍在 request 邊界斷言 header + action**。pure-function-only 明確不可接受（Arch C2）。prod 無痕（[[feedback_prod_verify_incognito]]）僅作補充、非唯一自動測試。
 - **CI 對齊**（[[feedback_pre_merge_gate_checklist_match_ci]]）：新增 test 必入 CI 對應 job；本機跑齊 lint / ratchet / test:int / **test:cov** / build:functions，全綠才宣告。
 
 ---
@@ -222,7 +228,9 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
 
 ---
 
-## 10. Open Decisions（送 ChatGPT Arch Gate + Codex Plan Gate 裁）
+## 10. Open Decisions（ChatGPT Arch Gate r1 已裁）
+
+> **Arch Gate r1 裁決**：OD-1 **A** ✅／OD-2 **A** ✅（受 C1，已解）／OD-3 **A required**（fallback 仍須 wiring test，見 §7/C2）／OD-4 **A** ✅／OD-5 **A** ✅（維持既有 tradeoff，**不**要求本 PR 後端加碼）。以下各條傾向均獲確認。
 
 - **OD-1（modal 共用度）**：dedicated `openElevationModal`（複製 markup，不碰 reverify）**vs** 把 `openReverifyModal` 泛化成 promise-returning 共用 modal。
   - 傾向：**dedicated**（首要 do-no-harm、僅 2 caller、控制流不同）。
@@ -264,3 +272,18 @@ grant 為後端 one-time、5min、session(sid)-bound、action-bound（`elevation
 | #14 | spec-scope | t2 | **已在 scope（最小化）** | §3.2 已列 429 文案；**拒**倒數計時（後端無 `retry_after`） |
 
 13 條 refuted（主線同意）＝多為「文件可更清楚」非真洞：action-untrusted-input 重複指控（call site 全 hardcoded literal）、apiFetch header merge 過慮（`new Headers(opts.headers)` 既保留 caller header）、5min TTL 對 local ceremony 過慮（秒級）、`#elev_exchange` phishing 過慮（Stage 1 不啟用該路徑）等。
+
+---
+
+## 13. ChatGPT Arch Gate r1 裁決 + 修補（REVISE → 已修，回送 r2）
+
+**裁決＝REVISE**；核心設計（passkey/wallet 兩鏈）sound，OD-1/2/4/5 全確認 **A**、OD-3 改 **A-required**。兩 blocking C 項：
+
+- **C1 — `bind_identity` transport（已解，frontend-only 成立、無後端改動）**：Gate（無 repo 視野）正確點出「top-level navigation 不能帶 custom header；`fetch` manual redirect 變 opaque-redirect（status 0 / 空 header list）拿不到 `Location`」（Fetch spec）。**但既有 `init?is_binding` 不回 302、回 JSON `{redirect_url}`**（`init.ts:258-261`，註解明示為了先帶 Authorization header），現行 `bindProvider`（:774-780）已是「`apiFetch` 拿 `redirect_url` → `window.location.href`」兩段式：**header 掛 `apiFetch`、導頁是其後獨立步驟（不參與 header）** → 正是 Gate 列為「可接受」的第一方案。**結論：只需把 header 加進既有 `apiFetch`，無 opaque-redirect 問題、無後端改動、不移出 scope**（plan §4.3 已補 transport 證明）。
+- **C2 — 測試不得只剩純函式（已修）**：§7／OD-3 改為 per-caller wiring test（node:vm + 最小 DOM stub + apiFetch spy，沿用 `tests/api-session-revoked.test.ts` pattern、**不新增 jsdom 套件**），三條 caller 各斷言「先 elevate + factor-add request 帶 `X-Factor-Add-Grant` + 正確 action」；fallback 仍須在 request 邊界做 wiring 斷言，pure-function-only **不接受**。
+
+**非 blocking A1–A5 已折入**：A1 grant mint 時機（§4 各 caller「ceremony 前取 grant」）／A2 button pending lock（§4/§5.3）／A3 403·429 分流文案（§6）／A4 `__totpEnabled`/`__hasPassword` 僅 UX hint、403 重整 refetch（§3.1）／A5 OAuth 逾時可恢復導回重綁（§4.3/§6）。
+
+**Scope/基線判定（Gate）**：未違反金融級 auth 基線；`requireFactorAddGrant`／grant one-time CAS／5min TTL／action whitelist／migration 0054 均**鎖定不放寬**。
+
+**下一步**：回送 **Arch Gate r2** 確認 C1/C2 修補 → **Codex Plan Gate**。
