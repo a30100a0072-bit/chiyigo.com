@@ -10,13 +10,14 @@
 
 base main `52c5f0b3`（PR-2z squash 後現行 main，branch fork point）。baseline 已於該 SHA 實測（見 §預期 ratchet / §Spike 實證），**勿**沿用更舊快照數字（memory 舊記 902/106/198 係 `01a42a2` 快照；本 PR base 實測 895/104/230）。
 
-> **Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]）**：當前 state = **`CHATGPT_ARCH_APPROVED`**（@ plan commit `89a961cf`；**待 owner 送 Codex Plan Gate；尚未授權 coding**）。
+> **Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]）**：當前 state = **`CODEX_PLAN_APPROVED`**（@ `5090bf7e`；兩 Plan Gate 全過；**待 owner 明示 `CODING_ALLOWED`；尚未授權 coding**）。
 > - 2026-06-16 owner 當輪明示「開 middleware 群（第 11 棒）」= **SPEC_APPROVED**（沿 chain 既定 spec 模板：scope = 4 檔 noImplicitAny 清零、純 type-only reduce PR；Non-goals = 不碰 caller / tests / config / runtime 行為、不改 CORS·觀測·告警·Content-Type 守門邏輯、不顯式標 onRequest 的 return；同輪預授權 A1 spike + plan doc 落檔 commit feature branch）。
 > - 2026-06-16 **A1 spike 已執行並全項達標**（見 §Spike 實證；主方案單輪零修正，含 admin getAll cast / request.cf 標註兩個實測 cascade 點），working tree 已 revert clean。
 > - 2026-06-16 Claude plan 自審到零（`PLAN_SELF_REVIEW_CLEAN`，**單 agent 對抗式**，L1）：對抗 15+ 探針（cascade 數學、`next` narrowing 安全性、admin cast 不遮蔽 bug、`cf`/`data.observe`/`emit` 標型、L1 研判、middleware 檔完整盤點 4/4），一輪 0 新發現。
 > - **級別研判 = L1（純 type annotation、TS erase 後 0 runtime；但較前棒多 3 個 local interface + 1 個 type cast，故附 PR-2z 式「Code Gate 用 L3 熱區檢查法複核」但書）**。理由：4 檔改動全為型別層（interface erase / cast erase / 參數標註 erase），無新 endpoint / schema / 權限 / 契約 / runtime 邏輯；spike 證 runtime byte-identical。**L1 仍走完整 3 道基本外部審查**（ChatGPT Arch + Codex Plan + Codex Code）；L1 不產生 `CHATGPT_CODE_FAITHFULNESS_APPROVED` state、self-review 用單 agent。**級別可由 Arch / Codex 任一方挑戰，疑義 fail-safe 升 L2**（[[feedback_codex_review_workflow]] §7）。**→ ChatGPT Arch 已裁（@ `89a961cf`）：implementation 維持 L1 型別修補、review care 升 L2**（Code Gate 以熱區法驗 TS erase 後 runtime 不變；重點 admin cast + request.cf/data.observe 觀測注入）。
 > - 2026-06-16 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `89a961cf`）** — 准單一 PR、准 minimal `next`、准 admin getAll erased cast、**禁混入任何 set-cookie runtime 重構**。OD-1/2/3 全裁（與 frozen 版一致 → frozen diff 不變）。Arch hard constraints：source scope 僅 4 檔（不得碰第 5 個 source）/ forced tsc 精準 895→877（−18）/ 4 檔 TS7006·TS7031=0 / `comm -13` 新增 0 / removed-set 18 行逐行對應原 18 個 implicit-any / eslint clean / `git diff --check` clean / runtime byte-identical / 禁新 helper·import·套件·DB。另登記 backlog（admin/ai/auth set-cookie 統一 behavior-review PR）。
-> - Codex Plan Gate：**待 owner 送**（外部 gate，Claude 不自跑、不自我宣告 approve）。gate 未回不動工。
+> - 2026-06-16 **Codex Plan Gate：`CODEX_PLAN_APPROVED`（@ `5090bf7e`）** — 無 blocker、無 critical risk。Gate note：code-stage gate list 須顯式含 `npm run test:cov`（已補進 §驗證計劃為一級項；plan 本身無缺陷、不阻擋）。Codex 本輪 read-only（未跑 tsc/test）。**只批 plan gate，非 coding approval**。
+> - **待 owner 明示 `CODING_ALLOWED` 才 coding**（外部 gate 已全過，唯缺 owner coding 授權）。
 
 ## ⚠ auth / 邊界熱區敏感聲明（最高優先紀律）
 
@@ -293,7 +294,8 @@ diff --git a/functions/api/auth/_middleware.ts b/functions/api/auth/_middleware.
 - `npm run lint` green（全量 `eslint functions tests` + compat-date + workflows）。
 - `npm run build:functions` green（type-only、esbuild type-strip，bundle 無型別殘留）。
 - filtered forced tsc：4 檔 0 殘留、sort-diff 重放（移除 18 行、零新增）；`tsc -b tsconfig.tests.json --force` exit 0。
-- **全量 `npm run test:int`**（middleware 全站注入，無 targeted lane → 跑全量；對齊 [[feedback_pre_merge_gate_checklist_match_ci]] 別漏 `test:cov`）。
+- **`npm run test:cov` green**（CI `test` 為 fail-fast 單 job、先跑 cov；cov 紅會 skip test:int/build/audit → 必先綠，[[feedback_pre_merge_gate_checklist_match_ci]]；**Codex Plan Gate note 點名須顯式列**）。
+- **全量 `npm run test:int` green**（middleware 全站注入、無 targeted lane → 跑全量；接在 test:cov 之後，對齊 CI 順序）。
 - baseline file 不得 `--update`（天花板 1119/175 保持）。
 - **硬驗收**：source diff 與本 doc §Spike 最終 diff **逐行一致**（4 檔，不得多檔；OD-1 minimal `next` / OD-2 cast 為凍結版；若 Arch 改裁則以該裁決為新凍結基準）；超出 = scope creep = Gate fail。
 - **Arch Gate approved-scope 對帳基準（Codex / code stage 逐項複核）**：
@@ -306,6 +308,6 @@ diff --git a/functions/api/auth/_middleware.ts b/functions/api/auth/_middleware.
 
 ## 流程定位
 
-- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 開棒）✅ → A1 spike ✅ → `PLAN_SELF_REVIEW_CLEAN`（單 agent 對抗式）✅ → 本 doc commit `89a961cf` ✅ → **`CHATGPT_ARCH_APPROVED`**（@ `89a961cf`，OD-1/2/3 全裁、impl L1 / review care L2）✅ → **Codex Plan Gate**〔← 當前，待 owner 送〕→ `CODING_ALLOWED` → coding（凍結 diff 逐行重放）→ 實跑 gates → 單 agent 自審 → **Codex Code Gate（Arch 但書：用 L3 熱區檢查法複核 TS erase 後 runtime byte-faithful，重點 admin cast + request.cf/data.observe 觀測注入不變）** → owner 明示點頭 → squash-merge（L1：不走 ChatGPT faithfulness 複核，不產生該 state）。
+- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 開棒）✅ → A1 spike ✅ → `PLAN_SELF_REVIEW_CLEAN`（單 agent 對抗式）✅ → 本 doc commit `89a961cf` ✅ → **`CHATGPT_ARCH_APPROVED`**（@ `89a961cf`，OD-1/2/3 全裁、impl L1 / review care L2）✅ → **`CODEX_PLAN_APPROVED`**（@ `5090bf7e`，無 blocker、test:cov note 已補）✅ → **`CODING_ALLOWED`**〔← 當前，待 owner 明示〕→ coding（凍結 diff 逐行重放）→ 實跑 gates → 單 agent 自審 → **Codex Code Gate（Arch 但書：用 L3 熱區檢查法複核 TS erase 後 runtime byte-faithful，重點 admin cast + request.cf/data.observe 觀測注入不變）** → owner 明示點頭 → squash-merge（L1：不走 ChatGPT faithfulness 複核，不產生該 state）。
 - merge 後監看 CI+Deploy；memory 收尾 receipt。
 - **下一刀（owner 排序，開工前再確認）**：`cors.ts`（security-boundary 單獨 PR，~20 caller，本 4 檔的 `getCorsHeaders` 上游）。cors.ts 後 functions leaf noImplicitAny 清零 → 開 `strict:true`（~140 strictNull/catch）→ scripts → tests → browser leaf。
