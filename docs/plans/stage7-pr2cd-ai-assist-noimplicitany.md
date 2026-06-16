@@ -8,7 +8,7 @@ base main `ccb42074`（branch fork point）。baseline 已於該 SHA 實測（`n
 
 ## Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]）
 
-當前 state = **`CODEX_PLAN_APPROVED`**（@ plan tip `43275a95`）。impl **L1** / review care **L2**。**待 owner `CODING_ALLOWED`**。
+當前 state = **`CODE_SELF_REVIEW_CLEAN`**（@ source `0d39b4a4`）。impl **L1** / review care **L2**。**待 Codex Code Gate**。
 
 - 2026-06-16 owner 授權 PR-2cd（scout/spike/plan，**不授權 source coding**）= **`SPEC_APPROVED`**。scope = `ai/assist.ts` 7 noImplicitAny → 0、純 type-only、獨立 PR。impl L1 / review care L2。
 - 2026-06-16 **A1 spike 兩輪**（見 §Spike 實證）：candidate-1（owner 原授權 5 點）**證實不足**（`db: D1Database`→TS2552、`raw: unknown`→3× TS2345 includes、淨 +1、tests-leaf cascade）→ candidate-2 / option A **單輪達標**（863→856、ai/assist 0、zero cascade、eslint 0、build compiled、+9/−8）。working tree 已 revert clean（HEAD `ccb42074`、僅 `?? CLEANUP_PLAN.md`、ratchet 回 863/98/236）。
@@ -16,7 +16,11 @@ base main `ccb42074`（branch fork point）。baseline 已於該 SHA 實測（`n
 - 2026-06-16 **ChatGPT Architecture 諮詢（owner-relayed GPT）= `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**：2 deviation 裁決如上、candidate locked（§鎖定 candidate）、prohibitions 明列（§Coding 硬性邊界）、risk/defense 框架納入本 plan。review care 維持 L2。
 - 2026-06-16 **Claude plan 自審到零**（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，impl L1，一輪 0 新發現）：見 §流程定位。
 - 2026-06-16 **Codex Plan Gate：`CODEX_PLAN_APPROVED`**（@ plan tip `43275a95`）— 0 blocker。對帳：`main..branch` docs-only（1 plan 檔、220 行、base `ccb42074`、`CLEANUP_PLAN.md` untracked 且在 diff 外）；frozen source scope 鎖定；L2 review care 正確（auth/AI input/Turnstile/rate-limit SQL/Workers AI/ai_audit 鄰接）；**alias caveat 已 handled**（plan 不 overclaim bundle byte-identity、只記 behavior-preserving）；`ai_audit` SQL/count windows/limits/insert shape 未改、留 Code Gate receipt 驗。Codex 自跑 `git diff --check` clean + `typecheck:ratchet` 863/236 green。**只批 plan，非 source-release**。
-- **待**：owner `CODING_ALLOWED` → Code（replay frozen +9/−8）→ 機械 gates + receipt → Codex Code Gate → owner squash。未 push、未開 PR、未動 main、未 coding。
+- 2026-06-16 **owner `CODING_ALLOWED`** → Code 階段。frozen diff replay：working-tree `git diff` 對 plan §Spike frozen **逐行 byte-identical**（1 檔 +9/−8、blob `7dc165c5→78efcd9d` = spike 同 blob）。source commit `0d39b4a4`。
+- 2026-06-16 **機械 gates 全綠（@ source `0d39b4a4`）**：forced `tsc -b --force` **total 863→856**（`ai/assist.ts` **0** 殘留、byLeaf `{functions:856}` = zero cascade、tests-leaf 0）；`RATCHET_BASE_REF=ccb42074 npm run typecheck:ratchet` **OK**（current **856/237**、baseline **1119/175 不動**）；`eslint ai/assist.ts` 0 + 全量 `npm run lint` 0；`build:functions` compiled；**`test:cov` pass**（25 files / 737）；**`test:int` 1328/1328**（75 files、**無 flaky**、452s）。`git diff --check` clean。⚠ **`test:cov`/`test:int` 為廣度 regression（確認他檔未受本刀影響），`ai/assist.ts` 無 direct 測例**。
+- 2026-06-16 **byte-identical receipt（review care L2）+ behavior-preserving 聲明**：diff 僅 6 sites（handler ctx 標 / `raw: unknown` / `const o = obj` 投影 alias / `sv/bg/tl as string`×3 / verifyTurnstile 3 param / `db: Env['chiyigo_db']`）。**未碰**：`requireAuth`/JWT、`BLOCK_PATTERNS`、`MAX_PROMPT_LEN`/length、`verifyTurnstile` fail-close 邏輯、多維 rate-limit SQL/`COUNTABLE`/limits、`env.AI.run`/`SCHEMA`/`SYSTEM_PROMPT`/`temperature`、`ai_audit INSERT`（10 欄）、`parseAndValidate` validation（`JSON.parse`/`typeof` guards/enum 內容/`sm.trim().slice`/return）。⚠ **唯一 runtime delta = transparent alias `const o = obj`**（`o === obj` by reference、behavior-preserving；**非 bundle byte-identical**，不誇大）。
+- 2026-06-16 **`CODE_SELF_REVIEW_CLEAN`（單 agent 對抗式，@ source `0d39b4a4`，impl L1，一輪 0 新發現）**：見 §流程定位。
+- **待**：Codex Code Gate → owner 明示 squash-merge。未 push、未開 PR、未動 main。
 
 ## 敏感面聲明（review care L2；無 direct test → receipt 為主要防線）
 
@@ -208,7 +212,7 @@ index 7dc165c5..78efcd9d 100644
 
 ## 流程定位
 
-- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 授權 PR-2cd）✅ → A1 spike（candidate-1 不足 → candidate-2/A 達標）✅ → owner 裁 2 deviation（OD-1/OD-2）✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent，impl L1）✅ → 本 doc commit（feature branch `stage7-pr2cd-ai-assist-noimplicitany`）✅ → **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（owner-relayed GPT 諮詢：deviation 裁決 + candidate lock + prohibitions）✅ → **`CODEX_PLAN_APPROVED`**（@ `43275a95`，0 blocker）✅ → **owner `CODING_ALLOWED`**〔← 當前待 owner〕→ coding（frozen replay +9/−8）→ 機械 gates + receipt → `CODE_SELF_REVIEW_CLEAN` → Codex Code Gate → owner squash → push → PR → CI green → squash-merge --delete-branch → `MERGED_MAIN`。
+- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 授權 PR-2cd）✅ → A1 spike（candidate-1 不足 → candidate-2/A 達標）✅ → owner 裁 2 deviation（OD-1/OD-2）✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent，impl L1）✅ → 本 doc commit（feature branch `stage7-pr2cd-ai-assist-noimplicitany`）✅ → **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（owner-relayed GPT 諮詢：deviation 裁決 + candidate lock + prohibitions）✅ → **`CODEX_PLAN_APPROVED`**（@ `43275a95`，0 blocker）✅ → **owner `CODING_ALLOWED`** ✅ → coding（frozen replay +9/−8、source `0d39b4a4`、blob `7dc165c5→78efcd9d`）✅ → 機械 gates 全綠（forced tsc 856/0、ratchet 856/237、lint 0、build、test:cov 737、test:int 1328/1328 無 flaky）✅ → **`CODE_SELF_REVIEW_CLEAN`**（單 agent，impl L1）✅ → **Codex Code Gate**〔← 當前待 owner 送審〕→ owner 明示 squash-merge → push → PR → CI green → squash-merge --delete-branch → `MERGED_MAIN`。
 - **Claude plan 自審紀錄（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，impl L1，一輪 0 新發現）**：
   1. **delta 數學**：863−7=856 ✅；set-diff ADDED=0 / REMOVED=7 ✅；errorFiles 98→97 / cleanFiles 236→237（單檔 bucket move）✅。
   2. **cascade 誠實**：`raw:unknown` 引 TS2339（投影解）+ 3× TS2345 includes（`as string` 解，非投影可解）——明列、spike 雙候選實證 ✅。
@@ -218,4 +222,5 @@ index 7dc165c5..78efcd9d 100644
   6. **敏感面 byte-identical**：auth/BLOCK_PATTERNS/length/Turnstile/rate-limit SQL/AI.run/SCHEMA/SYSTEM_PROMPT/ai_audit 全在 diff 行外 ✅。
   7. **scope**：single-file、無 out-of-scope error、caller/tests/config 未碰 ✅。
   8. **L1/L2**：impl L1（型別 erase + transparent alias）/ review care L2（auth+AI input+rate-limit+Turnstile+audit 鄰接、無 direct test）✅。
+- **Claude CODE 自審紀錄（`CODE_SELF_REVIEW_CLEAN`，單 agent 對抗式，@ source `0d39b4a4`，impl L1，一輪 0 新發現）**：對抗——(1) faithful replay：blob `78efcd9d` == spike 新側、+9/−8 ✅；(2) scope：僅 ai/assist.ts 1 檔、caller/tests/config 未碰 ✅；(3) runtime-invariance：型別 erase + transparent alias `const o = obj`（o===obj）+ build compiled + test:int 1328/1328 廣度 regression（無他檔 spillover）✅；(4) 敏感面 byte-identical：auth/BLOCK_PATTERNS/length/Turnstile/rate-limit SQL/AI.run/SCHEMA/SYSTEM_PROMPT/ai_audit 全在 diff 行外 ✅；(5) 無禁用 pattern：無 `:any`/`as any`/suppression/新 import/新 runtime 分支（alias 非 branch）、eslint 0、ratchet `[C]` 過 ✅；(6) OD 落實：`Env['chiyigo_db']`（OD-1）/ option A `Record<string,unknown>`+`as string`×3（OD-2、未用 D）✅；(7) runtime 誠實：alias behavior-preserving、非 bundle byte-identical，明標不誇大 ✅；(8) ratchet honesty：報 current 856/237、baseline file 未 `--update` ✅。
 - **本域後續序（owner 裁，輕→重）**：ai/assist（本 PR）→ auth-defense-brute-force（`utils/brute-force.ts`、有 test、全裸 annotation）→ captcha-turnstile（`utils/turnstile.ts`）；`utils/totp.ts` 折回 2FA/elevation/account 域。
