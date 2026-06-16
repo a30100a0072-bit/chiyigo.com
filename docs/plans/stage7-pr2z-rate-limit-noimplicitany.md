@@ -6,11 +6,13 @@
 
 base main `6c548006`（branch fork point）。chain 前棒 scopes `01a42a2`〔PR #64〕後，main 經**約 29 個 PR（#65–93）平行推進** — JS→TS chain 與安全審計（SEC-FACTOR-ADD / credential-reverification / elevation / webauthn / ecpay-failopen 等）並行，rate-limit 棒延後至此；末段 #89–93 為 content-hash asset-versioning + docs。故本 PR base = 現行 main `6c548006`，baseline 已於該 SHA 實測（見 §預期 ratchet），**勿**沿用 scopes 收尾 memory 的舊快照數字。
 
-> **Gate 紀錄（Dual Gate Workflow v3）**：當前 state = **`PLAN_DRAFT` →（自審後）`PLAN_SELF_REVIEW_CLEAN`**。
+> **Gate 紀錄（Dual Gate Workflow v3）**：當前 state = **`CHATGPT_ARCH_APPROVED`**（待 Codex Plan Gate；**尚未授權 coding**）。
 > - 2026-06-16 owner 當輪明示「開第 10 棒 rate-limit.ts」= **SPEC_APPROVED**（沿用 chain 既定 spec 模板：scope = 本檔 noImplicitAny 清零、純 type-only reduce PR；Non-goals = 不碰 caller / tests / config / runtime 行為、不顯式標 return、不動 `RateLimitKind` union 或 `familyRevokeCapKind`；同輪預授權 A1 spike + plan doc 落檔 commit feature branch）。
 > - 2026-06-16 **A1 spike 已執行並全項達標**（見 §Spike 實證；主方案單輪零修正），working tree 已 revert clean。
-> - **級別研判 = L1**（純 type annotation、3 個同型 `db` 標註、TS erase 後 0 runtime、無新 import / alias / global / cast、無契約或架構變更）。L1 仍走**完整 3 道基本外部審查**（ChatGPT Arch + Codex Plan + Codex Code）；L1 不產生 `CHATGPT_CODE_FAITHFULNESS_APPROVED` state、self-review 用單 agent 對抗式（非 workflow）。**惟本檔屬 rate-limit / brute-force / DoS 防護熱區** → 沿 chain「codex chain + first-do-no-harm」最高 care level；若 owner / ChatGPT / Codex 認為應升 L2/L3（加 workflow self-review + faithfulness 複核），當輪可挑戰升級（v3 §7 fail-safe）。
-> - Codex Plan Gate / ChatGPT Arch Gate：待 owner 送（外部 gate，Claude 不自跑）。
+> - 2026-06-16 Claude plan 自審到零（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式 3 輪：R1 補凍結 diff 尾端 context + 校正 baseline drift 歸因〔#65–93 ~29 PR〕+ 驗 tests-leaf noImplicitAny:false；R2 修「無 TS7006 殘餘」矛盾措辭 + strict-rung 段不過度宣稱 debt + OD-1 補註；R3 零新發現）。
+> - **級別研判 = L1**（純 type annotation、3 個同型 `db` 標註、TS erase 後 0 runtime、無新 import / alias / global / cast、無契約或架構變更）。L1 仍走**完整 3 道基本外部審查**（ChatGPT Arch + Codex Plan + Codex Code）；L1 不產生 `CHATGPT_CODE_FAITHFULNESS_APPROVED` state、self-review 用單 agent 對抗式（非 workflow）。
+> - 2026-06-16 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ plan commit `9361d4bb`）** — **0 Blocking finding**。裁示：① **L1 認可**（但但書 = 因本檔為 rate-limit SSOT，**Code Gate 必須用 L3 熱區檢查法複核 TS erase 後 runtime 不變**；觸發升級條件 = coding 階段一旦碰 SQL / limit 規則 / key format / 錯誤處理 / caller / test expectation → 即刻升 L3 退回重審）；② **OD-1 採主方案 inline `db: Env['chiyigo_db']` ×3**（alias defensible 但不採；不為風格一致性改已驗證 frozen diff）；③ Approved Scope 鎖定 = 僅 `functions/utils/rate-limit.ts` 的 3 個 `db` 參數標註，禁改 SQL / kind union / limit·計數邏輯 / 錯誤處理 / caller / test / config / migration；④ coding 後須重跑完整 gates（ratchet / sort-diff / `tsc -b tsconfig.tests.json --force` / eslint rate-limit / rate-limit integration 14/14 / **全量 `npm run lint`** / **`build:functions`**）。owner 裁示：可 push branch（限 plan commit `9361d4bb`，Codex Plan Gate 前禁新增 source commit）。
+> - Codex Plan Gate：待 owner 送（外部 gate，Claude 不自跑；Codex 輪不回送 ChatGPT，若 Codex 對已 approve 架構決策〔OD-1〕有異議 → 回報 owner 裁定）。
 
 ## ⚠ auth-flow 熱區敏感聲明（最高優先紀律）
 
@@ -52,7 +54,7 @@ base main `6c548006`（branch fork point）。chain 前棒 scopes `01a42a2`〔PR
   - **主方案（inline，建議）**：chain note 明列前例（PR-2u inline）；最小 diff（3 行標註、0 新宣告）；hot-zone first-do-no-harm（更少新 token = 更小 review 面）；`Env['chiyigo_db']` 本身已自我說明。**已 spike 實證零 cascade（見 §Spike 實證）。**
   - **alias 變體（defensible）**：對齊 8 個 util/infra 檔的 `ChiyigoDb` 主流慣例（Tier 1 §架構一致性）；命中 §抽象判斷「≥3 處實際重複 → 可抽象」（本檔恰 3 個 db 標註）；代價 = +1 宣告行 + why-comment。
   - **型別等價保證**：`type ChiyigoDb = Env['chiyigo_db']` 為 TS 透明 alias（非 nominal）→ `db: ChiyigoDb` 與 `db: Env['chiyigo_db']` **解析為同一型別**，cascade / emit 行為 byte-identical；兩者差異純為宣告風格，故 alias 變體**無需另跑 spike**（語言層 alias 透明性保證，非 runtime 語意斷言）。
-  - **裁決請求**：建議採 inline 主方案（honor chain note 既定方向 + 最小 diff）。若 Arch Gate 以「util 檔一致性（8-file `ChiyigoDb` 慣例）」優先 → alias 變體為 trivial swap（coding 階段加 1 宣告行 + `db: ChiyigoDb` ×3，重跑 §驗證計劃即可）。**請 Arch Gate prose 裁。**
+  - **✅ 裁決（2026-06-16 ChatGPT Architecture Gate @ `9361d4bb`）：採 inline 主方案 `db: Env['chiyigo_db']` ×3**，不採 alias。理由：本次優先序「安全熱區最小變更 > 凍結 diff 可重放 > TS erase runtime 零差 > Stage 7 reduce 範圍極窄」高於風格一致性；alias defensible 但 +1 宣告行收益不足、不為一致性改已 spike 全綠的 frozen diff。**OD-1 已關閉，inline 為唯一允許落地版。**
 
 **考慮過、否決**：
 - **`db: Pick<Env, 'chiyigo_db'>`**：型別為 `{ chiyigo_db: D1Database }`（env 物件 view），但 3 函式收的是 binding 本身（`db.prepare(...)`）非物件 → 標 Pick 會讓 `db.prepare` 變 property-not-exist（TS2339）、且 caller 傳 `env.chiyigo_db` 變 not-assignable。流入面不符，否決。
@@ -151,6 +153,6 @@ diff --git a/functions/utils/rate-limit.ts b/functions/utils/rate-limit.ts
 
 ## 流程定位
 
-- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 開棒訊息）→ A1 spike（已執行）→ `PLAN_SELF_REVIEW_CLEAN`（單 agent 對抗式，L1）→ 本 doc commit feature branch → **ChatGPT Architecture Gate（裁 OD-1 inline vs alias）** → **Codex Plan Gate** → `CODING_ALLOWED` → coding（凍結 diff 逐行重放）→ 實跑 gates → 自審 → **Codex Code Gate** → owner 明示點頭 → squash-merge（L1：不走 ChatGPT faithfulness 複核，不產生該 state）。
+- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 開棒訊息）✅ → A1 spike（已執行）✅ → `PLAN_SELF_REVIEW_CLEAN`（單 agent 對抗式，L1）✅ → 本 doc commit feature branch（`9361d4bb`）✅ → **`CHATGPT_ARCH_APPROVED`**（OD-1 裁 inline）✅ → **Codex Plan Gate**〔← 當前〕→ `CODING_ALLOWED` → coding（凍結 diff 逐行重放）→ 實跑 gates → 自審 → **Codex Code Gate（Arch 但書：用 L3 熱區檢查法複核 TS erase 後 runtime byte-faithful）** → owner 明示點頭 → squash-merge（L1：不走 ChatGPT faithfulness 複核，不產生該 state）。
 - merge 後監看 CI+Deploy（jwt.test flake 就 rerun）；memory 收尾 receipt。
 - **下一刀（owner 排序，開工前再確認）**：middleware 群〔4 檔 18：`functions/api/_middleware.ts`(9) + `api/admin/_middleware.ts`(3) + `api/ai/_middleware.ts`(3) + `api/auth/_middleware.ts`(3)，blast radius 最大、最後〕→ cors.ts（security-boundary 單獨 PR，~20 caller）。functions noImplicitAny 清零後開 `strict:true`（~140 strictNull/catch）。
