@@ -14,19 +14,12 @@ export async function onRequest({ request, env, next }: { request: Request; env:
 
   const response = await next()
 
-  // CF Workers for...of on Headers DOES include set-cookie (combined); skip it explicitly,
-  // then re-add each cookie individually via getAll() to avoid duplicates and preserve all values
-  const newHeaders = new Headers()
-  for (const [k, v] of response.headers) {
-    if (k.toLowerCase() !== 'set-cookie') newHeaders.append(k, v)
+  // new Response(body, response) 在 CF Workers runtime 層原生繼承 Set-Cookie 陣列（含多筆），
+  // 不需手動解構 Headers / 非標準 getAll('set-cookie')，與 /api/auth 中介層保持一致。
+  const newResponse = new Response(response.body, response)
+  for (const [k, v] of Object.entries(corsHeaders) as [string, string][]) {
+    newResponse.headers.set(k, v)
   }
-  // CF runtime Headers 有 getAll（WebWorker lib 型別未含此非標準擴充）；此 cast 僅補型別、runtime 不變
-  for (const c of (response.headers as Headers & { getAll(name: string): string[] }).getAll('set-cookie')) newHeaders.append('set-cookie', c)
-  for (const [k, v] of Object.entries(corsHeaders) as [string, string][]) newHeaders.set(k, v)
 
-  return new Response(response.body, {
-    status:     response.status,
-    statusText: response.statusText,
-    headers:    newHeaders,
-  })
+  return newResponse
 }
