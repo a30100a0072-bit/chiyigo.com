@@ -16,6 +16,34 @@
 import { getCorsHeaders } from '../utils/cors'
 import { refreshClientsCache } from '../utils/oauth-clients'
 
+// 下游 handler 在 data.observe 上掛的觀測 metadata（handler 可覆寫 userId/extras）
+interface RequestObserve {
+  traceId: string
+  userId: string | null
+  extras: Record<string, unknown> | null
+}
+
+// Pages Functions EventContext 的最小型別（@cloudflare/workers-types 未安裝，
+// 比照既有 handler 慣例以 inline shape 標註，僅涵蓋本檔實讀的欄位）。
+interface MiddlewareContext {
+  request: CfRequest                          // L144 讀 request.cf
+  env: Env
+  next: () => Promise<Response>
+  data: { observe?: RequestObserve }
+  waitUntil: (promise: Promise<unknown>) => void
+}
+
+// 5xx Discord 告警的 payload shape
+interface AlertPayload {
+  method: string
+  path: string
+  status: number
+  traceId: string
+  ms: number
+  errName: string | null
+  errMessage: string | null
+}
+
 const CT_EXEMPT_EXACT   = new Set(['/api/auth/logout'])
 // 第三方 webhook 多用 application/x-www-form-urlencoded（ECPay、PSP 等）；
 // /api/webhooks/* 全段豁免 Content-Type 守門，由各 vendor adapter 自行解析+驗章。
@@ -29,7 +57,7 @@ function genTraceId() {
 // 從 Authorization: Bearer <jwt> 取出 payload.sub（不驗證簽章，只給 log 標籤用）
 // — handler 仍會用 requireAuth 做真實驗證；status 4xx 表示這個 sub 是「自稱」，
 //   2xx/3xx 表示已被驗證通過。
-function tryDecodeAuthSub(authHeader) {
+function tryDecodeAuthSub(authHeader: string | null) {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null
   const parts = authHeader.slice(7).trim().split('.')
   if (parts.length < 2) return null
@@ -41,13 +69,13 @@ function tryDecodeAuthSub(authHeader) {
 }
 
 // 把 path 中的數字 / UUID 動態段替換為 :id / :uuid，避免高基數爆炸
-function routePattern(path) {
+function routePattern(path: string) {
   return path
     .replace(/\/\d+(?=\/|$)/g, '/:id')
     .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?=\/|$)/gi, '/:uuid')
 }
 
-function emit(line) {
+function emit(line: Record<string, unknown>) {
   try { console.log(JSON.stringify(line)) } catch { /* never throw from logger */ }
 }
 
@@ -56,7 +84,7 @@ function emit(line) {
 const ALERT_COOLDOWN_MS = 60_000
 const alertLastSentAt = new Map()
 
-function shouldAlert(pathPattern) {
+function shouldAlert(pathPattern: string) {
   const now = Date.now()
   const last = alertLastSentAt.get(pathPattern) ?? 0
   if (now - last < ALERT_COOLDOWN_MS) return false
@@ -64,7 +92,7 @@ function shouldAlert(pathPattern) {
   return true
 }
 
-async function sendAlert(webhookUrl, payload) {
+async function sendAlert(webhookUrl: string, payload: AlertPayload) {
   try {
     await fetch(webhookUrl, {
       method: 'POST',
@@ -81,13 +109,13 @@ async function sendAlert(webhookUrl, payload) {
   } catch { /* never throw from alerter */ }
 }
 
-function levelFor(status, hasError) {
+function levelFor(status: number, hasError: boolean) {
   if (hasError || status >= 500) return 'error'
   if (status >= 400) return 'warn'
   return 'info'
 }
 
-export async function onRequest(context) {
+export async function onRequest(context: MiddlewareContext) {
   const { request, env, next, data, waitUntil } = context
   const url     = new URL(request.url)
   const path    = url.pathname
@@ -141,7 +169,7 @@ export async function onRequest(context) {
   }
 
   const ms     = Date.now() - start
-  const cf     = request.cf ?? {}
+  const cf: { country?: string } = request.cf ?? {}
   const status = caught ? 500 : (response?.status ?? 0)
 
   const pathPattern = routePattern(path)

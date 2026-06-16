@@ -8,7 +8,7 @@
 
 import { getCorsHeaders } from '../../utils/cors'
 
-export async function onRequest({ request, env, next }) {
+export async function onRequest({ request, env, next }: { request: Request; env: Env; next: () => Promise<Response> }) {
   const corsHeaders = getCorsHeaders(request, env)
 
   if (request.method === 'OPTIONS') {
