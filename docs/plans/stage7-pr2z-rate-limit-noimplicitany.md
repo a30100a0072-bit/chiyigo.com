@@ -92,7 +92,7 @@ diff --git a/functions/utils/rate-limit.ts b/functions/utils/rate-limit.ts
  ): Promise<{ blocked: boolean, count: number }> {
    const where = ['kind = ?', `created_at > datetime('now', ?)`]
 @@ -100,7 +100,7 @@ export async function checkRateLimit(
- 
+
  /** 寫入一筆失敗記錄（kind 區分用途）。 */
  export async function recordRateLimit(
 -  db,
@@ -101,7 +101,7 @@ diff --git a/functions/utils/rate-limit.ts b/functions/utils/rate-limit.ts
  ): Promise<void> {
    await db
 @@ -114,7 +114,7 @@ export async function recordRateLimit(
- 
+
  /** 清除指定 user 在指定 kind 的所有記錄（成功事件後呼叫）。 */
  export async function clearRateLimit(
 -  db,
