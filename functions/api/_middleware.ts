@@ -26,7 +26,7 @@ interface RequestObserve {
 // Pages Functions EventContext 的最小型別（@cloudflare/workers-types 未安裝，
 // 比照既有 handler 慣例以 inline shape 標註，僅涵蓋本檔實讀的欄位）。
 interface MiddlewareContext {
-  request: CfRequest                          // L144 讀 request.cf
+  request: CfRequest                          // CfRequest（非標準 Request）：onRequest 內讀 request.cf.country
   env: Env
   next: () => Promise<Response>
   data: { observe?: RequestObserve }
