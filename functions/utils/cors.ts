@@ -9,14 +9,14 @@
 
 import { getAllowedCorsOrigins, getAudByOrigin, getValidAuds } from './oauth-clients'
 
-function getAllowedOrigins(env) {
+function getAllowedOrigins(env: Pick<Env, 'ALLOWED_ORIGINS'>) {
   const extras = env.ALLOWED_ORIGINS
     ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
     : []
   return [...getAllowedCorsOrigins(), ...extras]
 }
 
-function isAllowedOrigin(origin, env) {
+function isAllowedOrigin(origin: string, env: Pick<Env, 'ALLOWED_ORIGINS' | 'ENVIRONMENT'>) {
   if (!origin) return false
   if (getAllowedOrigins(env).includes(origin)) return true
   if (env.ENVIRONMENT === 'development' &&
@@ -31,10 +31,10 @@ function isAllowedOrigin(origin, env) {
  * @param {boolean} [opts.credentials] 跨子網域帶 cookie 的端點（refresh / logout / web token）
  *                                     傳 true 會加 Access-Control-Allow-Credentials: true
  */
-export function getCorsHeaders(request, env, opts: { credentials?: boolean } = {}) {
+export function getCorsHeaders(request: Request, env: Pick<Env, 'ALLOWED_ORIGINS' | 'ENVIRONMENT'>, opts: { credentials?: boolean } = {}) {
   const origin = request.headers.get('Origin') ?? ''
   if (!isAllowedOrigin(origin, env)) return {}
-  const headers = {
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Origin':  origin,
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -48,7 +48,7 @@ export function getCorsHeaders(request, env, opts: { credentials?: boolean } = {
 // JWT aud claim 解析：依 redirect / origin 決定 token 受眾
 // 從 oauth-clients registry 動態讀（middleware refresh 後反映 D1 最新內容）
 // 未匹配 → 'chiyigo'（chiyigo.com 自家頁面）
-export function resolveAud(input) {
+export function resolveAud(input: unknown) {
   if (!input || typeof input !== 'string') return 'chiyigo'
   if (getValidAuds().has(input)) return input
   try {
