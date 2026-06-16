@@ -2,6 +2,11 @@ import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config'
 
 export default defineWorkersConfig({
   test: {
+    // Integration tests share one workerd isolate (singleWorker) + D1-local storage;
+    // cumulative load pushes later cases past vitest's 5s default testTimeout
+    // (credential-disposition's heaviest case ~3.5s isolated, >5s under the full suite).
+    // 20s = ample headroom under load without masking a genuine hang.
+    testTimeout: 20_000,
     // PR-39 (Stage 4 enabler)：副檔名用 .{js,ts} glob，rename 期不漏 .test.ts
     // 參考 vitest.config.js 同步註解。
     include: ['tests/integration/**/*.test.{js,ts}'],
