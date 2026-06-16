@@ -5,7 +5,7 @@
 
 import { getCorsHeaders } from '../../utils/cors'
 
-export async function onRequest({ request, env, next }) {
+export async function onRequest({ request, env, next }: { request: Request; env: Env; next: () => Promise<Response> }) {
   const corsHeaders = getCorsHeaders(request, env)
 
   if (request.method === 'OPTIONS') {
@@ -20,7 +20,8 @@ export async function onRequest({ request, env, next }) {
   for (const [k, v] of response.headers) {
     if (k.toLowerCase() !== 'set-cookie') newHeaders.append(k, v)
   }
-  for (const c of response.headers.getAll('set-cookie')) newHeaders.append('set-cookie', c)
+  // CF runtime Headers 有 getAll（WebWorker lib 型別未含此非標準擴充）；此 cast 僅補型別、runtime 不變
+  for (const c of (response.headers as Headers & { getAll(name: string): string[] }).getAll('set-cookie')) newHeaders.append('set-cookie', c)
   for (const [k, v] of Object.entries(corsHeaders) as [string, string][]) newHeaders.set(k, v)
 
   return new Response(response.body, {

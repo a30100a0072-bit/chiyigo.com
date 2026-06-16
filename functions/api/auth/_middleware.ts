@@ -11,7 +11,7 @@
 
 import { getCorsHeaders } from '../../utils/cors'
 
-export async function onRequest({ request, env, next }) {
+export async function onRequest({ request, env, next }: { request: Request; env: Env; next: () => Promise<Response> }) {
   // 全 /api/auth/* 都可能帶 cookie / Authorization，統一加 Allow-Credentials: true
   // （瀏覽器只在客戶端 credentials:'include' 時才送，所以這裡放寬不會自動帶憑證）
   const corsHeaders = getCorsHeaders(request, env, { credentials: true })
