@@ -8,14 +8,15 @@ base main `ccb42074`（branch fork point）。baseline 已於該 SHA 實測（`n
 
 ## Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]）
 
-當前 state = **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（owner-relayed GPT 架構諮詢）。impl **L1** / review care **L2**。**待 owner 送 Codex Plan Gate**。
+當前 state = **`CODEX_PLAN_APPROVED`**（@ plan tip `43275a95`）。impl **L1** / review care **L2**。**待 owner `CODING_ALLOWED`**。
 
 - 2026-06-16 owner 授權 PR-2cd（scout/spike/plan，**不授權 source coding**）= **`SPEC_APPROVED`**。scope = `ai/assist.ts` 7 noImplicitAny → 0、純 type-only、獨立 PR。impl L1 / review care L2。
 - 2026-06-16 **A1 spike 兩輪**（見 §Spike 實證）：candidate-1（owner 原授權 5 點）**證實不足**（`db: D1Database`→TS2552、`raw: unknown`→3× TS2345 includes、淨 +1、tests-leaf cascade）→ candidate-2 / option A **單輪達標**（863→856、ai/assist 0、zero cascade、eslint 0、build compiled、+9/−8）。working tree 已 revert clean（HEAD `ccb42074`、僅 `?? CLEANUP_PLAN.md`、ratchet 回 863/98/236）。
 - 2026-06-16 **owner 裁 2 deviation**（A1 spike 揭露）：**OD-1 `db: Env['chiyigo_db']`**（非 `D1Database`）、**OD-2 includes 採 option A**（`Record<string,unknown>` 投影 + `sv/bg/tl as string`×3，非 D typed projection）。見 §Open Decisions。
 - 2026-06-16 **ChatGPT Architecture 諮詢（owner-relayed GPT）= `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**：2 deviation 裁決如上、candidate locked（§鎖定 candidate）、prohibitions 明列（§Coding 硬性邊界）、risk/defense 框架納入本 plan。review care 維持 L2。
 - 2026-06-16 **Claude plan 自審到零**（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，impl L1，一輪 0 新發現）：見 §流程定位。
-- **待**：Codex Plan Gate → owner `CODING_ALLOWED` → Code → Codex Code Gate → owner squash。未 push、未開 PR、未動 main、未 coding。
+- 2026-06-16 **Codex Plan Gate：`CODEX_PLAN_APPROVED`**（@ plan tip `43275a95`）— 0 blocker。對帳：`main..branch` docs-only（1 plan 檔、220 行、base `ccb42074`、`CLEANUP_PLAN.md` untracked 且在 diff 外）；frozen source scope 鎖定；L2 review care 正確（auth/AI input/Turnstile/rate-limit SQL/Workers AI/ai_audit 鄰接）；**alias caveat 已 handled**（plan 不 overclaim bundle byte-identity、只記 behavior-preserving）；`ai_audit` SQL/count windows/limits/insert shape 未改、留 Code Gate receipt 驗。Codex 自跑 `git diff --check` clean + `typecheck:ratchet` 863/236 green。**只批 plan，非 source-release**。
+- **待**：owner `CODING_ALLOWED` → Code（replay frozen +9/−8）→ 機械 gates + receipt → Codex Code Gate → owner squash。未 push、未開 PR、未動 main、未 coding。
 
 ## 敏感面聲明（review care L2；無 direct test → receipt 為主要防線）
 
@@ -207,7 +208,7 @@ index 7dc165c5..78efcd9d 100644
 
 ## 流程定位
 
-- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 授權 PR-2cd）✅ → A1 spike（candidate-1 不足 → candidate-2/A 達標）✅ → owner 裁 2 deviation（OD-1/OD-2）✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent，impl L1）✅ → 本 doc commit（feature branch `stage7-pr2cd-ai-assist-noimplicitany`）✅ → **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（owner-relayed GPT 諮詢：deviation 裁決 + candidate lock + prohibitions）✅ → **Codex Plan Gate**〔← 當前待 owner 送審〕→ owner `CODING_ALLOWED` → coding（frozen byte-identical replay）→ 機械 gates + receipt → `CODE_SELF_REVIEW_CLEAN` → Codex Code Gate → owner squash → push → PR → CI green → squash-merge --delete-branch → `MERGED_MAIN`。
+- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 授權 PR-2cd）✅ → A1 spike（candidate-1 不足 → candidate-2/A 達標）✅ → owner 裁 2 deviation（OD-1/OD-2）✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent，impl L1）✅ → 本 doc commit（feature branch `stage7-pr2cd-ai-assist-noimplicitany`）✅ → **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（owner-relayed GPT 諮詢：deviation 裁決 + candidate lock + prohibitions）✅ → **`CODEX_PLAN_APPROVED`**（@ `43275a95`，0 blocker）✅ → **owner `CODING_ALLOWED`**〔← 當前待 owner〕→ coding（frozen replay +9/−8）→ 機械 gates + receipt → `CODE_SELF_REVIEW_CLEAN` → Codex Code Gate → owner squash → push → PR → CI green → squash-merge --delete-branch → `MERGED_MAIN`。
 - **Claude plan 自審紀錄（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，impl L1，一輪 0 新發現）**：
   1. **delta 數學**：863−7=856 ✅；set-diff ADDED=0 / REMOVED=7 ✅；errorFiles 98→97 / cleanFiles 236→237（單檔 bucket move）✅。
   2. **cascade 誠實**：`raw:unknown` 引 TS2339（投影解）+ 3× TS2345 includes（`as string` 解，非投影可解）——明列、spike 雙候選實證 ✅。
