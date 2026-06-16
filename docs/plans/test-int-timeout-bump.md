@@ -6,11 +6,12 @@
 
 > **scope framing**：純抬「per-test 失敗上限」，不改任何測試行為 / 不縮短任何測試 / 不碰測試本體 / 不碰 unit config（`vitest.config.js`）。timeout 是**上限非延遲** → passing test 跑多快還多快、**零 CI 時間影響**。
 
-> **Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]；owner 裁定走完整 3 道）**：當前 state = **`PLAN_SELF_REVIEW_CLEAN`**（待 owner 跑 ChatGPT Arch Gate；未 merge、未開 PR）。
+> **Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]；owner 裁定走完整 3 道）**：當前 state = **`CHATGPT_ARCH_APPROVED`**（@ `29220916`；待 owner 跑 Codex Plan Gate；未 merge、未開 PR）。
 > - 2026-06-16 owner 裁示「B＝走完整 Dual Gate」（即使 zero-risk test config 也照 Hard Rule 跑滿 3 道）= **SPEC_APPROVED**。spec：`vitest.workers.config.js` 加 `testTimeout: 20_000` + why-comment；Non-goals = 不碰測試本體 / 不碰 `vitest.config.js`（unit）/ 不動 `singleWorker`·`isolatedStorage`·miniflare bindings / 不加 `hookTimeout`（無 hook timeout 失敗）/ 不優化 slow test setup。
 > - 2026-06-16 **A1 spike 已執行並達標**（見 §Spike 實證），working tree 已 revert clean（HEAD `9c4d7218`）。
 > - 2026-06-16 Claude plan 自審到零（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，L1）：見 §流程定位 自審紀錄。
 > - **級別研判 = L1**（純測試 config 一行 + 註解；TS 無關、prod/runtime/security 無關；rollback = 單行 revert）。L1 仍走完整 3 道基本外部審查（owner 裁定）；self-review 單 agent。
+> - 2026-06-16 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `29220916`）** — 0 blocker。OD-1/2/3 全裁＝建議版（`20_000` / config-global / 不加 `hookTimeout`）→ frozen diff 不變。架構 lock：僅 `vitest.workers.config.js`、僅加 `testTimeout: 20_000` + 註解；禁改測試本體 / unit config / `functions/**` / migration / runtime / `singleWorker` / `isolatedStorage` / `hookTimeout`。驗證要求：`test:int` 全量 1328 green / ratchet 869 不變 / lint / `test:cov`（CI 順序）/ `git diff --check` / diff scope review。
 > - **MERGE：待 owner 明示點頭**。未到位前不 push / 不開 PR / 不 merge / 不動 main。
 
 ## 風險聲明（誠實定位）
@@ -106,6 +107,6 @@ index 28073fff..8ee142bc 100644
 - **硬驗收**：diff 僅 `vitest.workers.config.js`、僅加 `testTimeout` + 註解;無第 2 檔、無其他 config key。
 
 ## 流程定位
-- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 裁 B）✅ → A1 spike ✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent 對抗式，L1）✅ → 本 doc commit（feature branch `test-int-suite-timeout`）→ **`CHATGPT_ARCH_APPROVED`**〔← 當前待 owner 跑〕→ `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`（owner）→ coding（frozen replay）→ 機械 gates 全綠 → `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → owner 點頭 → squash-merge → `MERGED_MAIN`。
+- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 裁 B）✅ → A1 spike ✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent 對抗式，L1）✅ → 本 doc commit（feature branch `test-int-suite-timeout`）→ **`CHATGPT_ARCH_APPROVED`**（@ `29220916`，0 blocker、OD-1/2/3 全裁）✅ → **`CODEX_PLAN_APPROVED`**〔← 當前待 owner 跑〕→ `CODING_ALLOWED`（owner）→ coding（frozen replay）→ 機械 gates 全綠 → `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → owner 點頭 → squash-merge → `MERGED_MAIN`。
 - **Claude plan 自審紀錄（單 agent 對抗式，L1，一輪 0 新發現）**：① root cause 實證（無 testTimeout→5s 預設、singleWorker 累積負載、credential-disposition 最慢檔 10.07s）✅；② 20s 值有據（最慢檔 ~2×、最慢 case 3-4×、遠小於真 hash hang）✅；③ scope 僅 config 一行、不碰測試本體/unit config/isolation 模型 ✅；④ 風險誠實定位（非 prod/security 面、唯一風險=遮蔽 hang 已 mitigate）✅；⑤ ratchet 不受影響（config 非 TS error）spike 證 869 不變 ✅；⑥ OD-1/2/3 留逃生給 Arch ✅。
 - **下一刀**：本 PR 與 noImplicitAny chain 獨立;merge 後 chain 續 `strict:true`（functions leaf 已清零）。
