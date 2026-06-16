@@ -19,7 +19,7 @@ import { verifyAuditChain } from '../../utils/audit-log'
 import { safeUserAudit, hashIdentifierForAudit } from '../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   // P1-17 Phase 3: metrics 主要是用戶/session 統計 → 收進 admin:users:read|write
   const { user, error } = await requireAnyScope(request, env, SCOPES.ADMIN_USERS_READ, SCOPES.ADMIN_USERS_WRITE)
   if (error) return error
@@ -102,11 +102,11 @@ export async function onRequestGet({ request, env }) {
 
   // hash chain 驗證另外做（要從頭 walk，不便和上面平行）
   const chain = await verifyAuditChain(db).catch(err => ({
-    valid: false, total: 0, brokenAt: null, reason: 'verify_failed:' + err?.message,
+    valid: false, total: 0, brokenAt: null as number | null, reason: 'verify_failed:' + err?.message,
   }))
 
   // ── 整理輸出 ───────────────────────────────────────────────────
-  const byKey = (rows, key) => Object.fromEntries((rows.results ?? []).map(r => [r[key], r.n]))
+  const byKey = (rows: { results?: Record<string, unknown>[] }, key: string) => Object.fromEntries((rows.results ?? []).map((r: Record<string, unknown>) => [r[key] as string, r.n]))
 
   // SEC-ADMIN-ENUM：top-IP 由 raw 改 keyed-HMAC16（domain 'metrics-ip'），保留「重複 offender
   // 可關聯」用途但不外洩 raw IP（PII）。salted 旗標供下游偵測 prod 缺 AUDIT_IP_SALT。
