@@ -8,11 +8,14 @@
 
 base main `25754678`（PR-2aa squash 後現行 main，branch fork point）。baseline 已於該 SHA 實測（見 §預期 ratchet / §Spike 實證）：**877 / 100 / 234 / 334**（canonical `npm run typecheck:ratchet:report`）。**勿**沿用更舊快照數字。
 
-> **Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]）**：當前 state = **`PLAN_SELF_REVIEW_CLEAN`**（待 owner 跑 ChatGPT Arch Gate；未 merge、未開 PR）。
+> **Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]）**：當前 state = **`CHATGPT_ARCH_APPROVED`**（@ `c52b7375`；待 owner 跑 Codex Plan Gate；未 merge、未開 PR）。
 > - 2026-06-16 owner 當輪明示「可以開 plan doc」+ scope 糾正 + 逐項裁決（見下）= **SPEC_APPROVED**。spec：scope = `cors.ts` 7 TS7006 + 1 TS2551 collateral 清零、純 type-only reduce PR；Non-goals = 不碰 CORS policy / allowlist / header value / credentials 分支 / origin 判斷、不碰 caller / tests / config、**不順手 trim JSDoc**（owner 鎖定）、`admin/payments/intents.ts` 的 `cors` param out-of-scope。impl 級別 = **L1**、review care = **L2**（owner 拍板）。同輪預授權 A1 spike + plan doc 落檔 commit feature branch。
 > - 2026-06-16 **A1 spike 已執行並全項達標**（見 §Spike 實證；主方案單輪零修正，含「minimal candidate 無顯式 return annotation 即零 cascade」的實證），working tree 已 revert clean（HEAD `25754678`、僅 `?? CLEANUP_PLAN.md` untracked）。
 > - 2026-06-16 Claude plan 自審到零（`PLAN_SELF_REVIEW_CLEAN`，**單 agent 對抗式**，L1）：見 §流程定位 自審紀錄。
-> - **級別研判 = L1（純 type annotation + 1 個 object-variable 型別標註，TS erase 後 0 runtime）**。理由：5 行改動全為型別層（param annotation erase / `Record<string,string>` 變數標註 erase），無新 endpoint / schema / 權限 / 契約 / runtime 邏輯；spike 證 runtime byte-identical（type-strip no-op）。**但 cors.ts = CORS security boundary（跨來源信任邊界 + credentials gating），故沿 PR-2z/2aa 例附「Code Gate 用 L2 熱區檢查法複核」**（owner 已預先拍板 review care L2）。**L1 仍走完整 3 道基本外部審查**（ChatGPT Arch + Codex Plan + Codex Code）；L1 不產生 `CHATGPT_CODE_FAITHFULNESS_APPROVED` state、self-review 用單 agent。**級別可由 Arch / Codex 任一方挑戰，疑義 fail-safe 升 L2**（[[feedback_codex_review_workflow]] §7）。
+> - **級別研判 = L1（純 type annotation + 1 個 object-variable 型別標註，TS erase 後 0 runtime）**。理由：5 行改動全為型別層（param annotation erase / `Record<string,string>` 變數標註 erase），無新 endpoint / schema / 權限 / 契約 / runtime 邏輯；spike 證 runtime byte-identical（type-strip no-op）。**但 cors.ts = CORS security boundary（跨來源信任邊界 + credentials gating），故沿 PR-2z/2aa 例附「Code Gate 用 L2 熱區檢查法複核」**（owner 已預先拍板 review care L2）。**L1 仍走完整 3 道基本外部審查**（ChatGPT Arch + Codex Plan + Codex Code）；L1 不產生 `CHATGPT_CODE_FAITHFULNESS_APPROVED` state、self-review 用單 agent。**級別可由 Arch / Codex 任一方挑戰，疑義 fail-safe 升 L2**（[[feedback_codex_review_workflow]] §7）。**→ ChatGPT Arch 已裁（@ `c52b7375`）：implementation 維持 L1 型別修補、review care 升 L2**（Code Gate 以熱區法驗 TS erase 後 CORS runtime 不變；重點 allowlist / credentials / fail-closed `{}` / `resolveAud` fail-safe byte-identical）。
+> - 2026-06-16 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED`（@ `c52b7375`）** — 0 blocker、0 required revision、2 non-blocking notes。OD-1..4 全裁（與 frozen 版一致 → frozen diff 不變）。Arch hard-lock approved scope：僅 `cors.ts` 1 檔 +5/−5 / 877→869 / errorFiles 100→99 / cleanFiles 234→235 / `comm -13` 空必重現 / baseline 1119/175 不動 / 無 `:any`·suppression·新 `as`·新 import·runtime branch；TS2551 修法須為 `Record<string,string>` 標註（非 conditional-spread runtime 改寫）；caller/tests/config/JSDoc/`admin/payments/intents.ts` 全不碰。
+>   - **NB-1（採納，coding 紀律）**：實作對帳一律用 raw diff（`git diff --word-diff` / raw patch），勿被聊天介面長行折行誤導（`getCorsHeaders(...)` 那行 142 字元）。
+>   - **NB-2（採納）**：`getCorsHeaders` inferred return 維持 `Record<string,string> | {}`，本 Gate 接受（spike 證 caller/test 零 cascade）；若 Codex 要改顯式 `: Record<string,string>` = **新裁決**，須回 plan 改 frozen diff，**不可在 coding 階段私改**。
 > - **MERGE：待 owner 明示點頭**（L1 路徑不產生 `CHATGPT_CODE_FAITHFULNESS_APPROVED` state）。未點頭前不 push / 不開 PR / 不 merge / 不動 main。
 
 ## ⚠ CORS security-boundary 敏感聲明（最高優先紀律）
@@ -203,7 +206,7 @@ index c9cb43ed..c94be48b 100644
 
 ## 流程定位
 
-- Dual Gate Workflow v3：`SPEC_APPROVED`（owner「可以開 plan doc」+ scope 糾正 + 逐項裁決）✅ → A1 spike ✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent 對抗式，L1）✅ → 本 doc commit（feature branch `stage7-pr2bb-cors-noimplicitany`）✅ → **`CHATGPT_ARCH_APPROVED`**〔← 當前待 owner 跑〕→ `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`（owner）→ coding（frozen byte-identical replay）→ 機械 gates 全綠 → `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → **owner 明示點頭**（L1：不走 ChatGPT faithfulness 複核、不產生該 state）→ squash-merge → `MERGED_MAIN`。
+- Dual Gate Workflow v3：`SPEC_APPROVED`（owner「可以開 plan doc」+ scope 糾正 + 逐項裁決）✅ → A1 spike ✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent 對抗式，L1）✅ → 本 doc commit（feature branch `stage7-pr2bb-cors-noimplicitany`）✅ → **`CHATGPT_ARCH_APPROVED`**（@ `c52b7375`，0 blocker、OD-1..4 全裁、NB-1/NB-2）✅ → **`CODEX_PLAN_APPROVED`**〔← 當前待 owner 跑〕→ `CODING_ALLOWED`（owner）→ coding（frozen byte-identical replay）→ 機械 gates 全綠 → `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → **owner 明示點頭**（L1：不走 ChatGPT faithfulness 複核、不產生該 state）→ squash-merge → `MERGED_MAIN`。
 - **Claude plan 自審紀錄（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，L1，一輪 0 新發現）**：對抗以下探針——
   1. **delta 數學**：877−8=869 ✅；comm -13 空（零 cascade）、comm -23 = 8 行 ✅；errorFiles/cleanFiles 由單檔 bucket move 決定（100→99 / 234→235）✅。
   2. **TS2551 framing**：明標 collateral、不計入 noImplicitAny 數（owner 糾正落實）✅；修法 `Record<string,string>` 為型別標註非 runtime 改寫 ✅。
