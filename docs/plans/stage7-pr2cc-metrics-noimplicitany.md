@@ -10,13 +10,14 @@ base main `540f07c1`（branch fork point）。baseline 已於該 SHA 實測（ca
 
 ## Gate 紀錄（Dual Gate Workflow v3，[[feedback_codex_review_workflow]]）
 
-當前 state = **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（@ plan commit `02de7acc`）。impl **L1** / review care **L2**（Arch 升）。**待 owner 送 Codex Plan Gate**。
+當前 state = **`CODEX_PLAN_APPROVED`**（@ plan tip `5af7179b`）。impl **L1** / review care **L2**。**待 owner `CODING_ALLOWED`**。
 
 - 2026-06-16 owner 裁示（mechanical-misc 細拆 + 「先寫 `admin/metrics.ts` cadence-smoke plan doc，進 Codex chain」）= **`SPEC_APPROVED`**。spec：scope = `admin/metrics.ts` 6 noImplicitAny → 0、純 type-only reduce PR；Non-goals = 不碰任何 SQL / rate-limit 邏輯 / audit 寫入 / HMAC / `verifyAuditChain` 契約 / payload 結構 / scope gate；不碰 caller / tests / config。impl 級別 = **L1**、review care = **L1**（admin read-only、非 security-boundary SSOT；audit/PII 鄰接面以 receipt byte-identical 守，gate 可挑戰升 L2）。同輪預授權 A1 spike + plan doc 落檔 commit feature branch。
 - 2026-06-16 **A1 spike 已執行並全項達標**（見 §Spike 實證；主方案單輪零修正），working tree 已 revert clean（HEAD `540f07c1`、僅 `?? CLEANUP_PLAN.md` untracked、ratchet `--report` 回 869/99/235）。
 - 2026-06-16 **Claude plan 自審到零**（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，L1，一輪 0 新發現）：見 §流程定位 自審紀錄。
 - 2026-06-16 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（@ plan commit `02de7acc`）— 0 blocker、不需重寫 plan、可進 Codex Plan Gate。**review care L1 → L2**（diff 僅 3 行 type-only，但鄰接 admin / audit / PII-hash）。**OD 全裁**：OD-1 採 `number | null`（精確對齊 `verifyAuditChain` 契約、不為保守放寬到未出現型別）；OD-2 採 `Record<string, unknown>` + `r[key] as string`（最小 TS-only 投影、不把 D1 row 值誤宣告成 `string | number`）。**必鎖**：source diff 只能是凍結 3 行（禁順手整理 / 改名 / 重排 / 抽 helper）；零 runtime；不改 SQL / binding / 排序 / limit / aggregation；不改 `verifyAuditChain` 呼叫·fallback 流程·payload shape（除 TS annotation 必要點）；不改 `hashIdentifierForAudit` / HMAC 呼叫與輸入；不改 scope / role / auth gate；禁 `any` / suppression / 放寬 tsconfig；PR 必附 SQL / `verifyAuditChain` / HMAC / payload / scope-gate **byte-identical receipt**。**NB（Arch 提醒）**：`CLEANUP_PLAN.md`（untracked、session 既存）不得進本 PR——一律 explicit `git add <檔>`（禁 `-A` / `.`），merge 前驗 PR diff 不含它（取代舊措辭：untracked 檔存在 ≠ clean worktree）。
-- **待**：Codex Plan Gate → owner `CODING_ALLOWED` → Code → Codex Code Gate → owner squash。未 push、未開 PR、未動 main。
+- 2026-06-16 **Codex Plan Gate：`CODEX_PLAN_APPROVED`**（@ plan tip `5af7179b`）— 0 blocker / 0 critical risk。對帳：`main..stage7-pr2cc-metrics-noimplicitany` docs-only（1 plan 檔、2 commits、base `540f07c1`、`CLEANUP_PLAN.md` 仍 untracked 且在 PR diff 外）；plan 把 source 鎖在 frozen 3 行 type-only；`verifyAuditChain` 實回 `brokenAt: number | null`（audit-log.ts:143）；敏感面（SQL / `verifyAuditChain` / HMAC input / payload shape / scope gate）全鎖 byte-identical；admin read-audit + chain-integrity path 保留、receipt 留 Code Gate。**只批 plan，非 source-release**（Code Gate 仍要 ratchet/lint/build/tests + byte-identical receipt）。
+- **待**：owner `CODING_ALLOWED` → Code（replay frozen 3 行）→ 機械 gates + receipt → Codex Code Gate → owner squash。未 push、未開 PR、未動 main。
 
 ## 敏感面聲明（review 對齊）
 
@@ -175,7 +176,7 @@ diff --git a/functions/api/admin/metrics.ts b/functions/api/admin/metrics.ts
 
 ## 流程定位
 
-- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 2026-06-16 裁示 + 「先寫 metrics cadence-smoke plan doc」）✅ → A1 spike ✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent 對抗式，L1）✅ → 本 doc commit（feature branch `stage7-pr2cc-metrics-noimplicitany` `02de7acc`）✅ → **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（review care 升 L2、OD-1/OD-2 採主方案、frozen 3 行鎖 + receipt 必附）✅ → **Codex Plan Gate**〔← 當前待 owner 送審〕→ owner `CODING_ALLOWED` → coding（frozen byte-identical replay）→ 機械 gates 全綠 → `CODE_SELF_REVIEW_CLEAN`（單 agent，impl L1）→ Codex Code Gate → owner 明示 squash-merge → push → PR → CI `test` 綠 → squash-merge --delete-branch → `MERGED_MAIN`。
+- Dual Gate Workflow v3：`SPEC_APPROVED`（owner 2026-06-16 裁示 + 「先寫 metrics cadence-smoke plan doc」）✅ → A1 spike ✅ → **`PLAN_SELF_REVIEW_CLEAN`**（單 agent 對抗式，L1）✅ → 本 doc commit（feature branch `stage7-pr2cc-metrics-noimplicitany` `02de7acc`）✅ → **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（review care 升 L2、OD-1/OD-2 採主方案、frozen 3 行鎖 + receipt 必附）✅ → **`CODEX_PLAN_APPROVED`**（@ `5af7179b`，0 blocker/critical）✅ → **owner `CODING_ALLOWED`**〔← 當前待 owner〕→ coding（frozen byte-identical replay）→ 機械 gates 全綠 → `CODE_SELF_REVIEW_CLEAN`（單 agent，impl L1）→ Codex Code Gate → owner 明示 squash-merge → push → PR → CI `test` 綠 → squash-merge --delete-branch → `MERGED_MAIN`。
 - **Claude plan 自審紀錄（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，L1，一輪 0 新發現）**：對抗以下探針——
   1. **delta 數學**：869−6=863 ✅；set-diff ADDED=0（零 cascade）、REMOVED=6 行 ✅；errorFiles/cleanFiles 由單檔 bucket move 決定（99→98 / 235→236）✅。
   2. **TS7018 framing**：(105) 明標為 `null`≡any（strictNullChecks:false）非 param 缺型別、修法為 property 顯式型別非裸 annotation ✅；型別取自 `verifyAuditChain` 契約 `number | null`（audit-log.ts:143-148 實證）✅。
