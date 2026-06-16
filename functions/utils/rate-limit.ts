@@ -80,7 +80,7 @@ interface RateLimitCheckOpts extends RateLimitScope {
  * windowSeconds: 計數視窗（秒）；max: 上限（含），超過 → 拒絕
  */
 export async function checkRateLimit(
-  db,
+  db: Env['chiyigo_db'],
   { kind, ip = null, userId = null, email = null, windowSeconds, max }: RateLimitCheckOpts,
 ): Promise<{ blocked: boolean, count: number }> {
   const where = ['kind = ?', `created_at > datetime('now', ?)`]
@@ -100,7 +100,7 @@ export async function checkRateLimit(
 
 /** 寫入一筆失敗記錄（kind 區分用途）。 */
 export async function recordRateLimit(
-  db,
+  db: Env['chiyigo_db'],
   { kind, ip = null, userId = null, email = null }: RateLimitScope,
 ): Promise<void> {
   await db
@@ -114,7 +114,7 @@ export async function recordRateLimit(
 
 /** 清除指定 user 在指定 kind 的所有記錄（成功事件後呼叫）。 */
 export async function clearRateLimit(
-  db,
+  db: Env['chiyigo_db'],
   { kind, userId = null, email = null }: { kind: RateLimitKind, userId?: number | null, email?: string | null },
 ): Promise<void> {
   if (userId) {
