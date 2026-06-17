@@ -8,14 +8,15 @@ base main `8f8018a6`（#100 root CLAUDE.md docs-only，#99 `5423c586` 後；docs
 
 ## Gate 紀錄（Dual Gate Workflow v3.1，[[feedback_codex_review_workflow]]）
 
-當前 state = **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（@ plan `e8783353`）。impl **L1** / review care **L2**。**未授權 source coding**（待 `CODEX_PLAN_APPROVED` → owner `CODING_ALLOWED`）。
+當前 state = **`CODEX_PLAN_APPROVED`**（@ plan `70008c15`）。impl **L1** / review care **L2**。**未授權 source coding**（待 owner `CODING_ALLOWED`）。
 
 - 2026-06-17 owner **C-1 `APPROVED_TO_SPEC_DRAFT`**（= `SPEC_APPROVED`）：scope = `brute-force.ts` 6 noImplicitAny → 0、純 type-only、單檔獨立 PR。typing 鎖 `Env['chiyigo_db']` + `string`。impl L1 / review care L2。完整 Dual Gate v3.1、不 lighter。鎖定區：禁混 `turnstile.ts`、禁碰 `login.ts`、禁 `baseline --update`、禁碰 `CLEANUP_PLAN.md`。
 - 2026-06-17 **scout（read-only，實跑命令非推理）**：ratchet `--report` 確認 current 856/97/237（無漂移）；`tsc -p tsconfig.functions.json` 確認 brute-force.ts 恰 6×TS7006（全裸 `db`/`email`/`ip` 參數）；grep 全 repo 證唯一 source caller = `login.ts`；確認 `tests/integration/brute-force.test.ts` 16 tests direct 覆蓋。
 - 2026-06-17 **plan-stage full-solution spike（已 revert，見 §Spike 實證）**：套 6 annotation → `tsc -p tsconfig.functions.json`（brute-force **0** residual）+ `typecheck:ratchet:report`（全 solution graph **856→850**、errorFiles 97→96、cleanFiles 237→238、**zero cascade**）+ targeted `brute-force.test.ts` **16/16 綠**。working tree revert clean（HEAD `8f8018a6`、僅 `?? CLEANUP_PLAN.md`、ratchet 回 856/97/237）。
 - 2026-06-17 **Claude plan 自審到零**（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，impl L1，一輪 0 新發現）：見 §流程定位。
 - 2026-06-17 **ChatGPT Architecture Gate（維度 B，owner-relayed）：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（@ plan `e8783353`）— 0 Blocker / 0 Required Revision / 2 Non-blocking。8 locks（L-1..L-8）納入 §Coding 硬性邊界 + §驗證計劃（L-8 = code 階段必重跑 full solution graph、不沿用 spike）。**2 NB 已採納**（doc-only 澄清、架構/scope/typing 不變）：NB-1 = spike receipt 僅 plan-stage 證據、code 階段必 replay 全 gate；NB-2 = `byte-identical` 限定為「TS-erase 後**預期** bundle byte-identical、final 以 code 階段 `build:functions` + diff receipt 為準」（呼應 PR-2cd 教訓 2 不 overclaim）。
-- **待**：`CODEX_PLAN_APPROVED`（維度 C）→ owner `CODING_ALLOWED` → coding → 機械 gates → `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → `CHATGPT_CODE_FAITHFULNESS_APPROVED`（v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
+- 2026-06-17 **Codex Plan Gate（維度 C，owner-relayed）：`CODEX_PLAN_APPROVED`**（@ plan `70008c15`）— 0 blocker / 0 required revision。Codex 對帳：HEAD `70008c15`、`main..HEAD` docs-only（1 plan 檔）、source blob 仍 `8bc52bd5`、in-memory replay 3 annotation → `a32d12d7`（= frozen post-blob 吻合）；`Env['chiyigo_db']` precedent 確認（`rate-limit.ts:83` + `env.d.ts:21`）；type-only 明禁 SQL/guard/const/auth/login/Turnstile/test/config/baseline/`CLEANUP_PLAN`。**只批 plan，非 `CODING_ALLOWED`**。
+- **待**：owner `CODING_ALLOWED` → coding（frozen replay +3/−3）→ 機械 gates（**full replay**，不沿用 spike）→ `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → `CHATGPT_CODE_FAITHFULNESS_APPROVED`（v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
 
 ## 敏感面聲明（review care L2；有 16-test direct 覆蓋 + byte-identical receipt 雙防線）
 
