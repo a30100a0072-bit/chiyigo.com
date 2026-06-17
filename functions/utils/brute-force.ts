@@ -39,7 +39,7 @@ const BLACKLIST_TTL_HOURS           = 24
  *   2. 套階梯找對應 cooldown
  *   3. 比較「上次失敗時間 + cooldown」與 NOW，回傳剩餘秒數
  */
-export async function getUserCooldownSeconds(db, email) {
+export async function getUserCooldownSeconds(db: Env['chiyigo_db'], email: string) {
   if (!email) return 0
   const row = await db
     .prepare(
@@ -74,7 +74,7 @@ export async function getUserCooldownSeconds(db, email) {
  * IP 是否在黑名單（且未過期）。
  * @returns {Promise<{ blocked: true, expires_at: string, reason: string } | null>}
  */
-export async function isIpBlacklisted(db, ip) {
+export async function isIpBlacklisted(db: Env['chiyigo_db'], ip: string) {
   if (!ip) return null
   const row = await db
     .prepare(
@@ -95,7 +95,7 @@ export async function isIpBlacklisted(db, ip) {
  * 命中（distinct email ≥ 10 in 1hr）→ INSERT (or UPDATE expires) → 回 true。
  * 未命中 → 回 false。
  */
-export async function detectAndBlacklistCrossUserScan(db, ip) {
+export async function detectAndBlacklistCrossUserScan(db: Env['chiyigo_db'], ip: string) {
   if (!ip) return false
   const row = await db
     .prepare(
