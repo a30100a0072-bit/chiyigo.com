@@ -8,7 +8,7 @@ base main `8f8018a6`（#100 root CLAUDE.md docs-only，#99 `5423c586` 後；docs
 
 ## Gate 紀錄（Dual Gate Workflow v3.1，[[feedback_codex_review_workflow]]）
 
-當前 state = **`CODEX_PLAN_APPROVED`**（@ plan `70008c15`）。impl **L1** / review care **L2**。**未授權 source coding**（待 owner `CODING_ALLOWED`）。
+當前 state = **`CODE_SELF_REVIEW_CLEAN`**（@ source `5fd6c0b1`）。impl **L1** / review care **L2**。**待 Codex Code Gate**（維度 C）。
 
 - 2026-06-17 owner **C-1 `APPROVED_TO_SPEC_DRAFT`**（= `SPEC_APPROVED`）：scope = `brute-force.ts` 6 noImplicitAny → 0、純 type-only、單檔獨立 PR。typing 鎖 `Env['chiyigo_db']` + `string`。impl L1 / review care L2。完整 Dual Gate v3.1、不 lighter。鎖定區：禁混 `turnstile.ts`、禁碰 `login.ts`、禁 `baseline --update`、禁碰 `CLEANUP_PLAN.md`。
 - 2026-06-17 **scout（read-only，實跑命令非推理）**：ratchet `--report` 確認 current 856/97/237（無漂移）；`tsc -p tsconfig.functions.json` 確認 brute-force.ts 恰 6×TS7006（全裸 `db`/`email`/`ip` 參數）；grep 全 repo 證唯一 source caller = `login.ts`；確認 `tests/integration/brute-force.test.ts` 16 tests direct 覆蓋。
@@ -16,7 +16,11 @@ base main `8f8018a6`（#100 root CLAUDE.md docs-only，#99 `5423c586` 後；docs
 - 2026-06-17 **Claude plan 自審到零**（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，impl L1，一輪 0 新發現）：見 §流程定位。
 - 2026-06-17 **ChatGPT Architecture Gate（維度 B，owner-relayed）：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（@ plan `e8783353`）— 0 Blocker / 0 Required Revision / 2 Non-blocking。8 locks（L-1..L-8）納入 §Coding 硬性邊界 + §驗證計劃（L-8 = code 階段必重跑 full solution graph、不沿用 spike）。**2 NB 已採納**（doc-only 澄清、架構/scope/typing 不變）：NB-1 = spike receipt 僅 plan-stage 證據、code 階段必 replay 全 gate；NB-2 = `byte-identical` 限定為「TS-erase 後**預期** bundle byte-identical、final 以 code 階段 `build:functions` + diff receipt 為準」（呼應 PR-2cd 教訓 2 不 overclaim）。
 - 2026-06-17 **Codex Plan Gate（維度 C，owner-relayed）：`CODEX_PLAN_APPROVED`**（@ plan `70008c15`）— 0 blocker / 0 required revision。Codex 對帳：HEAD `70008c15`、`main..HEAD` docs-only（1 plan 檔）、source blob 仍 `8bc52bd5`、in-memory replay 3 annotation → `a32d12d7`（= frozen post-blob 吻合）；`Env['chiyigo_db']` precedent 確認（`rate-limit.ts:83` + `env.d.ts:21`）；type-only 明禁 SQL/guard/const/auth/login/Turnstile/test/config/baseline/`CLEANUP_PLAN`。**只批 plan，非 `CODING_ALLOWED`**。
-- **待**：owner `CODING_ALLOWED` → coding（frozen replay +3/−3）→ 機械 gates（**full replay**，不沿用 spike）→ `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → `CHATGPT_CODE_FAITHFULNESS_APPROVED`（v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
+- 2026-06-17 **owner `CODING_ALLOWED`** → Code 階段。frozen replay：working-tree diff 對 plan §Spike frozen **逐行 byte-identical**（1 檔 +3/−3、blob `8bc52bd5→a32d12d7`、僅 brute-force.ts）。source commit **`5fd6c0b1`**。
+- 2026-06-17 **機械 gates 全綠（full replay @ source `5fd6c0b1`，不沿用 spike）**：`tsc -p tsconfig.functions.json` brute-force **0** residual／`typecheck:ratchet:report` 全 solution **850/96/238**／`RATCHET_BASE_REF=8f8018a6 typecheck:ratchet` **OK**（current 850/238、baseline 1119/175 不動、committed-diff banned-pattern scan clean）／`lint` 0／`build:functions` compiled／`test:cov` exit 0（cov 90.28%）／`test:int` **75 files / 1328 passed**（`brute-force.test.ts` **16/16**、無 flaky、509s）。`git diff --check` clean。
+- 2026-06-17 **emit byte-identical 實證（NB-2 兌現，非僅推斷）**：base(`8f8018a6`) vs HEAD 的 `brute-force.ts` 經 `esbuild` type-strip 後 JS **逐位元組相同**（皆 **2796 bytes、sha `2aec3ceb…`**）→ runtime bytecode 證實不變。⚠ 過程曾一度誤用 esbuild file-entry `--loader` 旗標致兩端空輸出（空字串 sha `e3b0c442…`）、即時抓出並改 stdin transform 重驗。
+- 2026-06-17 **`CODE_SELF_REVIEW_CLEAN`（單 agent 對抗式，@ source `5fd6c0b1`，impl L1，一輪 0 新發現）**：見 §流程定位。
+- **待**：`CODEX_CODE_APPROVED`（維度 C）→ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B，v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
 
 ## 敏感面聲明（review care L2；有 16-test direct 覆蓋 + byte-identical receipt 雙防線）
 
@@ -178,4 +182,5 @@ index 8bc52bd5..a32d12d7 100644
   6. **敏感面 byte-identical**：閾值/SQL/Date 計算/guard/fail-safe return/`_internal` 全在 diff 行外 ✅。
   7. **scope**：single-file、無 out-of-scope error、`login.ts`/tests/config/baseline/`CLEANUP_PLAN.md`/`turnstile.ts` 未碰（C-1 鎖定區全守）✅。
   8. **L1/L2**：impl L1（純參數 annotation、bundle byte-identical）/ review care L2（暴力破解防線、Tier-0 鄰接）✅。
+- **Claude CODE 自審紀錄（`CODE_SELF_REVIEW_CLEAN`，單 agent 對抗式，@ source `5fd6c0b1`，impl L1，一輪 0 新發現）**：對抗——(1) faithful replay：post-commit blob `a32d12d7` == frozen post-blob、+3/−3、僅 brute-force.ts（`git diff --name-only` 證）✅；(2) scope：`login.ts`/tests/config/baseline/`CLEANUP_PLAN.md`/`turnstile.ts` 未碰（C-1 鎖定區全守）✅；(3) runtime-invariance：**emit byte-identical 實證**（base vs HEAD type-strip JS 皆 2796 bytes/sha `2aec3ceb…`）+ build:functions compiled + test:int 1328/1328 廣度 regression（無他檔 spillover）+ `brute-force.test.ts` 16/16 direct ✅；(4) 敏感面 byte-identical：閾值/SQL/Date 計算/guard/fail-safe return/`.bind` 順序/`_internal` 全在 diff 行外 ✅；(5) 無禁用 pattern：無 `:any`/`as any`/suppression/新 import/新 runtime 分支、eslint 0、committed-diff ratchet banned-pattern scan clean ✅；(6) typing 忠 caller：`Env['chiyigo_db']`（env.chiyigo_db）/ `string`×2（toLowerCase / `?? 'unknown'`）✅；(7) runtime 誠實：byte-identical 非僅推斷、esbuild 實測（含誤用 `--loader` 致空輸出的即時自我糾錯）✅；(8) ratchet honesty：報 current 850/238、baseline file 未 `--update`（1119/175 凍結）✅。
 - **本域後續序（owner C-1 裁，輕→重）**：metrics（PR-2cc ✅）→ ai/assist（PR-2cd ✅）→ **brute-force（本 PR）** → captcha-turnstile（`utils/turnstile.ts`、fail-close 邊界、獨立 receipt）；`utils/totp.ts` 折回 2FA/elevation/account 域。
