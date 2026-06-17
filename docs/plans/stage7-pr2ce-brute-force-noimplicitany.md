@@ -8,13 +8,14 @@ base main `8f8018a6`（#100 root CLAUDE.md docs-only，#99 `5423c586` 後；docs
 
 ## Gate 紀錄（Dual Gate Workflow v3.1，[[feedback_codex_review_workflow]]）
 
-當前 state = **`PLAN_SELF_REVIEW_CLEAN`**（@ plan doc commit）。impl **L1** / review care **L2**。**未授權 source coding**（待 `CHATGPT_ARCH_APPROVED` → `CODEX_PLAN_APPROVED` → owner `CODING_ALLOWED`）。
+當前 state = **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（@ plan `e8783353`）。impl **L1** / review care **L2**。**未授權 source coding**（待 `CODEX_PLAN_APPROVED` → owner `CODING_ALLOWED`）。
 
 - 2026-06-17 owner **C-1 `APPROVED_TO_SPEC_DRAFT`**（= `SPEC_APPROVED`）：scope = `brute-force.ts` 6 noImplicitAny → 0、純 type-only、單檔獨立 PR。typing 鎖 `Env['chiyigo_db']` + `string`。impl L1 / review care L2。完整 Dual Gate v3.1、不 lighter。鎖定區：禁混 `turnstile.ts`、禁碰 `login.ts`、禁 `baseline --update`、禁碰 `CLEANUP_PLAN.md`。
 - 2026-06-17 **scout（read-only，實跑命令非推理）**：ratchet `--report` 確認 current 856/97/237（無漂移）；`tsc -p tsconfig.functions.json` 確認 brute-force.ts 恰 6×TS7006（全裸 `db`/`email`/`ip` 參數）；grep 全 repo 證唯一 source caller = `login.ts`；確認 `tests/integration/brute-force.test.ts` 16 tests direct 覆蓋。
 - 2026-06-17 **plan-stage full-solution spike（已 revert，見 §Spike 實證）**：套 6 annotation → `tsc -p tsconfig.functions.json`（brute-force **0** residual）+ `typecheck:ratchet:report`（全 solution graph **856→850**、errorFiles 97→96、cleanFiles 237→238、**zero cascade**）+ targeted `brute-force.test.ts` **16/16 綠**。working tree revert clean（HEAD `8f8018a6`、僅 `?? CLEANUP_PLAN.md`、ratchet 回 856/97/237）。
 - 2026-06-17 **Claude plan 自審到零**（`PLAN_SELF_REVIEW_CLEAN`，單 agent 對抗式，impl L1，一輪 0 新發現）：見 §流程定位。
-- **待**：`CHATGPT_ARCH_APPROVED`（維度 B，owner-relayed）→ `CODEX_PLAN_APPROVED`（維度 C）→ owner `CODING_ALLOWED` → coding → 機械 gates → `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → `CHATGPT_CODE_FAITHFULNESS_APPROVED`（v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
+- 2026-06-17 **ChatGPT Architecture Gate（維度 B，owner-relayed）：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（@ plan `e8783353`）— 0 Blocker / 0 Required Revision / 2 Non-blocking。8 locks（L-1..L-8）納入 §Coding 硬性邊界 + §驗證計劃（L-8 = code 階段必重跑 full solution graph、不沿用 spike）。**2 NB 已採納**（doc-only 澄清、架構/scope/typing 不變）：NB-1 = spike receipt 僅 plan-stage 證據、code 階段必 replay 全 gate；NB-2 = `byte-identical` 限定為「TS-erase 後**預期** bundle byte-identical、final 以 code 階段 `build:functions` + diff receipt 為準」（呼應 PR-2cd 教訓 2 不 overclaim）。
+- **待**：`CODEX_PLAN_APPROVED`（維度 C）→ owner `CODING_ALLOWED` → coding → 機械 gates → `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED` → `CHATGPT_CODE_FAITHFULNESS_APPROVED`（v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
 
 ## 敏感面聲明（review care L2；有 16-test direct 覆蓋 + byte-identical receipt 雙防線）
 
@@ -130,7 +131,7 @@ index 8bc52bd5..a32d12d7 100644
 
 ## Runtime 行為不變保證 / Rollback（bundle byte-identical）
 
-- 改動 = 6 個裸參數型別 annotation。**TS/esbuild type-strip 後完全消失**：`db: Env['chiyigo_db']` → `db`、`email: string` → `email`、`ip: string` → `ip`。**無 `as` cast、無投影 alias、無新 binding** → emit JS 與改前**逐位元組相同（bundle byte-identical）**——與 PR-2cc metrics 同級，**強於 PR-2cd**（後者有 `const o = obj` transparent alias，僅 behavior-preserving）。
+- 改動 = 6 個裸參數型別 annotation。**TS/esbuild type-strip 後完全消失**：`db: Env['chiyigo_db']` → `db`、`email: string` → `email`、`ip: string` → `ip`。**無 `as` cast、無投影 alias、無新 binding** → emit JS 與改前**預期逐位元組相同（bundle byte-identical）**——與 PR-2cc metrics 同級，**強於 PR-2cd**（後者有 `const o = obj` transparent alias，僅 behavior-preserving）。⚠ **NB-2（ChatGPT Arch）**：此 byte-identical 為 **TS-erase 後的預期**，**final 以 code 階段 `build:functions` + diff receipt 為準**（不僅憑 plan 推斷；呼應 PR-2cd 教訓 2 不 overclaim）。
 - 所有閾值常數、SQL（SELECT/INSERT/ON CONFLICT/UPDATE）、`Date` 計算、falsy guard、fail-safe return、`_internal` export **未改一字**。
 - rollback：單一 squash revert 完整回退；revert 後 ratchet 回 856。
 
@@ -143,6 +144,8 @@ index 8bc52bd5..a32d12d7 100644
 ## 驗證計劃（coding 階段，`CODING_ALLOWED` 後）
 
 > 無 ambient .d.ts 變更；保險 tsc/ratchet 可 `rm -rf .tscache` 全重建。branch 已有 plan-doc commit → plain ratchet base 自動 = origin/main `8f8018a6`；保險 `$env:RATCHET_BASE_REF='8f8018a6'; npm run typecheck:ratchet`。**不帶** `RATCHET_ALLOW_BASELINE_RAISE`（[[feedback_ts_ratchet_discipline]]）。
+
+> **NB-1 / L-8（ChatGPT Arch）**：以下全項於 **code 階段（`CODING_ALLOWED` 後）對真實 source diff 重新實跑**（含 full solution graph `tsc -b`）；**§Spike 實證的數字僅 plan-stage 證據、非 final receipt**，不得沿用當 Code Gate 收據。
 
 - `$env:RATCHET_BASE_REF='8f8018a6'; npm run typecheck:ratchet` green（856→850 / 97→96 / 237→238）。
 - `npm run lint` green（全量）。
