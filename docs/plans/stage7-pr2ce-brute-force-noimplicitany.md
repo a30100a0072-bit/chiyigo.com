@@ -8,7 +8,7 @@ base main `8f8018a6`（#100 root CLAUDE.md docs-only，#99 `5423c586` 後；docs
 
 ## Gate 紀錄（Dual Gate Workflow v3.1，[[feedback_codex_review_workflow]]）
 
-當前 state = **`CODE_SELF_REVIEW_CLEAN`**（@ source `5fd6c0b1`）。impl **L1** / review care **L2**。**待 Codex Code Gate**（維度 C）。
+當前 state = **`CODEX_CODE_APPROVED`**（@ source `5fd6c0b1`）。impl **L1** / review care **L2**。**待 ChatGPT Code Faithfulness**（維度 B，v3.1 任何級別全走）。
 
 - 2026-06-17 owner **C-1 `APPROVED_TO_SPEC_DRAFT`**（= `SPEC_APPROVED`）：scope = `brute-force.ts` 6 noImplicitAny → 0、純 type-only、單檔獨立 PR。typing 鎖 `Env['chiyigo_db']` + `string`。impl L1 / review care L2。完整 Dual Gate v3.1、不 lighter。鎖定區：禁混 `turnstile.ts`、禁碰 `login.ts`、禁 `baseline --update`、禁碰 `CLEANUP_PLAN.md`。
 - 2026-06-17 **scout（read-only，實跑命令非推理）**：ratchet `--report` 確認 current 856/97/237（無漂移）；`tsc -p tsconfig.functions.json` 確認 brute-force.ts 恰 6×TS7006（全裸 `db`/`email`/`ip` 參數）；grep 全 repo 證唯一 source caller = `login.ts`；確認 `tests/integration/brute-force.test.ts` 16 tests direct 覆蓋。
@@ -20,7 +20,8 @@ base main `8f8018a6`（#100 root CLAUDE.md docs-only，#99 `5423c586` 後；docs
 - 2026-06-17 **機械 gates 全綠（full replay @ source `5fd6c0b1`，不沿用 spike）**：`tsc -p tsconfig.functions.json` brute-force **0** residual／`typecheck:ratchet:report` 全 solution **850/96/238**／`RATCHET_BASE_REF=8f8018a6 typecheck:ratchet` **OK**（current 850/238、baseline 1119/175 不動、committed-diff banned-pattern scan clean）／`lint` 0／`build:functions` compiled／`test:cov` exit 0（cov 90.28%）／`test:int` **75 files / 1328 passed**（`brute-force.test.ts` **16/16**、無 flaky、509s）。`git diff --check` clean。
 - 2026-06-17 **emit byte-identical 實證（NB-2 兌現，非僅推斷）**：base(`8f8018a6`) vs HEAD 的 `brute-force.ts` 經 `esbuild` type-strip 後 JS **逐位元組相同**（皆 **2796 bytes、sha `2aec3ceb…`**）→ runtime bytecode 證實不變。⚠ 過程曾一度誤用 esbuild file-entry `--loader` 旗標致兩端空輸出（空字串 sha `e3b0c442…`）、即時抓出並改 stdin transform 重驗。
 - 2026-06-17 **`CODE_SELF_REVIEW_CLEAN`（單 agent 對抗式，@ source `5fd6c0b1`，impl L1，一輪 0 新發現）**：見 §流程定位。
-- **待**：`CODEX_CODE_APPROVED`（維度 C）→ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B，v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
+- 2026-06-17 **Codex Code Gate（維度 C，owner-relayed）：`CODEX_CODE_APPROVED`**（@ source `5fd6c0b1`）— 0 blocker / 0 required revision。Codex 獨立復現：`git diff --check 8f8018a6..HEAD` clean／`eslint brute-force.ts` exit 0／`brute-force.ts` tsc diagnostics **0**／`RATCHET_BASE_REF=8f8018a6 typecheck:ratchet` exit 0／`build:functions` compiled／targeted `brute-force.test.ts` **16/16**／working tree 僅 `?? CLEANUP_PLAN.md`／emit base==head **2796 bytes sha `2aec3ceb…`**／blob `8bc52bd5→a32d12d7`。raw `tsc -p` 的既有 Stage 7 backlog 不計入本 PR（本檔 0 diagnostic）。**只批 code，非 release**。
+- **待**：`CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B，v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
 
 ## 敏感面聲明（review care L2；有 16-test direct 覆蓋 + byte-identical receipt 雙防線）
 
