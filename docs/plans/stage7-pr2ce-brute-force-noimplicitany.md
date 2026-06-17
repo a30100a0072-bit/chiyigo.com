@@ -8,7 +8,7 @@ base main `8f8018a6`（#100 root CLAUDE.md docs-only，#99 `5423c586` 後；docs
 
 ## Gate 紀錄（Dual Gate Workflow v3.1，[[feedback_codex_review_workflow]]）
 
-當前 state = **`CODEX_CODE_APPROVED`**（@ source `5fd6c0b1`）。impl **L1** / review care **L2**。**待 ChatGPT Code Faithfulness**（維度 B，v3.1 任何級別全走）。
+當前 state = **`MERGE_ALLOWED`**（@ source `5fd6c0b1`）。impl **L1** / review care **L2**。**基本 4 道外部審查全過，待 owner 明示 squash-merge**。
 
 - 2026-06-17 owner **C-1 `APPROVED_TO_SPEC_DRAFT`**（= `SPEC_APPROVED`）：scope = `brute-force.ts` 6 noImplicitAny → 0、純 type-only、單檔獨立 PR。typing 鎖 `Env['chiyigo_db']` + `string`。impl L1 / review care L2。完整 Dual Gate v3.1、不 lighter。鎖定區：禁混 `turnstile.ts`、禁碰 `login.ts`、禁 `baseline --update`、禁碰 `CLEANUP_PLAN.md`。
 - 2026-06-17 **scout（read-only，實跑命令非推理）**：ratchet `--report` 確認 current 856/97/237（無漂移）；`tsc -p tsconfig.functions.json` 確認 brute-force.ts 恰 6×TS7006（全裸 `db`/`email`/`ip` 參數）；grep 全 repo 證唯一 source caller = `login.ts`；確認 `tests/integration/brute-force.test.ts` 16 tests direct 覆蓋。
@@ -21,7 +21,8 @@ base main `8f8018a6`（#100 root CLAUDE.md docs-only，#99 `5423c586` 後；docs
 - 2026-06-17 **emit byte-identical 實證（NB-2 兌現，非僅推斷）**：base(`8f8018a6`) vs HEAD 的 `brute-force.ts` 經 `esbuild` type-strip 後 JS **逐位元組相同**（皆 **2796 bytes、sha `2aec3ceb…`**）→ runtime bytecode 證實不變。⚠ 過程曾一度誤用 esbuild file-entry `--loader` 旗標致兩端空輸出（空字串 sha `e3b0c442…`）、即時抓出並改 stdin transform 重驗。
 - 2026-06-17 **`CODE_SELF_REVIEW_CLEAN`（單 agent 對抗式，@ source `5fd6c0b1`，impl L1，一輪 0 新發現）**：見 §流程定位。
 - 2026-06-17 **Codex Code Gate（維度 C，owner-relayed）：`CODEX_CODE_APPROVED`**（@ source `5fd6c0b1`）— 0 blocker / 0 required revision。Codex 獨立復現：`git diff --check 8f8018a6..HEAD` clean／`eslint brute-force.ts` exit 0／`brute-force.ts` tsc diagnostics **0**／`RATCHET_BASE_REF=8f8018a6 typecheck:ratchet` exit 0／`build:functions` compiled／targeted `brute-force.test.ts` **16/16**／working tree 僅 `?? CLEANUP_PLAN.md`／emit base==head **2796 bytes sha `2aec3ceb…`**／blob `8bc52bd5→a32d12d7`。raw `tsc -p` 的既有 Stage 7 backlog 不計入本 PR（本檔 0 diagnostic）。**只批 code，非 release**。
-- **待**：`CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B，v3.1 任何級別全走）→ owner 明示 squash-merge → `MERGED_MAIN`。
+- 2026-06-17 **ChatGPT Code Faithfulness Gate（維度 B，owner-relayed）：`CHATGPT_CODE_FAITHFULNESS_APPROVED`**（@ source `5fd6c0b1`）— **FAITHFUL**、0 Blocker / 0 Required Revision / 2 Non-blocking。逐項：source scope 僅 brute-force.ts ✅／docs scope plan-doc ✅／未授權檔（login/tests/baseline/turnstile/`CLEANUP_PLAN`）未碰 ✅／3 簽名 6 裸參數 +3/−3 ✅／`db: Env['chiyigo_db']`×3 ✅／`email/ip: string`×3 ✅／runtime logic（SQL/threshold/branch/guard/return）未動 ✅／frozen replay blob `a32d12d7` ✅／三 hunk 僅簽名行改 context 未動 ✅。NB-1（plan doc 行數敘述差異、以 git stat 為準）+ NB-2（merge 前確認 `CLEANUP_PLAN.md` 不入 PR diff）皆非阻塞。
+- **`MERGE_ALLOWED`**：基本 4 道外部審查全過（ChatGPT Arch + Codex Plan + Codex Code + ChatGPT faithfulness）+ 機械 gates 全綠 + emit byte-identical 實證。**待 owner 明示 squash-merge go**；未到位前不 push / 不開 PR / 不 merge / 不動 main / 不 `baseline:update`。
 
 ## 敏感面聲明（review care L2；有 16-test direct 覆蓋 + byte-identical receipt 雙防線）
 
