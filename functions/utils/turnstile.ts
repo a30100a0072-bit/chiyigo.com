@@ -28,7 +28,11 @@ const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverif
  * @param {object} env   含 TURNSTILE_SECRET_KEY
  * @returns {Promise<{ ok: boolean, skipped?: boolean, reason?: string }>}
  */
-export async function verifyTurnstile(request, body, env) {
+export async function verifyTurnstile(
+  request: Request,
+  body: Record<string, unknown>,
+  env: Pick<Env, 'TURNSTILE_SECRET_KEY'>,
+) {
   const secret = env?.TURNSTILE_SECRET_KEY
   if (!secret) return { ok: true, skipped: true }
 
