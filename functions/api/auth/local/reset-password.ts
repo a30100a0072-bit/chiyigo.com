@@ -23,7 +23,7 @@ import { bumpTokenVersion, res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   let body
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }

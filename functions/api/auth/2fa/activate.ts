@@ -31,7 +31,7 @@ import { checkRateLimit, recordRateLimit, clearRateLimit } from '../../../utils/
 const RL_WINDOW_SEC = 60
 const RL_MAX        = 5
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   // ── 1. 驗證 JWT ──────────────────────────────────────────────
   const { user, error } = await requireAuth(request, env)
   if (error) return error
