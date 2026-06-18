@@ -21,7 +21,10 @@ import { TOTP, Secret } from 'otpauth'
 const PERIOD_SEC = 30
 const DIGITS     = 6
 
-export async function verifyTotpReplaySafe(env, { userId, secret, code, window = 1 }) {
+export async function verifyTotpReplaySafe(
+  env: Pick<Env, 'chiyigo_db'>,
+  { userId, secret, code, window = 1 }: { userId: number; secret: string; code: unknown; window?: number },
+) {
   const sanitized = String(code ?? '').replace(/\s/g, '')
   if (!/^\d{6}$/.test(sanitized)) return { ok: false, reason: 'bad_format' }
 
