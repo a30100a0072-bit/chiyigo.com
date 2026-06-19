@@ -23,8 +23,8 @@ base main `b5e76f69`（接 PR-2cj #106；`git rev-parse HEAD` 實查 = `b5e76f69
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow，3 agents 三維 rubric：scope / runtime·security / evidence — 見 §Gate 進程紀錄）
   - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（維度 B，0 blocker / 0 required / 2 NB；affirm wrapper/worker ctx convention 先例；binding locks L1-L10 見 §Gate 進程紀錄）
-  - ✅ `CODEX_PLAN_APPROVED`（維度 C，0 blocker / 0 critical risk / 0 required）→ ⬜ owner `CODING_ALLOWED`
-  - ⬜ `CODE_SELF_REVIEW_CLEAN`（multi-agent workflow）→ ⬜ `CODEX_CODE_APPROVED`（維度 C）
+  - ✅ `CODEX_PLAN_APPROVED`（維度 C，0 blocker / 0 critical risk / 0 required）→ ✅ owner `CODING_ALLOWED`（2026-06-20）
+  - ✅ `CODE_SELF_REVIEW_CLEAN`（multi-agent workflow，3 agents converged 三維：diff-fidelity / runtime·security / evidence；source `ed5a93af`）→ ⬜ `CODEX_CODE_APPROVED`（維度 C）
   - ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B）→ ⬜ `MERGE_ALLOWED`（merge-front 7 gates 全綠、待 owner 明示）→ ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪回應外部 gate 的修正）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。
 
@@ -41,7 +41,10 @@ base main `b5e76f69`（接 PR-2cj #106；`git rev-parse HEAD` 實查 = `b5e76f69
   - **Binding locks L1-L10（ChatGPT Arch；為 owner L1-L10 + plan locks 之 restatement，無新增約束，Codex Plan 須保留）**：L1 僅動 `auth/delete.ts`；L2 僅兩簽名；L3 OD-ctx `ctx: { request: Request; env: Env }`；L4 禁 `EventContext`/`@cloudflare/workers-types`/ambient/helper；L5 byte-identical（runtime diff = fail）；L6 Tier-0 刪帳 runtime 全鎖；L7 coverage honesty（不宣稱 step-1 runtime coverage）；L8 Code 階段 evidence full replay、不沿用 spike；L9 isolation（`confirm`/A3/payments delete/tests/env/tsconfig/baseline/`CLEANUP_PLAN.md`）；L10 stop rule。
   - **可送 ② Codex Plan Gate；不得進 coding 除非 owner 明示 `CODING_ALLOWED`。**
 - 2026-06-20 **Codex Plan Gate（② 維度 C）：`CODEX_PLAN_APPROVED`**（0 blocker / 0 critical risk / 0 required）— 機械核驗全通過：HEAD `b588b193` / base `b5e76f69`、base→HEAD 僅 plan doc、`functions/` diff = 0（source plan-only）、`b588b193` 僅 gate-log `+8/−2`、隔離快照重現 ratchet **827→824** / 86→85 / 248→249、sort-diff **REMOVED=3 / ADDED=0**、emit **3721B** sha `541e4cfb…9499` byte-identical、tests-leaf 0→0、status 僅 `?? CLEANUP_PLAN.md`、coverage 誠實（step-1 無 direct/indirect test）。State Consistency **PASS**（SQL / token / rollback / audit / 刪帳狀態流程鎖定且不在 proposed diff）；Queue / Payment（payments `delete.ts` 已隔離）/ Distributed State **N/A**；Observability **PASS**（既有 critical audit 不變、未虛稱 runtime coverage）；L1-L10 / OD-ctx / Tier-0 runtime / isolation / stop rule 完整保留。**Plan Gate（① ChatGPT Arch + ② Codex Plan）全通過 = plan 批准；仍非 coding 授權，待 owner 明示 `CODING_ALLOWED` 才進 Code 階段。**
-- （後續 dated 收錄：CODING_ALLOWED / Code / Codex Code / Faithfulness / merge-front gates）
+- 2026-06-20 **owner `CODING_ALLOWED` ✅** → 進 Code 階段。
+- 2026-06-20 **Code 階段（source commit `ed5a93af`）**：落地唯二 2 編輯點（`onRequestPost(ctx: { request: Request; env: Env })` ＋ `handleDelete({ request, env }: { request: Request; env: Env })`），`git diff b5e76f69..ed5a93af -- functions/` = `delete.ts` **+2/−2**、blobs `9e4102a4→5e697377`、`numstat 2 2`（無 CRLF whole-file churn）。**full replay gates 全綠（@ source、不沿用 spike）**：ratchet enforce〔`RATCHET_BASE_REF=b5e76f69`〕**OK**（current **824/249**、ceiling 1119/175 不變）· forced solution sort-diff **REMOVED=3 / ADDED=0**（base 827 vs HEAD 824；checkout dance 後 tree restored clean）· canonical byte-identical（`esbuild --loader=ts --format=esm`）兩端 **3721B** sha `541e4cfb…9499`、stderr 0、`diff -q` IDENTICAL · tests-leaf **0** · `git diff --check` clean · lint green · build:functions「Compiled Worker successfully」。**NB-2 雙證齊**（source diff 逐行 annotation + byte-identical receipt，不以 ratchet 數字單獨代表 runtime 不變）。
+- 2026-06-20 **Code self-review = multi-agent workflow（維度 A，3 agents converged 三維：diff-fidelity / runtime·security / evidence；run `wf_fe5e2463-061`）→ `CODE_SELF_REVIEW_CLEAN`**：3 維 finder findings 全空（accepted 0 / suspicious_input 0），各 candidate 走 adversarial verifier（default-refuted）。主線**獨立讀真碼裁決**：diff-fidelity（`git diff b5e76f69 ed5a93af -- functions/` 恰 2 annotation、functions/ 僅 `delete.ts` 變更）✓、runtime·security（非簽名行 base↔head **逐行 IDENTICAL** + byte-identical emit sha 兩端一致 = runtime 不變硬證、Tier-0 紅線未動、無 `.cf`）✓、evidence（ratchet/sort-diff/byte-identical/tests-leaf 與 replay 一致、coverage honesty：grep `tests/` step-1 `auth/delete` import **0 命中**、不 overclaim）✓ → **一輪 0 新發現**。**待送 Code Gate（③ Codex Code → ④ ChatGPT Faithfulness）；不得 merge 除非 owner 明示 `MERGE_ALLOWED`。**
+- （後續 dated 收錄：Codex Code / Faithfulness / merge-front gates）
 
 ## owner 鎖定表（L1-L10，faithful 收錄）
 
