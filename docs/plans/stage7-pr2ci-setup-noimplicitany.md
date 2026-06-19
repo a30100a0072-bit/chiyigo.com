@@ -52,7 +52,8 @@ base main `176bf542`（接 PR-2ch #104；`git rev-parse HEAD` 實查）。
 - 2026-06-19 Claude scout（read-only A2 域）→ 回報 4 檔實測 → **owner 裁 PR-2ci scope = 選項 A 單檔 `setup.ts` + L1-L7 鎖**（非 coding approval）。
 - 2026-06-19 Claude **本 doc + 非 commit spike 實證**（見 §Spike 實證，working tree 已 revert clean）→ 單 agent 對抗式 self-review 至 0 新發現。
 - 2026-06-19 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 blocker / 0 required revision / 2 non-blocking note）— 最小變更方向成立；`Request` 選型合理（無 `.cf` → 不引 CfRequest）；`Env` 選型合理（entry handler 非 util，`requireAuth` 亦收 `Env`，貼近 handler convention）；plan/code 分 SHA + source 未動 + A2 三檔隔離（尤其 destructive `auth/delete.ts` 不混包）全判定正確。locks 精煉為 **L1-L10**（見 §Gate 1 精煉 locks，為 owner L1-L7 之 superset）。NB-1/NB-2 處置見該節。**可送 Codex Plan Gate；不得進 coding 除非 owner 明示 `CODING_ALLOWED`。**
-- **Codex Plan Gate**：PENDING。
+- 2026-06-19 **Codex Plan Gate r1：`CODEX_PLAN_CHANGES_REQUIRED`**（0 source / scope / security / Tier-0；1 docs-blocking finding）— byte-identical recipe 不可唯一重播：plan v1 記 `--loader=ts` / 2235B / `a4a12ce3…`，SoT canonical `--loader=ts --format=esm` 實得 2256B / `688cd77c…`。本地方案 (b)（owner 不需 push）；L37 / TS7031×2 / ratchet 833/89/245 / blob `3cf328c5→e1784b6c` / `Request`·`Env` 選型 / 零 coverage 均確認正確。
+- 2026-06-19 **修正（docs-only，本 commit）**：改用 canonical recipe、receipt 更新為 **2256B / `688cd77c…`**（本地 re-verify base==patched **YES**、exit 0、stderr 空）、明列完整 stdin replay 命令；L1-L10 不變、source 未動。**待重送 Codex Plan Gate r2。**
 - **owner `CODING_ALLOWED`**：PENDING（plan gate 過後才放）。
 - **Codex Code Gate**：PENDING（code 階段）。
 - **ChatGPT Faithfulness Gate**：PENDING（code 階段）。
@@ -118,7 +119,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 
 ## Spike 實證（full-solution，本地未 commit，2026-06-19，已 revert clean）
 
-**程序**：套 1 編輯點 → esbuild stdin byte-identical（base 從 HEAD、patched 從 working tree）→ 清 `.tscache` → forced `tsc -b tsconfig.solution.json --force`（含 functions / tests / scripts / browser-typecheck 4 leaf）→ canonical `--report` → `git diff --check` → `git restore` → 驗 clean。
+**程序**：套 1 編輯點 → esbuild stdin byte-identical（**canonical recipe `--loader=ts --format=esm`**；base 從 HEAD、patched 從 working tree）→ 清 `.tscache` → forced `tsc -b tsconfig.solution.json --force`（含 functions / tests / scripts / browser-typecheck 4 leaf）→ canonical `--report` → `git diff --check` → `git restore` → 驗 clean。
 
 **單輪達標**（scout cascade 靜態分析直接命中）：
 
@@ -128,7 +129,7 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 | total errorCount 833 → 831（恰 −2） | ✅ forced tsc solution **831**；sort-diff ADDED = **空** |
 | zero cascade（functions + tests + scripts + browser，全 solution） | ✅ sort-diff ADDED=0；base solution 非-`functions/` error = **0**（tests/scripts/browser 本就 0），patched 維持 |
 | canonical `--report` | ✅ errorCount **831** / errorFiles **88** / cleanFiles **246** / sourceFilesTotal 334 |
-| **bundle byte-identical**（TS erase 後 runtime 不變硬保證） | ✅ esbuild **stdin** type-strip base(`176bf542`) vs patched：皆 **2235 bytes（非空）**、`diff` IDENTICAL、sha256 兩端皆 `a4a12ce3e2fd95db182f07bca35bd7bb2382cbe9535ed7fd0997f7c213034c0a`、esbuild stderr 空（避 `--loader` file-entry 空輸出陷阱 [[feedback_byte_identical_emit_verification]]） |
+| **bundle byte-identical**（TS erase 後 runtime 不變硬保證；**canonical recipe `esbuild --loader=ts --format=esm`**，[[feedback_byte_identical_emit_verification]]） | ✅ esbuild **stdin** type-strip base(`176bf542`) vs patched：皆 **2256 bytes（非空）**、`diff -q` IDENTICAL、sha256 兩端皆 `688cd77c271b0c7cec3ff88aed37e09961f9733bef76be45b5a62aa0b27c0c2a`、esbuild stderr 空（避 `--loader` file-entry 空輸出陷阱）。⚠ **Codex Plan r1 修正**：plan v1 原誤用 `--loader=ts`（無 `--format=esm`）→ 2235B / `a4a12ce3…`，非 SoT canonical；兩 recipe 皆證 base==patched，但 receipt 必鎖 canonical 才可唯一重播 |
 | `git diff --check` | ✅ exit 0（無 trailing whitespace / lone space） |
 | working tree revert clean | ✅ `git restore` 後 `setup.ts` 回 HEAD blob `3cf328c5`、`git status --porcelain` 僅 `?? CLEANUP_PLAN.md` |
 
@@ -162,7 +163,10 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 - `$env:RATCHET_BASE_REF='176bf542'; npm run typecheck:ratchet` green（833→831 / 89→88 / 245→246）。
 - `npm run lint` green（全量）、`npm run build:functions` green。
 - filtered forced tsc：`setup.ts` 0 殘留 + 全 solution sort-diff ADDED=0（含 tests leaf；等同 `tsc -b tsconfig.tests.json --force` exit 0 的 tests-leaf 0 cascade，solution 建置已涵蓋）。
-- byte-identical：esbuild stdin base(`176bf542`) vs source → 2235B / sha `a4a12ce3…` 一致、非空。
+- **byte-identical**（canonical recipe，[[feedback_byte_identical_emit_verification]]；完整 stdin replay 命令，NB-2）：
+  - base：`git show 176bf542:functions/api/auth/2fa/setup.ts | node_modules/.bin/esbuild --loader=ts --format=esm`
+  - patched：`node_modules/.bin/esbuild --loader=ts --format=esm < functions/api/auth/2fa/setup.ts`
+  - 期望：兩端皆 **2256B / sha `688cd77c271b0c7cec3ff88aed37e09961f9733bef76be45b5a62aa0b27c0c2a`**、`diff -q` IDENTICAL、非空、stderr 空。
 - `setup.ts` **無 targeted int**（0 coverage）；跑全量 `test:int` 確認無跨檔破壞（**不宣稱涵蓋 setup**）。
 - merge 前 CI 對齊 local gates（[[feedback_pre_merge_gate_checklist_match_ci]]）：`lint` · `typecheck:ratchet` · `verify:browser-pipeline` · `test:cov` · `test:int` · `build:functions` · `npm audit --omit=dev --audit-level=high`。
 - **硬驗收**：source diff 與本 doc §型別選型 before→after **逐行一致**（人審 `git diff -- functions/api/auth/2fa/setup.ts`）；超出 = scope creep = Gate fail。
