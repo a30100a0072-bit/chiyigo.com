@@ -25,7 +25,7 @@ base main `9fcc095c`（接 PR-2ci #105；`git rev-parse HEAD` 實查）。
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow，3 agents 三維 rubric；scope 1 nit 已修、runtime·security + evidence clean — 見下 §Gate 進程紀錄）
   - ✅ `CHATGPT_ARCH_APPROVED`（維度 B）— `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（0 blocker / 0 required / 2 NB；binding locks A1-A8）
-  - ⬜ `CODEX_PLAN_APPROVED`（維度 C）→ `CODING_ALLOWED`（r1 `CODEX_PLAN_REJECTED`：coverage overclaim + 1 NB，已修 docs-only，待 r2）
+  - ✅ `CODEX_PLAN_APPROVED`（維度 C，**r2**）→ 待 owner `CODING_ALLOWED`（r1 `CODEX_PLAN_REJECTED`〔coverage overclaim + 1 NB〕→ docs-only 修 → r2 APPROVED）
   - ⬜ `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED`（維度 C）
   - ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B，v3.1 任何級別全走）→ `MERGE_ALLOWED` → `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪回應外部 gate 的修正）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。
@@ -44,6 +44,7 @@ base main `9fcc095c`（接 PR-2ci #105；`git rev-parse HEAD` 實查）。
   - **Required revision（coverage overclaim）**：coverage 列稱 10 例涵蓋 `UPSERT(OAuth-only)`，但 `change-password.test.ts:164` 用 `seedUser`（`_helpers.ts:268` 必建 local_accounts）→ 只走 `ON CONFLICT DO UPDATE`（existing-row UPDATE 分支），**OAuth-only INSERT 未測**。
   - **NB**：§Spike 表 label `bundle byte-identical` 應為 `single-file emitted-JS byte-identical`（與 NB-2 一致）。
 - 2026-06-19 **修正 r1（docs-only，本 commit；依 A8 回 `PLAN_DRAFT`）**：① coverage 改「existing-row UPDATE 分支」+ §測試影響面 明載 OAuth-only INSERT 未覆蓋（**不改 tests**，A7）；② gate-log「coverage 誠實 10 例」敘述同步修正為「count 10 正確、未下鑽 sub-path」；③ `bundle byte-identical`→`single-file emitted-JS byte-identical`；④ coverage 欄「OTP 一次性消耗」精確化為「step-up token 一次性消耗（jti revoke、it:143）」（change-password 不經手 OTP、OTP 於上游 step-up handler 消耗；單 agent self-review 點出、與 required revision 同 coverage-precision 域，一併修）。scope / 型別 / locks / spike 數值不變、source 仍 0 diff。**單 agent 對抗式 self-review（小修正、docs-only 單檔局部，依 §9 用單 agent）→ 收斂至 0 outstanding（唯一 nit ＝上述 ④，已修）**。**待重送 Codex Plan Gate r2。**
+- 2026-06-19 **Codex Plan Gate r2：`CODEX_PLAN_APPROVED`**（A1-A8 binding locks 保留；0 blocker / 0 required / 0 NB）— r1 required revision（coverage overclaim）+ NB（`bundle`→`single-file`）完整閉合；coverage / existing-row UPDATE branch / step-up token jti / single-file emit 措辭皆正確；commit 僅 plan doc、source diff=0、status 僅 `CLEANUP_PLAN.md`。已知未覆蓋（OAuth-only INSERT、`identity/unbind`）聲明誠實、由 Code Gate byte-identical 雙證約束。Critical Risk 無；State Consistency / Queue / Payment / Distributed State / Observability N/A（type-only）。**Plan Gate（① ChatGPT Arch + ② Codex Plan）全通過 = plan 批准；仍非 coding 授權，待 owner 明示 `CODING_ALLOWED` 才進 Code 階段。**
 
 ## owner 鎖定表（L1-L10，faithful 收錄）
 
