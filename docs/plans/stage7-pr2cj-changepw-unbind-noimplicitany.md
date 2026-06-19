@@ -23,12 +23,23 @@ base main `9fcc095c`（接 PR-2ci #105；`git rev-parse HEAD` 實查）。
   - ✅ Claude scout（read-only）→ 兩檔逐檔 error set + caller cascade 靜態分析 + 測試覆蓋分層 + byte-identical 適用性。
   - ✅ **非 commit full-solution spike 實證**（見 §Spike，working tree 已 revert clean）。
   - ✅ `PLAN_DRAFT` — 本 doc。
-  - ⬜ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow，三維 rubric）
-  - ⬜ `CHATGPT_ARCH_APPROVED`（維度 B）
+  - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow，3 agents 三維 rubric；scope 1 nit 已修、runtime·security + evidence clean — 見下 §Gate 進程紀錄）
+  - ✅ `CHATGPT_ARCH_APPROVED`（維度 B）— `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（0 blocker / 0 required / 2 NB；binding locks A1-A8）
   - ⬜ `CODEX_PLAN_APPROVED`（維度 C）→ `CODING_ALLOWED`
   - ⬜ `CODE_SELF_REVIEW_CLEAN` → `CODEX_CODE_APPROVED`（維度 C）
   - ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B，v3.1 任何級別全走）→ `MERGE_ALLOWED` → `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪回應外部 gate 的修正）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。
+
+### Gate 進程紀錄（dated；faithful 收錄）
+
+- 2026-06-19 Claude **scout（read-only）** → 兩檔逐檔 error set + caller cascade + coverage 分層 + byte-identical 適用性，全對齊 owner 裁示（檔錯數=2 / 0 internal caller / 無 `.cf`）。
+- 2026-06-19 Claude **非 commit full-solution spike**（見 §Spike，working tree revert clean）→ **multi-agent workflow self-review（維度 A，3 agents：scope / runtime·security / evidence）**：scope=`SCOPE_FINDINGS` 1 nit（plan 稱 `delete.ts`「雙 handler」措辭不精準）→ 實讀證為 `onRequestPost(ctx)` wrapper + 內層 `handleDelete({request,env})` worker，**已改成可驗證結構描述**；runtime·security=`CLEAN`（0；確認無 `.cf`、plain `Request` 正確、full `Env` 正確、Tier-0 紅線完整無漏）；evidence=`CLEAN`（0；實跑復現 byte-identical、無 PR-2ci/2ch stale 殘留、coverage 誠實 10 例）。修後一輪 0 新發現 → `PLAN_SELF_REVIEW_CLEAN`。
+- 2026-06-19 plan doc commit local（branch `stage7-pr2cj-changepw-unbind-noimplicitany` @ `640c407a`，**未 push**）→ 中文報告 6 欄 → 送外部 Plan Gate。
+- 2026-06-19 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 blocker / 0 required revision / 2 NB）— scope 切分合理（`delete.ts` 排除成立：destructive + wrapper/worker 異構）、Convention A 型別選型可接受（full `Env` / plain `Request` 理由成立、拒 `CfRequest`/return type/JSDoc 正確）、runtime-neutral 證明面足夠、coverage 聲明合格（`unbind` 不 overclaim）、流程治理合格（四道不 lighter）。
+  - **NB-1**：plan checklist `PLAN_SELF_REVIEW_CLEAN` 原標 ⬜（PLAN_DRAFT artifact 前瞻 checklist）；self-review 實已完成 → **本次 commit 已翻 ✅ + 補本 §Gate 進程紀錄**，Codex packet 保留此說明避免誤讀為尚未 self-review。
+  - **NB-2**：byte-identical 為單檔 transform（非完整 bundle）→ 對 type-only annotation 足夠；**Code Gate 必同附 source diff 逐行證明、不以 ratchet 數字單獨替代 runtime-neutral**（已併入 §驗證計劃「NB-2 雙證」）。
+  - **Binding locks A1-A8（ChatGPT Arch；為 owner L1-L10 之 restatement，Codex Plan 須保留）**：A1 scope 僅兩檔；A2 每檔 1 行 `onRequestPost` destructure annotation；A3 型別固定 `{ request, env }: { request: Request; env: Env }`；A4 runtime（SQL / auth gate / hash·salt / token bump / provider allowlist / 防自殺 count / audit / response body）全不得改；A5 evidence code 階段重跑 ratchet/sort-diff/tests-leaf/byte-identical、不沿用 spike；A6 `unbind` 不宣稱 test coverage、只宣稱 byte-identical；A7 isolation 不碰 `delete.ts`/tests/`env.d.ts`/tsconfig/baseline/`CLEANUP_PLAN.md`；A8 stop rule（任一 runtime diff / 額外 cleanup / coverage overclaim / 新增 cascade → 退回 `PLAN_DRAFT`）。
+  - **可送 Codex Plan Gate；不得進 coding 除非 owner 明示 `CODING_ALLOWED`。**
 
 ## owner 鎖定表（L1-L10，faithful 收錄）
 
