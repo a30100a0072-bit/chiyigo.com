@@ -53,7 +53,9 @@ base main `176bf542`（接 PR-2ch #104；`git rev-parse HEAD` 實查）。
 - 2026-06-19 Claude **本 doc + 非 commit spike 實證**（見 §Spike 實證，working tree 已 revert clean）→ 單 agent 對抗式 self-review 至 0 新發現。
 - 2026-06-19 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 blocker / 0 required revision / 2 non-blocking note）— 最小變更方向成立；`Request` 選型合理（無 `.cf` → 不引 CfRequest）；`Env` 選型合理（entry handler 非 util，`requireAuth` 亦收 `Env`，貼近 handler convention）；plan/code 分 SHA + source 未動 + A2 三檔隔離（尤其 destructive `auth/delete.ts` 不混包）全判定正確。locks 精煉為 **L1-L10**（見 §Gate 1 精煉 locks，為 owner L1-L7 之 superset）。NB-1/NB-2 處置見該節。**可送 Codex Plan Gate；不得進 coding 除非 owner 明示 `CODING_ALLOWED`。**
 - 2026-06-19 **Codex Plan Gate r1：`CODEX_PLAN_CHANGES_REQUIRED`**（0 source / scope / security / Tier-0；1 docs-blocking finding）— byte-identical recipe 不可唯一重播：plan v1 記 `--loader=ts` / 2235B / `a4a12ce3…`，SoT canonical `--loader=ts --format=esm` 實得 2256B / `688cd77c…`。本地方案 (b)（owner 不需 push）；L37 / TS7031×2 / ratchet 833/89/245 / blob `3cf328c5→e1784b6c` / `Request`·`Env` 選型 / 零 coverage 均確認正確。
-- 2026-06-19 **修正（docs-only，本 commit）**：改用 canonical recipe、receipt 更新為 **2256B / `688cd77c…`**（本地 re-verify base==patched **YES**、exit 0、stderr 空）、明列完整 stdin replay 命令；L1-L10 不變、source 未動。**待重送 Codex Plan Gate r2。**
+- 2026-06-19 **修正 r1（docs-only）**：改用 canonical recipe、receipt 更新為 **2256B / `688cd77c…`**（本地 re-verify base==patched **YES**、exit 0、stderr 空）、列 stdin replay 命令；L1-L10 不變、source 未動。
+- 2026-06-19 **Codex Plan Gate r2：`CODEX_PLAN_CHANGES_REQUIRED`**（0 source / scope / Tier-0；1 docs-blocking）— r1 flags/bytes/SHA 修正正確、source 仍 0 diff，但 replay 命令非 PowerShell 5.1 原文可執行（`<` stdin redirection 不支援、`esbuild.ps1` execution policy 阻擋）；獨立驗證數值仍正確（2256B / `688cd77c…` / identical / stderr 空）。
+- 2026-06-19 **修正 r2（docs-only，本 commit）**：§驗證計劃 byte-identical 區明標 **Git Bash commands** + 補完整 receipt（輸出檔、stderr、`wc -c`、`sha256sum`、`diff -q`）；本地用 doc 內 exact 命令（`node_modules/.bin/esbuild`）re-verify 兩端 **2256B / `688cd77c…` / stderr 0 / `diff -q` IDENTICAL**；數值與 L1-L10 不變、source 未動。**待重送 Codex Plan Gate r3。**
 - **owner `CODING_ALLOWED`**：PENDING（plan gate 過後才放）。
 - **Codex Code Gate**：PENDING（code 階段）。
 - **ChatGPT Faithfulness Gate**：PENDING（code 階段）。
@@ -163,10 +165,18 @@ export async function onRequestPost({ request, env }: { request: Request; env: E
 - `$env:RATCHET_BASE_REF='176bf542'; npm run typecheck:ratchet` green（833→831 / 89→88 / 245→246）。
 - `npm run lint` green（全量）、`npm run build:functions` green。
 - filtered forced tsc：`setup.ts` 0 殘留 + 全 solution sort-diff ADDED=0（含 tests leaf；等同 `tsc -b tsconfig.tests.json --force` exit 0 的 tests-leaf 0 cascade，solution 建置已涵蓋）。
-- **byte-identical**（canonical recipe，[[feedback_byte_identical_emit_verification]]；完整 stdin replay 命令，NB-2）：
-  - base：`git show 176bf542:functions/api/auth/2fa/setup.ts | node_modules/.bin/esbuild --loader=ts --format=esm`
-  - patched：`node_modules/.bin/esbuild --loader=ts --format=esm < functions/api/auth/2fa/setup.ts`
-  - 期望：兩端皆 **2256B / sha `688cd77c271b0c7cec3ff88aed37e09961f9733bef76be45b5a62aa0b27c0c2a`**、`diff -q` IDENTICAL、非空、stderr 空。
+- **byte-identical**（canonical recipe，[[feedback_byte_identical_emit_verification]]；NB-2 雙證之一）。⚠ **Git Bash commands**（經 Bash tool / Git Bash 執行；**PowerShell 5.1 不支援 `<` stdin redirection、且 `esbuild.ps1` 受 execution policy 阻擋** → 此 receipt 不在 PowerShell 原文跑；唯獨 ratchet 段用 PowerShell `$env:` 見上注）：
+
+```bash
+git show 176bf542:functions/api/auth/2fa/setup.ts | node_modules/.bin/esbuild --loader=ts --format=esm > /tmp/base.js 2>/tmp/base.err
+node_modules/.bin/esbuild --loader=ts --format=esm < functions/api/auth/2fa/setup.ts > /tmp/head.js 2>/tmp/head.err
+wc -c /tmp/base.js /tmp/head.js       # 期望 2256 兩端
+sha256sum /tmp/base.js /tmp/head.js   # 期望 688cd77c271b0c7cec3ff88aed37e09961f9733bef76be45b5a62aa0b27c0c2a 兩端
+cat /tmp/base.err /tmp/head.err       # 期望 空（stderr 0 bytes）
+diff -q /tmp/base.js /tmp/head.js     # 期望 IDENTICAL（無輸出 + exit 0）
+```
+
+  - patched 端 `< functions/api/auth/2fa/setup.ts` 讀 code 階段已落地 edit 的 working-tree 檔；base 端 `git show 176bf542:` 讀未改 base。本地實證：兩端 **2256B / `688cd77c…`**、stderr 0、`diff -q` IDENTICAL。
 - `setup.ts` **無 targeted int**（0 coverage）；跑全量 `test:int` 確認無跨檔破壞（**不宣稱涵蓋 setup**）。
 - merge 前 CI 對齊 local gates（[[feedback_pre_merge_gate_checklist_match_ci]]）：`lint` · `typecheck:ratchet` · `verify:browser-pipeline` · `test:cov` · `test:int` · `build:functions` · `npm audit --omit=dev --audit-level=high`。
 - **硬驗收**：source diff 與本 doc §型別選型 before→after **逐行一致**（人審 `git diff -- functions/api/auth/2fa/setup.ts`）；超出 = scope creep = Gate fail。
