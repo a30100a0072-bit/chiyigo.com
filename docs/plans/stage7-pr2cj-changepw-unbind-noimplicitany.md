@@ -26,7 +26,7 @@ base main `9fcc095c`（接 PR-2ci #105；`git rev-parse HEAD` 實查）。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow，3 agents 三維 rubric；scope 1 nit 已修、runtime·security + evidence clean — 見下 §Gate 進程紀錄）
   - ✅ `CHATGPT_ARCH_APPROVED`（維度 B）— `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（0 blocker / 0 required / 2 NB；binding locks A1-A8）
   - ✅ `CODEX_PLAN_APPROVED`（維度 C，**r2**）→ 待 owner `CODING_ALLOWED`（r1 `CODEX_PLAN_REJECTED`〔coverage overclaim + 1 NB〕→ docs-only 修 → r2 APPROVED）
-  - ✅ `CODE_SELF_REVIEW_CLEAN`（multi-agent workflow 3 agents：diff/runtime·security/evidence 全 CLEAN；source `31ddc5eb`）→ ⬜ `CODEX_CODE_APPROVED`（維度 C）
+  - ✅ `CODE_SELF_REVIEW_CLEAN`（multi-agent workflow 3 agents：diff/runtime·security/evidence 全 CLEAN；source `31ddc5eb`）→ ✅ `CODEX_CODE_APPROVED`（維度 C，0 blocker/required/NB）
   - ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B，v3.1 任何級別全走）→ `MERGE_ALLOWED` → `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪回應外部 gate 的修正）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。
 
@@ -47,6 +47,7 @@ base main `9fcc095c`（接 PR-2ci #105；`git rev-parse HEAD` 實查）。
 - 2026-06-19 **Codex Plan Gate r2：`CODEX_PLAN_APPROVED`**（A1-A8 binding locks 保留；0 blocker / 0 required / 0 NB）— r1 required revision（coverage overclaim）+ NB（`bundle`→`single-file`）完整閉合；coverage / existing-row UPDATE branch / step-up token jti / single-file emit 措辭皆正確；commit 僅 plan doc、source diff=0、status 僅 `CLEANUP_PLAN.md`。已知未覆蓋（OAuth-only INSERT、`identity/unbind`）聲明誠實、由 Code Gate byte-identical 雙證約束。Critical Risk 無；State Consistency / Queue / Payment / Distributed State / Observability N/A（type-only）。**Plan Gate（① ChatGPT Arch + ② Codex Plan）全通過 = plan 批准；仍非 coding 授權，待 owner 明示 `CODING_ALLOWED` 才進 Code 階段。**
 - 2026-06-19 **owner `CODING_ALLOWED` ✅** → 進 Code 階段。
 - 2026-06-19 **Code 階段（source commit `31ddc5eb`）**：落地 2 編輯點（與 frozen diff 一致，`git diff --stat` 2 檔各 +1/−1、`numstat` 1/1、無 CRLF whole-file churn）。**full replay gates 全綠（@ source、不沿用 spike）**：canonical byte-identical（`esbuild --loader=ts --format=esm`，base `9fcc095c` vs head）CP **2151B** `f40ce744…` / UB **2202B** `270403e2…`、stderr 0、`diff -q` IDENTICAL · forced solution sort-diff **REMOVED=4 / ADDED=0**（fresh base 831 via `git stash`）· 兩檔 residual TS7031 = 0 · tests-leaf `tsc -b tsconfig.tests.json --force` exit 0 · ratchet **OK**（`RATCHET_BASE_REF=9fcc095c`、current **827/248**、ceiling 1119/175 不變）· lint green · build:functions「Compiled Worker successfully」· `git diff --check` clean。**Code self-review = multi-agent workflow（3 agents：diff fidelity / runtime·security / evidence）→ 三維全 CLEAN、0 finding**；NB-2 雙證齊（byte-identical emit + source diff 逐行）。**待送 Code Gate（③ Codex Code → ④ ChatGPT Faithfulness）；不得 merge 除非 owner 明示 `MERGE_ALLOWED`。**
+- 2026-06-19 **Codex Code Gate（③）：`CODEX_CODE_APPROVED`**（0 blocker / 0 required / 0 NB）— source 恰兩行標註各 `1/1`、A1-A8 全守；byte-identical CP 2151B `f40ce744…` / UB 2202B `270403e2…`；**targeted integration 10/10**、ratchet **827/248** OK、tests-leaf green、目標 TS error 0；lint / build:functions / `git diff --check` 全綠；status 僅 `CLEANUP_PLAN.md`。Critical Risk 無；runtime/data path byte-identical；Queue / Payment / Distributed State / Observability N/A。**待 ④ ChatGPT Code Faithfulness；仍非 `MERGE_ALLOWED`。**
 
 ## owner 鎖定表（L1-L10，faithful 收錄）
 
