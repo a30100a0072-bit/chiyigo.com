@@ -57,9 +57,10 @@ base main `176bf542`（接 PR-2ch #104；`git rev-parse HEAD` 實查）。
 - 2026-06-19 **Codex Plan Gate r2：`CODEX_PLAN_CHANGES_REQUIRED`**（0 source / scope / Tier-0；1 docs-blocking）— r1 flags/bytes/SHA 修正正確、source 仍 0 diff，但 replay 命令非 PowerShell 5.1 原文可執行（`<` stdin redirection 不支援、`esbuild.ps1` execution policy 阻擋）；獨立驗證數值仍正確（2256B / `688cd77c…` / identical / stderr 空）。
 - 2026-06-19 **修正 r2（docs-only，本 commit）**：§驗證計劃 byte-identical 區明標 **Git Bash commands** + 補完整 receipt（輸出檔、stderr、`wc -c`、`sha256sum`、`diff -q`）；本地用 doc 內 exact 命令（`node_modules/.bin/esbuild`）re-verify 兩端 **2256B / `688cd77c…` / stderr 0 / `diff -q` IDENTICAL**；數值與 L1-L10 不變、source 未動。**待重送 Codex Plan Gate r3。**
 - 2026-06-19 **Codex Plan Gate r3：`CODEX_PLAN_APPROVED` @ `78678204`**（Findings: none）— r2 finding 完整閉合；Git Bash 原文 receipt 重播成功（兩端 2256B / `688cd77c…` / stderr 0 / `diff_exit=0`）；`main...HEAD` 僅 plan doc 4 commit、source diff=0、`CLEANUP_PLAN.md` 未進 diff；L1-L10 / typing / ratchet / cascade / coverage 誠實性一致。**Plan Gate（Gate 1 ChatGPT Arch + Gate 2 Codex Plan）全通過 = plan 批准，非 coding 授權。**
-- **owner `CODING_ALLOWED`**：PENDING（Plan Gate 已過；待 owner **當輪明示** 才進 Code 階段）。
-- **Codex Code Gate**：PENDING（code 階段）。
-- **ChatGPT Faithfulness Gate**：PENDING（code 階段）。
+- 2026-06-19 **owner `CODING_ALLOWED` ✅** → 進 Code 階段。
+- 2026-06-19 **Code 階段（source commit `d7ae6753`）**：落地唯一 L37 annotation（+1/−1，與凍結 diff 一致）。**full replay gates 全綠（@ source，不沿用 spike）**：canonical byte-identical（`--loader=ts --format=esm`）base vs patched 皆 **2256B / `688cd77c…`**、`diff -q` IDENTICAL、stderr 0 · forced solution sort-diff **REMOVED=2 / ADDED=0**（fresh base 833 via `git stash`）· setup.ts residual 0 · tests/scripts/browser 0 · ratchet **OK**（baseline 天花板 1119/175、current **831/246**、base `176bf542`）· `--report` **831/88/246** · lint 0 · build:functions compiled · `git diff --check` clean。**單 agent 對抗式 self-review `APPROVE` 0 finding**（diff fidelity / runtime·security / evidence 三維 clean）。
+- **Codex Code Gate**：PENDING（送審 @ source `d7ae6753`）。
+- **ChatGPT Faithfulness Gate**：PENDING（Gate 3 後）。
 
 ## ⚠ 2FA setup 熱區敏感聲明（最高優先紀律，安全鎖 L3）
 
