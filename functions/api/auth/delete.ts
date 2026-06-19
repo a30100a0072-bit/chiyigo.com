@@ -13,7 +13,7 @@ const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_MINUTES = 15
 const IP_HOURLY_LIMIT   = 5
 
-export async function onRequestPost(ctx) {
+export async function onRequestPost(ctx: { request: Request; env: Env }) {
   try {
     return await handleDelete(ctx)
   } catch (e) {
@@ -28,7 +28,7 @@ export async function onRequestPost(ctx) {
   }
 }
 
-async function handleDelete({ request, env }) {
+async function handleDelete({ request, env }: { request: Request; env: Env }) {
   // P1-3：刪帳號是高權限毀滅性動作，要求 step-up token（5min 短效，需通過 2FA 換來）
   // + 額外驗一次密碼作雙重憑證（step-up 雖已驗 TOTP，密碼是 OAuth-only 帳號禁止刪的閘門）
   const { user, error } = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'delete_account')
