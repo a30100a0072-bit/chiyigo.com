@@ -24,11 +24,34 @@ base main `176bf542`（接 PR-2ch #104；`git rev-parse HEAD` 實查）。
 | L6 Evidence | plan 階段需實測 sort-diff、byte-identical、tests-leaf |
 | L7 Claim | coverage 只能宣稱 byte-identical；不得宣稱 direct/indirect test coverage |
 
+## Gate 1 精煉 locks（ChatGPT Architecture，L1-L10；owner L1-L7 之 superset）
+
+2026-06-19 Gate 1 將 owner L1-L7 精煉擴充為 L1-L10（faithful 收錄；本 plan 逐項 compliant、已對 source 復核）：
+
+| Lock | 內容 |
+|---|---|
+| L1 Scope | 僅 `functions/api/auth/2fa/setup.ts` |
+| L2 Edit Point | 僅 L37 handler signature annotation |
+| L3 Type-only | 不得改任何 emitted JavaScript 行為 |
+| L4 Runtime Hot Zone | 不得觸碰 secret generation、`Secret.fromBase32`、TOTP 參數、issuer fallback、rate-limit、SQL、response body、常數 |
+| L5 Env | 不得改 `types/env.d.ts`；不得新增 env key；**不得把本案推廣成 util full-Env 政策**（handler full `Env` ⟂ util `Pick` 刻意分流） |
+| L6 Tests | 不得新增 / 刪除 / 修改 tests 配合本 PR |
+| L7 Evidence | Code 階段需重跑 ratchet、forced sort-diff、esbuild stdin byte-identical、tests-leaf cascade、`git diff --check` |
+| L8 Claim | setup.ts coverage 只能宣稱 byte-identical；不得宣稱 direct/indirect test coverage |
+| L9 Gate | 不得因單檔或 spike clean 跳過 Codex Plan / Codex Code / ChatGPT Faithfulness |
+| L10 Stop Rule | 任一非 annotation diff 出現 → 退回 PLAN_DRAFT，不得在 Code 階段自行擴 scope |
+
+**對照**：L1-L10 ⊇ owner L1-L7（L1=L1；L2 明確化編輯點；L3⊇owner L2；L4=owner L3；L5=owner L4＋util 政策防外溢；L6⊆owner L5 之 tests 子集；L7=owner L6；L8=owner L7；L9/L10 新增治理 stop-rule）。
+
+**Non-blocking notes 處置**：
+- **NB-1（push for Codex）**：branch 目前僅本地。Codex Plan Gate 若需遠端 `main...HEAD` 比較，可 push `stage7-pr2ci-setup-noimplicitany`；此為流程需要、不改 gate-state、不等同 coding allowed。**待 owner 指示 push 或本地跑 Codex。**
+- **NB-2（code 階段報告雙證）**：Code 階段報告**同時列**「base vs patched emit byte-identical（esbuild stdin，sha + bytes）」與「source diff 僅 1-line annotation（`git diff` 逐行）」，**不以 ratchet 數字單獨替代行為保證**。已併入 §驗證計劃 硬驗收（plan 原已含 byte-identical + 逐行 diff 人審，NB-2 明文強化）。
+
 ## 流程定位 / Gate 紀錄（Dual Gate Workflow v3.1）
 
 - 2026-06-19 Claude scout（read-only A2 域）→ 回報 4 檔實測 → **owner 裁 PR-2ci scope = 選項 A 單檔 `setup.ts` + L1-L7 鎖**（非 coding approval）。
 - 2026-06-19 Claude **本 doc + 非 commit spike 實證**（見 §Spike 實證，working tree 已 revert clean）→ 單 agent 對抗式 self-review 至 0 新發現。
-- **ChatGPT Architecture Gate**：PENDING。
+- 2026-06-19 **ChatGPT Architecture Gate：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 blocker / 0 required revision / 2 non-blocking note）— 最小變更方向成立；`Request` 選型合理（無 `.cf` → 不引 CfRequest）；`Env` 選型合理（entry handler 非 util，`requireAuth` 亦收 `Env`，貼近 handler convention）；plan/code 分 SHA + source 未動 + A2 三檔隔離（尤其 destructive `auth/delete.ts` 不混包）全判定正確。locks 精煉為 **L1-L10**（見 §Gate 1 精煉 locks，為 owner L1-L7 之 superset）。NB-1/NB-2 處置見該節。**可送 Codex Plan Gate；不得進 coding 除非 owner 明示 `CODING_ALLOWED`。**
 - **Codex Plan Gate**：PENDING。
 - **owner `CODING_ALLOWED`**：PENDING（plan gate 過後才放）。
 - **Codex Code Gate**：PENDING（code 階段）。
