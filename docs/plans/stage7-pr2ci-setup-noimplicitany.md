@@ -59,8 +59,8 @@ base main `176bf542`（接 PR-2ch #104；`git rev-parse HEAD` 實查）。
 - 2026-06-19 **Codex Plan Gate r3：`CODEX_PLAN_APPROVED` @ `78678204`**（Findings: none）— r2 finding 完整閉合；Git Bash 原文 receipt 重播成功（兩端 2256B / `688cd77c…` / stderr 0 / `diff_exit=0`）；`main...HEAD` 僅 plan doc 4 commit、source diff=0、`CLEANUP_PLAN.md` 未進 diff；L1-L10 / typing / ratchet / cascade / coverage 誠實性一致。**Plan Gate（Gate 1 ChatGPT Arch + Gate 2 Codex Plan）全通過 = plan 批准，非 coding 授權。**
 - 2026-06-19 **owner `CODING_ALLOWED` ✅** → 進 Code 階段。
 - 2026-06-19 **Code 階段（source commit `d7ae6753`）**：落地唯一 L37 annotation（+1/−1，與凍結 diff 一致）。**full replay gates 全綠（@ source，不沿用 spike）**：canonical byte-identical（`--loader=ts --format=esm`）base vs patched 皆 **2256B / `688cd77c…`**、`diff -q` IDENTICAL、stderr 0 · forced solution sort-diff **REMOVED=2 / ADDED=0**（fresh base 833 via `git stash`）· setup.ts residual 0 · tests/scripts/browser 0 · ratchet **OK**（baseline 天花板 1119/175、current **831/246**、base `176bf542`）· `--report` **831/88/246** · lint 0 · build:functions compiled · `git diff --check` clean。**單 agent 對抗式 self-review `APPROVE` 0 finding**（diff fidelity / runtime·security / evidence 三維 clean）。
-- **Codex Code Gate**：PENDING（送審 @ source `d7ae6753`）。
-- **ChatGPT Faithfulness Gate**：PENDING（Gate 3 後）。
+- 2026-06-19 **Codex Code Gate：`CODEX_CODE_APPROVED` @ source `d7ae6753`**（reviewed HEAD `c2d01a78`；findings: none）— Codex 獨立復跑全 gate 一致（emit 2256B / `688cd77c…` byte-identical、ratchet 831/88/246、setup residual 0、lint / build / `diff --check` 綠）+ **補跑全量 `test:int` = 75 files / 1328 tests 全通過**（閉合 plan merge-front test:int、de-risk merge）。非阻塞紀錄：原 code-stage 報告把 `test:int` 置於 merge-front 未於 code 階段列出，已由本 gate 重跑閉合；仍不宣稱 setup direct/indirect coverage（L8）。
+- **ChatGPT Faithfulness Gate**：PENDING（送審 @ source `d7ae6753` / HEAD `c2d01a78`）。
 
 ## ⚠ 2FA setup 熱區敏感聲明（最高優先紀律，安全鎖 L3）
 
