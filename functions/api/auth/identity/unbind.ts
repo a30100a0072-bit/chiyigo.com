@@ -15,7 +15,7 @@ import { safeUserAudit } from '../../../utils/user-audit'
 
 const ALLOWED_PROVIDERS = new Set(['google', 'discord', 'line', 'facebook'])
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 

@@ -37,7 +37,7 @@ import { requireStepUp, bumpTokenVersion, res } from '../../../utils/auth'
 import { SCOPES } from '../../../utils/scopes'
 import { safeUserAudit } from '../../../utils/user-audit'
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   // step-up 守門：驗 step_up_token + scope=elevated:account + for_action=change_password
   // requireStepUp 內部已 revokeJti（一次性）+ 嚴格 scope（不走 role fallback）
   const { user, error } = await requireStepUp(
