@@ -22,7 +22,7 @@ base main `b5e76f69`（接 PR-2cj #106；`git rev-parse HEAD` 實查 = `b5e76f69
   - ✅ **非 commit full-solution spike 實證**（見 §Spike，working tree 已 `git checkout` revert clean、`git diff b5e76f69` 空）。
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow，3 agents 三維 rubric：scope / runtime·security / evidence — 見 §Gate 進程紀錄）
-  - ⬜ `CHATGPT_ARCH_APPROVED`（維度 B；含 affirm wrapper/worker ctx convention 先例）
+  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（維度 B，0 blocker / 0 required / 2 NB；affirm wrapper/worker ctx convention 先例；binding locks L1-L10 見 §Gate 進程紀錄）
   - ⬜ `CODEX_PLAN_APPROVED`（維度 C）→ ⬜ owner `CODING_ALLOWED`
   - ⬜ `CODE_SELF_REVIEW_CLEAN`（multi-agent workflow）→ ⬜ `CODEX_CODE_APPROVED`（維度 C）
   - ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B）→ ⬜ `MERGE_ALLOWED`（merge-front 7 gates 全綠、待 owner 明示）→ ⬜ `MERGED_MAIN`
@@ -34,7 +34,13 @@ base main `b5e76f69`（接 PR-2cj #106；`git rev-parse HEAD` 實查 = `b5e76f69
 - 2026-06-19 Claude **scout（read-only @ `b5e76f69`）** → 逐檔 error set（恰 3：TS7006 `ctx` ×1 ＋ TS7031 `request`/`env` ×2）+ caller cascade（`handleDelete` intra-file only、`onRequestPost` Pages entry 0 TS importer）+ coverage 分層（step-1 `delete.ts` 無 direct/indirect test）+ byte-identical 適用性，全對齊 owner 裁示（檔錯數 = 3、cascade judged 0、無 `.cf`、wrapper/worker 結構符描述）→ 0 矛盾、不觸發 stop-rule。
 - 2026-06-19 Claude **非 commit full-solution spike**（見 §Spike，working tree revert clean）→ 全 receipt 綠（ratchet 827→824、sort-diff REMOVED=3/ADDED=0、byte-identical 3721B sha `541e4cfb…`、tests-leaf 0→0）。
 - 2026-06-20 **multi-agent workflow self-review（維度 A，3 agents converged 三維：scope / runtime·security / evidence；run `wf_c59cd05d-70d`）→ `PLAN_SELF_REVIEW_CLEAN`**：3 維 finder findings 全空（accepted 0 / suspicious_input 0），各 candidate 走 adversarial verifier（default-refuted）。主線**獨立讀 plan 對抗式裁決**（非採 raw 輸出）：scope（單檔 2 簽名、frozen diff +2/−2、排除區鎖）✓、runtime·security（Tier-0 紅線全鎖、type-only byte-identical、無 `.cf`、real hard-delete=step-2 `confirm.ts` 已載明）✓、evidence（ratchet/sort-diff/byte-identical/tests-leaf/cascade 數值與 spike 一致、無 PR-2cj stale 值洩漏〔`2151`/`2202`/`831`/`f40ce744`/`270403e2` 皆 0 hit〕、coverage 誠實〔step-1 無 direct test、byte-identical 唯一硬保證、不 overclaim〕、exact-error 三行正確）✓ → **一輪 0 新發現**。
-- （後續 dated 收錄：plan commit / ChatGPT Arch / Codex Plan / CODING_ALLOWED / Code / Codex Code / Faithfulness / merge-front gates）
+- 2026-06-20 plan doc commit local（branch `stage7-pr2ck-delete-noimplicitany` @ `cb5ce96f`，**未 push**）→ 中文報告 6 欄 → owner 裁示直接送外部 Plan Gate（不先人工過目；ChatGPT 須收完整 plan doc 原文、非 packet 摘要）。
+- 2026-06-20 **ChatGPT Architecture Gate（① 維度 B）：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 blocker / 0 required revision / 2 NB）— Scope（單檔 2 編輯點）/ OD-ctx（`ctx: { request: Request; env: Env }`、affirm wrapper/worker 先例、拒 `EventContext`/workers-types/ambient）/ Runtime（type-only byte-identical）/ Security（Tier-0 刪帳紅線全鎖）/ Evidence（ratchet·sort-diff·byte-identical·tests-leaf·cascade 一致）/ Coverage（step-1 無 direct test、不 overclaim）/ Isolation 全 ✅ Pass。
+  - **NB-1**（文件可讀性，非阻擋）：chat UI 長行換行（如 diff 內 `env: Env` 被斷行）非真實內容；Code 階段以 repo committed plan doc 與實際 `git diff` 為準、不以聊天 UI 換行為準。
+  - **NB-2**（Code 階段報告，非阻擋）：Code report 必同列 source diff 逐行 + byte-identical receipt，不以 ratchet `827→824` 單獨代表 runtime 不變（plan §驗證計劃「NB-2 雙證」已含此要求）。
+  - **Binding locks L1-L10（ChatGPT Arch；為 owner L1-L10 + plan locks 之 restatement，無新增約束，Codex Plan 須保留）**：L1 僅動 `auth/delete.ts`；L2 僅兩簽名；L3 OD-ctx `ctx: { request: Request; env: Env }`；L4 禁 `EventContext`/`@cloudflare/workers-types`/ambient/helper；L5 byte-identical（runtime diff = fail）；L6 Tier-0 刪帳 runtime 全鎖；L7 coverage honesty（不宣稱 step-1 runtime coverage）；L8 Code 階段 evidence full replay、不沿用 spike；L9 isolation（`confirm`/A3/payments delete/tests/env/tsconfig/baseline/`CLEANUP_PLAN.md`）；L10 stop rule。
+  - **可送 ② Codex Plan Gate；不得進 coding 除非 owner 明示 `CODING_ALLOWED`。**
+- （後續 dated 收錄：Codex Plan / CODING_ALLOWED / Code / Codex Code / Faithfulness / merge-front gates）
 
 ## owner 鎖定表（L1-L10，faithful 收錄）
 
