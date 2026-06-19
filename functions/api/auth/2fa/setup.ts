@@ -34,7 +34,7 @@ function generateBase32Secret(byteLength = 20) {
   return result
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   // ── 1. 驗證 JWT ──────────────────────────────────────────────
   const { user, error } = await requireAuth(request, env)
   if (error) return error
