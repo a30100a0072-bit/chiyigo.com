@@ -22,7 +22,7 @@ const SHORT_WINDOW_SEC    = 60   // 新：login_attempts kind='email_send' 短�
 const SHORT_WINDOW_MAX    = 3    //      每 IP 每分鐘 3 次
 const FETCH_TIMEOUT_MS    = 8000  // 防 Resend 卡住把 Worker 拖進 524
 
-export async function onRequestPost(ctx) {
+export async function onRequestPost(ctx: { request: Request; env: Env }) {
   try {
     return await handle(ctx)
   } catch (err) {
@@ -31,7 +31,7 @@ export async function onRequestPost(ctx) {
   }
 }
 
-async function handle({ request, env }) {
+async function handle({ request, env }: { request: Request; env: Env }) {
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 
