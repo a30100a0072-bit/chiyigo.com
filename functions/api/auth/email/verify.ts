@@ -10,7 +10,7 @@ import { hashToken } from '../../../utils/crypto'
 import { res } from '../../../utils/auth'
 import { safeUserAudit } from '../../../utils/user-audit'
 
-export async function onRequestGet({ request }) {
+export async function onRequestGet({ request }: { request: Request }) {
   const url   = new URL(request.url)
   const token = url.searchParams.get('token') ?? ''
   const target = new URL('/verify-email.html', url.origin)
@@ -18,7 +18,7 @@ export async function onRequestGet({ request }) {
   return Response.redirect(target.href, 302)
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   let body
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
