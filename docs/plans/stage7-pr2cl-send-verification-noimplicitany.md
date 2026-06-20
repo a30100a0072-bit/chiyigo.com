@@ -23,7 +23,7 @@ base main `d8153850`（接 PR-2ck #107；`git rev-parse HEAD` 實查 = `d8153850
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow，3 agents 三維 rubric：scope / runtime·security / evidence — 見 §Gate 進程紀錄）
   - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（維度 B，0 blocker / 0 required / 3 NB；7 維 Pass；CL-1..CL-10 + NB-1..NB-3 見 §Gate 進程紀錄）
-  - ⬜ `CODEX_PLAN_APPROVED`（維度 C）→ ⬜ owner `CODING_ALLOWED`
+  - ✅ `CODEX_PLAN_APPROVED`（維度 C，0 blocker / 0 required；獨立 replay 重現全數值）→ ⬜ owner `CODING_ALLOWED`
   - ⬜ `CODE_SELF_REVIEW_CLEAN`（multi-agent workflow）→ ⬜ `CODEX_CODE_APPROVED`（維度 C）
   - ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（維度 B）→ ⬜ `MERGE_ALLOWED`（merge-front 7 gates 全綠後待 owner 明示）→ ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪回應外部 gate 的修正）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。
@@ -41,7 +41,8 @@ base main `d8153850`（接 PR-2ck #107；`git rev-parse HEAD` 實查 = `d8153850
   - **NB-2**（非阻擋）：`CLEANUP_PLAN.md` untracked 仍是 commit 汙染風險；Code 階段挑檔 add + 列 `git diff --cached --name-status`。
   - **NB-3**（非阻擋）：plan 已寫 full replay @ source commit、方向正確；Codex Plan 應鎖「coding 後重跑」、不接受 spike 當最終 code gate 證據。
   - **可送 ② Codex Plan Gate；非 coding 授權，待 ② 通過 + owner 明示 `CODING_ALLOWED`。**
-- （後續 dated 收錄：Codex Plan → CODING_ALLOWED → Code → Codex Code → ChatGPT Faithfulness → merge-front gates → MERGE_ALLOWED → squash → main CI / deploy）
+- 2026-06-20 **Codex Plan Gate（② 維度 C）：`CODEX_PLAN_APPROVED`**（0 blocker / 0 required revision；獨立 replay）— 機械核驗全通過：base `824` → patched `821`、恰 **3 target error removed / 0 added**、emit byte-identical **3398B** sha `b1765521…`、tests-leaf TS pass、source 與 `d8153850` 完全相同、branch diff 僅 plan doc、worktree 僅 untracked `CLEANUP_PLAN.md`、staged 空。Critical Risk **None**（type-only、未動 auth/限流/token/SQL/rollback/email/timeout/response）；State Consistency **No change**（DB 操作與 rollback 順序鎖在 scope 外）；Queue / Payment / Distributed State **N/A**；Observability **No change**（logging 不變、未虛稱 handler runtime coverage）。CL-1..CL-10 / NB-1..NB-3 完整保留。**Plan Gate（① ChatGPT Arch + ② Codex Plan）全通過 = plan 批准；仍非 coding 授權，待 owner 明示 `CODING_ALLOWED` 才進 Code 階段。**
+- （後續 dated 收錄：CODING_ALLOWED → Code（落地 + full replay @source + NB-2 雙證）→ Code multi-agent self-review → Codex Code → ChatGPT Faithfulness → merge-front gates → MERGE_ALLOWED → squash → main CI / deploy）
 
 ## owner 鎖定表（L1-L10，faithful 收錄）
 
