@@ -85,13 +85,17 @@ for (const file of files) {
       }
     }
     if (!/\bGUARD\b/.test(src)) err(file, 'workflow entry must reference the injection GUARD (B2/AC6)')
-    // full enforcement: EVERY agent() call must carry agentType:'Explore' + a schema (not just once).
+    // full enforcement: EVERY agent() call must carry agentType:'readonly-reviewer' + a schema.
+    // readonly-reviewer = global read-only agent with NO model pin -> inherits the session model
+    // (verified loads in a fresh session 2026-06-21 as `readonly-reviewer · inherit`; see memory
+    // feedback_selfreview_workflow_model_inheritance). Built-in 'Explore' is FORBIDDEN here: /agents
+    // shows it pinned to haiku, which silently downgrades finders/verifiers off the session model.
     const nAgent = (src.match(/\bagent\s*\(/g) || []).length
-    const nExplore = (src.match(/agentType:\s*'Explore'/g) || []).length
+    const nReviewer = (src.match(/agentType:\s*'readonly-reviewer'/g) || []).length
     const nSchema = (src.match(/\bschema:\s*[A-Za-z_{]/g) || []).length
     if (nAgent === 0) err(file, 'workflow entry has no agent() call')
-    else if (nExplore < nAgent || nSchema < nAgent) {
-      err(file, `every agent() must use agentType:'Explore' + schema (agent=${nAgent}, Explore=${nExplore}, schema=${nSchema})`)
+    else if (nReviewer < nAgent || nSchema < nAgent) {
+      err(file, `every agent() must use agentType:'readonly-reviewer' + schema (agent=${nAgent}, readonly-reviewer=${nReviewer}, schema=${nSchema})`)
     }
     // OD-D: Workflow runtime rejects static import -> entries must be self-contained (inline SSOT).
     if (/^\s*import\s[^\n]*\sfrom\s/m.test(src)) {
