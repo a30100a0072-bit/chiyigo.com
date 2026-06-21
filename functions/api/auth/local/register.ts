@@ -26,7 +26,7 @@ const ACCESS_TOKEN_TTL   = '15m'
 const VERIFY_TOKEN_HOURS = 24
 const REFRESH_TOKEN_DAYS = 7
 
-export async function onRequestPost({ request, env, waitUntil }) {
+export async function onRequestPost({ request, env, waitUntil }: { request: Request; env: Env; waitUntil?: (promise: Promise<unknown>) => void }) {
   // ── 1. 解析 Body ────────────────────────────────────────────
   let body
   try { body = await request.json() }
@@ -140,7 +140,7 @@ export async function onRequestPost({ request, env, waitUntil }) {
         `)
         .bind(emailLower, emailLower, guest_id)
         .all()
-      const takenRows = taken?.results ?? []
+      const takenRows: Array<{ id: number; user_id: number | null }> = taken?.results ?? []
       const allTakenIds = takenRows.map(r => r.id)
       // Codex r5 #4（2026-05-10）：requisition_ids cap，避免訪客跨多日累積大量 row 後 audit 過大
       const TAKEN_IDS_CAP = 100
