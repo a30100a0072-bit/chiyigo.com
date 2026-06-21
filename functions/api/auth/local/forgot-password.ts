@@ -20,7 +20,7 @@ const COOLDOWN_SECONDS  = 60
 const TOKEN_TTL_HOURS   = 1
 const IP_HOURLY_LIMIT   = 5   // per IP, across all token types
 
-export async function onRequestPost({ request, env, waitUntil }) {
+export async function onRequestPost({ request, env, waitUntil }: { request: Request; env: Env; waitUntil?: (promise: Promise<unknown>) => void }) {
   let body
   try { body = await request.json() }
   catch { return res({ error: 'Invalid JSON', code: 'INVALID_JSON' }, 400) }
