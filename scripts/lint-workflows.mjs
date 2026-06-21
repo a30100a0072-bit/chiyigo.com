@@ -132,6 +132,33 @@ if (!GUARD.includes('.env') || !GUARD.includes('.dev.vars') || !GUARD.includes('
   err('lib/schemas.mjs', 'GUARD missing required secret-denylist forbid-declaration (section 8.1)')
 }
 
+// The readonly-reviewer agent DEFINITION must be repo-local + minimally/correctly configured. Without
+// this the "no haiku downgrade" invariant is only string-deep: a fresh clone has no agent (runtime
+// `agent type not found`), or a drifted global agent (gaining `model: haiku`, wrong tools) silently
+// re-breaks it. Lock it mechanically (Codex Code Gate 2026-06-21).
+const AGENT_PATH = '.claude/agents/readonly-reviewer.md'
+try {
+  const fm = readFileSync(AGENT_PATH, 'utf8').replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/)
+  if (!fm) {
+    err(AGENT_PATH, 'missing YAML frontmatter')
+  } else {
+    const body = fm[1]
+    const keys = [...body.matchAll(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:/gm)].map((m) => m[1])
+    const ALLOWED_KEYS = ['name', 'description', 'tools']
+    for (const k of keys) if (!ALLOWED_KEYS.includes(k)) err(AGENT_PATH, `unexpected frontmatter key '${k}' (allowed: ${ALLOWED_KEYS.join('/')})`)
+    if (keys.includes('model')) err(AGENT_PATH, 'MUST NOT set `model:` (a pin would defeat session-model inheritance)')
+    if (!/^name:\s*readonly-reviewer\s*$/m.test(body)) err(AGENT_PATH, "name must be exactly 'readonly-reviewer'")
+    const toolsM = body.match(/^tools:\s*(.+?)\s*$/m)
+    const tools = toolsM ? toolsM[1].split(',').map((s) => s.trim()).filter(Boolean).sort() : []
+    const EXPECTED_TOOLS = ['Bash', 'Glob', 'Grep', 'Read']
+    if (JSON.stringify(tools) !== JSON.stringify(EXPECTED_TOOLS)) {
+      err(AGENT_PATH, `tools must be exactly Read/Grep/Glob/Bash (got: [${tools.join(', ')}])`)
+    }
+  }
+} catch (e) {
+  err(AGENT_PATH, `repo-local agent definition missing/unreadable (committed workflows depend on it at runtime): ${e.message}`)
+}
+
 // validator self-check (section 8 layer 2; P1): known-bad inputs MUST be rejected, good ones accepted.
 const BAD_PATHS = ['foo;git status', 'foo|git status', 'a&b', 'a b', 'foo\nbar', '/etc/passwd', '../x', '..\\x', '~/x', 'C:\\x', '\\\\srv\\share', 'file:x', '.dev.vars', 'x.env', 'a$(b)', 'a`b`', "a'b", 'a"b', 'a{b}', 'a<b']
 for (const bp of BAD_PATHS) if (isSafeReadPath(bp)) err('schemas.mjs', `isSafeReadPath must reject: ${JSON.stringify(bp)}`)
