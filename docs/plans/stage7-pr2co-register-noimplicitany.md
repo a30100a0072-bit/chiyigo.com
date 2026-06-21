@@ -22,7 +22,7 @@ base main `58664200`（接 PR-2cn #110；`git rev-parse HEAD` 實查 = `58664200
   - ✅ **非 commit full-solution spike 實證**（見 §Spike，working tree 已 `git checkout` revert clean、blob 回 `18976c9e`）。
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow `wf_630b5500-8d3`，3 agents 三維 rubric：scope / runtime·security / evidence；三維全 **0 findings**、accepted 0、suspicious 0；主線獨立對抗式裁決認同 clean — 見 §Gate 進程紀錄）
-  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B，**0 Blocker / 0 Required Revision / 3 NB**、8 維全 PASS、6 OD 全 APPROVED、binding locks CL-1..CL-8 — 見 §Gate 進程紀錄）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C）→ ⬜ owner `CODING_ALLOWED`
+  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B，**0 Blocker / 0 Required Revision / 3 NB**、8 維全 PASS、6 OD 全 APPROVED、binding locks CL-1..CL-8 — 見 §Gate 進程紀錄）→ 🔄 `CODEX_PLAN_APPROVED`（② 維度 C）：**r1 `CHANGES_REQUESTED`**（機械 replay + CL-1..CL-8 全 PASS，唯 2 項 docs-only 證據敘述不精確：import 數 8→11、coverage 補 `jwt-sid-claim.test.ts` + Turnstile skip-path-only）→ **已 docs-only 修正、待重送 r2** → ⬜ owner `CODING_ALLOWED`
   - ⬜ Code 階段（source commit、full replay @ source、NB-2 雙證）→ ⬜ `CODE_SELF_REVIEW_CLEAN`（multi-agent workflow）→ ⬜ `CODEX_CODE_APPROVED`（③）→ ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④）
   - ⬜ merge-front 7 gates 全綠（含 `test:cov`）→ ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪修 gate 回饋）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。外部未送不得自我宣告通過。
@@ -38,7 +38,10 @@ base main `58664200`（接 PR-2cn #110；`git rev-parse HEAD` 實查 = `58664200
   - **Binding locks CL-1..CL-8（ChatGPT Arch；② Codex Plan 與 Code 階段須保留）**：CL-1 只改 `register.ts`；CL-2 source diff 僅 2 編輯點（handler param annotation + `takenRows` const annotation）；CL-3 handler `request: Request; env: Env; waitUntil?: (promise: Promise<unknown>) => void`；CL-4 D1 row `Array<{ id: number; user_id: number \| null }>`、**禁 callback-param-only、禁 full table type**；CL-5 runtime（Turnstile / email duplicate / PBKDF2 / batch INSERT / guest takeover / refresh token / JWT / audit / email send / cookie·body response）全不動；CL-6 security non-addition（**禁新增 rate-limit、禁補 RESEND guard、禁改 waitUntil guard**）；CL-7 Code 階段必重跑 forced tsc sort-diff / ratchet report / tests-leaf / byte-identical / `git diff --check`；CL-8 faithfulness — actual diff 必與 frozen diff byte/line-level 對齊、任何額外 formatting·comment·import 變更即 fail。
   - **NB-1（非阻擋）**：Code 階段需重新 replay，不得沿用 spike 數字作 final evidence（對齊 plan L12 / §驗證計劃 NB-2 雙證）。**NB-2（非阻擋）**：row 型別 `{ id: number; user_id: number \| null }` 的 schema 依據（`requisition.id` PK INTEGER / `user_id` nullable INTEGER）須在 **Code Gate packet ＋ Faithfulness packet** 仍保留，避免 Faithfulness 階段失去脈絡。**NB-3（非阻擋）**：中文報告續寫 **impl L1 / review care L3**，不得改成整體 L1（避免 reviewer 降級熱區）。
   - **可送 ② Codex Plan Gate；非 coding 授權，待 ② 通過 + owner 明示 `CODING_ALLOWED` 才進 Code 階段。**
-- （後續 dated 收錄：Codex Plan → CODING_ALLOWED → Code → Code self-review → Codex Code → ChatGPT Faithfulness → merge-front 7 gates → MERGE_ALLOWED → SHIPPED）
+- 2026-06-21 owner 驅動產 **Codex Plan packet**（`~/Desktop/chiyigo-pr2co-codex-plan-packet.md`，repo 外、§0 角色+裁決格式 / §1 base+plan doc path / §2 frozen diff / §3 獨立 replay 程序 / §4 待填對照表 / §5 CL-1..CL-8 核對 / §6 row 型別 schema 依據〔NB-2〕 / §7 verdict format；Codex 有 repo 存取故聚焦獨立 replay）→ 送外部 ②。
+- 2026-06-21 **Codex Plan Gate（② 維度 C）r1：`CHANGES_REQUESTED`**（**機械 replay 全 PASS、CL-1..CL-8 全 PASS、row schema 核實、Queue/payment/distributed/state/observability N/A**，唯 **2 項 docs-only 證據敘述不精確 → 依 packet「任一 MISMATCH 即 blocking」判 CHANGES_REQUESTED**）：① 機械重驗全數值**獨立重現**（base solution 815 / register 4 錯〔3 TS7031 + 1 TS7006〕 / patched 811 / 殘留 0 / sort-diff REMOVED 4·ADDED 0 / tests-leaf 0 / ratchet 811·81·253·334 / emit 7563·7563 / sha `9227b6b914ec9664` 兩端 / `diff -q` IDENTICAL / frozen blob `18976c9e→778c1b4a` / numstat 2·2 / baseline 1119·175 不變）。**Required Revision 2（皆 docs-only、不推翻 ① 架構裁決）**：(R1) §byte-identical 適用性「8 import 群」與其後 11 模組列表 + §隔離區「11 檔 import」內部矛盾 → 校正為 **11 import statement**；(R2) coverage/caller 收斂 — 除 `register.test.ts`，`jwt-sid-claim.test.ts` **亦** direct import register handler（補列）；且兩測試檔**未設 `TURNSTILE_SECRET_KEY`/未斷言 `CAPTCHA_FAILED`** → 只走 missing-secret skip path、**不得無限定宣稱「涵蓋 Turnstile」**（校正為 skip-path only、fail-close 0 test）。
+- 2026-06-21 Claude **docs-only 修正（R1+R2）** → 對抗式單 agent self-review（v3.1 §9：外部 finding 小 scope 修正用單 agent、未達 L2/L3 規模不重跑 workflow）：先**獨立查證** Codex 兩 finding 屬實（`grep -cE "^import " register.ts` = **11**；`jwt-sid-claim.test.ts:28` `await import('…/register')` + `:50` `callFunction(registerPost,…)` 確為第 2 importer；`grep TURNSTILE_SECRET_KEY/CAPTCHA_FAILED/cf-turnstile-response` 於兩測試檔 = **空** → 確 skip-path only）→ 修 §167 import 數、§108 caller cascade 補第 2 importer、§219 coverage 表補第 2 檔、§222 下鑽證據校正 Turnstile skip-path、§247 targeted int 補 jwt-sid-claim。**0 source 改動**（純 plan doc）。
+- （後續 dated 收錄：Codex Plan r2 → CODING_ALLOWED → Code → Code self-review → Codex Code → ChatGPT Faithfulness → merge-front 7 gates → MERGE_ALLOWED → SHIPPED）
 
 ## owner 鎖定表（C-1 ruling 2026-06-21，faithful 收錄）
 
@@ -105,7 +108,7 @@ functions/api/auth/local/register.ts(144,41): error TS7006: Parameter 'r' implic
 
 | 面 | 判定 | 證據 |
 |---|---|---|
-| `onRequestPost` 外部 TS caller | **0 牽動** | `grep local/register` 於 functions/ **無任何 TS/JS importer**；直接消費端：`tests/integration/register.test.ts` `await import` 取 `onRequestPost`，經 `callFunction(handler, request)`〔`_helpers.ts:324` `handler` **untyped**〕呼叫 → 型別連結被切斷、annotate 不引入 tests-leaf 新錯（spike tests-leaf 0→0 實證）|
+| `onRequestPost` 外部 TS caller | **0 牽動** | `grep local/register` 於 functions/ **無任何 TS/JS importer**（production 0）；直接消費端＝**2 個 integration test**：`tests/integration/register.test.ts` ＋ `tests/integration/jwt-sid-claim.test.ts`，皆 `await import` 取 `onRequestPost`、經 `callFunction(handler, request)`〔`_helpers.ts:324` `handler` **untyped**〕呼叫 → 型別連結被切斷、annotate 不引入 tests-leaf 新錯（spike tests-leaf 0→0 實證）|
 | shared `verifyTurnstile` caller | **不牽動** | 本檔 L46 `verifyTurnstile(request, body, env)`；annotate 後 `Request`→param1 `Request` ✓、`body`(any)→`Record<string,unknown>` ✓、`Env`→`Pick<Env,'TURNSTILE_SECRET_KEY'>` ✓ 全 assignable；**不改 util、不牽動另 2 caller**〔`login.ts`/`forgot-password.ts`〕。`assist.ts:221` 為同名 local 函式（homonym，非此 util caller）|
 | intra-file env / request / waitUntil 存取 | 全相容 | `request.json()`(WebWorker lib→`any` body)、`env.chiyigo_db`(D1Database→any)、`env.RESEND_API_KEY`(env.d.ts `RESEND_API_KEY?: string`→`string\|undefined`，L217 `if` narrow 成 `string`)、`resolveAud`/`validatePassword`/`buildTokenScope`/`isWebClient`/`refreshCookie`/`hashIdentifierForAudit`/`safeUserAudit`/`resolveActiveTenantClaims`/`signJwt`/`sendVerificationEmail` 各 util param 全 assignable（spike ADDED=0 實證）、`waitUntil(sendTask)`〔`Promise<void>`→`Promise<unknown>` ✓〕；**無 `.cf`** |
 | L144 const annotation 內部 cascade | 全自洽 | `takenRows: Array<{id:number; user_id:number\|null}>` 後：`takenRows.map(r => r.id)` → `r: {id;user_id}`、`r.id: number`（TS7006 消）；`allTakenIds: number[]`；`takenIds = .slice(…)` → `number[]`；`takenRows[0]?.user_id ?? null` → `number\|null`；`newUserId` → `number\|null` 流入 `safeUserAudit(env,{user_id:newUserId,…})`〔util untyped→吃任何值〕；`requisition_ids:takenIds`/`count:allTakenIds.length` 全在 audit data（any 消費）→ spike ADDED=0 證 0 cascade |
@@ -164,7 +167,7 @@ export async function onRequestPost({ request, env, waitUntil }: { request: Requ
 | frozen diff numstat | ✅ `2  2`（2 insertion / 2 deletion；無 whole-file CRLF churn）；base blob `18976c9e` → head blob `778c1b4a` |
 | working tree revert clean | ✅ `git checkout --` 後 `git status --porcelain` 僅 `?? CLEANUP_PLAN.md`、blob 回 `18976c9e`、staged 空 |
 
-**byte-identical 適用性**：register.ts 8 import 群（crypto / jwt / tenant-context / email / password / cors / scopes / turnstile / auth / cookies / user-audit）→ esbuild stdin transform **適用**（單檔 transform、import 行原樣保留；非完整 bundle，但 type-only annotation PR 這正是對的證明面——改動僅限本單檔、其他檔 byte 不變 → bundle 等價）。⚠ 用 **stdin**（`<` / pipe），非 file-entry `--loader`（後者吐空字串 sha `e3b0c442…` 是 tell，[[feedback_byte_identical_emit_verification]]）；本 spike emit 7563B 非空、已排除該坑。`waitUntil` + L144 const annotation 含 handler 仍是單檔 type-strip transform 適用。
+**byte-identical 適用性**：register.ts **11 個 import statement**（crypto / jwt / tenant-context / email / password / cors / scopes / turnstile / auth / cookies / user-audit，11 模組各一行）→ esbuild stdin transform **適用**（單檔 transform、import 行原樣保留；非完整 bundle，但 type-only annotation PR 這正是對的證明面——改動僅限本單檔、其他檔 byte 不變 → bundle 等價）。⚠ 用 **stdin**（`<` / pipe），非 file-entry `--loader`（後者吐空字串 sha `e3b0c442…` 是 tell，[[feedback_byte_identical_emit_verification]]）；本 spike emit 7563B 非空、已排除該坑。`waitUntil` + L144 const annotation 含 handler 仍是單檔 type-strip transform 適用。
 
 ### frozen diff（git-format，spike 實取，`git diff --check` clean）
 
@@ -216,10 +219,11 @@ index 18976c9e..778c1b4a 100644
 
 | 標的 | direct test | indirect | 真打路徑 | 硬保證 |
 |---|---|---|---|---|
-| `local/register.ts`（handler `onRequestPost`）| ✅ **有**（`tests/integration/register.test.ts`）| — | `await import('…/register')` 直取 `onRequestPost` + `callFunction` | **byte-identical 為主硬保證**；integration test 為 runtime 旁證 |
+| `local/register.ts`（handler `onRequestPost`）| ✅ **有**（**2 檔**：`tests/integration/register.test.ts` ＋ `tests/integration/jwt-sid-claim.test.ts`）| — | `await import('…/register')` 直取 `onRequestPost` + `callFunction`（兩檔皆 untyped 切斷型別連結）| **byte-identical 為主硬保證**；integration test 為 runtime 旁證 |
 
 - **下鑽證據（不 overclaim）**：
-  - direct integration test 涵蓋 register happy/重複 email/Turnstile/web vs non-web cookie/guest takeover 等路徑（mock `sendVerificationEmail`）。
+  - direct integration test（`register.test.ts` ＋ `jwt-sid-claim.test.ts`、皆 mock `sendVerificationEmail`）涵蓋 register happy / 重複 email / web vs non-web cookie / guest takeover / sid claim 等路徑。
+  - ⚠ **Turnstile 覆蓋校正（Codex Plan ② finding，不 overclaim）**：兩測試檔**皆未設 `TURNSTILE_SECRET_KEY`、亦未送 `cf-turnstile-response`、未斷言 `CAPTCHA_FAILED`** → 只走 `verifyTurnstile` 的 **missing-secret skip path（早退 `{ok:true,skipped:true}`）**；**fail-close（`!ts.ok` → 403 `CAPTCHA_FAILED`）路徑 0 test**。故不宣稱「涵蓋 Turnstile」，僅「涵蓋 Turnstile skip path」。
   - **誠實界線**：type-only 改動 runtime 不可見（型別 erase）＋ `callFunction` 之 `handler` untyped 切斷 test↔handler 型別連結 → 此 integration test **不能「覆蓋」型別標註本身**；它提供的是「emit 不變則 register 各路徑行為不變」的旁證。**主硬保證 = byte-identical emit（sha 兩端一致）**；本 PR type-only 不改 tests（L10/L11），各路徑的不變保護 = byte-identical。
   - **L144 guest takeover 路徑覆蓋誠實**：const 型別標註 erase 後 runtime 不可見；`takenRows`/`r.id`/`newUserId` 的 runtime 值與順序不變（byte-identical 證），integration test 對 guest takeover 路徑的覆蓋僅作旁證、不宣稱覆蓋型別標註。
 - 與 PR-2ci..2cn（皆以 byte-identical 為硬保證）同策略；本檔額外有 direct test 作旁證，但**仍不宣稱 type annotation 被測試覆蓋**。
@@ -244,7 +248,7 @@ diff -q /tmp/reg-base.js /tmp/reg-head.js         # 期望 IDENTICAL（無輸出
   - patched 端 `< <file>` 讀 code 階段已落地 edit 的 working-tree 檔；base 端 `git show 58664200:` 讀未改 base。spike 本地實證：兩端 **7563B / `9227b6b9…`**、stderr 0、`diff -q` IDENTICAL。
 - **NB-2 雙證**：Code 階段報告**同時列**「base vs patched emit byte-identical（esbuild stdin，sha + bytes）」與「source diff 僅 2 處 annotation（`git diff` 逐行）」，**不以 ratchet 數字單獨替代行為保證**。
 - `npm run lint` green（全量；確認 `waitUntil?` annotation + `Array<{…}>` annotation 不觸 `no-floating-promises`/`no-unused-vars`/`no-undef`）、`npm run build:functions` green。
-- targeted int：跑既有 `tests/integration/register.test.ts` 確認綠（runtime 旁證、不宣稱涵蓋 type annotation）；跑全量 `test:int` 確認無跨檔破壞。
+- targeted int：跑既有 `tests/integration/register.test.ts` ＋ `tests/integration/jwt-sid-claim.test.ts` 確認綠（runtime 旁證、不宣稱涵蓋 type annotation；Turnstile 僅 skip path）；跑全量 `test:int` 確認無跨檔破壞。
 - merge 前 CI 對齊 local gates（[[feedback_pre_merge_gate_checklist_match_ci]]）：`lint` · `typecheck:ratchet` · `verify:browser-pipeline` · `test:cov` · `test:int` · `build:functions` · `npm audit --omit=dev --audit-level=high`。
 - **硬驗收**：source diff 與本 doc §frozen diff **逐行一致**（人審 `git diff --stat` 僅 1 檔 +2/−2、`git diff` 2 處為 `onRequestPost` 簽名 + `takenRows` const annotation）；超出 = scope creep = Gate fail。
 
