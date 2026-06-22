@@ -255,11 +255,11 @@ if (!GUARD.includes('.env') || !GUARD.includes('.dev.vars') || !GUARD.includes('
 //      (`description: "a: b"`), which the real file never uses -- canonical-only, fail-closed.
 //
 // SCOPE OF THE GUARANTEE -- precise, do NOT overclaim (Codex Plan Gate 2026-06-22). The no-haiku lint
-// covers exactly TWO tracked artifacts: (i) the validated workflow entries (plan/code-self-review.mjs),
+// covers exactly TWO classes of tracked artifact: (i) the validated workflow entries (plan/code-self-review.mjs),
 // where the AST entry validator above requires every agent() call to be a direct
 // `agent(prompt, { agentType: 'readonly-reviewer', schema })` with NO `model` key (so an entry cannot
 // swap to Explore, alias the binding, or pin an invocation-level model); and (ii) this project agent
-// definition, whose frontmatter carries no `model:` pin. Within those two artifacts a committed model pin
+// definition, whose frontmatter carries no `model:` pin. Within those two classes a committed model pin
 // (haiku or otherwise) is mechanically blocked. It does NOT extend further -- in particular it does NOT
 // control runtime model/agent resolution, which Claude Code takes from sources this lint cannot see:
 //   - model precedence: CLAUDE_CODE_SUBAGENT_MODEL env > invocation-level model > agent frontmatter >
