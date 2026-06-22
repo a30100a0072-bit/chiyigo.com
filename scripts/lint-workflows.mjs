@@ -38,13 +38,12 @@ function extractMetaBlock(src) {
   return null
 }
 
-// Strip JS line/block comments while PRESERVING string + template-literal content, so an
-// `agentType: 'readonly-reviewer'` *value* is still counted but a doc-comment bearing the token
-// cannot inflate the tallies (closes the count-masking gap; branch
-// refactor/selfreview-workflow-readonly-reviewer, see memory feedback_selfreview_workflow_model_inheritance).
-// Known limitation: a regex literal containing an unbalanced quote would desync the string tracker;
-// no workflow entry uses one (the real entries passing is the live check). Belt-and-suspenders
-// behind the agent-DEF validator further below, which is the robust guard.
+// Strip JS line/block comments while PRESERVING string + template-literal content (so an
+// `agentType: 'readonly-reviewer'` value stays visible while a doc-comment bearing the token cannot
+// interfere). Feeds the per-call-site scanner below a comment-free view. Known limitation: a regex
+// literal containing an unbalanced quote would desync the string tracker -- but that fails CLOSED
+// (it over-rejects: the following agent() call is missed and the entry is flagged "no agent() call",
+// never laundered). No workflow entry uses such a regex (the real entries passing is the live check).
 function stripComments(code) {
   return code.replace(
     /("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
@@ -52,29 +51,148 @@ function stripComments(code) {
   )
 }
 
-// Per-entry agent() discipline. Returns a list of problems ([] = clean). Runs on the comment-
-// stripped view: (1) forbids ANY agentType value other than 'readonly-reviewer' -- built-in
-// 'Explore' (which /agents pins to haiku, silently downgrading finders/verifiers off the session
-// model) and any other model-pinned / non-read-only type are rejected outright; (2) requires every
-// agent() call to carry agentType:'readonly-reviewer' + a schema. LIMITATION (this gate is
-// belt-and-suspenders): counts are string-level on the comment-stripped view, so comment-token
-// masking is closed, but a token inside a STRING literal -- or an indirect (non-literal)
-// `agentType: someVar` -- is NOT caught here. The agent-DEF validator below is the robust primary
-// guard; per-call-site arg binding is the future hardening (tracked follow-up). The no-haiku
-// invariant still holds regardless: a literal non-readonly agentType is forbidden, and an omitted
-// agentType falls back to the session-model default (not haiku). Self-checked at end of file.
+// --- per-call-site agent() options binding (C; replaces the maskable file-wide count) ---
+// A file-wide token count is bypassable: an indirect `agentType: someVar` (-> 'Explore' -> haiku)
+// escapes a literal-value forbid, while a string-literal token satisfies the count -- F1+F2 compose
+// into a real no-haiku bypass (Codex Plan Gate REJECT 2026-06-22). So instead of counting, we ISOLATE
+// each agent() call and require THAT call's own options object to carry a LITERAL
+// agentType:'readonly-reviewer' + a schema. Minimal hand-rolled scanner (no parser dependency, no
+// general AST): track string/template literals + bracket depth only. Self-checked at end of file.
+
+// From a quote char at s[i], return the index of its matching close quote -- honoring \-escapes and,
+// for templates, ${ ... } interpolation (which may nest braces/strings).
+function skipString(s, i) {
+  const q = s[i]
+  i++
+  while (i < s.length) {
+    const c = s[i]
+    if (c === '\\') { i += 2; continue }
+    if (q === '`' && c === '$' && s[i + 1] === '{') {
+      i += 2
+      let d = 1
+      while (i < s.length && d > 0) {
+        const cc = s[i]
+        if (cc === '\\') { i += 2; continue }
+        if (cc === "'" || cc === '"' || cc === '`') { i = skipString(s, i) + 1; continue }
+        if (cc === '{') d++
+        else if (cc === '}') d--
+        i++
+      }
+      continue
+    }
+    if (c === q) return i
+    i++
+  }
+  return s.length - 1
+}
+
+// Index of the delimiter matching the opener at s[open] ('(' '{' '['), skipping strings; -1 if none.
+function matchSpan(s, open) {
+  const close = { '(': ')', '{': '}', '[': ']' }[s[open]]
+  let depth = 0
+  for (let i = open; i < s.length; i++) {
+    const c = s[i]
+    if (c === "'" || c === '"' || c === '`') { i = skipString(s, i); continue }
+    if (c === s[open]) depth++
+    else if (c === close) { depth--; if (depth === 0) return i }
+  }
+  return -1
+}
+
+// Split the inner text of an object / arg list on TOP-LEVEL commas (skip strings + nested brackets).
+function splitTopLevel(inner) {
+  const out = []
+  let depth = 0, start = 0
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i]
+    if (c === "'" || c === '"' || c === '`') { i = skipString(inner, i); continue }
+    if (c === '(' || c === '{' || c === '[') depth++
+    else if (c === ')' || c === '}' || c === ']') depth--
+    else if (c === ',' && depth === 0) { out.push(inner.slice(start, i)); start = i + 1 }
+  }
+  if (inner.slice(start).trim()) out.push(inner.slice(start))
+  return out
+}
+
+// Parse one options object literal `{ ... }` into { agentType, hasSchema, hasSpread, hasComputedKey }.
+// agentType is the RAW value token of the agentType key (null if absent). A top-level spread (`...x`)
+// or a computed key (`[...]:`) is reported because either could override / alias agentType at runtime.
+function readOptions(objText) {
+  const inner = objText.slice(1, -1)
+  let agentType = null, hasSchema = false, hasSpread = false, hasComputedKey = false
+  for (const seg of splitTopLevel(inner)) {
+    if (seg.trim().startsWith('...')) { hasSpread = true; continue }
+    let depth = 0, colon = -1
+    for (let i = 0; i < seg.length; i++) {
+      const c = seg[i]
+      if (c === "'" || c === '"' || c === '`') { i = skipString(seg, i); continue }
+      if (c === '(' || c === '{' || c === '[') depth++
+      else if (c === ')' || c === '}' || c === ']') depth--
+      else if (c === ':' && depth === 0) { colon = i; break }
+    }
+    if (colon < 0) continue
+    const rawKey = seg.slice(0, colon).trim()
+    // A computed key (`['agentType']: ...`) could alias agentType to a non-readonly value at runtime
+    // while a static `agentType: 'readonly-reviewer'` reads clean -- reject rather than try to resolve.
+    if (rawKey.startsWith('[')) { hasComputedKey = true; continue }
+    const key = rawKey.replace(/^['"`]|['"`]$/g, '')
+    const val = seg.slice(colon + 1).trim()
+    if (key === 'agentType') agentType = val
+    else if (key === 'schema') hasSchema = true
+  }
+  return { agentType, hasSchema, hasSpread, hasComputedKey }
+}
+
+// Validate EVERY agent() call in a workflow entry by binding each call to its own options object.
+// Returns problems ([] = clean). The no-haiku invariant is enforced here: a call cannot pass unless
+// its inline options literally select 'readonly-reviewer' (which the agent-DEF validator proves has
+// no model pin). Note: this enforces *which agent is selected*, not read-only itself -- readonly-
+// reviewer holds Bash, so its read-only posture is best-effort (prompt-enforced), not a sandbox.
 function entryAgentErrors(src) {
   const out = []
   const code = stripComments(src)
-  const bad = [...new Set(code.match(/agentType:\s*'(?!readonly-reviewer')[^']*'/g) || [])]
-  if (bad.length) out.push(`forbidden agentType (only 'readonly-reviewer' allowed): ${bad.join(', ')}`)
-  const nAgent = (code.match(/\bagent\s*\(/g) || []).length
-  const nReviewer = (code.match(/agentType:\s*'readonly-reviewer'/g) || []).length
-  const nSchema = (code.match(/\bschema:\s*[A-Za-z_{]/g) || []).length
-  if (nAgent === 0) out.push('workflow entry has no agent() call')
-  else if (nReviewer < nAgent || nSchema < nAgent) {
-    out.push(`every agent() must use agentType:'readonly-reviewer' + schema (agent=${nAgent}, readonly-reviewer=${nReviewer}, schema=${nSchema})`)
+  let n = 0
+  for (let i = 0; i < code.length; i++) {
+    const c = code[i]
+    if (c === "'" || c === '"' || c === '`') { i = skipString(code, i); continue }
+    if (!code.startsWith('agent', i)) continue
+    if (i > 0 && /[A-Za-z0-9_$]/.test(code[i - 1])) continue // word boundary (skip e.g. subagent)
+    const head = /^agent(\s*)\(/.exec(code.slice(i))
+    if (!head) continue
+    n++
+    const openParen = i + head[0].length - 1
+    const closeParen = matchSpan(code, openParen)
+    if (closeParen < 0) { out.push(`agent() call #${n}: unbalanced parentheses`); continue }
+    const argText = code.slice(openParen + 1, closeParen)
+    // Bind to the 2nd POSITIONAL argument -- the runtime contract is agent(prompt, options). Picking
+    // "the first { anywhere in the args" would let a decoy options literal sit in the prompt (arg #1)
+    // or a 3rd-arg position and launder a variable/Explore real 2nd arg (F-1). Require exactly 2 args
+    // and an inline object literal as arg #2.
+    const callArgs = splitTopLevel(argText)
+    if (callArgs.length !== 2) {
+      out.push(`agent() call #${n}: must be agent(prompt, { agentType: 'readonly-reviewer', schema: ... }) -- got ${callArgs.length} arg(s)`)
+      continue
+    }
+    const optText = callArgs[1].trim()
+    // arg #2 must be a SINGLE balanced object literal -- not an expression that merely begins and ends
+    // with braces (e.g. `{readonly} && {Explore}` returns the Explore object at runtime; F-2). The
+    // matching brace of the leading `{` must be the final char.
+    if (!optText.startsWith('{') || matchSpan(optText, 0) !== optText.length - 1) {
+      out.push(`agent() call #${n}: 2nd argument must be a single inline object literal (not a variable/expression)`)
+      continue
+    }
+    const { agentType, hasSchema, hasSpread, hasComputedKey } = readOptions(optText)
+    // Byte-exact single-quoted literal only (fail-closed): a double-quoted / backtick / escaped value
+    // would resolve to readonly-reviewer at runtime but is still rejected -- the sanctioned form is the
+    // single-quoted literal the real entries use; over-rejection is the safe direction here.
+    if (agentType !== "'readonly-reviewer'") {
+      out.push(`agent() call #${n}: agentType must be the literal 'readonly-reviewer' (got: ${agentType === null ? 'absent' : agentType})`)
+    }
+    if (hasComputedKey) out.push(`agent() call #${n}: computed keys are not allowed in options (could alias agentType)`)
+    if (hasSpread) out.push(`agent() call #${n}: spread in options is not allowed (could override agentType)`)
+    if (!hasSchema) out.push(`agent() call #${n}: options must include a schema`)
   }
+  if (n === 0) out.push('workflow entry has no agent() call')
   return out
 }
 
@@ -125,13 +243,14 @@ for (const file of files) {
       }
     }
     if (!/\bGUARD\b/.test(src)) err(file, 'workflow entry must reference the injection GUARD (B2/AC6)')
-    // Agent() discipline for this entry -- delegated to entryAgentErrors(): a comment-stripped count
-    // (every agent() call carries agentType:'readonly-reviewer' + schema; doc-comment tokens can no
-    // longer mask it) PLUS an explicit forbid of any non-'readonly-reviewer' agentType.
-    // readonly-reviewer = repo-local read-only agent (.claude/agents/readonly-reviewer.md, tracked,
-    // NO model pin -> inherits the session model; the agent-DEF validator below locks its shape and is
-    // the robust primary guard). Built-in 'Explore' is the specific hazard: /agents pins it to haiku,
-    // silently downgrading finders/verifiers off the session model.
+    // Agent() discipline -- delegated to entryAgentErrors(): per-call-site binding. Each call must be
+    // agent(prompt, options) where options is a SINGLE inline object literal whose agentType is the
+    // LITERAL 'readonly-reviewer' (+ a schema). Rejected: a variable/expression/decoy-position 2nd arg,
+    // a non-readonly or indirect agentType, spread, computed keys, string/comment padding -- so the
+    // textually-checked agent equals the runtime-selected agent. This binds the no-haiku invariant per
+    // call (the agent-DEF validator below proves readonly-reviewer carries no model pin). 'Explore' is
+    // the hazard: /agents pins it to haiku. NB: read-only ITSELF is not mechanically enforced --
+    // readonly-reviewer holds Bash, so its read-only posture is best-effort (prompt-enforced), not a sandbox.
     for (const e of entryAgentErrors(src)) err(file, e)
     // OD-D: Workflow runtime rejects static import -> entries must be self-contained (inline SSOT).
     if (/^\s*import\s[^\n]*\sfrom\s/m.test(src)) {
@@ -195,20 +314,31 @@ try {
   err(AGENT_PATH, `repo-local agent definition missing/unreadable (committed workflows depend on it at runtime): ${e.message}`)
 }
 
-// self-check: the entry agent() gate MUST flag a comment-masked forbidden agentType and MUST pass a
-// clean entry. Locks the count-masking fix -- pre-fix the masked fixture PASSED (the old gate counted
-// comment tokens too; branch refactor/selfreview-workflow-readonly-reviewer, Codex Code Gate 2026-06-22).
-const SC_MASKED = [
-  "await agent(p1, { agentType: 'Explore', schema: S1 })",
-  "await agent(p2, { agentType: 'readonly-reviewer', schema: S2 })",
-  "// agentType: 'readonly-reviewer' -- masking doc-comment must NOT launder the Explore call",
-].join('\n')
-const SC_CLEAN = [
-  "await agent(p1, { agentType: 'readonly-reviewer', schema: S1 })",
-  "await agent(p2, { agentType: 'readonly-reviewer', schema: S2 })",
-].join('\n')
-if (entryAgentErrors(SC_MASKED).length === 0) err('lint-workflows self-check', 'entryAgentErrors must flag a comment-masked forbidden agentType')
-if (entryAgentErrors(SC_CLEAN).length !== 0) err('lint-workflows self-check', `entryAgentErrors must accept a clean entry (got: ${entryAgentErrors(SC_CLEAN).join('; ')})`)
+// self-check (locks the C fix): per-call-site binding MUST reject indirect/absent/forbidden agentType,
+// string/comment padding, and spread, and MUST accept clean entries. Pre-fix the file-wide count
+// laundered the indirect+padding case (Codex Plan Gate REJECT 2026-06-22 repro). [name, src, expectFlagged]
+const SELF_CHECKS = [
+  ['clean', `await agent(p1, { agentType: 'readonly-reviewer', schema: S1 })\nawait agent(p2, { agentType: 'readonly-reviewer', phase: 'Find', label: \`x:\${d}\`, schema: S2 })`, false],
+  ['literal-Explore', `await agent(p, { agentType: 'Explore', schema: S })`, true],
+  ['comment-masked-Explore', `await agent(p1, { agentType: 'Explore', schema: S1 })\n// agentType: 'readonly-reviewer'`, true],
+  ['indirect-agentType+note-string', `const _t = 'Explore'\nawait agent(p, { agentType: _t, note: "agentType: 'readonly-reviewer'", schema: S })`, true],
+  ['indirect+separate-pad-string', `const _t = 'Explore'\nawait agent(p, { agentType: _t, schema: S })\nconst _pad = "agentType: 'readonly-reviewer'"`, true],
+  ['absent-agentType', `await agent(p, { schema: S })`, true],
+  ['missing-schema', `await agent(p, { agentType: 'readonly-reviewer' })`, true],
+  ['spread-options', `await agent(p, { agentType: 'readonly-reviewer', schema: S, ...override })`, true],
+  ['decoy-options-3rd-arg', `await agent(prompt, runtimeOpts, { agentType: 'readonly-reviewer', schema: S })`, true],
+  ['object-in-prompt-position', `await agent({ agentType: 'readonly-reviewer', schema: S }, optsVar)`, true],
+  ['expression-2nd-arg-&&', `await agent(p, { agentType: 'readonly-reviewer', schema: S } && { agentType: 'Explore', schema: S })`, true],
+  ['computed-key-alias', `await agent(p, { agentType: 'readonly-reviewer', ['agentType']: 'Explore', schema: S })`, true],
+  ['no-options-arg', `await agent(prompt)`, true],
+  ['no-agent-call', `const x = 1`, true],
+]
+for (const [name, sample, expectFlagged] of SELF_CHECKS) {
+  const flagged = entryAgentErrors(sample).length > 0
+  if (flagged !== expectFlagged) {
+    err('lint-workflows self-check', `entryAgentErrors[${name}] expected ${expectFlagged ? 'FLAGGED' : 'clean'}, got ${flagged ? 'FLAGGED' : 'clean'} (${JSON.stringify(entryAgentErrors(sample))})`)
+  }
+}
 
 // validator self-check (section 8 layer 2; P1): known-bad inputs MUST be rejected, good ones accepted.
 const BAD_PATHS = ['foo;git status', 'foo|git status', 'a&b', 'a b', 'foo\nbar', '/etc/passwd', '../x', '..\\x', '~/x', 'C:\\x', '\\\\srv\\share', 'file:x', '.dev.vars', 'x.env', 'a$(b)', 'a`b`', "a'b", 'a"b', 'a{b}', 'a<b']
