@@ -8,6 +8,12 @@ dist/
 .claude/*
 !.claude/workflows/
 !.claude/workflows/**
+# .claude/agents/readonly-reviewer.md is repo-local: the committed v3 workflows reference it
+# at runtime (agentType:'readonly-reviewer'), so it must travel with the repo for reproducibility.
+# Allowlist ONLY that file; the rest of .claude/agents/ stays local-only.
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/readonly-reviewer.md
 
 # 註：public/*.html 是 npm run build 的產物（來源：src/pages + src/partials），
 # 但因 Cloudflare Pages 新版 dashboard UI 無法設 build command，故仍 commit 進 repo。
