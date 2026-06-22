@@ -229,31 +229,62 @@ if (!GUARD.includes('.env') || !GUARD.includes('.dev.vars') || !GUARD.includes('
   err('lib/schemas.mjs', 'GUARD missing required secret-denylist forbid-declaration (section 8.1)')
 }
 
-// The readonly-reviewer agent DEFINITION must be repo-local + minimally/correctly configured. Without
-// this the "no haiku downgrade" invariant is only string-deep: a fresh clone has no agent (runtime
-// `agent type not found`), or a drifted global agent (gaining `model: haiku`, wrong tools) silently
-// re-breaks it. Lock it mechanically (Codex Code Gate 2026-06-21).
+// The readonly-reviewer agent DEFINITION must be repo-local + correctly configured under a STRICT
+// frontmatter grammar. Without this the "no haiku downgrade" invariant is only string-deep: a fresh
+// clone has no agent (runtime `agent type not found`), or a drifted agent (a `model:` pin in ANY YAML
+// form, wrong tools) silently re-breaks it. No YAML parser is available (no new dependency allowed), so
+// validate fail-closed: every non-blank frontmatter line MUST be one of exactly the UNQUOTED keys
+// name/description/tools as `key: value`, each exactly once. This rejects quoted (`"model": haiku`),
+// indented, explicit (`? model`), merge/anchor, duplicate, and any unexpected key -- closing the
+// quoted-key `model` bypass (Codex Code Gate 2026-06-22; originally added 2026-06-21).
+function agentDefErrors(raw) {
+  const out = []
+  const fm = raw.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/)
+  if (!fm) { out.push('missing YAML frontmatter'); return out }
+  const body = fm[1]
+  const ALLOWED = ['name', 'description', 'tools']
+  const seen = Object.create(null)
+  for (const line of body.split('\n')) {
+    if (line.trim() === '') continue
+    const m = line.match(/^(name|description|tools): (.+)$/)
+    if (!m) { out.push(`frontmatter line outside the strict grammar (only unquoted name:/description:/tools: 'key: value' allowed): ${JSON.stringify(line)}`); continue }
+    seen[m[1]] = (seen[m[1]] || 0) + 1
+  }
+  for (const k of ALLOWED) {
+    if (!seen[k]) out.push(`frontmatter missing required key '${k}'`)
+    else if (seen[k] > 1) out.push(`frontmatter key '${k}' must appear exactly once (got ${seen[k]})`)
+  }
+  if (!/^name: readonly-reviewer$/m.test(body)) out.push("name must be exactly 'readonly-reviewer'")
+  const toolsM = body.match(/^tools: (.+)$/m)
+  const tools = toolsM ? toolsM[1].split(',').map((s) => s.trim()).filter(Boolean).sort() : []
+  const EXPECTED_TOOLS = ['Bash', 'Glob', 'Grep', 'Read']
+  if (JSON.stringify(tools) !== JSON.stringify(EXPECTED_TOOLS)) out.push(`tools must be exactly Read/Grep/Glob/Bash (got: [${tools.join(', ')}])`)
+  return out
+}
 const AGENT_PATH = '.claude/agents/readonly-reviewer.md'
 try {
-  const fm = readFileSync(AGENT_PATH, 'utf8').replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/)
-  if (!fm) {
-    err(AGENT_PATH, 'missing YAML frontmatter')
-  } else {
-    const body = fm[1]
-    const keys = [...body.matchAll(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:/gm)].map((m) => m[1])
-    const ALLOWED_KEYS = ['name', 'description', 'tools']
-    for (const k of keys) if (!ALLOWED_KEYS.includes(k)) err(AGENT_PATH, `unexpected frontmatter key '${k}' (allowed: ${ALLOWED_KEYS.join('/')})`)
-    if (keys.includes('model')) err(AGENT_PATH, 'MUST NOT set `model:` (a pin would defeat session-model inheritance)')
-    if (!/^name:\s*readonly-reviewer\s*$/m.test(body)) err(AGENT_PATH, "name must be exactly 'readonly-reviewer'")
-    const toolsM = body.match(/^tools:\s*(.+?)\s*$/m)
-    const tools = toolsM ? toolsM[1].split(',').map((s) => s.trim()).filter(Boolean).sort() : []
-    const EXPECTED_TOOLS = ['Bash', 'Glob', 'Grep', 'Read']
-    if (JSON.stringify(tools) !== JSON.stringify(EXPECTED_TOOLS)) {
-      err(AGENT_PATH, `tools must be exactly Read/Grep/Glob/Bash (got: [${tools.join(', ')}])`)
-    }
-  }
+  for (const e of agentDefErrors(readFileSync(AGENT_PATH, 'utf8'))) err(AGENT_PATH, e)
 } catch (e) {
   err(AGENT_PATH, `repo-local agent definition missing/unreadable (committed workflows depend on it at runtime): ${e.message}`)
+}
+
+// self-check (locks the agent-DEF grammar; closes the quoted-key `model` bypass Codex Code Gate found).
+const AGENT_DEF_CHECKS = [
+  ['good', `---\nname: readonly-reviewer\ndescription: x\ntools: Read, Grep, Glob, Bash\n---\n`, false],
+  ['quoted-model', `---\nname: readonly-reviewer\ndescription: x\n"model": haiku\ntools: Read, Grep, Glob, Bash\n---\n`, true],
+  ['bare-model', `---\nname: readonly-reviewer\ndescription: x\nmodel: haiku\ntools: Read, Grep, Glob, Bash\n---\n`, true],
+  ['indented-model', `---\nname: readonly-reviewer\ndescription: x\n  model: haiku\ntools: Read, Grep, Glob, Bash\n---\n`, true],
+  ['explicit-key-model', `---\nname: readonly-reviewer\ndescription: x\n? model\n: haiku\ntools: Read, Grep, Glob, Bash\n---\n`, true],
+  ['duplicate-name', `---\nname: readonly-reviewer\nname: evil\ndescription: x\ntools: Read, Grep, Glob, Bash\n---\n`, true],
+  ['extra-tool', `---\nname: readonly-reviewer\ndescription: x\ntools: Read, Grep, Glob, Bash, Write\n---\n`, true],
+  ['wrong-name', `---\nname: explorer\ndescription: x\ntools: Read, Grep, Glob, Bash\n---\n`, true],
+  ['missing-tools', `---\nname: readonly-reviewer\ndescription: x\n---\n`, true],
+  ['missing-description', `---\nname: readonly-reviewer\ntools: Read, Grep, Glob, Bash\n---\n`, true],
+  ['no-frontmatter', `name: readonly-reviewer\n`, true],
+]
+for (const [nm, raw, expectFlagged] of AGENT_DEF_CHECKS) {
+  const flagged = agentDefErrors(raw).length > 0
+  if (flagged !== expectFlagged) err('lint-workflows agent-def self-check', `agentDefErrors[${nm}] expected ${expectFlagged ? 'FLAGGED' : 'clean'}, got ${flagged ? 'FLAGGED' : 'clean'} (${JSON.stringify(agentDefErrors(raw))})`)
 }
 
 // self-check (locks the AST validator): every indirect-invocation / forbidden-shape MUST be flagged and
