@@ -237,10 +237,27 @@ if (!GUARD.includes('.env') || !GUARD.includes('.dev.vars') || !GUARD.includes('
 // name/description/tools as `key: value`, each exactly once. This rejects quoted (`"model": haiku`),
 // indented, explicit (`? model`), merge/anchor, duplicate, and any unexpected key -- closing the
 // quoted-key `model` bypass (Codex Code Gate 2026-06-22; originally added 2026-06-21).
+//
+// STRICT-BUT-NOT-FULL-YAML (best-effort, no parser). Two further mismatches with a real YAML parser are
+// also closed fail-closed (2026-06-22 follow-up):
+//   1. Close fence must be a BARE `---` (followed by a newline or EOF). A typo'd fence like `---evil`
+//      no longer terminates the frontmatter -- previously the extraction matched the `\n---` inside it
+//      and accepted a body that YAML would not (the agent would fail to register at runtime). Such a
+//      file is now reported as having no valid frontmatter.
+//   2. An unquoted scalar value containing `: ` (colon-space) is a YAML mapping-value ambiguity a real
+//      parser rejects (e.g. `description: foo: bar` -> js-yaml "bad indentation of a mapping entry");
+//      the greedy grammar would otherwise accept it. This also rejects the non-canonical quoted form
+//      (`description: "a: b"`), which the real file never uses -- canonical-only, fail-closed.
+// Forms beyond these may still slip the hand-rolled grammar; those fail loud at runtime registration
+// (a fail-CLOSED outcome -- NOT a haiku downgrade), which is acceptable. This does NOT enforce read-only
+// or no-haiku by itself; it keeps the committed agent def canonical so the AST entry validator's
+// no-haiku guarantee rests on a well-formed agent.
 function agentDefErrors(raw) {
   const out = []
-  const fm = raw.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/)
-  if (!fm) { out.push('missing YAML frontmatter'); return out }
+  // close fence must be a bare `---` (newline or EOF after) -- a non-bare close like `---evil` does not
+  // terminate the frontmatter (see header note 1); fail closed when no valid frontmatter is delimited.
+  const fm = raw.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---(?:\n|$)/)
+  if (!fm) { out.push('missing YAML frontmatter (no opening `---`, or close fence is not a bare `---`)'); return out }
   const body = fm[1]
   const ALLOWED = ['name', 'description', 'tools']
   const seen = Object.create(null)
@@ -248,6 +265,9 @@ function agentDefErrors(raw) {
     if (line.trim() === '') continue
     const m = line.match(/^(name|description|tools): (.+)$/)
     if (!m) { out.push(`frontmatter line outside the strict grammar (only unquoted name:/description:/tools: 'key: value' allowed): ${JSON.stringify(line)}`); continue }
+    // value with a `: ` (colon-space) is a YAML mapping-value ambiguity (see header note 2); the greedy
+    // `(.+)` captured it, so flag fail-closed. Still count the key below so this is the ONLY error.
+    if (m[2].includes(': ')) out.push(`frontmatter value for '${m[1]}' has a ': ' (colon-space) YAML mapping ambiguity -- remove or restructure it: ${JSON.stringify(line)}`)
     seen[m[1]] = (seen[m[1]] || 0) + 1
   }
   for (const k of ALLOWED) {
@@ -281,6 +301,10 @@ const AGENT_DEF_CHECKS = [
   ['missing-tools', `---\nname: readonly-reviewer\ndescription: x\n---\n`, true],
   ['missing-description', `---\nname: readonly-reviewer\ntools: Read, Grep, Glob, Bash\n---\n`, true],
   ['no-frontmatter', `name: readonly-reviewer\n`, true],
+  // 2026-06-22 follow-up (strict-but-not-full-YAML gaps). Each is ISOLATING: paired with otherwise-valid
+  // name/description/tools so ONLY the new guard fires -- deleting that one guard flips it to clean.
+  ['nonbare-close-fence', `---\nname: readonly-reviewer\ndescription: x\ntools: Read, Grep, Glob, Bash\n---evil\n`, true],
+  ['value-colon-space', `---\nname: readonly-reviewer\ndescription: foo: bar\ntools: Read, Grep, Glob, Bash\n---\n`, true],
 ]
 for (const [nm, raw, expectFlagged] of AGENT_DEF_CHECKS) {
   const flagged = agentDefErrors(raw).length > 0
