@@ -189,10 +189,11 @@ for (const file of files) {
     // Agent() invocation discipline -- delegated to entryAgentErrors() (AST-based; owner ruling A').
     // The injected `agent` binding may appear ONLY as the callee of a direct call agent(prompt,
     // { agentType: 'readonly-reviewer', schema }); aliasing, pass-as-value, .bind, optional / member /
-    // computed access, shadowing the name `agent`, and eval / Function are all rejected. Binds the
-    // no-haiku invariant per call (the agent-DEF validator below proves readonly-reviewer carries no
-    // model pin). 'Explore' is the hazard (/agents pins it to haiku). NB: read-only ITSELF is not
-    // mechanically enforced -- readonly-reviewer holds Bash, so its read-only posture is best-effort.
+    // computed access, shadowing the name `agent`, and eval / Function are all rejected. Enforces the
+    // tracked-artifact no-haiku check per call (the agent-DEF validator below proves the committed
+    // readonly-reviewer carries no model pin; see its header for what is / is NOT guaranteed at runtime).
+    // 'Explore' is the hazard (/agents pins it to haiku). NB: read-only ITSELF is not mechanically
+    // enforced -- readonly-reviewer holds Bash, so its read-only posture is best-effort.
     for (const e of entryAgentErrors(src)) err(file, e)
     // OD-D: Workflow runtime rejects static import -> entries must be self-contained (inline SSOT).
     if (/^\s*import\s[^\n]*\sfrom\s/m.test(src)) {
@@ -229,29 +230,38 @@ if (!GUARD.includes('.env') || !GUARD.includes('.dev.vars') || !GUARD.includes('
   err('lib/schemas.mjs', 'GUARD missing required secret-denylist forbid-declaration (section 8.1)')
 }
 
-// The readonly-reviewer agent DEFINITION must be repo-local + correctly configured under a STRICT
-// frontmatter grammar. Without this the "no haiku downgrade" invariant is only string-deep: a fresh
-// clone has no agent (runtime `agent type not found`), or a drifted agent (a `model:` pin in ANY YAML
-// form, wrong tools) silently re-breaks it. No YAML parser is available (no new dependency allowed), so
-// validate fail-closed: every non-blank frontmatter line MUST be one of exactly the UNQUOTED keys
-// name/description/tools as `key: value`, each exactly once. This rejects quoted (`"model": haiku`),
-// indented, explicit (`? model`), merge/anchor, duplicate, and any unexpected key -- closing the
-// quoted-key `model` bypass (Codex Code Gate 2026-06-22; originally added 2026-06-21).
+// The readonly-reviewer agent DEFINITION is validated repo-local under a STRICT frontmatter grammar so a
+// drifted or typo'd COMMITTED def cannot silently carry a `model:` pin or the wrong tools. No YAML parser
+// is available (no new dependency allowed), so validate fail-closed: every non-blank frontmatter line MUST
+// be one of exactly the UNQUOTED keys name/description/tools as `key: value`, each exactly once. This
+// rejects quoted (`"model": haiku`), indented, explicit (`? model`), merge/anchor, duplicate, and any
+// unexpected key -- closing the quoted-key `model` bypass (Codex Code Gate 2026-06-22; added 2026-06-21).
 //
 // STRICT-BUT-NOT-FULL-YAML (best-effort, no parser). Two further mismatches with a real YAML parser are
 // also closed fail-closed (2026-06-22 follow-up):
-//   1. Close fence must be a BARE `---` (followed by a newline or EOF). A typo'd fence like `---evil`
-//      no longer terminates the frontmatter -- previously the extraction matched the `\n---` inside it
-//      and accepted a body that YAML would not (the agent would fail to register at runtime). Such a
-//      file is now reported as having no valid frontmatter.
+//   1. Close fence must be a BARE `---` (followed by a newline or EOF). A typo'd fence like `---evil` no
+//      longer terminates the frontmatter -- previously the extraction matched the `\n---` inside it and
+//      accepted a body a real YAML parser would not. Such a file is reported as having no valid frontmatter.
 //   2. An unquoted scalar value containing `: ` (colon-space) is a YAML mapping-value ambiguity a real
-//      parser rejects (e.g. `description: foo: bar` -> js-yaml "bad indentation of a mapping entry");
-//      the greedy grammar would otherwise accept it. This also rejects the non-canonical quoted form
+//      parser rejects (e.g. `description: foo: bar` -> js-yaml "bad indentation of a mapping entry"); the
+//      greedy grammar would otherwise accept it. Also rejects the non-canonical quoted form
 //      (`description: "a: b"`), which the real file never uses -- canonical-only, fail-closed.
-// Forms beyond these may still slip the hand-rolled grammar; those fail loud at runtime registration
-// (a fail-CLOSED outcome -- NOT a haiku downgrade), which is acceptable. This does NOT enforce read-only
-// or no-haiku by itself; it keeps the committed agent def canonical so the AST entry validator's
-// no-haiku guarantee rests on a well-formed agent.
+//
+// SCOPE OF THE GUARANTEE -- do NOT overclaim (Codex Plan Gate 2026-06-22). This is a TRACKED-ARTIFACT
+// check only. Combined with the AST entry validator above (forbids `Explore`; requires a direct
+// `agent(.., { agentType: 'readonly-reviewer', schema })` call), it guarantees only that the COMMITTED
+// repo artifacts cannot silently carry a `model:` pin or an `Explore` invocation. It does NOT control
+// runtime model/agent resolution, which Claude Code resolves from sources this lint cannot see:
+//   - model precedence: CLAUDE_CODE_SUBAGENT_MODEL env > invocation-level model > agent frontmatter >
+//     parent -- an env var or caller override can pin a model regardless of this frontmatter;
+//   - agent precedence: managed > --agents > project > user > plugin -- a managed or --agents agent can
+//     REPLACE this project agent, and a same-named USER agent (one exists at ~/.claude/agents/) sits
+//     lower in precedence than this project def.
+// Absolute runtime no-haiku would need separate startup/runtime model-source validation (out of scope).
+// Residuals (e.g. a value ending in a bare `:`, or colon-TAB) make a TRACKED def YAML-invalid; whether the
+// runtime then fails loud or falls back to the lower-precedence same-named user agent is UNVERIFIED (do
+// not assume `agent type not found`). But no residual can inject a `model:` pin into a def this lint
+// passes, so residuals do not weaken the tracked-artifact guarantee above.
 function agentDefErrors(raw) {
   const out = []
   // close fence must be a bare `---` (newline or EOF after) -- a non-bare close like `---evil` does not
