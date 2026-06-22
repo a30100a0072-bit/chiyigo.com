@@ -50,8 +50,11 @@ function extractMetaBlock(src) {
 // `x['agent']`), any SHADOWING of the name `agent` (declaration / param / import / destructure), and
 // `eval` / `Function` (including the parenthesized direct-eval form `(eval)(...)`) are rejected; a
 // syntactically unparseable entry is also flagged (fail loud). The 2nd arg must be a single inline
-// object literal whose `agentType` is the string literal 'readonly-reviewer' (non-computed key, no duplicate) plus a
-// `schema`. Comments are AST trivia and string contents are StringLiteral nodes, so comment- and
+// object literal whose `agentType` is the string literal 'readonly-reviewer' (non-computed key, no
+// duplicate), must include a `schema`, and must NOT contain a `model` key -- an invocation-level model
+// outranks the agent's no-pin frontmatter (model precedence: env > invocation > frontmatter > parent), so
+// a `model` here would pin the subagent and defeat no-haiku (added 2026-06-22 after Codex Plan Gate found
+// the gap). Comments are AST trivia and string contents are StringLiteral nodes, so comment- and
 // string-token masking are inherently impossible. AST-enforced for statically analyzable committed
 // entries that pass the mandatory lint:workflows path; not a platform sandbox. read-only stays
 // best-effort (readonly-reviewer holds Bash). Self-checked at end of file.
@@ -83,9 +86,9 @@ function entryAgentErrors(src) {
     if (args.length !== 2) { push(call, `agent() must be agent(prompt, { agentType: 'readonly-reviewer', schema }) -- got ${args.length} arg(s)`); return }
     const opt = args[1]
     if (!ts.isObjectLiteralExpression(opt)) { push(call, `agent() 2nd argument must be a single inline object literal (not a variable/expression)`); return }
-    let agentTypeCount = 0, agentTypeOk = false, hasSchema = false
+    let agentTypeCount = 0, agentTypeOk = false, hasSchema = false, hasModel = false
     for (const prop of opt.properties) {
-      if (ts.isSpreadAssignment(prop)) { push(prop, `agent() options: spread is not allowed (could override agentType)`); continue }
+      if (ts.isSpreadAssignment(prop)) { push(prop, `agent() options: spread is not allowed (could override agentType / inject model)`); continue }
       const nameNode = prop.name
       if (nameNode && ts.isComputedPropertyName(nameNode)) { push(prop, `agent() options: computed keys are not allowed`); continue }
       const keyText = nameNode && (ts.isIdentifier(nameNode) || ts.isStringLiteral(nameNode)) ? nameNode.text : null
@@ -95,12 +98,15 @@ function entryAgentErrors(src) {
         if (val && ts.isStringLiteral(val) && val.text === 'readonly-reviewer') agentTypeOk = true
       } else if (keyText === 'schema') {
         hasSchema = true
+      } else if (keyText === 'model') {
+        hasModel = true // invocation-level model outranks the agent's no-pin frontmatter -> would pin a model (see header); forbid any model key
       }
     }
     if (agentTypeCount === 0) push(opt, `agent() options must set agentType: 'readonly-reviewer'`)
     else if (agentTypeCount > 1) push(opt, `agent() options: duplicate agentType is not allowed`)
     else if (!agentTypeOk) push(opt, `agent() options: agentType must be the string literal 'readonly-reviewer'`)
     if (!hasSchema) push(opt, `agent() options must include a schema`)
+    if (hasModel) push(opt, `agent() options must NOT set 'model' (invocation-level model outranks the no-pin frontmatter -> pins a model; readonly-reviewer must inherit the session model)`)
   }
 
   function visit(node) {
@@ -188,12 +194,13 @@ for (const file of files) {
     if (!/\bGUARD\b/.test(src)) err(file, 'workflow entry must reference the injection GUARD (B2/AC6)')
     // Agent() invocation discipline -- delegated to entryAgentErrors() (AST-based; owner ruling A').
     // The injected `agent` binding may appear ONLY as the callee of a direct call agent(prompt,
-    // { agentType: 'readonly-reviewer', schema }); aliasing, pass-as-value, .bind, optional / member /
-    // computed access, shadowing the name `agent`, and eval / Function are all rejected. Enforces the
-    // tracked-artifact no-haiku check per call (the agent-DEF validator below proves the committed
-    // readonly-reviewer carries no model pin; see its header for what is / is NOT guaranteed at runtime).
-    // 'Explore' is the hazard (/agents pins it to haiku). NB: read-only ITSELF is not mechanically
-    // enforced -- readonly-reviewer holds Bash, so its read-only posture is best-effort.
+    // { agentType: 'readonly-reviewer', schema }) with NO `model` key; aliasing, pass-as-value, .bind,
+    // optional / member / computed access, shadowing the name `agent`, and eval / Function are all
+    // rejected. Enforces the tracked-artifact no-haiku check per call (the agent-DEF validator below
+    // proves the committed readonly-reviewer carries no model pin; see its header for what is / is NOT
+    // guaranteed at runtime). Hazards: `Explore` (/agents pins it to haiku) and an invocation-level
+    // `model` (outranks frontmatter). NB: read-only ITSELF is not mechanically enforced -- readonly-reviewer
+    // holds Bash, so its read-only posture is best-effort.
     for (const e of entryAgentErrors(src)) err(file, e)
     // OD-D: Workflow runtime rejects static import -> entries must be self-contained (inline SSOT).
     if (/^\s*import\s[^\n]*\sfrom\s/m.test(src)) {
@@ -247,21 +254,26 @@ if (!GUARD.includes('.env') || !GUARD.includes('.dev.vars') || !GUARD.includes('
 //      greedy grammar would otherwise accept it. Also rejects the non-canonical quoted form
 //      (`description: "a: b"`), which the real file never uses -- canonical-only, fail-closed.
 //
-// SCOPE OF THE GUARANTEE -- do NOT overclaim (Codex Plan Gate 2026-06-22). This is a TRACKED-ARTIFACT
-// check only. Combined with the AST entry validator above (forbids `Explore`; requires a direct
-// `agent(.., { agentType: 'readonly-reviewer', schema })` call), it guarantees only that the COMMITTED
-// repo artifacts cannot silently carry a `model:` pin or an `Explore` invocation. It does NOT control
-// runtime model/agent resolution, which Claude Code resolves from sources this lint cannot see:
+// SCOPE OF THE GUARANTEE -- precise, do NOT overclaim (Codex Plan Gate 2026-06-22). The no-haiku lint
+// covers exactly TWO tracked artifacts: (i) the validated workflow entries (plan/code-self-review.mjs),
+// where the AST entry validator above requires every agent() call to be a direct
+// `agent(prompt, { agentType: 'readonly-reviewer', schema })` with NO `model` key (so an entry cannot
+// swap to Explore, alias the binding, or pin an invocation-level model); and (ii) this project agent
+// definition, whose frontmatter carries no `model:` pin. Within those two artifacts a committed model pin
+// (haiku or otherwise) is mechanically blocked. It does NOT extend further -- in particular it does NOT
+// control runtime model/agent resolution, which Claude Code takes from sources this lint cannot see:
 //   - model precedence: CLAUDE_CODE_SUBAGENT_MODEL env > invocation-level model > agent frontmatter >
-//     parent -- an env var or caller override can pin a model regardless of this frontmatter;
+//     parent -- the env var still outranks everything and is NOT checked here;
 //   - agent precedence: managed > --agents > project > user > plugin -- a managed or --agents agent can
 //     REPLACE this project agent, and a same-named USER agent (one exists at ~/.claude/agents/) sits
-//     lower in precedence than this project def.
-// Absolute runtime no-haiku would need separate startup/runtime model-source validation (out of scope).
-// Residuals (e.g. a value ending in a bare `:`, or colon-TAB) make a TRACKED def YAML-invalid; whether the
-// runtime then fails loud or falls back to the lower-precedence same-named user agent is UNVERIFIED (do
-// not assume `agent type not found`). But no residual can inject a `model:` pin into a def this lint
-// passes, so residuals do not weaken the tracked-artifact guarantee above.
+//     lower in precedence than this project def;
+//   - any agent() call OUTSIDE those two entry files is not scanned (e.g. tracked docs may show an
+//     `Explore` example -- those are illustrative, not executed).
+// Absolute runtime no-haiku would need separate startup/runtime (env + agent-source) model validation
+// (out of scope). Residuals (e.g. a value ending in a bare `:`, or colon-TAB) make a TRACKED def
+// YAML-invalid; whether the runtime then fails loud or falls back to the lower-precedence same-named user
+// agent is UNVERIFIED (do not assume `agent type not found`). But no residual can inject a `model:` pin
+// into a def this lint passes, so residuals do not weaken the tracked-artifact guarantee above.
 function agentDefErrors(raw) {
   const out = []
   // close fence must be a bare `---` (newline or EOF after) -- a non-bare close like `---evil` does not
@@ -335,6 +347,13 @@ const SELF_CHECKS = [
   ['indirect+note-padding', `const _t = 'Explore'\nawait agent(p, { agentType: _t, note: "agentType: 'readonly-reviewer'", schema: S })`, true],
   ['absent-agentType', `await agent(p, { schema: S })`, true],
   ['missing-schema', `await agent(p, { agentType: 'readonly-reviewer' })`, true],
+  // forbidden invocation-level model pin (Path B 2026-06-22; invocation model outranks the no-pin
+  // frontmatter -> would defeat no-haiku). Isolating: valid agentType + schema, so ONLY the model guard
+  // fires; ANY model value is forbidden (inherit-only, not just 'haiku'). Spread/computed `model` are
+  // already caught by spread-options / computed-key above.
+  ['invocation-model-haiku', `await agent(p, { agentType: 'readonly-reviewer', model: 'haiku', schema: S })`, true],
+  ['invocation-model-opus', `await agent(p, { agentType: 'readonly-reviewer', model: 'opus', schema: S })`, true],
+  ['invocation-model-string-key', `await agent(p, { agentType: 'readonly-reviewer', 'model': 'haiku', schema: S })`, true],
   ['duplicate-agentType', `await agent(p, { agentType: 'readonly-reviewer', agentType: 'Explore', schema: S })`, true],
   ['template-agentType', `await agent(p, { agentType: \`readonly-reviewer\`, schema: S })`, true],
   ['spread-options', `await agent(p, { ...override, agentType: 'readonly-reviewer', schema: S })`, true],
