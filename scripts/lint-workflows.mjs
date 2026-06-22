@@ -38,6 +38,46 @@ function extractMetaBlock(src) {
   return null
 }
 
+// Strip JS line/block comments while PRESERVING string + template-literal content, so an
+// `agentType: 'readonly-reviewer'` *value* is still counted but a doc-comment bearing the token
+// cannot inflate the tallies (closes the count-masking gap; branch
+// refactor/selfreview-workflow-readonly-reviewer, see memory feedback_selfreview_workflow_model_inheritance).
+// Known limitation: a regex literal containing an unbalanced quote would desync the string tracker;
+// no workflow entry uses one (the real entries passing is the live check). Belt-and-suspenders
+// behind the agent-DEF validator further below, which is the robust guard.
+function stripComments(code) {
+  return code.replace(
+    /("(?:\\.|[^"\\])*")|('(?:\\.|[^'\\])*')|(`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+    (_m, dq, sq, tpl) => dq || sq || tpl || '',
+  )
+}
+
+// Per-entry agent() discipline. Returns a list of problems ([] = clean). Runs on the comment-
+// stripped view: (1) forbids ANY agentType value other than 'readonly-reviewer' -- built-in
+// 'Explore' (which /agents pins to haiku, silently downgrading finders/verifiers off the session
+// model) and any other model-pinned / non-read-only type are rejected outright; (2) requires every
+// agent() call to carry agentType:'readonly-reviewer' + a schema. LIMITATION (this gate is
+// belt-and-suspenders): counts are string-level on the comment-stripped view, so comment-token
+// masking is closed, but a token inside a STRING literal -- or an indirect (non-literal)
+// `agentType: someVar` -- is NOT caught here. The agent-DEF validator below is the robust primary
+// guard; per-call-site arg binding is the future hardening (tracked follow-up). The no-haiku
+// invariant still holds regardless: a literal non-readonly agentType is forbidden, and an omitted
+// agentType falls back to the session-model default (not haiku). Self-checked at end of file.
+function entryAgentErrors(src) {
+  const out = []
+  const code = stripComments(src)
+  const bad = [...new Set(code.match(/agentType:\s*'(?!readonly-reviewer')[^']*'/g) || [])]
+  if (bad.length) out.push(`forbidden agentType (only 'readonly-reviewer' allowed): ${bad.join(', ')}`)
+  const nAgent = (code.match(/\bagent\s*\(/g) || []).length
+  const nReviewer = (code.match(/agentType:\s*'readonly-reviewer'/g) || []).length
+  const nSchema = (code.match(/\bschema:\s*[A-Za-z_{]/g) || []).length
+  if (nAgent === 0) out.push('workflow entry has no agent() call')
+  else if (nReviewer < nAgent || nSchema < nAgent) {
+    out.push(`every agent() must use agentType:'readonly-reviewer' + schema (agent=${nAgent}, readonly-reviewer=${nReviewer}, schema=${nSchema})`)
+  }
+  return out
+}
+
 const IMPORT_DENYLIST = [
   'fs', 'node:fs', 'fs/promises', 'node:fs/promises', 'child_process', 'node:child_process',
   'http', 'node:http', 'https', 'node:https', 'net', 'node:net', 'tls', 'node:tls', 'dns', 'node:dns',
@@ -85,18 +125,14 @@ for (const file of files) {
       }
     }
     if (!/\bGUARD\b/.test(src)) err(file, 'workflow entry must reference the injection GUARD (B2/AC6)')
-    // full enforcement: EVERY agent() call must carry agentType:'readonly-reviewer' + a schema.
-    // readonly-reviewer = global read-only agent with NO model pin -> inherits the session model
-    // (verified loads in a fresh session 2026-06-21 as `readonly-reviewer · inherit`; see memory
-    // feedback_selfreview_workflow_model_inheritance). Built-in 'Explore' is FORBIDDEN here: /agents
-    // shows it pinned to haiku, which silently downgrades finders/verifiers off the session model.
-    const nAgent = (src.match(/\bagent\s*\(/g) || []).length
-    const nReviewer = (src.match(/agentType:\s*'readonly-reviewer'/g) || []).length
-    const nSchema = (src.match(/\bschema:\s*[A-Za-z_{]/g) || []).length
-    if (nAgent === 0) err(file, 'workflow entry has no agent() call')
-    else if (nReviewer < nAgent || nSchema < nAgent) {
-      err(file, `every agent() must use agentType:'readonly-reviewer' + schema (agent=${nAgent}, readonly-reviewer=${nReviewer}, schema=${nSchema})`)
-    }
+    // Agent() discipline for this entry -- delegated to entryAgentErrors(): a comment-stripped count
+    // (every agent() call carries agentType:'readonly-reviewer' + schema; doc-comment tokens can no
+    // longer mask it) PLUS an explicit forbid of any non-'readonly-reviewer' agentType.
+    // readonly-reviewer = repo-local read-only agent (.claude/agents/readonly-reviewer.md, tracked,
+    // NO model pin -> inherits the session model; the agent-DEF validator below locks its shape and is
+    // the robust primary guard). Built-in 'Explore' is the specific hazard: /agents pins it to haiku,
+    // silently downgrading finders/verifiers off the session model.
+    for (const e of entryAgentErrors(src)) err(file, e)
     // OD-D: Workflow runtime rejects static import -> entries must be self-contained (inline SSOT).
     if (/^\s*import\s[^\n]*\sfrom\s/m.test(src)) {
       err(file, 'workflow entry must NOT use static import (runtime rejects it; inline the SSOT -- OD-D)')
@@ -158,6 +194,21 @@ try {
 } catch (e) {
   err(AGENT_PATH, `repo-local agent definition missing/unreadable (committed workflows depend on it at runtime): ${e.message}`)
 }
+
+// self-check: the entry agent() gate MUST flag a comment-masked forbidden agentType and MUST pass a
+// clean entry. Locks the count-masking fix -- pre-fix the masked fixture PASSED (the old gate counted
+// comment tokens too; branch refactor/selfreview-workflow-readonly-reviewer, Codex Code Gate 2026-06-22).
+const SC_MASKED = [
+  "await agent(p1, { agentType: 'Explore', schema: S1 })",
+  "await agent(p2, { agentType: 'readonly-reviewer', schema: S2 })",
+  "// agentType: 'readonly-reviewer' -- masking doc-comment must NOT launder the Explore call",
+].join('\n')
+const SC_CLEAN = [
+  "await agent(p1, { agentType: 'readonly-reviewer', schema: S1 })",
+  "await agent(p2, { agentType: 'readonly-reviewer', schema: S2 })",
+].join('\n')
+if (entryAgentErrors(SC_MASKED).length === 0) err('lint-workflows self-check', 'entryAgentErrors must flag a comment-masked forbidden agentType')
+if (entryAgentErrors(SC_CLEAN).length !== 0) err('lint-workflows self-check', `entryAgentErrors must accept a clean entry (got: ${entryAgentErrors(SC_CLEAN).join('; ')})`)
 
 // validator self-check (section 8 layer 2; P1): known-bad inputs MUST be rejected, good ones accepted.
 const BAD_PATHS = ['foo;git status', 'foo|git status', 'a&b', 'a b', 'foo\nbar', '/etc/passwd', '../x', '..\\x', '~/x', 'C:\\x', '\\\\srv\\share', 'file:x', '.dev.vars', 'x.env', 'a$(b)', 'a`b`', "a'b", 'a"b', 'a{b}', 'a<b']
