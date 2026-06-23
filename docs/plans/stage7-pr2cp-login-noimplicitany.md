@@ -39,7 +39,7 @@
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow `wf_bc6ef081-856`、3 agents 三維 rubric：scope / runtime·security / evidence；readonly-reviewer 繼承 session model Opus 4.8；三維全 **0 findings**、accepted 0、suspicious 0；主線獨立對抗式裁決認同 clean — 見 §Gate 進程紀錄）
   - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B，**0 Blocker / 0 Required Revision / 2 NB**、11 維全 PASS、binding locks LOCK-1..LOCK-10 — 見 §Gate 進程紀錄）→ ✅ `CODEX_PLAN_APPROVED`（② 維度 C，r3，**0 blocking / 0 required**；**Plan Gate 雙道全過** — 見 §Gate 進程紀錄）→ ⬜ owner `CODING_ALLOWED`
-  - ✅ Code 階段（source commit `38ba2d86`、full replay @ committed、NB-2 雙證）→ ✅ `CODE_SELF_REVIEW_CLEAN`（維度 A workflow `wf_8e4ab310-6de`、3 維 0 findings + 主線裁決 — 見 §Gate 進程紀錄）→ ✅ `CODEX_CODE_APPROVED`（③，**0 blocking / 0 required** — 見 §Gate 進程紀錄）→ ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④）
+  - ✅ Code 階段（source commit `38ba2d86`、full replay @ committed、NB-2 雙證）→ ✅ `CODE_SELF_REVIEW_CLEAN`（維度 A workflow `wf_8e4ab310-6de`、3 維 0 findings + 主線裁決 — 見 §Gate 進程紀錄）→ ✅ `CODEX_CODE_APPROVED`（③，**0 blocking / 0 required** — 見 §Gate 進程紀錄）→ ✅ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④，**14/14 Faithful、0 deviation；外部 4 道全過**）
   - ⬜ merge-front 7 gates → ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪修 gate 回饋）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。外部未送不得自我宣告通過。
 
@@ -70,6 +70,9 @@
 
 - 2026-06-23 owner 驅動產 **Codex Code packet**（`~/Desktop/chiyigo-pr2cp-codex-code-packet.md`，repo 外、**HEAD-independent anchor**〔套 r1/r2 教訓：blocking 純 source-base 不變量 + 機械值、HEAD/commit-count 標 [info]〕、committed diff + 獨立 replay 程序 + 機械重驗對照表 + LOCK-1..10 + cascade + Code self-review 摘要 + 覆蓋誠實）→ 送外部 ③。
 - 2026-06-23 **Codex Code Gate（③ 維度 C）：`CODEX_CODE_APPROVED`**（**0 blocking / 0 required revision**）— 機械重驗 committed code（source commit `38ba2d86`）全數**獨立重現**：source diff 僅 `login.ts` L38 1 行（numstat 1/1）、`327a2d01..HEAD -- functions/` 唯一 commit `38ba2d86`、`HEAD:login.ts` blob `06dead7c`、base blob `87d0d8cf`、`game/login.ts` 未動、solution **811→809**、REMOVED 恰 2 條 TS7031 `(38,39)`+`(38,48)`、ADDED **0**、tests-leaf **0**、byte-identical **9523B** sha `9f8d81e1` IDENTICAL、ratchet OK **809/254**、lint green、build Compiled、targeted int **7 files / 81 tests passed**。change type-only、emit byte-identical。Queue/payment/distributed/observability **N/A**。HEAD-independent packet → 零 anchor 誤判（不重蹈 Plan r1/r2）。**可進 ④ ChatGPT Faithfulness；非 merge 授權。**
+
+- 2026-06-23 owner 驅動產 **ChatGPT Faithfulness packet**（`~/Desktop/chiyigo-pr2cp-chatgpt-faithfulness-packet.md`，repo 外、自足〔ChatGPT 無 repo 存取〕：§2 approved frozen vs §3 actual committed 並排 + §5 anti-curated-diff git artifacts〔`git show 38ba2d86 --name-status` / `git diff --name-status 327a2d01..HEAD` / `--stat` / functions/ log〕 + §6 14-項 matrix + §8 replay）→ 送外部 ④。
+- 2026-06-23 **ChatGPT Code Faithfulness Gate（④ 維度 B-code）：`CHATGPT_CODE_FAITHFULNESS_APPROVED`**（**14/14 Faithful、0 deviation / 0 scope creep / 0 未附 hunk source / 0 blocking / 0 required / 0 NB**）— approved frozen diff 與 actual committed diff（`327a2d01..HEAD -- functions/`）逐行一致（同 index `87d0d8cf..06dead7c`、同 hunk `@@ -35,7 +35,7 @@`、同 ±行）；§5 全樹僅 plan doc + `local/login.ts`、functions/ 範圍內唯一 commit `38ba2d86`；14 matrix 全 Faithful（檔範圍 / 1 編輯點 / annotation / function-declaration 非 arrow / plain Request / full Env / 無 waitUntil·D1 callback·workers-types / runtime 熱區全不動 / `game/login.ts` 未動 / 無 return-type·JSDoc·格式 drift / byte-identical）。**外部 4 道全過（① ChatGPT Arch + ② Codex Plan + ③ Codex Code + ④ ChatGPT Faithfulness）。** 非 merge 授權：merge-front 7 gates + owner `MERGE_ALLOWED` 仍必走。
 
 ## owner 鎖定表（C-1 ruling 2026-06-23，faithful 收錄）
 
