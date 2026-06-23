@@ -38,7 +38,7 @@
   - ✅ **非 commit full-solution spike 實證**（見 §Spike，working tree 已 `git checkout` revert clean、blob 回 `87d0d8cf`）。
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow `wf_bc6ef081-856`、3 agents 三維 rubric：scope / runtime·security / evidence；readonly-reviewer 繼承 session model Opus 4.8；三維全 **0 findings**、accepted 0、suspicious 0；主線獨立對抗式裁決認同 clean — 見 §Gate 進程紀錄）
-  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B，**0 Blocker / 0 Required Revision / 2 NB**、11 維全 PASS、binding locks LOCK-1..LOCK-10 — 見 §Gate 進程紀錄）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C）→ ⬜ owner `CODING_ALLOWED`
+  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B，**0 Blocker / 0 Required Revision / 2 NB**、11 維全 PASS、binding locks LOCK-1..LOCK-10 — 見 §Gate 進程紀錄）→ ✅ `CODEX_PLAN_APPROVED`（② 維度 C，r3，**0 blocking / 0 required**；**Plan Gate 雙道全過** — 見 §Gate 進程紀錄）→ ⬜ owner `CODING_ALLOWED`
   - ⬜ Code 階段（source commit、full replay @ source、NB-2 雙證）→ ⬜ `CODE_SELF_REVIEW_CLEAN` → ⬜ `CODEX_CODE_APPROVED`（③）→ ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④）
   - ⬜ merge-front 7 gates → ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪修 gate 回饋）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。外部未送不得自我宣告通過。
@@ -62,6 +62,8 @@
 
 - 2026-06-23 **Codex Plan Gate（② 維度 C）r2：`CHANGES_REQUESTED`**（**again packet-only false-reject；plan source-level 仍全綠**）：r1 修正時把 packet HEAD anchor 釘成 `14d26823`，但隨後記錄 r1 結果又 commit 第 3 顆 plan-only（`c4396502`）→ HEAD 再前進、packet 的 `14d26823 / 2 commits` 又 stale。Codex 機械重驗源頭仍全綠（base blob `87d0d8cf`、`327a2d01..HEAD -- functions` 空、`HEAD:login.ts`=`327a2d01:login.ts`=`87d0d8cf`、source 零落地），唯 packet exact-HEAD 期望逼 false-reject。**根因升級**：exact HEAD/commit-count 本質上隨每次 gate-record commit 前進，**永不可當 blocking**。
 - 2026-06-23 Claude **packet HEAD-independent 重構（r3 修法，Write 整檔）** → 單 agent 對抗式 self-review（v3.1 §9）：**徹底移除 exact-HEAD-as-blocking**，blocking 改純 **source-base 不變量**（base SHA `327a2d01` 固定、`327a2d01..HEAD -- functions` 空、`HEAD:login.ts` blob == `327a2d01:login.ts` blob == `87d0d8cf`）+ 機械 replay 值；branch HEAD commit SHA 與「N plan-only commits」改 **[info, 非 blocking]**、§7 明訂「不得據 HEAD 不符 reject」。grep 證：`14d26823`/`c4396502` 釘死值全清、20 個 `[BLOCKING]` marker 在 source-base+機械值、3 個 `[info]` marker 在 HEAD。**0 plan 邏輯 / 0 source 改動**（packet repo-external；login.ts blob 仍 `87d0d8cf`）。教訓精煉進 [[feedback_gate_packet_replay_anchor_head_vs_base]]（exact HEAD 永不可當 blocking、隨 gate-record commit 前進；HEAD *source blob* 才是穩定 blocking 不變量）。→ 待 owner 送 ② r3。
+
+- 2026-06-23 **Codex Plan Gate（② 維度 C）r3：`CODEX_PLAN_APPROVED`**（**0 blocking / 0 required revision**）— HEAD-independent packet 後零 anchor 誤判。Codex 獨立重現全部 [BLOCKING] 事實：`git rev-parse 327a2d01`=`327a2d011910…`、`327a2d01..HEAD -- functions` 空、`HEAD:login.ts`=`327a2d01:login.ts`=`87d0d8cf`、patched frozen blob `06dead7c`、solution **811→809**、REMOVED 恰 2 條 `local/login.ts` TS7031 `(38,39)`+`(38,48)`、ADDED **0**、tests-leaf **0→0**、byte-identical **9523B** sha `9f8d81e1` IDENTICAL、patched ratchet **809/80/254/334**（current unpatched 仍 811/81/253/334、因 source 未落地）。current HEAD `dfc405ab`（informational、非 mismatch）。Queue/payment/distributed/observability **N/A**。**Plan Gate 雙道（① ChatGPT Arch + ② Codex Plan）全過 = plan 批准；仍非 coding 授權，待 owner 明示 `CODING_ALLOWED` 才進 Code 階段。**
 
 ## owner 鎖定表（C-1 ruling 2026-06-23，faithful 收錄）
 
