@@ -21,11 +21,11 @@ const USER_DELETABLE = new Set([
   PAYMENT_STATUS.PENDING, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED,
 ])
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestGet({ request, env, params }) {
+export async function onRequestGet({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requirePaymentAccess(request, env, { skipKyc: true })
   if (error) return error
@@ -40,7 +40,7 @@ export async function onRequestGet({ request, env, params }) {
   return res(row, 200, cors)
 }
 
-export async function onRequestDelete({ request, env, params }) {
+export async function onRequestDelete({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requirePaymentAccess(request, env, { skipKyc: true })
   if (error) return error
