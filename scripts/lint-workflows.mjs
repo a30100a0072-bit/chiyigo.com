@@ -49,9 +49,16 @@ function extractMetaBlock(src) {
 // reference (alias, pass-as-value, `.bind`, optional call `agent?.()`, member `obj.agent`, computed
 // `x['agent']`), any SHADOWING of the name `agent` (declaration / param / import / destructure), and
 // `eval` / `Function` (including the parenthesized direct-eval form `(eval)(...)`) are rejected; a
-// syntactically unparseable entry is also flagged (fail loud). The 2nd arg must be a single inline
-// object literal whose `agentType` is the string literal 'readonly-reviewer' (non-computed key, no duplicate) plus a
-// `schema`. Comments are AST trivia and string contents are StringLiteral nodes, so comment- and
+// syntactically unparseable entry is also flagged (fail loud). The 2nd arg must be a single inline object
+// literal that: sets `agentType` = the string literal 'readonly-reviewer' (non-computed key, no duplicate);
+// includes a `schema`; contains NO `model` key (an invocation-level model outranks the agent's no-pin
+// frontmatter -- precedence env > invocation > frontmatter > parent -- so it would pin the subagent);
+// declares exactly one `__proto__: null` so the options object has NO prototype (an inherited `model`, via a
+// non-null __proto__ or Object.prototype pollution, would otherwise resolve through the chain); and uses no
+// getter / setter / method (an accessor runs code at read time -- it can return a `model` or re-add a
+// prototype). (model gap 2026-06-22,
+// inherited-model / null-proto 2026-06-23 -- both after Codex found them.) Comments are AST trivia and
+// string contents are StringLiteral nodes, so comment- and
 // string-token masking are inherently impossible. AST-enforced for statically analyzable committed
 // entries that pass the mandatory lint:workflows path; not a platform sandbox. read-only stays
 // best-effort (readonly-reviewer holds Bash). Self-checked at end of file.
@@ -83,9 +90,12 @@ function entryAgentErrors(src) {
     if (args.length !== 2) { push(call, `agent() must be agent(prompt, { agentType: 'readonly-reviewer', schema }) -- got ${args.length} arg(s)`); return }
     const opt = args[1]
     if (!ts.isObjectLiteralExpression(opt)) { push(call, `agent() 2nd argument must be a single inline object literal (not a variable/expression)`); return }
-    let agentTypeCount = 0, agentTypeOk = false, hasSchema = false
+    let agentTypeCount = 0, agentTypeOk = false, hasSchema = false, hasModel = false, protoNull = 0, protoOther = 0
     for (const prop of opt.properties) {
-      if (ts.isSpreadAssignment(prop)) { push(prop, `agent() options: spread is not allowed (could override agentType)`); continue }
+      if (ts.isSpreadAssignment(prop)) { push(prop, `agent() options: spread is not allowed (could override agentType / inject model / set a prototype)`); continue }
+      // accessors / methods run code at property-read time -- a getter could directly return a `model`
+      // value, or re-add a prototype (defeating __proto__: null) -- so only plain data properties are allowed.
+      if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop) || ts.isMethodDeclaration(prop)) { push(prop, `agent() options: getter / setter / method properties are not allowed (an accessor runs code at read time -- can return a model or re-add a prototype)`); continue }
       const nameNode = prop.name
       if (nameNode && ts.isComputedPropertyName(nameNode)) { push(prop, `agent() options: computed keys are not allowed`); continue }
       const keyText = nameNode && (ts.isIdentifier(nameNode) || ts.isStringLiteral(nameNode)) ? nameNode.text : null
@@ -95,12 +105,28 @@ function entryAgentErrors(src) {
         if (val && ts.isStringLiteral(val) && val.text === 'readonly-reviewer') agentTypeOk = true
       } else if (keyText === 'schema') {
         hasSchema = true
+      } else if (keyText === 'model') {
+        hasModel = true // invocation-level model outranks the agent's no-pin frontmatter -> would pin a model (see header); forbid any model key
+      } else if (keyText === '__proto__') {
+        // `__proto__: null` (the mandated form) gives the options object NO prototype, so no inherited
+        // property (a model from Object.prototype pollution or a __proto__-set prototype) can resolve.
+        // Any non-null __proto__ value SETS a prototype that could carry an inherited model -> forbidden.
+        const val = ts.isPropertyAssignment(prop) ? prop.initializer : null
+        if (val && val.kind === ts.SyntaxKind.NullKeyword) protoNull++
+        else protoOther++
       }
     }
     if (agentTypeCount === 0) push(opt, `agent() options must set agentType: 'readonly-reviewer'`)
     else if (agentTypeCount > 1) push(opt, `agent() options: duplicate agentType is not allowed`)
     else if (!agentTypeOk) push(opt, `agent() options: agentType must be the string literal 'readonly-reviewer'`)
     if (!hasSchema) push(opt, `agent() options must include a schema`)
+    if (hasModel) push(opt, `agent() options must NOT set 'model' (invocation-level model outranks the no-pin frontmatter -> pins a model; readonly-reviewer must inherit the session model)`)
+    // null-prototype mandate (Option W): require exactly one `__proto__: null` so the options object cannot
+    // inherit a `model` via the prototype chain (the own-property checks above miss inherited / proto-injected
+    // models -- Codex Code Gate 2026-06-23). This is a JS-call-boundary guarantee, not a runtime one.
+    if (protoOther > 0) push(opt, `agent() options: __proto__ must be exactly null (a non-null __proto__ sets a prototype that can inject an inherited model)`)
+    else if (protoNull === 0) push(opt, `agent() options must include '__proto__: null' (null-prototype options cannot inherit a model from a polluted prototype)`)
+    else if (protoNull > 1) push(opt, `agent() options: duplicate __proto__ is not allowed`)
   }
 
   function visit(node) {
@@ -188,11 +214,13 @@ for (const file of files) {
     if (!/\bGUARD\b/.test(src)) err(file, 'workflow entry must reference the injection GUARD (B2/AC6)')
     // Agent() invocation discipline -- delegated to entryAgentErrors() (AST-based; owner ruling A').
     // The injected `agent` binding may appear ONLY as the callee of a direct call agent(prompt,
-    // { agentType: 'readonly-reviewer', schema }); aliasing, pass-as-value, .bind, optional / member /
-    // computed access, shadowing the name `agent`, and eval / Function are all rejected. Binds the
-    // no-haiku invariant per call (the agent-DEF validator below proves readonly-reviewer carries no
-    // model pin). 'Explore' is the hazard (/agents pins it to haiku). NB: read-only ITSELF is not
-    // mechanically enforced -- readonly-reviewer holds Bash, so its read-only posture is best-effort.
+    // { agentType: 'readonly-reviewer', schema }) with NO `model` key; aliasing, pass-as-value, .bind,
+    // optional / member / computed access, shadowing the name `agent`, and eval / Function are all
+    // rejected. Enforces the tracked-artifact no-haiku check per call (the agent-DEF validator below
+    // proves the committed readonly-reviewer carries no model pin; see its header for what is / is NOT
+    // guaranteed at runtime). Hazards: `Explore` (/agents pins it to haiku) and an invocation-level
+    // `model` (outranks frontmatter). NB: read-only ITSELF is not mechanically enforced -- readonly-reviewer
+    // holds Bash, so its read-only posture is best-effort.
     for (const e of entryAgentErrors(src)) err(file, e)
     // OD-D: Workflow runtime rejects static import -> entries must be self-contained (inline SSOT).
     if (/^\s*import\s[^\n]*\sfrom\s/m.test(src)) {
@@ -229,18 +257,51 @@ if (!GUARD.includes('.env') || !GUARD.includes('.dev.vars') || !GUARD.includes('
   err('lib/schemas.mjs', 'GUARD missing required secret-denylist forbid-declaration (section 8.1)')
 }
 
-// The readonly-reviewer agent DEFINITION must be repo-local + correctly configured under a STRICT
-// frontmatter grammar. Without this the "no haiku downgrade" invariant is only string-deep: a fresh
-// clone has no agent (runtime `agent type not found`), or a drifted agent (a `model:` pin in ANY YAML
-// form, wrong tools) silently re-breaks it. No YAML parser is available (no new dependency allowed), so
-// validate fail-closed: every non-blank frontmatter line MUST be one of exactly the UNQUOTED keys
-// name/description/tools as `key: value`, each exactly once. This rejects quoted (`"model": haiku`),
-// indented, explicit (`? model`), merge/anchor, duplicate, and any unexpected key -- closing the
-// quoted-key `model` bypass (Codex Code Gate 2026-06-22; originally added 2026-06-21).
+// The readonly-reviewer agent DEFINITION is validated repo-local under a STRICT frontmatter grammar so a
+// drifted or typo'd COMMITTED def cannot silently carry a `model:` pin or the wrong tools. No YAML parser
+// is available (no new dependency allowed), so validate fail-closed: every non-blank frontmatter line MUST
+// be one of exactly the UNQUOTED keys name/description/tools as `key: value`, each exactly once. This
+// rejects quoted (`"model": haiku`), indented, explicit (`? model`), merge/anchor, duplicate, and any
+// unexpected key -- closing the quoted-key `model` bypass (Codex Code Gate 2026-06-22; added 2026-06-21).
+//
+// STRICT-BUT-NOT-FULL-YAML (best-effort, no parser). Two further mismatches with a real YAML parser are
+// also closed fail-closed (2026-06-22 follow-up):
+//   1. Close fence must be a BARE `---` (followed by a newline or EOF). A typo'd fence like `---evil` no
+//      longer terminates the frontmatter -- previously the extraction matched the `\n---` inside it and
+//      accepted a body a real YAML parser would not. Such a file is reported as having no valid frontmatter.
+//   2. An unquoted scalar value containing `: ` (colon-space) is a YAML mapping-value ambiguity a real
+//      parser rejects (e.g. `description: foo: bar` -> js-yaml "bad indentation of a mapping entry"); the
+//      greedy grammar would otherwise accept it. Also rejects the non-canonical quoted form
+//      (`description: "a: b"`), which the real file never uses -- canonical-only, fail-closed.
+//
+// SCOPE OF THE GUARANTEE -- precise, do NOT overclaim (Codex Plan/Code Gate 2026-06-22/23). The no-haiku
+// lint covers exactly TWO classes of tracked artifact: (i) the validated workflow entries
+// (plan/code-self-review.mjs), where the AST entry validator above requires every agent() call to be a
+// direct `agent(prompt, { __proto__: null, agentType: 'readonly-reviewer', schema })` -- null-prototype
+// options with no `model` key, no accessor, no Explore / alias -- so at the JS CALL BOUNDARY the options
+// object has no own AND no inherited `model` (even under Object.prototype pollution); and (ii) this project
+// agent definition, whose frontmatter carries no `model:` pin. Within those two classes a committed model
+// pin (haiku or otherwise) is blocked at the JS call boundary. It does NOT extend further -- it does NOT
+// guarantee injected-runtime internal transforms, and does NOT control runtime model/agent resolution,
+// which Claude Code takes from sources this lint cannot see:
+//   - model precedence: CLAUDE_CODE_SUBAGENT_MODEL env > invocation-level model > agent frontmatter >
+//     parent -- the env var still outranks everything and is NOT checked here;
+//   - agent precedence: managed > --agents > project > user > plugin -- a managed or --agents agent can
+//     REPLACE this project agent, and a same-named USER agent (one exists at ~/.claude/agents/) sits
+//     lower in precedence than this project def;
+//   - any agent() call OUTSIDE those two entry files is not scanned (e.g. tracked docs may show an
+//     `Explore` example -- those are illustrative, not executed).
+// Absolute runtime no-haiku would need separate startup/runtime (env + agent-source) model validation
+// (out of scope). Residuals (e.g. a value ending in a bare `:`, or colon-TAB) make a TRACKED def
+// YAML-invalid; whether the runtime then fails loud or falls back to the lower-precedence same-named user
+// agent is UNVERIFIED (do not assume `agent type not found`). But no residual can inject a `model:` pin
+// into a def this lint passes, so residuals do not weaken the tracked-artifact guarantee above.
 function agentDefErrors(raw) {
   const out = []
-  const fm = raw.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---/)
-  if (!fm) { out.push('missing YAML frontmatter'); return out }
+  // close fence must be a bare `---` (newline or EOF after) -- a non-bare close like `---evil` does not
+  // terminate the frontmatter (see header note 1); fail closed when no valid frontmatter is delimited.
+  const fm = raw.replace(/\r\n/g, '\n').match(/^---\n([\s\S]*?)\n---(?:\n|$)/)
+  if (!fm) { out.push('missing YAML frontmatter (no opening `---`, or close fence is not a bare `---`)'); return out }
   const body = fm[1]
   const ALLOWED = ['name', 'description', 'tools']
   const seen = Object.create(null)
@@ -248,6 +309,9 @@ function agentDefErrors(raw) {
     if (line.trim() === '') continue
     const m = line.match(/^(name|description|tools): (.+)$/)
     if (!m) { out.push(`frontmatter line outside the strict grammar (only unquoted name:/description:/tools: 'key: value' allowed): ${JSON.stringify(line)}`); continue }
+    // value with a `: ` (colon-space) is a YAML mapping-value ambiguity (see header note 2); the greedy
+    // `(.+)` captured it, so flag fail-closed. Still count the key below so this is the ONLY error.
+    if (m[2].includes(': ')) out.push(`frontmatter value for '${m[1]}' has a ': ' (colon-space) YAML mapping ambiguity -- remove or restructure it: ${JSON.stringify(line)}`)
     seen[m[1]] = (seen[m[1]] || 0) + 1
   }
   for (const k of ALLOWED) {
@@ -281,6 +345,10 @@ const AGENT_DEF_CHECKS = [
   ['missing-tools', `---\nname: readonly-reviewer\ndescription: x\n---\n`, true],
   ['missing-description', `---\nname: readonly-reviewer\ntools: Read, Grep, Glob, Bash\n---\n`, true],
   ['no-frontmatter', `name: readonly-reviewer\n`, true],
+  // 2026-06-22 follow-up (strict-but-not-full-YAML gaps). Each is ISOLATING: paired with otherwise-valid
+  // name/description/tools so ONLY the new guard fires -- deleting that one guard flips it to clean.
+  ['nonbare-close-fence', `---\nname: readonly-reviewer\ndescription: x\ntools: Read, Grep, Glob, Bash\n---evil\n`, true],
+  ['value-colon-space', `---\nname: readonly-reviewer\ndescription: foo: bar\ntools: Read, Grep, Glob, Bash\n---\n`, true],
 ]
 for (const [nm, raw, expectFlagged] of AGENT_DEF_CHECKS) {
   const flagged = agentDefErrors(raw).length > 0
@@ -291,56 +359,76 @@ for (const [nm, raw, expectFlagged] of AGENT_DEF_CHECKS) {
 // clean entries MUST pass. The textual scanner this replaced leaked indirect agentType then aliasing
 // (two Codex Plan Gate REJECTs 2026-06-22); these fixtures lock those + the wider family. [name, src, expectFlagged]
 const SELF_CHECKS = [
-  // valid shapes -> must PASS
-  ['clean', `await agent(p1, { agentType: 'readonly-reviewer', schema: S1 })\nawait agent(p2, { agentType: 'readonly-reviewer', phase: 'Find', label: \`x:\${d}\`, schema: S2 })`, false],
-  ['clean-double-quote-agentType', `await agent(p, { agentType: "readonly-reviewer", schema: S })`, false],
-  // forbidden agentType value / options shape -> must FLAG
-  ['literal-Explore', `await agent(p, { agentType: 'Explore', schema: S })`, true],
-  ['comment-masked-Explore', `await agent(p, { agentType: 'Explore', schema: S }) // agentType: 'readonly-reviewer'`, true],
-  ['indirect-agentType', `const _t = 'Explore'\nawait agent(p, { agentType: _t, schema: S })`, true],
-  ['indirect+note-padding', `const _t = 'Explore'\nawait agent(p, { agentType: _t, note: "agentType: 'readonly-reviewer'", schema: S })`, true],
-  ['absent-agentType', `await agent(p, { schema: S })`, true],
-  ['missing-schema', `await agent(p, { agentType: 'readonly-reviewer' })`, true],
-  ['duplicate-agentType', `await agent(p, { agentType: 'readonly-reviewer', agentType: 'Explore', schema: S })`, true],
-  ['template-agentType', `await agent(p, { agentType: \`readonly-reviewer\`, schema: S })`, true],
-  ['spread-options', `await agent(p, { ...override, agentType: 'readonly-reviewer', schema: S })`, true],
-  ['computed-key', `await agent(p, { ['agentType']: 'readonly-reviewer', schema: S })`, true],
+  // valid shapes -> must PASS. Every valid call now carries the mandatory `__proto__: null` (Option W).
+  ['clean', `await agent(p1, { __proto__: null, agentType: 'readonly-reviewer', schema: S1 })\nawait agent(p2, { __proto__: null, agentType: 'readonly-reviewer', phase: 'Find', label: \`x:\${d}\`, schema: S2 })`, false],
+  ['clean-double-quote-agentType', `await agent(p, { __proto__: null, agentType: "readonly-reviewer", schema: S })`, false],
+  // forbidden agentType value / options shape -> must FLAG (valid except the one tested defect)
+  ['literal-Explore', `await agent(p, { __proto__: null, agentType: 'Explore', schema: S })`, true],
+  ['comment-masked-Explore', `await agent(p, { __proto__: null, agentType: 'Explore', schema: S }) // agentType: 'readonly-reviewer'`, true],
+  ['indirect-agentType', `const _t = 'Explore'\nawait agent(p, { __proto__: null, agentType: _t, schema: S })`, true],
+  ['indirect+note-padding', `const _t = 'Explore'\nawait agent(p, { __proto__: null, agentType: _t, note: "agentType: 'readonly-reviewer'", schema: S })`, true],
+  ['absent-agentType', `await agent(p, { __proto__: null, schema: S })`, true],
+  ['missing-schema', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer' })`, true],
+  // forbidden invocation-level model pin (Path B 2026-06-22; invocation model outranks the no-pin
+  // frontmatter -> would defeat no-haiku). Isolating: valid otherwise, so ONLY the model guard fires;
+  // ANY model value is forbidden (inherit-only, not just 'haiku'). Spread/computed `model` are already
+  // caught by spread-options / computed-key above.
+  ['invocation-model-haiku', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', model: 'haiku', schema: S })`, true],
+  ['invocation-model-opus', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', model: 'opus', schema: S })`, true],
+  ['invocation-model-string-key', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', 'model': 'haiku', schema: S })`, true],
+  ['duplicate-agentType', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', agentType: 'Explore', schema: S })`, true],
+  ['template-agentType', `await agent(p, { __proto__: null, agentType: \`readonly-reviewer\`, schema: S })`, true],
+  ['spread-options', `await agent(p, { __proto__: null, ...override, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['computed-key', `await agent(p, { __proto__: null, ['agentType']: 'readonly-reviewer', schema: S })`, true],
+  // null-prototype options mandate (Option W 2026-06-23; Codex Code Gate found an inherited-model bypass:
+  // `__proto__: { model }` / Object.prototype pollution make options.model resolve via the prototype chain,
+  // which the own-property checks miss). Every options object must declare exactly one `__proto__: null`
+  // and contain no accessor (a getter runs code at read time -- can return a model or re-add a prototype).
+  ['missing-proto-null', `await agent(p, { agentType: 'readonly-reviewer', schema: S })`, true],
+  ['proto-non-null-object', `await agent(p, { __proto__: { model: 'haiku' }, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['proto-non-null-string-key', `await agent(p, { '__proto__': { model: 'haiku' }, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['proto-non-null-empty', `await agent(p, { __proto__: {}, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['proto-undefined', `await agent(p, { __proto__: undefined, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['duplicate-proto-null', `await agent(p, { __proto__: null, __proto__: null, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['options-getter', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', get x() { return 1 }, schema: S })`, true],
+  ['options-setter', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', set x(v) {}, schema: S })`, true],
+  ['options-method', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', m() {}, schema: S })`, true],
   // forbidden 2nd-arg shape -> must FLAG
   ['expression-2nd-arg', `await agent(p, ro && explore)`, true],
   ['variable-2nd-arg', `await agent(p, optsVar)`, true],
-  ['decoy-3rd-arg', `await agent(prompt, runtimeOpts, { agentType: 'readonly-reviewer', schema: S })`, true],
-  ['object-in-prompt', `await agent({ agentType: 'readonly-reviewer', schema: S }, optsVar)`, true],
+  ['decoy-3rd-arg', `await agent(prompt, runtimeOpts, { __proto__: null, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['object-in-prompt', `await agent({ __proto__: null, agentType: 'readonly-reviewer', schema: S }, optsVar)`, true],
   ['no-options-arg', `await agent(prompt)`, true],
   // forbidden indirect invocation / shadow / dynamic -> must FLAG
-  ['alias-binding', `const _invoke = agent\n_invoke(p, { agentType: 'Explore', schema: S })`, true],
+  ['alias-binding', `const _invoke = agent\n_invoke(p, { __proto__: null, agentType: 'Explore', schema: S })`, true],
   ['pass-as-value', `pipeline(agent)`, true],
   ['agent-bind', `const f = agent.bind(null)`, true],
-  ['optional-call', `await agent?.(p, { agentType: 'readonly-reviewer', schema: S })`, true],
-  ['member-call', `await obj.agent(p, { agentType: 'readonly-reviewer', schema: S })`, true],
+  ['optional-call', `await agent?.(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['member-call', `await obj.agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S })`, true],
   ['computed-access', `const f = globalThis['agent']`, true],
-  ['shadow-const', `const agent = x\nawait agent(p, { agentType: 'readonly-reviewer', schema: S })`, true],
-  ['shadow-param', `[].forEach((agent) => agent(p, { agentType: 'readonly-reviewer', schema: S }))`, true],
+  ['shadow-const', `const agent = x\nawait agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S })`, true],
+  ['shadow-param', `[].forEach((agent) => agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S }))`, true],
   ['eval', `eval("agent(p, { agentType: 'Explore', schema: S })")`, true],
   ['new-Function', `const f = new Function("return 1")`, true],
   // no direct agent() call at all -> must FLAG
   ['no-agent-call', `const x = 1`, true],
-  // isolating fixtures (F3): pair the forbidden construct with a VALID direct call so ONLY the targeted
-  // guard fires (not "no-direct-call") -- deleting that single guard must flip the fixture to clean.
-  ['iso-member', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nobj.agent(q, { agentType: 'readonly-reviewer', schema: S })`, true],
-  ['iso-optional', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nagent?.(q, { agentType: 'readonly-reviewer', schema: S })`, true],
-  ['iso-computed-access', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nconst f = globalThis['agent']`, true],
-  ['iso-computed-key', `await agent(p, { agentType: 'readonly-reviewer', ['x']: 1, schema: S })`, true],
-  ['iso-eval', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\neval("x")`, true],
-  ['iso-paren-eval', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\n(eval)("q")`, true],
-  ['iso-new-Function', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nconst g = new Function("return 1")`, true],
-  ['iso-stray-ref', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nconst h = agent`, true],
-  ['iso-shorthand-capture', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nconst o = { agent }`, true],
-  ['iso-arg-count', `await agent(p, { agentType: 'readonly-reviewer', schema: S }, extra)`, true],
-  ['iso-parse-error', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nconst broken = (`, true],
+  // isolating fixtures (F3): pair the forbidden construct with a VALID direct call (now incl. __proto__:
+  // null) so ONLY the targeted guard fires -- deleting that single guard must flip the fixture to clean.
+  ['iso-member', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nobj.agent(q, { agentType: 'readonly-reviewer', schema: S })`, true],
+  ['iso-optional', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nagent?.(q, { agentType: 'readonly-reviewer', schema: S })`, true],
+  ['iso-computed-access', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nconst f = globalThis['agent']`, true],
+  ['iso-computed-key', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', ['x']: 1, schema: S })`, true],
+  ['iso-eval', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\neval("x")`, true],
+  ['iso-paren-eval', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\n(eval)("q")`, true],
+  ['iso-new-Function', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nconst g = new Function("return 1")`, true],
+  ['iso-stray-ref', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nconst h = agent`, true],
+  ['iso-shorthand-capture', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nconst o = { agent }`, true],
+  ['iso-arg-count', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S }, extra)`, true],
+  ['iso-parse-error', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nconst broken = (`, true],
   // the exact round-5 bypass: shorthand capture + template-literal computed key -> invoke with Explore
-  ['shorthand+computed-capture-chain', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\n({agent})[\`agent\`](q, { agentType: 'Explore', schema: S })`, true],
-  ['export-named-capture', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nexport { agent }`, true],
-  ['iso-computed-access-template', `await agent(p, { agentType: 'readonly-reviewer', schema: S });\nconst f = globalThis[\`agent\`]`, true],
+  ['shorthand+computed-capture-chain', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\n({agent})[\`agent\`](q, { agentType: 'Explore', schema: S })`, true],
+  ['export-named-capture', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nexport { agent }`, true],
+  ['iso-computed-access-template', `await agent(p, { __proto__: null, agentType: 'readonly-reviewer', schema: S });\nconst f = globalThis[\`agent\`]`, true],
 ]
 for (const [name, sample, expectFlagged] of SELF_CHECKS) {
   const flagged = entryAgentErrors(sample).length > 0

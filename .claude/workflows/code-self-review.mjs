@@ -127,7 +127,7 @@ ${decisionDiffLines}
   Return decision_hunks as [{file, hunk}] -- hunk = the full git diff output for that file
   (empty string only if the file truly has no diff in this range).
 Return base_sha, reviewed_sha=HEAD_SHA, name_status, stat, changed_files, and decision_hunks.`,
-  { agentType: 'readonly-reviewer', phase: 'Artifacts', label: 'git-artifacts', schema: ARTIFACTS_SCHEMA })
+  { __proto__: null, agentType: 'readonly-reviewer', phase: 'Artifacts', label: 'git-artifacts', schema: ARTIFACTS_SCHEMA })
 
 if (!artifacts ||
   !RESOLVED_SHA_PATTERN.test(String(artifacts.base_sha || '')) ||
@@ -171,11 +171,11 @@ Return the single updated FINDING.`
 }
 const reviews = await pipeline(
   DIMENSIONS,
-  (d) => agent(finderPrompt(d), { agentType: 'readonly-reviewer', phase: 'Find', label: `find:${d.key}`, schema: FINDINGS_RESULT_SCHEMA }),
+  (d) => agent(finderPrompt(d), { __proto__: null, agentType: 'readonly-reviewer', phase: 'Find', label: `find:${d.key}`, schema: FINDINGS_RESULT_SCHEMA }),
   (review) => {
     if (!review || !Array.isArray(review.findings) || review.findings.length === 0) return review
     return parallel(review.findings.map((f) => () =>
-      agent(verifyPrompt(f), { agentType: 'readonly-reviewer', phase: 'Verify', label: `verify:${review.dimension}`, schema: FINDING_SCHEMA })
+      agent(verifyPrompt(f), { __proto__: null, agentType: 'readonly-reviewer', phase: 'Verify', label: `verify:${review.dimension}`, schema: FINDING_SCHEMA })
         .then((v) => v || { ...f, status: 'refuted', verdict_note: 'verifier returned null' })
     )).then((verified) => ({ dimension: review.dimension, findings: verified.filter(Boolean) }))
   }

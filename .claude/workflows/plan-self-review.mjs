@@ -104,13 +104,13 @@ rationale. Return the single updated FINDING.`
 const reviews = await pipeline(
   DIMENSIONS,
   (d) => agent(finderPrompt(d, planDocPath), {
-    agentType: 'readonly-reviewer', phase: 'Find', label: `find:${d.key}`, schema: FINDINGS_RESULT_SCHEMA,
+    __proto__: null, agentType: 'readonly-reviewer', phase: 'Find', label: `find:${d.key}`, schema: FINDINGS_RESULT_SCHEMA,
   }),
   (review) => {
     if (!review || !Array.isArray(review.findings) || review.findings.length === 0) return review
     return parallel(review.findings.map((f) => () =>
       agent(verifyPrompt(f), {
-        agentType: 'readonly-reviewer', phase: 'Verify', label: `verify:${review.dimension}`, schema: FINDING_SCHEMA,
+        __proto__: null, agentType: 'readonly-reviewer', phase: 'Verify', label: `verify:${review.dimension}`, schema: FINDING_SCHEMA,
       }).then((v) => v || { ...f, status: 'refuted', verdict_note: 'verifier returned null' })
     )).then((verified) => ({ dimension: review.dimension, findings: verified.filter(Boolean) }))
   }
