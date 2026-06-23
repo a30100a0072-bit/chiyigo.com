@@ -40,7 +40,7 @@
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow `wf_bc6ef081-856`、3 agents 三維 rubric：scope / runtime·security / evidence；readonly-reviewer 繼承 session model Opus 4.8；三維全 **0 findings**、accepted 0、suspicious 0；主線獨立對抗式裁決認同 clean — 見 §Gate 進程紀錄）
   - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B，**0 Blocker / 0 Required Revision / 2 NB**、11 維全 PASS、binding locks LOCK-1..LOCK-10 — 見 §Gate 進程紀錄）→ ✅ `CODEX_PLAN_APPROVED`（② 維度 C，r3，**0 blocking / 0 required**；**Plan Gate 雙道全過** — 見 §Gate 進程紀錄）→ ⬜ owner `CODING_ALLOWED`
   - ✅ Code 階段（source commit `38ba2d86`、full replay @ committed、NB-2 雙證）→ ✅ `CODE_SELF_REVIEW_CLEAN`（維度 A workflow `wf_8e4ab310-6de`、3 維 0 findings + 主線裁決 — 見 §Gate 進程紀錄）→ ✅ `CODEX_CODE_APPROVED`（③，**0 blocking / 0 required** — 見 §Gate 進程紀錄）→ ✅ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④，**14/14 Faithful、0 deviation；外部 4 道全過**）
-  - ⬜ merge-front 7 gates → ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
+  - ✅ merge-front 7 gates 全綠（lint / ratchet 809·254 / verify:browser-pipeline / test:cov 737 / test:int 1328 / build:functions / npm audit 0 — 見 §Gate 進程紀錄）→ ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪修 gate 回饋）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。外部未送不得自我宣告通過。
 
 ### Gate 進程紀錄（dated；faithful 收錄）
@@ -73,6 +73,9 @@
 
 - 2026-06-23 owner 驅動產 **ChatGPT Faithfulness packet**（`~/Desktop/chiyigo-pr2cp-chatgpt-faithfulness-packet.md`，repo 外、自足〔ChatGPT 無 repo 存取〕：§2 approved frozen vs §3 actual committed 並排 + §5 anti-curated-diff git artifacts〔`git show 38ba2d86 --name-status` / `git diff --name-status 327a2d01..HEAD` / `--stat` / functions/ log〕 + §6 14-項 matrix + §8 replay）→ 送外部 ④。
 - 2026-06-23 **ChatGPT Code Faithfulness Gate（④ 維度 B-code）：`CHATGPT_CODE_FAITHFULNESS_APPROVED`**（**14/14 Faithful、0 deviation / 0 scope creep / 0 未附 hunk source / 0 blocking / 0 required / 0 NB**）— approved frozen diff 與 actual committed diff（`327a2d01..HEAD -- functions/`）逐行一致（同 index `87d0d8cf..06dead7c`、同 hunk `@@ -35,7 +35,7 @@`、同 ±行）；§5 全樹僅 plan doc + `local/login.ts`、functions/ 範圍內唯一 commit `38ba2d86`；14 matrix 全 Faithful（檔範圍 / 1 編輯點 / annotation / function-declaration 非 arrow / plain Request / full Env / 無 waitUntil·D1 callback·workers-types / runtime 熱區全不動 / `game/login.ts` 未動 / 無 return-type·JSDoc·格式 drift / byte-identical）。**外部 4 道全過（① ChatGPT Arch + ② Codex Plan + ③ Codex Code + ④ ChatGPT Faithfulness）。** 非 merge 授權：merge-front 7 gates + owner `MERGE_ALLOWED` 仍必走。
+
+- 2026-06-23 **merge-front 7 gates 全綠（@ source `38ba2d86`、CI-equivalent，[[feedback_pre_merge_gate_checklist_match_ci]]）**：`lint` ✅ · `typecheck:ratchet`〔`RATCHET_BASE_REF=327a2d01`〕✅（baseline 1119/175、current **809/254**）· `verify:browser-pipeline` ✅（25 pages / 214 refs content-hash equal、classic+module prod emit byte-equal）· `test:cov` ✅（**25 files / 737 tests passed**、Statements **90.28%** 1933/2141、Branches 92.77%、Functions 92.08%、Lines 90.28%）· `test:int` ✅（**75 files / 1328 tests passed**、427s；含 login 牽動的 brute-force/rate-limit/risk-score/jwt-sid-claim/token-version/user-audit 全綠；error-path 測試的 stderr 為刻意觸發、非 failure）· `build:functions` ✅（Compiled Worker successfully）· `npm audit --omit=dev --audit-level=high` ✅（**0 vulnerabilities**）。post-gate working tree 僅 `?? CLEANUP_PLAN.md`（coverage/.tmp-* gitignored 未污染）、HEAD `5f3c23b2`、login.ts blob `06dead7c`、net source 1/1。**外部 4 道 + merge-front 7 gates 全綠；待 owner `MERGE_ALLOWED` → squash-merge `--delete-branch`。**
+- （後續 dated 收錄：owner `MERGE_ALLOWED` → push branch + 開 PR + squash-merge `--delete-branch` → 監看 main CI + Cloudflare deploy → SHIPPED memory）
 
 ## owner 鎖定表（C-1 ruling 2026-06-23，faithful 收錄）
 
