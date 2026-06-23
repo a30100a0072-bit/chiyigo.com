@@ -35,7 +35,7 @@ const ACCESS_TOKEN_TTL    = '15m'
 const PRE_AUTH_TOKEN_TTL  = '5m'
 const REFRESH_TOKEN_DAYS  = 7
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   // ── 1. 解析 Body ────────────────────────────────────────────
   let body
   try { body = await request.json() }
