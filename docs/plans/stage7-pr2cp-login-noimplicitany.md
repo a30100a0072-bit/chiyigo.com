@@ -56,6 +56,10 @@
   - **NB-1（非阻擋）**：Codex Plan packet 把 `a0e70293 → 327a2d01` base 修正放前段，避免審查者誤以為基底漂移未處理。**NB-2（非阻擋）**：`game/login.ts` 可列後續殘留清單、但不得在 PR-2cp 內補做（含 TS7053、形態不同）。
   - **可送 ② Codex Plan Gate；非 coding 授權，待 ② 通過 + owner 明示 `CODING_ALLOWED` 才進 Code 階段。**
 
+- 2026-06-23 owner 驅動產 **Codex Plan packet**（`~/Desktop/chiyigo-pr2cp-codex-plan-packet.md`，repo 外；NB-1 base 修正置最前段、§2 frozen diff、§3 獨立 replay 命令、§4 待填對照表、§5 LOCK 核對、§6 cascade 拆解、§7 verdict）→ 送外部 ②。
+- 2026-06-23 **Codex Plan Gate（② 維度 C）r1：`CHANGES_REQUESTED`**（**1 blocking、packet-only replay-anchor 錯誤；plan source-level 經 Codex 獨立全綠**）：Codex 機械重驗**全數獨立重現**（login.ts base blob `87d0d8cf`、`327a2d01..HEAD -- functions` 空、base solution **811**〔login.ts 恰 2 TS7031 @ `(38,39)`/`(38,48)`〕、tests-leaf **0**、in-memory patched overlay：blob `06dead7c`/solution **809**/REMOVED **2**·ADDED **0**/tests **0**、emit **9523B** sha `9f8d81e1` byte-identical、ratchet 811/81/253/334→**809/80/254/334**；Queue/payment/distributed/observability **N/A**）。**唯一 blocking（packet-only）**：packet §3/§4 把 `git rev-parse HEAD` 期望寫成 `327a2d01`，但 branch `stage7-pr2cp-login` 已有 2 plan-only commits → 實 HEAD = `14d26823`、依 packet §7「任一 MISMATCH = blocking」會逼 false reject。**根因**：replay anchor 混淆 branch HEAD 與 source base（plan-only commit 後 HEAD≠base，[[feedback_gate_packet_replay_anchor_head_vs_base]]）。
+- 2026-06-23 Claude **packet-only 修正（replay anchor）** → 單 agent 對抗式 self-review（v3.1 §9：packet docs-only 小修正、未達 L2/L3 規模、不重跑 workflow）：git 實證正確 anchor（`git rev-parse 327a2d01`=`327a2d011910…`、`HEAD`=`14d268237a5e…`、`327a2d01..HEAD -- functions` 空、`HEAD:…login.ts`=`327a2d01:…login.ts`=`87d0d8cf`）→ 修 packet 3 處（§前置 prose / §3 step 0 / §4 對照表：HEAD 期望改 `14d26823`、新增顯式 base-anchor `git rev-parse 327a2d01` + `327a2d01..HEAD -- functions`〔空〕 + `HEAD:…login.ts`〔`87d0d8cf`〕）+ 加 r1→r2 delta 註記。**0 plan doc source 邏輯改動（本次僅補 Gate 紀錄）、0 repo source 改動**（packet 為 repo-external；login.ts blob 仍 `87d0d8cf`）。grep 確認 anchor bug 全清。→ 待 owner 送 ② r2。
+
 ## owner 鎖定表（C-1 ruling 2026-06-23，faithful 收錄）
 
 | Lock | 內容 |
