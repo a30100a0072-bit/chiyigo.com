@@ -20,11 +20,11 @@ import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { requirePaymentAccess, isPaymentStatus, isPaymentKind } from '../../../utils/payments'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requirePaymentAccess(request, env, { skipKyc: true })
   if (error) return error
