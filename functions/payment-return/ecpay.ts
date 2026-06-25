@@ -10,7 +10,7 @@
  * 這隻純 UX redirect。
  */
 
-export async function onRequestPost({ request }) {
+export async function onRequestPost({ request }: { request: Request }) {
   let vendorIntentId = ''
   try {
     const body = await request.text()
@@ -29,7 +29,7 @@ export async function onRequestPost({ request }) {
 }
 
 // 沙箱有時 user 會重整或從 history 點 → 也支援 GET
-export async function onRequestGet({ request }) {
+export async function onRequestGet({ request }: { request: Request }) {
   const url = new URL(request.url)
   const vendorIntentId = url.searchParams.get('MerchantTradeNo') ?? ''
   const target = vendorIntentId
