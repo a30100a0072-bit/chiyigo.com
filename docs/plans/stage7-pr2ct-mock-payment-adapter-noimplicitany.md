@@ -56,7 +56,7 @@ function constantTimeEq(a: unknown, b: unknown) {                 // L72（local
   - ✅ **非 commit full-solution spike 實證**（見 §Spike，working tree 已 `git checkout` revert clean、blob 回 `0eb91bc9`）。
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow `wf_0b9bb408-ba5`、3 readonly-reviewer finders + 2 verifier 全 `claude-opus-4-8[1m]`〔0 haiku〕、收斂三維 scope-fidelity / runtime-security / evidence-integrity、`__proto__:null`；**accepted 2 / suspicious_input 0**＝同根因 tier3 路徑精確度〔排除清單 + cascade 引用漏 `functions/api/` 前綴〕→ 主線獨立裁決採納 + 修正 + re-verify 一輪 0 新發現 — 見 §Gate 進程紀錄）
-  - ⬜ `CHATGPT_ARCH_APPROVED`（① 維度 B）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C）→ ⬜ owner `CODING_ALLOWED`
+  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B、**0 Blocker / 0 Required Revision / 3 NB**、7 架構提問全認可、binding locks GL1..GL10、全對齊本 plan 既有 owner 鎖定表 + OD ruling、無 plan 改動 — 見 §Gate 進程紀錄 + §ChatGPT Arch binding locks）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C、待送）→ ⬜ owner `CODING_ALLOWED`
   - ⬜ Code 階段（owner `CODING_ALLOWED` → source commit → full replay @ committed）→ ⬜ `CODE_SELF_REVIEW_CLEAN`（維度 A workflow）→ ⬜ `CODEX_CODE_APPROVED`（③）→ ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④）
   - ⬜ merge-front 7 gates → ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪修 gate 回饋）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。外部未送不得自我宣告通過。
@@ -66,7 +66,9 @@ function constantTimeEq(a: unknown, b: unknown) {                 // L72（local
 - 2026-06-25 Claude **scout（read-only @ `b83b9ecd`）** → 逐檔 error set（**恰 6 錯**：L25〔request/env〕、L60〔secret/body〕、L72〔a/b〕、皆 TS7006）+ caller cascade（payments.ts:412 `import { mockPaymentAdapter }` → L416 `ADAPTERS.mock`；**NET 零 cascade**：spike 實測 loc+code 粒度 REMOVED=6/ADDED=0、payments.ts count 18→18 不變，唯一非-mock delta ＝ payments.ts:423 既存 TS7053 的 message-text 更新〔詳 §Scout〕）+ env.d.ts:58 `PAYMENT_MOCK_SECRET?: string` 確認 + 結構判定（util module、**零 import**、`const SIGNATURE_HEADER` + `mockPaymentAdapter` object〔含 `parseWebhook` 方法〕+ 2 module-local helper〔`hmacSha256Hex`/`constantTimeEq`〕）。全對齊 owner 預估。
 - 2026-06-25 Claude **非 commit full-solution spike**（見 §Spike，working tree revert clean）→ 全 receipt 綠（solution 795→789、loc+code sort-diff REMOVED=6/ADDED=0、byte-identical 1946B sha `5ee278c4…` 兩端一致 esbuild stderr 0、ratchet 795/77/257 → 789/76/258、frozen diff numstat 3/3 blob `0eb91bc9→cd74f0a8`、`git diff --check` clean、targeted lint exit 0、revert 後 blob 回 `0eb91bc9`）。
 - 2026-06-25 **multi-agent workflow self-review（維度 A，run `wf_0b9bb408-ba5`、5 agents〔3 finder + 2 verifier〕/ 343281 subagent tokens / 117 tool uses / ~14.4min；finder/verifier 皆 `readonly-reviewer` 繼承 session model `claude-opus-4-8[1m]`〔workflowProgress 5/5 model 記錄、0 haiku〕、options `__proto__:null`）→ `PLAN_SELF_REVIEW_CLEAN`**：收斂三維 rubric（scope-fidelity / runtime-security / evidence-integrity）**accepted 2 / suspicious_input 0**。runtime-security **0 findings**。兩條 accepted（皆 tier3、verifier 對抗式 ACCEPTED）＝**同一根因**：plan 把 3 個排除的 `functions/api/...` handler 檔（`auth/payments/checkout/ecpay.ts` / `admin/payments/intents.ts` / `webhooks/payments/[vendor].ts`）與 §Scout cascade 引用 `[vendor].ts:39` 寫成漏 `functions/api/` 前綴的 shorthand → 路徑無法 resolve（**文件精確度/traceability tier3，非 scope 違反、非算術錯**）。**finder 同時獨立 VERIFIED 正確且未誤報**：in-scope target 全 load-bearing 點全路徑 / 恰 3 簽名 6 TS7006〔(25,22)(25,31)(60,30)(60,38)(72,25)(72,28)〕/ OD-A 0-import faithful / `constantTimeEq=unknown` 型別正確〔且 `no-unnecessary-condition` 確不在 eslint.config.js〕/ base mock.ts 簽名符 frozen diff / env.d.ts:58 PAYMENT_MOCK_SECRET / `:39` 行錨本身正確〔real 行 = `const parsed = await adapter.parseWebhook(request, env)`〕/ ratchet base 795/77/257 / `[vendor].ts`=19·kyc `[vendor].ts`=5 count 正確 / firewall 機制真實〔forced tsc 第 39 行無錯、`adapter: any`〕。**主線獨立對抗式裁決（v3.1 §5、非採 raw）**：`git ls-files` 親驗 3 檔確在 `functions/api/`（`functions/api/auth/payments/checkout/ecpay.ts`·`functions/api/admin/payments/intents.ts`·`functions/api/webhooks/payments/[vendor].ts`）→ 採納 2 finding → 修 L24（候選+排除清單）·L106（排除清單）·L117（cascade 引用）·L24 narrative 歷史 PR 序列，全正規化為完整 `functions/...` repo 路徑 → **re-verify：plan 內 19 個 `functions/...ts` citation 全數 resolve against `git ls-files`、load-bearing 路徑全 qualified**（target/歷史 narrative shorthand 沿 pr2cs title 慣例保留、finder 未 flag、target 於所有 load-bearing 點全路徑）→ 一輪 0 新發現。**review agents 未污染 git**（主線驗：HEAD `b83b9ecd`、source blob `0eb91bc9` 未動、staged 空、`git diff b83b9ecd..HEAD -- functions/` 空、working tree 僅 `?? CLEANUP_PLAN.md` + 本 plan doc）。**待 commit plan-only → 中文報告 6 欄 → 產 ChatGPT Arch packet → 送外部 ①。**
-- ⬜（後續 dated 收錄：plan commit / 外部 4 道 / Code 階段 / merge-front / SHIPPED）
+- 2026-06-25 **plan-only commit `18bff827`**（branch `refactor/stage7-pr2ct-mock-payment-adapter-noimplicitany`、local、未 push、plan-only **+251 / 0 source**；commit 前後核 staged set 僅 plan doc、`git diff b83b9ecd..HEAD -- functions/` 空、`HEAD:mock.ts` blob 仍 `0eb91bc9`、`git diff --cached --check` clean、CLEANUP_PLAN.md 未 staged）→ 中文報告 6 欄（gate-state `PLAN_SELF_REVIEW_CLEAN`）→ 產自足 **ChatGPT Arch packet**（`~/Desktop/chiyigo-packets/chiyigo-pr2ct-chatgpt-arch-packet.md`、repo 外、§2 含全 78 行 base source）→ 送外部 ①。
+- 2026-06-25 **ChatGPT Architecture Gate（① 維度 B）：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（**0 Blocker / 0 Required Revision / 3 Non-blocking Note**）— 7 架構提問全認可（① OD-A 同意〔現不建 `PaymentVendorAdapter`/`WebhookParseResult`、defer ecpay+spine cluster 較安全〕② `request: Request` plain〔無 `.cf`、禁 CfRequest〕③ `env: Env` 保 `env?.`〔符 type-only 最小 diff〕④ `constantTimeEq(a: unknown, b: unknown)`〔最忠實 defensive contract；`string` 會使 guard 變 dead branch〕⑤ defer spine 契約〔`payments.ts:423` message-text 更新非本 PR 應處理、屬後續 spine PR〕⑥ 無 migration/rollback/cache-bust 遺漏〔rollback = revert 單 squash〕⑦ 不牽動 security boundary〔HMAC + constant-time 不改 runtime、byte-identical 為足夠硬證〕）。**Non-blocking**：NB-1 mock 不應被包裝成 ecpay typing pattern-proof（後續 cluster 重審 adapter interface、不沿用本 PR 當 shared contract）· NB-2 error diff 用 loc+code 粒度〔本 plan §Spike 已採、完整 message 文字 diff 會顯 REMOVED=7/ADDED=1 表象〕· NB-3 `constantTimeEq unknown` 是 lock 非風格〔後續禁改 string〕——**3 NB 皆已在本 plan 既有內容反映、無新增動作**。**Binding locks GL1..GL10**（② Codex Plan 與 Code 階段須保留；見 §ChatGPT Arch binding locks）：全與本 plan 既有 owner 鎖定表 L1..L14 + OD ruling + 排除清單 + §Scout payments.ts:423 nuance **一致、無 plan 改動需求**。**可送 ② Codex Plan Gate；非 coding 授權。**
+- ⬜（後續 dated 收錄：Codex Plan packet / 外部 ②③④ / Code 階段 / merge-front / SHIPPED）
 
 ## owner 鎖定表（2026-06-25，faithful 收錄）
 
@@ -86,6 +88,23 @@ function constantTimeEq(a: unknown, b: unknown) {                 // L72（local
 | L12 Coverage | mock adapter 經 integration test（`tests/integration/payments.test.ts` HTTP 路徑、`PAYMENT_MOCK_SECRET` + HMAC）間接覆蓋；**無 direct typed unit 呼叫 `mockPaymentAdapter.parseWebhook`**（ecpay 才有 direct test 呼叫）→ 主硬保證 ＝ **byte-identical**（emit 不變）+ merge-front 全量 test:int 旁證；不宣稱本 PR 新增任何 runtime 覆蓋（[[feedback_pr_coverage_claim_accuracy]]）|
 | L13 Evidence replay | plan + code 階段都重跑 ratchet / forced sort-diff / byte-identical；Code 階段 **不沿用 spike**、source commit 後重量（NB-2 雙證）|
 | L14 Stop Rule | 任一 runtime diff / 相鄰 cleanup / 碰排除檔 / 偏離 OD（用 `CfRequest` / `string` for constantTimeEq / arrow const / 建 interface / 新 import / 改 HMAC·constant-time·normalize·守門 / 新增安全功能）→ 退回 `PLAN_DRAFT` |
+
+## ChatGPT Arch binding locks（GL1..GL10，2026-06-25 ① `CHATGPT_ARCH_APPROVED_WITH_LOCKS` 認可；②③④ 須保留；faithful 收錄）
+
+| Lock | 內容 | 對應本 plan |
+|---|---|---|
+| GL1 | 只允許修改 `functions/utils/payment-vendors/mock.ts` | owner L1 / 排除清單 |
+| GL2 | 唯一允許 source diff = §frozen diff 三處 annotation | owner L3 / §frozen diff |
+| GL3 | 不新增 import / type alias / interface、不改 object shorthand·function declaration 形式 | owner L3/L4 |
+| GL4 | 禁止建立 `PaymentVendorAdapter` / `WebhookParseResult` | owner L4 / OD-A |
+| GL5 | 禁碰 `functions/utils/payment-vendors/ecpay.ts`·`functions/utils/payments.ts`·`functions/api/webhooks/payments/[vendor].ts`·admin payments·checkout·`CLEANUP_PLAN.md` | owner 排除清單 / Coding 邊界 |
+| GL6 | `parseWebhook(request: Request, env: Env)`；禁 `CfRequest`/`EventContext`/workers-types import | owner L2/L5 |
+| GL7 | `constantTimeEq(a: unknown, b: unknown)`；禁改 `string` | owner L7 / NB-3 |
+| GL8 | 保 byte-identical runtime；禁改 HMAC·signature header·payload normalize·`env?.PAYMENT_MOCK_SECRET`·JSON parse·constant-time loop | owner L8/L9 |
+| GL9 | ②③④ 驗證須承認 `payments.ts:423` message-text update 為**既存同碼同位置**錯誤、非新 cascade（NB-2：用 loc+code 粒度）| §Scout nuance / §Spike |
+| GL10 | merge 前仍需完整 4 gate；本裁示非 coding/merge 授權 | owner L13 / checklist |
+
+> **3 NB 處置**：NB-1（mock ≠ ecpay pattern-proof）已在 §OD-A 裁定「代價誠實」段明載；NB-2（loc+code 粒度）本 plan §Spike 已採；NB-3（`unknown` 是 lock）= GL7 + owner L7。**無新增動作、無 plan 改動。**
 
 ## ⚠ payments 鄰接聲明（review care L2，**mock / test-only / 非真實金流**）
 
