@@ -55,6 +55,9 @@ declare global {
     ECPAY_MERCHANT_ID?: string;
     ECPAY_HASH_KEY?: string;
     ECPAY_HASH_IV?: string;
+    ECPAY_RETURN_URL?: string;
+    ECPAY_CLIENT_BACK_URL?: string;
+    ECPAY_ORDER_RESULT_URL?: string;
     PAYMENT_MOCK_SECRET?: string;
     KYC_MOCK_SECRET?: string;
     PSP_DIRECT_INTENT_ENABLED?: string;
