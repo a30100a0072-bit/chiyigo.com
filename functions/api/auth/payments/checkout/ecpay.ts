@@ -49,11 +49,11 @@ import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug'
 const MIN_AMOUNT = 1
 const MAX_AMOUNT = 200000  // 單筆綠界限額；金融操作上限再調
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requirePaymentAccess(request, env)
   if (error) return error
@@ -171,7 +171,7 @@ export async function onRequestPost({ request, env }) {
 
 // 限制 user 提供的 callback URL 必須 same-origin（http/https + 同 host）。
 // 任何不合法輸入回 null → 上層 fallback 到 env / 預設值。
-function pickSafeUrl(input, origin) {
+function pickSafeUrl(input: unknown, origin: string) {
   if (!input || typeof input !== 'string') return null
   let parsed
   try { parsed = new URL(input) } catch { return null }
