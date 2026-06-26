@@ -80,7 +80,7 @@ env.d.ts 唯一允許落地的 3 行新增（接在 L57 `ECPAY_HASH_IV?` 後、L
   - ✅ **非 commit full-solution spike 實證**（見 §Spike，working tree 已 revert clean、blobs 回 base）。
   - ✅ `PLAN_DRAFT` — 本 doc。
   - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow `wf_68262a80-f0c`、3 readonly-reviewer 全 `claude-opus-4-8` 繼承 Opus、收斂三維；1 tier2 真缺陷〔單檔 spike 證據敘述〕→ 主線獨立裁決〔dual-leaf 實測、非採 finder「786」推導〕修正 → 一輪 0 新發現；見 §Gate 進程紀錄）
-  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B、2026-06-26、**0 Blocker / 0 Required Revision**、7 架構裁決全 APPROVED、Path A APPROVED_WITH_LOCKS、binding LOCK-1..14；見 §Gate 進程紀錄）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C）→ ⬜ owner `CODING_ALLOWED`
+  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B、2026-06-26、**0 Blocker / 0 Required Revision**、7 架構裁決全 APPROVED、Path A APPROVED_WITH_LOCKS、binding LOCK-1..14；見 §Gate 進程紀錄）→ ✅ `CODEX_PLAN_APPROVED`（② 維度 C、2026-06-26、**0 findings**；見 §Gate 進程紀錄）→ ⬜ owner `CODING_ALLOWED`
   - ⬜ Code 階段（source commit → full replay @ committed、不沿用 spike）→ ⬜ `CODE_SELF_REVIEW_CLEAN`（維度 A workflow）→ ⬜ `CODEX_CODE_APPROVED`（③）→ ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④）
   - ⬜ merge-front 7 gates → ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪修 gate 回饋）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。外部未送不得自我宣告通過。
@@ -107,7 +107,9 @@ env.d.ts 唯一允許落地的 3 行新增（接在 L57 `ECPAY_HASH_IV?` 後、L
   - **LOCK-13 Gate 邊界**：② Codex Plan / ③ Codex Code / ④ ChatGPT Faithfulness 仍須完整跑；本回覆不授權 coding/push/merge。
   - **LOCK-14 Scope disclosure**：後續所有 packet 保留「原單檔 OD 被 spike 否決、owner 改裁 Path A 2 檔」脈絡，避免被誤判為 scope creep。
   - **可送 ② Codex Plan Gate；非 coding 授權，待 ② 通過 + owner 明示 `CODING_ALLOWED`。**
-- ⬜（後續 dated 收錄：② Codex Plan → owner `CODING_ALLOWED` → Code 階段 → ③ Codex Code → ④ Faithfulness → merge-front → squash）
+- 2026-06-26 owner 驅動產 **Codex Plan packet**（`~/Desktop/chiyigo-packets/chiyigo-pr2cu-codex-plan-packet.md`、repo 外、HEAD-independent anchor〔B1-B4 source-base〕+ §3 read-only/forced-tsc replay + §3c dual-leaf reconcile + §4 frozen diff + §5 plan 對照 + §5′ LOCK-1..14 + §6 cascade + §7 覆蓋誠實）→ 送外部 ②。
+- 2026-06-26 **Codex Plan Gate（② 維度 C）：`CODEX_PLAN_APPROVED`**（**0 findings / 0 Blocker / 0 Required Revision**）— read-only replay 全數獨立重現：`31ac2fa6` resolve `31ac2fa66b0a…`、`HEAD:ecpay.ts`==base `4a258589…`、`HEAD:types/env.d.ts`==base `852dc08c…`、`git diff 31ac2fa6..HEAD -- functions/ types/` 空（committed diff plan-only = 本 plan doc）、base forced tsc **count=789** 含恰 6 個 `checkout/ecpay.ts` noImplicitAny、base stdin esbuild emit **4594B** sha `190247ce…`、frozen patch line-target dry-run apply OK、dual-leaf TS2339 解釋對齊 live `tsconfig.functions.json`/`tsconfig.tests.json`。**Residual boundary（Codex 明示）**：未 apply frozen diff 到 tracked source（read-only plan review）→ **full Path A replay 待 `CODING_ALLOWED` 後 Code 階段重跑**（LOCK-10）。**HEAD-independent anchor → 零 false-reject。Plan Gate 雙道（①+②）全過 = plan 批准；非 coding/push/merge/release 授權、待 owner 明示 `CODING_ALLOWED` 才進 Code 階段。**
+- ⬜（後續 dated 收錄：owner `CODING_ALLOWED` → Code 階段〔source commit + full replay @ committed〕→ ③ Codex Code → ④ Faithfulness → merge-front 7 gates → owner `MERGE_ALLOWED` → squash → `MERGED_MAIN`）
 
 ## owner 鎖定表（2026-06-26，faithful 收錄；Path A 更新版）
 
