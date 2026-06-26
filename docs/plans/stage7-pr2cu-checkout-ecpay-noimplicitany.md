@@ -79,11 +79,35 @@ env.d.ts 唯一允許落地的 3 行新增（接在 L57 `ECPAY_HASH_IV?` 後、L
   - ✅ Claude scout（read-only @ `31ac2fa6`）→ 逐檔 error set（**恰 6 錯**：L52,42 / L52,51 / L56,39 / L56,48 〔4×TS7031 ctx〕+ L174,22 / L174,29 〔2×TS7006 helper〕）+ caller cascade（handler ＝ Pages entrypoint 無 TS importer；`pickSafeUrl` 局部非-export、caller 僅同檔 L137/L138）+ env 缺口發現（3×TS2339）。
   - ✅ **非 commit full-solution spike 實證**（見 §Spike，working tree 已 revert clean、blobs 回 base）。
   - ✅ `PLAN_DRAFT` — 本 doc。
-  - ⬜ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow；收斂三維；主線獨立裁決非採 raw）
-  - ⬜ `CHATGPT_ARCH_APPROVED`（① 維度 B）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C）→ ⬜ owner `CODING_ALLOWED`
+  - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow `wf_68262a80-f0c`、3 readonly-reviewer 全 `claude-opus-4-8` 繼承 Opus、收斂三維；1 tier2 真缺陷〔單檔 spike 證據敘述〕→ 主線獨立裁決〔dual-leaf 實測、非採 finder「786」推導〕修正 → 一輪 0 新發現；見 §Gate 進程紀錄）
+  - ✅ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 維度 B、2026-06-26、**0 Blocker / 0 Required Revision**、7 架構裁決全 APPROVED、Path A APPROVED_WITH_LOCKS、binding LOCK-1..14；見 §Gate 進程紀錄）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C）→ ⬜ owner `CODING_ALLOWED`
   - ⬜ Code 階段（source commit → full replay @ committed、不沿用 spike）→ ⬜ `CODE_SELF_REVIEW_CLEAN`（維度 A workflow）→ ⬜ `CODEX_CODE_APPROVED`（③）→ ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④）
   - ⬜ merge-front 7 gates → ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪修 gate 回饋）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。外部未送不得自我宣告通過。
+
+### Gate 進程紀錄（dated；faithful 收錄）
+
+- 2026-06-26 Claude **scout（read-only @ `31ac2fa6`）** → 恰 6 錯（4×TS7031 @52/56 + 2×TS7006 @174）+ env 缺口發現（標 `env: Env` 掀 3 unique TS2339 @135/139/146）+ caller cascade（handler Pages entry 無 importer；`pickSafeUrl` 局部、caller 僅同檔）。
+- 2026-06-26 Claude **non-commit full-solution spike**（已 revert clean）→ single-file 證 OD 不足（3 unique TS2339、dual-leaf 計 6 error-line、ecpay.ts 無法進 cleanFiles）→ **Path A**（+env.d.ts 3 key）789→783、REMOVED 6 / ADDED 0、ecpay.ts byte-identical 4594B `190247ce…`、frozen blobs ecpay `4a258589→78ab4e31`、env.d.ts `852dc08c→17efab36`。
+- 2026-06-26 **plan self-review = multi-agent workflow（維度 A、run `wf_68262a80-f0c`、7 agents〔3 finder + 4 verifier〕/ 537792 subagent tokens / 62 tool uses；finder/verifier 皆 `readonly-reviewer` 繼承 session model `claude-opus-4-8`〔0 haiku〕、options `__proto__:null`）→ `PLAN_SELF_REVIEW_CLEAN`**：收斂三維。runtime-security **0 findings**；evidence-integrity backbone（blob 重建、byte-identical、anchor、無 sibling-PR 洩漏、ratchet 算術）**獨立重現全綠**（accepted, positive）；status-line nit（tier3）**refuted**（記錄當時態、immaterial）。**1 tier2 真缺陷**（scope-fidelity + evidence-integrity 雙維命中）：原 plan 把單檔 spike 寫「ADDED 6 / 789→789 / 白做」與自身「3 個 TS2339」矛盾。**主線獨立對抗式裁決（v3.1 §5、非採 raw）**：finder 推導「786/ADDED 3」**未經 forced tsc 量測、亦不對**（漏 dual-leaf）；回查實測 single-file ADDED=6（3 unique × 2 leaf：`tsconfig.functions.json` noImplicitAny:true + `tsconfig.tests.json` noImplicitAny:false 皆 include `functions/**/*.ts`、TS2339 雙報、noImplicitAny 單報）、errorCount 789。**已修 plan**（§Path A 緣由 + §Spike）：3 unique TS2339 + dual-leaf 機制 + 真因（ecpay.ts 殘留 3 TS2339 → 無法進 cleanFiles，非「白做」）；grep 全檔 0 殘留矛盾 → 一輪 0 新發現。**review agents 未污染 git**（主線驗：HEAD source blob 未動、staged 空、`git diff 31ac2fa6..HEAD -- functions/ types/` 空）。
+- 2026-06-26 **plan doc commit `d607aa0d`**（branch、local、未 push、plan-only +270 / 0 source；commit 後核 staged set 僅 plan doc、net source diff base..HEAD 空、`HEAD:src` blobs == base `4a258589`/`852dc08c`）→ 中文報告 6 欄（gate-state `PLAN_SELF_REVIEW_CLEAN`）→ 產自足 **ChatGPT Arch packet**（`~/Desktop/chiyigo-packets/chiyigo-pr2cu-chatgpt-arch-packet.md`、repo 外、§4 含全檔 base source）→ 送外部 ①。
+- 2026-06-26 **ChatGPT Architecture Gate（① 維度 B）：`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（**0 Blocker / 0 Required Revision**）— 7 架構裁決全 **APPROVED**（handler `{request:Request;env:Env}` / full Env 非 Pick〔env 整包 forward〕 / 不用 CfRequest〔無 `.cf`〕 / `pickSafeUrl(input:unknown,origin:string)`〔defensive guard〕 / 不加 return type〔維持 `string\|null`〕 / env.d.ts 補 3 optional key〔限 sealed Env gap repair〕 / Path A scope expansion〔APPROVED_WITH_LOCKS、須持續揭露〕）。**binding LOCK-1..14（② Codex Plan / ③ Codex Code / ④ Faithfulness 須保留）**：
+  - **LOCK-1 檔案範圍**：Code 階段 source diff 僅允許 `functions/api/auth/payments/checkout/ecpay.ts` 與 `types/env.d.ts`；plan doc / gate log 可另列、不得混入其他 source。
+  - **LOCK-2 ecpay.ts 編輯點**：只改 L52 / L56 / L174 三個簽名 annotation。
+  - **LOCK-3 handler OD**：`onRequestOptions`/`onRequestPost({ request, env }: { request: Request; env: Env })`；禁 `Pick`/`CfRequest`/custom ctx alias/arrow wrapper。
+  - **LOCK-4 helper OD**：`pickSafeUrl(input: unknown, origin: string)`；禁加 explicit return type、禁改 function body、禁 export。
+  - **LOCK-5 Env 補鍵**：`types/env.d.ts` 只新增 `ECPAY_RETURN_URL?: string;` / `ECPAY_CLIENT_BACK_URL?: string;` / `ECPAY_ORDER_RESULT_URL?: string;`。
+  - **LOCK-6 Env 邊界**：禁改既有 `ECPAY_MODE/MERCHANT_ID/HASH_KEY/HASH_IV` 型別·optionality·順序語意；禁動 `CfRequest` alias、`cloudflare:test` bridge、其他 Env 段。
+  - **LOCK-7 金流 red-line**：禁改 `createPaymentIntent`/`generateMerchantTradeNo`/`getEcpayCheckoutUrl`/`buildEcpayCheckoutFields`/CheckMacValue 路徑/amount bounds/currency/kind·status/metadata 寫入。
+  - **LOCK-8 權限 red-line**：禁改 `requirePaymentAccess` 呼叫、requisition owner check、KYC/payment gate、audit event type·severity·payload。
+  - **LOCK-9 URL red-line**：禁改 `returnUrl`/`clientBackUrl`/`orderResultUrl` fallback 順序；禁改 `pickSafeUrl` same-origin 判斷。
+  - **LOCK-10 Evidence**：Code 階段以 actual committed source 重跑 forced tsc / sort-diff REMOVED·ADDED / ratchet report / `git diff --check` / byte-identical；不沿用 spike。
+  - **LOCK-11 byte-identical**：`ecpay.ts` canonical esbuild stdin emit byte-identical；`.d.ts` 維持零 runtime footprint。
+  - **LOCK-12 staged set**：commit 前 staged set 不含 `CLEANUP_PLAN.md`、不用 `git add -A`。
+  - **LOCK-13 Gate 邊界**：② Codex Plan / ③ Codex Code / ④ ChatGPT Faithfulness 仍須完整跑；本回覆不授權 coding/push/merge。
+  - **LOCK-14 Scope disclosure**：後續所有 packet 保留「原單檔 OD 被 spike 否決、owner 改裁 Path A 2 檔」脈絡，避免被誤判為 scope creep。
+  - **可送 ② Codex Plan Gate；非 coding 授權，待 ② 通過 + owner 明示 `CODING_ALLOWED`。**
+- ⬜（後續 dated 收錄：② Codex Plan → owner `CODING_ALLOWED` → Code 階段 → ③ Codex Code → ④ Faithfulness → merge-front → squash）
 
 ## owner 鎖定表（2026-06-26，faithful 收錄；Path A 更新版）
 
