@@ -20,11 +20,11 @@ import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import { safeUserAudit } from '../../../utils/user-audit'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env)
   // P1-16：DLQ raw_body 含 ECPay payload（PII / 帳號 / 部分卡資訊）；
   // 與 metadata-archive 對齊，要求 step-up elevated:payment + admin:payments scope。

@@ -20,11 +20,11 @@ import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 import { safeUserAudit } from '../../../utils/user-audit'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env)
 
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_PAYMENT, 'view_metadata_archive')

@@ -23,11 +23,11 @@ import { getCorsHeaders } from '../../../utils/cors'
 import { SCOPES } from '../../../utils/scopes'
 import { PAYMENT_STATUS, isPaymentStatus } from '../../../utils/payments'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env)
   // P1-17 Phase 3: 任一金流 fine scope 即可讀（finance/support 透過 :read 通過）
   const { error } = await requireAnyScope(
@@ -91,7 +91,8 @@ export async function onRequestGet({ request, env }) {
   const refundMap = new Map(
     ((refunded.results ?? []) as RefundRow[]).map(r => [r.bucket, r] as const),
   )
-  const buckets = (main.results ?? []).map(r => ({
+  type MainRow = { bucket: string; count: number; sum_subunit: number }
+  const buckets = ((main.results ?? []) as MainRow[]).map(r => ({
     bucket:               r.bucket,
     count:                Number(r.count) || 0,
     sum_subunit:          Number(r.sum_subunit) || 0,
