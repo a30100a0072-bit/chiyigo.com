@@ -70,8 +70,8 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
   - ✅ Claude scout（read-only @ `745019ab`）→ 逐檔 error set（13 錯：aggregate 5 / webhook-dlq 4 / metadata-archive 4）+ caller cascade（三 handler ＝ Pages entrypoint；direct importer ＝ `admin-payments.test.ts` direct-literal call）+ env 存取掃描（僅 `env.chiyigo_db`，無缺口）。
   - ✅ **非 commit full-solution spike 實證**（見 §Spike，working tree 已 revert clean、blobs 回 base）。
   - ✅ `PLAN_DRAFT` — 本 doc。
-  - ⬜ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow、收斂三維；待跑）
-  - ⬜ `CHATGPT_ARCH_APPROVED`（① 維度 B）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C）→ ⬜ owner `CODING_ALLOWED`
+  - ✅ `PLAN_SELF_REVIEW_CLEAN`（multi-agent workflow `wf_6d11bd01-c0a`、3 readonly-reviewer finder 繼承 Opus〔scope-fidelity/runtime-security/evidence-integrity〕+ 對抗 verifier、`__proto__:null`；1 tier3 doc-label finding〔L-1 cell「2 ctx」→「4 ctx-err」〕主線裁決修正、runtime-security + evidence-integrity **0 findings**、一輪 0 新發現；見 §Gate 進程紀錄）
+  - ⏳ `CHATGPT_ARCH_APPROVED`（① 維度 B、packet 已產、**待 owner 送外部**）→ ⬜ `CODEX_PLAN_APPROVED`（② 維度 C）→ ⬜ owner `CODING_ALLOWED`
   - ⬜ Code 階段（`CODING_ALLOWED` → source commit → full replay @ committed、不沿用 spike）→ ⬜ `CODE_SELF_REVIEW_CLEAN`（維度 A workflow）→ ⬜ `CODEX_CODE_APPROVED`（③）→ ⬜ `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④）
   - ⬜ merge-front 7 gates → ⬜ owner `MERGE_ALLOWED` → ⬜ `MERGED_MAIN`
 - **通則**：任何更改（首次 plan / code ＋ 每輪修 gate 回饋）先對抗式 self-review 至「一輪 0 新發現」才 commit → 中文報告 6 欄 → 送外部。外部未送不得自我宣告通過。
@@ -80,7 +80,9 @@ export async function onRequestGet({ request, env }: { request: Request; env: En
 
 - 2026-06-27 Claude **scout（read-only @ `745019ab`）** → 13 錯（aggregate 5〔L26/L30 4×TS7031 ctx + L94 1×TS7006 `r`〕、webhook-dlq 4〔L23/L27 4×TS7031〕、metadata-archive 4〔L23/L27 4×TS7031〕）+ env 存取掃描（三檔僅 `env.chiyigo_db`、無未宣告 key → 無 Path A 風險）+ caller cascade（三 handler Pages entry；`admin-payments.test.ts` L21-23 direct import + L201/208/248 direct-literal call）。
 - 2026-06-27 Claude **non-commit full-solution spike**（已 revert clean）→ single-file（3 source、不改 env.d.ts）證足：total **783→770**、三檔 0 殘留、sort-diff **REMOVED=13 / ADDED=0**、三檔 emit **byte-identical**、aggregate `MainRow` cast 乾淨（vs `Record<string,unknown>` 掀 TS2345 ×2 已否決）。frozen blobs：aggregate `1a09ace8→283746af`、webhook-dlq `4521cf3a→39bdc897`、metadata-archive `f7e442c4→1292b21f`。
-- ⬜（後續 dated 收錄：plan self-review → plan commit → 中文報告 → ChatGPT Arch packet → ① …）
+- 2026-06-27 **plan self-review = multi-agent workflow（維度 A、run `wf_6d11bd01-c0a`、4 agents〔3 finder + 1 verifier〕/ 377246 subagent tokens / 53 tool uses；finder/verifier 皆 `readonly-reviewer` 繼承 session model `claude-opus-4-8`、`__proto__:null`）→ `PLAN_SELF_REVIEW_CLEAN`**：收斂三維。**runtime-security 0 findings、evidence-integrity 0 findings**（finder 獨立重現 base forced tsc 13 錯分佈、3 base emit sha〔2931/2217/1941B〕、ratchet 783/75/259、MainRow-clean vs Record-breaks-TS2345 推理，全對上、無 discrepancy）。**1 tier3 doc-label finding（scope-fidelity）**：L-1 lock cell 把 webhook-dlq/metadata-archive 寫「2 ctx」（混用 ctx error-count 與 sig-line-count；該兩檔各 4 ctx error）→ per-file tally 讀成 5+2+2=9、與同 cell「全 13 錯」矛盾。**主線獨立裁決（v3.1 §5、非採 raw）**：grep 全檔確認唯 L89 有 unit-conflation（top table L7-9 / scout L70·L81 / error inventory L143 皆正確 4/4）→ 修 L-1 為「4 ctx-err … 全 13 錯（5+4+4）」→ 一輪 0 新發現。**review agents 未污染 git**（主線驗：HEAD `745019ab`〔plan commit 前〕、3 source blob 未動〔1a09ace8/4521cf3a/f7e442c4〕、staged 空、`git diff 745019ab..HEAD -- functions/ types/` 空）。
+- 2026-06-27 **plan doc commit `0606b29e`**（branch、local、未 push、plan-only +288 / 0 source；commit 後核 staged set 僅 plan doc、CLEANUP_PLAN.md 未 staged、net source diff base..HEAD 空、`HEAD:src` 三 blob == base `1a09ace8`/`4521cf3a`/`f7e442c4`）→ 中文報告 6 欄（gate-state `PLAN_SELF_REVIEW_CLEAN`）→ 產自足 **ChatGPT Arch packet**（`~/Desktop/chiyigo-packets/chiyigo-pr2cv-chatgpt-arch-packet.md`、repo 外、§2 HEAD-independent anchor + §3 frozen diff + §7 三檔 full base source）→ **待 owner 送外部 ①**。
+- ⬜（後續 dated 收錄：① ChatGPT Arch → ② Codex Plan → owner CODING_ALLOWED → Code 階段 …）
 
 ## owner 鎖定表（2026-06-27；single-file 版）
 
