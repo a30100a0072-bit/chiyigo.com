@@ -190,12 +190,12 @@ index 1a09ace8..283746af 100644
 @@ -23,11 +23,11 @@ import { getCorsHeaders } from '../../../utils/cors'
  import { SCOPES } from '../../../utils/scopes'
  import { PAYMENT_STATUS, isPaymentStatus } from '../../../utils/payments'
- 
+
 -export async function onRequestOptions({ request, env }) {
 +export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
    return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
  }
- 
+
 -export async function onRequestGet({ request, env }) {
 +export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
    const cors = getCorsHeaders(request, env)
@@ -218,16 +218,16 @@ index f7e442c4..1292b21f 100644
 @@ -20,11 +20,11 @@ import { getCorsHeaders } from '../../../utils/cors'
  import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
  import { safeUserAudit } from '../../../utils/user-audit'
- 
+
 -export async function onRequestOptions({ request, env }) {
 +export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
    return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
  }
- 
+
 -export async function onRequestGet({ request, env }) {
 +export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
    const cors = getCorsHeaders(request, env)
- 
+
    const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_PAYMENT, 'view_metadata_archive')
 diff --git a/functions/api/admin/payments/webhook-dlq.ts b/functions/api/admin/payments/webhook-dlq.ts
 index 4521cf3a..39bdc897 100644
@@ -236,12 +236,12 @@ index 4521cf3a..39bdc897 100644
 @@ -20,11 +20,11 @@ import { getCorsHeaders } from '../../../utils/cors'
  import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
  import { safeUserAudit } from '../../../utils/user-audit'
- 
+
 -export async function onRequestOptions({ request, env }) {
 +export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
    return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
  }
- 
+
 -export async function onRequestGet({ request, env }) {
 +export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
    const cors = getCorsHeaders(request, env)
