@@ -119,8 +119,8 @@ ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（架構上可進 Codex Plan
 - [x] `SPEC_APPROVED`（owner directive 2026-06-28：delete.ts ＝ 下一棒）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（L1 single-agent 對抗式 readonly-reviewer〔繼承 Opus〕→ 0 blocking / 0 major / **2 minor**，皆採納修入 plan：**M-1** byte-identical recipe 原為 HEAD-vs-worktree 恆真式 → 改 pin base `cc8c786d`〔未標註〕vs 已標註 head〔§4/§6〕，且 reviewer 獨立把 §2 edit 套 base blob 重算得同 3632B/`e8d8c565…` 雙證 claim；**M-2** §3 prose 誤列 `effectiveScopesFromJwt` 為 env-forward〔實吃 `stepCheck.user`〕→ 修正。cascade root-cause〔getPaymentIntent env 參數 baseline TS7006、回傳 any〕+ sort-diff ADDED=0 + ratchet 756/70/264→751/69/265 + scope 無 creep 皆 reviewer 獨立 CONFIRMED）
 - [x] `CHATGPT_ARCH_APPROVED`（2026-06-28、`APPROVED_WITH_LOCKS` PR-2cy-L1..L10〔§7〕+ 防禦表；plan 已滿足/承諾全部 10 lock、無 plan 邏輯變更。明示「非 merge 授權、非 code correctness 最終裁決」）
-- [ ] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`
-- [ ] `CODE_SELF_REVIEW_CLEAN`
+- [x] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`（2026-06-28、Codex live replay：`cc8c786d..ce0d2db2` 僅改 plan doc、source blob 兩端同 `2381d909…`、virtual full-solution replay 756→751 REMOVED=5/ADDED=0、移除恰 5 個 delete.ts TS7031、byte-identical 3632B/`e8d8c565…`、locks L1-L10 一致；no blocking。明示非 Code Gate / 非 merge 授權）
+- [x] `CODE_SELF_REVIEW_CLEAN`（L1 single-agent 對抗式 readonly-reviewer〔繼承 Opus〕→ **0 blocking/major/minor**〔2 informational：L10 workers-types caveat、`requireStepUp` 簽名由 ADDED=0 背書〕；reviewer 獨立重跑**非恆真式** byte-identical〔`cc8c786d` 未標註 vs 已標註 working tree〕得 3632B/`e8d8c565…`、自算 comm REMOVED=5/ADDED=0、確認 diff 恰 2 行〔L40/L44〕無夾帶他檔、locks L1-L5/L9 honored。**機械層全綠**：L6 sort-diff REMOVED 5/ADDED 0 · L7 byte-identical 3632B/`e8d8c565…` · ratchet **751/69/265** · lint 0 · test:cov **737 passed/90.28%** · test:int **1328 passed** · build:functions compiled · npm audit 0 · verify:browser-pipeline 25p/214r）
 - [ ] `CODEX_CODE_APPROVED`
 - [ ] `CHATGPT_CODE_FAITHFULNESS_APPROVED` → `MERGE_ALLOWED`
 - [ ] `MERGED_MAIN`（squash-merge --delete-branch；merge-front 重 7 gates 全綠後；更新 topic receipt + 刪 packets）
