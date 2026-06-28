@@ -183,28 +183,31 @@ index 18d39e63..649ae26c 100644
 - **staged set**：僅三 source 檔 + 本 plan doc；**禁** `git add -A`、`CLEANUP_PLAN.md` 不進 commit。
 - **硬驗收**：source diff 與本 doc §4 frozen diff **逐行一致**（人審 `git diff --stat` 僅 3 檔、各 +2/−2）；超出 = scope creep = Gate fail。
 
-## §7 proposed locks（待 ChatGPT Arch 裁；先 codify 自我承諾、無 plan 邏輯變更）
+## §7 Binding locks（ChatGPT Arch ① `APPROVED_WITH_LOCKS`、2026-06-29、binding）
 
-> Plan Gate（① ChatGPT Arch）將裁定/補強 binding locks；以下為 plan 自我承諾，Arch 裁後以其 lock set 為準。
+ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（**0 blocker / 0 required revision / 1 non-blocking note**；架構上可進 Codex Plan Gate ②、**非 merge 授權、非 code correctness 最終裁決**）。7 架構裁決全 APPROVE（Convention A / full Env vs Pick / plain Request vs CfRequest / `params:Record<string,string>` / 非 Path-A / type-only claim〔Code 重證〕/ cascade-safety〔D1·spine any 不升格〕）。11 binding lock 全部已被本 plan 滿足/承諾（codify、無 plan 邏輯變更）：
 
-| Lock | 內容 | plan 對應 |
+| Lock | 內容 | plan 對應 / 履行 |
 |---|---|---|
-| L1 Scope | source 改動只能是三檔各兩處 handler context annotation（共 6 改）；plan doc 可更新 gate log、不得夾帶其他 source | §0/§2/§6 |
-| L2 Runtime hot-zone | 不改 runtime branch / SQL / CAS（claim/lock/final）/ ECPay 呼叫 / 三表同步 / reconciliation 路徑 / audit payload / scope·step-up gate / rate-limit / response shape / docstring | §0/§5、byte-identical §4 |
-| L3 排除檔 | 禁碰 `utils/payments.ts`/`payment-vendors/ecpay.ts`/`webhooks/payments/[vendor].ts`/`env.d.ts`/adapter/mock/ecpay/同域 payments 其他檔；需碰任一 → 停下回 `PLAN_DRAFT` | §0 |
-| L4 No any / no cast | 禁新增 explicit `any`、禁用 cast 壓錯；只允許 Convention A context type | §0/§2 |
-| L5 params 形態 | approve/reject `params` 維持 `Record<string, string>`；不改 `Number(params?.id)` 行為；list 不引入 params destructure | §2/§3 |
-| L6 sort-diff | Code 階段必重跑 full-solution sort-diff；僅允許 REMOVED 恰 14 / ADDED 0；ADDED 非空 → 回 gate 重審、禁自擴 scope 修 | §6 |
-| L7 byte-identical | Code 階段必重跑 byte-identical emit；base〔`3da9b947` 未標註 blob〕vs 標註後 blob 必 byte-identical；sha/bytes 不同＝runtime drift | §4/§6 |
-| L8 baseline | baseline `1119/175` 不得 `--update`；只接受 raw 751→737 / cleanFiles 265→268 / errorFiles 69→66 reduce 型變更 | §0/§6 |
-| L9 Tier-0 防線 | approve.ts 退款執行防線不降級：step-up `approve_requisition_refund` / `admin:payments:refund` scope / 雙層 CAS / ECPay / reconciliation / critical audit 皆不變；reject/list 防線同理 | §5 |
-| L10 D1/spine any 不升格 | 不得把「D1 / `getPaymentIntent` 等 spine export 現為 `any`」升格長期架構結論；未來引入 workers-types 或銳化 spine 回傳型別 → 本檔需重評 cascade | §3.cascade / §4 ⚠ caveat |
+| L1 Scope | 僅 3 source 各 2 處 handler ctx annotation、共 6 改；plan doc 只可更新 gate log | §0/§2/§6 staged set |
+| L2 Runtime hot-zone | 不改 runtime branch / SQL / CAS / ECPay / 三表同步 / reconciliation / audit / scope / step-up / rate-limit / response / docstring | §0/§5、byte-identical §4 |
+| L3 排除檔 | 禁碰 `utils/payments.ts`/`payment-vendors/ecpay.ts`/`webhooks/payments/[vendor].ts`/`env.d.ts`/adapter/mock/ecpay/同域 payments 其他檔 | §0 |
+| L4 No any / no cast | 禁 `any`、禁 cast、禁 helper type；只允許 Convention A inline context annotation | §0/§2 |
+| L5 Params | approve/reject 固定 `params: Record<string,string>`；不改 `Number(params?.id)`；list 不引入 params | §2/§3 |
+| L6 sort-diff | Code 階段必重跑；只接受 REMOVED 恰 14 / ADDED 0；否則回 gate | §6 |
+| L7 byte-identical | Code 階段必以 base `3da9b947` 未標註 blob vs committed 標註 blob 重證三檔 emit identical | §4/§6 |
+| L8 Ratchet baseline | 不得 `--update` baseline；只接受 751→737 / 69→66 / 265→268 方向 | §0/§6 |
+| L9 Tier-0 防線 | approve.ts step-up / fine scope / 雙 CAS / ECPay refund / reconciliation / critical audit / TG sync 全不可變；reject/list 同理 | §5 |
+| L10 不升格 any 結論 | D1/spine any 僅本輪 cascade-safe 現況、非長期架構結論；未來 workers-types 或 spine 回傳銳化需重評 | §3.cascade / §4 ⚠ caveat |
+| L11 Source landing parity | Code 階段 committed diff 必與 §4 frozen diff（= packet §3）byte-for-byte 對齊；任何額外 hunk 需回 Plan Gate | §6 硬驗收 |
+
+**NB-1（non-blocking）**：approve.ts 為退款執行端，即使本輪 type-only，Code Gate ③ 須明確要求 Codex 對「無 runtime hunk」做**機械核對**（diff hunk-level，非只看 tsc 結果）。→ 履行：Codex Code packet（③）將列「name-status source-bearing 恰 3 檔 + 三檔 full hunks 證僅 handler 簽名行變 + 函式體 byte-unchanged」，明請 Codex 機械核 no-runtime-hunk。
 
 ## §8 gate trail（state 隨進度更新）
 
 - [x] `SPEC_APPROVED`（owner directive 2026-06-29：requisition-refund family ＝ 下一棒；C-1 ＝ 三檔一棒 batch）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（2026-06-29、L1 single-agent 對抗式 `readonly-reviewer`〔繼承 session model Opus 4.8〕→ **0 blocking / 0 major / 1 minor + 2 informational**，主線獨立裁決後全處置：**M-1**〔minor〕§5 list red-line 誤列「soft-delete 過濾 LEFT JOIN」→ 主線獨立查實 list query〔L69-92〕僅 `WHERE rrr.status=?`、LEFT JOIN 為 enrichment、**無 deleted_at 過濾** → 修正為「enrichment、無 soft-delete 過濾」；**I-2**〔info〕§1 untracked 狀態 stale → clarify 為 plan-only commit 前預期態；**I-3**〔info〕scratchpad 缺 `*.head.ts`、但 plan recipe 為正確非恆真式、reviewer 已獨立 re-derive reject.ts byte-identical〔`3da9b947` 未標註 vs 標註得同 2495B/`e516dcaa…`〕補實 → 無 plan defect、無 action。**reviewer live 獨立驗證 CONFIRMED**（非採 raw）：scope 6 edits/14 TS7031〔loc 逐一吻合〕· cascade=0〔sort-diff REMOVED 14/ADDED 0、含 approve.ts DEFER-spine import 面 + `webhooks/payments/[vendor].ts` 19 錯前後不變 + tests-leaf assignable〕· byte-identical 非恆真〔explicit-SHA re-derive〕· ratchet 751/69/265→737/66/268〔live `--report`〕· `Env` ambient `declare global` + 三檔僅 `env.chiyigo_db` → 無 Path-A · §5 Tier-0 red-lines 完整。**review agent 未污染 git**〔主線驗 HEAD `3da9b947`、源 blob 未動、staged 空〕。一輪 0 新發現〔僅餘修正後 doc，技術核心同輪 CONFIRMED clean〕）
-- [ ] `CHATGPT_ARCH_APPROVED`（① 維度 B）
+- [x] `CHATGPT_ARCH_APPROVED`（① 維度 B、2026-06-29、`APPROVED_WITH_LOCKS`：0 blocker / 0 required revision / 1 NB；7 架構裁決全 APPROVE、binding **L1-L11**〔§7〕+ 風險表 5 + 防禦表 8；plan 已滿足/承諾全 11 lock、無 plan 邏輯變更。明示非 merge 授權、非 code correctness 最終裁決）
 - [ ] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`（② 維度 C）
 - [ ] `CODE_SELF_REVIEW_CLEAN`（Code 階段 L1 single-agent 對抗式）
 - [ ] `CODEX_CODE_APPROVED`（③ 維度 C）
