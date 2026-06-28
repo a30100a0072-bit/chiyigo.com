@@ -108,12 +108,12 @@ index 7fcaa694..e1fd8a14 100644
 @@ -34,11 +34,11 @@ import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
  // 反而在 UI/API 隱形。
  const VALID_STATUS = new Set(['pending', 'approved', 'rejected', 'processing'])
- 
+
 -export async function onRequestOptions({ request, env }) {
 +export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
    return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
  }
- 
+
 -export async function onRequestGet({ request, env }) {
 +export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
    const cors = getCorsHeaders(request, env)
@@ -126,16 +126,16 @@ index a8418f21..5b29b5ac 100644
 @@ -34,11 +34,11 @@ import { safeUserAudit } from '../../../../utils/user-audit'
  import { DEBUG_REASON_CODES } from '../../../../utils/audit-aggregate-debug'
  import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'
- 
+
 -export async function onRequestOptions({ request, env }) {
 +export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
    return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
  }
- 
+
 -export async function onRequestPost({ request, env, params }) {
 +export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
    const cors = getCorsHeaders(request, env)
- 
+
    const stepCheck = await requireStepUp(
 diff --git a/functions/api/admin/requisition-refund/[id]/reject.ts b/functions/api/admin/requisition-refund/[id]/reject.ts
 index 18d39e63..649ae26c 100644
@@ -144,16 +144,16 @@ index 18d39e63..649ae26c 100644
 @@ -21,11 +21,11 @@ import { getCorsHeaders } from '../../../../utils/cors'
  import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes'
  import { safeUserAudit } from '../../../../utils/user-audit'
- 
+
 -export async function onRequestOptions({ request, env }) {
 +export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
    return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
  }
- 
+
 -export async function onRequestPost({ request, env, params }) {
 +export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
    const cors = getCorsHeaders(request, env)
- 
+
    const stepCheck = await requireStepUp(
 ```
 
@@ -208,7 +208,7 @@ ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（**0 blocker / 0 required r
 - [x] `SPEC_APPROVED`（owner directive 2026-06-29：requisition-refund family ＝ 下一棒；C-1 ＝ 三檔一棒 batch）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（2026-06-29、L1 single-agent 對抗式 `readonly-reviewer`〔繼承 session model Opus 4.8〕→ **0 blocking / 0 major / 1 minor + 2 informational**，主線獨立裁決後全處置：**M-1**〔minor〕§5 list red-line 誤列「soft-delete 過濾 LEFT JOIN」→ 主線獨立查實 list query〔L69-92〕僅 `WHERE rrr.status=?`、LEFT JOIN 為 enrichment、**無 deleted_at 過濾** → 修正為「enrichment、無 soft-delete 過濾」；**I-2**〔info〕§1 untracked 狀態 stale → clarify 為 plan-only commit 前預期態；**I-3**〔info〕scratchpad 缺 `*.head.ts`、但 plan recipe 為正確非恆真式、reviewer 已獨立 re-derive reject.ts byte-identical〔`3da9b947` 未標註 vs 標註得同 2495B/`e516dcaa…`〕補實 → 無 plan defect、無 action。**reviewer live 獨立驗證 CONFIRMED**（非採 raw）：scope 6 edits/14 TS7031〔loc 逐一吻合〕· cascade=0〔sort-diff REMOVED 14/ADDED 0、含 approve.ts DEFER-spine import 面 + `webhooks/payments/[vendor].ts` 19 錯前後不變 + tests-leaf assignable〕· byte-identical 非恆真〔explicit-SHA re-derive〕· ratchet 751/69/265→737/66/268〔live `--report`〕· `Env` ambient `declare global` + 三檔僅 `env.chiyigo_db` → 無 Path-A · §5 Tier-0 red-lines 完整。**review agent 未污染 git**〔主線驗 HEAD `3da9b947`、源 blob 未動、staged 空〕。一輪 0 新發現〔僅餘修正後 doc，技術核心同輪 CONFIRMED clean〕）
 - [x] `CHATGPT_ARCH_APPROVED`（① 維度 B、2026-06-29、`APPROVED_WITH_LOCKS`：0 blocker / 0 required revision / 1 NB；7 架構裁決全 APPROVE、binding **L1-L11**〔§7〕+ 風險表 5 + 防禦表 8；plan 已滿足/承諾全 11 lock、無 plan 邏輯變更。明示非 merge 授權、非 code correctness 最終裁決）
-- [ ] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`（② 維度 C）
+- [x] `CODEX_PLAN_APPROVED`（② 維度 C、2026-06-29、**0 blocking**）→ ⏳ owner `CODING_ALLOWED`（**待明示**）。Codex live replay 全重現：base `3da9b947`、HEAD `a1a169ff`、delta 僅 plan doc、三 source blob base==plan、`chiyigo-pr2cz.diff` `git apply --check --whitespace=error` clean、ratchet `RATCHET_BASE_REF=3da9b947` → 751/69/265。frozen source diff ＝ 6 handler-ctx annotation、**no runtime hunk / import / SQL / CAS / audit / payment-flow change**。**2 non-blocking caveat**：(a) Codex 環境計 packet 586 行 vs 本地實測 648〔LF-only、0 CR；環境計數差異、anchors/content/diff 已驗、packet SHIPPED 後刪〕；(b) `git diff --check` flag plan doc §4 內嵌 frozen-diff 空白 context 行〔markdown 內嵌 diff 的 `" "` 行、**非 source**；source patch `--whitespace=error` clean〕→ 已 strip plan doc 尾空白〔cosmetic、authoritative `chiyigo-pr2cz.diff` 保留 faithful `" "` context；±annotation 行不變、L11 byte-for-byte 仍立〕。明示**非 CODING_ALLOWED / 非 code approval / 非 merge 授權**
 - [ ] `CODE_SELF_REVIEW_CLEAN`（Code 階段 L1 single-agent 對抗式）
 - [ ] `CODEX_CODE_APPROVED`（③ 維度 C）
 - [ ] `CHATGPT_CODE_FAITHFULNESS_APPROVED` → `MERGE_ALLOWED`（④ 維度 B-code）
