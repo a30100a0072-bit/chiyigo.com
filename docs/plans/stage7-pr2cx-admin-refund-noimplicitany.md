@@ -77,11 +77,26 @@
 - **merge-front 7 gates（對齊 CI `.github/workflows/ci.yml`）**：`lint` · `typecheck:ratchet` · `verify:browser-pipeline` · `test:cov` · `test:int` · `build:functions` · `npm audit --omit=dev --audit-level=high`。
 - **staged set**：僅 `refund.ts` + 本 plan doc；**禁** `git add -A`、`CLEANUP_PLAN.md` 不進 commit。
 
-## §7 gate trail（state 隨進度更新）
+## §7 Locks（ChatGPT Arch `APPROVED_WITH_LOCKS`、2026-06-28、binding）
+
+ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（架構上可進 Codex Plan Gate、**非 merge 授權**）。8 條 lock 全部已被本 plan 滿足（codify、無 plan 變更）：
+
+| Lock | 內容 | plan 對應 |
+|---|---|---|
+| PR-2cx-L1 | source scope 僅 `functions/api/admin/payments/intents/[id]/refund.ts` | §0 |
+| PR-2cx-L2 | 僅允許兩處 handler context annotation：L39、L43 | §2 |
+| PR-2cx-L3 | 禁碰 `utils/payments.ts`、`delete.ts`、`env.d.ts`、adapter registry、mock/ecpay、webhooks | §0 |
+| PR-2cx-L4 | 禁新增 explicit `any`、禁改 runtime branch、禁改 SQL、禁改 response shape | §0/§5 |
+| PR-2cx-L5 | 必證 byte-identical emit / runtime 行為不變 | §6 |
+| PR-2cx-L6 | 驗證目標：raw 761→756、`refund.ts` 5→0、+1 cleanFile、不淨增錯 | §0/§6 |
+| PR-2cx-L7 | `payments.ts` adapter typing 只能由後續 PaymentAdapter interface coupled PR 處理 | §0/§4 |
+| PR-2cx-L8 | migration/rollback/DB index/Tx/SoftDel/Unique/Page/Backup 皆不得變更（出現即 scope creep） | type-only、無 DB/schema 變更 |
+
+## §8 gate trail（state 隨進度更新）
 
 - [x] `SPEC_APPROVED`（owner ruling 2026-06-28）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（L1 single-agent 對抗式 readonly-reviewer〔繼承 Opus〕→ `PLAN_CLEAN` 0 blocking/major/minor；1 informational〔D1=any cascade-safe 根因〕主線採納補入 §3）
-- [ ] `CHATGPT_ARCH_APPROVED`
+- [x] `CHATGPT_ARCH_APPROVED`（2026-06-28、`APPROVED_WITH_LOCKS` PR-2cx-L1..L8〔§7〕；plan 已滿足全部 8 lock、無 plan 變更）
 - [ ] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`
 - [ ] `CODE_SELF_REVIEW_CLEAN`
 - [ ] `CODEX_CODE_APPROVED`
