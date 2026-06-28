@@ -97,8 +97,8 @@ ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（架構上可進 Codex Plan
 - [x] `SPEC_APPROVED`（owner ruling 2026-06-28）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（L1 single-agent 對抗式 readonly-reviewer〔繼承 Opus〕→ `PLAN_CLEAN` 0 blocking/major/minor；1 informational〔D1=any cascade-safe 根因〕主線採納補入 §3）
 - [x] `CHATGPT_ARCH_APPROVED`（2026-06-28、`APPROVED_WITH_LOCKS` PR-2cx-L1..L8〔§7〕；plan 已滿足全部 8 lock、無 plan 變更）
-- [ ] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`
-- [ ] `CODE_SELF_REVIEW_CLEAN`
+- [x] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`（2026-06-28、Codex 驗 packet anchor `5613d208`、機械推論成立、no blocking）
+- [x] `CODE_SELF_REVIEW_CLEAN`（L1 single-agent 對抗式 readonly-reviewer〔繼承 Opus〕→ `CODE_CLEAN` 0 finding；機械層綠：ratchet 756/264 · byte-identical emit sha `e28529aa…a4ca`/5082B · lint clean。diff 恰 2 行 annotation〔L39/L43〕、8 lock 全合規）
 - [ ] `CODEX_CODE_APPROVED`
 - [ ] `CHATGPT_CODE_FAITHFULNESS_APPROVED` → `MERGE_ALLOWED`
 - [ ] `MERGED_MAIN`（squash-merge --delete-branch；更新 topic receipt）
