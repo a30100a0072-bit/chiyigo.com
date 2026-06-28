@@ -92,19 +92,33 @@
 ## §6 verification plan
 
 - **byte-identical**：canonical recipe `esbuild --loader=ts --format=esm`（stdin、Git Bash）對 **PR base `cc8c786d` blob（未標註）vs 已標註 commit blob** 比對 sha（[[feedback_byte_identical_emit_verification]]；**禁 HEAD-vs-HEAD 恆真式**，self-review M-1）— scout 已證 3632B/`e8d8c565…`，code 階段 commit 後以 `cc8c786d` 為 base 重播確認。
+- **full-solution sort-diff（L6）**：Code 階段（commit 後）重跑 forced `tsc -b … --force`，對 756 baseline sort-diff → 必 **REMOVED 恰 5 / ADDED 0**；ADDED 非空 → 回 Codex/ChatGPT gate 重審、禁自擴 scope。
 - **ratchet**：`npm run typecheck:ratchet` → 期望 current `751 / 265`（errorFiles 69）；baseline 不動（**不** `--update`）。
 - **merge-front 7 gates（對齊 CI `.github/workflows/ci.yml`）**：`lint` · `typecheck:ratchet` · `verify:browser-pipeline` · `test:cov` · `test:int`（含 admin-payments delete 4 case）· `build:functions` · `npm audit --omit=dev --audit-level=high`。
 - **staged set**：僅 `delete.ts` + 本 plan doc；**禁** `git add -A`、`CLEANUP_PLAN.md` 不進 commit。
 
-## §7 Locks（ChatGPT Arch — 待裁；APPROVE 後 codify 於此）
+## §7 Locks（ChatGPT Arch `APPROVED_WITH_LOCKS`、2026-06-28、binding）
 
-_pending `CHATGPT_ARCH_APPROVED`。_
+ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（架構上可進 Codex Plan Gate、**非 merge 授權、非 code correctness 最終裁決**）。10 條 lock 全部已被本 plan 滿足/承諾（codify、無 plan 邏輯變更）：
+
+| Lock | 內容 | plan 對應 / 履行 |
+|---|---|---|
+| PR-2cy-L1 | Code source 改動只能是 `delete.ts` 兩處 handler context annotation；plan doc 可更新 gate log、不得夾帶其他 source | §0/§2/§6 staged set |
+| PR-2cy-L2 | 不改 runtime branch / SQL / response shape / audit payload / status 判斷 / soft-delete·anonymize·archive 行為 | §0/§5、byte-identical §4 |
+| PR-2cy-L3 | 禁碰 `payments.ts`/`refund.ts`/`env.d.ts`/adapter/mock/ecpay/webhooks；需碰任一 → 停下重開架構審查 | §0 |
+| PR-2cy-L4 | 禁新增 explicit `any`、禁用 cast 壓錯；只允許 Convention A context type | §0/§2 |
+| PR-2cy-L5 | `params` 維持 `Record<string, string>`；不改 route param 解析 / `Number(params?.id)` 行為 | §2/§3 |
+| PR-2cy-L6 | Code 階段必重跑 full-solution sort-diff；僅允許 REMOVED 恰 5 / ADDED 0；ADDED 非空 → 回 Codex/ChatGPT gate 重審、**禁自擴 scope 修** | §6（Code 階段 enforce） |
+| PR-2cy-L7 | Code 階段必重跑 byte-identical emit；base〔`cc8c786d` 未標註 blob〕vs 標註後 blob 必 byte-identical；sha/bytes 不同＝runtime drift | §4/§6 |
+| PR-2cy-L8 | baseline `1119/175` 不得 `--update`；只接受 raw 756→751 / cleanFiles 264→265 / errorFiles 70→69 reduce 型變更 | §0/§6 |
+| PR-2cy-L9 | destructive admin endpoint 防線不降級：`requireStepUp(ELEVATED_PAYMENT,'delete_payment')` / `admin:payments` scope / `LOCKED_STATUSES` / critical audit 皆不變 | §5 |
+| PR-2cy-L10 | 不得把「D1 / `getPaymentIntent` 現為 `any`」升格長期架構結論；未來引入 `@cloudflare/workers-types` 或銳化 `getPaymentIntent` 回傳型別 → 本檔需重評 cascade | §3.4 / §4 ⚠ caveat |
 
 ## §8 gate trail（state 隨進度更新）
 
 - [x] `SPEC_APPROVED`（owner directive 2026-06-28：delete.ts ＝ 下一棒）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（L1 single-agent 對抗式 readonly-reviewer〔繼承 Opus〕→ 0 blocking / 0 major / **2 minor**，皆採納修入 plan：**M-1** byte-identical recipe 原為 HEAD-vs-worktree 恆真式 → 改 pin base `cc8c786d`〔未標註〕vs 已標註 head〔§4/§6〕，且 reviewer 獨立把 §2 edit 套 base blob 重算得同 3632B/`e8d8c565…` 雙證 claim；**M-2** §3 prose 誤列 `effectiveScopesFromJwt` 為 env-forward〔實吃 `stepCheck.user`〕→ 修正。cascade root-cause〔getPaymentIntent env 參數 baseline TS7006、回傳 any〕+ sort-diff ADDED=0 + ratchet 756/70/264→751/69/265 + scope 無 creep 皆 reviewer 獨立 CONFIRMED）
-- [ ] `CHATGPT_ARCH_APPROVED`
+- [x] `CHATGPT_ARCH_APPROVED`（2026-06-28、`APPROVED_WITH_LOCKS` PR-2cy-L1..L10〔§7〕+ 防禦表；plan 已滿足/承諾全部 10 lock、無 plan 邏輯變更。明示「非 merge 授權、非 code correctness 最終裁決」）
 - [ ] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`
 - [ ] `CODE_SELF_REVIEW_CLEAN`
 - [ ] `CODEX_CODE_APPROVED`
