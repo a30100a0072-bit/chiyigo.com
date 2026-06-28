@@ -26,11 +26,11 @@ import { PAYMENT_STATUS, isPaymentStatus } from '../../../utils/payments'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env)
 
   // P0-6：CSV export 帶整批 PII，必須 step-up（一次性 elevated:payment token）
@@ -167,7 +167,7 @@ export async function onRequestGet({ request, env }) {
     )
     .bind(...binds).all()
 
-  const countByStatus = {}
+  const countByStatus: Record<string, number> = {}
   let sumSucceededSubunit = 0
   for (const r of (aggRows.results ?? [])) {
     countByStatus[r.status] = r.cnt
@@ -187,12 +187,12 @@ export async function onRequestGet({ request, env }) {
 }
 
 // T9（2026-05-06）：CSV 直接從 worker 產出，避免前端跑 500 頁分頁迴圈撞 401 / OOM
-function csvCell(v) {
+function csvCell(v: unknown) {
   if (v == null) return ''
   const s = String(v)
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
 }
-function csvResponse(rows, cors, baseName) {
+function csvResponse(rows: Record<string, unknown>[], cors: Record<string, string>, baseName: string) {
   const header = ['id','user_id','vendor','vendor_intent_id','kind','status',
                   'amount_subunit','amount_raw','currency','requisition_id',
                   'refund_request_status','created_at','updated_at']
