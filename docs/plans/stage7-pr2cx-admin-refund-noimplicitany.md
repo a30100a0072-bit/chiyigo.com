@@ -100,5 +100,5 @@ ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（架構上可進 Codex Plan
 - [x] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`（2026-06-28、Codex 驗 packet anchor `5613d208`、機械推論成立、no blocking）
 - [x] `CODE_SELF_REVIEW_CLEAN`（L1 single-agent 對抗式 readonly-reviewer〔繼承 Opus〕→ `CODE_CLEAN` 0 finding；機械層綠：ratchet 756/264 · byte-identical emit sha `e28529aa…a4ca`/5082B · lint clean。diff 恰 2 行 annotation〔L39/L43〕、8 lock 全合規）
 - [x] `CODEX_CODE_APPROVED`（2026-06-28、Codex 驗 commit `80de07f2`：僅 refund.ts 2 行 + gate-log、`NO_REFUND_DIAGNOSTICS`、byte-identical 5082B/sha e28529aa、ratchet 756/264、no any/SQL/auth/CAS/audit 變更、no blocking）
-- [ ] `CHATGPT_CODE_FAITHFULNESS_APPROVED` → `MERGE_ALLOWED`
-- [ ] `MERGED_MAIN`（squash-merge --delete-branch；更新 topic receipt）
+- [x] `CHATGPT_CODE_FAITHFULNESS_APPROVED` → `MERGE_ALLOWED`（2026-06-28、FAITHFUL matrix 全 PASS、`--name-status` 點名無遺漏 source hunk、無需 invalidate ③ 的 Tier0/1）
+- [ ] `MERGED_MAIN`（squash-merge --delete-branch；merge-front 重 7 gates 全綠後；更新 topic receipt + 刪 packets）
