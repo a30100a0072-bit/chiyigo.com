@@ -17,7 +17,7 @@ import { requireAuth, res } from '../../../../utils/auth'
 import { safeUserAudit } from '../../../../utils/user-audit'
 import { syncRequisitionTgMessage } from '../../../../utils/tg-requisition'
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const { user, error } = await requireAuth(request, env)
   if (error) return error
 
