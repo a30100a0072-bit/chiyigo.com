@@ -23,11 +23,11 @@ import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit
 
 const ELEVATED_ACTION_UNBIND = 'unbind_wallet'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestDelete({ request, env, params }) {
+export async function onRequestDelete({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requireStepUp(
     request, env, SCOPES.ELEVATED_ACCOUNT, ELEVATED_ACTION_UNBIND,
