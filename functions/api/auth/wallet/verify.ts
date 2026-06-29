@@ -33,11 +33,11 @@ import { requireFactorAddGrant, consumeFactorAddGrantStmt } from '../../../utils
 
 const NICKNAME_MAX = 64
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   // SEC-FACTOR-ADD（PR-A3）：綁 wallet 需 factor-add elevation grant（validate-not-consume；
   // consume 與下方 user_wallets INSERT 同一 db.batch）。
