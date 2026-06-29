@@ -99,7 +99,7 @@ baseline 錯（scout forced `tsc -b … --force` 實證、loc 逐一吻合）：
 
 - **dual-leaf**：payments.ts/[vendor].ts 皆經 `tsconfig.functions.json`（noImplicitAny:true）+ `tsconfig.tests.json`（noImplicitAny:false）兩 leaf 編譯。37 錯皆 TS70xx〔functions-leaf only、單算〕；若 interface 引入任何 TS2339/TS2345 會 dual-leaf 雙倍 → spike ADDED=0 證**無**此類新錯（含 tests-leaf）。
 
-### frozen diff（git-format，spike 實取、branch 重套；`git diff --check` exit 0、`--stat` 3 檔 **+81/−24**〔Option B：payments 29/15 含 jose import、[vendor] 22/9、payment-types 30/0〕；authoritative = `frozen-2da-B.diff`）
+### frozen diff（git-format，spike 實取、branch 重套；`git diff --check` exit 0、`--stat` 3 檔 **+81/−24**〔Option B：payments 29/15 含 jose import、[vendor] 22/9、payment-types 30/0〕；authoritative = `chiyigo-pr2da-B.diff`）
 
 ```diff
 diff --git a/functions/api/webhooks/payments/[vendor].ts b/functions/api/webhooks/payments/[vendor].ts
@@ -202,7 +202,7 @@ index 023a6cc5..f0ec0d92 100644
 +export function resolvePaymentAdapter(vendor: string): PaymentAdapter | null {
 ```
 
-> 完整 byte-for-byte frozen diff（含 multi-line `updatePaymentStatus`/`requirePaymentAccess`/`dlqInsert` 全 hunk + 新檔全文）= Code Gate packet `chiyigo-pr2da.diff`（authoritative）。本 §4 為人審摘要；Code 階段 committed diff 必與 authoritative frozen diff byte-for-byte 對齊（L-parity）。
+> 完整 byte-for-byte frozen diff（含 multi-line `updatePaymentStatus`/`requirePaymentAccess`/`dlqInsert` 全 hunk + 新檔全文）= Code Gate packet `chiyigo-pr2da-B.diff`（authoritative）。本 §4 為人審摘要；Code 階段 committed diff 必與 authoritative frozen diff byte-for-byte 對齊（L-parity）。
 
 ## §5 security / 風險（Tier-0 金流 spine + webhook、first-do-no-harm）
 
@@ -226,8 +226,8 @@ index 023a6cc5..f0ec0d92 100644
 - **merge-front 7 gates（對齊 CI `.github/workflows/ci.yml`）**：`lint`（含 `@typescript-eslint/no-explicit-any` — 本 PR 零 **lexical** any；OD-3 kyc derived-any 非 lexical、不觸此 lint）· `typecheck:ratchet` · `verify:browser-pipeline` · `test:cov` · `test:int`（含 `payments.test.ts` + webhook/payment integration、含 ecpay/mock adapter 路徑）· `build:functions` · `npm audit --omit=dev --audit-level=high`。
 - **NB-2 雙證**：Code 階段報告**同時列**「三檔 base vs patched emit byte-identical（sha + bytes）」與「source diff（`git diff` 逐行 == authoritative frozen diff）」，不以 ratchet 數字單獨替代行為保證。
 - **staged set**：僅 3 source 檔（payments.ts / [vendor].ts / 新 payment-types.ts）+ 本 plan doc；**禁** `git add -A`、`CLEANUP_PLAN.md` 不進 commit。
-- **authoritative landing blobs（Code Gate L11 對齊 `frozen-2da-B.diff`〔Option B〕）**：`payments.ts` `f0ec0d92`、`[vendor].ts` `dd284160`、`payment-types.ts` `a1a1b22e`（⚠ M-2：勿用 scratchpad `payment-types.ts.spike`〔blob `0e5ee200`、註解 stale、非 authoritative〕）。
-- **硬驗收**：source diff 與 authoritative frozen diff **byte-for-byte 一致**（人審 `git diff --stat` 僅 3 檔 +80/−24）；超出 = scope creep = Gate fail。
+- **authoritative landing blobs（Code Gate L11 對齊 `chiyigo-pr2da-B.diff`〔Option B〕）**：`payments.ts` `f0ec0d92`、`[vendor].ts` `dd284160`、`payment-types.ts` `a1a1b22e`（⚠ M-2：勿用 scratchpad `payment-types.ts.spike`〔blob `0e5ee200`、註解 stale、非 authoritative〕）。
+- **硬驗收**：source diff 與 authoritative frozen diff **byte-for-byte 一致**（人審 `git diff --stat` 僅 3 檔 **+81/−24**）；超出 = scope creep = Gate fail。
 
 ## §7 Binding locks（① ChatGPT Arch `CHATGPT_ARCH_APPROVED_WITH_LOCKS`、2026-06-29、binding）
 
@@ -253,9 +253,9 @@ ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（**0 blocker / 0 required r
 ## §8 gate trail（state 隨進度更新）
 
 - [x] `SPEC_APPROVED`（owner directive 2026-06-29 + ChatGPT SPEC 收斂：Scope-1a；OD 裁定 §0 表；non-goals = ecpay/mock/strict-closure/runtime 全不動）
-- [x] `PLAN_SELF_REVIEW_CLEAN`（2026-06-29、L2/L3 multi-agent workflow self-review〔payments 熱區、**3 readonly-reviewer 並行三維** scope-fidelity / runtime-security / evidence-integrity、繼承 Opus 4.8、read-only〕。**一輪發現 1 MAJOR + 2 minor**，主線獨立裁決後全處置：**OD-3 MAJOR**〔dim1+dim3 命中、**dim2 誤判 pass→證主線不採 subagent raw 必要**〕＝原 `Awaited<ReturnType<typeof requireAuth>>['user']` **實為 derived-any、非 JWTPayload|null**〔baseline `auth.ts` TS7018 ×5 + dim3 `IsAny` probe 實證、union 含 any 塌成 any〕→ **owner 裁 Option B**〔顯式 `user: JWTPayload | null` + `import type{JWTPayload}from'jose'`；empirically 700/REMOVED 37/ADDED 0/byte-identical 10014B`2113e620`、payments blob `654ec854→f0ec0d92`〕；**M-1**〔minor〕§2 payments.ts TS-code 分項錯 → 修為 TS7006×11/7031×4/7053×2/7018×1；**M-2**〔minor〕scratchpad spike blob ≠ authoritative → Code Gate 落地 `frozen-2da-B.diff` 版〔payment-types `a1a1b22e`〕。**主線獨立驗證 CONFIRMED**：737→700 / REMOVED 37 / ADDED 0〔含 tests-leaf dual-leaf〕· OD-1 cascade-safe〔mock/ecpay 結構 assignable、ecpay 27 不變〕· OD-2 記憶修正〔`Record<PaymentStatus>` 仍 TS7053、須 `Record<string>`〕· byte-identical 非恆真〔base `9d096b60` 未標註 vs head〕· **Option B caller 零 breakage**〔ADDED 0 含 requirePaymentAccess 全 caller〕。Option B delta〔2-line、單檔〕依 §9 回路節流主線單-agent 複驗 → 一輪 0 新發現。review agent 未污染 git〔HEAD `9d096b60`、源未動、實測在 scratchpad 複本〕）
+- [x] `PLAN_SELF_REVIEW_CLEAN`（2026-06-29、L2/L3 multi-agent workflow self-review〔payments 熱區、**3 readonly-reviewer 並行三維** scope-fidelity / runtime-security / evidence-integrity、繼承 Opus 4.8、read-only〕。**一輪發現 1 MAJOR + 2 minor**，主線獨立裁決後全處置：**OD-3 MAJOR**〔dim1+dim3 命中、**dim2 誤判 pass→證主線不採 subagent raw 必要**〕＝原 `Awaited<ReturnType<typeof requireAuth>>['user']` **實為 derived-any、非 JWTPayload|null**〔baseline `auth.ts` TS7018 ×5 + dim3 `IsAny` probe 實證、union 含 any 塌成 any〕→ **owner 裁 Option B**〔顯式 `user: JWTPayload | null` + `import type{JWTPayload}from'jose'`；empirically 700/REMOVED 37/ADDED 0/byte-identical 10014B`2113e620`、payments blob `654ec854→f0ec0d92`〕；**M-1**〔minor〕§2 payments.ts TS-code 分項錯 → 修為 TS7006×11/7031×4/7053×2/7018×1；**M-2**〔minor〕scratchpad spike blob ≠ authoritative → Code Gate 落地 `chiyigo-pr2da-B.diff` 版〔payment-types `a1a1b22e`〕。**主線獨立驗證 CONFIRMED**：737→700 / REMOVED 37 / ADDED 0〔含 tests-leaf dual-leaf〕· OD-1 cascade-safe〔mock/ecpay 結構 assignable、ecpay 27 不變〕· OD-2 記憶修正〔`Record<PaymentStatus>` 仍 TS7053、須 `Record<string>`〕· byte-identical 非恆真〔base `9d096b60` 未標註 vs head〕· **Option B caller 零 breakage**〔ADDED 0 含 requirePaymentAccess 全 caller〕。Option B delta〔2-line、單檔〕依 §9 回路節流主線單-agent 複驗 → 一輪 0 新發現。review agent 未污染 git〔HEAD `9d096b60`、源未動、實測在 scratchpad 複本〕）
 - [x] `CHATGPT_ARCH_APPROVED`（① 維度 B、2026-06-29、`APPROVED_WITH_LOCKS`：0 blocker / 0 required revision / **4 added locks L13-L16**〔§7〕；A1-A7 全 APPROVE/APPROVE_WITH_LOCK；確認**無 DB migration**〔純 type-only、不適用 expand/migrate/contract〕。明示非 merge 授權、非 code correctness 最終裁決）
-- [ ] `CODEX_PLAN_APPROVED`（② 維度 C、⏳ 待送）→ owner `CODING_ALLOWED`
+- [ ] `CODEX_PLAN_APPROVED`（② 維度 C；**r1 `CHANGES_REQUESTED` = 純 evidence-integrity doc-consistency**〔frozen diff 名稱混用 `frozen-2da-B.diff`/`chiyigo-pr2da.diff` → 全 canonical 化 `chiyigo-pr2da-B.diff`〔4 處〕；§6 硬驗收 `+80`→`+81`〔漏改〕；Codex packet line-count 宣稱移除〕，**Codex r1 所有 replay 數值已驗證通過**〔737→700 / REMOVED37/ADDED0 / byte-identical blobs `f0ec0d92`·`dd284160`·`a1a1b22e` / ratchet 700·64·271 / OD-2 probe `Record<PaymentStatus>` 復現 TS7053 / OD-3 auth.ts TS7018 evidence + patched ADDED 0 / apply-check clean〕、**source-plan logic 零變更** → 主線單-agent 複驗修正〔§9 回路節流、小 scope doc fix〕 → 新 plan-only commit + delta packet 重送 → ⏳ r2 待送）→ owner `CODING_ALLOWED`
 - [ ] `CODE_SELF_REVIEW_CLEAN`（Code 階段；apply frozen diff → 明確 stage 3 source〔禁 -A〕→ full replay 重證 L6/L7/L8 + merge-front 7 gates）
 - [ ] `CODEX_CODE_APPROVED`（③ 維度 C）
 - [ ] `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④ 維度 B-code）→ owner `MERGE_ALLOWED`
