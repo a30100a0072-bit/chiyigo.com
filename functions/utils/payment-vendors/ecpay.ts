@@ -23,6 +23,11 @@
  *   - MerchantTradeNo 是我方 generated；存到 vendor_intent_id 做 lookup key
  */
 
+import type { WebhookParseResult } from '../payment-types'
+
+// ecpay 僅消費下列 5 個 creds binding；Pick 綁定 Env SoT，且讓 fail-closed 單元測試可傳 partial env
+type EcpayCredsEnv = Pick<Env, 'ENVIRONMENT' | 'ECPAY_MODE' | 'ECPAY_MERCHANT_ID' | 'ECPAY_HASH_KEY' | 'ECPAY_HASH_IV'>
+
 // 不從 ../payments.ts 引 PAYMENT_STATUS（會跟 payments.ts 引 ADAPTERS map 形成 circular import
 // → adapter 註冊時 payments.ts 還沒 ready 為 undefined → resolvePaymentAdapter 找不到）
 const PAYMENT_STATUS = Object.freeze({
@@ -63,7 +68,7 @@ class EcpayConfigError extends Error {
 //
 // 不變量：SANDBOX_CREDS 公開金鑰「有且僅有」非 production + 明確 ECPAY_MODE='sandbox'
 //   + 無真實 creds 一條路徑可達；其餘一律真實 creds 或 fail-closed throw。
-function getCreds(env) {
+function getCreds(env: EcpayCredsEnv) {
   const isProduction = env?.ENVIRONMENT === 'production'
   const mode = env?.ECPAY_MODE
   const hasAll3 = !!(env?.ECPAY_MERCHANT_ID && env?.ECPAY_HASH_KEY && env?.ECPAY_HASH_IV)
@@ -95,7 +100,7 @@ function getCreds(env) {
   )
 }
 
-export function getEcpayCheckoutUrl(env) {
+export function getEcpayCheckoutUrl(env: EcpayCredsEnv) {
   const { isProd } = getCreds(env)
   return isProd ? ECPAY_PROD_URL : ECPAY_STAGE_URL
 }
@@ -109,7 +114,7 @@ export function getEcpayCheckoutUrl(env) {
 //   - '*' 不編（encodeURIComponent 不編 *，一致）
 //   - 其餘 unreserved 標點 -_.()'! 不編（一致）
 
-function ecpayUrlEncode(s) {
+function ecpayUrlEncode(s: string) {
   return encodeURIComponent(String(s ?? ''))
     .replace(/~/g, '%7e')
     .replace(/%20/g, '+')
@@ -126,8 +131,8 @@ function ecpayUrlEncode(s) {
  *   4. URL encode（.NET 規則 + 小寫）
  *   5. SHA256 → 大寫 hex
  */
-export async function ecpayCheckMacValue(params, hashKey, hashIV) {
-  const filtered = {}
+export async function ecpayCheckMacValue(params: Record<string, string>, hashKey: string, hashIV: string) {
+  const filtered: Record<string, string> = {}
   for (const [k, v] of Object.entries(params)) {
     if (k === 'CheckMacValue') continue
     if (v === undefined || v === null) continue
@@ -148,7 +153,7 @@ export const ecpayPaymentAdapter = {
    * 解 ECPay ReturnURL POST notification（form-urlencoded）。
    * 失敗回 ok:false；caller 應回非 "1|OK" 讓 ECPay 重送。
    */
-  async parseWebhook(request, env) {
+  async parseWebhook(request: Request, env: EcpayCredsEnv): Promise<WebhookParseResult> {
     // PAY-002：getCreds fail-closed throw（缺 creds / prod 禁 sandbox / sandbox 未明確）→
     // 回 ok:false 讓 handler 走 critical audit + DLQ + reject（不在此 throw，否則 handler
     // 對 parseWebhook 無外層 catch 會跳過 audit/DLQ 路徑）。.code 機讀供 handler audit。
@@ -298,7 +303,16 @@ export const ecpayPaymentAdapter = {
  *
  * @returns {Promise<{ checkout_url: string, fields: object }>}
  */
-export async function buildEcpayCheckoutFields(env, payload) {
+export async function buildEcpayCheckoutFields(env: EcpayCredsEnv, payload: {
+  merchantTradeNo: string
+  totalAmount: number
+  tradeDesc?: string
+  itemName?: string
+  returnUrl: string
+  clientBackUrl?: string
+  orderResultUrl?: string
+  choosePayment?: string
+}) {
   const { merchantId, hashKey, hashIV, isProd } = getCreds(env)
   const checkoutUrl = isProd ? ECPAY_PROD_URL : ECPAY_STAGE_URL
 
@@ -324,18 +338,18 @@ export async function buildEcpayCheckoutFields(env, payload) {
   return { checkout_url: checkoutUrl, fields }
 }
 
-function formatTradeDate(d) {
+function formatTradeDate(d: Date) {
   // ECPay 規定格式："yyyy/MM/dd HH:mm:ss" + 必須是 TW 時區（UTC+8）。
   // Workers runtime 是 UTC，必須手動加 8 小時，否則綠界端時間異常。
   const tw = new Date(d.getTime() + 8 * 60 * 60 * 1000)
-  const pad = n => String(n).padStart(2, '0')
+  const pad = (n: number) => String(n).padStart(2, '0')
   return `${tw.getUTCFullYear()}/${pad(tw.getUTCMonth() + 1)}/${pad(tw.getUTCDate())} `
     + `${pad(tw.getUTCHours())}:${pad(tw.getUTCMinutes())}:${pad(tw.getUTCSeconds())}`
 }
 
 // debug 版本：回傳算 hash 用的 raw concat string，給 /checkout?debug=1 對拍 ECPay 官方驗算工具用
-async function ecpayCheckMacValueDebug(params, hashKey, hashIV) {
-  const filtered = {}
+async function ecpayCheckMacValueDebug(params: Record<string, string>, hashKey: string, hashIV: string) {
+  const filtered: Record<string, string> = {}
   for (const [k, v] of Object.entries(params)) {
     if (k === 'CheckMacValue') continue
     if (v === undefined || v === null) continue
@@ -351,7 +365,7 @@ async function ecpayCheckMacValueDebug(params, hashKey, hashIV) {
   return { mac, raw, encoded }
 }
 
-function truncate(s, max) {
+function truncate(s: string, max: number) {
   s = String(s ?? '')
   return s.length > max ? s.slice(0, max) : s
 }
@@ -383,7 +397,12 @@ const ECPAY_REFUND_PROD_URL  = 'https://payment.ecpay.com.tw/CreditDetail/DoActi
  *
  * @returns {Promise<{ ok: boolean, rtn_code?: string, rtn_msg?: string, raw?: string }>}
  */
-export async function ecpayRefund(env, { merchantTradeNo, tradeNo, totalAmount, action = 'R' }) {
+export async function ecpayRefund(env: EcpayCredsEnv, { merchantTradeNo, tradeNo, totalAmount, action = 'R' }: {
+  merchantTradeNo: string
+  tradeNo: string
+  totalAmount: number
+  action?: string
+}) {
   const { merchantId, hashKey, hashIV, isProd } = getCreds(env)
   const url = isProd ? ECPAY_REFUND_PROD_URL : ECPAY_REFUND_STAGE_URL
 
