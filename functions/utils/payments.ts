@@ -21,6 +21,8 @@
 import { res, requireAuth } from './auth'
 import { safeUserAudit } from './user-audit'
 import { getUserKycStatus, KYC_STATUS } from './kyc'
+import type { PaymentAdapter } from './payment-types'
+import type { JWTPayload } from 'jose'
 
 export const PAYMENT_STATUS = Object.freeze({
   PENDING:    'pending',
@@ -66,7 +68,7 @@ const METADATA_ALLOWED_KEYS = new Set([
   'payment_info',       // ATM/CVS 取號資訊（webhook handler mergeMetadata 寫入）
 ])
 
-function sanitizeMetadata(metadata): Record<string, unknown> | null {
+function sanitizeMetadata(metadata: unknown): Record<string, unknown> | null {
   if (metadata == null) return null
   if (typeof metadata !== 'object' || Array.isArray(metadata)) {
     throw new Error('metadata must be a plain object')
@@ -102,7 +104,7 @@ interface CreatePaymentIntentPayload {
   failure_reason?: string | null
 }
 
-export async function createPaymentIntent(env, payload: CreatePaymentIntentPayload = {}) {
+export async function createPaymentIntent(env: Env, payload: CreatePaymentIntentPayload = {}) {
   if (!env?.chiyigo_db) throw new Error('db not available')
   const { user_id, vendor, vendor_intent_id, kind = PAYMENT_KIND.DEPOSIT,
           status = PAYMENT_STATUS.PENDING, amount_subunit = null, amount_raw = null,
@@ -141,7 +143,7 @@ export async function createPaymentIntent(env, payload: CreatePaymentIntentPaylo
 }
 
 export async function getPaymentIntent(
-  env,
+  env: Env,
   { id, vendor, vendor_intent_id, includeDeleted = false }: {
     id?: number | string | null,
     vendor?: string | null,
@@ -176,13 +178,13 @@ export async function getPaymentIntent(
 //   succeeded   → refunded（admin 退款）
 //   failed / canceled / refunded → terminal，無 outgoing
 // 注意：lockIntentForRefund 用直接 SQL CAS 做 succeeded→processing，不過此守衛。
-const ALLOWED_TRANSITIONS = {
+const ALLOWED_TRANSITIONS: Record<string, ReadonlySet<string>> = {
   [PAYMENT_STATUS.PENDING]:    new Set([PAYMENT_STATUS.PROCESSING, PAYMENT_STATUS.SUCCEEDED, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED]),
   [PAYMENT_STATUS.PROCESSING]: new Set([PAYMENT_STATUS.SUCCEEDED, PAYMENT_STATUS.FAILED, PAYMENT_STATUS.CANCELED, PAYMENT_STATUS.REFUNDED]),
   [PAYMENT_STATUS.SUCCEEDED]:  new Set([PAYMENT_STATUS.REFUNDED]),
-  [PAYMENT_STATUS.FAILED]:     new Set(),
-  [PAYMENT_STATUS.CANCELED]:   new Set(),
-  [PAYMENT_STATUS.REFUNDED]:   new Set(),
+  [PAYMENT_STATUS.FAILED]:     new Set<string>(),
+  [PAYMENT_STATUS.CANCELED]:   new Set<string>(),
+  [PAYMENT_STATUS.REFUNDED]:   new Set<string>(),
 }
 
 /**
@@ -203,7 +205,15 @@ const ALLOWED_TRANSITIONS = {
  * false，但 caller 仍會 merge trade_no、寫 payment.status.change audit、回 PSP
  * success → 帳面看起來像成功收款。改 structured 後 caller 能明確跳過。
  */
-export async function updatePaymentStatus(env, { vendor, vendor_intent_id, status, failure_reason = null }) {
+export async function updatePaymentStatus(
+  env: Env,
+  { vendor, vendor_intent_id, status, failure_reason = null }: {
+    vendor?: string,
+    vendor_intent_id?: string | number,
+    status?: string,
+    failure_reason?: string | null,
+  },
+) {
   if (!env?.chiyigo_db) return { outcome: 'no_row' }
   if (!VALID_STATUSES.has(status)) throw new Error(`Invalid payment status: ${status}`)
 
@@ -299,7 +309,7 @@ export async function updatePaymentStatus(env, { vendor, vendor_intent_id, statu
  * payment.intent.succeeded_status_changed critical audit；refund 自身的
  * payment.refund.success / requisition.refund.approved 已是 critical，覆蓋足夠。
  */
-export async function lockIntentForRefund(env, intentId) {
+export async function lockIntentForRefund(env: Env, intentId: number | string) {
   if (!env?.chiyigo_db) return { ok: false, code: 'NO_DB' }
   const row = await env.chiyigo_db
     .prepare(
@@ -317,7 +327,7 @@ export async function lockIntentForRefund(env, intentId) {
   return { ok: true, intent: row }
 }
 
-export async function unlockIntentToSucceeded(env, intentId) {
+export async function unlockIntentToSucceeded(env: Env, intentId: number | string) {
   if (!env?.chiyigo_db) return
   await env.chiyigo_db
     .prepare(
@@ -343,10 +353,14 @@ export async function unlockIntentToSucceeded(env, intentId) {
  * @param {string}  [opts.requiredLevel]   'enhanced' = 高額提款
  */
 export async function requirePaymentAccess(
-  request,
-  env,
+  request: Request,
+  env: Env,
   opts: { skipKyc?: boolean, requiredLevel?: string } = {},
-) {
+): Promise<{
+  user: JWTPayload | null,
+  error: Response | null,
+  kyc?: Awaited<ReturnType<typeof getUserKycStatus>>,
+}> {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
 
@@ -412,13 +426,13 @@ export async function requirePaymentAccess(
 import { mockPaymentAdapter } from './payment-vendors/mock'
 import { ecpayPaymentAdapter } from './payment-vendors/ecpay'
 
-const ADAPTERS = {
+const ADAPTERS: Record<string, PaymentAdapter> = {
   mock:  mockPaymentAdapter,
   ecpay: ecpayPaymentAdapter,
   // stripe: () => import('./payment-vendors/stripe.js').then(m => m.stripePaymentAdapter),
   // tappay: () => import('./payment-vendors/tappay.js').then(m => m.tappayPaymentAdapter),
 }
 
-export function resolvePaymentAdapter(vendor) {
+export function resolvePaymentAdapter(vendor: string): PaymentAdapter | null {
   return ADAPTERS[vendor] ?? null
 }
