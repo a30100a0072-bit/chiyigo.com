@@ -108,15 +108,25 @@
 - **merge-front 7 gates（對齊 CI `.github/workflows/ci.yml`）**：`lint` · `typecheck:ratchet` · `verify:browser-pipeline` · `test:cov` · `test:int` · `build:functions` · `npm audit --omit=dev --audit-level=high`。
 - **staged set**：僅 `refund-request.ts` + 本 plan doc；**禁** `git add -A` / `-A`，**`CLEANUP_PLAN.md` 不進 commit**。
 
-## §7 Locks（待 ChatGPT Arch 裁；本節 codify SPEC BL-1..BL-8 + OD-1，gate 回饋後更新）
+## §7 Locks（ChatGPT Arch `APPROVED_WITH_LOCKS`、2026-06-29、binding）
 
-ChatGPT Architecture Gate 將裁 `APPROVED_WITH_LOCKS` / finding。SPEC 已鎖 BL-1..BL-8（§0）+ OD-1（§0.1）。本 plan 全部滿足/承諾，無 plan 邏輯變更。
+ChatGPT Architecture Gate 裁 **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（**0 blocker / 0 required revision / 3 non-blocking locks**；架構上可進 Codex Plan Gate、**非 merge 授權、非 code correctness 最終裁決**）。逐題 5 問全通過：①架構/治理一致性〔不改 API contract / IAM / tenant / DB schema / migration / rollback〕②BL-7 framing 通過+加鎖 ③F-3 邊界 通過+措辭精確化〔「不改 import/invoke + `safeUserAudit` 參數 byte-identical + `cold_class` 衍生 provably unchanged」，**非**「完全無關」〕④byte-identical zero-runtime 通過〔Code Gate 必重跑非恆真〕⑤locks 足夠+追加 3 條。
+
+3 條 ChatGPT lock（codify、已被本 plan 滿足、無 plan 邏輯變更）：
+
+| Lock | 內容 | plan 對應 |
+|---|---|---|
+| PR-2dc-L1 | Code 階段 diff 只有 `functions/api/payments/intents/[id]/refund-request.ts` 一檔、hunk **僅 L20** handler-context type annotation | §2 / §6 staged set / BL-1·BL-2 |
+| PR-2dc-L2 | Code Gate 重跑**非恆真** byte-identical：base `5fd17536:$F` 未標註 blob vs committed annotated source、emit sha/size/cmp 一致才過 | §4 / §6 / BL-5 |
+| PR-2dc-L3 | 報告用語只能稱「payments-path noImplicitAny=0 **under enumerated baton set + refund-request.ts**」；**不得**寫成所有 payment-like / `billing` / `wallet` 全清 | §0 payments-path 定義 / BL-7 |
+
+**Code Gate 必看（ChatGPT 列）**：source diff 1 檔 1 行無他 hunk · tsc sort-diff REMOVED=3/ADDED=0 · ratchet 673→670 / 63→62 / 272→273 不 update baseline · byte-identical 非恆真 base-vs-head 重算 · dormant 無 audit-archive/R2/retention/aggregate/checkpoint diff · runtime 無退款流程/權限/IDOR/防重/vendor/audit payload 改動。
 
 ## §8 gate trail（state 隨進度更新）
 
 - [x] `SPEC_APPROVED_WITH_LOCKS`（owner C-1 + ChatGPT 收斂 2026-06-29：refund-request.ts ＝ 下一棒；BL-1..BL-8；OD-1 ＝ L2/L3 multi-agent self-review）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（L2/L3 multi-agent self-review：3 parallel readonly-reviewer 三維〔plan-faithfulness / type-cascade / security-scope，繼承 Opus 4.8〕→ **0 blocking / 0 major**；4 處 minor/info 經主線獨立裁決採納修入 plan：**(1)** §3 bullet-1 `requireAuth` premise 事實錯誤〔`auth.ts:22-27` 參數**已標型** `Request`/`Env`、非未標型；結論不變、機制更強健〕→ 修正；**(2)** BL-7「payments-path」術語未定義〔billing/wallet 仍帶 noImplicitAny〕→ 加精確定義 + billing/wallet 標分離待清域；**(3)** §5 BL-8「完全不碰 cold-archive」略過度〔`safeUserAudit` 內部衍生 `cold_class` transitively feed〕→ 收斂 wording、證 `cold_class` provably 相同；**(4)** §4 importer enumeration 漏 `dashboard.ts:638` apiFetch〔URL 字串非 import〕→ 補註。主線**獨立重驗** heavy claims：`comm` REMOVED=3 exact / ADDED=0、files 63→62、`node_modules/@cloudflare/` 無 workers-types → D1=any cascade-safe、byte-identical 非恆真 3932B/`885205…`〔3 reviewer 各自獨立 esbuild 重算同 sha〕。修正後一輪 0 新發現。)
-- [ ] `CHATGPT_ARCH_APPROVED`
+- [x] `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（2026-06-29、**0 blocker / 0 required revision / 3 non-blocking locks** PR-2dc-L1..L3〔§7〕；逐題 5 問全通過〔Q2 BL-7 framing 加鎖、Q3 F-3 措辭精確化、Q4 byte-identical Code Gate 必重跑〕；明示**非 merge 授權、非 code correctness 最終裁決**）
 - [ ] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`
 - [ ] `CODE_SELF_REVIEW_CLEAN`（L2/L3 multi-agent）
 - [ ] `CODEX_CODE_APPROVED`
