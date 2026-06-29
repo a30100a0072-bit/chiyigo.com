@@ -34,11 +34,11 @@ import { checkRateLimit, recordRateLimit } from '../../utils/rate-limit'
 // 反而在 UI/API 隱形。
 const VALID_STATUS = new Set(['pending', 'approved', 'rejected', 'processing'])
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env)
   // P1-17 Phase 3: 退款列表屬金流，任一金流 fine 即可讀
   const { user, error } = await requireAnyScope(
