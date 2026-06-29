@@ -101,15 +101,26 @@
 - **merge-front 7 gates（對齊 CI `.github/workflows/ci.yml`）**：`lint` · `typecheck:ratchet` · `verify:browser-pipeline` · `test:cov` · `test:int`〔含 `wallet.test.ts` 4 handler direct-call〕 · `build:functions` · `npm audit --omit=dev --audit-level=high`。
 - **staged set**：僅 4 wallet 檔 + 本 plan doc；**禁** `git add -A`，`CLEANUP_PLAN.md` 不進 commit。
 
-## §7 Locks（待 ChatGPT Arch 裁；本節 codify SPEC WL-1..WL-10 + OD-1/OD-2，gate 回饋後更新）
+## §7 Locks（ChatGPT Arch `APPROVED_WITH_LOCKS`、2026-06-29、binding）
 
-ChatGPT Architecture Gate 將裁 `APPROVED_WITH_LOCKS` / finding。SPEC 已鎖 WL-1..WL-10（§0）+ OD-1/OD-2（§0.1）。本 plan 全部滿足/承諾，無 plan 邏輯變更。
+ChatGPT Architecture Gate 裁 **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（**0 blocker / 0 required revision / 0 major**；架構上可進 Codex Plan Gate、**非 merge 授權、非 code correctness 最終裁決**）。5 問全 APPROVED（8 標註一致 / 4 檔 domain-batch 適當 / Tier-0-adjacent 邊界〔接受前提＝Code Gate diff-fidelity〕/ wallet 域 framing 正確〔`user_wallets` vs `credit_wallets`/billing 分離〕/ WL 足夠+追加 4 條）。
+
+SPEC WL-1..WL-10（§0）+ OD-1/OD-2（§0.1）已鎖。**4 條 ChatGPT code-stage lock（codify、已被本 plan §3/§4/§6 承諾、無 plan 邏輯變更）**：
+
+| Lock | 內容 | plan 對應 |
+|---|---|---|
+| PR-2dd-L11 diff-fidelity | Code Gate 必確認 committed source diff **僅 8 handler signature annotation**、無第 9 個 source edit | §3/§6 + WL-1/WL-2 |
+| PR-2dd-L12 no type escape | 禁新增 `as any` / `unknown as` / `@ts-ignore` / `@ts-expect-error` / runtime cast / erased helper | §3 + WL-4 |
+| PR-2dd-L13 no import drift | 禁新增任何 import（**含 type-only**）；`Request`/`Env` 走 ambient/global | §3〔`Env` ambient 零 import〕 |
+| PR-2dd-L14 security-line byte lock | `requireStepUp` / `requireFactorAddGrant` / `verifySiweMessage` / `consumeWalletNonce` / `db.batch` / grant replay check / critical audit / IDOR SQL 必 byte-identical | §4/§5 + WL-5/WL-8 |
+
+**Code Gate 重點（ChatGPT 明示）**：唯一要嚴格看的不是演算法、而是「是否真的只有 8 行 handler context 型別」→ **diff-fidelity 收口**（byte-identical 測不到 erased cast/import，須對 committed source 逐行 diff）。
 
 ## §8 gate trail（state 隨進度更新）
 
 - [x] `SPEC_APPROVED_WITH_LOCKS`（owner C-1 + ChatGPT 收斂 2026-06-29：wallet 域 4 檔；WL-1..WL-10；OD-1 ＝ L2/L3 multi-agent、OD-2 ＝ domain-batch 單 PR）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（L2/L3 multi-agent self-review：3 parallel readonly-reviewer 三維〔plan-faithfulness / type-cascade / security-scope，繼承 Opus 4.8〕→ **0 blocking / 0 major / 0 minor**；3 維各自獨立重驗：plan-faithfulness〔`comm` REMOVED=17 exact / ADDED=0、8 site 逐檔確認〔[id].ts L30 唯一帶 params〕、base blob SHA、WL-9 無 test 改〕、type-cascade〔per-error-code histogram TS7031 215→198 其餘碼全不變·TS2345=0、D1=any 三方靜態〔workers-types 缺席〕+empirical 確認、callee 非銳化〔getCorsHeaders `Pick<Env>` wide→narrow assignable、與 ecpay narrow→full 陷阱反向〕、stream-injected byte-identical 重算〕、security-scope〔4 檔 sed-rebuild **非恆真** byte-identical〔source bytes +64/+96、emit 全等〕、security path 位元未動、F-3 grep clean、`Env` ambient 故 8 標註零 import 無隱藏第 9 edit〕。**2 處 INFO 主線獨立裁決後採納修入 plan**：(1) §0「wallet 域」精確定義〔SIWE user-wallet 4 檔 ＝ wallet17 桶 vs `admin/billing/wallets` credit_wallets/billing 分離域〕避 payments-path 類 drift；(2) §3 dual-leaf exhaustive 補第 2 importer `credential-disposition.test.ts:14`〔主線 grep 證全 repo 僅 2 test 檔 import〕。security 方法論註〔byte-identical 無法測 erased cast/import〕→ Code Gate diff-fidelity 對 committed source 收口〔§3/§6〕。修正後一輪 0 新發現。)
-- [ ] `CHATGPT_ARCH_APPROVED`
+- [x] `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（2026-06-29、**0 blocker / 0 required revision / 0 major**；+4 code-stage lock PR-2dd-L11 diff-fidelity · L12 no type escape · L13 no import drift · L14 security-line byte lock〔§7〕；5 問全 APPROVED；明示**非 merge 授權**）
 - [ ] `CODEX_PLAN_APPROVED` → `CODING_ALLOWED`
 - [ ] `CODE_SELF_REVIEW_CLEAN`（L2/L3 multi-agent）
 - [ ] `CODEX_CODE_APPROVED`
