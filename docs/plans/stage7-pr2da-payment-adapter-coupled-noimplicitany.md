@@ -229,9 +229,9 @@ index 023a6cc5..f0ec0d92 100644
 - **authoritative landing blobs（Code Gate L11 對齊 `frozen-2da-B.diff`〔Option B〕）**：`payments.ts` `f0ec0d92`、`[vendor].ts` `dd284160`、`payment-types.ts` `a1a1b22e`（⚠ M-2：勿用 scratchpad `payment-types.ts.spike`〔blob `0e5ee200`、註解 stale、非 authoritative〕）。
 - **硬驗收**：source diff 與 authoritative frozen diff **byte-for-byte 一致**（人審 `git diff --stat` 僅 3 檔 +80/−24）；超出 = scope creep = Gate fail。
 
-## §7 Binding locks（⏳ 待 ChatGPT Arch ① 填；以下為 self-proposed、Gate 確認/調整）
+## §7 Binding locks（① ChatGPT Arch `CHATGPT_ARCH_APPROVED_WITH_LOCKS`、2026-06-29、binding）
 
-> PLAN_DRAFT 階段 self-proposed lock skeleton，待 ① ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS` 後 codify。
+ChatGPT Architecture Gate 裁 `APPROVED_WITH_LOCKS`（**0 blocker / 0 required revision / 4 added locks L13-L16**；架構上可進 Codex Plan Gate ②、**非 merge 授權、非 code correctness 最終裁決**）。A1-A7 全 APPROVE/APPROVE_WITH_LOCK（A1 payment-types 位置 / A2 registry 契約強制〔限收斂、非 adapter leaf 完工〕/ A3 flat-optional descriptive〔不宣稱新 runtime contract〕/ A4 optional methods / A5 OD-2 `Record<string>`〔接受實測、鎖 status set〕/ A6 OD-3 Option B / A7 cascade-safe Scope-1a）。L1-L12 self-proposed 全採納 + 新增 L13-L16；全部已被本 plan 滿足（codify、無 plan 邏輯變更、byte-identical 保證）。
 
 - **L1 Scope**：僅 3 source（payments.ts / [vendor].ts / 新 payment-types.ts）；diff byte-for-byte == authoritative frozen diff；plan doc 只可更新 gate log。
 - **L2 Runtime hot-zone**：不改狀態機 / CAS / idempotency / 簽章 / 金額閘門 / dedupe / DLQ / orphan / audit / step-up / scope / rate-limit / response shape / SQL；byte-identical 證。
@@ -245,13 +245,17 @@ index 023a6cc5..f0ec0d92 100644
 - **L10 Ratchet baseline**：不得 `--update`；只接受 737→700 / 66→64 / 268→271 方向。
 - **L11 Source landing parity**：committed diff 必與 authoritative frozen diff byte-for-byte；額外 hunk → 回 Plan Gate。
 - **L12 高風險領域**：webhook = cross-system JSON contract；`WebhookParseResult` 為描述性 typing、非新契約；payment 狀態機/idempotency/dedupe 行為由 byte-identical 保證不變。
+- **L13（新、Arch ①）WebhookParseResult 非 ok:true 必填契約**：欄位不得被當成 `ok:true` 必填；caller 既有 null/undefined guard（`!= null`/`?? null`/`&&`）不得移除。〔履行：byte-identical → caller body 不變〕
+- **L14（新、Arch ①）ALLOWED_TRANSITIONS 語義鎖**：物件字面值既有 status key / value / transition set 不得新增/刪除/改名/重排語義。〔履行：本 PR 僅加型別標註 + 3 空集合 `new Set<string>()` type-arg；6-key set 與非空 Set 內容不變、byte-identical 證 runtime 不變〕
+- **L15（新、Arch ①）optional method 不得壓錯**：`successResponse?`/`failureResponse?` 不得用 `!`、cast、或新增 runtime fallback。〔履行：frozen diff 不碰 `successFn`/`adapter.successResponse`/`adapter.failureResponse` guard 行（既有 `typeof … === 'function'`）、byte-identical 證〕
+- **L16（新、Arch ①）strict:true closure 只列 follow-up**：[vendor].ts L43 closure possibly-undefined 只可列 follow-up（§5 NB）、不得混入本 PR 修。
 
 ## §8 gate trail（state 隨進度更新）
 
 - [x] `SPEC_APPROVED`（owner directive 2026-06-29 + ChatGPT SPEC 收斂：Scope-1a；OD 裁定 §0 表；non-goals = ecpay/mock/strict-closure/runtime 全不動）
 - [x] `PLAN_SELF_REVIEW_CLEAN`（2026-06-29、L2/L3 multi-agent workflow self-review〔payments 熱區、**3 readonly-reviewer 並行三維** scope-fidelity / runtime-security / evidence-integrity、繼承 Opus 4.8、read-only〕。**一輪發現 1 MAJOR + 2 minor**，主線獨立裁決後全處置：**OD-3 MAJOR**〔dim1+dim3 命中、**dim2 誤判 pass→證主線不採 subagent raw 必要**〕＝原 `Awaited<ReturnType<typeof requireAuth>>['user']` **實為 derived-any、非 JWTPayload|null**〔baseline `auth.ts` TS7018 ×5 + dim3 `IsAny` probe 實證、union 含 any 塌成 any〕→ **owner 裁 Option B**〔顯式 `user: JWTPayload | null` + `import type{JWTPayload}from'jose'`；empirically 700/REMOVED 37/ADDED 0/byte-identical 10014B`2113e620`、payments blob `654ec854→f0ec0d92`〕；**M-1**〔minor〕§2 payments.ts TS-code 分項錯 → 修為 TS7006×11/7031×4/7053×2/7018×1；**M-2**〔minor〕scratchpad spike blob ≠ authoritative → Code Gate 落地 `frozen-2da-B.diff` 版〔payment-types `a1a1b22e`〕。**主線獨立驗證 CONFIRMED**：737→700 / REMOVED 37 / ADDED 0〔含 tests-leaf dual-leaf〕· OD-1 cascade-safe〔mock/ecpay 結構 assignable、ecpay 27 不變〕· OD-2 記憶修正〔`Record<PaymentStatus>` 仍 TS7053、須 `Record<string>`〕· byte-identical 非恆真〔base `9d096b60` 未標註 vs head〕· **Option B caller 零 breakage**〔ADDED 0 含 requirePaymentAccess 全 caller〕。Option B delta〔2-line、單檔〕依 §9 回路節流主線單-agent 複驗 → 一輪 0 新發現。review agent 未污染 git〔HEAD `9d096b60`、源未動、實測在 scratchpad 複本〕）
-- [ ] `CHATGPT_ARCH_APPROVED`（① 維度 B、待送）
-- [ ] `CODEX_PLAN_APPROVED`（② 維度 C、待送）→ owner `CODING_ALLOWED`
+- [x] `CHATGPT_ARCH_APPROVED`（① 維度 B、2026-06-29、`APPROVED_WITH_LOCKS`：0 blocker / 0 required revision / **4 added locks L13-L16**〔§7〕；A1-A7 全 APPROVE/APPROVE_WITH_LOCK；確認**無 DB migration**〔純 type-only、不適用 expand/migrate/contract〕。明示非 merge 授權、非 code correctness 最終裁決）
+- [ ] `CODEX_PLAN_APPROVED`（② 維度 C、⏳ 待送）→ owner `CODING_ALLOWED`
 - [ ] `CODE_SELF_REVIEW_CLEAN`（Code 階段；apply frozen diff → 明確 stage 3 source〔禁 -A〕→ full replay 重證 L6/L7/L8 + merge-front 7 gates）
 - [ ] `CODEX_CODE_APPROVED`（③ 維度 C）
 - [ ] `CHATGPT_CODE_FAITHFULNESS_APPROVED`（④ 維度 B-code）→ owner `MERGE_ALLOWED`
