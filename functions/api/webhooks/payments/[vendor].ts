@@ -26,7 +26,7 @@ import {
 import { safeUserAudit } from '../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug'
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const vendor = String(params?.vendor ?? '').toLowerCase()
   const adapter = resolvePaymentAdapter(vendor)
   if (!adapter) {
@@ -34,7 +34,7 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   // T17 DLQ：讀 raw body 一次（adapter 可能也會讀），失敗時落 DLQ
-  const rawBody = await request.clone().text().catch(() => null)
+  const rawBody = await request.clone().text().catch((): null => null)
 
   const parsed = await adapter.parseWebhook(request, env)
 
@@ -152,7 +152,7 @@ export async function onRequestPost({ request, env, params }) {
   //   - 既有 'failed'              → CAS UPDATE 'failed'→'processing' 才算 claim 到 retry
   //   - 既有 'processing'（in-flight）/ CAS 落敗 → 回 failure，PSP 之後 retry（不雙跑）
   const payloadHash = parsed.raw_body
-    ? await sha256Hex(parsed.raw_body).catch(() => null)
+    ? await sha256Hex(parsed.raw_body).catch((): null => null)
     : null
   let claimed = false
   try {
@@ -219,7 +219,7 @@ export async function onRequestPost({ request, env, params }) {
   }
 
   // Codex r5 P0：orphan 處理共用 helper（dedupe claim 後 upfront + 下方 TOCTOU 補救都用）。
-  async function handleOrphan({ liveIntent, reason }) {
+  async function handleOrphan({ liveIntent, reason }: { liveIntent: { id?: number | string | null; user_id?: number | string | null; deleted_at?: string | null } | null; reason: string }) {
     await safeUserAudit(env, {
       event_type: 'payment.webhook.orphan_intent',
       severity:   'critical',
@@ -482,7 +482,7 @@ export async function onRequestPost({ request, env, params }) {
   return successFn()
 }
 
-async function markWebhookEventApplied(env, vendor, eventId) {
+async function markWebhookEventApplied(env: Env, vendor: string, eventId: string) {
   if (!env?.chiyigo_db || !eventId) return
   // Codex r2 P1：不可吞錯；caller 負責 DLQ + markFailed + throw
   await env.chiyigo_db
@@ -490,7 +490,7 @@ async function markWebhookEventApplied(env, vendor, eventId) {
     .bind(vendor, eventId).run()
 }
 
-async function markWebhookEventFailed(env, vendor, eventId) {
+async function markWebhookEventFailed(env: Env, vendor: string, eventId: string) {
   if (!env?.chiyigo_db || !eventId) return
   try {
     await env.chiyigo_db
@@ -499,7 +499,7 @@ async function markWebhookEventFailed(env, vendor, eventId) {
   } catch { /* DLQ 已落，標記失敗也不擋 */ }
 }
 
-async function mergeMetadata(env, intentId, patch) {
+async function mergeMetadata(env: Env, intentId: number | string, patch: Record<string, unknown>) {
   const row = await env.chiyigo_db
     .prepare(`SELECT metadata FROM payment_intents WHERE id = ?`)
     .bind(intentId).first()
@@ -513,7 +513,7 @@ async function mergeMetadata(env, intentId, patch) {
     .bind(JSON.stringify(merged), intentId).run()
 }
 
-async function sha256Hex(s) {
+async function sha256Hex(s: string) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
   return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('')
 }
@@ -522,7 +522,20 @@ async function sha256Hex(s) {
 //   Codex r5 P1：strict=true（orphan/憑證路徑）寫失敗 → throw，caller 走
 //   markFailed 讓 PSP retry；strict=false（既有 best-effort 路徑）保留吞錯
 //   行為（DLQ 自己壞不可擋 PSP response）。
-async function dlqInsert(env, row, { strict = false } = {}) {
+async function dlqInsert(
+  env: Env,
+  row: {
+    vendor?: string | null
+    event_id?: string | null
+    vendor_intent_id?: string | number | null
+    raw_body?: string | null
+    payload_hash?: string | null
+    error_stage?: string
+    error_message?: string
+    http_status_returned?: number | null
+  },
+  { strict = false }: { strict?: boolean } = {},
+) {
   if (!env?.chiyigo_db) return false
   let payloadHash = row.payload_hash ?? null
   if (!payloadHash && row.raw_body) {
