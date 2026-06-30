@@ -30,14 +30,14 @@ const ALLOWED_BODY_KEYS: ReadonlySet<string> = new Set([
   'tenant_id', 'product_id', 'plan_id', 'manual_source', 'admin_idempotency_key', 'payment_ref', 'grant_reason',
 ])
 
-async function emitDenied(env, request, userId: number, reasonCode: string, extra: Record<string, unknown> = {}) {
+async function emitDenied(env: Env, request: Request, userId: number, reasonCode: string, extra: Record<string, unknown> = {}) {
   await safeUserAudit(env, {
     event_type: 'billing.grant.denied', severity: 'warn', user_id: userId, request,
     data: { reason_code: reasonCode, ...extra },
   })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   // 1. step-up：elevated:billing + for_action='grant_plan'（拒一般 access token / 錯 scope / 錯 action）
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_BILLING, 'grant_plan')
   if (stepCheck.error) return stepCheck.error
