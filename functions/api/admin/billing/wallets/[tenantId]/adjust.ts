@@ -18,14 +18,14 @@ const RL_WINDOW_SEC = 60
 const RL_MAX = 30
 const ALLOWED_BODY_KEYS: ReadonlySet<string> = new Set(['amount', 'direction', 'admin_idempotency_key', 'reason'])
 
-async function emitDenied(env, request, userId: number, reasonCode: string, extra: Record<string, unknown> = {}) {
+async function emitDenied(env: Env, request: Request, userId: number, reasonCode: string, extra: Record<string, unknown> = {}) {
   await safeUserAudit(env, {
     event_type: 'billing.credit.denied', severity: 'warn', user_id: userId, request,
     data: { reason_code: reasonCode, op: 'adjust', ...extra },
   })
 }
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_BILLING, 'wallet_adjust')
   if (stepCheck.error) return stepCheck.error
   const userId = Number(stepCheck.user.sub)
