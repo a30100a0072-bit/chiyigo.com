@@ -22,7 +22,7 @@
 const SIGNATURE_HEADER = 'X-KYC-Signature'
 
 export const mockKycAdapter = {
-  async parseWebhook(request, env) {
+  async parseWebhook(request: Request, env: Env) {
     const secret = env?.KYC_MOCK_SECRET
     if (!secret) return { ok: false, error: 'KYC_MOCK_SECRET not configured' }
 
@@ -57,7 +57,7 @@ export const mockKycAdapter = {
   },
 }
 
-async function hmacSha256Hex(secret, body) {
+async function hmacSha256Hex(secret: string, body: string) {
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),
@@ -69,7 +69,7 @@ async function hmacSha256Hex(secret, body) {
   return Array.from(new Uint8Array(sig), b => b.toString(16).padStart(2, '0')).join('')
 }
 
-function constantTimeEq(a, b) {
+function constantTimeEq(a: string, b: string) {
   if (typeof a !== 'string' || typeof b !== 'string') return false
   if (a.length !== b.length) return false
   let diff = 0
