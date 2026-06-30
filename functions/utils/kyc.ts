@@ -140,7 +140,7 @@ export async function requireKyc(request: Request, env: Env, opts: { requiredSta
   const requiredLevel  = opts.requiredLevel  ?? null
 
   const { user, error } = await requireAuth(request, env)
-  if (error) return { user: null, error }
+  if (error) return { user: null as null, error }
 
   const userId = Number(user.sub)
   const kyc = await getUserKycStatus(env, userId)
@@ -151,7 +151,7 @@ export async function requireKyc(request: Request, env: Env, opts: { requiredSta
       data: { required_status: requiredStatus, actual_status: kyc.status },
     })
     return {
-      user: null,
+      user: null as null,
       error: res({
         error: 'KYC verification required',
         code:  'KYC_REQUIRED',
@@ -163,7 +163,7 @@ export async function requireKyc(request: Request, env: Env, opts: { requiredSta
 
   if (requiredLevel === KYC_LEVEL.ENHANCED && kyc.level !== KYC_LEVEL.ENHANCED) {
     return {
-      user: null,
+      user: null as null,
       error: res({
         error: 'Enhanced KYC required',
         code:  'KYC_LEVEL_INSUFFICIENT',
@@ -173,7 +173,7 @@ export async function requireKyc(request: Request, env: Env, opts: { requiredSta
     }
   }
 
-  return { user, error: null, kyc }
+  return { user, error: null as null, kyc }
 }
 
 // ── Vendor adapter pattern ────────────────────────────────────────

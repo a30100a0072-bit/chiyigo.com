@@ -22,7 +22,7 @@ import { resolveKycAdapter, setUserKycStatus } from '../../../utils/kyc'
 import { safeUserAudit } from '../../../utils/user-audit'
 import { DEBUG_REASON_CODES } from '../../../utils/audit-aggregate-debug'
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const vendor = String(params?.vendor ?? '').toLowerCase()
   const adapter = resolveKycAdapter(vendor)
   if (!adapter) {
@@ -41,7 +41,7 @@ export async function onRequestPost({ request, env, params }) {
 
   // dedupe — 寫 kyc_webhook_events 撞 UNIQUE 即代表重送
   const payloadHash = parsed.raw_body
-    ? await sha256Hex(parsed.raw_body).catch(() => null)
+    ? await sha256Hex(parsed.raw_body).catch(() => null as null)
     : null
   try {
     await env.chiyigo_db
@@ -89,7 +89,7 @@ export async function onRequestPost({ request, env, params }) {
   return res({ ok: true })
 }
 
-async function sha256Hex(s) {
+async function sha256Hex(s: string) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
   return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('')
 }
