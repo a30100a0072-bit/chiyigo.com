@@ -17,7 +17,7 @@ const DEFAULT_RP_NAME    = 'Chiyigo'
 const DEFAULT_ORIGINS    = ['https://chiyigo.com']
 const CHALLENGE_TTL_SEC  = 5 * 60  // 5 分鐘
 
-export function getRpConfig(env) {
+export function getRpConfig(env: Env) {
   const rpID    = env?.WEBAUTHN_RP_ID   || DEFAULT_RP_ID
   const rpName  = env?.WEBAUTHN_RP_NAME || DEFAULT_RP_NAME
   const origins = (env?.WEBAUTHN_ORIGINS
@@ -30,7 +30,7 @@ export function getRpConfig(env) {
  * 寫入 challenge。caller 負責產 challenge（SimpleWebAuthn 會回 base64url）。
  * ttlSec 預設 300；同 challenge 重複插入會撞 UNIQUE，理論上極不可能（隨機 32 byte）。
  */
-export async function saveChallenge(env, { challenge, user_id = null, ceremony }) {
+export async function saveChallenge(env: Env, { challenge, user_id = null, ceremony }: { challenge: string; user_id?: number | null; ceremony: string }) {
   const expiresAt = new Date(Date.now() + CHALLENGE_TTL_SEC * 1000)
     .toISOString().replace('T', ' ').slice(0, 19)
   await env.chiyigo_db
@@ -52,7 +52,7 @@ export async function saveChallenge(env, { challenge, user_id = null, ceremony }
  * 雖有 publicKey/counter 兜底但仍違反 step-up「一次性消耗」基線。
  * D1 已穩定支援 DELETE...RETURNING（SQLite 3.35+），改一條 SQL 原子化。
  */
-export async function consumeChallenge(env, { challenge, ceremony }) {
+export async function consumeChallenge(env: Env, { challenge, ceremony }: { challenge: string; ceremony: string }) {
   const row = await env.chiyigo_db
     .prepare(
       `DELETE FROM webauthn_challenges
@@ -68,7 +68,7 @@ export async function consumeChallenge(env, { challenge, ceremony }) {
  * 撈某 user 既有的 credentials（excludeCredentials / allowCredentials 都會用到）。
  * transports 欄位是 JSON array 字串 → parse 回來給 lib。
  */
-export async function listUserCredentials(env, userId) {
+export async function listUserCredentials(env: Env, userId: number) {
   const rs = await env.chiyigo_db
     .prepare(
       `SELECT credential_id, transports
@@ -77,13 +77,13 @@ export async function listUserCredentials(env, userId) {
     )
     .bind(userId)
     .all()
-  return (rs.results ?? []).map(r => ({
+  return (rs.results ?? []).map((r: Record<string, unknown>) => ({
     id: r.credential_id,
-    transports: parseTransports(r.transports),
+    transports: parseTransports(r.transports as string | null),
   }))
 }
 
-function parseTransports(raw) {
+function parseTransports(raw: string | null) {
   if (!raw) return undefined
   try {
     const arr = JSON.parse(raw)

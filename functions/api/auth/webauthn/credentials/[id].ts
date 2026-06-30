@@ -31,11 +31,11 @@ import { safeUserAudit, hashIdentifierForAudit } from '../../../../utils/user-au
 const ELEVATED_ACTION_REMOVE = 'remove_passkey'
 const NICKNAME_MAX = 64
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPatch({ request, env, params }) {
+export async function onRequestPatch({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requireAuth(request, env)
   if (error) return error
@@ -69,7 +69,7 @@ export async function onRequestPatch({ request, env, params }) {
   return res({ id: credPk, nickname }, 200, cors)
 }
 
-export async function onRequestDelete({ request, env, params }) {
+export async function onRequestDelete({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requireStepUp(
     request, env, SCOPES.ELEVATED_ACCOUNT, ELEVATED_ACTION_REMOVE,

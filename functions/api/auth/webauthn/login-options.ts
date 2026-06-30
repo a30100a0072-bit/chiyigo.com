@@ -25,11 +25,11 @@ import { getRpConfig, saveChallenge, listUserCredentials } from '../../../utils/
 import { checkRateLimit, recordRateLimit } from '../../../utils/rate-limit'
 import { safeUserAudit } from '../../../utils/user-audit'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
 
   // SEC-CEREMONY-DOS：匿名端點，每次 saveChallenge 無條件寫一筆 webauthn_challenges

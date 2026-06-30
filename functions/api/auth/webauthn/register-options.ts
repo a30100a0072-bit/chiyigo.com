@@ -19,11 +19,11 @@ import { getCorsHeaders } from '../../../utils/cors'
 import { getRpConfig, saveChallenge, listUserCredentials } from '../../../utils/webauthn'
 import { safeUserAudit } from '../../../utils/user-audit'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requireAuth(request, env)
   if (error) return error

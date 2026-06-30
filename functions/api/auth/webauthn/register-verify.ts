@@ -23,18 +23,18 @@
  *   500 → SimpleWebAuthn verify 拋例外
  */
 
-import { verifyRegistrationResponse } from '@simplewebauthn/server'
+import { verifyRegistrationResponse, type WebAuthnCredential } from '@simplewebauthn/server'
 import { res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { getRpConfig, consumeChallenge } from '../../../utils/webauthn'
 import { safeUserAudit, hashIdentifierForAudit } from '../../../utils/user-audit'
 import { requireFactorAddGrant, consumeFactorAddGrantStmt } from '../../../utils/elevation'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   // SEC-FACTOR-ADD（PR-A3）：新增 passkey 需 factor-add elevation grant（X-Factor-Add-Grant header）。
   // validate-not-consume；grant consume 與下方 credential INSERT 同一 db.batch（both-or-neither）。
@@ -100,7 +100,7 @@ export async function onRequestPost({ request, env }) {
   // 3. 取出 credential 資料 → INSERT
   // SimpleWebAuthn v13 把欄位塞在 registrationInfo.credential
   const info = verification.registrationInfo
-  const credData = info.credential ?? {}
+  const credData = (info.credential ?? {}) as WebAuthnCredential
   const credentialID    = credData.id            // base64url string
   const publicKeyBytes  = credData.publicKey     // Uint8Array
   const counter         = credData.counter ?? 0
@@ -178,7 +178,7 @@ export async function onRequestPost({ request, env }) {
  * SimpleWebAuthn 也可以接 expectedChallenge async function 但這裡需要先做查表
  * 來確認 ceremony / user_id，所以自行 decode 一次。
  */
-function extractChallenge(clientDataB64Url) {
+function extractChallenge(clientDataB64Url: string) {
   try {
     const json = new TextDecoder().decode(base64urlToBytes(clientDataB64Url))
     const parsed = JSON.parse(json)
@@ -186,7 +186,7 @@ function extractChallenge(clientDataB64Url) {
   } catch { return null }
 }
 
-function base64urlToBytes(s) {
+function base64urlToBytes(s: string) {
   const pad = '='.repeat((4 - s.length % 4) % 4)
   const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/')
   const bin = atob(b64)
@@ -195,7 +195,7 @@ function base64urlToBytes(s) {
   return out
 }
 
-function bytesToBase64url(bytes) {
+function bytesToBase64url(bytes: Uint8Array) {
   let bin = ''
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
