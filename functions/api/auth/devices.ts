@@ -33,11 +33,11 @@
 import { requireAuth, res } from '../../utils/auth'
 import { getCorsHeaders } from '../../utils/cors'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requireAuth(request, env)
   if (error) return error
@@ -60,7 +60,7 @@ export async function onRequestGet({ request, env }) {
     .bind(userId)
     .all()
 
-  const devices = (rs.results ?? []).map(r => ({
+  const devices = (rs.results ?? []).map((r: Record<string, unknown>) => ({
     device_uuid:  r.device_uuid,                    // null = web
     last_seen:    r.last_seen,
     first_seen:   r.first_seen,

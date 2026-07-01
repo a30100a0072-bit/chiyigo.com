@@ -46,7 +46,7 @@ import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE, resol
 
 const VALID_MODES = new Set(['jti', 'user', 'device'])
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
 
@@ -166,7 +166,7 @@ export async function onRequestPost({ request, env }) {
                 WHERE user_id = ? AND device_uuid = ? AND revoked_at IS NULL`)
     .bind(targetId, deviceUuid)
     .all()
-  const candidateRefs = (candRows.results ?? []).map((r) => String(r.ref))
+  const candidateRefs = (candRows.results ?? []).map((r: Record<string, unknown>) => String(r.ref))
 
   // PR5 large-N 異常告警（observability，no silent cap）：N = 此 device 上列舉到的 live family 數；超過異常門檻就在
   // 既有 critical 稽核加 large_n flag（即使 full success 也發）。門檻 env 可調（嚴格只收 finite 正整數，否則 default 50）。
