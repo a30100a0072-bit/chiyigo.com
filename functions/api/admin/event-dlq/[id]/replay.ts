@@ -19,11 +19,11 @@ import { hashToken } from '../../../../utils/crypto'
 const RL_WINDOW_SEC = 60
 const RL_MAX = 30
 
-async function auditReplay(env, request, userId, severity, data) {
+async function auditReplay(env: Env, request: Request, userId: number, severity: string, data: Record<string, unknown>) {
   await safeUserAudit(env, { event_type: 'domain.event.replay', severity, user_id: userId, request, data })
 }
 
-export async function onRequestPost({ request, env, params }) {
+export async function onRequestPost({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_EVENTS, 'event_dlq_replay')
   if (stepCheck.error) return stepCheck.error
   const userId = Number(stepCheck.user.sub)
