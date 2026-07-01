@@ -16,7 +16,7 @@
  */
 const VALID_RE = /^web-[0-9a-f-]{36}$/i
 
-export function pickOrMakeDeviceUuid({ read, write, makeUuid }) {
+export function pickOrMakeDeviceUuid({ read, write, makeUuid }: { read: () => string | null; write: (v: string) => void; makeUuid: () => string | null }) {
   const existing = safeCall(read)
   if (existing && VALID_RE.test(existing)) return existing
 
@@ -28,7 +28,7 @@ export function pickOrMakeDeviceUuid({ read, write, makeUuid }) {
   return fullUuid
 }
 
-function safeCall(fn) {
+function safeCall<T>(fn: () => T): T | null {
   try { return fn() }
   catch { return null }
 }
