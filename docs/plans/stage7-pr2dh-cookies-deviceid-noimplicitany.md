@@ -1,7 +1,7 @@
 # Stage 7 PR-2dh — misc leaf 首棒：cookies + device-id noImplicitAny → 0
 
 **PR**：refactor(utils): annotate cookies + device-id noImplicitAny (8 -> 0)
-**base**：`0195c266`（#131 PR-2dg）｜**source commit**：TBD（Phase 2 CODING_ALLOWED 後）
+**base**：`0195c266`（#131 PR-2dg）｜**source commit**：`96f12a9a`｜**docs gate-log**：`9ae7fcd4`（+ 本 trajectory 最終更新）
 **級別**：impl L1 / review care L2（pure utils、type-only、無 env/D1/token 變更）
 **性質**：純 type-only、byte-identical 2/2、misc leaf 群首棒（split 而非 12 檔 domain-batch）
 
@@ -123,4 +123,6 @@ L31  - function safeCall(fn) {
 5. **CODING_ALLOWED**（owner 2026-07-01）→ branch `refactor/stage7-pr2dh-cookies-deviceid-noimplicitany` @ `0195c266` → source commit **`96f12a9a`**（5 edit、net diff = frozen diff 逐字）。
 6. **機械層 9/9 全綠**（ARCH-L4/L5 重跑、不沿用 spike）：forced tsc 566→558 / REMOVED=8 / ADDED=0 / 殘留 0 · byte-identical 2/2〔cookies `ddb3d30b…c07ef38` · device-id `f405680a…7ce17d3` · stderr 0〕· ratchet 558/41/294 · lint · build:functions · verify:browser-pipeline · test:cov 737/90.28% · **test:int 75f/1328** · npm audit 0。
 7. **維度 A code** self-review（L2 workflow `wf_a7868934-926`、19 agents、7 finder → 對抗 verify）→ **11 findings 全 refuted**（0 accepted / 0 suspicious）：3 contract-enum〔caller cascade / return 收斂 / dual-leaf〕經 ratchet+import-graph 否證、naming-ssot 3〔randomUuid doc-alias〈pre-existing 未改、out-of-scope〉/ maxAgeSec≠maxAgeSeconds / `Request` 為正確最小型別〉、race/idempotency/async/regression-lock 皆 type-only N/A（workflow 獨立重跑 esbuild byte-identical 佐證）。主線親讀真碼裁決認同全 refute → `CODE_SELF_REVIEW_CLEAN`。
-8. **③ Codex Code** → 【待送】。**④ ChatGPT Faithfulness** → 【待送】。**MERGE_ALLOWED**（owner）→ squash-merge。
+8. **③ Codex Code** `CODEX_CODE_APPROVED`（獨立驗：2 source +5/-5、gate-log docs-only、forced tsc 566→558/REMOVED=8/ADDED=0、byte-identical sha 相符、ratchet/lint/build/browser/test:cov/**test:int 75f/1328** 全過、no escape hatch；npm audit external-registry 被拒未重跑、無 dep 變更故非 blocker）。
+9. **④ ChatGPT Faithfulness** `CHATGPT_CODE_FAITHFULNESS_APPROVED`（SC-1..4 + ARCH-L1..8 全 PASS、無 scope creep、無漏 hunk〔2 code 皆附、gate-log 為 docs〕、security-adjacent byte-identical 充分）。
+10. **MERGE_ALLOWED**（owner 2026-07-01）→ push + PR + squash-merge。
