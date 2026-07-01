@@ -49,11 +49,11 @@ import { sendRiskBlockedAlertEmail } from '../../../utils/email'
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
 
   // SEC-CEREMONY-DOS：passkey 登入端點無速限（assertion 密碼學不可暴破，但無界呼叫會
@@ -312,7 +312,7 @@ export async function onRequestPost({ request, env }) {
   return res({ ...payload, refresh_token: refreshToken }, 200, cors)
 }
 
-function extractChallenge(clientDataB64Url) {
+function extractChallenge(clientDataB64Url: string) {
   try {
     const json = new TextDecoder().decode(base64urlToBytes(clientDataB64Url))
     const parsed = JSON.parse(json)
@@ -320,7 +320,7 @@ function extractChallenge(clientDataB64Url) {
   } catch { return null }
 }
 
-function base64urlToBytes(s) {
+function base64urlToBytes(s: string) {
   const pad = '='.repeat((4 - s.length % 4) % 4)
   const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/')
   const bin = atob(b64)
@@ -329,7 +329,7 @@ function base64urlToBytes(s) {
   return out
 }
 
-function parseTransports(raw) {
+function parseTransports(raw: string | null) {
   if (!raw) return undefined
   try {
     const arr = JSON.parse(raw)

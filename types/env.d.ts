@@ -32,6 +32,8 @@ declare global {
 
     // ── Auth misc ──────────────────────────────────────────────────────
     TOTP_ISSUER?: string;
+    WEBAUTHN_RP_ID?: string;
+    WEBAUTHN_RP_NAME?: string;
     WEBAUTHN_ORIGINS?: string;
     TURNSTILE_SECRET_KEY?: string;
     WALLET_SIWE_DOMAIN?: string;

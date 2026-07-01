@@ -16,11 +16,11 @@ import { requireAuth, res } from '../../../utils/auth'
 import { getCorsHeaders } from '../../../utils/cors'
 import { publicReasonCode } from '../../../utils/credential-disposition'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requireAuth(request, env)
   if (error) return error
@@ -37,10 +37,10 @@ export async function onRequestGet({ request, env }) {
     .bind(userId)
     .all()
 
-  const credentials = (rs.results ?? []).map(r => ({
+  const credentials = (rs.results ?? []).map((r: Record<string, unknown>) => ({
     id:               r.id,
     nickname:         r.nickname,
-    transports:       parseTransports(r.transports),
+    transports:       parseTransports(r.transports as string | null),
     aaguid:           r.aaguid,
     backup_eligible:  !!r.backup_eligible,
     backup_state:     !!r.backup_state,
@@ -48,13 +48,13 @@ export async function onRequestGet({ request, env }) {
     last_used_at:     r.last_used_at,
     // SEC-FACTOR-ADD-A PR-A4：user-visible disposition flag + 最小化 reason（不洩 raw high:<signal>）
     requires_reverification: !!r.requires_reverification,
-    disposition_reason:      publicReasonCode(r.requires_reverification, r.disposition_reason),
+    disposition_reason:      publicReasonCode(r.requires_reverification as number, r.disposition_reason as string | null),
   }))
 
   return res({ credentials }, 200, cors)
 }
 
-function parseTransports(raw) {
+function parseTransports(raw: string | null) {
   if (!raw) return []
   try {
     const arr = JSON.parse(raw)
