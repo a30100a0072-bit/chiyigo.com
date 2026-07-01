@@ -16,7 +16,7 @@ const ACCEPT_RL_WINDOW_SEC = 60
 const ACCEPT_RL_MAX = 30
 const ALLOWED_BODY_KEYS: ReadonlySet<string> = new Set(['token'])
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const { userId, error } = await requireRegularAccessToken(request, env)
   if (error) return error
 
@@ -91,7 +91,7 @@ export async function onRequestPost({ request, env }) {
   }
 }
 
-async function emitDenied(env, request, userId: number, reasonCode: string) {
+async function emitDenied(env: Env, request: Request, userId: number, reasonCode: string) {
   await safeUserAudit(env, {
     event_type: 'invitation.accept.denied', severity: 'warn', user_id: userId, request,
     data: { reason_code: reasonCode },

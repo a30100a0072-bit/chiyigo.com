@@ -29,11 +29,11 @@ import { res } from '../../../utils/auth'
 
 const SUPPORTED_PROVIDERS = ['discord']
 
-const PROVIDER_INIT_PATHS = {
+const PROVIDER_INIT_PATHS: Record<string, string> = {
   discord: '/api/auth/discord/init',
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const url      = new URL(request.url)
   const platform = url.searchParams.get('platform') ?? 'web'
   const provider = url.searchParams.get('provider') ?? 'discord'
