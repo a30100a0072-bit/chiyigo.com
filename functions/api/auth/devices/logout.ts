@@ -28,11 +28,11 @@ import { getCorsHeaders } from '../../../utils/cors'
 import { safeUserAudit, hashIdentifierForAudit, auditDomainEventEmitted } from '../../../utils/user-audit'
 import { revokeSessionFamilies, FAMILY_REF_SQL, SESSION_REVOKE_CHUNK_SIZE, resolveLargeNThreshold } from '../../../utils/session-revoke'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   const { user, error } = await requireAuth(request, env)
   if (error) return error
@@ -71,7 +71,7 @@ export async function onRequestPost({ request, env }) {
                           WHERE user_id = ? AND device_uuid IS NULL AND revoked_at IS NULL`).bind(userId).all()
     : await db.prepare(`SELECT DISTINCT ${FAMILY_REF_SQL} AS ref FROM refresh_tokens
                           WHERE user_id = ? AND device_uuid = ? AND revoked_at IS NULL`).bind(userId, dev).all()
-  const candidateRefs = (candRows.results ?? []).map((r) => String(r.ref))
+  const candidateRefs = (candRows.results ?? []).map((r: Record<string, unknown>) => String(r.ref))
 
   // PR5 large-N 異常告警（observability，no silent cap）：N = 此 device 上列舉到的 live family 數；超過異常門檻就在
   // 既有稽核加 large_n flag（即使 full success 也發）。門檻 env 可調（嚴格只收 finite 正整數，否則 default 50）。
