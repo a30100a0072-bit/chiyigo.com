@@ -41,7 +41,7 @@ import down0011 from '../../migrations/down/0011_login_attempts_kind.down.sql?ra
 import down0012 from '../../migrations/down/0012_admin_audit_hash_chain.down.sql?raw'
 
 // I-1 targeted (codex r9-5 follow-up, 2026-05-10)：0037 是 prod 部署順序錯會直接 500 的 migration，
-// 至少要有 targeted smoke。完整 0001..0055 forward 已實作（見 line 448 describe）；本 case
+// 至少要有 targeted smoke。完整 0001..0056 forward 已實作（見 line 448 describe）；本 case
 // 維持手建 fixture 形式作 0037 issued_aud 行為的 targeted 驗證。
 import up0037 from '../../migrations/0037_refresh_tokens_issued_aud.sql?raw'
 import up0038      from '../../migrations/0038_audit_log_phase2.sql?raw'
@@ -97,6 +97,7 @@ import up0054    from '../../migrations/0054_elevation_grants.sql?raw'
 import down0054  from '../../migrations/down/0054_elevation_grants.down.sql?raw'
 import up0055    from '../../migrations/0055_credential_disposition.sql?raw'
 import down0055  from '../../migrations/down/0055_credential_disposition.down.sql?raw'
+import up0056    from '../../migrations/0056_login_attempts_created_at_index.sql?raw'
 
 // 0029 原本含 typo（REFERENCES requisitions 複數），2026-05-12 retroactive
 // 修為單數 `requisition`（見 migration 檔頭 🔧 註解）。end-state 不變、0030 仍
@@ -109,6 +110,7 @@ const ALL_UPS = [
   up0033, up0034, up0035, up0036, up0037, up0038, up0039, up0040,
   up0041, up0042, up0043, up0044, up0045, up0046, up0047, up0048,
   up0049, up0050, up0051, up0052, up0053, up0054, up0055,
+  up0056,
 ]
 
 const UPS   = [up0001, up0002, up0003, up0004, up0005, up0006, up0007, up0008, up0009, up0010, up0011, up0012]
@@ -297,7 +299,7 @@ describe('migrations smoke', () => {
 //
 // 設計選擇：本測試是 **targeted migration smoke**，不是 full forward migration proof。
 // 2026-05-12 _base.sql 已重整為 12-table purified baseline（含 refresh_tokens /
-// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0055 已實作於下方
+// auth_codes / local_accounts 等 prod 既有表）；full forward 0001..0056 已實作於下方
 // 「full forward chain」describe（line 448）。本 case 維持手建 fixture 形式作 0037
 // issued_aud 行為 targeted 驗證。
 //
@@ -392,10 +394,10 @@ describe('migrations smoke 0037 targeted', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full forward chain 0001..0055 vs prod snapshot
+// Full forward chain 0001..0056 vs prod snapshot
 //
 // 2026-05-12 schema baseline 重整後（_base.sql 改為 12-table purified baseline），
-// 完整 forward 變得可行。本 describe 驗 _base + 0001..0055 跑完後的 schema shape
+// 完整 forward 變得可行。本 describe 驗 _base + 0001..0056 跑完後的 schema shape
 // 對得上 database/_prod_snapshot_2026_05_12.sql（除已知 cosmetic 差異）。
 //
 // 預期 list 由 prod snapshot 手動 transcribe（grep CREATE TABLE / CREATE INDEX
@@ -496,7 +498,7 @@ const EXPECTED_REQUISITION_INDEXES = [
   'idx_requisition_ip',         // 0006
 ]
 
-describe('full forward chain 0001..0055 vs prod snapshot', () => {
+describe('full forward chain 0001..0056 vs prod snapshot', () => {
   beforeAll(async () => {
     await dropAllTables()
     await execAll(baseSql)
@@ -541,6 +543,7 @@ describe('full forward chain 0001..0055 vs prod snapshot', () => {
     expect(indexes).toContain('idx_payment_webhook_events_apply_status')  // 0042 (Codex r1 P0-2)
     expect(indexes).toContain('idx_payment_intents_deleted_at')           // 0043 (Codex r1 P0-1)
     expect(indexes).toContain('idx_admin_audit_prev_hash_unique')         // 0045 (hash chain CAS race fix)
+    expect(indexes).toContain('idx_login_attempts_created_at')             // 0056
   })
 
   // codex round-12 medium：補 FK + index DDL semantic 驗證。
