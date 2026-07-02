@@ -1,0 +1,14 @@
+-- 0056: login_attempts(created_at) index — cron D1 cleanup full-scan 消除（PR-CLEAN-1）
+--
+-- cleanup task（functions/api/admin/cron/cleanup.ts）:
+--   DELETE FROM login_attempts WHERE created_at < datetime('now', '-90 days')
+-- 既有 login_attempts 索引皆複合、leading ip/email/kind（0002/0011）→ 對 bare
+-- created_at range 用不到 → prod EXPLAIN QUERY PLAN 坐實走 `SCAN login_attempts`。
+-- 補此單欄 index 後 planner 轉 `SEARCH login_attempts USING INDEX ... (created_at<?)`。
+--
+-- additive、backward-compatible、無 code 依賴（cleanup DELETE 語句不變、只是改走 index）。
+-- preventive hygiene：現 login_attempts≈974 row、full scan 無害；隨 90 天保留累積成長才有實益。
+-- 非修 cron 524（那次 524 是 transient CF/D1 stall，非 scan 造成）。
+-- refresh_tokens 的 `revoked_at IS NOT NULL OR expires_at<...` OR-DELETE index-only 不可解
+--   （SQLite OR-union 需兩 term 皆 seekable；IS NOT NULL 非 seekable）→ 另案 PR-CLEAN-2 handler-split。
+CREATE INDEX IF NOT EXISTS idx_login_attempts_created_at ON login_attempts(created_at);
