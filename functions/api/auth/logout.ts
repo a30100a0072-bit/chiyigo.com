@@ -26,11 +26,11 @@ import { safeUserAudit, auditDomainEventEmitted } from '../../utils/user-audit'
 import { emitSessionRevoked } from '../../utils/domain-event-emit'
 import { casByFamily, FAMILY_REF_SQL } from '../../utils/session-revoke'
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   // 成功登出（含並發已撤、token 不存在）一律：200 + 清除 Cookie（冪等）。
   const loggedOut = () => new Response(JSON.stringify({ message: 'Logged out' }), {
@@ -116,7 +116,7 @@ export async function onRequestPost({ request, env }) {
   return loggedOut()
 }
 
-function parseCookieHeader(header, name) {
+function parseCookieHeader(header: string | null, name: string) {
   if (!header) return null
   const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
   return match ? match[1] : null
