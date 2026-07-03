@@ -45,11 +45,11 @@ const REFRESH_GRACE_SECONDS = 30
 export const REFRESH_FAMILY_REVOKE_AUDIT_CAP            = 5
 export const REFRESH_FAMILY_REVOKE_AUDIT_WINDOW_SECONDS = 600
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   return new Response(null, { status: 204, headers: getCorsHeaders(request, env, { credentials: true }) })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const cors = getCorsHeaders(request, env, { credentials: true })
   // Cookie 優先（Web），其次 JSON body（App）
   const cookieToken = parseCookieHeader(request.headers.get('Cookie'), 'chiyigo_refresh')
@@ -410,7 +410,7 @@ export async function onRequestPost({ request, env }) {
   }, 200, cors)
 }
 
-function parseCookieHeader(header, name) {
+function parseCookieHeader(header: string | null, name: string) {
   if (!header) return null
   const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
   return match ? match[1] : null
