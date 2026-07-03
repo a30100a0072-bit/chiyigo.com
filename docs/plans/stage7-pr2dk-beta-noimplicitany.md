@@ -1,7 +1,7 @@
 # Stage 7 PR-2dk β — noImplicitAny 續清（misc leaf β cluster：auth/logout + auth/refresh）
 
-**狀態**：PLAN_DRAFT（Phase 1；SPEC_APPROVED＝Option A / params-only，owner 2026-07-03）｜**gate-log 待補**（4 道外部審查軌跡）
-**base**：`5be20373`（origin/main）｜**source commit**：待 CODING_ALLOWED 後產
+**狀態**：SHIPPED（squash-merge to main）｜**gate-log 永久記錄**（Dual Gate v3.1 4 道外部審查全 APPROVED；SPEC_APPROVED＝Option A / params-only，owner 2026-07-03）
+**base**：`5be20373`（origin/main）｜**source commit**：`af93a99c`
 **性質**：純 type-only noImplicitAny 標註（12 → 0）、byte-identical emit 2/2、零 runtime / 零 schema/API/migration。
 
 > ⚠ `auth/logout.ts` ≠ `auth/devices/logout.ts`（後者 α/PR-2dj 已 SHIPPED，本棒未碰）。
@@ -69,20 +69,20 @@ SSOT：
 
 **F-3 DORMANT-safe**：2 檔 0 命中 archive / R2 / retention / aggregate / checkpoint；`safeUserAudit` transitive cold_class feed 之 args byte-identical（type-only）→ dormant 未改未 invoke。
 
-## 4. 本地機械 gate（CODE stage 實跑、全綠才往下）— pending
-`typecheck:ratchet`（518）· `lint` · `verify:browser-pipeline` · `test:cov` · `test:int` · `build:functions`（含完整 `npm run build`：chains lint:migrations/handlers/archive）· `npm audit --omit=dev --audit-level=high`。
-> reviewer 於 test:int 並行時**勿跑 `tsc --force`**（避 Miniflare 飢餓假 flake）。known flaky `jwt.test.ts:33`（~1.6%/run）非本棒引入 → CI 撞到 rerun。
+## 4. 本地機械 gate（CODE stage + merge-front 實跑、全綠）
+`typecheck:ratchet` enforce OK（518/302、baseline `1119/175` frozen、base 5be20373）· forced tsc set-diff **530→518 / REMOVED=12 / ADDED=0** · byte-identical 2/2（logout 3016B `38d0a417f67cdee1…`、refresh 13429B `f8766503e02e7173…`）· `lint` 0 · `verify:browser-pipeline` OK（25 pages ?v=）· `test:cov` **25 檔/737 passed/90.28%**（1933/2141）· `test:int` **75 檔/1328 passed**（無 flake）· `build:functions` Compiled OK · 完整 `npm run build`（lint:handlers/archive-no-delete/migrations）OK · `npm audit --omit=dev --audit-level=high` 0 vuln。
+> known flaky `jwt.test.ts:33`（~1.6%/run）非本棒引入、本次未撞。npm audit 外部 registry 沙箱重跑限制＝非 blocker（`package.json`/lock 未改；本機已跑 0 vuln）。本機 build:partials 的 public/ CRLF churn 挑檔未進 PR（[[feedback_windows_build_crlf_churn]]）。
 
 ## 5. Dual Gate v3.1 — 4 道外部審查 — pending
 - ① ChatGPT Architecture `CHATGPT_ARCH_APPROVED_WITH_LOCKS`（2026-07-03；0 blocker / 0 required / 3 NB；8 審查面全 PASS：SPEC fidelity / scope / Convention A / parseCookieHeader lean / Pages contract / refresh-logout 安全面 / dup 治理 / plan-doc companion）→ ARCH-L1..L9（見 §1）。NB：dup 3-份描述已修正 / plan doc 保治理檔身分不算 source scope 擴張 / Codex Plan 仍須 replay 驗 TS2345·TS2353=0 新增。
 - ② Codex Plan `CODEX_PLAN_APPROVED`（2026-07-03；0 blocking / 0 required）：隔離 overlay replay 坐實 base `5be20373`、530→518、REMOVED=12（TS7031=8/TS7006=4）、ADDED=0、TS2345/TS2353=0 新增、byte-identical logout 3016B/refresh 13429B hash 相符、numstat 3/3·3/3、僅 6 annotation site 無 return type、`oauth/end-session.ts:63` 仍 backlog、source/governance doc 分離維持。
-- ③ Codex Code — pending
-- ④ ChatGPT Faithfulness — pending
+- ③ Codex Code `CODEX_CODE_APPROVED`（2026-07-03 @ `af93a99c`；0 blocking）：獨立 replay 坐實 diff 3/3·3/3、§3 hunks 相符、530→518/REMOVED=12/ADDED=0/TS2345·TS2353=0、byte-identical hash 吻合、gates 綠。npm audit 沙箱重跑限制非 blocker（deps 未改）；public/ CRLF 噪音提醒（已清）。
+- ④ ChatGPT Faithfulness `CHATGPT_CODE_FAITHFULNESS_APPROVED`（2026-07-03；0 blocker / 2 NB）：7 檢查全 PASS（反 curated-diff / source scope / params-only / forbidden touch / ARCH-L7 分列 / OD fidelity / scope creep）、無可信 Tier0/1 side-finding。
 
-**維度 A self-review**：
-- PLAN（L3-security fail-safe、3 readonly-reviewer：SPEC-scope-fidelity / behavior-preservation-security / type-cascade-naming-SSOT）→ 結果待填。
-- CODE（L3、reviewer 維度待 CODE stage）→ 待填。
-- 主線親裁（非採 raw）。
+**維度 A self-review（內部放大器、主線親裁不採 raw）**：
+- PLAN（L3-security fail-safe、3 readonly-reviewer：SPEC-scope-fidelity / behavior-preservation-security / type-cascade-naming-SSOT）→ 一輪 0 finding；主線補查 Pages-runtime 契約 + callFunction excess-property 皆安全。
+- CODE（L3、3 readonly-reviewer：diff-fidelity / runtime-security / evidence）→ 一輪 0 finding；word-diff 每行 body 為 context、security path 全未觸、evidence reviewer 獨立 esbuild 重算 byte-identical sha256 吻合 + baseline frozen 未 --update。
+- 主線親裁（非採 raw）：兩階段各一輪 0 新發現；fold-in＝dup 3 份精確化、sibling 82→89。
 
 ## 6. OD 狀態
 β **零新型別 OD**。jti null-union OD（`string | null | undefined`）屬 γ/PR-2dl（BLOCK-4 明禁未碰）。parseCookieHeader return type 由 owner 裁 **params-only**（BLOCK-5）。
