@@ -1,6 +1,6 @@
 # Stage 7 PR-2dl γ — noImplicitAny 續清（misc leaf γ cluster：utils/backchannel + utils/revocation）
 
-**狀態**：**`CODE_SELF_REVIEW_CLEAN`（CODE @ `0af55e69`，2026-07-04）**〔Plan Gate ①+② 雙過、機械層全綠、維度 A CODE 三維 0 blocking〕｜**待送 ③ Codex Code**（未授權 merge）
+**狀態**：**`CODEX_CODE_APPROVED`（③ @ `0af55e69`，2026-07-04）**〔Plan ①+② + Code ③ 三道過、機械層全綠〕｜**待送 ④ ChatGPT Faithfulness**（未授權 push/merge）
 **base**：`894646e2`（origin/main，PR-2dk β）｜**source commit**：`0af55e69`（2 source、+14/-8）
 **性質**：純 type-only noImplicitAny 標註（13 → 0）、byte-identical emit 2/2、零 runtime / 零 schema/API/migration。**帶 2 個 owner-ruled OD（jti / sub）+ JSDoc jti 同步**（非純機械，OD 顯式攤開、禁機械偷渡）。
 
@@ -100,7 +100,7 @@
 ## 5. Dual Gate v3.1 — 4 道外部審查
 - ① ChatGPT Architecture **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`（2026-07-04 @ `c8d64d89`）**：APPROVE、0 blocker。核准限定 2 source / 13 TS7006 / type-only / byte-identical 2/2 / 零 runtime·schema·API·migration；OD-1 jti / OD-2 sub / JSDoc 同步對齊 owner 裁決；ARCH-L1..L10（見 §1）。NB：① `@param {object} env` 可暫留、CODE 不得順改（除非 owner 明示）；② ② 必隔離 replay、③ 必 source-commit replay；③ sub SoT 已修正為 `row.user_id` dispatch path（不再依賴舊 `parseInt` 歸因）；④ backchannel 無直接 test importer→③ Code 可特別看 end-session path assignability。**只核准 plan/locks、不授權 CODE、不授權 merge。**
 - ② Codex Plan **`CODEX_PLAN_APPROVED`（2026-07-04）**：no material findings。隔離 replay 坐實：branch diff 僅 plan doc（source/runtime/test/schema/env/caller 空）；patch 只動 2 source；forced tsc **518→505**、errorFiles 33→31、cleanFiles 302→304、**ADDED=0**（無新 TS2345/TS2339/TS2367/TS2353）、**REMOVED=13**（全 TS7006）；byte-identical 2/2 hash 吻合（backchannel `631f3903…`/1613B、revocation `6e138b6f…`/2082B）。註：無 repo-local `governance/rules.json`＝依 live replay 證據非 manifest enforcement。**此裁決 ≠ CODING_ALLOWED。**
-- ③ Codex Code `CODEX_CODE_APPROVED` — pending（CODE stage @ source commit `0af55e69`）。
+- ③ Codex Code **`CODEX_CODE_APPROVED`（2026-07-04 @ `0af55e69`）**：no material findings。獨立 replay 坐實：source/docs split（`0af55e69` 僅 2 source、`8ce7d3db` 為 docs gate-log）；**faithfulness — live source diff == `code-diff-0af55e69.patch` == ②-approved `intended-source.patch` byte-for-byte**（3990B、SHA-256 `959ebbee80b0c4530b44c1dddffd3caca20bebb4189eb6957b2287c23ac3dea8`）；forced tsc 518→505/ADDED=0/REMOVED=13（全 TS7006）；byte-identical 2/2（`631f3903`/1613B、`6e138b6f`/2082B）；0 escape-hatch/`any`；security guard（jti fail-safe/fail-closed + `INSERT OR IGNORE`+`changes()` atomic）未觸。gates 綠（ratchet/tsc/lint/browser-pipeline/test:cov 737/test:int 1328/build:functions/handlers/archive-no-delete/migrations）。npm audit（outbound）+ full build（寫 public/）未獨立重跑＝deps/config 未改非 blocker。**≠ push/merge/release。**
 - ④ ChatGPT Faithfulness `CHATGPT_CODE_FAITHFULNESS_APPROVED` — pending。
 
 **維度 A self-review（內部放大器、主線親裁不採 raw）**：
