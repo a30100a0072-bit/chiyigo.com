@@ -1,6 +1,6 @@
 # Stage 7 PR-2dl γ — noImplicitAny 續清（misc leaf γ cluster：utils/backchannel + utils/revocation）
 
-**狀態**：PLAN_DRAFT → PLAN_SELF_REVIEW_CLEAN（維度 A L3 self-review 完成）｜**待送 ① ChatGPT Architecture**
+**狀態**：PLAN_SELF_REVIEW_CLEAN → **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`（① 2026-07-04 @ `c8d64d89`）**｜**待送 ② Codex Plan Gate**（未授權進 CODE、未授權 merge）
 **base**：`894646e2`（origin/main，PR-2dk β）｜**source commit**：pending（CODE stage）
 **性質**：純 type-only noImplicitAny 標註（13 → 0）、byte-identical emit 2/2、零 runtime / 零 schema/API/migration。**帶 2 個 owner-ruled OD（jti / sub）+ JSDoc jti 同步**（非純機械，OD 顯式攤開、禁機械偷渡）。
 
@@ -39,7 +39,17 @@
 - BLOCK-6 禁 helper / shared util 抽取、禁改 `getBackchannelEndpoints()` / `oauth-clients` / caller。
 - BLOCK-7 `Env` ambient、禁 import。
 
-**ARCH locks（① ChatGPT Architecture）**：pending — 送 ① 後回填 ARCH-L1..Ln。
+**ARCH locks（① ChatGPT `CHATGPT_ARCH_APPROVED_WITH_LOCKS`，2026-07-04 @ `c8d64d89`）**：
+- ARCH-L1 TYPE-ONLY：CODE stage 只允許參數型別、2 local type alias、3 處 jti JSDoc 同步；禁改任何 runtime expression。
+- ARCH-L2 SOURCE-SET：source 僅 `utils/backchannel.ts` + `utils/revocation.ts`（+ plan doc companion）；禁改 caller / test / schema / migration / `env.d.ts`。
+- ARCH-L3 JTI-CONTRACT：`isJtiRevoked` / `revokeJti` / `consumeJtiOnce` 之 `jti` 必 `string | null | undefined`；JSDoc 同步；禁窄化。
+- ARCH-L4 SUB-CONTRACT：`signLogoutToken` / `dispatchBackchannelLogout` 之 `sub` 必 `string | number`；禁窄成 `string`、禁放寬 `undefined/null`。
+- ARCH-L5 ENV-PICK：util env 只用 `Pick<Env, 實讀 key>`（`JWT_PRIVATE_KEY` / `chiyigo_db` / `CHIYIGO_KV`）；禁 full `Env` 掩蓋依賴面。
+- ARCH-L6 NO-TEST-ADAPT：禁改 `revocation.test.ts` 或其他測試配合型別；測試只作驗證。
+- ARCH-L7 REPLAY-REQUIRED：CODE stage 必以 final source commit 重跑 forced tsc set-diff：ADDED=0、REMOVED=13 TS7006；禁沿用 scout。
+- ARCH-L8 BYTE-IDENTICAL：final diff 必重跑 2/2 byte-identical，JSDoc 同步後 hash 不得改 JS emit。
+- ARCH-L9 BUILD-COVERAGE：CODE stage 必跑 `typecheck:ratchet` / lint / browser pipeline / coverage / integration / functions build / full build / audit；audit deps 未改可非 blocker 但需報告。
+- ARCH-L10 NO-DORMANT：禁觸 archive/R2/retention/aggregate/checkpoint（F-3 dormant）；name-status 出現額外檔案自動退回 plan。
 
 ## 2. Edit matrix（10 edit hunk：5 簽名 + 2 alias + 3 JSDoc；清 13 TS7006）
 
@@ -84,8 +94,8 @@
 - CODE stage 重證（對齊 CI `.github/workflows/ci.yml`）：`typecheck:ratchet` enforce（505/31/304、baseline `1119/175` frozen）· `lint` · `verify:browser-pipeline` · `test:cov` · `test:int`（75 檔、含 `revocation.test.ts` 契約測試）· `build:functions` · 完整 `npm run build` · `npm audit --omit=dev --audit-level=high`。
 > known flaky `jwt.test.ts:33`（~1.6%/run）非本棒引入（tamper no-op false-pass、與本 diff 無關）→ CI 撞到 rerun、非本棒 failure。npm audit deps 未改＝非 blocker。本機 build 的 public/ CRLF churn 挑檔不進 PR（[[feedback_windows_build_crlf_churn]]）。self-review 與 `test:int` 並行時囑 reviewer **勿跑 `tsc --force`**（避 Miniflare 飢餓 flake）。
 
-## 5. Dual Gate v3.1 — 4 道外部審查 — pending
-- ① ChatGPT Architecture `CHATGPT_ARCH_APPROVED` — pending（審查面預期：SPEC/OD fidelity〔jti/sub 兩 OD + JSDoc (b)〕 / scope / util Pick 慣例〔⟂ handler full Env〕 / byte-identical 零行為 / revocation hot-path 安全面 / F-3 / dual-leaf / plan-doc companion 身分）。
+## 5. Dual Gate v3.1 — 4 道外部審查
+- ① ChatGPT Architecture **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`（2026-07-04 @ `c8d64d89`）**：APPROVE、0 blocker。核准限定 2 source / 13 TS7006 / type-only / byte-identical 2/2 / 零 runtime·schema·API·migration；OD-1 jti / OD-2 sub / JSDoc 同步對齊 owner 裁決；ARCH-L1..L10（見 §1）。NB：① `@param {object} env` 可暫留、CODE 不得順改（除非 owner 明示）；② ② 必隔離 replay、③ 必 source-commit replay；③ sub SoT 已修正為 `row.user_id` dispatch path（不再依賴舊 `parseInt` 歸因）；④ backchannel 無直接 test importer→③ Code 可特別看 end-session path assignability。**只核准 plan/locks、不授權 CODE、不授權 merge。**
 - ② Codex Plan `CODEX_PLAN_APPROVED` — pending（隔離 replay 驗 base 518→505、REMOVED=13、ADDED=0、TS2345/TS2353=0 新增、byte-identical hash）。
 - ③ Codex Code `CODEX_CODE_APPROVED` — pending（CODE stage @ source commit）。
 - ④ ChatGPT Faithfulness `CHATGPT_CODE_FAITHFULNESS_APPROVED` — pending。
