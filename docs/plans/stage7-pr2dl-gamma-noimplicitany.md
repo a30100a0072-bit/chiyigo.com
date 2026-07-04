@@ -1,7 +1,7 @@
 # Stage 7 PR-2dl γ — noImplicitAny 續清（misc leaf γ cluster：utils/backchannel + utils/revocation）
 
-**狀態**：**`CODEX_PLAN_APPROVED`（② 2026-07-04）**〔Plan Gate ①+② 雙過〕｜**待 owner 明示 `CODING_ALLOWED` 才進 CODE stage**（未授權 merge）
-**base**：`894646e2`（origin/main，PR-2dk β）｜**source commit**：pending（CODE stage）
+**狀態**：**`CODE_SELF_REVIEW_CLEAN`（CODE @ `0af55e69`，2026-07-04）**〔Plan Gate ①+② 雙過、機械層全綠、維度 A CODE 三維 0 blocking〕｜**待送 ③ Codex Code**（未授權 merge）
+**base**：`894646e2`（origin/main，PR-2dk β）｜**source commit**：`0af55e69`（2 source、+14/-8）
 **性質**：純 type-only noImplicitAny 標註（13 → 0）、byte-identical emit 2/2、零 runtime / 零 schema/API/migration。**帶 2 個 owner-ruled OD（jti / sub）+ JSDoc jti 同步**（非純機械，OD 顯式攤開、禁機械偷渡）。
 
 > ⚠ γ 是 misc leaf 拆棒（owner LOCKED α→β→γ）收尾棒：α（`admin/revoke`+`auth/devices`+`devices/logout` 13）#134 SHIPPED、β（`auth/logout`+`auth/refresh` 12）#136 SHIPPED、**γ（本棒）= session-token leaf 最後 13**。
@@ -72,6 +72,8 @@
 - **sub OD `string | number` SoT**＝ backchannel 內部 `String(sub)`（:47）+ `if(!sub)`（:68）吃 string/number；caller `end-session.ts` **兩 dispatch site**：① id_token_hint 路徑 L96/99 傳 `sub`（L80-81 `verifyIdTokenHintGetSub`→`string|null`、`if(sub)` narrow 成 `string`）；② cookie-fallback 路徑 L127/129 傳 `userId`（**L120 `const userId = row.user_id`**＝D1 `refresh_tokens.user_id` INTEGER、runtime number；現 handler ctx 未標型故靜態 `any`）。**一 string、一 number id、無 undefined caller** → `string | number` 精準（runtime 語意 + owner ruling + strict:true forward-compat）；JSDoc `@param {string|number} sub`（backchannel:64 已對、無需改）。〔註：L82 `parseInt(sub,10)` 的同名 `userId` 只餵 id_token_hint 區塊 UPDATE/audit、**從未 dispatch**，非 sub caller。〕
 - **`aud: string`**＝ `getBackchannelEndpoints()` 回傳 `{aud, url}` + `.setAudience(aud)` 用法；set-diff ADDED=0 坐實相容。
 
+> **註（alias hunk 完整形）**：edit matrix #1/#4 的 `type XxxEnv = Pick<…>` 別名各**上帶一行 why-comment**（`// util env 子集…handler full Env ⟂ util Pick 刻意分流`，理由同 §1 EDIT-1）+ 一分隔空行，對齊 sibling named-Pick-alias（`jwt.ts`/`siwe.ts`/`device-alerts.ts`）帶註解慣例。comment/空行 esbuild AST-neutral（byte-identical 不破），已含於 ②-approved `intended-source.patch`（非新增 scope）。
+
 ## 3. 證據（scout 實測 @ working-tree overlay，已還原；CODE stage 於 source commit 重證）
 
 - **forced tsc** `tsc -b tsconfig.solution.json --pretty false --force`：**518 → 505**、REMOVED=13（set-diff 精確＝那 13 條 TS7006）、**ADDED=0**（set-diff、非算術；含 dual-leaf tests leaf 全域）。errorFiles 33→31、cleanFiles 302→304。baseline `1119/175` frozen（reduce 禁 --update）。
@@ -89,20 +91,22 @@
 
 **F-3 DORMANT-safe**：2 檔 0 命中 archive / R2 / retention / aggregate / checkpoint（backchannel＝jose+fetch+oauth-clients；revocation＝KV+D1 `revoked_jti`）；type-only byte-identical → 無 transitive dormant invoke。
 
-## 4. 本地機械 gate（scout 已測；CODE stage + merge-front 全套重跑）— pending CODE stage
-- scout 已測：forced tsc set-diff **518→505 / REMOVED=13 / ADDED=0** · byte-identical 2/2（含 JSDoc 最終形態）。
-- CODE stage 重證（對齊 CI `.github/workflows/ci.yml`）：`typecheck:ratchet` enforce（505/31/304、baseline `1119/175` frozen）· `lint` · `verify:browser-pipeline` · `test:cov` · `test:int`（75 檔、含 `revocation.test.ts` 契約測試）· `build:functions` · 完整 `npm run build` · `npm audit --omit=dev --audit-level=high`。
-> known flaky `jwt.test.ts:33`（~1.6%/run）非本棒引入（tamper no-op false-pass、與本 diff 無關）→ CI 撞到 rerun、非本棒 failure。npm audit deps 未改＝非 blocker。本機 build 的 public/ CRLF churn 挑檔不進 PR（[[feedback_windows_build_crlf_churn]]）。self-review 與 `test:int` 並行時囑 reviewer **勿跑 `tsc --force`**（避 Miniflare 飢餓 flake）。
+## 4. 本地機械 gate（CODE stage @ `0af55e69` 全套實跑、全綠）
+- **ARCH-L7 forced tsc set-diff**：`518→505` / **ADDED=0** / **REMOVED=13**（全 TS7006）；errorFiles 33→31、cleanFiles 302→304。
+- **ARCH-L8 byte-identical 2/2**（committed vs `894646e2:blob`，含 JSDoc sync）：backchannel `631f3903…`/1613B · revocation `6e138b6f…`/2082B。
+- `typecheck:ratchet` enforce OK（505/304、baseline `1119/175` frozen 未 --update）· `lint` OK（eslint+compat-date+workflows）· `verify:browser-pipeline` OK（25 pages ?v=）· `test:cov` **90.28%（1933/2141）** · `test:int` **75 檔/1328 passed**（無 flake、761s）· `build:functions` Compiled OK · 完整 `npm run build` OK（lint:handlers/archive-no-delete/migrations）· `npm audit --omit=dev --audit-level=high` **0 vuln**。
+> known flaky `jwt.test.ts:33`（~1.6%/run）本次未撞。npm audit deps 未改＝非 blocker。本機 build 的 public/ CRLF churn 已 `git checkout -- public/` 挑檔不進 PR（[[feedback_windows_build_crlf_churn]]）；source commit `0af55e69` name-status 僅 2 檔。
 
 ## 5. Dual Gate v3.1 — 4 道外部審查
 - ① ChatGPT Architecture **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`（2026-07-04 @ `c8d64d89`）**：APPROVE、0 blocker。核准限定 2 source / 13 TS7006 / type-only / byte-identical 2/2 / 零 runtime·schema·API·migration；OD-1 jti / OD-2 sub / JSDoc 同步對齊 owner 裁決；ARCH-L1..L10（見 §1）。NB：① `@param {object} env` 可暫留、CODE 不得順改（除非 owner 明示）；② ② 必隔離 replay、③ 必 source-commit replay；③ sub SoT 已修正為 `row.user_id` dispatch path（不再依賴舊 `parseInt` 歸因）；④ backchannel 無直接 test importer→③ Code 可特別看 end-session path assignability。**只核准 plan/locks、不授權 CODE、不授權 merge。**
 - ② Codex Plan **`CODEX_PLAN_APPROVED`（2026-07-04）**：no material findings。隔離 replay 坐實：branch diff 僅 plan doc（source/runtime/test/schema/env/caller 空）；patch 只動 2 source；forced tsc **518→505**、errorFiles 33→31、cleanFiles 302→304、**ADDED=0**（無新 TS2345/TS2339/TS2367/TS2353）、**REMOVED=13**（全 TS7006）；byte-identical 2/2 hash 吻合（backchannel `631f3903…`/1613B、revocation `6e138b6f…`/2082B）。註：無 repo-local `governance/rules.json`＝依 live replay 證據非 manifest enforcement。**此裁決 ≠ CODING_ALLOWED。**
-- ③ Codex Code `CODEX_CODE_APPROVED` — pending（CODE stage @ source commit）。
+- ③ Codex Code `CODEX_CODE_APPROVED` — pending（CODE stage @ source commit `0af55e69`）。
 - ④ ChatGPT Faithfulness `CHATGPT_CODE_FAITHFULNESS_APPROVED` — pending。
 
 **維度 A self-review（內部放大器、主線親裁不採 raw）**：
-- PLAN（L3-security fail-safe、multi-agent workflow / N readonly-reviewer）→ 結果見報告第 4 欄。
-- CODE（L3）→ pending CODE stage。
+- PLAN（L3-security fail-safe、3 readonly-reviewer：OD-fidelity/scope-lock · type-cascade/dual-leaf · behavior/L3-security）→ 一輪 0 blocking/high；主線核真碼修正 OD-2 SoT 行號歸因（改 `row.user_id` dispatch path、非 `parseInt`）+ 補 `bind-email.ts:86` production `string|null` caller 證據。
+- CODE（L3、3 readonly-reviewer：diff-fidelity · runtime-security · evidence）→ 一輪 0 blocking；evidence reviewer **獨立重算 byte-identical 命中**（`631f3903`/`6e138b6f`）、baseline 未 --update、0 escape-hatch/`any`；runtime-security 逐行確認 fail-safe/fail-closed/atomic guard 未觸；diff-fidelity 1 LOW（alias why-comment 超出 §2 字面列舉）→ 主線裁決非 scope creep（已在 ②-approved patch、AST-neutral、對齊 sibling 慣例）+ §2 補註。
+- 主線親裁（非採 raw）：兩階段各一輪 0 新發現。
 
 ## 6. OD 狀態（owner-ruled 2026-07-04，SPEC_APPROVED）
 | OD | 裁決 | SoT / 理由 |
