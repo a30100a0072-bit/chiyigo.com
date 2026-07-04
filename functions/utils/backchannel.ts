@@ -27,6 +27,9 @@ import { getBackchannelEndpoints } from './oauth-clients'
 
 const LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout'
 
+// util env 子集：只需簽 logout_token 的私鑰（Pick 而非全 Env — handler full Env ⟂ util Pick 刻意分流）
+type BackchannelEnv = Pick<Env, 'JWT_PRIVATE_KEY'>
+
 // RP backchannel endpoint 來自 oauth-clients registry（D1 + KV cache）—
 // 該 RP 的 `backchannel_logout_uri` 為 null 即不會被 dispatch。mbti/talo
 // 等待對等 endpoint 實作後在 registry 補 URL 自動生效。
@@ -37,7 +40,7 @@ function randomJti() {
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
-async function signLogoutToken(sub, aud, env) {
+async function signLogoutToken(sub: string | number, aud: string, env: BackchannelEnv) {
   if (!env.JWT_PRIVATE_KEY) throw new Error('JWT_PRIVATE_KEY not configured')
   const jwk = JSON.parse(env.JWT_PRIVATE_KEY)
   const key = await importJWK(jwk, 'ES256')
@@ -64,7 +67,7 @@ async function signLogoutToken(sub, aud, env) {
  * @param {string|number} sub  user external id
  * @returns {Promise<void>}
  */
-export async function dispatchBackchannelLogout(env, sub) {
+export async function dispatchBackchannelLogout(env: BackchannelEnv, sub: string | number) {
   if (!sub) return
   await Promise.allSettled(getBackchannelEndpoints().map(async ({ aud, url }) => {
     try {

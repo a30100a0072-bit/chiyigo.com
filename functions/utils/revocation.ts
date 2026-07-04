@@ -17,16 +17,19 @@
  *   單存正向快取，hot path 一次 KV GET + D1 SELECT，不依賴 invalidation。
  */
 
+// util env 子集：D1 為 source of truth + KV 正向快取（Pick 而非全 Env — handler full Env ⟂ util Pick 刻意分流）
+type RevocationEnv = Pick<Env, 'chiyigo_db' | 'CHIYIGO_KV'>
+
 const KV_PREFIX = 'revoked:'
 
 /**
  * 查 jti 是否已 revoke。jti 缺值 / DB binding 缺 → 視為未 revoke（向後相容）。
  *
  * @param {object} env  Cloudflare env（CHIYIGO_KV optional / chiyigo_db required for source of truth）
- * @param {string} jti
+ * @param {string | null | undefined} jti
  * @returns {Promise<boolean>}
  */
-export async function isJtiRevoked(env, jti) {
+export async function isJtiRevoked(env: RevocationEnv, jti: string | null | undefined) {
   if (!jti || typeof jti !== 'string') return false
 
   // 1) KV 正向快取 hit → 直接 revoked
@@ -50,10 +53,10 @@ export async function isJtiRevoked(env, jti) {
  * 撤銷一張 token：D1 寫入 revoked_jti + KV 同步快取「已 revoke」。
  *
  * @param {object} env
- * @param {string} jti
+ * @param {string | null | undefined} jti
  * @param {number} expSec  JWT 的 exp（epoch 秒），決定 KV TTL（過期 token 不需快取）
  */
-export async function revokeJti(env, jti, expSec) {
+export async function revokeJti(env: RevocationEnv, jti: string | null | undefined, expSec: number) {
   if (!jti || typeof jti !== 'string') return
   if (!env.chiyigo_db) throw new Error('chiyigo_db binding required for revoke')
 
@@ -89,11 +92,11 @@ export async function revokeJti(env, jti, expSec) {
  *   - DB error 拋出 → 由 caller catch；revocation 失敗禁 fail-open
  *
  * @param {object} env
- * @param {string} jti
+ * @param {string | null | undefined} jti
  * @param {number} expSec  JWT 的 exp（epoch 秒）
  * @returns {Promise<{ok: boolean, reason?: string}>}
  */
-export async function consumeJtiOnce(env, jti, expSec) {
+export async function consumeJtiOnce(env: RevocationEnv, jti: string | null | undefined, expSec: number) {
   if (!jti || typeof jti !== 'string') return { ok: false, reason: 'no_jti' }
   if (!env.chiyigo_db) return { ok: false, reason: 'no_db' }
 
