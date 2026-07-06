@@ -1,6 +1,7 @@
 # Stage 7 PR-2dm — noImplicitAny 續清（misc cluster 頭棒：`utils/requireRole`）
 
-**狀態**：**`PLAN_DRAFT`**（Dual Gate v3.1；本棒 L2-security）｜待 dimension-A plan self-review → owner 送 ① ChatGPT Arch → ② Codex Plan
+**狀態**：**`CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（① 2026-07-07 @ plan `be821ab8`，含 ARCH-L1..L10）｜`PLAN_SELF_REVIEW_CLEAN` `be821ab8`（維度-A workflow `wf_febdcbe8-552`）｜待 owner 送 ② Codex Plan Gate。
+> **狀態 SoT**：本 header + 對應中文報告為當前 gate-state 權威；內文若殘留舊註（如個別段落寫 `PLAN_DRAFT`）以此 header 為準（ARCH-L10 DOC-HYGIENE）。**① 核准僅 plan、未授權 coding / merge / push / PR。**
 **base**：`d2269efe`（origin/main，#138 flaky-test fix SHIPPED 後）
 **性質**：純 type-only noImplicitAny 標註（**12 → 0**）、byte-identical emit（esbuild before==after 已實證）、零 runtime / 零 schema / 零 API / 零 migration。**RBAC 特權判斷邊界**（ROLE_LEVEL 階層比較 + fail-closed 防禦）→ 型別只描述、runtime 一字不改。
 
@@ -46,7 +47,20 @@
 - **DEFER-LOCK**：**不為未來 auth-7 提前加 cast**。forward-compat（見 §5）留給 auth-7 PR 在同一語意邊界收斂；本棒 transient tsc 已證現況無需 cast（未觸發）。
 - **NAMING-LOCK**：`RoleCheckedUser` 命名反映「已過 KNOWN_ROLES gate」的 user；`ROLE_LEVEL: Record<string, number>` 對齊 scopes.ts 既有 precedent（無另立 alias；[[feedback_state_machine_naming_no_alias]]）。
 
-**ARCH locks（待 ① ChatGPT Arch 落地填入）**：ARCH-L1..Ln placeholder。
+**ARCH locks（① `CHATGPT_ARCH_APPROVED_WITH_LOCKS`，2026-07-07 @ plan `be821ab8`；逐字落地）**：
+
+| Lock | 內容 |
+|---|---|
+| ARCH-L1 SCOPE | CODE stage 僅可改 `functions/utils/requireRole.ts`；禁改 caller / test / schema / migration / `env.d.ts`。plan doc companion 可保留。 |
+| ARCH-L2 RUNTIME | 禁改 `KNOWN_ROLES.has` / `?? -1` / `?? Infinity` / `in ROLE_LEVEL` / `<` / `>` / `safeUserAudit` / `res(...)` / `Number(user.sub)` 等 runtime expression。 |
+| ARCH-L3 TYPE | 鎖定 `ROLE_LEVEL: Record<string, number>` / `minRole: string` / `env: Env`。 |
+| ARCH-L4 USER-TYPE | 採 `RoleCheckedUser = { role: string; [claim: string]: unknown }`，module-local、不 export。 |
+| ARCH-L5 TEST | CODE source commit 必重跑 forced tsc set-diff；權威條件 `REMOVED=12 / ADDED=0`；禁沿用 transient overlay 結果。 |
+| ARCH-L6 BYTE | CODE source commit 必重跑 esbuild byte-identical；emit diff 非 0 即停止。 |
+| ARCH-L7 COUPLING | 不動 `auth.ts`；`requireAuth` 回傳仍 any 的 coupling 留給 auth-7。 |
+| ARCH-L8 NO-CAST | 不為 auth-7 預先加 cast；若 CODE stage 需 cast 才過 → 回 Plan Gate。 |
+| ARCH-L9 FALLBACK | 接受 `Record<string, number>` 在現 tsconfig 下使 fallback 型別不可見；前提＝runtime fallback expression 原樣保留（見 §2 型別可見性）。 |
+| ARCH-L10 DOC-HYGIENE | 進 ② 前更新 plan header 狀態或註明「中文報告 supersedes header」（本次已更新 header + 此表落地）。 |
 
 ## 2. SSOT 對齊（每個 TYPE-LOCK 決策的真相源）
 
