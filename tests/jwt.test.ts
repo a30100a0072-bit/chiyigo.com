@@ -30,7 +30,16 @@ describe('signJwt / verifyJwt', () => {
 
   it('rejects tampered token', async () => {
     const token = await signJwt({ sub: 'x' }, '5m', env)
-    const tampered = token.slice(0, -2) + (token.endsWith('A') ? 'B' : 'A') + token.slice(-1)
+    // 依「實際被替換的字元」決定替換值，確保 tampered !== token 恆成立、消除 no-op。
+    // 舊碼替換值取決於 token.endsWith('A')（最後一字元）卻替換「倒數第 2 字元」，兩者巧合時
+    // 變 no-op → verifyJwt 驗到未竄改的原 token 而 resolve → ~1.6% flaky。
+    // 取倒數第 2（非最後一）：ES256 簽章最後一 base64url 字元只帶 2 有效 bit（尾字元 ∈ {A,Q,g,w}），
+    // 改它可能因 padding bit 對齊而解出相同 bytes（另一種潛在 no-op）；倒數第 2 為全 6-bit、改必變。
+    const penultimate = token.slice(-2, -1)
+    const tampered =
+      token.slice(0, -2) + (penultimate === 'A' ? 'B' : 'A') + token.slice(-1)
+
+    expect(tampered).not.toBe(token)
     await expect(verifyJwt(tampered, env)).rejects.toThrow()
   })
 
