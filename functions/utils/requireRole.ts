@@ -19,7 +19,7 @@
 import { requireAuth, res } from './auth'
 import { safeUserAudit } from './user-audit'
 
-const ROLE_LEVEL = {
+const ROLE_LEVEL: Record<string, number> = {
   player: 0, user: 0, finance: 0, support: 0,
   moderator: 1,
   admin: 2, super_admin: 2,
@@ -32,23 +32,33 @@ const ROLE_LEVEL = {
  * endpoint 應在拒絕前寫 critical audit 通知 oncall，給管理介面用。
  */
 export const KNOWN_ROLES = new Set(Object.keys(ROLE_LEVEL))
-export function isKnownRole(role) { return KNOWN_ROLES.has(role) }
+export function isKnownRole(role: string) { return KNOWN_ROLES.has(role) }
 
 /**
  * Codex r5 #5（2026-05-10）：unknown_role audit 寫到 Discord webhook / 結構化 log，
  * 為防控制字元 / Markdown / unicode 干擾下游解析，把 role 字串清成 [a-z0-9_-] 後截 32 字。
  * 合法 role 全在此白名單內，sanitize 不會丟資訊；非法 role 經此處理才落 audit。
  */
-export function safeRoleString(role) {
+export function safeRoleString(role: string) {
   return String(role || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 32)
 }
+
+/**
+ * requireRole 成功回傳的 user：role 已通過下方 KNOWN_ROLES gate 驗證故為 string；
+ * 其餘 JWT claim 維持 unknown（untrusted，caller 各自 narrow）。
+ */
+type RoleCheckedUser = { role: string; [claim: string]: unknown }
 
 /**
  * @param {Request} request
  * @param {object}  env
  * @param {string}  minRole  — 'player' | 'moderator' | 'admin' | 'developer'
  */
-export async function requireRole(request, env, minRole) {
+export async function requireRole(
+  request: Request,
+  env: Env,
+  minRole: string,
+): Promise<{ user: RoleCheckedUser | null; error: Response | null }> {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
 
@@ -99,7 +109,7 @@ export async function requireRole(request, env, minRole) {
  * @param {string} targetRole  被操作對象 role
  * @returns {boolean}          actor strictly outranks target
  */
-export function actorOutranksTarget(actorRole, targetRole) {
+export function actorOutranksTarget(actorRole: string, targetRole: string) {
   // Codex r3 #4（2026-05-10）：未知 actor 一律拒絕；未知 target 也 fail closed
   // （DB 若無 role CHECK constraint，避免 admin 因 target.role 拼錯就拿到 ban 權）
   if (!(actorRole  in ROLE_LEVEL)) return false
