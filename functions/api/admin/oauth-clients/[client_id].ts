@@ -18,7 +18,7 @@ import { SCOPES, effectiveScopesFromJwt } from '../../../utils/scopes'
 
 const VALID_APP_TYPES = new Set(['web', 'native', 'mobile'])
 
-function isHttpsOrChiyigoScheme(uri) {
+function isHttpsOrChiyigoScheme(uri: unknown): boolean {
   if (typeof uri !== 'string' || !uri) return false
   try {
     const u = new URL(uri)
@@ -29,13 +29,13 @@ function isHttpsOrChiyigoScheme(uri) {
   } catch { return false }
 }
 
-function isStringArray(v) {
+function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every(s => typeof s === 'string')
 }
 
 // ── GET ─────────────────────────────────────────────────────────
 
-export async function onRequestGet({ request, env, params }) {
+export async function onRequestGet({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   // P1-17 Phase 3: GET 同時接受 admin:clients:read 或 :write
   const { error } = await requireAnyScope(request, env, SCOPES.ADMIN_CLIENTS_READ, SCOPES.ADMIN_CLIENTS_WRITE)
   if (error) return error
@@ -62,7 +62,7 @@ export async function onRequestGet({ request, env, params }) {
  * 把可變更欄位 normalize 成 (column, value) pairs。
  * 未在 body 出現的欄位 → 不動。
  */
-function buildPatchSet(body) {
+function buildPatchSet(body: Record<string, unknown>) {
   const sets = []
   const binds = []
   const errors = []
@@ -81,7 +81,8 @@ function buildPatchSet(body) {
   }
 
   if (body.app_type !== undefined) {
-    if (!VALID_APP_TYPES.has(body.app_type)) errors.push(`app_type must be one of: ${[...VALID_APP_TYPES].join(', ')}`)
+    // SAFETY: app_type 為邊界 unknown→string 之 erased cast，僅供既有 VALID_APP_TYPES.has，runtime 不變
+    if (!VALID_APP_TYPES.has(body.app_type as string)) errors.push(`app_type must be one of: ${[...VALID_APP_TYPES].join(', ')}`)
     else { sets.push('app_type = ?'); binds.push(body.app_type) }
   }
 
@@ -130,7 +131,7 @@ function buildPatchSet(body) {
   return { sets, binds, errors }
 }
 
-export async function onRequestPatch({ request, env, params }) {
+export async function onRequestPatch({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   // P0-5：改 redirect_uris / scopes 等同帳號劫持武器，必須 step-up
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'update_oauth_client')
   if (stepCheck.error) return stepCheck.error
@@ -189,7 +190,7 @@ export async function onRequestPatch({ request, env, params }) {
 
 // ── DELETE（軟下架）─────────────────────────────────────────────
 
-export async function onRequestDelete({ request, env, params }) {
+export async function onRequestDelete({ request, env, params }: { request: Request; env: Env; params: Record<string, string> }) {
   // P0-5：軟下架仍可造成既有 RP 全斷，必須 step-up
   const stepCheck = await requireStepUp(request, env, SCOPES.ELEVATED_ACCOUNT, 'delete_oauth_client')
   if (stepCheck.error) return stepCheck.error

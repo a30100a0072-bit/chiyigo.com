@@ -26,7 +26,7 @@ import { SCOPES, effectiveScopesFromJwt } from '../../utils/scopes'
 const CLIENT_ID_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/  // 小寫英數 + - + _，1-64 字
 const VALID_APP_TYPES = new Set(['web', 'native', 'mobile'])
 
-function isHttpsOrChiyigoScheme(uri) {
+function isHttpsOrChiyigoScheme(uri: unknown): boolean {
   if (typeof uri !== 'string' || !uri) return false
   try {
     const u = new URL(uri)
@@ -37,7 +37,7 @@ function isHttpsOrChiyigoScheme(uri) {
   } catch { return false }
 }
 
-function isStringArray(v) {
+function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every(s => typeof s === 'string')
 }
 
@@ -45,12 +45,13 @@ function isStringArray(v) {
  * 驗證並 normalize POST body。
  * @returns {{ ok: true, normalized } | { ok: false, error }}
  */
-function validateCreateBody(body) {
+function validateCreateBody(body: Record<string, unknown>) {
   if (!body || typeof body !== 'object')
     return { ok: false, error: 'Invalid body' }
 
   const { client_id, client_name } = body
-  if (!client_id || !CLIENT_ID_RE.test(client_id))
+  // SAFETY: client_id 為邊界 unknown→string 之 erased cast，僅供既有 CLIENT_ID_RE.test，runtime 不變
+  if (!client_id || !CLIENT_ID_RE.test(client_id as string))
     return { ok: false, error: 'client_id must match [a-z0-9][a-z0-9_-]{1,63}' }
 
   if (!client_name || typeof client_name !== 'string')
@@ -73,7 +74,8 @@ function validateCreateBody(body) {
       !isHttpsOrChiyigoScheme(body.backchannel_logout_uri))
     return { ok: false, error: 'backchannel_logout_uri must be https URL or null' }
 
-  if (body.app_type !== undefined && !VALID_APP_TYPES.has(body.app_type))
+  // SAFETY: app_type 為邊界 unknown→string 之 erased cast，僅供既有 VALID_APP_TYPES.has，runtime 不變
+  if (body.app_type !== undefined && !VALID_APP_TYPES.has(body.app_type as string))
     return { ok: false, error: `app_type must be one of: ${[...VALID_APP_TYPES].join(', ')}` }
 
   if (body.allowed_scopes !== undefined && !isStringArray(body.allowed_scopes))
@@ -101,7 +103,7 @@ function validateCreateBody(body) {
 
 // ── GET /api/admin/oauth-clients ─────────────────────────────────
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   // P1-17 Phase 3: GET 同時接受 admin:clients:read 或 :write
   const { error } = await requireAnyScope(request, env, SCOPES.ADMIN_CLIENTS_READ, SCOPES.ADMIN_CLIENTS_WRITE)
   if (error) return error
@@ -128,7 +130,7 @@ export async function onRequestGet({ request, env }) {
 
 // ── POST /api/admin/oauth-clients ────────────────────────────────
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const { user, error } = await requireRole(request, env, 'admin')
   if (error) return error
 
