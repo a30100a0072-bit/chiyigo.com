@@ -8,7 +8,30 @@
  *   false → 信箱不可信任，碰撞時阻擋並要求用戶以密碼登入後手動綁定
  */
 
-const PROVIDERS = {
+interface NormalizedProfile {
+  provider_id: string
+  email: string | null
+  name: string | null
+  avatar: string | null
+  email_verified: boolean
+}
+
+interface RawDiscordProfile { id: string | number; email?: string | null; username?: string | null; avatar?: string | null; verified?: boolean }
+interface RawGoogleProfile { sub: string | number; email?: string | null; name?: string | null; picture?: string | null; email_verified?: boolean }
+interface RawLineProfile { userId: string | number; email?: string | null; displayName?: string | null; pictureUrl?: string | null }
+interface RawFacebookProfile { id: string | number; email?: string | null; name?: string | null; picture?: { data?: { url?: string | null } } }
+interface RawAppleProfile { sub: string | number; email?: string | null; name?: string | null; email_verified?: boolean | string }
+
+interface ProviderConfig {
+  authUrl: string
+  tokenUrl: string
+  userInfoUrl: string | null
+  scope: string
+  trustEmail: boolean
+  normalizeProfile(raw: unknown): NormalizedProfile
+}
+
+const PROVIDERS: Record<string, ProviderConfig> = {
   discord: {
     authUrl:     'https://discord.com/api/oauth2/authorize',
     tokenUrl:    'https://discord.com/api/oauth2/token',
@@ -18,13 +41,13 @@ const PROVIDERS = {
     // profile 正規化：統一輸出 { provider_id, email, name, avatar, email_verified }
     normalizeProfile(raw) {
       return {
-        provider_id:    String(raw.id),
-        email:          raw.email ?? null,
-        name:           raw.username ?? null,
-        avatar:         raw.avatar
-          ? `https://cdn.discordapp.com/avatars/${raw.id}/${raw.avatar}.png`
+        provider_id:    String((raw as RawDiscordProfile).id),
+        email:          (raw as RawDiscordProfile).email ?? null,
+        name:           (raw as RawDiscordProfile).username ?? null,
+        avatar:         (raw as RawDiscordProfile).avatar
+          ? `https://cdn.discordapp.com/avatars/${(raw as RawDiscordProfile).id}/${(raw as RawDiscordProfile).avatar}.png`
           : null,
-        email_verified: raw.verified === true,
+        email_verified: (raw as RawDiscordProfile).verified === true,
       }
     },
   },
@@ -37,11 +60,11 @@ const PROVIDERS = {
     trustEmail:  true,
     normalizeProfile(raw) {
       return {
-        provider_id:    String(raw.sub),
-        email:          raw.email ?? null,
-        name:           raw.name ?? null,
-        avatar:         raw.picture ?? null,
-        email_verified: raw.email_verified === true,
+        provider_id:    String((raw as RawGoogleProfile).sub),
+        email:          (raw as RawGoogleProfile).email ?? null,
+        name:           (raw as RawGoogleProfile).name ?? null,
+        avatar:         (raw as RawGoogleProfile).picture ?? null,
+        email_verified: (raw as RawGoogleProfile).email_verified === true,
       }
     },
   },
@@ -54,10 +77,10 @@ const PROVIDERS = {
     trustEmail:  false,
     normalizeProfile(raw) {
       return {
-        provider_id:    String(raw.userId),
-        email:          raw.email ?? null,       // LINE 不一定回傳 email
-        name:           raw.displayName ?? null,
-        avatar:         raw.pictureUrl ?? null,
+        provider_id:    String((raw as RawLineProfile).userId),
+        email:          (raw as RawLineProfile).email ?? null,       // LINE 不一定回傳 email
+        name:           (raw as RawLineProfile).displayName ?? null,
+        avatar:         (raw as RawLineProfile).pictureUrl ?? null,
         email_verified: false,                   // LINE 不提供 email_verified
       }
     },
@@ -71,10 +94,10 @@ const PROVIDERS = {
     trustEmail:  false,
     normalizeProfile(raw) {
       return {
-        provider_id:    String(raw.id),
-        email:          raw.email ?? null,       // FB 用戶可拒絕授權 email
-        name:           raw.name ?? null,
-        avatar:         raw.picture?.data?.url ?? null,
+        provider_id:    String((raw as RawFacebookProfile).id),
+        email:          (raw as RawFacebookProfile).email ?? null,       // FB 用戶可拒絕授權 email
+        name:           (raw as RawFacebookProfile).name ?? null,
+        avatar:         (raw as RawFacebookProfile).picture?.data?.url ?? null,
         email_verified: false,                   // FB 不提供 email_verified
       }
     },
@@ -92,11 +115,11 @@ const PROVIDERS = {
     normalizeProfile(raw) {
       // raw 來自 id_token JWT payload（需在 callback 解碼）
       return {
-        provider_id:    String(raw.sub),
-        email:          raw.email ?? null,
-        name:           raw.name ?? null,
+        provider_id:    String((raw as RawAppleProfile).sub),
+        email:          (raw as RawAppleProfile).email ?? null,
+        name:           (raw as RawAppleProfile).name ?? null,
         avatar:         null,
-        email_verified: raw.email_verified === true || raw.email_verified === 'true',
+        email_verified: (raw as RawAppleProfile).email_verified === true || (raw as RawAppleProfile).email_verified === 'true',
       }
     },
   },
@@ -108,15 +131,23 @@ const PROVIDERS = {
  * @param {object} env   Cloudflare Pages Functions env binding
  * @returns {object|null} provider config，不支援的 provider 回傳 null
  */
-export function getProvider(name, env) {
+interface ProviderSecretsEnv {
+  DISCORD_CLIENT_ID?: string; DISCORD_CLIENT_SECRET?: string
+  GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string
+  LINE_CLIENT_ID?: string; LINE_CLIENT_SECRET?: string
+  FACEBOOK_CLIENT_ID?: string; FACEBOOK_CLIENT_SECRET?: string
+  APPLE_CLIENT_ID?: string; APPLE_CLIENT_SECRET?: string
+}
+
+export function getProvider(name: string, env: ProviderSecretsEnv) {
   const cfg = PROVIDERS[name?.toLowerCase()]
   if (!cfg) return null
 
   const upper = name.toUpperCase()
   return {
     ...cfg,
-    clientId:     env[`${upper}_CLIENT_ID`]     ?? null,
-    clientSecret: env[`${upper}_CLIENT_SECRET`] ?? null,
+    clientId:     env[`${upper}_CLIENT_ID` as keyof ProviderSecretsEnv]     ?? null,
+    clientSecret: env[`${upper}_CLIENT_SECRET` as keyof ProviderSecretsEnv] ?? null,
   }
 }
 

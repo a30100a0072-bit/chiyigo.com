@@ -17,19 +17,18 @@
  *   後可見。一致性 eventual 但對 RP 註冊（極低頻變動）足夠。
  */
 
-/**
- * @typedef {Object} OAuthClient
- * @property {string}   client_id
- * @property {string}   aud
- * @property {string[]} origins
- * @property {string[]} redirect_uris
- * @property {string[]} post_logout_redirect_uris
- * @property {string[]} frontchannel_logout_uris
- * @property {string|null} backchannel_logout_uri
- */
+export interface OAuthClient {
+  client_id: string
+  aud: string
+  origins: string[]
+  redirect_uris: string[]
+  post_logout_redirect_uris: string[]
+  frontchannel_logout_uris: string[]
+  backchannel_logout_uri: string | null
+}
 
 /** boot-time 預設值，與 migrations/0020 seed 對齊 */
-export const IN_CODE_CLIENTS = [
+export const IN_CODE_CLIENTS: OAuthClient[] = [
   {
     client_id: 'chiyigo',
     aud: 'chiyigo',
@@ -99,19 +98,19 @@ const REFRESH_THROTTLE_MS = 60_000  // 同一 isolate 內 60s 內只跑一次 re
 const KV_KEY = 'oauth_clients:all'
 const KV_TTL_SEC = 300              // 5 min；admin CRUD 寫入時應該主動 purge
 
-function rowToClient(row) {
-  const j = (s, def) => {
+function rowToClient(row: Record<string, unknown>): OAuthClient {
+  const j = (s: string | null, def: string[]): string[] => {
     if (s == null) return def
     try { const v = JSON.parse(s); return Array.isArray(v) ? v : def } catch { return def }
   }
   return {
-    client_id: row.client_id,
-    aud:       row.aud ?? row.client_id,
-    origins:                   j(row.cors_origins,              []),
-    redirect_uris:             j(row.allowed_redirect_uris,     []),
-    post_logout_redirect_uris: j(row.post_logout_redirect_uris, []),
-    frontchannel_logout_uris:  j(row.frontchannel_logout_uris,  []),
-    backchannel_logout_uri:    row.backchannel_logout_uri ?? null,
+    client_id: row.client_id as string,
+    aud:       (row.aud ?? row.client_id) as string,
+    origins:                   j(row.cors_origins as string | null,              []),
+    redirect_uris:             j(row.allowed_redirect_uris as string | null,     []),
+    post_logout_redirect_uris: j(row.post_logout_redirect_uris as string | null, []),
+    frontchannel_logout_uris:  j(row.frontchannel_logout_uris as string | null,  []),
+    backchannel_logout_uri:    (row.backchannel_logout_uri ?? null) as string | null,
   }
 }
 
@@ -124,7 +123,7 @@ function rowToClient(row) {
  * @param {object} env
  * @param {boolean} [force]  跳過 60s throttle（admin CRUD 後呼叫）
  */
-export async function refreshClientsCache(env, force = false) {
+export async function refreshClientsCache(env: Env, force = false) {
   const now = Date.now()
   if (!force && now - _lastRefreshAt < REFRESH_THROTTLE_MS) return
   _lastRefreshAt = now
@@ -172,7 +171,7 @@ export async function refreshClientsCache(env, force = false) {
 }
 
 /** Admin CRUD 寫入後呼叫：清 KV，下次 middleware refresh 會立即從 D1 抓新資料 */
-export async function invalidateClientsCache(env) {
+export async function invalidateClientsCache(env: Env) {
   _lastRefreshAt = 0  // 強制下次 refresh 不被 throttle 跳過
   if (env?.CHIYIGO_KV) {
     try { await env.CHIYIGO_KV.delete(KV_KEY) } catch { /* ignore */ }
@@ -188,7 +187,7 @@ export function _resetCacheForTests() {
 // ── Sync getters（consumers 改用這些，不再用舊 const）────────
 
 export function getAllClients()        { return _currentClients }
-export function getClient(clientId)    { return _currentClients.find(c => c.client_id === clientId) ?? null }
+export function getClient(clientId: string)    { return _currentClients.find(c => c.client_id === clientId) ?? null }
 
 export function getAllowedCorsOrigins()   { return _currentClients.flatMap(c => c.origins ?? []) }
 export function getAllowedRedirectUris()  { return _currentClients.flatMap(c => c.redirect_uris ?? []) }
@@ -221,7 +220,7 @@ export function getFrontchannelFrameOrigins() {
 // 注意：這些是「first-load 快照」，cache refresh 後不會更新。
 // 新 code 用 getXxx() 函式版本。
 
-const flat = (key) => IN_CODE_CLIENTS.flatMap(c => c[key] ?? [])
+const flat = (key: 'origins' | 'redirect_uris' | 'post_logout_redirect_uris' | 'frontchannel_logout_uris') => IN_CODE_CLIENTS.flatMap(c => c[key] ?? [])
 
 /** @deprecated 用 getAllClients() 或 IN_CODE_CLIENTS */
 export const OAUTH_CLIENTS                 = IN_CODE_CLIENTS
