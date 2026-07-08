@@ -12,7 +12,7 @@ const CODE_TTL_MS = 5 * 60 * 1000
 /**
  * 從 Cookie header 取出 chiyigo_refresh 值
  */
-export function readRefreshCookie(cookieHeader) {
+export function readRefreshCookie(cookieHeader: string | null) {
   if (!cookieHeader) return null
   const match = cookieHeader.match(/(?:^|;\s*)chiyigo_refresh=([^;]+)/)
   return match ? match[1] : null
@@ -30,7 +30,7 @@ export function readRefreshCookie(cookieHeader) {
  *
  * 回傳的 row 含 auth_time（給 max_age 比對 + id_token 簽用）
  */
-export async function findActiveUserByRefreshCookie(env, refreshToken) {
+export async function findActiveUserByRefreshCookie(env: Env, refreshToken: string | null) {
   if (!refreshToken || typeof refreshToken !== 'string') return null
   const tokenHash = await hashToken(refreshToken)
 
@@ -61,7 +61,7 @@ export async function findActiveUserByRefreshCookie(env, refreshToken) {
  *
  * 回傳 true = 滿足條件可繼續 silent SSO；false = 需要強制重認。
  */
-export function isWithinMaxAge(authTime, maxAgeSeconds) {
+export function isWithinMaxAge(authTime: string | null, maxAgeSeconds: number | null) {
   if (maxAgeSeconds === null || maxAgeSeconds === undefined) return true
   if (maxAgeSeconds <= 0) return false
   if (!authTime) return false
@@ -78,8 +78,16 @@ export function isWithinMaxAge(authTime, maxAgeSeconds) {
  * 與 /api/auth/oauth/code 的邏輯等價，差別僅在 silent flow 沒有 pkce_session
  * 中介物，code_challenge / state / scope / nonce 直接從 authorize 參數帶入。
  */
-export async function issueAuthCodeAndBuildRedirect(env, {
+export async function issueAuthCodeAndBuildRedirect(env: Env, {
   userId, redirectUri, codeChallenge, state, scope, nonce, authTime,
+}: {
+  userId: number | string
+  redirectUri: string
+  codeChallenge: string
+  state: string
+  scope?: string | null
+  nonce?: string | null
+  authTime?: string | null
 }) {
   const code = generateSecureToken()
   const codeHash = await hashToken(code)
@@ -104,7 +112,7 @@ export async function issueAuthCodeAndBuildRedirect(env, {
 /**
  * OIDC prompt=none 失敗回應 — redirect to redirect_uri with error=login_required
  */
-export function buildLoginRequiredRedirect(redirectUri, state) {
+export function buildLoginRequiredRedirect(redirectUri: string, state: string) {
   const sep = redirectUri.includes('?') ? '&' : '?'
   return `${redirectUri}${sep}error=login_required&state=${encodeURIComponent(state)}`
 }
