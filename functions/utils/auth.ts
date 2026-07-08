@@ -15,6 +15,24 @@ import { verifyJwt } from './jwt'
 import { isJtiRevoked, consumeJtiOnce } from './revocation'
 import { safeUserAudit } from './user-audit'
 import { hasAllScopes, effectiveScopesFromJwt, hasExactScopeInToken, isElevatedScope } from './scopes'
+import type { JWTPayload } from 'jose'
+
+/**
+ * requireAuth 及其 scope / step-up / tenant 包裝回傳的 user。
+ *
+ * verifyJwt 已對 token 做密碼學驗章（ES256 + iss/aud gate），token 由 chiyigo 自簽（signJwt），
+ * 故 claim 形狀由簽發端契約保證。此處標出 caller 實際消費的自訂 claim 為具體型別；其餘 claim
+ * 經 JWTPayload 的 index signature 維持 `unknown`（caller 各自 narrow）。具體型別自 JWTPayload 的
+ * index-`unknown` 收斂 → 於 requireAuth 成功 return 處以邊界 cast 落地（見該處 SAFETY 註解）。
+ */
+type AuthedUser = JWTPayload & {
+  role?: string
+  email?: string
+  sid?: string
+  risk_score?: number
+  risk_factors?: string[]
+  risk_country?: string
+}
 
 // requiredScope: 若指定，則 JWT payload.scope 必須吻合（用於 pre_auth_token 等）
 // opts.audience: 若指定，jwtVerify 會強制驗 aud claim（chiyigo IAM resource server 端點建議帶 'chiyigo'）；
@@ -24,7 +42,7 @@ export async function requireAuth(
   env: Env,
   requiredScope: string | null = null,
   opts: { audience?: string | string[] | null } = {},
-) {
+): Promise<{ user: AuthedUser | null; error: Response | null }> {
   const authHeader = request.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) {
     return { user: null, error: res({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401) }
@@ -91,7 +109,9 @@ export async function requireAuth(
     }
   }
 
-  return { user: payload, error: null }
+  // SAFETY: payload 已由 verifyJwt 密碼學驗章（ES256 + iss/aud gate）；claim 形狀由 chiyigo signJwt 端契約保證。
+  // 邊界 cast：把 JWTPayload index-`unknown` claim 收斂成 AuthedUser 宣告的具體型別（type-only、runtime 不變）。
+  return { user: payload as AuthedUser, error: null }
 }
 
 /**
@@ -104,9 +124,9 @@ export async function requireAuth(
  *   - 帳號封禁
  *   - 帳號刪除
  *
- * NOTE: db 暫不標型別等 §1.5c wrangler types 上線（D1Database global）
+ * db 型別用 Env['chiyigo_db']（既有 idiom）：裸 D1Database 在 source .ts 不可解析（僅 env.d.ts 靠 skipLibCheck 過）。
  */
-export async function bumpTokenVersion(db, userId: number): Promise<void> {
+export async function bumpTokenVersion(db: Env['chiyigo_db'], userId: number): Promise<void> {
   await db.batch([
     db.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').bind(userId),
     db.prepare(`
@@ -130,7 +150,7 @@ export async function bumpTokenVersion(db, userId: number): Promise<void> {
  *
  * 多 scope（AND）：requireScope(request, env, 'admin:users', 'admin:revoke')
  */
-export async function requireScope(request: Request, env: Env, ...requiredScopes: string[]) {
+export async function requireScope(request: Request, env: Env, ...requiredScopes: string[]): Promise<{ user: AuthedUser | null; error: Response | null }> {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
 
@@ -159,7 +179,7 @@ export async function requireScope(request: Request, env: Env, ...requiredScopes
  *
  * 既有 admin/super_admin/developer 透過 hierarchy 拿到所有 fine，全通過；零 regression。
  */
-export async function requireAnyScope(request: Request, env: Env, ...acceptedScopes: string[]) {
+export async function requireAnyScope(request: Request, env: Env, ...acceptedScopes: string[]): Promise<{ user: AuthedUser | null; error: Response | null }> {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, error }
 
@@ -199,7 +219,7 @@ export async function requireStepUp(
   env: Env,
   requiredScope: string,
   requiredAction: string | null = null,
-) {
+): Promise<{ user: AuthedUser | null; error: Response | null }> {
   if (!isElevatedScope(requiredScope)) {
     // 程式錯誤而非 user 錯誤：caller 給了非 elevated 的 scope
     return { user: null, error: res({ error: 'requireStepUp must check an elevated:* scope', code: 'INTERNAL_ERROR' }, 500) }
@@ -295,7 +315,7 @@ export async function requireStepUp(
  * 非正整數 sub（fail-closed）。回傳已驗證的整數 userId 供 tenant resolver 使用，
  * caller 一律傳此 userId 而非 raw user.sub（codex r3）。
  */
-export async function requireRegularAccessToken(request: Request, env: Env) {
+export async function requireRegularAccessToken(request: Request, env: Env): Promise<{ user: AuthedUser | null; userId: number | null; error: Response | null }> {
   const { user, error } = await requireAuth(request, env)
   if (error) return { user: null, userId: null, error }
 
