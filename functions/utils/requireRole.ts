@@ -96,7 +96,9 @@ export async function requireRole(
     }
   }
 
-  return { user, error: null }
+  // role 已於 line-74 KNOWN_ROLES gate 保證為已知 string（未過則上方已 403 return）；requireAuth（auth-7 起）
+  // 把 role 標為 optional claim，此 cast 把 gate 後保證的 required-role 契約落地成 RoleCheckedUser（type-only、runtime 不變）。
+  return { user: user as RoleCheckedUser, error: null }
 }
 
 /**
