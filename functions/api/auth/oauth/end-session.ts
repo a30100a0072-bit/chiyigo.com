@@ -31,17 +31,17 @@ import {
   getFrontchannelFrameOrigins,
 } from '../../../utils/oauth-clients'
 
-function escAttr(s) {
+function escAttr(s: string) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
-function isAllowedPostLogoutUri(uri) {
+function isAllowedPostLogoutUri(uri: unknown) {
   return typeof uri === 'string' && getAllowedPostLogoutUris().includes(uri)
 }
 
 // id_token_hint 驗簽（不驗 exp）→ 取出 sub
-async function verifyIdTokenHintGetSub(idToken, env) {
+async function verifyIdTokenHintGetSub(idToken: string | null, env: Env) {
   if (!idToken || typeof idToken !== 'string') return null
   let kid = null
   try { kid = decodeProtectedHeader(idToken).kid ?? null } catch { return null }
@@ -60,13 +60,13 @@ async function verifyIdTokenHintGetSub(idToken, env) {
   } catch { return null }
 }
 
-function parseCookieHeader(header, name) {
+function parseCookieHeader(header: string | null, name: string) {
   if (!header) return null
   const m = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`))
   return m ? m[1] : null
 }
 
-export async function onRequestGet({ request, env, waitUntil }) {
+export async function onRequestGet({ request, env, waitUntil }: { request: Request; env: Env; waitUntil?: (promise: Promise<unknown>) => void }) {
   const url = new URL(request.url)
   const idTokenHint            = url.searchParams.get('id_token_hint')
   const postLogoutRedirectUri  = url.searchParams.get('post_logout_redirect_uri') || 'https://chiyigo.com/'

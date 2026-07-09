@@ -53,7 +53,7 @@ const SESSION_TTL_MS = 10 * 60 * 1000 // 10 分鐘完成登入
 
 // redirect_uri 白名單來自 oauth-clients registry（D1 + KV cache + in-code fallback）
 // 加 RP 走 D1（admin CRUD 或 SQL）；middleware 每請求 refresh cache（throttle 60s）。
-function isAllowedRedirectUri(uri) {
+function isAllowedRedirectUri(uri: string) {
   if (getAllowedRedirectUris().includes(uri)) return true
   // Loopback（Desktop Launcher，RFC 8252）— 動態 port，不在 registry
   if (/^http:\/\/127\.0\.0\.1:\d{1,5}\/callback$/.test(uri)) return true
@@ -63,13 +63,13 @@ function isAllowedRedirectUri(uri) {
 // OIDC 支援的 scope 值（其他傳入會被忽略而非報錯，避免破壞既有 client）
 const KNOWN_SCOPES = new Set(['openid', 'profile', 'email'])
 
-function normalizeScope(raw) {
+function normalizeScope(raw: string | null) {
   if (!raw) return null
   const tokens = raw.split(/\s+/).filter(Boolean).filter(s => KNOWN_SCOPES.has(s))
   return tokens.length ? tokens.join(' ') : null
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   const url    = new URL(request.url)
   const params = url.searchParams
 
