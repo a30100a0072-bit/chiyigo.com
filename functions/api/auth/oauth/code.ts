@@ -19,7 +19,7 @@ import { generateSecureToken, hashToken } from '../../../utils/crypto'
 
 const CODE_TTL_MS = 5 * 60 * 1000 // auth code 5 分鐘有效
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   // 驗證登入狀態
   const { user, error } = await requireAuth(request, env)
   if (error) return error

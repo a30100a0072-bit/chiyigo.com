@@ -40,14 +40,14 @@ const REFRESH_COOKIE_DAYS = 7 // Web cookie 模式較短（合 refresh.ts 設定
 //   chiyigo Origin → cookie 模式（HttpOnly，body 無 refresh_token）
 //   無 Origin / 跨站 Origin → body 模式（programmatic / curl / native client 保留）
 
-export async function onRequestOptions({ request, env }) {
+export async function onRequestOptions({ request, env }: { request: Request; env: Env }) {
   const cors = isWebClient(request)
     ? getCorsHeaders(request, env, { credentials: true })
     : getCorsHeaders(request, env)
   return new Response(null, { status: 204, headers: cors })
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   const isWeb = isWebClient(request)
   const cors  = isWeb ? getCorsHeaders(request, env, { credentials: true }) : getCorsHeaders(request, env)
 
