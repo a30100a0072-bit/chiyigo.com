@@ -51,6 +51,18 @@ declare global {
     TELEGRAM_CHAT_ID?: string;
     ALERT_WEBHOOK_URL?: string;
 
+    // ── OAuth provider credentials (runtime bindings; read by getProvider())
+    DISCORD_CLIENT_ID?: string;
+    DISCORD_CLIENT_SECRET?: string;
+    GOOGLE_CLIENT_ID?: string;
+    GOOGLE_CLIENT_SECRET?: string;
+    LINE_CLIENT_ID?: string;
+    LINE_CLIENT_SECRET?: string;
+    FACEBOOK_CLIENT_ID?: string;
+    FACEBOOK_CLIENT_SECRET?: string;
+    APPLE_CLIENT_ID?: string;
+    APPLE_CLIENT_SECRET?: string;
+
     // ── Payments ───────────────────────────────────────────────────────
     // PAY-002：prod 不需設（unset 即視為 prod）且禁 'sandbox'；非 prod 走 'sandbox' 才允許公開 creds。
     ECPAY_MODE?: 'prod' | 'sandbox';
