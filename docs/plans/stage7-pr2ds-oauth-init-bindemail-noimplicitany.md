@@ -1,15 +1,15 @@
 # Stage 7 PR-2ds — 棒3b：`init.ts` + `bind-email.ts` noImplicitAny 續清（oauth domain dirty-2）
 
 **SPEC**: `STAGE7_OAUTH_INIT_BINDEMAIL_NOIMPLICITANY`
-**狀態**: `PLAN_SELF_REVIEW_CLEAN`（owner `SPEC_APPROVED_WITH_LOCKS` 2026-07-11 → 本 plan doc → **維度 A 對抗式 self-review 完成**〔5 finder 並行、**0 BLOCKER / 0 MAJOR**、1 MINOR + 6 NIT 全折入、主線 fresh-pass 0 新發現，見 §5.7〕；**≠ `CODING_ALLOWED` / commit / push / PR / merge**）→ 待 owner 送 **① ChatGPT Arch**。
-> **gate 進程**: scout〔2 檔共 6 錯 forced tsc 確認、zero dual-leaf〕→ transient overlay 實測〔**REMOVED=6/ADDED=0** + byte-identical 升級證據（cmp -s + SHA-256）+ `git checkout --` 還原、overlay 零殘留、ratchet 還原 414/20/315〕→ 提 SPEC + OD + locks → owner **`SPEC_APPROVED_WITH_LOCKS`**（OD-3b-1..4 全裁、micro 全採、**兩項強制修正 MC-1/MC-2**、ARCH-3B-1..16 locks、風險/防禦/驗證/商業表）→ **MC-1 params 驗證程序執行**〔試 owner 優先型別 `{ provider?: string }` → REMOVED=6/ADDED=0 無 cascade → 直接採用、無需退回 SPEC〕→ **本 plan doc** → self-review → ① Arch → ② Codex Plan → `CODING_ALLOWED` → CODE fresh replay → ③ Codex Code → ④ ChatGPT faithfulness → owner `MERGE_ALLOWED` + CI green → squash-merge。
-> **狀態 SoT**: 本 header + 對應中文報告為當前 gate-state 權威。目前＝`PLAN_SELF_REVIEW_CLEAN`；上游 owner ruling＝`SPEC_APPROVED_WITH_LOCKS`；**未 commit / 無 branch / 無 PR；CODING_ALLOWED 前禁動 source**。
+**狀態**: `CODEX_PLAN_CHANGES_REQUESTED (r1) → PLAN 已修訂、待 owner 重送 ① ChatGPT Arch`（② Codex Plan Gate r1 判 OD-3b-3 `buf as ArrayBufferLike` 為未登錄的非完全誠實 assertion、違 advisory `TS-BOUNDARY-002` → 採建議改 `toBase64Url` **function overload、零 assertion**；此偏離原核准 OD-3b-3 故須**重開 ① Arch + 建新 plan anchor**；plan 已修訂並焦點 self-review〔localized 單函式、overlay 重證 REMOVED=6/ADDED=0 + byte-identical〕。**≠ `CODEX_PLAN_APPROVED` / `CODING_ALLOWED`**。上游歷史：SPEC `SPEC_APPROVED_WITH_LOCKS` + ① Arch r0 `APPROVED_WITH_LOCKS`〔@ 歷史 anchor `45935374`、cast 版、**已被 r1 overload 修訂取代**〕+ 維度 A self-review clean §5.7）。
+> **gate 進程**: scout〔2 檔共 6 錯 forced tsc 確認、zero dual-leaf〕→ transient overlay 實測〔**REMOVED=6/ADDED=0** + byte-identical 升級證據（cmp -s + SHA-256）+ `git checkout --` 還原、ratchet 還原 414/20/315〕→ owner **`SPEC_APPROVED_WITH_LOCKS`**（OD-3b-1..4、micro、MC-1/MC-2、ARCH-3B-1..16）→ MC-1 params 驗證〔`{ provider?: string }` REMOVED=6/ADDED=0 無 cascade、採用〕→ 本 plan doc → 維度 A self-review clean → **① ChatGPT Arch r0 `APPROVED_WITH_LOCKS`**〔2 提交前修正 folded〕→ **plan-anchor commit `45935374`（cast 版、歷史）** → **② Codex Plan Gate r1 `CHANGES_REQUESTED`**〔OD-3b-3 cast 違 TS-BOUNDARY-002 → function overload〕→ **plan r1 修訂（overload、零 assertion）+ 焦點 self-review + 新 anchor（parent `45935374`）** → 【待 owner **重送 ① Arch**】→ ② Codex Plan → `CODING_ALLOWED` → CODE fresh replay → ③ Codex Code → ④ ChatGPT faithfulness → owner `MERGE_ALLOWED` + CI green → squash-merge。
+> **狀態 SoT**: 本 header + 對應中文報告為當前 gate-state 權威。目前＝`CODEX_PLAN_CHANGES_REQUESTED (r1)` 後之修訂態、待 owner 重送 ① Arch；**歷史 anchor `45935374ae64947430b07a81c3e771ab2c8655b8`**（cast 版、① Arch r0 通過但被 r1 overload 修訂取代、**不可直接取得 Plan approval**）；**新 anchor**＝本次 r1 修訂 commit（parent `45935374`）。**CODING_ALLOWED 前禁動 source**。
 
 **base**: `7fe52bcfe78412d11c337080075141715d0f7cc6`（origin/main，#144 PR-2dr 棒3-env SHIPPED 後；ARCH-3B-2 immutable base）
 **級別**: **L2 implementation + L3 security review**（實作純 type-only 屬 L2；但 `init.ts` = OAuth authorization init〔PKCE / silent SSO / rate-limit / elevation / factor-add binding〕、`bind-email.ts` = OAuth identity binding + access/refresh token 簽發，皆 Tier-0 端點，治理與審查輸出升 L3 security-context）
 **性質**: 純 type-only noImplicitAny 標註（`init.ts` **5→0** · `bind-email.ts` **1→0**；合 **6→0**、全 TS7006）、byte-identical emit（esbuild stdin-pipe + SHA-256 實證）、**零 runtime / 零 control-flow / 零 validation / 零 schema / 零 API / 零 migration / 零部署面 / 零 test 改動 / 零 env.d.ts / 零新 interface / 零 export / 零新套件 / 零 lockfile**。棒3b 是 reduce PR（**REMOVED=6**、非 enabler）；post-棒3b ratchet = **408 / 18 / 317**（ARCH-3B-13）。
 
-**owner ruling（2026-07-11 `SPEC_APPROVED_WITH_LOCKS`）**: source 核准僅 `init.ts` + `bind-email.ts`（+ plan companion）｜OD-3b-1 context shape = **inline object + `[key: string]: unknown`、禁共用 interface/export/正式 EventContext 宣稱**｜OD-3b-2 = **handler boundary `env: Env`、util 端 `ProviderSecretsEnv` 不放寬**｜OD-3b-3 = **`new Uint8Array(buf as ArrayBufferLike)` 局部 overload bridge、禁擴散/禁 double-cast**｜OD-3b-4 = **bind-email 不含 params**｜micro（`n: number` / `platform: string` / `port: string \| null`）全採｜**強制修正 MC-1（params 不得寬泛 Record）+ MC-2（byte-identical 證據升級）**｜Architecture Locks **ARCH-3B-1..16**（§1.2 逐字）｜風險表 §5.2 / 防禦表 §5.4 / 驗證要求 §5.5 / 商業摘要 §5.6。
+**owner ruling（2026-07-11 `SPEC_APPROVED_WITH_LOCKS`）**: source 核准僅 `init.ts` + `bind-email.ts`（+ plan companion）｜OD-3b-1 context shape = **inline object + `[key: string]: unknown`、禁共用 interface/export/正式 EventContext 宣稱**｜OD-3b-2 = **handler boundary `env: Env`、util 端 `ProviderSecretsEnv` 不放寬**｜OD-3b-3 = **~~`new Uint8Array(buf as ArrayBufferLike)`~~ → r1 ② Codex Plan 修訂為 `toBase64Url` function overload〔零 assertion、閉合 advisory TS-BOUNDARY-002〕、待 ① Arch 重批**｜OD-3b-4 = **bind-email 不含 params**｜micro（`n: number` / `platform: string` / `port: string \| null`）全採｜**強制修正 MC-1（params 不得寬泛 Record）+ MC-2（byte-identical 證據升級）**｜Architecture Locks **ARCH-3B-1..16**（§1.2 逐字）｜風險表 §5.2 / 防禦表 §5.4 / 驗證要求 §5.5 / 商業摘要 §5.6。
 
 > ⚠ 本棒 **tree 非 fully clean**：`CLEANUP_PLAN.md`（pre-existing untracked、**不屬本 PR、挑檔 stage 排除**）+ 本 plan doc（untracked）。gate evidence 的完整 changed-files allowlist 恰 {`init.ts`, `bind-email.ts`, 本 plan doc}；source 面恰 {`init.ts`, `bind-email.ts`}。
 
@@ -31,7 +31,7 @@
 | loc（base） | error | 型別決策（form） |
 |---|---|---|
 | 34,20 | TS7006 `n` | `function randomHex(n: number)`（caller = `randomHex(STATE_BYTES)`〔=16〕；內部 `new Uint8Array(n)` 需 number）|
-| 39,22 | TS7006 `buf` | `function toBase64Url(buf: ArrayBuffer \| Uint8Array)`（caller: `raw`=Uint8Array〔L46〕 / `hashBuf`=ArrayBuffer〔L48〕）+ **L40** `new Uint8Array(buf as ArrayBufferLike)`（OD-3b-3 overload bridge）|
+| 39,22 | TS7006 `buf` | **function overload**（r1 ② 修訂、取代原 cast）：`function toBase64Url(buf: ArrayBuffer): string` + `function toBase64Url(buf: Uint8Array): string` + 實作簽名 `function toBase64Url(buf: ArrayBuffer \| ArrayLike<number>)`（caller: `raw`=Uint8Array〔L46〕 / `hashBuf`=ArrayBuffer〔L48〕）；**L40 impl body `new Uint8Array(buf)` 一字不動、零 assertion**（OD-3b-3）|
 | 53,30 / 53,40 | TS7006 `platform` / `port` | `function buildClientCallback(platform: string, port: string \| null)`（caller: `platform` = `url.searchParams.get('platform') ?? 'web'`〔string〕 / `port` = `url.searchParams.get('port')`〔string\|null〕）|
 | 68,36 | TS7006 `context` | `onRequestGet(context: { request: Request; env: Env; params: { provider?: string }; [key: string]: unknown })`（單一 context 參數、body 內 destructure 不動；OD-3b-1 + MC-1）|
 
@@ -40,7 +40,7 @@
 |---|---|---|
 | 30,37 | TS7006 `context` | `onRequestPost(context: { request: Request; env: Env; [key: string]: unknown })`（**無 params**，OD-3b-4；handler 只 destructure `{ request, env }`）|
 
-> **type surface（zero 新 named interface、zero export）**：2 handler-ctx inline 標註〔init 1 + bind-email 1〕+ 4 helper/param 標註〔`n: number` / `buf: ArrayBuffer\|Uint8Array` / `platform: string` + `port: string\|null`〕+ 1 局部 type assertion〔`buf as ArrayBufferLike`〕。`Env` / `Request` 為 global ambient（2 檔未 import；overlay ADDED=0 反證解析）。2 檔為 leaf route handler、**zero export type/interface** → 型別面全 module-local（production 僅 Pages router 觸發；integration test 以 value import `onRequest*`，故 CASCADE-LOCK 含 tests-leaf，見 NB-1）。
+> **type surface（zero 新 named interface、zero export）**：2 handler-ctx inline 標註〔init 1 + bind-email 1〕+ 3 helper/param 標註〔`n: number` / `platform: string` + `port: string\|null`〕+ `toBase64Url` **function overload**〔2 public overload signature〔`ArrayBuffer→string` / `Uint8Array→string`〕+ 1 implementation signature〔`ArrayBuffer\|ArrayLike<number>`〕、**零 type assertion**（r1 ②）〕。`Env` / `Request` 為 global ambient（2 檔未 import；overlay ADDED=0 反證解析）。2 檔為 leaf route handler、**zero export type/interface** → 型別面全 module-local（production 僅 Pages router 觸發；integration test 以 value import `onRequest*`，故 CASCADE-LOCK 含 tests-leaf，見 NB-1）。
 
 ### 1.2 Block locks（**ARCH-3B-1..16** = owner `SPEC_APPROVED_WITH_LOCKS` 2026-07-11 逐字落地）
 
@@ -48,7 +48,7 @@
 |---|---|
 | **ARCH-3B-1 SCOPE** | scope 僅 `init.ts`、`bind-email.ts`、plan companion |
 | **ARCH-3B-2 IMMUTABLE-BASE** | base 固定 `7fe52bcf`；實作前必須重驗 main、tree、ratchet |
-| **ARCH-3B-3 SOURCE-DELTA** | source 僅增加參數型別與必要 type assertion |
+| **ARCH-3B-3 SOURCE-DELTA** | source 僅增加參數型別與 `toBase64Url` function overload 型別簽名；**零 type assertion**（r1 ② 修訂：取代原 `as ArrayBufferLike`、閉合 TS-BOUNDARY-002）|
 | **ARCH-3B-4 ZERO-RUNTIME** | 零 runtime expression、branch、validation、return、exception、log 變動 |
 | **ARCH-3B-5 CONTEXT-SHAPE** | handler 保留單一 `context` 參數及 body destructuring |
 | **ARCH-3B-6 INDEX-SIG-ENVELOPE** | `[key: string]: unknown` 僅為 test/framework extra-property envelope |
@@ -77,7 +77,20 @@
 
 - **`env: Env`（OD-3b-2）**：init `getProvider(provider, env)`〔L76〕/ bind-email `getProvider(provider, env)`〔L71〕的 `env` 由 context 型別帶出 `Env`。**handler boundary 用完整 `Env`**（槓桿 棒3-env #144 補進 `Env` 的 10 optional OAuth credential key → `Env` 與 weak-type `ProviderSecretsEnv` 有 10 屬性重疊 → assignable、**無 TS2559**）。**util 端 `getProvider(name, env: ProviderSecretsEnv)` least-privilege 窄型不放寬**（ARCH-3B-9；棒3-env ARCH-ENV-5 已凍結）。對映 [[feedback_util_env_param_pick_not_full_env]]（util 收窄型是正解、caller 傳母表 Env）。init 另用 `env.chiyigo_db`〔D1Database〕/ `env.IAM_BASE_URL`〔`?: string`〕，皆在 `Env`（`types/env.d.ts`:23/46）→ 標 `env:Env` 不 cascade TS2339。
 
-- **`toBase64Url(buf: ArrayBuffer | Uint8Array)` + `new Uint8Array(buf as ArrayBufferLike)`（OD-3b-3）**：caller 傳 `raw`（Uint8Array，PKCE verifier）與 `hashBuf`（ArrayBuffer，SHA-256 digest）→ union `ArrayBuffer | Uint8Array` caller-faithful。`new Uint8Array()` 三 overload 無單一者接受該 union（`ArrayBuffer`→buffer overload；`Uint8Array`→ArrayLike/Iterable overload）→ 需 `as ArrayBufferLike` 落 buffer overload。**此 cast 純為 constructor overload bridge**（`Uint8Array` 本身非 `ArrayBufferLike`，但 TS assertion 因 union 含 `ArrayBuffer` constituent 而接受、**無 TS2352**、overlay 坐實）；**於 emit 抹除**（byte-identical SHA-256 坐實）→ runtime `new Uint8Array(buf)` 對兩型別行為不變（ArrayBuffer→view、Uint8Array→copy，皆既有正確行為）。**僅此一位置、禁擴散、禁 `as unknown as`/`as any`/helper wrapper/runtime branch**（OD-3b-3 + ARCH-3B-8）。
+- **`toBase64Url` function overload（OD-3b-3；r1 ② Codex Plan 修訂，取代原 `as ArrayBufferLike`）**：
+  ```ts
+  function toBase64Url(buf: ArrayBuffer): string
+  function toBase64Url(buf: Uint8Array): string
+  function toBase64Url(buf: ArrayBuffer | ArrayLike<number>) {
+    return btoa(String.fromCharCode(...new Uint8Array(buf)))   // impl body 一字不動、零 assertion
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+  }
+  ```
+  - **真相源＝② Codex Plan r1 建議**：原 `buf: ArrayBuffer | Uint8Array` + `new Uint8Array(buf as ArrayBufferLike)` 被判為未登錄的非完全誠實 assertion、違 advisory `TS-BOUNDARY-002`（`Uint8Array` 本身非 `ArrayBufferLike`）。改用 function overload 後 **零 `as` assertion、零 unsafe-boundary exception**（無需新增 governance registry）。
+  - **兩 caller 忠實**：`raw`（Uint8Array，PKCE verifier L46）→ 命中 `(buf: Uint8Array): string` overload；`hashBuf`（ArrayBuffer，SHA-256 digest L48）→ 命中 `(buf: ArrayBuffer): string` overload。public overload 精確描述兩 call site、比原 union 更誠實。
+  - **實作簽名 `ArrayBuffer | ArrayLike<number>`**：內部 `new Uint8Array(buf)` 於此實作簽名下 type-check **無新錯**（transient overlay `ADDED=0` compiler-as-oracle 坐實；不憑型別推理宣稱、[[feedback_dont_assert_runtime_semantics_without_verify]]）。
+  - **byte-identical 維持**：2 個 public overload signature 為 declaration-only、**esbuild 於 emit strip**（實測 init.ts emit 仍 `9048` / SHA-256 `f87d1c0f…`、cmp -s exit 0；emit 只剩 `function toBase64Url(buf) {`）；runtime `new Uint8Array(buf)` 對兩型別行為不變（ArrayBuffer→view、Uint8Array→copy，皆既有正確行為）。
+  - **module-local、public API / runtime contract 不變**；**禁擴散、禁 `as` 任何形式 / helper wrapper / runtime branch**（OD-3b-3 + ARCH-3B-3/8）。
 
 - **micro（caller-faithful）**：`randomHex(n: number)`（number const caller）· `buildClientCallback(platform: string, port: string \| null)`（`port` 誠實 nullable、內部 `if (!port …)` + `String(port)` 既有不動）。
 
@@ -85,15 +98,15 @@
 
 **A. forced tsc set-diff** — `npx tsc -b tsconfig.solution.json --pretty false --force`（uniq set、`sort -u` 後 `comm`）：
 - base error set = **414 unique**（= ratchet report 414/20/315；raw 414、**零 dual-leaf**）。
-- 套 6 處 type-affecting overlay（init 5 + bind-email 1、含 `{ provider?: string }` + `[key:string]:unknown` + `buf as ArrayBufferLike`）→ **408 unique**；set-diff **REMOVED=6**（init.ts 34,20/39,22/53,30/53,40/68,36 + bind-email.ts 30,37、全 TS7006）/ **ADDED=0**（全 solution、含 tests-leaf；[[feedback_tsc_forced_solution_dual_leaf_error_count]]）。errorFiles 20→18、cleanFiles 315→317。baseline `1119/175` frozen（reduce 禁 `--update`）。
-- **關鍵消解坐實**：**TS2559 未出現**（`getProvider(provider, env:Env)` assignable to `ProviderSecretsEnv`＝棒3-env #144 之效）· **TS2353 未出現**（index-sig ctx 吸收 test rich EventContext）· **TS2352 未出現**（`buf as ArrayBufferLike` 單 cast 接受、無需 double-cast）· 無 TS2339（env.IAM_BASE_URL 等在 Env）· 無 TS2345（`params.provider` 讀為 string、不 cascade `.includes`/`getProvider`）。
+- 套 6 處 type-affecting overlay（init 5 + bind-email 1、含 `{ provider?: string }` + `[key:string]:unknown` + `toBase64Url` **function overload**〔r1 ② 版〕）→ **408 unique**；set-diff **REMOVED=6**（init.ts 34,20/39,22/53,30/53,40/68,36 + bind-email.ts 30,37、全 TS7006）/ **ADDED=0**（全 solution、含 tests-leaf；[[feedback_tsc_forced_solution_dual_leaf_error_count]]）。errorFiles 20→18、cleanFiles 315→317。baseline `1119/175` frozen（reduce 禁 `--update`）。**r1 overload 版與 r0 cast 版 REMOVED/ADDED 逐字相同（皆 6/0）、byte-identical 逐字相同（9048/8060、同 SHA）**——差異僅 assertion→overload，型別效果與 emit 皆等價。
+- **關鍵消解坐實**：**TS2559 未出現**（`getProvider(provider, env:Env)` assignable to `ProviderSecretsEnv`＝棒3-env #144 之效）· **TS2353 未出現**（index-sig ctx 吸收 test rich EventContext）· **零 `as` assertion**（`toBase64Url` 改 function overload、**無 TS2352 / 無 TS-BOUNDARY-002 exception**；impl body `new Uint8Array(buf)` 於實作簽名 `ArrayBuffer\|ArrayLike<number>` 下 ADDED=0）· 無 TS2339（env.IAM_BASE_URL 等在 Env）· 無 TS2345（`params.provider` 讀為 string、不 cascade `.includes`/`getProvider`）。
 
 **B. byte-identical emit（ARCH-3B-11 + MC-2 升級證據；esbuild stdin-pipe、非 vacuous）**：
 | 檔 | base size | cand size | cmp -s exit | SHA-256（base = cand） | vacuous guard |
 |---|---|---|---|---|---|
 | `[provider]/init.ts` | 9048 | 9048 | **0** | `f87d1c0f203838b8e216e4eeae8bc76ee0819c9d9aa9b5c2ac630f604df0313d` | non-vacuous（≠ empty sha `e3b0c442…`）|
 | `bind-email.ts` | 8060 | 8060 | **0** | `f32008463d6379d1658585a6bb0157c1a722cea86559e639cef5928ce166b001` | non-vacuous |
-> RUNTIME-LOCK（ARCH-3B-4/11）坐實：provider 驗證 / PKCE / state / nonce / silent SSO / rate-limit / is_binding factor-add / elevation OAuth-reauth / oauth_states 寫入 / temp_bind jti replay / reverification gate / 信箱碰撞 / user·identity 建立 / access·refresh token 簽發 / cookie 100% 未動；參數註記 / `as` cast（型別資訊）全於 emit 抹除（**本棒不新增 return-type 標註**，delta 限「參數型別 + 必要 assertion」、ARCH-3B-3）。
+> RUNTIME-LOCK（ARCH-3B-4/11）坐實：provider 驗證 / PKCE / state / nonce / silent SSO / rate-limit / is_binding factor-add / elevation OAuth-reauth / oauth_states 寫入 / temp_bind jti replay / reverification gate / 信箱碰撞 / user·identity 建立 / access·refresh token 簽發 / cookie 100% 未動；參數註記 / function overload 簽名（型別資訊）全於 emit 抹除〔esbuild strip overload signature、實測 init.ts emit 只剩 `function toBase64Url(buf) {`〕（**本棒零 `as` assertion、不新增 return-type 標註**，delta 限「參數型別 + overload 型別簽名」、ARCH-3B-3）。
 > **⚠ 驗法（MC-2；[[feedback_byte_identical_emit_verification]]）**：`git show HEAD:<f> | esbuild --loader=ts --format=esm` vs `cat <f> | esbuild --loader=ts --format=esm`，取 **`cmp -s` exit 0 + 兩側 SHA-256 一致 + 兩側 size > 0**（**size 相等不足以標 byte-identical**，MC-2 明訂）。canonical recipe **必含 `--format=esm`**；`--loader=ts` 對 file-arg 會 error → 0-byte vacuous 假 pass，故必驗 byte > 0 且 sha ≠ empty-string sha。PowerShell 5.1 無 `<` stdin redirection、命令走 Git Bash（② Codex 環境 `bash` 不在 PATH → replay 用明確路徑 `C:\Program Files\Git\bin\bash.exe` 或 esbuild JS transform fallback）。
 
 **C. transient revert clean**：`git checkout -- ':(literal)functions/api/auth/oauth/[provider]/init.ts' 'functions/api/auth/oauth/bind-email.ts'`（`:(literal)` pathspec 處理 `[provider]` glob）→ `git status --porcelain` 僅 `?? CLEANUP_PLAN.md`（pre-existing）+ 本 plan doc（untracked）、`git diff --stat HEAD` 空（未 commit、零殘留）、HEAD 未動 `7fe52bcf`、ratchet 還原後仍 414/20/315。
@@ -116,7 +129,7 @@ CODE stage @ final source commit 必先跑 **immutable-base guard（ARCH-3B-2）
 |---|---|---|
 | OD-3b-1 context shape | **採用，附限制** | inline object + `[key: string]: unknown`；禁共用 interface/type、禁 export、禁宣稱正式 `EventContext` 模型（ARCH-3B-6/7）|
 | OD-3b-2 `env: Env` | **採用** | handler boundary 用完整 `Env`；`getProvider` 端維持 `ProviderSecretsEnv`、不放寬 util capability（ARCH-3B-9）|
-| OD-3b-3 buffer cast | **採用，視為局部 overload bridge** | 僅 `new Uint8Array(buf as ArrayBufferLike)` 此一位置；禁 `as unknown as`/`any`/helper wrapper/runtime branch（ARCH-3B-8）|
+| OD-3b-3 buffer 型別 | **r0 owner「局部 overload bridge cast」→ r1 ② 修訂為 function overload、零 assertion** | `toBase64Url(buf:ArrayBuffer):string` + `(buf:Uint8Array):string` + impl `(buf:ArrayBuffer\|ArrayLike<number>)`；impl body `new Uint8Array(buf)` 不變；**零 `as`**/helper/runtime branch（ARCH-3B-3/8）；閉合 TS-BOUNDARY-002、無需 registry |
 | OD-3b-4 bind-email params | **採用不含 params** | handler 未讀 params、由 index-sig 吸收 test ctx；不得為對稱性增未使用欄位 |
 | micro types | **採用** | `n: number` / `platform: string` / `port: string \| null`；必須與實際 caller 推導一致 |
 
@@ -126,7 +139,7 @@ CODE stage @ final source commit 必先跑 **immutable-base guard（ARCH-3B-2）
 | OAuth init / identity binding 型別誤導 | Tier-0 | 可能掩蓋 provider、帳號綁定或 token 路徑缺陷 | 僅補參數型別，禁 runtime/control-flow/validation 變更（ARCH-3B-4/11）|
 | `context` index signature 過寬 | 中 | 任意欄位均可存在，可能成後續濫用入口 | 僅限函式參數 local inline shape；值固定 `unknown`；禁動態 key 讀取（ARCH-3B-6/7）|
 | `params` 過度宣稱 | 中 | 宣稱所有 key 存在且為字串、與 route boundary 不完全一致 | **MC-1**：優先 `{ provider?: string }`；確認既有流程使用前已 narrowing／fail-closed |
-| `buf as ArrayBufferLike` 非完全誠實 | 中 | Uint8Array 本身非 ArrayBufferLike、僅 overload bridge | 僅原 `new Uint8Array(buf)` 位置；禁擴散、禁 double-cast（ARCH-3B-8）|
+| buffer 型別誠實性（原 `buf as ArrayBufferLike`）| 低（r1 已消解）| r0 cast 為 overload bridge、被 ② 判違 TS-BOUNDARY-002 | **r1 ② 修訂：改 `toBase64Url` function overload、零 `as`、零 unsafe-boundary exception**；public API/runtime contract 不變、module-local；byte-identical 維持（overload 簽名 esbuild strip、9048/SHA 不變）|
 | byte-identical 僅比較長度 | 高 | 相同 byte count ≠ 內容相同 | **MC-2**：`cmp -s` exit 0 或雙側 SHA-256、兩側非空 |
 | `[provider]` 路徑工具漏掃 | 中 | 自審工具可能未納入 init.ts | **ARCH-3B-14**：faithfulness packet 人工補完整 hunk + 機械 name-status |
 
@@ -163,12 +176,19 @@ CODE stage @ final source commit 必先跑 **immutable-base guard（ARCH-3B-2）
 本棒是低成本、零功能變動的技術債清理，讓兩個 Tier-0 OAuth 檔案轉 clean、降低 callback.ts（棒4）後續處理時的錯誤噪音。**不得藉此棒重構 context abstraction**；該收益不足以承擔 OAuth 端點 runtime drift（ARCH-3B-15）。
 
 ### 5.7 維度 A 對抗式 self-review 收據（2026-07-11；5 finder 並行 + 主線裁決）
+> **r0（cast 版）maiden 收據**——下列 5 finder 審的是 ① Arch r0 通過的 `buf as ArrayBufferLike` cast 版。r1 ② Codex Plan 將 OD-3b-3 改為 function overload（零 assertion），其餘 5 決策（context/params/env:Env/bind-email/micro）**一字未變**、r0 finding 對其仍全效。r1 修訂之焦點 re-review 見本節末「r1 焦點 self-review」。
+
 5 個 read-only 對抗 finder（各攻一維度、全程禁改檔/禁套 overlay/禁動 git，避免平行 tree 互吸）+ 主線獨立複核。**0 BLOCKER / 0 MAJOR**；1 MINOR + 6 NIT 全數折入本 plan doc；主線 fresh-pass 再讀 0 新發現。
 - **Finder 1（Lock 忠實度 + Scope）**：0 BLOCKER/MAJOR/MINOR + 3 NIT。獨立重現 base emit SHA（逐字命中）；以 clean `token.ts`（棒3a 已 noImplicitAny=0）當 in-repo witness 坐實 **bare `.first()` 回 `any`、欄位讀取不 cascade**（ADDED=0 關鍵支柱）；全 env sink assignability 逐一核；16 locks 連號無缺、標籤衝突處理正確。NIT：env.d.ts 路徑前綴〔已修〕· §3.B「return type」vacuous 列舉〔已修〕· 內文 inline ARCH-3B-1 雙義〔已修〕。
 - **Finder 2（Cascade + 型別正確性）**：6 檢查全 VERIFIED、0 BLOCKER/MAJOR + 3 NIT（透明度）。機械重算 REMOVED=6/ADDED=0（`comm` + `grep -Fxvf` 雙法）、6 錯座標、post-ratchet 408/18/317（獨立推導 errorFiles 20→18）；型別邏輯獨立推導 MC-1 機制 + 雙重保險、env:Env 消 TS2559（10/10）、`buf as ArrayBufferLike` 消 TS2352 + cast 必要性。NIT：raw dual-leaf / cleanFiles 絕對值 / byte-identical 不在此維度、由 CODE-stage fresh replay 兜底。
 - **Finder 3（byte-identical + runtime 分離）**：0 發現。在 scratchpad（未動 repo tree）重建 candidate、用 repo esbuild 實測、**獨立重現 plan §3.B 的 sha/size 逐字吻合**（init `f87d1c0f…`/9048、bind-email `f32008…`/8060、`cmp -s` exit 0）；6 處全 emit-erased、零 runtime 構造。誠實邊界：byte-identical PASS 不保證型別正確（屬 Finder 2 維度）。
 - **Finder 4（MC 遵從 + 證據完整性 / gate-state 忠實）**：7 維度全 PASS + 1 NIT〔已修〕。獨立交叉驗證 ADDED=0 → MC-1 condition #3 正確未觸發；獨立重現 base emit sha → MC-2 PASS；base SHA / ratchet 414/20/315 / gate-state（無 commit/branch）/ 標籤衝突 / 內部恆等式（20+315=18+317=335）全自洽。NIT：§1.1「全 TS7006」措辭〔已修〕。
 - **Finder 5（L3 security-context + faithfulness）**：安全維度 1-5 全 0 發現 + 1 MINOR〔已修〕+ 1 NIT〔已折入 NB-7〕。安全：6 註記不誤導安全不變量、`[key:string]:unknown` 無 live 濫用向量（grep 零 `context[...]`/`env[...]`）、`env:Env` 是收緊非放寬、P0-2/consumeJtiOnce/OD-3 reverification/PKCE/nonce 全未動、不摺入 LINE hardening。MINOR：NB-1 誤列 `jwt-sid-claim` 為 bind-email value-leaf〔主線 grep 複核確認、已更正為 oauth-bind-email 唯一〕。NIT：`{provider?:string}` strict:true 延後 cascade〔已補 NB-7 揭露〕。
+
+**r1 焦點 self-review（② Codex Plan CHANGES_REQUESTED 後、localized 單函式 `toBase64Url` overload 修訂；依 Dual Gate「L2/L3 回應外部小修正、不觸架構/單檔局部 → 單 agent／主線對抗式」，未達重跑 5-finder workflow 規模）**：主線對抗式複核 + compiler-as-oracle 實測——
+- **compiler 坐實**：套 overload 版 transient overlay（其餘 5 標註不變）→ forced tsc `REMOVED=6 / ADDED=0`（與 r0 cast 版逐字相同、含 tests-leaf）；`git checkout --` 還原、overlay 零殘留、ratchet 還原 414/20/315。
+- **byte-identical 坐實（MC-2 升級）**：init.ts emit `9048` / SHA-256 `f87d1c0f…`、bind-email.ts `8060` / `f32008…`、`cmp -s` exit 0、雙側非 vacuous——**與 r0 cast 版逐字相同**；且 esbuild emit 實測只剩 `function toBase64Url(buf) {`（2 overload signature 被 strip）→ 坐實 overload 為 declaration-only、runtime 零變更。
+- **對抗結論**：overload 版消除 assertion（閉合 TS-BOUNDARY-002）、零 `as`、零 registry；型別效果（REMOVED/ADDED）與 emit（byte-identical）皆與 r0 等價；其餘 OD/lock/security 決策未受影響。**0 新發現**。
 
 ## 6. 非 blocking notes
 - **NB-1**：2 檔為 leaf route handler、**zero export type/interface**（同 PR-2dp/2dq）——production 僅 Pages router 觸發、無跨模組 public type contract。⚠ integration test 以 **value** import `onRequest*`：**init 4 leaf**〔`cred-reverify-enforcement` / `rate-limit` / `callback` 靜態 import + `oauth-nonce` **動態** `await import()`〕、**bind-email 1 leaf**〔`oauth-bind-email.test.ts:22` 唯一〕。故 CASCADE-LOCK（ARCH-3B-12）**必含 tests-leaf**；overlay ADDED=0 已全 solution 涵蓋。⚠ **`jwt-sid-claim.test.ts` 不是 bind-email 的 value-import leaf**（其 L10 註解提及 "bind-email" 屬 issuance 清單、非 import；實際 import login/refresh；bind-email sid regression 由 `oauth-bind-email` flow 自身覆蓋）——早期 `grep -rln "bind-email"` 誤命中該註解、已更正。
@@ -187,6 +207,6 @@ CODE stage @ final source commit 必先跑 **immutable-base guard（ARCH-3B-2）
 
 ## Index receipt（archive 用；本檔結案後搬 MEMORY 對應）
 - 清 oauth dirty-2 2 檔 6 noImplicitAny → 0（init.ts 5〔n/buf/platform/port/context〕+ bind-email.ts 1〔context〕、全 TS7006、zero dual-leaf）；REMOVED=6 / ADDED=0、byte-identical（init sha `f87d1c0f…` 9048 / bind-email sha `f32008…` 8060、cmp -s + SHA-256）。post-ratchet 408/18/317。
-- OD 裁決：OD-3b-1 inline ctx + `[key:string]:unknown`（禁共用/export/EventContext 宣稱）、OD-3b-2 `env:Env`（util `ProviderSecretsEnv` 凍結）、OD-3b-3 `buf as ArrayBufferLike`（局部 overload bridge、禁擴散/double-cast）、OD-3b-4 bind-email 無 params；micro `n:number`/`platform:string`/`port:string|null`。
+- OD 裁決：OD-3b-1 inline ctx + `[key:string]:unknown`（禁共用/export/EventContext 宣稱）、OD-3b-2 `env:Env`（util `ProviderSecretsEnv` 凍結）、**OD-3b-3 `toBase64Url` function overload（r1 ② 修訂、零 assertion、取代原 `as ArrayBufferLike`、閉合 TS-BOUNDARY-002）**、OD-3b-4 bind-email 無 params；micro `n:number`/`platform:string`/`port:string|null`。
 - MC-1（params `{ provider?: string }` 非 `Record<string,string>`；試 optional → REMOVED=6/ADDED=0 無 cascade〔strictNullChecks:false〕→ 採用、condition #3 不觸發）+ MC-2（byte-identical 證據升級 cmp -s + SHA-256 + size>0）。
 - ARCH-3B-1..16（SCOPE / IMMUTABLE-BASE / SOURCE-DELTA / ZERO-RUNTIME / CONTEXT-SHAPE / INDEX-SIG-ENVELOPE / NO-DYNAMIC-KEY / NO-ANY-NO-GLOBAL / UTIL-FROZEN / NO-ENV-SURFACE / SECURITY-BYTE-IDENTICAL / CASCADE / RATCHET / PROVIDER-PATH-HUNK / NO-FOLD-IN / NO-PKG-NO-TEST）。⚠ 標籤衝突：強制修正段 ARCH-3B-1/2 ≠ Locks 表 ARCH-3B-1/2（本檔以 MC-1/MC-2 別名承載強制修正）。
