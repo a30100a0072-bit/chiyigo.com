@@ -1,7 +1,7 @@
 # Stage 7 PR-2dt — 棒4-type：`callback.ts` noImplicitAny 續清（oauth domain 最後一塊、Path C 之 PR1）
 
 **SPEC**: `STAGE7_OAUTH_CALLBACK_NOIMPLICITANY`（owner `SPEC_APPROVED_WITH_LOCKS` 2026-07-13，Path C）
-**狀態**: `PLAN_SELF_REVIEW_CLEAN_R2`（維度 A `wf_77126efb-acd` 2 accepted+10 refuted @ `e14e8bfd` → **① ChatGPT Arch R1 `CHANGES_REQUESTED @ e14e8bfd`**〔架構方向+Path C PASS、2 Tier-1 Required RR1/RR2、0 scope-reversal/0 security-blocker〕→ docs-only 窄修 RR1/RR2 + 主線對抗式 re-read 0 新發現 → 新 commit〔非 amend〕→ **待 ① ChatGPT Arch 窄幅 re-review**）→ ② Codex Plan
+**狀態**: `MERGE_ALLOWED`（owner 2026-07-13）。**4 道外部 gate 全過**：① `CHATGPT_ARCH_APPROVED @ 9a8ded14`（R1 CHANGES_REQUESTED RR1/RR2 → R2 CLOSED）· ② `CODEX_PLAN_APPROVED @ 9a8ded14`（0 finding）· ③ `CODEX_CODE_APPROVED @ de70cfd8`（0 material、byte-identical 三面實證）· ④ `CHATGPT_CODE_FAITHFULNESS_APPROVED @ de70cfd8`（0 scope-creep/漏做/型別偷換/架構偏離）。維度 A：plan `wf_77126efb-acd`（2 accepted 已修+10 refuted）· CODE `wf_eef6454a-b37`（16 refuted+3 accepted 全 pre-existing tier3、0 actionable）。CODE commit `de70cfd8`（callback.ts 23 標註、11 lines、REMOVED=23/ADDED=0、ratchet 385/18/317、byte-identical `2c313404`）。→ merge-front CI local gates → push → PR → squash-merge → main。⚠ **本檔契約 §1→EOF 自 `9a8ded14`（Plan Gate approved）起逐 byte 未改**；本狀態行 + 後續 merge-front 為 docs-only header 更新。
 **base**: `67111ad428e836a9729362847ac68ee5f8d71e01`（= main = origin/main、#145 PR-2ds 棒3b SHIPPED 後；IMMUTABLE-BASE = SPEC-C locks）
 **worktree**: `C:/Users/User/Desktop/chiyigo-pr2dt-callback-type`、branch `stage7-pr2dt-callback-type`（`SINGLE_WRITER_READY` 已達成）
 **級別**: **L2 implementation + L3 security review**（實作純 type-only 屬 L2；但 `callback.ts` = 動態 OAuth callback〔state/PKCE 原子核銷、identity 簽發、elevation exchange、access/refresh token 簽發〕，Tier-0 最重端點，治理與審查輸出升 L3 security-context）
