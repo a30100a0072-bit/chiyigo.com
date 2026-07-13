@@ -37,12 +37,12 @@ const TEMP_BIND_TTL      = '10m'
 
 // ── 入口（GET + POST 共用）────────────────────────────────────────
 
-export const onRequestGet  = (ctx) => handle(ctx)
-export const onRequestPost = (ctx) => handle(ctx)
+export const onRequestGet  = (ctx: { request: Request; env: Env; params: { provider?: string }; [key: string]: unknown }) => handle(ctx)
+export const onRequestPost = (ctx: { request: Request; env: Env; params: { provider?: string }; [key: string]: unknown }) => handle(ctx)
 
 const ALLOWED_PROVIDERS = new Set(['discord', 'google', 'line', 'facebook', 'apple'])
 
-async function handle(context) {
+async function handle(context: { request: Request; env: Env; params: { provider?: string }; [key: string]: unknown }) {
   const { request, env, params } = context
   const provider = params.provider?.toLowerCase()
 
@@ -522,7 +522,7 @@ async function exchangeCode({ cfg, code, code_verifier, redirect_uri }) {
 
 // ── Profile 取得（provider 差異處理）────────────────────────────
 
-async function fetchProfile(provider, cfg, tokens, expectedNonce) {
+async function fetchProfile(provider: string, cfg: ReturnType<typeof getProvider>, tokens: { id_token?: string; access_token?: string }, expectedNonce: string | null) {
   // Apple：user info 在 id_token 內，無 userInfoUrl
   // P1-1：原本只 decodeJwtPayload 沒驗章 → 攻擊者可造任意 sub/email 取代帳號
   // 改 jwtVerify(JWKS) + 驗 iss/aud/nonce
@@ -575,7 +575,7 @@ async function fetchProfile(provider, cfg, tokens, expectedNonce) {
 
 // Google id_token 驗章（ES256/RS256，透過 JWKS）
 // 模組級快取 JWKS：同一 isolate 內 Google 公鑰 fetch 僅一次（jose 內部會 respect HTTP cache headers）
-let _googleJwks = null
+let _googleJwks: ReturnType<typeof createRemoteJWKSet> | null = null
 function getGoogleJwks() {
   if (!_googleJwks) {
     _googleJwks = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'))
@@ -583,7 +583,7 @@ function getGoogleJwks() {
   return _googleJwks
 }
 
-async function verifyGoogleIdToken(idToken, expectedAud, expectedNonce) {
+async function verifyGoogleIdToken(idToken: string, expectedAud: string | null, expectedNonce: string | null) {
   const { payload } = await jwtVerify(idToken, getGoogleJwks(), {
     issuer:   ['https://accounts.google.com', 'accounts.google.com'],
     audience: expectedAud,
@@ -595,7 +595,7 @@ async function verifyGoogleIdToken(idToken, expectedAud, expectedNonce) {
 }
 
 // Apple id_token 驗章（RS256，透過 JWKS）
-let _appleJwks = null
+let _appleJwks: ReturnType<typeof createRemoteJWKSet> | null = null
 function getAppleJwks() {
   if (!_appleJwks) {
     _appleJwks = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'))
@@ -603,7 +603,7 @@ function getAppleJwks() {
   return _appleJwks
 }
 
-async function verifyAppleIdToken(idToken, expectedAud, expectedNonce) {
+async function verifyAppleIdToken(idToken: string, expectedAud: string | null, expectedNonce: string | null) {
   const { payload } = await jwtVerify(idToken, getAppleJwks(), {
     issuer:   'https://appleid.apple.com',
     audience: expectedAud,
@@ -617,7 +617,7 @@ async function verifyAppleIdToken(idToken, expectedAud, expectedNonce) {
 // ── 工具 ─────────────────────────────────────────────────────────
 
 // LINE id_token 驗簽（HS256，以 channel secret 為 key）
-async function verifyLineIdToken(idToken, channelSecret) {
+async function verifyLineIdToken(idToken: string, channelSecret: string | null) {
   const parts = idToken.split('.')
   if (parts.length !== 3) throw new Error('Invalid id_token format')
   const [headerB64, payloadB64, sigB64] = parts
@@ -644,13 +644,13 @@ async function verifyLineIdToken(idToken, channelSecret) {
   return payload
 }
 
-function escapeHtml(s) {
+function escapeHtml(s: string) {
   return String(s).replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]))
 }
 
-function htmlError(message, status = 400) {
+function htmlError(message: string, status = 400) {
   return new Response(
     `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">
     <title>登入失敗</title>
