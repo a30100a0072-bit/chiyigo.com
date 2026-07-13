@@ -27,7 +27,7 @@ import { consumeJtiOnce } from '../../../utils/revocation'
 const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
 
-export async function onRequestPost(context) {
+export async function onRequestPost(context: { request: Request; env: Env; [key: string]: unknown }) {
   const { request, env } = context
 
   let body
