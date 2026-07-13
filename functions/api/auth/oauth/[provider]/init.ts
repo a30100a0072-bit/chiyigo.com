@@ -31,12 +31,14 @@ const OIDC_PROVIDERS = new Set(['google', 'line', 'apple'])
 
 // ── PKCE 工具 ─────────────────────────────────────────────────────
 
-function randomHex(n) {
+function randomHex(n: number) {
   return Array.from(crypto.getRandomValues(new Uint8Array(n)))
     .map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-function toBase64Url(buf) {
+function toBase64Url(buf: ArrayBuffer): string
+function toBase64Url(buf: Uint8Array): string
+function toBase64Url(buf: ArrayBuffer | ArrayLike<number>) {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
@@ -50,7 +52,7 @@ async function generatePkce() {
 
 // ── 平台回呼 URI ──────────────────────────────────────────────────
 
-function buildClientCallback(platform, port) {
+function buildClientCallback(platform: string, port: string | null) {
   switch (platform) {
     case 'pc':
       if (!port || !/^\d{4,5}$/.test(String(port)))
@@ -65,7 +67,7 @@ function buildClientCallback(platform, port) {
 
 // ── 主處理器 ──────────────────────────────────────────────────────
 
-export async function onRequestGet(context) {
+export async function onRequestGet(context: { request: Request; env: Env; params: { provider?: string }; [key: string]: unknown }) {
   const { request, env, params } = context
   const provider = params.provider?.toLowerCase()
 
