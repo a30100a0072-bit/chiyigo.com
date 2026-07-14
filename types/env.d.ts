@@ -43,6 +43,7 @@ declare global {
     RESEND_API_KEY?: string;
     MAIL_FROM_ADDRESS?: string;
     RESEND_TIMEOUT_MS?: string;
+    OAUTH_FETCH_TIMEOUT_MS?: string;   // provider token/userinfo fetch timeout override（ms；test/ops escape hatch；unset→8000/5000 default）
     IAM_BASE_URL?: string;
     IAM_SERVICE?: Fetcher;
     LINE_OA_URL?: string;
