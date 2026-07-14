@@ -162,7 +162,7 @@ const PROFILE_MAX_ATTEMPTS             = 2       // 1 次初試 + 最多 1 次 r
 const PROFILE_RETRY_BACKOFF_MS         = 250
 ```
 
-- **終止條件**：`attempt > PROFILE_MAX_ATTEMPTS` ⇒ throw；4xx / 429 ⇒ **立即** throw（不進 backoff）。**無無限 retry**。
+- **終止條件（Codex Plan R2 INFO 精確化）**：retry 條件為 `attempt < PROFILE_MAX_ATTEMPTS`；**`attempt >= PROFILE_MAX_ATTEMPTS`（即已達 MAX_ATTEMPTS 次）⇒ 不再 retry、直接 throw**（MAX=2 ⇒ throw 落在第 2 次 attempt，非「> MAX」的第 3 次〔永不到達〕）；4xx / 429 / malformed body ⇒ **立即** throw（不進 backoff）。**無無限 retry**。
 - **default 最壞路徑（有界，含 JWKS；self-review #3）**：
   - **LINE / discord / facebook（無 JWKS）**：8000（token）＋ 5000 × 2（userinfo）＋ 250（backoff）≈ **18.25s**。
   - **Google（cold-cache JWKS，本 PR 未包 timeout，jose default 5s）**：8000（token）＋ 5000（JWKS）＋ 5000 × 2（userinfo）＋ 250 ≈ **~23.25s**。
@@ -387,7 +387,7 @@ vi.fn(async (_url, init) => ({
 | **T2** | DELTA_RED | discord | 同上，`state` part → File | 實測 RED：`D1_TYPE_ERROR` throw、**無 Response** | 400 htmlError · **不 throw** |
 | **T3** | INVARIANT_GREEN | **apple** | 合法 urlencoded form_post（`onRequestPost` 路徑） | **base GREEN**：base 已處理 apple form_post → 到 token exchange | GREEN：`fetchCalls` 含 **apple** tokenUrl（guard 未擋合法 form_post；不必完成 JWKS/登入） |
 | **T4** | DELTA_RED | discord | tokenUrl mock(i) 掛住（**fetch 階段** timeout） | RED：無限等 → vitest 20s testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ abort → 400 · 耗時 < 1s · **tokenUrl `fetchCalls` 恰 1 次**（Arch R2-3：鎖「token timeout 亦不 retry」——非冪等 authorization_code 的核心 idempotency lock，不可只靠 T7〔5xx〕間接推論） |
-| **T4b** | DELTA_RED | discord | tokenUrl mock(ii)：回 **200 headers 但 token `json()` body 掛住** honor abort（**body-read 階段** timeout；Codex R2） | RED：base exchangeCode `return res.json()`（無 await）→ timer 提早清 → body-stall 無限等 → testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ abort → 400 · 耗時 < 1s · **tokenUrl `fetchCalls` 恰 1 次**（證 exchangeCode `return await res.json()` 使 timer 涵蓋 token body-read、且不 retry） |
+| **T4b** | DELTA_RED | discord | tokenUrl mock(ii)：回 **200 headers 但 token `json()` body 掛住** honor abort（**body-read 階段** timeout；Codex R2） | RED：**base exchangeCode 無任何 timeout（bare fetch、無 AbortController）→ body-stall 無限等 → testTimeout**（Codex R2 INFO：base-RED 因「無 timeout」；「timer 提早清」是候選若只加 timer 卻沿用 `return res.json()`〔無 await〕的實作風險，T4b 靠要求 `return await res.json()` 擋此） | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ abort → 400 · 耗時 < 1s · **tokenUrl `fetchCalls` 恰 1 次** |
 | **T5** | DELTA_RED | discord | userinfo：attempt1 **500**，attempt2 200（resolved 5xx） | RED：1 次 → 400 | **200 登入成功** · **userinfo `fetchCalls` 恰 2 次** |
 | **T5b** | DELTA_RED | discord | userinfo：**兩次皆 500**（retry 耗盡；R-2） | RED：1 次 → 400 | 400 · **userinfo `fetchCalls` 恰 2 次**（鎖 `MAX_ATTEMPTS=2`） |
 | **T6** | INVARIANT_GREEN | discord | userinfo → **401** | **base GREEN**：base 亦 1 次 → 400 | GREEN：400 · **userinfo `fetchCalls` 恰 1 次**（不 retry 4xx） |
