@@ -22,7 +22,7 @@
 |---|---|---|
 | **production source** | `functions/api/auth/oauth/[provider]/callback.ts` | guard + exchangeCode 標型 + fetch timeout/retry |
 | **production source** | `types/env.d.ts` | **additive +1 optional key** `OAUTH_FETCH_TIMEOUT_MS?: string`（零 JS emit；先例 = PR-2dr 棒3-env #144 additive +10 key） |
-| **test** | `tests/integration/oauth-callback-guard-fetch.test.ts` | **新檔**：14 cases（DELTA_RED 8 + INVARIANT_GREEN 6、§6） |
+| **test** | `tests/integration/oauth-callback-guard-fetch.test.ts` | **新檔**：16 cases（DELTA_RED 10 + INVARIANT_GREEN 6、§6） |
 | **治理文件** | 本 plan doc | companion |
 
 **明禁動**（SPEC-D-1/2/6/7/8/12）：`oauth-providers.ts` · `init.ts` · `bind-email.ts` · `verifyLineIdToken` / `verifyGoogleIdToken` / `verifyAppleIdToken` **body** · **`fetchProfile` 內的 id_token 驗證區塊逐字不動**〔Apple early-return `L529-532` · Google `verifyGoogleIdToken` 呼叫 `L541` · LINE `verifyLineIdToken` 呼叫 `L549` + LINE nonce 檢查 `L550-552` · LINE email 注入 `L562-563` · Google claim 覆寫 `L565-571`〕——本 PR 只在**其後**的 `fetch(cfg.userInfoUrl)`（L556-560）包 retry loop，**retry loop 絕不涵蓋任何 verify\*IdToken**（self-review #1；SPEC-D-12 邊界，LINE nonce 區 = PR-2dv 目標）· `callback.ts:61` CT 子字串守門 · `oauthError`（L73）· **禁新建 `functions/utils/*`**。
@@ -34,12 +34,12 @@
 | **SPEC-D-1** | source allowlist = `callback.ts` + `types/env.d.ts`（+ test + plan doc） | §1.1 |
 | **SPEC-D-2** | **禁擴散到 Google / Apple 的 nonce·exp 硬化** → 另棒（NF-3） | 三個 `verify*IdToken` body 逐字不動 |
 | **SPEC-D-3** | no-weakening：新增檢查只能 reject 更多 | guard 是**純 additive 收斂**；fetch timeout 只增加失敗路徑 |
-| **SPEC-D-4** | **ratchet post = `381 / 17 / 318`、`REMOVED=4 / ADDED=0`**；新 code 每個 function param 必須顯式標型；baseline `1119/175` 凍結禁 `--update`；**相對 `274a37b4` 任何漂移 → halt** | §4 REPLAY |
-| **SPEC-D-5** | **byte-identical 不適用**；驗收分兩類（Arch R2）：**`DELTA_RED`**（每個新增行為 delta）base RED→candidate GREEN；**`INVARIANT_GREEN`**（no-weakening / policy-preservation）base GREEN∧candidate GREEN。**禁**把 invariant 測試逼成 pre-fix RED（邏輯不可能）。§6 = 14 cases（DELTA_RED 8 + INVARIANT_GREEN 6） | **§6** |
+| **SPEC-D-4** | **ratchet（Codex Plan R1 修正：分 source-only vs final）**：errorCount **381**、errorFiles **17**、`REMOVED=4 / ADDED=0` **是不變量**；**cleanFiles/total 分兩階段**——source-only scout（僅 callback.ts）= `318 / 335`；**FINAL（含新 tracked 測試檔）= `319 / 336`**（新 clean `.ts` 測試檔被 `git ls-files` 計入 → cleanFiles+1 / total+1；`types/env.d.ts` 是 `.d.ts` **不計**〔ratchet 排除 `.d.ts`〕）。**CODE stage lock = `381/17/319/336`**；scout 的 `318/335` 僅 source-only receipt。新 code 每個 param 顯式標型（否則 errorCount≠381）；測試檔**必須 clean**（否則 ADDED>0、errorCount 升）；baseline `1119/175` 凍結禁 `--update`；**errorCount/errorFiles/ADDED 任何漂移 → halt** | §4 REPLAY / §5.A |
+| **SPEC-D-5** | **byte-identical 不適用**；驗收分兩類（Arch R2）：**`DELTA_RED`**（每個新增行為 delta）base RED→candidate GREEN；**`INVARIANT_GREEN`**（no-weakening / policy-preservation）base GREEN∧candidate GREEN。**禁**把 invariant 測試逼成 pre-fix RED（邏輯不可能）。§6 = 16 cases（DELTA_RED 10 + INVARIANT_GREEN 6） | **§6** |
 | **SPEC-D-6** | **禁新建 `functions/utils/*`**（coverage 80% 門檻，NF-7） | fetch helper 全 module-local |
 | **SPEC-D-7** | `oauthError`（L73）不動 | 明示不夾帶 |
 | **SPEC-D-8** | **`callback.ts:61` CT 子字串守門明禁動** | 動它 ⇒ guard 變 runtime-unreachable ⇒ T1/T2 失去 RED 著力點 ⇒ Gate fail |
-| **SPEC-D-9** | **retry 鎖定條件**：token exchange **retry=0 永不重試**；userinfo GET **max 1 retry**（總 2 attempts）、固定 backoff、**只 retry**〔**fetch-stage rejection**（network 等，res 未建立；Arch R3 註 2 精確化，取代舊「network」）/ timeout（**fetch 階段 或 body-read 階段**，Arch R1）/ resolved 5xx〕、**絕不 retry**〔4xx / 429 / malformed body〕；**retry loop 只包 `fetch(cfg.userInfoUrl)+res.json()`、不含任何 verify\*IdToken**（self-review #1）；四個 transient trigger（5xx / fetch-timeout / body-timeout / fetch-stage rejection）**各有 test**（T5 / T8 / T8b / T9），耗盡端 T5b 鎖 `MAX_ATTEMPTS=2`，次數以 `fetchCalls.length` 機械斷言 | §3.3 / §3.4 / §4.2 / §6 |
+| **SPEC-D-9** | **retry 鎖定條件**：token exchange **retry=0 永不重試**；userinfo GET **max 1 retry**（總 2 attempts）、固定 backoff、**只 retry**〔**fetch-stage rejection**（network 等，res 未建立；Arch R3 註 2 精確化，取代舊「network」）/ timeout（**fetch 階段 或 body-read 階段**，Arch R1）/ resolved 5xx〕、**絕不 retry**〔4xx / 429 / malformed body〕；**retry loop 只包 `fetch(cfg.userInfoUrl)+res.json()`、不含任何 verify\*IdToken**（self-review #1）；四個 transient trigger（5xx / fetch-timeout / body-timeout / fetch-stage rejection）**各有 test**（T5 / T8 / T8b / T9）；**兩個獨立 `attempt<MAX_ATTEMPTS` 分支各鎖耗盡**（Codex R3）——resolved-5xx 分支 T5b、rejection/timeout 分支 T8c；token exchange body-read timer 覆蓋由 T4b 鎖（Codex R2）；次數皆以 `fetchCalls.length` 機械斷言 | §3.3 / §3.4 / §4.2 / §6 |
 | **SPEC-D-10** | `[provider]` 路徑陷阱：git pathspec 一律 `:(literal)functions/api/auth/oauth/[provider]/callback.ts`；`code-self-review.mjs` `REPO_PATH_PATTERN` 拒 `[` ⇒ **faithfulness packet 必人工補完整 hunk + 機械 `--name-status`** | §4 |
 | **SPEC-D-11** | 單一寫者 + 獨立 worktree；跑機械 gate 前必 `npm ci` | ✅ 已達成 |
 | **SPEC-D-12** | PR-2du 與 PR-2dv 禁交錯 / 禁共用未提交 diff；2du 先 merge，2dv 從 post-2du main 重建 | — |
@@ -192,6 +192,18 @@ async function exchangeCode({ cfg, code, code_verifier, redirect_uri, timeoutMs 
 - `timeoutMs: number` — **新增參數**（least-privilege：只傳所需的 ms，**不傳整個 `env`**；對映 [[feedback_util_env_param_pick_not_full_env]]）。
 - **零 assertion、零新 import、零新 named/exported type。**
 
+**exchangeCode body 的 timeout 結構（Codex Plan R2：timer 必須包住 body reader）**：exchangeCode 單發、retry=0，timer 須涵蓋 **fetch + 兩個 body reader**（success 的 `res.json()` **與** error path 的 `res.text()`）：
+```ts
+  const ctrl = new AbortController()
+  const timeoutId = setTimeout(() => ctrl.abort(), timeoutMs)   // bare abort（無 config leak）
+  try {
+    const res = await fetch(cfg.tokenUrl, { method:'POST', headers:{...}, body, signal: ctrl.signal })
+    if (!res.ok) { const msg = await res.text(); throw new Error(`${res.status} ${msg}`) }  // res.text() 仍在 timer 內
+    return await res.json()      // ⚠ await 拉進 try（原 base 為 `return res.json()`；改 await 使 timer 涵蓋 token body-read、F1）
+  } finally { clearTimeout(timeoutId) }
+```
+- ⚠ **base 是 `return res.json()`（無 await、L520）**——若照抄再包 `finally{clearTimeout}`，timer 會在 body-read **前**被清（token body-stall 逃過 timeout）。故本 PR **改 `return await res.json()`**、且 `res.text()` 亦在 try 內 ⇒ 兩個 body reader 皆受 timer 保護。**T4b（token body-stall）機械鎖此**（Codex R2）。retry=0 不變（無 loop、單發 throw）。
+
 **call-site 串接（完整 diff 面，FULL-DIFF-ALLOWLIST）**：`handle()` 內（持有 `env`）算兩個 timeout 一次、往下傳：
 ```ts
   const tokenTimeoutMs   = parseFetchTimeoutMs(env, TOKEN_FETCH_TIMEOUT_MS_DEFAULT)
@@ -229,9 +241,9 @@ async function fetchUserInfoWithRetry(url: string, accessToken: string | undefin
       clearTimeout(timeoutId)                       // 每 attempt 恰一次（涵蓋 return/throw/正常）
     }
     if (failed) {
-      // transient = timeout(任一階段、didTimeout) ∨ network(fetch 階段、res===undefined)；malformed body(res 已設 ∧ ¬didTimeout) = terminal
+      // transient = timeout(任一階段、didTimeout) ∨ fetch-stage rejection(res===undefined)；malformed body(res 已設 ∧ ¬didTimeout) = terminal
       if ((didTimeout || res === undefined) && attempt < PROFILE_MAX_ATTEMPTS) { await sleep(PROFILE_RETRY_BACKOFF_MS); continue }
-      throw failure
+      throw failure instanceof Error ? failure : new Error('userInfo fetch failed')   // Error-shape 保證（Codex R3 residual：外層 catch 讀 err.message）
     }
     // res 已設且 !res.ok（resolved 4xx/5xx）
     if (res.status >= 500 && attempt < PROFILE_MAX_ATTEMPTS) { await sleep(PROFILE_RETRY_BACKOFF_MS); continue }  // 5xx transient
@@ -249,7 +261,7 @@ async function fetchUserInfoWithRetry(url: string, accessToken: string | undefin
   - 4 種 reject 全覆蓋：fetch-timeout〔didTimeout✔〕· fetch-stage rejection〔res===undefined✔〕· body-timeout〔didTimeout✔，**Arch R1 新納入 retry**〕· body-malformed〔兩者皆 false → terminal，**Arch R2 加 T11 鎖**〕。
 - **註 a — bare `ctrl.abort()`（無 reason）**：分類不靠 abort 形狀（靠 didTimeout），bare abort **只為不洩漏 config**——token-exchange catch（callback.ts:122）`htmlError(...${err.message})`，bare abort 的 err.message 無 `${timeoutMs}ms`。
 - **註 b — 避 `let raw`/`let body` 觸 TS7034**：`return await res.json()` **直接 return**（不經未初始化 `let`）；`const raw = await fetchUserInfoWithRetry(...)` 保留 any 推斷 ⇒ 零 TS7034/7005。`let res`（`Response|undefined` evolving、concrete 非 any）/ `let failure: unknown`（顯式標型）/ `let failed`（boolean）皆不觸 TS7034。**⚠ CODE stage 必 fresh replay 坐實 ADDED=0**（overlay scout 未含此 refactor、§5.A）。
-- **四 transient trigger + 一 terminal 各有 test**：5xx = resolved `res.status>=500`（T5 rescue / T5b 耗盡）；fetch-timeout（T8）；**body-timeout（T8b、Arch R1）**；fetch-stage rejection（T9）；**malformed body = terminal（T11、Arch R2、INVARIANT_GREEN）**。**T8/T8b/T9 的 mock 只需 honor abort/reject（任何形狀）**（見 §6 mock 契約）。
+- **四 transient trigger + 一 terminal + 兩耗盡分支 各有 test**：5xx = resolved `res.status>=500`（T5 rescue / **T5b resolved-5xx 耗盡**）；fetch-timeout（T8）；**body-timeout（T8b、Arch R1）**；fetch-stage rejection（T9）；**rejection/timeout 耗盡（T8c、Codex R3——helper 兩個獨立 `attempt<MAX` 判定的另一個）**；**malformed body = terminal（T11、Arch R2、INVARIANT_GREEN）**。**T8/T8b/T8c/T9 的 mock 只需 honor abort/reject（任何形狀）**（見 §6 mock 契約）。
 - **token exchange（exchangeCode）同樣 bare `abort()`**（retry=0、單發無 loop；沿 `email.ts` 單發 idiom + bare abort、message 無 config leak；catch 在 callback.ts:122）。
 - **`sleep` = 內聯 `await new Promise(r => setTimeout(r, ms))`**（module-local、不新建 util、SPEC-D-6；沿 `audit-log.ts:119` idiom）。`PROFILE_MAX_ATTEMPTS`(=2) / `PROFILE_RETRY_BACKOFF_MS`(=250) = module-level named const（§3.4）。
 
@@ -320,9 +332,10 @@ unset 語意                   : 啟用內建 bounded defaults token=8000ms / us
 | **REMOVED** | **4**（恰為上述 4 個） |
 | **ADDED** | **0**（全 solution、含 tests leaf、零 cascade） |
 | callback.ts @ candidate | **CLEAN（0 錯）** ⇒ **oauth 域 105 全清成立** |
-| **ratchet** | **errorCount 381 · errorFiles 17 · cleanFiles 318**（sourceFilesTotal 335；baseline 1119/175 凍結） |
+| **ratchet（source-only scout）** | **errorCount 381 · errorFiles 17 · cleanFiles 318 · total 335**（baseline 1119/175 凍結）|
 
-> ⚠ 該 overlay 只含 **guard + exchangeCode 標型**。**fetch timeout/retry 的 ratchet 中性（ADDED=0）尚未實測** ⇒ CODE stage 必須 fresh replay 全套（SPEC-D-4；新 helper 的每個 param 必須顯式標型，否則 ADDED>0）。
+> ⚠ **此 `318/335` 是 source-only scout receipt（Codex Plan R1）**：overlay 只含 callback.ts（`env.d.ts` 是 `.d.ts` 不計）、**無新測試檔**。**FINAL PR 會新增 tracked `.ts` 測試檔** → `git ls-files` 計入、clean → **cleanFiles 318→319 / total 335→336**（errorCount 381 / errorFiles 17 / ADDED=0 不變）。**CODE stage lock = `381/17/319/336`**（SPEC-D-4）。
+> ⚠ 另：該 overlay 只含 **guard + exchangeCode 標型**；**fetch timeout/retry helper refactor 的 ADDED=0 尚未實測** ⇒ CODE stage 必須 fresh replay 全套（新 helper/exchangeCode 每個 param 顯式標型、測試檔 clean，否則 ADDED>0 或 errorCount 升）。
 
 ### 5.B workerd probe（真 `@cloudflare/vitest-pool-workers` + 真 D1；pre-fix @ pristine base vs post-fix @ guard）
 
@@ -344,14 +357,14 @@ unset 語意                   : 啟用內建 bounded defaults token=8000ms / us
 
 ---
 
-## 6. Negative / regression test 清單（SPEC-D-5；**14 cases、兩類**）
+## 6. Negative / regression test 清單（SPEC-D-5；**16 cases、兩類**）
 
 新檔 `tests/integration/oauth-callback-guard-fetch.test.ts`。fetch mock 沿 `oauth-nonce.test.ts:75-99` 的 **`fetchCalls.push(url)` 記錄器** idiom（retry 次數靠它機械斷言，禁靠推理）。
 
 **⚠ 兩類驗收（Arch R2 修正——SPEC-D-5「每條 pre-fix RED」對 invariant 測試邏輯不可能成立）**：
-- **`DELTA_RED`（新增行為 delta）**：**base RED → candidate GREEN**。＝{ T1, T2, T4, T5, T5b, T8, T8b, T9 }（8 條）。
-- **`INVARIANT_GREEN`（no-weakening / policy-preservation）**：**base GREEN ∧ candidate GREEN**（證既有行為不被弱化）。＝{ T3, T6, T6b, T7, T10, **T11** }（6 條）。
-- 合計 **14 cases**（含 T5b/T6b/T8b/T11；不再誤稱「T1–T10」）。
+- **`DELTA_RED`（新增行為 delta）**：**base RED → candidate GREEN**。＝{ T1, T2, T4, **T4b**, T5, T5b, T8, T8b, **T8c**, T9 }（**10 條**）。
+- **`INVARIANT_GREEN`（no-weakening / policy-preservation）**：**base GREEN ∧ candidate GREEN**（證既有行為不被弱化）。＝{ T3, T6, T6b, T7, T10, T11 }（6 條）。
+- 合計 **16 cases**（Codex Plan R2 加 T4b〔token body-stall〕+ R3 加 T8c〔userinfo rejection 耗盡〕）。
 
 **provider 選擇（self-found C + Arch R3）**：retry/timeout 相關（T4–T9）用 **`discord`**——無 OIDC id_token 分支、無 JWKS ⇒ `fetchCalls` 只含 token + userinfo、retry 次數斷言最乾淨。**T3 改用 `apple`（Arch R3 修正）**——F9/風險表把 T3 定位為「**Apple** form_post 回歸」，故 provider 必須是 apple 才是該路徑的證據（discord 只證共用 parser、非 Apple-specific）。T10（驗 verify 不 retry）用 **`line`**（有 verify、無 JWKS）。
 
@@ -373,7 +386,8 @@ vi.fn(async (_url, init) => ({
 | **T1** | DELTA_RED | discord | POST + poisoned CT，`code` part → File | 實測 RED：400 **但** `fetchCalls` 含 tokenUrl **且** state row 被燒 | 400 · **`fetchCalls` 不含 tokenUrl** · **state row 仍在** |
 | **T2** | DELTA_RED | discord | 同上，`state` part → File | 實測 RED：`D1_TYPE_ERROR` throw、**無 Response** | 400 htmlError · **不 throw** |
 | **T3** | INVARIANT_GREEN | **apple** | 合法 urlencoded form_post（`onRequestPost` 路徑） | **base GREEN**：base 已處理 apple form_post → 到 token exchange | GREEN：`fetchCalls` 含 **apple** tokenUrl（guard 未擋合法 form_post；不必完成 JWKS/登入） |
-| **T4** | DELTA_RED | discord | tokenUrl mock(i) 掛住 | RED：無限等 → vitest 20s testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ abort → 400 · 耗時 < 1s · **tokenUrl `fetchCalls` 恰 1 次**（Arch R2-3：鎖「token timeout 亦不 retry」——非冪等 authorization_code 的核心 idempotency lock，不可只靠 T7〔5xx〕間接推論） |
+| **T4** | DELTA_RED | discord | tokenUrl mock(i) 掛住（**fetch 階段** timeout） | RED：無限等 → vitest 20s testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ abort → 400 · 耗時 < 1s · **tokenUrl `fetchCalls` 恰 1 次**（Arch R2-3：鎖「token timeout 亦不 retry」——非冪等 authorization_code 的核心 idempotency lock，不可只靠 T7〔5xx〕間接推論） |
+| **T4b** | DELTA_RED | discord | tokenUrl mock(ii)：回 **200 headers 但 token `json()` body 掛住** honor abort（**body-read 階段** timeout；Codex R2） | RED：base exchangeCode `return res.json()`（無 await）→ timer 提早清 → body-stall 無限等 → testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ abort → 400 · 耗時 < 1s · **tokenUrl `fetchCalls` 恰 1 次**（證 exchangeCode `return await res.json()` 使 timer 涵蓋 token body-read、且不 retry） |
 | **T5** | DELTA_RED | discord | userinfo：attempt1 **500**，attempt2 200（resolved 5xx） | RED：1 次 → 400 | **200 登入成功** · **userinfo `fetchCalls` 恰 2 次** |
 | **T5b** | DELTA_RED | discord | userinfo：**兩次皆 500**（retry 耗盡；R-2） | RED：1 次 → 400 | 400 · **userinfo `fetchCalls` 恰 2 次**（鎖 `MAX_ATTEMPTS=2`） |
 | **T6** | INVARIANT_GREEN | discord | userinfo → **401** | **base GREEN**：base 亦 1 次 → 400 | GREEN：400 · **userinfo `fetchCalls` 恰 1 次**（不 retry 4xx） |
@@ -382,6 +396,7 @@ vi.fn(async (_url, init) => ({
 | **T8** | DELTA_RED | discord | userinfo：attempt1 **fetch-timeout**（mock(i)），attempt2 200 | RED：無限等 → testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ **200 · userinfo `fetchCalls` 恰 2 次** |
 | **T8b** | DELTA_RED | discord | userinfo：attempt1 **body-stall timeout**（mock(ii)、200 headers/body 掛住），attempt2 200（**Arch R1**） | RED：base 無 body timeout → 掛到 testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ **200 · userinfo `fetchCalls` 恰 2 次**（證 body-read timeout 亦 retry） |
 | **T9** | DELTA_RED | discord | userinfo：attempt1 **network error**（mock `async()=>{throw new Error('network')}`，任意 reject），attempt2 200 | RED：base 1 次 → 400 | **200 · userinfo `fetchCalls` 恰 2 次** |
+| **T8c** | DELTA_RED | discord | userinfo：**兩次皆 timeout/reject**（mock(i) 兩次皆掛住 honor abort；rejection-branch 耗盡；Codex R3） | RED：base 無 timeout → attempt1 掛到 testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ 400 · **userinfo `fetchCalls` 恰 2 次**（鎖 **rejection/timeout 分支**的 `MAX_ATTEMPTS=2`——T5b 只鎖 resolved-5xx 分支、helper 有兩個獨立 `attempt<MAX` 判定，此條鎖另一個） |
 | **T10** | INVARIANT_GREEN | line | id_token 簽章無效（wrong secret）⇒ `verifyLineIdToken` throw（callback.ts:640） | **base GREEN**：base verify 亦在 userinfo 前失敗 | GREEN：400 · **userinfo `fetchCalls` 恰 0 次**（verify 在 retry loop 外、不觸 userinfo retry） |
 | **T11** | INVARIANT_GREEN | discord | userinfo 回 **200 但 body 非法 JSON**（`json()` 拋 `SyntaxError`、**非 timeout**；Arch R2-2） | **base GREEN**：base `res.json()` 亦拋 → 400、userinfo 1 次 | GREEN：400 · **userinfo `fetchCalls` 恰 1 次**（機械證 `didTimeout \|\| res===undefined` **不**把 malformed body 誤當 transient；`res` 已設 ∧ ¬didTimeout → terminal） |
 
@@ -389,7 +404,7 @@ vi.fn(async (_url, init) => ({
 
 **T10 helper 紀律（避踩 OD-5-HELPER）**：T10 需 forge 一個 LINE id_token（wrong-secret 使簽章驗證失敗）。**PR-2du 在新測試檔 file-local 定義最小 `signLineIdToken`**（複製 `oauth-nonce.test.ts:31-46` 現有 file-local helper 的形狀），**不 promote 到 `_helpers.ts`**（promote 是 PR-2dv 的 OD-5-HELPER scope）。T10 用 wrong-key（不碰 nonce）⇒ **不踩 NF-3、不硬化任何 verify body**。
 
-> ⚠ scout 的 `zz-b5-probe.test.ts` 是**一次性證據、未進任何 commit**（throwaway worktree 已移除）。14 cases 必須在本 PR **正式落地**成 `tests/integration/` 交付物；**DELTA_RED 8 條須留「base RED」輸出證據、INVARIANT_GREEN 6 條須留「base GREEN ∧ candidate GREEN」證據**（SPEC-D-5 兩類）。
+> ⚠ scout 的 `zz-b5-probe.test.ts` 是**一次性證據、未進任何 commit**（throwaway worktree 已移除）。16 cases 必須在本 PR **正式落地**成 `tests/integration/` 交付物；**DELTA_RED 10 條須留「base RED」輸出證據、INVARIANT_GREEN 6 條須留「base GREEN ∧ candidate GREEN」證據**（SPEC-D-5 兩類）。
 
 ---
 
@@ -397,7 +412,7 @@ vi.fn(async (_url, init) => ({
 
 先跑 **IMMUTABLE-BASE guard**：`git merge-base --is-ancestor 274a37b4 HEAD`（exit 0）+ 重驗 HEAD / ratchet。再跑並讀真實輸出：
 
-`typecheck:ratchet`（**enforce、post = `381/17/318`、baseline `1119/175` 未 `--update`**、帶 `RATCHET_BASE_REF=274a37b4`）· `lint` · `verify:browser-pipeline` · `test:cov` · `test:int` · `build:functions` · 完整 `npm run build` · `npm audit --omit=dev --audit-level=high`。
+`typecheck:ratchet`（**enforce、FINAL post = `381/17/319/336`**〔含新 tracked 測試檔；source-only scout 為 `318/335`、Codex Plan R1〕、baseline `1119/175` 未 `--update`、帶 `RATCHET_BASE_REF=274a37b4`）· `lint` · `verify:browser-pipeline` · `test:cov` · `test:int` · `build:functions` · 完整 `npm run build` · `npm audit --omit=dev --audit-level=high`。
 （[[feedback_pre_merge_gate_checklist_match_ci]]：**最常漏 `test:cov`**；CI `test` 是 fail-fast 單 job，cov 紅會 skip 遮蔽 int/build/audit。）
 
 另 **REPLAY（SPEC-D-4）**：
@@ -405,7 +420,7 @@ vi.fn(async (_url, init) => ({
 - **FULL-DIFF-ALLOWLIST 機械核對**：`git diff --name-status 274a37b4..<source>` 完整 changed-files 恰 {`callback.ts`, `types/env.d.ts`, `tests/integration/oauth-callback-guard-fetch.test.ts`, 本 plan doc}。任一額外檔 = scope violation、停 gate。**尤其核對 `oauth-nonce.test.ts` / `_helpers.ts` 未被改**（SPEC-D-12：`:202` 反轉 + helper promote 皆 PR-2dv）。
 - **RED-TEST-INTEGRITY**：任何 test red 先保留首次失敗輸出並判因；**禁「known flaky」直接 rerun 至 green**。Windows `public/` CRLF churn 挑檔不進 PR（[[feedback_windows_build_crlf_churn]]）。
 - **PROVIDER-PATH-HUNK（SPEC-D-10）**：`[provider]` 路徑含 `[` ⇒ `code-self-review.mjs` `REPO_PATH_PATTERN` 拒收、無法當 formal decision-point ⇒ **faithfulness packet 人工補完整 hunk + 機械 `--name-status`**，不得只依賴 reviewer script（**工具靜默回空 ≠「沒改動」**）。
-- **兩類驗收實證（SPEC-D-5、Arch R2）**：**DELTA_RED 8 條**（T1/T2/T4/T5/T5b/T8/T8b/T9）須留「在 base `274a37b4` 上真的 fail」證據；**INVARIANT_GREEN 6 條**（T3/T6/T6b/T7/T10/T11）須留「base GREEN ∧ candidate GREEN」證據（證未弱化既有 policy）。禁把 invariant 逼成 RED。
+- **兩類驗收實證（SPEC-D-5、Arch R2 + Codex Plan R2/R3）**：**DELTA_RED 10 條**（T1/T2/T4/T4b/T5/T5b/T8/T8b/T8c/T9）須留「在 base `274a37b4` 上真的 fail」證據；**INVARIANT_GREEN 6 條**（T3/T6/T6b/T7/T10/T11）須留「base GREEN ∧ candidate GREEN」證據（證未弱化既有 policy）。禁把 invariant 逼成 RED。
 
 ---
 
