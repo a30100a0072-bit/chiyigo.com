@@ -35,6 +35,27 @@ const ACCESS_TOKEN_TTL   = '15m'
 const REFRESH_TOKEN_DAYS = 7
 const TEMP_BIND_TTL      = '10m'
 
+// ── Provider fetch 韌性（timeout + 有界 retry；PR-2du）──────────────
+// baseline §程式碼要求：外部呼叫必設 timeout + retry policy。token exchange 因
+// authorization_code 單次核銷、逾時結果未知不可安全重送 → retry=0；userinfo GET
+// 冪等純讀 → 有界 max-1 retry。OAUTH_FETCH_TIMEOUT_MS 同時覆寫兩者（test/ops
+// escape hatch，沿 email.ts RESEND_TIMEOUT_MS 先例），下限 10ms、上限 15s。
+const TOKEN_FETCH_TIMEOUT_MS_DEFAULT   = 8_000
+const PROFILE_FETCH_TIMEOUT_MS_DEFAULT = 5_000
+const PROFILE_MAX_ATTEMPTS             = 2      // 1 次初試 + 最多 1 次 retry
+const PROFILE_RETRY_BACKOFF_MS         = 250
+const FETCH_TIMEOUT_MAX_MS             = 15_000 // 上限 clamp：防 override 打破「禁無限等」
+
+function parseFetchTimeoutMs(env: Env, fallbackMs: number): number {
+  const raw = env.OAUTH_FETCH_TIMEOUT_MS
+  if (raw == null || raw === '') return fallbackMs
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 10) return fallbackMs
+  return Math.min(Math.floor(n), FETCH_TIMEOUT_MAX_MS)
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
 // ── 入口（GET + POST 共用）────────────────────────────────────────
 
 export const onRequestGet  = (ctx: { request: Request; env: Env; params: { provider?: string }; [key: string]: unknown }) => handle(ctx)
@@ -73,7 +94,12 @@ async function handle(context: { request: Request; env: Env; params: { provider?
   if (oauthError)
     return htmlError(`${provider} 授權被拒絕，請重新嘗試。`)
 
-  if (!code || !state)
+  // File-narrow guard（PR-2du）：POST form_post 下 code/state 為 FormDataEntryValue
+  // (File | string)；poisoned multipart 可讓其為 File → 若流下去，state=File 會使
+  // D1 .bind() 拋 D1_TYPE_ERROR（裸露、無 catch → 500），code=File 會白打一次
+  // provider 外呼並燒掉 state row。narrow 成 string 使兩者在 state 核銷前 fail-closed。
+  // 此 narrow 亦是 exchangeCode({ code: string }) 的型別前置（見 plan §4.6）。
+  if (typeof code !== 'string' || !code || typeof state !== 'string' || !state)
     return htmlError('缺少必要參數，請重新登入。')
 
   const db = env.chiyigo_db
@@ -113,11 +139,15 @@ async function handle(context: { request: Request; env: Env; params: { provider?
     }
   }
 
+  // provider fetch timeout（PR-2du）：token/userinfo 各自 default、OAUTH_FETCH_TIMEOUT_MS 同時覆寫兩者
+  const tokenTimeoutMs   = parseFetchTimeoutMs(env, TOKEN_FETCH_TIMEOUT_MS_DEFAULT)
+  const profileTimeoutMs = parseFetchTimeoutMs(env, PROFILE_FETCH_TIMEOUT_MS_DEFAULT)
+
   // ── 3. 換取 access_token ─────────────────────────────────────
   let providerTokens
   try {
     providerTokens = await exchangeCode({
-      cfg, code, code_verifier, redirect_uri,
+      cfg, code, code_verifier, redirect_uri, timeoutMs: tokenTimeoutMs,
     })
   } catch (err) {
     await safeUserAudit(env, { event_type: 'oauth.callback.fail', severity: 'warn', request, data: { provider, reason_code: 'token_exchange_failed' } })
@@ -127,7 +157,7 @@ async function handle(context: { request: Request; env: Env; params: { provider?
   // ── 4. 取得並正規化 profile（含 OIDC nonce 驗證）─────────────
   let profile
   try {
-    const rawProfile = await fetchProfile(provider, cfg, providerTokens, expectedNonce)
+    const rawProfile = await fetchProfile(provider, cfg, providerTokens, expectedNonce, profileTimeoutMs)
     profile = cfg.normalizeProfile(rawProfile)
   } catch (err) {
     await safeUserAudit(env, { event_type: 'oauth.callback.fail', severity: 'warn', request, data: { provider, reason_code: 'profile_fetch_failed' } })
@@ -497,7 +527,13 @@ try{sessionStorage.setItem('access_token',${safeToken});}catch(e){}
 
 // ── Token 換取 ────────────────────────────────────────────────────
 
-async function exchangeCode({ cfg, code, code_verifier, redirect_uri }) {
+async function exchangeCode({ cfg, code, code_verifier, redirect_uri, timeoutMs }: {
+  cfg: ReturnType<typeof getProvider>
+  code: string
+  code_verifier: string | null
+  redirect_uri: string
+  timeoutMs: number
+}) {
   const body = new URLSearchParams({
     client_id:     cfg.clientId,
     client_secret: cfg.clientSecret,
@@ -508,21 +544,31 @@ async function exchangeCode({ cfg, code, code_verifier, redirect_uri }) {
   // PKCE providers 帶 code_verifier
   if (code_verifier) body.set('code_verifier', code_verifier)
 
-  const res = await fetch(cfg.tokenUrl, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  })
-  if (!res.ok) {
-    const msg = await res.text()
-    throw new Error(`${res.status} ${msg}`)
+  // authorization_code 單次核銷、逾時結果未知 → retry=0（單發）。timer 覆蓋 fetch +
+  // 兩個 body reader（res.text() error path / res.json() success path）；bare abort()
+  // 不洩漏 timeout config 到 err.message。故 return await（非 return res.json()）。
+  const ctrl = new AbortController()
+  const timeoutId = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const res = await fetch(cfg.tokenUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal:  ctrl.signal,
+    })
+    if (!res.ok) {
+      const msg = await res.text()
+      throw new Error(`${res.status} ${msg}`)
+    }
+    return await res.json()
+  } finally {
+    clearTimeout(timeoutId)
   }
-  return res.json()
 }
 
 // ── Profile 取得（provider 差異處理）────────────────────────────
 
-async function fetchProfile(provider: string, cfg: ReturnType<typeof getProvider>, tokens: { id_token?: string; access_token?: string }, expectedNonce: string | null) {
+async function fetchProfile(provider: string, cfg: ReturnType<typeof getProvider>, tokens: { id_token?: string; access_token?: string }, expectedNonce: string | null, timeoutMs: number) {
   // Apple：user info 在 id_token 內，無 userInfoUrl
   // P1-1：原本只 decodeJwtPayload 沒驗章 → 攻擊者可造任意 sub/email 取代帳號
   // 改 jwtVerify(JWKS) + 驗 iss/aud/nonce
@@ -553,11 +599,9 @@ async function fetchProfile(provider: string, cfg: ReturnType<typeof getProvider
     lineEmail = payload.email ?? null
   }
 
-  const res = await fetch(cfg.userInfoUrl, {
-    headers: { Authorization: `Bearer ${tokens.access_token}` },
-  })
-  if (!res.ok) throw new Error(`userInfo ${res.status}`)
-  const raw = await res.json()
+  // userinfo GET 冪等純讀 → 有界 retry（見 fetchUserInfoWithRetry；verify* 在此之前、
+  // 逐字不動、NOT in retry loop）
+  const raw = await fetchUserInfoWithRetry(cfg.userInfoUrl, tokens.access_token, timeoutMs)
 
   // 將 LINE email 注入 raw profile（LINE profile API 不含 email）
   if (provider === 'line' && lineEmail) raw.email = lineEmail
@@ -571,6 +615,44 @@ async function fetchProfile(provider: string, cfg: ReturnType<typeof getProvider
   }
 
   return raw
+}
+
+// userinfo GET 的 timeout + 有界 retry（PR-2du）。冪等純讀（同 Bearer 重讀同資源），
+// max 1 retry。分類**不 introspect error 形狀**（test mock / workerd 形狀不可靠）：
+//   - didTimeout：由本地 timer callback 設，涵蓋 fetch 與 res.json() 兩階段 → timeout 皆 retry
+//   - res === undefined：fetch 在回 Response 前 reject（network 等）→ retry
+//   - res 已設 ∧ ¬didTimeout（malformed body 的 json reject）→ terminal，不 retry
+// 4xx/429 與最終 5xx 對 resolved res 判斷、落 catch 之外。timer 涵蓋 body-read（return await）。
+async function fetchUserInfoWithRetry(url: string, accessToken: string | undefined, timeoutMs: number) {
+  for (let attempt = 1; ; attempt++) {
+    const ctrl = new AbortController()
+    let didTimeout = false
+    const timeoutId = setTimeout(() => { didTimeout = true; ctrl.abort() }, timeoutMs)
+    let res
+    let failure: unknown
+    let failed = false
+    try {
+      res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, signal: ctrl.signal })
+      if (res.ok) return await res.json()
+    } catch (err) {
+      failed = true
+      failure = err
+    } finally {
+      clearTimeout(timeoutId)
+    }
+    if (failed) {
+      if ((didTimeout || res === undefined) && attempt < PROFILE_MAX_ATTEMPTS) {
+        await sleep(PROFILE_RETRY_BACKOFF_MS)
+        continue
+      }
+      throw failure instanceof Error ? failure : new Error('userInfo fetch failed')
+    }
+    if (res.status >= 500 && attempt < PROFILE_MAX_ATTEMPTS) {
+      await sleep(PROFILE_RETRY_BACKOFF_MS)
+      continue
+    }
+    throw new Error(`userInfo ${res.status}`)
+  }
 }
 
 // Google id_token 驗章（ES256/RS256，透過 JWKS）
