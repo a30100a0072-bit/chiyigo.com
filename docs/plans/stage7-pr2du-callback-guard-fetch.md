@@ -162,12 +162,13 @@ const PROFILE_RETRY_BACKOFF_MS         = 250
 ```
 
 - **終止條件**：`attempt > PROFILE_MAX_ATTEMPTS` ⇒ throw；4xx / 429 ⇒ **立即** throw（不進 backoff）。**無無限 retry**。
-- **最壞路徑（有界，含 JWKS；self-review #3 修正）**：
+- **default 最壞路徑（有界，含 JWKS；self-review #3）**：
   - **LINE / discord / facebook（無 JWKS）**：8000（token）＋ 5000 × 2（userinfo）＋ 250（backoff）≈ **18.25s**。
   - **Google（cold-cache JWKS，本 PR 未包 timeout，jose default 5s）**：8000（token）＋ 5000（JWKS）＋ 5000 × 2（userinfo）＋ 250 ≈ **~23.25s**。
   - **Apple（無 userinfo GET）**：8000（token）＋ 5000（JWKS，jose default）≈ **~13s**。
-  - ⇒ 全域最壞 bound ≈ **~23.25s（Google）**；先前寫的 18.25s **實為 LINE/userinfo 路徑**（未含 JWKS）。皆有界。
-- **env override（test/ops escape hatch）**：`OAUTH_FETCH_TIMEOUT_MS` **同時**覆寫 token + userinfo 兩個 timeout（沿 `utils/email.ts` `RESEND_TIMEOUT_MS` 先例）；**不覆寫 jose JWKS timeout**（SPEC-D-2 禁動 verify body）。**無此 override，T4/T8 只能真等 8/5 秒**（vitest `testTimeout: 20_000`）⇒ override 是可測性的**必要條件**，非便利。
+  - ⇒ default 全域最壞 bound ≈ **~23.25s（Google）**（先前寫的 18.25s 實為 LINE/userinfo 路徑）。
+- **⚠ override-max 最壞路徑（round-2 tier3：env-override 放大）**：`OAUTH_FETCH_TIMEOUT_MS` 同時覆寫 token + userinfo、userinfo 再 ×2 attempts ⇒ 放大。以 clamp 上限 `FETCH_TIMEOUT_MAX_MS = 15_000`（§4.3；**已從 30_000 下修正為此因**）：Google override-max = 15000（token）＋ 5000（JWKS 不受 override）＋ 15000×2（userinfo）＋ 250 ≈ **~50.25s**。**⚠ 此值須於 CODE/deploy stage 對 Cloudflare Pages Functions wall-clock / edge 524 窗實測確認落在窗內（勿逕行斷言平台上限；[[feedback_dont_assert_runtime_semantics_without_verify]]）**。clamp 目的＝防「禁無限等」被打破，非量化最壞值；15s 上限使 override-max 從 30s-clamp 的 ~95s 收斂到 ~50s。
+- **env override（test/ops escape hatch）**：`OAUTH_FETCH_TIMEOUT_MS` **同時**覆寫 token + userinfo（沿 `utils/email.ts` `RESEND_TIMEOUT_MS` 先例）；**不覆寫 jose JWKS timeout**（SPEC-D-2 禁動 verify body）。**無此 override，T4/T8 只能真等 8/5 秒**（vitest `testTimeout: 20_000`）⇒ override 是可測性的**必要條件**。主要用途＝test（設極小值）；ops 若上調須知 §override-max 放大。
 
 ---
 
@@ -213,21 +214,22 @@ async function fetchProfile(provider: string, cfg: ReturnType<typeof getProvider
 async function fetchUserInfoWithRetry(url: string, accessToken: string | undefined, timeoutMs: number) {
   for (let attempt = 1; ; attempt++) {
     const ctrl = new AbortController()
-    const timeoutId = setTimeout(() => ctrl.abort(), timeoutMs)   // ⚠ bare abort()（R-1）
-    let transient = false
+    const timeoutId = setTimeout(() => ctrl.abort(), timeoutMs)   // bare abort()（見 §4.2 註 a）
+    let res
     try {
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, signal: ctrl.signal })
-      if (res.ok) return await res.json()                    // ✅ body-read 在 timer + try 內（F1）；return any（無 TS7034，R-3）
-      if (res.status >= 500) transient = true                // 5xx = resolved-but-transient
-      else throw new Error(`userInfo ${res.status}`)         // 4xx/429 → 立即 throw、不 retry
-    } catch (err) {
-      if (err && (err.name === 'AbortError' || err instanceof TypeError)) transient = true  // abort(timeout)=AbortError、network=TypeError
-      else throw err                                         // 非 transient（含上面手拋的 4xx Error）→ 立即 throw
-    } finally {
-      clearTimeout(timeoutId)                                // 單一 finally 覆蓋 return/throw/continue-前
+      res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, signal: ctrl.signal })
+    } catch {                                                // ⭐ catch 只包 fetch()：唯一到達者 = fetch-reject
+      clearTimeout(timeoutId)                               //    = abort(timeout) 或 network，**兩者皆 transient、零 introspection**
+      if (attempt < PROFILE_MAX_ATTEMPTS) { await sleep(PROFILE_RETRY_BACKOFF_MS); continue }
+      throw new Error(`userInfo unreachable after ${attempt} attempt(s)`)   // retry 耗盡（連不上）
     }
-    if (transient && attempt < PROFILE_MAX_ATTEMPTS) { await sleep(PROFILE_RETRY_BACKOFF_MS); continue }
-    throw new Error(`userInfo fetch failed after ${attempt} attempt(s)`)   // retry 耗盡；無 status、無 config leak
+    // 有 res：4xx/5xx 判斷在 catch **之外**對 res 做 → 不與 fetch-reject 混淆（消除 error introspection）
+    if (res.ok) {
+      try { return await res.json() } finally { clearTimeout(timeoutId) }   // body-read 在 timer 內（F1）；return any（無 TS7034，註 b）
+    }
+    clearTimeout(timeoutId)
+    if (res.status >= 500 && attempt < PROFILE_MAX_ATTEMPTS) { await sleep(PROFILE_RETRY_BACKOFF_MS); continue }  // 5xx transient
+    throw new Error(`userInfo ${res.status}`)               // 4xx / 429 / 最終 5xx → terminal、不 retry
   }
 }
 
@@ -235,19 +237,21 @@ async function fetchUserInfoWithRetry(url: string, accessToken: string | undefin
   const raw = await fetchUserInfoWithRetry(cfg.userInfoUrl, tokens.access_token, timeoutMs)   // const、any 推斷（無 TS7034）
   // ... 既有 LINE email 注入（L562-563）/ Google claim 覆寫（L565-571）逐字不動 ...
 ```
-- **⚠ R-3（主線 re-read 抓出：`let raw` 會觸 noImplicitAny）**：早期草稿把 loop 內聯、用 `let raw`（未初始化、後賦 `res.json()`=any）→ **TS7034 宣告 + TS7005 讀取**（同 PR-2dt `_googleJwks` 病灶）⇒ 破 SPEC-D-4 `ADDED=0`。`let raw:any` 被 ESLint `no-explicit-any` 擋；`let raw:unknown` 在 strict:false 下對 `raw.email=`/`raw.sub=` cascade TS2571。**解=抽 helper**：helper `return await res.json()`、`const raw = await fetchUserInfoWithRetry(...)` 保留原 `const raw` any 推斷 ⇒ 零 TS7034。**⚠ CODE stage 必 fresh replay 坐實 ADDED=0**（overlay scout 未含此 refactor、§5.A 已標）。
-- **⚠ R-1：bare `ctrl.abort()`、非 `abort(new Error(...))`**。`abort(reason)` 令 fetch 以 `reason` reject（`err.name==='Error'`）⇒ 無法用 `err.name==='AbortError'` 分類 timeout ⇒ T8 timeout-retry 永遠分類失敗。bare `abort()` → `DOMException{name:'AbortError'}` ⇒ 分類正確 + 無 ms config 洩漏（一併解 security finding 的 config-leak）。**與 `email.ts` idiom 刻意分歧**（email.ts retry=0 不需分類）。
-- **兩條 transient 分支結構不同（self-review #2）**：5xx = **resolved** response（`res.status>=500`）；network / timeout = **rejected** promise（`catch` 判 `AbortError`/`TypeError`）。三 trigger 各有 test（T5=5xx / T8=timeout / T9=network），耗盡端 T5b 鎖 `MAX_ATTEMPTS=2`。
-- **token exchange（exchangeCode）同樣 bare `abort()`**（retry=0，message 一致無 config leak；catch 在 callback.ts:122）。exchangeCode 的 timeout 為單次（無 loop），沿 `email.ts` 單發 idiom + bare abort。
-- **`sleep` = 內聯 `await new Promise(r => setTimeout(r, ms))`**（module-local、不新建 util、SPEC-D-6；沿 `audit-log.ts:119` idiom）。`PROFILE_MAX_ATTEMPTS` / `PROFILE_RETRY_BACKOFF_MS` = module-level named const（§3.4）。
+- **⚠ 核心不變式（round-2 self-review：消 error introspection）**：`catch` **只包 `fetch()` 一行** ⇒ 唯一能進 catch 的是 **fetch 本身 reject**（`ctrl.abort()` 觸發的 timeout、或 network 失敗）——**這兩者一律 transient**，故 catch **不需判 `err.name`/`instanceof`**（先前草稿靠 `AbortError`/`TypeError` introspection→ 脆弱：test mock 控制 reject 值、workerd 形狀未證）。4xx/5xx 對 **resolved 的 `res`** 判斷，落在 catch **之外**，永不與 fetch-reject 混淆 ⇒ **我方手拋的 `userInfo 4xx` 不會被誤當 transient**。
+  - **消掉的舊 finding**：round-1 R-1（abort 分類）+ round-2 T8 mock 契約矛盾（self-found B plain-Error reject）+ T9 `instanceof TypeError` 未證——**全部因「fetch-reject 一律 transient」而無條件成立**：mock 只要 reject（任何形狀）即觸 retry。
+- **註 a — bare `ctrl.abort()`（保留、但理由收窄）**：不再為「分類」需要（catch 不 introspect），但仍用 bare abort **只為不洩漏 config**——token-exchange catch（callback.ts:122）`htmlError(...${err.message})`，bare abort 的 err.message = "The operation was aborted"（無 `${timeoutMs}ms`）。
+- **註 b — `const raw`（R-3，避 `let raw` 觸 TS7034）**：helper `return await res.json()`（any）、`const raw = await fetchUserInfoWithRetry(...)` 保留原 `const raw` any 推斷 ⇒ 零 TS7034/7005。內聯 `let raw`（未初始化後賦 any）會觸 TS7034（同 `_googleJwks`）；`let raw:any` 被 ESLint 擋、`:unknown` cascade TS2571。**⚠ CODE stage 必 fresh replay 坐實 ADDED=0**（overlay scout 未含此 refactor、§5.A）。
+- **三 transient trigger 各有 test（self-review #2）**：5xx = resolved `res.status>=500`（T5 rescue / T5b 耗盡）；timeout = fetch-reject via abort（T8）；network = fetch-reject（T9）。**T8/T9 的 mock 只需 reject（任何形狀）**（見 §6 mock 契約更新）。
+- **token exchange（exchangeCode）同樣 bare `abort()`**（retry=0、單發無 loop；沿 `email.ts` 單發 idiom + bare abort、message 無 config leak；catch 在 callback.ts:122）。
+- **`sleep` = 內聯 `await new Promise(r => setTimeout(r, ms))`**（module-local、不新建 util、SPEC-D-6；沿 `audit-log.ts:119` idiom）。`PROFILE_MAX_ATTEMPTS`(=2) / `PROFILE_RETRY_BACKOFF_MS`(=250) = module-level named const（§3.4）。
 
 ### 4.3 timeout 解析（**逐條對齊 `utils/email.ts` 既有 idiom**）
 
 | email.ts 既有寫法 | 本 PR 對映 |
 |---|---|
 | `const RESEND_TIMEOUT_MS_DEFAULT = 5_000`（named const、`_` 分隔） | `TOKEN_FETCH_TIMEOUT_MS_DEFAULT = 8_000` / `PROFILE_FETCH_TIMEOUT_MS_DEFAULT = 5_000` |
-| `parseTimeoutMs(env)`：`raw == null \|\| raw === ''` → default；`Number(raw)`；`!Number.isFinite(n) \|\| n < 10` → default；`Math.floor(n)` | `parseFetchTimeoutMs(env: Env, fallbackMs: number)` — **同套守門 + 補上限 clamp（self-found A）**：`n < 10` → fallback（下限）**＋ `Math.min(Math.floor(n), FETCH_TIMEOUT_MAX_MS)`（上限，`FETCH_TIMEOUT_MAX_MS = 30_000`）**。⚠ `email.ts` 原 `parseTimeoutMs` **只有下限、無上限** ⇒ 若照抄，`OAUTH_FETCH_TIMEOUT_MS=99999999` 會把「禁無限等」baseline 打回原形（Worker wall-clock 前一直掛）。故本 PR **不逐字照抄**、顯式補上限 |
-| `ctrl.abort(new Error(\`Resend timeout after ${timeoutMs}ms\`))` — abort 帶**描述性 Error** | ⚠ **刻意分歧（R-1）**：本 PR 用 **bare `ctrl.abort()`**（無 reason）→ fetch reject `DOMException{name:'AbortError'}`，使 catch 能以 `err.name==='AbortError'` 分類 timeout 並 retry（email.ts retry=0 不需分類、故可帶 reason）；bonus = 無 ms config 洩漏 |
+| `parseTimeoutMs(env)`：`raw == null \|\| raw === ''` → default；`Number(raw)`；`!Number.isFinite(n) \|\| n < 10` → default；`Math.floor(n)` | `parseFetchTimeoutMs(env: Env, fallbackMs: number)` — **同套守門 + 補上限 clamp（self-found A）**：`n < 10` → fallback（下限）**＋ `Math.min(Math.floor(n), FETCH_TIMEOUT_MAX_MS)`（上限，`FETCH_TIMEOUT_MAX_MS = 15_000`）**。⚠ `email.ts` 原 `parseTimeoutMs` **只有下限、無上限** ⇒ 若照抄，`OAUTH_FETCH_TIMEOUT_MS=99999999` 會把「禁無限等」baseline 打回原形。⚠ **上限值 = 15_000（非 30_000）**：override 同時作用 token+userinfo、且 userinfo ×2 attempts ⇒ 放大係數大（§3.4 override-max bound）；15s 上限使 override-max ≈ 15+5(JWKS)+15×2+0.25 ≈ **50s**（round-2 tier3） |
+| `ctrl.abort(new Error(\`Resend timeout after ${timeoutMs}ms\`))` — abort 帶**描述性 Error** | ⚠ **刻意分歧**：本 PR 用 **bare `ctrl.abort()`**（無 reason）→ err.message 無 `${timeoutMs}ms` config 洩漏（token-exchange catch `htmlError(...${err.message})` 會回 client）。**retry 分類不靠 abort 形狀**（§4.2 核心不變式：catch 只包 fetch、fetch-reject 一律 transient）⇒ 與 email.ts 帶 reason 無功能衝突、純為 no-leak |
 | `return await res.json()`（**非** `return res.json()`）+ 註解「await 拉進 try：success path 也要等 body 解析完才 clearTimeout」 | **相同**（[[feedback_async_return_await_with_finally_cleanup]]；否則 header 已回但 body 卡住時 timer 會被 `finally` 提早清掉 ⇒ timeout 失效） |
 | `finally { if (timeoutId !== undefined) clearTimeout(timeoutId) }` | **相同** |
 
@@ -260,19 +264,14 @@ async function fetchUserInfoWithRetry(url: string, accessToken: string | undefin
 ```
 `?: string`（Cloudflare env binding 一律 string）。**零 JS emit**、無 migration、無 secret、無部署面變更。先例 = PR-2dr 棒3-env #144（additive +10 optional key，Codex 正規化後 bundle SHA-256 相同＝zero-emit 鐵證）。
 
-### 4.5 失敗模式 observability discriminator（**self-review #4 accepted**；additive、in-scope）
+### 4.5 失敗模式 observability — **round-2 self-review：整個 DROP 出本 PR、改 backlog**
 
-**問題**：本 PR 新增 4 個失敗模式（F3 token timeout / F4 userinfo timeout / F5 retry-exhausted / F7-F8 4xx·429），但現有兩個 catch（callback.ts:123 `token_exchange_failed` / :133 `profile_fetch_failed`）只記 `{ provider, reason_code }`；`safeUserAudit` 只存 `entry.data + trace_id`；callback.ts 無 console/logger ⇒ **timeout-vs-5xx-vs-4xx 的區別只在 `err.message`（僅送 client-facing htmlError、server 端無訊號）**。違全域 §可觀測性要求（「上線後驗證 Tier 0 真實有效的唯一手段」）——retry 加了卻無 post-deploy 訊號證明它在自癒。
+round-1 self-review #4 建議加 `failure_kind` 判別欄區分新失敗模式（timeout/5xx/4xx/network/retry-exhausted）。**round-2 self-review 掀出此欄有連鎖問題，主線裁決：從本 PR 移除、backlog（見 §8 NB-11）**：
+1. **分類本身壞**（3 個 round-2 finding：security-observability/api-contract/high-risk/naming 一致）：以 regex 對 `err.message` 分類與 §4.2 helper 實際 throw 字串不自洽——`http_5xx` 死桶（helper 5xx 走 retry、耗盡拋通用訊息無 status）、`retry_exhausted` 被 `network` catch-all 蓋掉、token catch 收到的是 `exchangeCode` 的 `${status} ${msg}`（無 `userInfo` 前綴）、**verify\* 失敗（id_token 偽造 / nonce-replay）被誤標 `network`**（把安全訊號蓋成基礎設施雜訊）。
+2. **讀取端會 redact**（round-2 migration/spec-scope finding）：admin 稽核讀取端 `functions/api/admin/audit.ts:35-43` `SAFE_EVENT_DATA_KEYS` allowlist 會 **redact 未登錄的 `failure_kind`** ⇒ 寫了也看不到；補 allowlist = **動 `admin/audit.ts`、越界 SPEC-D-1**（本 PR source allowlist 僅 callback.ts + env.d.ts）。
+3. **零 regression**：base 本就把 timeout/network/verify 全歸 `profile_fetch_failed`（無子判別）⇒ **不加 = 維持現狀、非退步**；加一個壞的反而 misleading。
 
-**修法（最小 additive、零 migration）**：`event_data` 是 free-form JSON ⇒ 在既有兩個 catch 的 data object 追加一個判別欄位：
-```ts
-// callback.ts:123 / :133 的既有 catch，data 從 { provider, reason_code } 追加：
-data: { provider, reason_code, failure_kind }   // failure_kind: 'timeout'|'http_5xx'|'http_4xx'|'network'|'retry_exhausted'
-```
-- `failure_kind` 由 catch 判 `err`（`err.name==='AbortError'`→'timeout'；`/userInfo 5\d\d/`→'http_5xx'；`/userInfo 4\d\d/`→'http_4xx'；否則 'network'；userinfo 2 次皆敗→'retry_exhausted'）。
-- **In-scope 理由**：本 PR 本就在改這兩個 catch 的**觸發條件**（新增 timeout/retry 失敗路徑）⇒ 補判別欄位是同一改動面的自然延伸、非夾帶。
-- **明示不做（→ backlog）**：retry-rescued success signal（attempt 2 救回登入時發正向 audit）需**註冊新 `event_type` 到 `audit-policy.ts`**（擴 scope）⇒ 列 §8 NB-11 backlog，本 PR 不做。
-- **無新 reason_code / 無新 event_type** ⇒ 不動 `audit-policy.ts`（api-contract 面零變更；self-review 中 api-contract finder 的 reason_code enum 疑慮由此「不新增 enum」化解）。
+**正解（backlog、NB-11）**：要做得對需 **(a)** helper 以結構化 outcome（error 帶 `{kind}` 欄位、非 regex 猜 message；對映 [[feedback_updatestatus_structured_outcome]]）；**(b)** token/profile 兩 catch 各自對映實際 throw 格式；**(c)** admin 讀取端 allowlist 登錄；**(d)** SPEC-D-5 test 鎖每個 kind——是一個獨立 observability PR，與 NB-9（風控 swallow）同批。**本 PR 兩個 catch 維持既有 `{ provider, reason_code }` 不動**（零 audit 面變更）。
 
 ---
 
@@ -318,11 +317,11 @@ data: { provider, reason_code, failure_kind }   // failure_kind: 'timeout'|'http
 
 **provider 選擇（self-found C）**：retry/timeout 相關（T4–T9）一律用 **`discord`**——discord **無 OIDC id_token 分支、無 JWKS**（`[ID_TOKEN_VERIFY]` 直接落 discord 分支到 `[USERINFO_FETCH]`）⇒ `fetchCalls` 只含 token + userinfo 兩種 URL、retry 次數斷言最乾淨，不被 verify\*/JWKS fetch 干擾。T10（驗 verify 不 retry）用 **`line`**（有 verify、無 JWKS）。
 
-**⚠ mock signal 契約（self-found B）**：測 timeout（T4/T8）的 mock **必須顯式監聽 abort 才會 reject**——`ctrl.abort()` 不會讓一個不理會 signal 的 pending promise reject。沿 `tests/email.test.ts:113-129` 先例：
+**⚠ mock signal 契約（self-found B + round-2 修正）**：測 timeout（T4/T8）的 mock **必須顯式監聽 abort 才會 reject**——`ctrl.abort()` 不會讓一個不理會 signal 的 pending promise reject。沿 `tests/email.test.ts:113-129` 先例。**⭐ reject 值任意形狀即可**（`new Error(...)` 亦可）——§4.2 重構後 catch 只包 `fetch()`、fetch-reject **一律 transient**、**不 introspect `err.name`/`instanceof`**（round-2 tier1 修正：先前草稿靠 `AbortError`/`TypeError` 分類，plain-Error mock 會使 T8 恆 RED）：
 ```ts
-// hanging mock that honors init.signal（否則 T4/T8 會真的掛到 vitest 20s testTimeout）
+// hanging mock that honors init.signal（否則 T4/T8 掛到 vitest 20s testTimeout）
 vi.fn((_url, init) => new Promise((_res, reject) => {
-  init?.signal?.addEventListener('abort', () => reject(new Error('aborted by internal timeout')), { once: true })
+  init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })  // 任意 reject → helper 視 transient → retry
 }))
 ```
 
@@ -333,12 +332,12 @@ vi.fn((_url, init) => new Promise((_res, reject) => {
 | **T3** | discord | **positive**：合法 urlencoded form_post（`onRequestPost` 路徑） | 全 repo 無此測試（`onRequestPost` 零覆蓋、NF-5） | 正常流到 token exchange（`fetchCalls` 含 tokenUrl）⇒ **證 guard 未誤擋合法 form_post** |
 | **T4** | discord | tokenUrl mock 掛住（honor signal） | 無限等 → vitest 20s testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ abort → 400 · 耗時 < 1s |
 | **T5** | discord | userinfo：attempt 1 → **500**，attempt 2 → 200（**resolved 5xx 分支**） | 1 次 → 400 | **200 登入成功** · **userinfo `fetchCalls` 恰 2 次** |
-| **T5b** | discord | userinfo：**兩次皆 500**（retry 耗盡；self-review #2 主線 R-2） | 1 次 → 400 | 400 · **userinfo `fetchCalls` 恰 2 次**（鎖 `PROFILE_MAX_ATTEMPTS=2`：**證 retry 停在 2、非無限/off-by-one**）· 選配斷言 audit `failure_kind='retry_exhausted'` |
+| **T5b** | discord | userinfo：**兩次皆 500**（retry 耗盡；self-review #2 主線 R-2） | 1 次 → 400 | 400 · **userinfo `fetchCalls` 恰 2 次**（鎖 `PROFILE_MAX_ATTEMPTS=2`：**證 retry 停在 2、非無限/off-by-one**） |
 | **T6** | discord | userinfo → **401** | 400 | 400 · **userinfo `fetchCalls` 恰 1 次**（鎖「不 retry 4xx」） |
 | **T6b** | discord | userinfo → **429** | 400 | 400 · **userinfo `fetchCalls` 恰 1 次**（鎖「不 retry 429」，SPEC-D-9） |
 | **T7** | discord | tokenUrl → **500** | 400 | 400 · **tokenUrl `fetchCalls` 恰 1 次**（鎖「token exchange 永不 retry」） |
 | **T8** | discord | userinfo：attempt 1 **timeout(abort)**，attempt 2 → 200（**rejected/abort 分支**；self-review #2） | 無 test → timeout 分支 retry 未驗 | `OAUTH_FETCH_TIMEOUT_MS='50'` + 首次掛住(honor signal)/次次 200 ⇒ **200 · userinfo `fetchCalls` 恰 2 次** |
-| **T9** | discord | userinfo：attempt 1 **network error**（mock `throw new TypeError()`），attempt 2 → 200（**rejected/network 分支**；self-review #2） | 無 test → network retry 未驗 | **200 · userinfo `fetchCalls` 恰 2 次** |
+| **T9** | discord | userinfo：attempt 1 **network error**（mock `async () => { throw new Error('network') }`，**任意 reject 皆可**、無需 TypeError；round-2 修正），attempt 2 → 200 | 無 test → network retry 未驗 | **200 · userinfo `fetchCalls` 恰 2 次** |
 | **T10** | line | id_token 簽章無效（wrong channel secret）⇒ `verifyLineIdToken` throw（sig invalid，callback.ts:640） | 無 test 鎖「verify throw 不 retry userinfo」 | 400 · **userinfo `fetchCalls` 恰 0 次**（證 verify 在 retry loop **外**、verify throw 不觸發 userinfo retry；self-review #1） |
 
 **T10 helper 紀律（避踩 OD-5-HELPER）**：T10 需 forge 一個 LINE id_token（wrong-secret 使簽章驗證失敗）。**PR-2du 在新測試檔 file-local 定義最小 `signLineIdToken`**（複製 `oauth-nonce.test.ts:31-46` 現有 file-local helper 的形狀），**不 promote 到 `_helpers.ts`**（promote 是 PR-2dv 的 OD-5-HELPER scope）。T10 用 wrong-key（不碰 nonce）⇒ **不踩 NF-3（Google/LINE nonce seed 保真是另一棒）、不硬化任何 verify body**。
@@ -375,7 +374,7 @@ vi.fn((_url, init) => new Promise((_res, reject) => {
 - **NB-8（抽 fetch-with-timeout util）**：repo 現有 **5 個 site** 手刻同一段 `AbortController` + `setTimeout` + `finally{clearTimeout}`（`email.ts` / `send-verification.ts` / `invitations/index.ts` + 本棒 2 個）——已達「≥3 處重複」抽象門檻。**但 SPEC-D-6 明禁本棒新建 `functions/utils/*`**（會落入 `vitest.config.js` 的 80% coverage 門檻、需配套測試）→ backlog。
 - **NB-9（風控 alert email swallow）**：`callback.ts:366` `catch { /* swallow */ }` 無 observability（3 site：callback + login + login-verify）— PR-2dt code-self-review 掀出、**非本棒**。
 - **NB-10（`ctx` / `context` alias）**：`callback.ts:40-41` 用 `ctx`、`:45` 用 `context`（pre-existing）。統一為 `context` 對齊 init/bind-email → backlog（本棒不夾帶）。
-- **NB-11（retry-rescued success signal）**：self-review #4 建議「attempt 2 救回登入時發正向 audit」以驗 retry 真在自癒——但需**註冊新 `event_type` 到 `audit-policy.ts`**（擴 scope、動 api-contract 面）⇒ **本棒不做**（本棒只加 free-form `failure_kind` 到既有 audit、§4.5）。→ backlog（與 NB-9 observability 一批）。
+- **NB-11（失敗模式 observability — round-2 從本 PR DROP、backlog；§4.5）**：本 PR 新增 4 個失敗模式（token timeout / userinfo timeout / retry-exhausted / 4xx·429），但 base 本就把它們與 verify 失敗全歸 `profile_fetch_failed`（無子判別）。round-1 曾提議加 `failure_kind` 判別欄，**round-2 self-review 掀出**：(a) 以 regex 猜 `err.message` 分類與實際 throw 字串不自洽（死桶 + verify 失敗被誤標 network）；(b) admin 讀取端 `admin/audit.ts:35-43 SAFE_EVENT_DATA_KEYS` allowlist 會 redact，補登錄 = 越界 SPEC-D-1；(c) base 無此欄 ⇒ drop = 零 regression。**正解需結構化 outcome（error 帶 `{kind}`）+ token/profile 兩 catch 各自對映 + admin allowlist + test 鎖**＝獨立 observability PR，與 NB-9（風控 swallow）＋ retry-rescued success signal（需註冊新 `event_type` 到 `audit-policy.ts`）同批。**本 PR 兩 catch 維持 `{ provider, reason_code }` 不動**。
 - **NB-12（Apple profile 韌性缺口）**：self-review #3 揭示 Apple 的 profile 完全靠 `verifyAppleIdToken`（含 JWKS，callback.ts:532 early-return），**本 PR 的 userinfo timeout/retry 對 Apple 不適用**；Apple profile-side 仍靠 jose default 5s JWKS timeout（F10）。要顯式硬化 Apple 的 JWKS fetch timeout 須動 verify body（SPEC-D-2 禁）⇒ 與 NB-7（jose 顯式 timeout）**同一 backlog**。token exchange timeout（8000ms）對 Apple 仍生效。
 
 ---
