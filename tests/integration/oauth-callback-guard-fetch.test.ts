@@ -1,11 +1,11 @@
 /**
  * PR-2du 棒5a — OAuth callback File-narrow guard + provider fetch 韌性
  *
- * 16 cases、兩類（SPEC-D-5）：
- *   DELTA_RED (10)      base RED → candidate GREEN（新增行為 delta）
+ * 17 cases、兩類（SPEC-D-5）：
+ *   DELTA_RED (11)      base RED → candidate GREEN（新增行為 delta）
  *   INVARIANT_GREEN (6) base GREEN ∧ candidate GREEN（no-weakening）
  *
- * DELTA_RED       = T1 T2 T4 T4b T5 T5b T8 T8b T8c T9
+ * DELTA_RED       = T1 T2 T4 T4b T5 T5b T8 T8b T8c T9 T17
  * INVARIANT_GREEN = T3 T6 T6b T7 T10 T11
  *
  * 分類靠 fetchCalls 記錄器機械斷言（禁靠推理）。timeout 用 OAUTH_FETCH_TIMEOUT_MS='50'
