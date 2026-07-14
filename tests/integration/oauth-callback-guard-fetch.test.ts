@@ -24,14 +24,14 @@ const BASE = 'http://localhost/api/auth/oauth'
 
 // ── file-local helpers ────────────────────────────────────────────
 
-function b64url(bytes) {
+function b64url(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
-function b64urlString(s) { return b64url(new TextEncoder().encode(s)) }
+function b64urlString(s: string): string { return b64url(new TextEncoder().encode(s)) }
 
 /** Sign an HS256 LINE id_token（file-local；不 promote 到 _helpers，promote 屬 PR-2dv）。 */
-async function signLineIdToken(payload, secret) {
+async function signLineIdToken(payload: Record<string, unknown>, secret: string): Promise<string> {
   const header = { alg: 'HS256', typ: 'JWT' }
   const data = `${b64urlString(JSON.stringify(header))}.${b64urlString(JSON.stringify(payload))}`
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
@@ -40,7 +40,10 @@ async function signLineIdToken(payload, secret) {
   return `${data}.${b64url(sig)}`
 }
 
-async function seedOauthState({ state, nonce = null, platform = 'web', codeVerifier = 'verifier-xyz' }) {
+async function seedOauthState(
+  { state, nonce = null, platform = 'web', codeVerifier = 'verifier-xyz' }:
+  { state: string; nonce?: string | null; platform?: string; codeVerifier?: string },
+): Promise<void> {
   const exp = new Date(Date.now() + 600_000).toISOString().replace('T', ' ').slice(0, 19)
   await env.chiyigo_db.prepare(
     `INSERT INTO oauth_states (state_token, code_verifier, nonce, redirect_uri, platform, expires_at)
@@ -48,13 +51,13 @@ async function seedOauthState({ state, nonce = null, platform = 'web', codeVerif
     .bind(state, codeVerifier, nonce, 'https://chiyigo.com/cb', platform, exp).run()
 }
 
-async function stateRowExists(state) {
+async function stateRowExists(state: string): Promise<boolean> {
   const row = await env.chiyigo_db
     .prepare('SELECT state_token FROM oauth_states WHERE state_token = ?').bind(state).first()
   return !!row
 }
 
-function callGet(provider, state, code = 'auth-code') {
+function callGet(provider: string, state: string, code: string = 'auth-code') {
   const url = `${BASE}/${provider}/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`
   // 傳完整 EventContext literal；handler ctx 的 [key:string]:unknown 吸收 waitUntil/data/next
   return cbGet({
@@ -63,7 +66,7 @@ function callGet(provider, state, code = 'auth-code') {
   })
 }
 
-function callPost(provider, body, contentType) {
+function callPost(provider: string, body: string, contentType: string) {
   return cbPost({
     request: new Request(`${BASE}/${provider}/callback`, {
       method: 'POST', headers: { 'Content-Type': contentType, 'CF-Connecting-IP': '1.2.3.4' }, body,
@@ -98,7 +101,7 @@ const countUserinfo = () => fetchCalls.filter(isUserinfo).length
 
 // behavior：物件=200 JSON；數字=該 status；'hang'=fetch 掛住 honor abort；
 // 'body-stall'=200 headers 但 json() 掛住 honor abort；'network'=reject；'bad-json'=200 壞 body
-async function behave(b, init) {
+async function behave(b: unknown, init?: RequestInit) {
   if (b === 'hang') {
     return new Promise((_res, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
@@ -124,7 +127,7 @@ function installMock(plan: { token?: unknown; userinfo?: unknown } = {}) {
   const tSeq = Array.isArray(token) ? [...token] : null
   const uSeq = Array.isArray(userinfo) ? [...userinfo] : null
   let tI = 0, uI = 0
-  const fn = vi.fn(async (input, init) => {
+  const fn = vi.fn(async (input: Request | string, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.url
     fetchCalls.push(url)
     if (isToken(url)) return behave(tSeq ? tSeq[tI++] : (token ?? { access_token: 'tok' }), init)
