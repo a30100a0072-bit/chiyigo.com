@@ -22,7 +22,7 @@
 |---|---|---|
 | **production source** | `functions/api/auth/oauth/[provider]/callback.ts` | guard + exchangeCode 標型 + fetch timeout/retry |
 | **production source** | `types/env.d.ts` | **additive +1 optional key** `OAUTH_FETCH_TIMEOUT_MS?: string`（零 JS emit；先例 = PR-2dr 棒3-env #144 additive +10 key） |
-| **test** | `tests/integration/oauth-callback-guard-fetch.test.ts` | **新檔**：16 cases（DELTA_RED 10 + INVARIANT_GREEN 6、§6） |
+| **test** | `tests/integration/oauth-callback-guard-fetch.test.ts` | **新檔**：17 cases（DELTA_RED 11 + INVARIANT_GREEN 6、§6） |
 | **治理文件** | 本 plan doc | companion |
 
 **明禁動**（SPEC-D-1/2/6/7/8/12）：`oauth-providers.ts` · `init.ts` · `bind-email.ts` · `verifyLineIdToken` / `verifyGoogleIdToken` / `verifyAppleIdToken` **body** · **`fetchProfile` 內的 id_token 驗證區塊逐字不動**〔Apple early-return `L529-532` · Google `verifyGoogleIdToken` 呼叫 `L541` · LINE `verifyLineIdToken` 呼叫 `L549` + LINE nonce 檢查 `L550-552` · LINE email 注入 `L562-563` · Google claim 覆寫 `L565-571`〕——本 PR 只在**其後**的 `fetch(cfg.userInfoUrl)`（L556-560）包 retry loop，**retry loop 絕不涵蓋任何 verify\*IdToken**（self-review #1；SPEC-D-12 邊界，LINE nonce 區 = PR-2dv 目標）· `callback.ts:61` CT 子字串守門 · `oauthError`（L73）· **禁新建 `functions/utils/*`**。
@@ -35,7 +35,7 @@
 | **SPEC-D-2** | **禁擴散到 Google / Apple 的 nonce·exp 硬化** → 另棒（NF-3） | 三個 `verify*IdToken` body 逐字不動 |
 | **SPEC-D-3** | no-weakening：新增檢查只能 reject 更多 | guard 是**純 additive 收斂**；fetch timeout 只增加失敗路徑 |
 | **SPEC-D-4** | **ratchet（Codex Plan R1 修正：分 source-only vs final）**：errorCount **381**、errorFiles **17**、`REMOVED=4 / ADDED=0` **是不變量**；**cleanFiles/total 分兩階段**——source-only scout（僅 callback.ts）= `318 / 335`；**FINAL（含新 tracked 測試檔）= `319 / 336`**（新 clean `.ts` 測試檔被 `git ls-files` 計入 → cleanFiles+1 / total+1；`types/env.d.ts` 是 `.d.ts` **不計**〔ratchet 排除 `.d.ts`〕）。**CODE stage lock = `381/17/319/336`**；scout 的 `318/335` 僅 source-only receipt。新 code 每個 param 顯式標型（否則 errorCount≠381）；測試檔**必須 clean**（否則 ADDED>0、errorCount 升）；baseline `1119/175` 凍結禁 `--update`；**errorCount/errorFiles/ADDED 任何漂移 → halt** | §4 REPLAY / §5.A |
-| **SPEC-D-5** | **byte-identical 不適用**；驗收分兩類（Arch R2）：**`DELTA_RED`**（每個新增行為 delta）base RED→candidate GREEN；**`INVARIANT_GREEN`**（no-weakening / policy-preservation）base GREEN∧candidate GREEN。**禁**把 invariant 測試逼成 pre-fix RED（邏輯不可能）。§6 = 16 cases（DELTA_RED 10 + INVARIANT_GREEN 6） | **§6** |
+| **SPEC-D-5** | **byte-identical 不適用**；驗收分兩類（Arch R2）：**`DELTA_RED`**（每個新增行為 delta）base RED→candidate GREEN；**`INVARIANT_GREEN`**（no-weakening / policy-preservation）base GREEN∧candidate GREEN。**禁**把 invariant 測試逼成 pre-fix RED（邏輯不可能）。§6 = 17 cases（DELTA_RED 11 + INVARIANT_GREEN 6） | **§6** |
 | **SPEC-D-6** | **禁新建 `functions/utils/*`**（coverage 80% 門檻，NF-7） | fetch helper 全 module-local |
 | **SPEC-D-7** | `oauthError`（L73）不動 | 明示不夾帶 |
 | **SPEC-D-8** | **`callback.ts:61` CT 子字串守門明禁動** | 動它 ⇒ guard 變 runtime-unreachable ⇒ T1/T2 失去 RED 著力點 ⇒ Gate fail |
@@ -357,14 +357,14 @@ unset 語意                   : 啟用內建 bounded defaults token=8000ms / us
 
 ---
 
-## 6. Negative / regression test 清單（SPEC-D-5；**16 cases、兩類**）
+## 6. Negative / regression test 清單（SPEC-D-5；**17 cases、兩類**）
 
 新檔 `tests/integration/oauth-callback-guard-fetch.test.ts`。fetch mock 沿 `oauth-nonce.test.ts:75-99` 的 **`fetchCalls.push(url)` 記錄器** idiom（retry 次數靠它機械斷言，禁靠推理）。
 
 **⚠ 兩類驗收（Arch R2 修正——SPEC-D-5「每條 pre-fix RED」對 invariant 測試邏輯不可能成立）**：
 - **`DELTA_RED`（新增行為 delta）**：**base RED → candidate GREEN**。＝{ T1, T2, T4, **T4b**, T5, T5b, T8, T8b, **T8c**, T9 }（**10 條**）。
 - **`INVARIANT_GREEN`（no-weakening / policy-preservation）**：**base GREEN ∧ candidate GREEN**（證既有行為不被弱化）。＝{ T3, T6, T6b, T7, T10, T11 }（6 條）。
-- 合計 **16 cases**（Codex Plan R2 加 T4b〔token body-stall〕+ R3 加 T8c〔userinfo rejection 耗盡〕）。
+- 合計 **17 cases**（Codex Plan R2 加 T4b〔token body-stall〕+ R3 加 T8c〔userinfo rejection 耗盡〕；code-self-review #3 加 **T17**〔parseFetchTimeoutMs clamp/fallback〕）。
 
 **provider 選擇（self-found C + Arch R3）**：retry/timeout 相關（T4–T9）用 **`discord`**——無 OIDC id_token 分支、無 JWKS ⇒ `fetchCalls` 只含 token + userinfo、retry 次數斷言最乾淨。**T3 改用 `apple`（Arch R3 修正）**——F9/風險表把 T3 定位為「**Apple** form_post 回歸」，故 provider 必須是 apple 才是該路徑的證據（discord 只證共用 parser、非 Apple-specific）。T10（驗 verify 不 retry）用 **`line`**（有 verify、無 JWKS）。
 
@@ -399,12 +399,15 @@ vi.fn(async (_url, init) => ({
 | **T8c** | DELTA_RED | discord | userinfo：**兩次皆 timeout/reject**（mock(i) 兩次皆掛住 honor abort；rejection-branch 耗盡；Codex R3） | RED：base 無 timeout → attempt1 掛到 testTimeout | `OAUTH_FETCH_TIMEOUT_MS='50'` ⇒ 400 · **userinfo `fetchCalls` 恰 2 次**（鎖 **rejection/timeout 分支**的 `MAX_ATTEMPTS=2`——T5b 只鎖 resolved-5xx 分支、helper 有兩個獨立 `attempt<MAX` 判定，此條鎖另一個） |
 | **T10** | INVARIANT_GREEN | line | id_token 簽章無效（wrong secret）⇒ `verifyLineIdToken` throw（callback.ts:640） | **base GREEN**：base verify 亦在 userinfo 前失敗 | GREEN：400 · **userinfo `fetchCalls` 恰 0 次**（verify 在 retry loop 外、不觸 userinfo retry） |
 | **T11** | INVARIANT_GREEN | discord | userinfo 回 **200 但 body 非法 JSON**（`json()` 拋 `SyntaxError`、**非 timeout**；Arch R2-2） | **base GREEN**：base `res.json()` 亦拋 → 400、userinfo 1 次 | GREEN：400 · **userinfo `fetchCalls` 恰 1 次**（機械證 `didTimeout \|\| res===undefined` **不**把 malformed body 誤當 transient；`res` 已設 ∧ ¬didTimeout → terminal） |
+| **T17** | DELTA_RED | — | `parseFetchTimeoutMs` unit：clamp `'99999999'→15000`、邊界 `'15000'→15000`、`'5'/'abc'/''/undefined→fallback`、`'3000'→3000`（code-self-review #3；`export` + namespace import `callbackMod.*`） | **base RED**：base 無 `parseFetchTimeoutMs` export → `callbackMod.parseFetchTimeoutMs` undefined → `TypeError`（namespace import 不破壞其餘 16 case base 編譯） | GREEN：全部斷言通過（鎖上限 clamp「禁無限等」+ `<10`/invalid fallback 兩不變量）|
+
+> **code-self-review #4/#5 補強（既有 case 加斷言、不增 case）**：T4/T4b/T8/T8b/T8c 加**完成時間上限**（`< 1000/1500ms`）鎖「override 失效退回 5s/8s default」迴歸（#4）；T4 加 **no-config-leak** 斷言 `body not.toMatch(/\d+\s?ms/)` 鎖「bare abort 迴歸成描述性 abort 洩漏 timeout 值」（#5）。
 
 > **INVARIANT_GREEN 的 delta 佐證**：T6/T6b/T7/T10/T11 在 base 與 candidate 皆 GREEN、**斷言值不變**（次數/狀態相同）⇒ 證本 PR **未弱化**這些既有 no-retry / verify-first / malformed-terminal policy（Arch #7 + R2-2）。它們**不是** delta、故不可能 pre-fix RED；把它們列入 DELTA_RED 是原 SPEC-D-5 的邏輯矛盾。
 
 **T10 helper 紀律（避踩 OD-5-HELPER）**：T10 需 forge 一個 LINE id_token（wrong-secret 使簽章驗證失敗）。**PR-2du 在新測試檔 file-local 定義最小 `signLineIdToken`**（複製 `oauth-nonce.test.ts:31-46` 現有 file-local helper 的形狀），**不 promote 到 `_helpers.ts`**（promote 是 PR-2dv 的 OD-5-HELPER scope）。T10 用 wrong-key（不碰 nonce）⇒ **不踩 NF-3、不硬化任何 verify body**。
 
-> ⚠ scout 的 `zz-b5-probe.test.ts` 是**一次性證據、未進任何 commit**（throwaway worktree 已移除）。16 cases 必須在本 PR **正式落地**成 `tests/integration/` 交付物；**DELTA_RED 10 條須留「base RED」輸出證據、INVARIANT_GREEN 6 條須留「base GREEN ∧ candidate GREEN」證據**（SPEC-D-5 兩類）。
+> ⚠ scout 的 `zz-b5-probe.test.ts` 是**一次性證據、未進任何 commit**（throwaway worktree 已移除）。17 cases 必須在本 PR **正式落地**成 `tests/integration/` 交付物；**DELTA_RED 11 條須留「base RED」輸出證據、INVARIANT_GREEN 6 條須留「base GREEN ∧ candidate GREEN」證據**（SPEC-D-5 兩類）。**已實測 base = 11 failed / 6 passed、candidate = 17 passed。**
 
 ---
 
@@ -420,7 +423,7 @@ vi.fn(async (_url, init) => ({
 - **FULL-DIFF-ALLOWLIST 機械核對**：`git diff --name-status 274a37b4..<source>` 完整 changed-files 恰 {`callback.ts`, `types/env.d.ts`, `tests/integration/oauth-callback-guard-fetch.test.ts`, 本 plan doc}。任一額外檔 = scope violation、停 gate。**尤其核對 `oauth-nonce.test.ts` / `_helpers.ts` 未被改**（SPEC-D-12：`:202` 反轉 + helper promote 皆 PR-2dv）。
 - **RED-TEST-INTEGRITY**：任何 test red 先保留首次失敗輸出並判因；**禁「known flaky」直接 rerun 至 green**。Windows `public/` CRLF churn 挑檔不進 PR（[[feedback_windows_build_crlf_churn]]）。
 - **PROVIDER-PATH-HUNK（SPEC-D-10）**：`[provider]` 路徑含 `[` ⇒ `code-self-review.mjs` `REPO_PATH_PATTERN` 拒收、無法當 formal decision-point ⇒ **faithfulness packet 人工補完整 hunk + 機械 `--name-status`**，不得只依賴 reviewer script（**工具靜默回空 ≠「沒改動」**）。
-- **兩類驗收實證（SPEC-D-5、Arch R2 + Codex Plan R2/R3）**：**DELTA_RED 10 條**（T1/T2/T4/T4b/T5/T5b/T8/T8b/T8c/T9）須留「在 base `274a37b4` 上真的 fail」證據；**INVARIANT_GREEN 6 條**（T3/T6/T6b/T7/T10/T11）須留「base GREEN ∧ candidate GREEN」證據（證未弱化既有 policy）。禁把 invariant 逼成 RED。
+- **兩類驗收實證（SPEC-D-5、Arch R2 + Codex Plan R2/R3 + code-self-review #3）**：**DELTA_RED 11 條**（T1/T2/T4/T4b/T5/T5b/T8/T8b/T8c/T9/**T17**）須留「在 base `274a37b4` 上真的 fail」證據；**INVARIANT_GREEN 6 條**（T3/T6/T6b/T7/T10/T11）須留「base GREEN ∧ candidate GREEN」證據。**CODE stage 已實測：base 11-fail/6-pass、candidate 17-pass。**
 
 ---
 
@@ -437,7 +440,9 @@ vi.fn(async (_url, init) => ({
 - **NB-9（風控 alert email swallow）**：`callback.ts:366` `catch { /* swallow */ }` 無 observability（3 site：callback + login + login-verify）— PR-2dt code-self-review 掀出、**非本棒**。
 - **NB-10（`ctx` / `context` alias）**：`callback.ts:40-41` 用 `ctx`、`:45` 用 `context`（pre-existing）。統一為 `context` 對齊 init/bind-email → backlog（本棒不夾帶）。
 - **NB-11（失敗模式 observability — round-2 從本 PR DROP、backlog；§4.5）**：本 PR 新增 4 個失敗模式（token timeout / userinfo timeout / retry-exhausted / 4xx·429），但 base 本就把它們與 verify 失敗全歸 `profile_fetch_failed`（無子判別）。round-1 曾提議加 `failure_kind` 判別欄，**round-2 self-review 掀出**：(a) 以 regex 猜 `err.message` 分類與實際 throw 字串不自洽（死桶 + verify 失敗被誤標 network）；(b) admin 讀取端 `admin/audit.ts:35-43 SAFE_EVENT_DATA_KEYS` allowlist 會 redact，補登錄 = 越界 SPEC-D-1；(c) base 無此欄 ⇒ drop = 零 regression。**正解需結構化 outcome（error 帶 `{kind}`）+ token/profile 兩 catch 各自對映 + admin allowlist + test 鎖**＝獨立 observability PR，與 NB-9（風控 swallow）＋ retry-rescued success signal（需註冊新 `event_type` 到 `audit-policy.ts`）同批。**本 PR 兩 catch 維持 `{ provider, reason_code }` 不動**。
-- **NB-12（Apple profile 韌性缺口）**：self-review #3 揭示 Apple 的 profile 完全靠 `verifyAppleIdToken`（含 JWKS，callback.ts:532 early-return），**本 PR 的 userinfo timeout/retry 對 Apple 不適用**；Apple profile-side 仍靠 jose default 5s JWKS timeout（F10）。要顯式硬化 Apple 的 JWKS fetch timeout 須動 verify body（SPEC-D-2 禁）⇒ 與 NB-7（jose 顯式 timeout）**同一 backlog**。token exchange timeout（8000ms）對 Apple 仍生效。
+- **NB-12（Apple profile 韌性缺口）**：self-review #3 揭示 Apple 的 profile 完全靠 `verifyAppleIdToken`（含 JWKS，callback.ts:532 early-return），**本 PR 的 userinfo timeout/retry 對 Apple 不適用**；Apple profile-side 仍靠 jose default 5s JWKS timeout（F10）。要顯式硬化 Apple 的 JWKS fetch timeout 須動 verify body（SPEC-D-2 禁）⇒ 與 NB-7（jose 顯式 timeout）**同一 backlog**。token exchange timeout（8000ms）對 Apple 仍生效。**code-self-review #2 覆核確認**（jose 有 5s default timeout ⇒ 非「禁無限等」違反、僅新 override 不涵蓋此邊界）。
+- **NB-13（新用戶建立為兩段非交易 INSERT — pre-existing、非本 diff 引入；code-self-review #1）**：新用戶分支先 `INSERT users` 取 `last_row_id` 再獨立 `INSERT user_identities`（callback.ts L355-369、無 batch/transaction；binding 分支 L248 已用 atomic `db.batch`）。兩 INSERT 間中斷 → orphan user（有 email、無 identity）；trustEmail=true 下次登入經 email 碰撞路徑自癒、trustEmail=false 落 403。**本 PR 不觸此 code、不在 scope**（現分兩段是為取 last_row_id 的刻意取捨）→ 另案 backlog（改 atomic `INSERT...SELECT WHERE changes()=1` 或冪等寫入）。
+- **NB-14（`parseFetchTimeoutMs` export；code-self-review #3）**：為 T17 regression-lock 將 module-local `parseFetchTimeoutMs` 改 `export`（原 plan §4.3 述其 module-local）。**SPEC-D-6 僅禁新建 `functions/utils/*` 檔、不禁 export callback.ts 既有 fn**；純函式、無副作用、唯一 consumer 為測試 ⇒ 零 runtime 面影響（Pages router 僅呼叫 onRequestGet/Post）。ratchet errorCount 381 不變（ADDED=0 保持）。
 
 ---
 

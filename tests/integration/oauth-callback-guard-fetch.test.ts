@@ -19,6 +19,9 @@ import {
   onRequestGet as cbGet,
   onRequestPost as cbPost,
 } from '../../functions/api/auth/oauth/[provider]/callback'
+// namespace import：容忍 base 無此 export（base callbackMod.parseFetchTimeoutMs===undefined
+// → T17 於 base RED，不破壞其餘 16 case 的 base 編譯 / evidence）
+import * as callbackMod from '../../functions/api/auth/oauth/[provider]/callback'
 
 const BASE = 'http://localhost/api/auth/oauth'
 
@@ -201,6 +204,10 @@ describe('PR-2du guard + fetch resilience', () => {
     expect(res.status).toBe(400)
     expect(Date.now() - t0).toBeLessThan(1000)
     expect(countToken()).toBe(1)
+    // no-config-leak lock（code-self-review #5）：bare ctrl.abort() ⇒ err.message 無 timeout 值；
+    // 若 regress 成 email.ts 式描述性 abort（`...${timeoutMs}ms`），htmlError body 會出現 `\d+ms`
+    const body = await res.text()
+    expect(body).not.toMatch(/\d+\s?ms/)
   })
 
   it('T4b [DELTA_RED] token body-stall timeout → abort → 400、token 恰 1 次、<1s', async () => {
@@ -236,27 +243,33 @@ describe('PR-2du guard + fetch resilience', () => {
     env.OAUTH_FETCH_TIMEOUT_MS = '50'
     installMock({ token: { access_token: 'tok' }, userinfo: ['hang', DISCORD_PROFILE] })
     await seedOauthState({ state: 'st8' })
+    const t0 = Date.now()
     const res = await callGet('discord', 'st8')
     expect(res.status).toBe(200)
     expect(countUserinfo()).toBe(2)
+    expect(Date.now() - t0).toBeLessThan(1500)   // 完成上限（code-self-review #4）：override 若失效退回 5s default 會超標
   })
 
   it('T8b [DELTA_RED] userinfo body-stall timeout→200：登入成功、userinfo 恰 2 次', async () => {
     env.OAUTH_FETCH_TIMEOUT_MS = '50'
     installMock({ token: { access_token: 'tok' }, userinfo: ['body-stall', DISCORD_PROFILE] })
     await seedOauthState({ state: 'st8b' })
+    const t0 = Date.now()
     const res = await callGet('discord', 'st8b')
     expect(res.status).toBe(200)
     expect(countUserinfo()).toBe(2)
+    expect(Date.now() - t0).toBeLessThan(1500)   // 完成上限（code-self-review #4）
   })
 
   it('T8c [DELTA_RED] userinfo 兩次皆 timeout（rejection/timeout 分支耗盡）→ 400、userinfo 恰 2 次', async () => {
     env.OAUTH_FETCH_TIMEOUT_MS = '50'
     installMock({ token: { access_token: 'tok' }, userinfo: ['hang', 'hang'] })
     await seedOauthState({ state: 'st8c' })
+    const t0 = Date.now()
     const res = await callGet('discord', 'st8c')
     expect(res.status).toBe(400)
     expect(countUserinfo()).toBe(2)
+    expect(Date.now() - t0).toBeLessThan(1500)   // 完成上限（code-self-review #4）
   })
 
   it('T9 [DELTA_RED] userinfo network-error→200：登入成功、userinfo 恰 2 次', async () => {
@@ -311,5 +324,16 @@ describe('PR-2du guard + fetch resilience', () => {
     const res = await callGet('discord', 'st11')
     expect(res.status).toBe(400)
     expect(countUserinfo()).toBe(1)
+  })
+
+  it('T17 [DELTA_RED] parseFetchTimeoutMs：上限 clamp + <10/invalid fallback 不變量（code-self-review #3）', () => {
+    const p = callbackMod.parseFetchTimeoutMs   // base 無此 export → undefined → 本 case base RED
+    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '99999999' }, 8000)).toBe(15000)  // 上限 clamp（禁無限等）
+    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '15000' }, 8000)).toBe(15000)     // 邊界
+    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '5' }, 8000)).toBe(8000)          // <10 → fallback
+    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: 'abc' }, 8000)).toBe(8000)        // invalid → fallback
+    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '' }, 5000)).toBe(5000)           // empty → fallback
+    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: undefined }, 5000)).toBe(5000)    // unset → fallback
+    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '3000' }, 8000)).toBe(3000)       // 合法 → 直用
   })
 })

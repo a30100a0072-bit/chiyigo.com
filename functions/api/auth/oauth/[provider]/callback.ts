@@ -46,7 +46,9 @@ const PROFILE_MAX_ATTEMPTS             = 2      // 1 次初試 + 最多 1 次 re
 const PROFILE_RETRY_BACKOFF_MS         = 250
 const FETCH_TIMEOUT_MAX_MS             = 15_000 // 上限 clamp：防 override 打破「禁無限等」
 
-function parseFetchTimeoutMs(env: Env, fallbackMs: number): number {
+// exported for regression-lock test（上限 clamp + <10/invalid fallback 兩不變量；
+// code-self-review #3）。SPEC-D-6 僅禁新建 functions/utils/*，export 既有 module fn 不違反。
+export function parseFetchTimeoutMs(env: Env, fallbackMs: number): number {
   const raw = env.OAUTH_FETCH_TIMEOUT_MS
   if (raw == null || raw === '') return fallbackMs
   const n = Number(raw)
