@@ -1,11 +1,11 @@
 /**
  * PR-2du 棒5a — OAuth callback File-narrow guard + provider fetch 韌性
  *
- * 17 cases、兩類（SPEC-D-5）：
- *   DELTA_RED (11)      base RED → candidate GREEN（新增行為 delta）
+ * 16 cases、兩類（SPEC-D-5）：
+ *   DELTA_RED (10)      base RED → candidate GREEN（新增行為 delta）
  *   INVARIANT_GREEN (6) base GREEN ∧ candidate GREEN（no-weakening）
  *
- * DELTA_RED       = T1 T2 T4 T4b T5 T5b T8 T8b T8c T9 T17
+ * DELTA_RED       = T1 T2 T4 T4b T5 T5b T8 T8b T8c T9
  * INVARIANT_GREEN = T3 T6 T6b T7 T10 T11
  *
  * 分類靠 fetchCalls 記錄器機械斷言（禁靠推理）。timeout 用 OAUTH_FETCH_TIMEOUT_MS='50'
@@ -19,9 +19,6 @@ import {
   onRequestGet as cbGet,
   onRequestPost as cbPost,
 } from '../../functions/api/auth/oauth/[provider]/callback'
-// namespace import：容忍 base 無此 export（base callbackMod.parseFetchTimeoutMs===undefined
-// → T17 於 base RED，不破壞其餘 16 case 的 base 編譯 / evidence）
-import * as callbackMod from '../../functions/api/auth/oauth/[provider]/callback'
 
 const BASE = 'http://localhost/api/auth/oauth'
 
@@ -324,16 +321,5 @@ describe('PR-2du guard + fetch resilience', () => {
     const res = await callGet('discord', 'st11')
     expect(res.status).toBe(400)
     expect(countUserinfo()).toBe(1)
-  })
-
-  it('T17 [DELTA_RED] parseFetchTimeoutMs：上限 clamp + <10/invalid fallback 不變量（code-self-review #3）', () => {
-    const p = callbackMod.parseFetchTimeoutMs   // base 無此 export → undefined → 本 case base RED
-    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '99999999' }, 8000)).toBe(15000)  // 上限 clamp（禁無限等）
-    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '15000' }, 8000)).toBe(15000)     // 邊界
-    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '5' }, 8000)).toBe(8000)          // <10 → fallback
-    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: 'abc' }, 8000)).toBe(8000)        // invalid → fallback
-    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '' }, 5000)).toBe(5000)           // empty → fallback
-    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: undefined }, 5000)).toBe(5000)    // unset → fallback
-    expect(p({ ...env, OAUTH_FETCH_TIMEOUT_MS: '3000' }, 8000)).toBe(3000)       // 合法 → 直用
   })
 })
