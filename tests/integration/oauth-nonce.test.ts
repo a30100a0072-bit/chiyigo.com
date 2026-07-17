@@ -5,7 +5,7 @@
  *   1. LINE callback：id_token.nonce 與 stored.nonce 相符 → 成功
  *   2. LINE callback：id_token.nonce 不符 → 拒絕（id_token replay）
  *   3. Apple callback：相同邏輯（id_token 為唯一資料來源）
- *   4. nonce=null（migration 未套用 / 非 OIDC provider）→ 不執行 nonce 比對
+ *   4. LINE callback：stored.nonce=null → 拒絕（PR-2dv 起 nonce 強制、fail-closed）
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
@@ -199,7 +199,11 @@ describe('LINE callback nonce 驗證', () => {
     expect(res.status).toBe(400)
   })
 
-  it('stored.nonce 為 NULL（legacy 進行中 session）→ 不執行 nonce 比對，仍可登入', async () => {
+  // PR-2dv AMENDMENT（2026-07-15）：舊策略 stored.nonce=NULL → 略過比對仍放行（為 migration
+  // 未套用的 legacy session 留門）。反轉為 fail-closed：nonce 缺席等同對該次登入關閉 replay
+  // 校驗，攻擊者只要讓 state 不帶 nonce 即可繞過。代價為極少數 NULL-nonce 進行中 session
+  // 需重跑 OAuth（上線前以 DEPLOY-EVIDENCE 唯讀查活躍筆數）。
+  it('stored.nonce 為 NULL（legacy 進行中 session）→ 拒絕（nonce 強制，fail-closed）', async () => {
     const idToken = await signLineIdToken(
       {
         iss: 'https://access.line.me', sub: 'line-legacy',
@@ -216,7 +220,7 @@ describe('LINE callback nonce 驗證', () => {
 
     await seedOauthState({ state: 'state-legacy', nonce: null })
     const res = await callCb('line', 'state-legacy')
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(400)
   })
 })
 
