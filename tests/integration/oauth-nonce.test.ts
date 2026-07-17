@@ -204,11 +204,15 @@ describe('LINE callback nonce 驗證', () => {
   // 校驗，攻擊者只要讓 state 不帶 nonce 即可繞過。代價為極少數 NULL-nonce 進行中 session
   // 需重跑 OAuth（上線前以 DEPLOY-EVIDENCE 唯讀查活躍筆數）。
   it('stored.nonce 為 NULL（legacy 進行中 session）→ 拒絕（nonce 強制，fail-closed）', async () => {
+    // id_token 帶一個合法外觀的 nonce：使本案唯一的拒絕成因是 stored.nonce=NULL，
+    // 與「token 缺 nonce claim」失敗模式隔離（self-review tier2：否則兩失敗耦合、
+    // 只刪 stored-NULL 分支的回歸抓不到）。base 對此 fixture 仍回 200（放行），故
+    // 訊息 + 零副作用斷言在 base 皆 RED、DELTA 分類不變。
     const idToken = await signLineIdToken(
       {
         iss: 'https://access.line.me', sub: 'line-legacy',
         aud: 'line-cid', exp: Math.floor(Date.now() / 1000) + 600,
-        email: 'legacy@line.example',
+        nonce: 'attacker-nonce', email: 'legacy@line.example',
       },
       'line-channel-secret',
     )
@@ -221,6 +225,15 @@ describe('LINE callback nonce 驗證', () => {
     await seedOauthState({ state: 'state-legacy', nonce: null })
     const res = await callCb('line', 'state-legacy')
     expect(res.status).toBe(400)
+    // status-only 無法歸因（所有失敗都回 400）→ 精確釘住 nonce gate（htmlError 回顯
+    // err.message，見 callback.ts:164）+ 零帳號副作用。不用 `無法取得.*用戶資料` OR
+    // （那會 match 任何 fetchProfile 失敗、失去歸因）。
+    const body = await res.text()
+    expect(body).toContain('id_token nonce mismatch')
+    const cnt = await env.chiyigo_db
+      .prepare('SELECT COUNT(*) AS n FROM users WHERE email = ?')
+      .bind('legacy@line.example').first()
+    expect(cnt.n).toBe(0)
   })
 })
 

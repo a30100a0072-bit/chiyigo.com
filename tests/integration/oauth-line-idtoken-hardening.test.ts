@@ -1,7 +1,8 @@
 /**
  * Stage 7 PR-2dv 棒5b — LINE id_token（HS256）驗證 hardening
  *
- * 5 項 fail-closed 補強：alg → signature → iss → aud → exp → nonce（驗證順序即此）。
+ * 5 項 fail-closed 補強 ＝ alg / iss / aud / exp / nonce（item 1-5）；signature 為既有 gate，
+ * 本 PR 僅在其上加 F-2 channelSecret guard。驗證順序：alg → signature → iss → aud → exp → nonce。
  *
  * 兩類（PLAN §4.3 L8 base-RED 證據法）：
  *   DELTA_RED       base RED（200）→ candidate GREEN（400）＝新增的 reject 行為
@@ -430,9 +431,9 @@ describe('PR-2dv item 4 — exp（強制存在 + finite + now>=exp）', () => {
   }
 })
 
-// ── item 4：nonce ─────────────────────────────────────────────────
+// ── item 5：nonce ─────────────────────────────────────────────────
 
-describe('PR-2dv item 4 — nonce（移入 verifier + 強制）', () => {
+describe('PR-2dv item 5 — nonce（移入 verifier + 強制）', () => {
   it('[N11 子案 DELTA_RED] stored.nonce 為空字串 → 拒絕（base falsy 跳過比對）', async () => {
     const idToken = await signLineIdToken(
       lineClaims({ nonce: 'attacker-nonce', sub: 'line-nonce-empty', email: 'nonce-empty@line.example' }),

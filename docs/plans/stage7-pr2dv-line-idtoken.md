@@ -384,3 +384,22 @@ approved matrix 的 **N13 `channelSecret=''` 子案**原用於「證 F-2 load-be
   - **不變**：guard predicate · runtime scope · 矩陣 `DELTA 10 / INVARIANT 6` · 全部 carry-forward locks。
   - **① R4b-NB（已落修，不需再送 ①）**：「runtime logic byte-unchanged」須明寫比較基準＝**相對前次 R4 candidate**，**非**「candidate ↔ base `18b5f72d` 的 production runtime diff 為零」（§13.4 已改寫；防 ③／④ 誤讀）。
 - ⚠ **`CODING_ALLOWED` 恢復條件**：① 明示其核准**本身不恢復**；須 **②通過 ∧ owner 重新授權** 才可續 CODE。
+
+---
+
+## 14. CODE-stage 維度 A self-review 結果（2026-07-17；`0abd39d8`）
+
+**workflow**：`code-self-review.mjs`、38 agents、23 candidate findings → **6 accepted / 17 refuted**（0 unverified；7 個 transient 529 經 retry 全補回）。17 refuted 多為 finder 讀 main worktree（＝base）致行號漂移、被 verifier 以「該檔/行不存在於 base」駁回。
+
+### 14.1 已於 CODE stage 修（self-review 驅動、test-only）
+- **#3（tier3、accepted）item 編號 bug**：新測試檔 nonce 區塊誤標 `item 4`（與 exp 重複、`item 5` 缺席）→ 改 `item 5`；header「5 項」註明＝alg/iss/aud/exp/nonce、signature 為既有 gate。純 label、無 runtime/ratchet/plan 影響（plan 全文無 `item N` 編號）。
+- **#5（tier2、accepted）N11 main 弱鎖**：`oauth-nonce.test.ts:202` 原僅斷言 `status===400`，但所有失敗都回 400（htmlError 預設）→ 無法歸因 nonce gate；且 fixture 的 id_token 無 nonce claim → 「stored-NULL 拒絕」與「token-nonce 缺席」耦合。**owner 2026-07-17 裁「就地強化」**：補 `toContain('id_token nonce mismatch')` 精確釘 gate + `users` count=0 零副作用 + fixture id_token 改帶合法 nonce（隔離失敗模式）。仍 DELTA（base 對此 fixture 回 200→訊息/副作用斷言仍 RED、矩陣不變）。⚠ **超出 §4.1/§5.1 字面 N11-NARROW-EDIT（「僅 expectation 200→400」）**：owner 明示授權、依 standing rule [[feedback_regression_test_must_lock_exact_failure]] + PR-2du F-3 先例（test 品質意圖 > 字面 scope）；④ faithfulness packet 標為 owner-approved self-review 強化。
+
+### 14.2 不動 code、文件揭露 + backlog（verifier 共識「別動 code」）
+> 皆 tier3（除 idempotency 兩則掛 tier2 但屬 pre-existing）、**今日不可利用**、且落在 §1「明禁動」範圍。依 [[feedback_prefer_plan_fidelity_over_small_waiver]] + [[feedback_security_boundary_pr_first_do_no_harm]]，**CODE stage 不逕改**，進 `project_line_idtoken_verify_hardening_backlog`。
+
+- **#1/#2/#6 — Google/Apple nonce 語義分歧 + 缺 `!tokens.id_token` guard**：本 PR 使 LINE nonce 強制（NULL→400），但 Google（callback.ts:671-673）/ Apple（:691-693）仍條件式 `if (expectedNonce && ...)`＝NULL 靜默跳過 replay 校驗。**分歧由本 PR 造成**（base @18b5f72d 三者一致用 `if (expectedNonce && ...)` idiom）。另 caller L594 `if (provider === 'line' && tokens.id_token)`：token response 無 id_token 時 LINE 跳過全部 6 道 gate 走 userinfo 建帳號，而 Apple:576/Google:586 對缺 id_token 一律 throw（fail-closed），LINE 獨缺對稱守衛。**今日不可利用**：init.ts:30 OIDC_PROVIDERS 含三者、:173 恆生 nonce；LINE userinfo（/v2/profile）不回 email → 無 id_token = 無 email 登入（provider_id 取自 userinfo raw.userId、非 id_token）。**backlog**：後續 PR 評估 (a) Google/Apple 對齊強制 nonce（連帶修 callback.test.ts:229/243/602 三處 nonce=NULL seed）(b) LINE 比照加 `if (!tokens.id_token) throw`。
+- **#4 — ERROR-CONTRACT 字串配對未結構綁定**：`signature invalid`（L728 新 + L744 既有）/`nonce mismatch`（L770 新 + L771）各出現兩處，測試只鎖「新端」（N15/N11子案有訊息斷言），「舊端」L744/L771 只驗 status → 單獨改舊端字串測試抓不到。L744 是 plan §3.1 pin「既有逐字不動」、改＝出 scope + 觸 Google/Apple。**backlog**：後續 PR 把 6 個 throw 字串上提為 module 級常數（放 `LINE_ISSUER` 旁）。
+
+### 14.3 主線獨立裁決（非採信 workflow、讀真 diff `18b5f72d..0abd39d8`）
+ORDER-LOCK（verifier L596 → userinfo L602、N15 runtime `userinfoCalled=false` 坐實）✓ · CALLER-CLEANUP（讀原始碼確認舊 nonce block 已刪、非只數 grep）✓ · LINE-AUD-STRING-ONLY（verifier 內 0 個 `Array.isArray`/`.includes`）✓ · 禁 export verifyLineIdToken ✓ · diff 新增行 0 個 `any`/suppression ✓ · 明禁動檔案（Google/Apple verifier、oauth-providers.ts、L76 guard、L164 catch、env.d.ts）全未觸 ✓。
