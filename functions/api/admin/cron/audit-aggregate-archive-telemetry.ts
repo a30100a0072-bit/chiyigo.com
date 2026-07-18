@@ -32,7 +32,7 @@ const EVENT_PREFIX = 'audit.aggregate_archive.telemetry'
 const SELECT_COLUMNS =
   'id, event_type, user_id, severity, hour_bucket, count, ip_hash_top, cold_class, created_at'
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   return runAggregateArchive({
     request, env,
     tableName:     TABLE_NAME,
