@@ -27,7 +27,7 @@ const EVENT_PREFIX = 'audit.aggregate_archive.debug'
 const SELECT_COLUMNS =
   'id, event_type, reason_code, hour_bucket, total_count, sample_count, samples_json, sampled, cold_class, created_at'
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env }: { request: Request; env: Env }) {
   return runAggregateArchive({
     request, env,
     tableName:     TABLE_NAME,
