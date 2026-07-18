@@ -588,14 +588,12 @@ async function fetchProfile(provider: string, cfg: ReturnType<typeof getProvider
   }
 
   // LINE：email 在 id_token 內（scope 包含 email 時），驗 HMAC-SHA256 簽名
-  // 注意：LINE id_token 簽章驗證失敗 / nonce 不符均視為硬性失敗（不再降級為「忽略 email」），
+  // 注意：LINE id_token 簽章 / claim 驗證失敗均視為硬性失敗（不再降級為「忽略 email」），
   // 否則攻擊者可注入未驗簽 id_token 取得本不應持有的 email。
+  // nonce 比對已移入 verifyLineIdToken（單一權威，PR-2dv OD-2）— 此處不得再驗。
   let lineEmail = null
   if (provider === 'line' && tokens.id_token) {
-    const payload = await verifyLineIdToken(tokens.id_token, cfg.clientSecret)
-    if (expectedNonce && payload.nonce !== expectedNonce) {
-      throw new Error('id_token nonce mismatch')
-    }
+    const payload = await verifyLineIdToken(tokens.id_token, cfg.clientId, cfg.clientSecret, expectedNonce)
     lineEmail = payload.email ?? null
   }
 
@@ -698,12 +696,36 @@ async function verifyAppleIdToken(idToken: string, expectedAud: string | null, e
 
 // ── 工具 ─────────────────────────────────────────────────────────
 
-// LINE id_token 驗簽（HS256，以 channel secret 為 key）
-async function verifyLineIdToken(idToken: string, channelSecret: string | null) {
+// LINE id_token 的 iss（LINE 官方文件確切值）。pin 為 literal：值錯會使全 LINE 登入失敗，
+// 且不得誤用 authorize-URL host（access.line.me 無尾斜線）。
+const LINE_ISSUER = 'https://access.line.me'
+
+// LINE id_token 驗簽（HS256，以 channel secret 為 key）+ claim 驗證。
+// 本函式是 LINE claim 的單一權威（PR-2dv OD-2）：alg → signature → iss → aud → exp → nonce，
+// 全部 fail-closed。caller 不得再自行驗任何 claim（雙軌會讓其中一軌被靜默改弱）。
+async function verifyLineIdToken(
+  idToken: string,
+  expectedAud: string | null,
+  channelSecret: string | null,
+  expectedNonce: string | null,
+) {
   const parts = idToken.split('.')
   if (parts.length !== 3) throw new Error('Invalid id_token format')
   const [headerB64, payloadB64, sigB64] = parts
 
+  // alg 先於驗章：LINE Web login 恆 HS256。先拒非 HS256 header 可讓「謊報 alg」在未來
+  // 有人改寫此函式成 header-driven 選演算法時就已被獨立 gate 擋下（alg-confusion DiD）。
+  const header = JSON.parse(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')))
+  if (header.alg !== 'HS256') throw new Error('id_token unexpected alg')
+
+  // 兩種 misconfig 的成因不同，都必須在 importKey 前擋下：
+  //   null（未設 LINE_CLIENT_SECRET）→ encode(null) 會編出字面字串 "null" 的 4 bytes、importKey
+  //     照收 → 知情攻擊者可用 key "null" 自簽並通過驗章（實測 base：建帳號 + 簽發 access_token）。
+  //     此分支是本 guard 的 load-bearing 理由。
+  //   ''（設為空字串）→ importKey 拒 0-length key 而拋例外，本身已 fail-closed，惟該例外訊息
+  //     會把 crypto 內部細節回顯到錯誤頁。
+  // 複用 generic signature invalid：不對外區分 misconfig 與真正的簽章失敗。
+  if (typeof channelSecret !== 'string' || channelSecret.length === 0) throw new Error('id_token signature invalid')
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(channelSecret),
@@ -722,7 +744,32 @@ async function verifyLineIdToken(idToken: string, channelSecret: string | null) 
   if (!valid) throw new Error('id_token signature invalid')
 
   const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')))
-  if (payload.exp && Date.now() / 1000 > payload.exp) throw new Error('id_token expired')
+
+  // iss：擋其他 IdP 簽出的 token 冒充 LINE。
+  if (payload.iss !== LINE_ISSUER) throw new Error('id_token issuer mismatch')
+
+  // aud：擋跨 channel 重放（別的 LINE channel 簽給自己的 token 拿來登入本站）。
+  // string-only exact — LINE 官方文件定義 aud Type = String（Channel ID）。OIDC generic
+  // 契約才允許 array；HS256（MAC）的 multi-audience 行為 OIDC 未定義，array-includes
+  // 無法證明其他 audience 受信任 → 只收 LINE 明文承諾的 String 契約，array 一律拒。
+  // expectedAud 空值分支 = UNREACHABLE_BY_CURRENT_CALL_GRAPH_DID：唯一 callsite 之前
+  // 的 `if (!cfg.clientId) return htmlError(...)`（本檔 handle()）已收斂為非空字串。
+  // 保留此分支是防禦未來移除該 guard 或新增第 2 個 caller；新增 caller 必須重判可達性。
+  if (typeof expectedAud !== 'string' || expectedAud.length === 0) throw new Error('id_token audience mismatch')
+  if (typeof payload.aud !== 'string' || payload.aud !== expectedAud) throw new Error('id_token audience mismatch')
+
+  // exp：強制存在（缺 exp 的 token 等於永不過期）。!Number.isFinite 擋 `1e999` → Infinity，
+  // 該值 typeof 為 number 但 now >= Infinity 恆 false，會使 token 永久有效。leeway 0，
+  // now === exp 亦視為過期。
+  const now = Math.floor(Date.now() / 1000)
+  if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || now >= payload.exp) throw new Error('id_token expired')
+
+  // nonce：擋 id_token replay。stored nonce 為 NULL/空 → fail-closed（舊策略放行 legacy
+  // session，等同對「state 沒帶 nonce」的請求關閉 replay 校驗）。兩種失敗共用同一訊息，
+  // client 無法區分 state 損壞 vs claim 不符。
+  if (typeof expectedNonce !== 'string' || expectedNonce.length === 0) throw new Error('id_token nonce mismatch')
+  if (typeof payload.nonce !== 'string' || payload.nonce.length === 0 || payload.nonce !== expectedNonce) throw new Error('id_token nonce mismatch')
+
   return payload
 }
 
