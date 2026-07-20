@@ -792,6 +792,37 @@ git ls-tree origin/main "$DOC"          # 取 mode ＋ blob OID
   **closeout ①** `CHATGPT_ARCH_APPROVED` → **closeout ②** `CODEX_PLAN_APPROVED` → owner `CODING_ALLOWED` →
   `CODE_SELF_REVIEW_CLEAN` → **closeout ③** `CODEX_CODE_APPROVED` → **closeout ④** `CHATGPT_CODE_FAITHFULNESS_APPROVED` →
   owner `MERGE_ALLOWED` → `MERGED_MAIN`。）
+- **2026-07-19**｜commit **無**（Plan Gate 審查標的＝repo-external frozen PLAN，receipt 見 `## 9` 表 PLAN 列）｜
+  **verdict**（**closeout PR 自身**之 Plan Gate 兩道；來源＝交接 handoff 與 closeout ② packet 之 `CONTEMPORANEOUS_TRANSCRIPTION`，非外部逐字原文）：
+  **closeout ①** `CHATGPT_ARCH_APPROVED`（R4）· **closeout ②** `CODEX_PLAN_APPROVED`（一輪過；「Approve — Plan Gate only」）｜
+  **finding 數**：closeout ① R1 `CHANGES_REQUESTED`（6 blocking，含 3 Tier 1）→ RR2 `CHANGES_REQUESTED`（5 blocking，含 2 Tier 1）→
+  RR3 `CHANGES_REQUESTED`（2 Tier 1 ＋ 2 non-blocking）→ R4 `APPROVED`（**0 Tier 0／0 Tier 1／0 blocking**）
+  ＋ 2 carry-forward locks：`ARCH-CLOSEOUT-R4-1`（squash commit body 模板必須包含 `doc path`／`doc file mode`／`doc blob OID`／`doc SHA-256` 四欄；
+  不要求修改目前 frozen PLAN，但 closeout ③／④ packet 必須驗證 merge-body 模板已含 `file mode` 欄；生效＝本 PR Code 階段）·
+  `ARCH-CLOSEOUT-R4-2`（未來 `packet-disposition closeout` 軸解除 PLAN 跨 W3 凍結前，獨立複核收據須另記 `PLAN bytes`／`PLAN SHA-256`／
+  與本 doc `## 9` PLAN receipt 之 match verdict 或語意等價之 repo-immutable 證明；屬未來 disposition 軸，不阻擋本 PR）
+  ＋ 2 non-blocking notes（NB-1：不新增「依失範後果分級」獨立段落，§10.1 現有判準已足；NB-2：frozen PLAN 內殘留 pre-R17 gate-state
+  文字不構成內容 finding、亦不得為此回改 frozen PLAN）；
+  另 `ARCH-R6`〔SHA-256 位數〕由 closeout ① 於 R2 主動撤回——經位元組檢查確認差異在上傳表示層（CRLF）、非 receipt 錯誤
+  （closeout ② packet 原文之 standalone 註記；其輪次隸屬與 blocking 計數之關係原文未載，不另推斷）
+  · closeout ② **0 Tier 0／0 Tier 1／0 blocking**（九項提問全答通過；
+  另附 3 條 non-blocking 執行註記：`ci.yml` 8 個 `run:` ＝ 1 個 `npm ci` setup ＋ 7 道品質 gate、`test:int` 實測 581.31 秒須背景執行、
+  repo-local TypeScript governance manifest 不存在故相關 rule ID 維持 advisory／not-enforced）｜
+  **anchor**：frozen PLAN `sha256=24ed55e51a3175c5deb14d619941a830532c46f7d822b25278e5382540e8f54c`（`94153` bytes／`1244` lines／CR `0`；
+  closeout ① R4 對上傳副本之位元組檢查〔正規化為 LF 後〕與本 receipt 完全一致、closeout ② 所審亦同一 receipt）·
+  closeout ② packet `sha256=5de7a61be15c6265db306a7e5b67514c48535a737a67e5d211fda5e4c7042540`（`11499` bytes）｜
+  **下一步授權邊界**：closeout ② 明文**未核發** `CODING_ALLOWED`／Code Gate／merge／release authorization —— 四項須 owner 另行核發。
+- **2026-07-20**｜commit `3bf1c7bc4f98872a5fef792e76fc4b5b94a2bc23`（**CODE-stage 首個 commit**＝byte-frozen carve-out 凍結錨點；依 carve-out 設計，
+  該 SHA 由本 entry 於後續 append commit 記入可變面 §10.4——commit 不可能包含自身 SHA）｜
+  **verdict**：owner 當輪明示核發 **`CODING_ALLOWED`**（2026-07-20）後落盤：本 doc 自 frozen PLAN §8 fence **純落盤**（零壓縮、零內容轉換），
+  僅依 PLAN §7.3 填實 `## 9` receipt 表 SPEC／PLAN 兩列共 4 cell；該 commit 時點與 fence 原文之位元組差異**恰該 2 行**
+  （fence 取出以 head＋取出內容＋tail 拼接後與 frozen PLAN cmp byte-identical，佐證取出無損），
+  白名單制佔位符檢查通過（僅餘 `## 10.1` rollback 欄之命令模板）｜
+  **finding 數**：CODE-stage 落盤自審（L1 單 agent 對抗式）末輪 **0 新發現**｜
+  **anchor**：closeout-base `6aae95704cc151061cad0a05966d43f0d28c0eea`（branch 自此建出）｜
+  **下一步授權邊界**：`CODE_SELF_REVIEW_CLEAN` → **closeout ③** `CODEX_CODE_APPROVED` → **closeout ④** `CHATGPT_CODE_FAITHFULNESS_APPROVED`
+  → owner `MERGE_ALLOWED`；closeout ③ 核發後僅允許追加其 receipt 一則；closeout ④ 核發後本 doc（含 §10.4）一律禁止再修改；
+  終局 receipt（closeout ④ verdict／`MERGE_ALLOWED`／`MERGED_MAIN`／本 doc 最終 blob OID＋SHA-256）僅進 squash commit body。
 
 > ### ⚠ §10.4 為 **APPEND-ONLY RECEIPT AREA**（ARCH-R2 鎖定）
 >
