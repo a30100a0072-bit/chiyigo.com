@@ -156,3 +156,62 @@ F3_FILE_EDIT_TRIGGER = NOT_TRIGGERED      # 本批零修改受保護三檔
 
 
 
+---
+
+## 10. ③ Codex Code Gate receipt（append-only）
+
+> 🔒 本節於 ③ 核發後以 **docs-only commit** append，依 `## 9` 分層規則：
+> **append-only、🚫 不回改既有內容、🚫 不編輯 `## 9` 表之任何列**。
+> 本節仍寫於 ④ 之前，**會被 ④ 覆核**，故無自我收據悖論。
+> 🚫 **④ receipt 不在本檔記錄** —— 處置由 owner 於 ④ 核發時依 `## 9` 三選一指定。
+
+**verdict**：`CODEX_CODE_APPROVED`
+**錨定 commit**：`2ae960f32cfb1f1b5ca4e13fa676232daa7b7b17`
+**計數**：0 Critical / 0 Required / 0 Non-blocking
+
+### 10.1 審查範圍
+
+③ 實際審查 committed diff、`functions/utils/audit-policy.ts`、本 repo plan doc 與 live feature
+worktree，**未依賴 CODE stage self-review 之 PASS 宣稱**；七道 gate 全部獨立重跑。
+
+### 10.2 ③ 獨立重跑之量測
+
+| 項 | ③ 實測 |
+|---|---|
+| compiler committed replay | `377 → 373`；精確移除四條目標 `TS7006`，`ADDED=0` |
+| ratchet | `373 / 14 / 323 / 337` |
+| canonical transform 三面 | 皆 `20846` bytes、SHA-256 `f18e7f139…`、byte-identical |
+| `lint` | PASS |
+| `verify:browser-pipeline` | PASS |
+| `test:cov` | `25` files / `737` tests PASS；`audit-policy.ts` 100% |
+| `test:int` | PID `18272`、exit `0`、`77` files / `1377` tests、duration `747.26s`；stderr `13684` B，unhandled/uncaught/rejection `0` |
+| `build:functions` | PASS |
+| `npm audit --omit=dev --audit-level=high` | `0 vulnerabilities` |
+
+### 10.3 ③ 之 state consistency 認定
+
+- commit parent 精確為 base `787149759f6fdf603992d38fc5575d933f9e27ef`，僅前進一個 commit。
+- changed set 恰兩檔：source `3/3`（僅核准之三行、四處 `: string`）／repo doc 新增 `158` 行。
+- source committed blob `7d0b1d371098a71e60ad8af24bc6bfe11bd0cddf`；
+  repo-doc blob `521f2482e3e80348ae7200be9375e471ff675701`、SHA-256 `a6d6e687…`。
+- 遮罩 `## 9` 表 ①② 兩個 carve-out 儲存格後，committed doc 與 frozen fence **逐 byte 相同**。
+- feature worktree clean；main 仍停在 base，僅既有 `?? CLEANUP_PLAN.md`。
+- branch 無 upstream、無 remote tracking ref，確認**尚未 push**。
+
+### 10.4 ③ 明文裁決之爭點：fence 檔末空行
+
+`git diff --check` 之 EOF blank-line warning 判定為**非 defect** —— 檔末之 trailing LF 正是
+frozen fence 的逐字內容；現行 CI 亦無 `diff --check`／markdownlint gate。
+**擅自 trim 反而會違反 approved PLAN。**
+
+### 10.5 ③ 未核發項（不得推定）
+
+`push`／開 PR · `merge` · `deploy`／release · `CHATGPT_CODE_FAITHFULNESS_APPROVED`。
+本 code approval 恆錨定 `2ae960f3…`；本節形成之 docs-only commit 須由 ④ 分開核對。
+
+### 10.6 ③ 記錄之 out-of-scope 事項（🚫 未授權於本 PR 夾帶修復）
+
+- repo `.git/hooks` 僅有 sample hooks，全域文件所述 pre-commit hook 於本 repo **未啟用** —— 既有治理漂移。
+- repo 無 repo-local TypeScript governance manifest，故 `TS-TYPE-001`／`GOV-DECISION-001`／
+  `GOV-EVIDENCE-001` 仍為 **advisory／not enforced**；③ 以上述 live evidence 手動閉合。
+- closeout memory audit 容量判 `NEAR`、`report_recommended=true`；與本 commit 無關，未進行 cleanup。
