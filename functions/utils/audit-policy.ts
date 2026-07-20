@@ -369,7 +369,7 @@ for (const e of DEBUG_FAILURE)    REGISTRY.set(e, AUDIT_CATEGORY.DEBUG_FAILURE)
  * @param {string} eventType
  * @returns {string|null}
  */
-export function classifyAuditEvent(eventType) {
+export function classifyAuditEvent(eventType: string) {
   return REGISTRY.get(eventType) ?? null
 }
 
@@ -392,7 +392,7 @@ export function classifyAuditEvent(eventType) {
  * @param {string} severity   'info' | 'warn' | 'critical'
  * @returns {string}          immutable / security_critical / security_warn / read_audit / telemetry / debug_failure
  */
-export function classifyForCold(eventType, severity) {
+export function classifyForCold(eventType: string, severity: string) {
   const category = REGISTRY.get(eventType)
   // 未分類事件 fallback 'immutable'，與 audit-policy unclassified warn 並存
   // （safeUserAudit 會 console.warn，但仍寫入；cold_class 拿最長 retention 保險）
@@ -410,7 +410,7 @@ export function classifyForCold(eventType, severity) {
  * @param {string} category
  * @returns {string[]}
  */
-export function listEventsByCategory(category) {
+export function listEventsByCategory(category: string) {
   const out = []
   for (const [event, cat] of REGISTRY) {
     if (cat === category) out.push(event)
