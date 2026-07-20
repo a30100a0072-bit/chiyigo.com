@@ -823,6 +823,22 @@ git ls-tree origin/main "$DOC"          # 取 mode ＋ blob OID
   **下一步授權邊界**：`CODE_SELF_REVIEW_CLEAN` → **closeout ③** `CODEX_CODE_APPROVED` → **closeout ④** `CHATGPT_CODE_FAITHFULNESS_APPROVED`
   → owner `MERGE_ALLOWED`；closeout ③ 核發後僅允許追加其 receipt 一則；closeout ④ 核發後本 doc（含 §10.4）一律禁止再修改；
   終局 receipt（closeout ④ verdict／`MERGE_ALLOWED`／`MERGED_MAIN`／本 doc 最終 blob OID＋SHA-256）僅進 squash commit body。
+- **2026-07-20**｜commit `fa1350ff6e0171bccabc485ea26a417856a77049`（closeout ③ 審查標的；本 entry 依 §10.4 規則為 closeout ③ 核發後唯一允許之追加）｜
+  **verdict**：**closeout ③** `CODEX_CODE_APPROVED`（**Code Gate only** —— 明文不含 push／merge／release 授權；
+  來源＝owner 當輪轉送之 Codex 回覆，`CONTEMPORANEOUS_TRANSCRIPTION`；未驗證為逐字原文、依裁決 2 不升格）。其重放確認：位元組推導鏈重放成功
+  （fence 814 行；commit 1 僅 `## 9` 表 SPEC／PLAN 兩列四格差異；commit 2 純追加 31 行／0 刪）；
+  6 個批 A packet receipt 重算全符；白名單僅餘 rollback 命令模板；merge-body 模板四欄齊備（含 `doc file mode: 100644`）；
+  機械 gates 全綠（lint · ratchet 377/15/322/337＋baseline 1119/175 · browser pipeline · cov 25 files/737 tests〔90.3%〕·
+  int 77 files/1377 tests · build:functions · npm audit 0 vulnerabilities · 三支 BUILD-LOCK 替代 lint；依 BUILD-LOCK 未跑 npm run build）｜
+  **finding 數**：**0 blocking／0 Tier 0／0 Tier 1**；另 2 個非 gate 轉錄 typo 提醒（HEAD 縮寫、檔名 —— 經機械 grep，
+  該二錯誤字串於本 doc、commit messages、closeout ③ packet 皆 0 命中，屬送審轉錄層、非 repo 產物內容）
+  ＋ 1 註記（repo-local TypeScript governance manifest 仍不存在、相關 rule ID 維持 not enforced；本 PR 零 TS 變更、不影響核准）｜
+  **anchor**：審查標的 commit `fa1350ff6e0171bccabc485ea26a417856a77049`；doc 於該版之指紋＝blob
+  `044eecece2b096ab9f26a096469ba29ed9c34b41`／`sha256=859acc297e5534d963ee41cfaca8bd5c76fc320c2fdd207de727e220d395d9b5`
+  （`65782` bytes／`845` lines／CR `0`）｜
+  **下一步授權邊界**：**closeout ④** `CHATGPT_CODE_FAITHFULNESS_APPROVED`（審查標的＝含本 entry 之最終 doc commit）
+  → owner `MERGE_ALLOWED`；closeout ④ 核發後本 doc（含 §10.4）一律禁止再修改；
+  終局 receipt（closeout ④ verdict／`MERGE_ALLOWED`／`MERGED_MAIN`／本 doc 最終 blob OID＋SHA-256）僅進 squash commit body。
 
 > ### ⚠ §10.4 為 **APPEND-ONLY RECEIPT AREA**（ARCH-R2 鎖定）
 >
