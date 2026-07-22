@@ -856,3 +856,75 @@ F3_FILE_EDIT_TRIGGER = NOT_TRIGGERED      # 本棒零修改受保護三檔
 > 🚫 **④ receipt 不在本檔記錄** —— 處置由 owner 於 ④ 核發時依 `## 9` 三選一指定。
 
 _（待 ③ 核發後 append）_
+
+---
+
+**verdict**：`CODEX_CODE_APPROVED`
+**計數**：**0 Critical / 0 Required / 1 Non-blocking**（`CR-1`）
+
+**錨定**
+
+| 項 | 值 |
+|---|---|
+| code commit | `96b9a6fb08059fcf07e1b3963357f2622c74fb0d` |
+| parent（W-1） | `cc1f056e41a796598c26b2747ee5c9e6cd13475e` |
+| source blob | `f151dda4f3fa4a1859805bf53464bd8bdd586729` |
+| test blob | `6c1a14164f9aa1afb7ac74ba3b6ffa463786a5bd` |
+| tracked diff | 空；僅既存 out-of-scope `CLEANUP_PLAN.md` |
+| branch | 無 upstream、**未 push** |
+
+### 10.1 ③ 認定之實作符合性
+
+- 只改兩檔，numstat **精確**為 `17/4`、`5/5`
+- 三個 type aliases、typed `REGISTRY`、三個 signature **完全吻合** PLAN
+- 恰**五**個新增 `as const`
+- `as any`／`as AuditSeverity`／`as AuditEventType`：**0**
+- `eventType` 維持 `string`；unknown-event → `immutable` fail-safe **保留**
+- working tree 行尾：source `CR=0`／`LF=435`；test `CR=452`／`LF=452`
+- committed blobs 經 clean filter 後**均為 LF**
+
+### 10.2 ③ 獨立重算之量測
+
+| 項 | ③ 實測 |
+|---|---|
+| forced base↔HEAD `tsc` | `373 → 373`，**diagnostic SHA 相同**，`REMOVED=0 / ADDED=0` |
+| `typecheck:ratchet` | `373 / 14 / 323 / 337` |
+| 三面 emit `audit-policy.ts` | 三面皆 `20846` B、`f18e7f13…cc15`、stderr `0` |
+| 三面 emit `audit-policy.test.ts` | 三面皆 `13279` B、`66a62486…be49`、stderr `0` |
+| `L1_CONDITIONAL` | **成立**，無 runtime behavior delta |
+| `lint` | PASS |
+| `verify:browser-pipeline` | 25 pages／214 refs |
+| targeted Vitest | `137/137` |
+| `test:cov` | 25 files／737 tests；`audit-policy.ts` 100% |
+| `test:int` | exit `0`、`713` 秒 |
+| `build:functions` | PASS |
+| 三支獨立 read-only lint | 全過 |
+| `npm audit --omit=dev --audit-level=high` | `0 vulnerabilities` |
+
+### 10.3 ③ 之領域適用性認定
+
+Queue · payment · distributed-state · transaction · runtime observability 變更均判為
+**Not Applicable** —— 依據：本 commit 之 runtime emit **byte-identical**。
+
+### 10.4 `CR-1` 裁決（Non-blocking）
+
+- **Severity**：Minor / Non-blocking｜**rule_id**：`GOV-DRIFT-001`
+- **認定**：`audit-policy.ts` JSDoc 之 brace types 比明確 TS signatures 寬，
+  **確實是 cognition–artifact drift**。
+- **但**核准 PLAN（§2.4）明文要求 JSDoc 原樣保留；**本 PR 修它會違反 approved surface**。
+  TS compiler、runtime 與 emit 均不受影響。
+- **③ 之處置**：本 PR **不修、不中止 ③**；③ **不新增**「首個合法觸碰即必修」之新 lock。
+- ③ 明示：本 receipt **得記錄「`CR-1` 判為 non-blocking」，但不得在 evidence-only receipt
+  偷渡新的 future requirement**。
+- ③ 明示：**若 owner 要耐久強制收斂，應另立經核准的 JSDoc／source-comment alignment
+  backlog 或棒次** —— 此為 ③ 對 owner 之陳述，**非本 PLAN 新增之要求或 lock**。
+
+### 10.5 ③ 未核發項（不得推定）
+
+`push` · 開 PR · `merge` · release · `CHATGPT_CODE_FAITHFULNESS_APPROVED`。
+本 code approval 恆錨定 `96b9a6fb…`；本節形成之 plan-doc-only commit **須由 ④ 分開核對**。
+
+### 10.6 ③ 記錄之 out-of-scope 事項（🚫 未授權於本 PR 夾帶修復）
+
+repo 仍無 repo-local TypeScript governance manifest／unsafe-boundary registry；
+相關 global rules 維持 **advisory / not enforced**，🚫 **不得**宣稱 repo enforcement 已成立。
