@@ -481,7 +481,7 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 | 階段 | 狀態 |
 |---|---|
 | SPEC | `SPEC_APPROVED` @ R2（`0 Blocking / 0 Required / 0 Non-blocking`；判級 `L1_CONDITIONAL`；`CODING_ALLOWED` 未核發。R1 → Claude 提 `SPEC-1` blocking → R2 以明列六值 union 關閉） |
-| ① ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0／**5 Required**／1 NB；錨定 PLAN R1 sha256 `25d7c9cf…d88d`、`27044` B、LF）→ **R2 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 Blocking／**0 Required**／1 NB〔`NB2`〕／**2 carry-forward locks**；錨定 PLAN R2 sha256 `c2428f74…fb6d`、`38878` B、LF；R1 五項全 `CLOSED`，其中 `RR1`／`RR3` 為 `CLOSED_WITH_LOCK`）→ **R3 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**1 Required**〔`GPT-C2-ARCH-RR3-RR1`：merge-integrity violation 缺 containment／recovery〕／0 NB；錨定 PLAN R3 sha256 `4d70c647…633b`、`42925` B、LF；`NB2`／`L2` `CLOSED`、`L1` `CLOSED_WITH_RR1`；R2 已批准架構全數 carry forward）→ **R4 送審中**（補 `MERGE_INTEGRITY_VIOLATION` recovery 狀態機） |
+| ① ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0／**5 Required**／1 NB；錨定 PLAN R1 sha256 `25d7c9cf…d88d`、`27044` B、LF）→ **R2 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 Blocking／**0 Required**／1 NB〔`NB2`〕／**2 carry-forward locks**；錨定 PLAN R2 sha256 `c2428f74…fb6d`、`38878` B、LF；R1 五項全 `CLOSED`，其中 `RR1`／`RR3` 為 `CLOSED_WITH_LOCK`）→ **R3 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**1 Required**〔`GPT-C2-ARCH-RR3-RR1`：merge-integrity violation 缺 containment／recovery〕／0 NB；錨定 PLAN R3 sha256 `4d70c647…633b`、`42925` B、LF；`NB2`／`L2` `CLOSED`、`L1` `CLOSED_WITH_RR1`；R2 已批准架構全數 carry forward）→ **R4 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**2 Required**〔`RR4-RR1` HALT 封死自身 revert 出口；`RR4-RR2` 僅靠 tree diff 無法證明無不可逆副作用〕／0 NB；錨定 PLAN R4 sha256 `754c1c44…f270`、`47788` B、LF。**「已部署不當然阻擋 fast path」之實質裁決已獲批准、R5 不重開**；六項必要語意中四項成立、兩項須補）→ **R5 送審中** |
 | ② Codex Plan | `PENDING`（① 未 approve 前不送） |
 | ③ Codex Code | 核發後以 **plan-doc-only commit**（僅改本 plan doc）append 於 `## 10`（本表不回填） |
 | ④ ChatGPT Faithfulness | 🚫 **本 PR 內不記錄** —— 見下方「④ 自我收據悖論」 |
@@ -559,17 +559,31 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 > ```text
 > 1. 立即停止（HALT）
 >    - 本棒不得標 CLOSED
->    - 🚫 禁止後續 merge 以該 tree 為 base
+>    - 🚫 禁止任何「非 remediation」之後續開發／merge／release／rollout
+>      （含以該 tree 為 base 的一般開發分支）
+>    - ✅ 唯一例外 ＝ owner 授權之 emergency revert／incident remediation PR：
+>        · 該 PR **得以當前 main 為 base**（含該未核准 tree）
+>        · scope **僅限**撤回或修復 violation
+>        · 🚫 不得夾帶一般功能／重構／文件整理／任何其他變更
+>      〔`GPT-C2-ARCH-RR4-RR1`：無此 carve-out 則 HALT 會封死自己唯一的合法出口 ——
+>        revert PR 必然從含壞樹的 main 分出，字面執行將使 fast path 不可執行〕
 >    - 🚫 禁止「進一步」部署／發布該未核准 tree
 >      （手動 re-deploy · release · promote · rollout 擴大）
 >      ⚠ 本 repo 之 Pages 部署為自動且無條件，偵測到時「首次部署」多半已完成
 >        → 該情形不是「阻止部署」，而是「儘速以 revert 觸發還原部署」（見下方特有事實）
->    - 保存證據：reviewed commit/tree · pre-merge main · actual squash commit/tree
->                · 兩 tree 之完整機械 diff
+>    - 保存證據（**兩層皆須在 HALT 當下擷取**，見下方 fast-path oracle）：
+>        · 靜態：reviewed commit/tree · pre-merge main · actual squash commit/tree
+>                · 兩 tree 之完整機械 diff · runtime emit／bundle identity
+>        · 動態：deployment run 與生效時間 · migration 狀態 · D1／R2 mutation evidence
+>                · webhook／email／payment／secret rotation logs
+>      ⚠ 動態證據**會隨時間衰減**（log 輪替／保留期、deployment 紀錄老化）——
+>        故即使最終判定走窄豁免，**擷取動作仍須在 HALT 當下完成**，
+>        🚫 不得以「大概是 type-only」為由延後或略過擷取
 >
 > 2. 預設回復路徑（fast path）
 >    條件：actual squash commit 仍是 main tip · 其後無其他 commit
->          · 無不可逆外部副作用
+>          · **依下方 fast-path oracle 判定為「已證明無不可逆副作用」**
+>          （🚫 不得憑印象認定；無法證明 → FAIL-CLOSED 走步驟 3）
 >    → 以獨立 emergency revert PR 撤回該 squash
 >    → 🚫 不得 direct push、🚫 不得改寫 main 歷史（對齊 CLAUDE.md §2 硬規則）
 >    → revert 後重新建立 candidate，從 ④ 重審
@@ -609,18 +623,52 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 > **⚠ 副作用評估必須針對「實際落地的 tree」，🚫 不得以本棒的預期內容推斷**：
 > merge-integrity violation 的定義就是「落地的 tree **不是** ④ 所審的那棵」——
 > 因此該樹**含有什麼是未知的**，可能包含本棒 scope 外的 migration／寫入路徑。
-> 評估順序固定為：
+> 評估順序固定如下。
+>
+> **fast-path oracle ＝ 兩層證據 ＋ fail-closed**（`GPT-C2-ARCH-RR4-RR2`）
+>
+> ⚠ **tree diff 只能回答「落地了哪些程式碼」，不能獨自回答「副作用是否已發生」** ——
+> migration 是否已 apply · D1／R2 是否已寫入 · webhook／email／付款是否已送出 ·
+> Functions 是否已被流量觸發 · secret rotation 是否已生效，**皆非 diff 可判定**。
+> 只看 diff 會出現「diff 看起來可 revert，但 runtime side effect 已發生 → 誤走 fast path」。
 >
 > ```text
-> (1) 先取 actual_squash_commit^{tree} 與 reviewed_commit^{tree} 之完整機械 diff
-> (2) 依該 diff 的「實際內容」查上表判定可逆性
-> (3) 才決定走步驟 2 或步驟 3
+> 1. 靜態證據（必取）
+>    - reviewed tree vs actual tree 之完整 diff
+>    - runtime emit／bundle identity
+>    - migration · deploy config · write path · outbound path 之變更分類
+>
+> 2. 動態證據（適用時必查）
+>    - deployment run 與生效時間
+>    - migration 狀態
+>    - D1／R2 mutation evidence
+>    - webhook／email／payment／secret rotation logs
+>    - 其他不可逆外部操作紀錄
+>
+> 3. 裁決
+>    - 已證明「無不可逆副作用」        → 可走步驟 2 fast path
+>    - 已發生不可逆副作用              → 步驟 3
+>    - ⚠ 無法證明是否發生              → FAIL-CLOSED，一律走步驟 3
 > ```
 >
-> 🚫 **禁止**跳過 (1)(2) 直接引用「本棒是 type-only」作為 fast path 之依據。
+> 🚫 **禁止**只寫「依 diff 查表」就推導副作用未發生；🚫 禁止跳過 (1) 直接引用
+> 「本棒是 type-only」作為 fast path 之依據。
 >
-> **僅在 diff 證實落地內容確為本棒預期範圍時**，方可援引：批 C2 為 type-only、
-> 零 migration、零 D1／R2 寫入、零對外副作用 → 此時預期適用步驟 2 fast path
+> **窄豁免（動態檢查可記 `N/A`）**：若**完整 diff 證明**同時滿足
+> ① 僅 type-only／test／plan-doc 變更 ·
+> ② **runtime emit byte-identical** ·
+> ③ 無 deploy config／migration／資料寫入／outbound path 變更
+> → 動態副作用檢查得記為 `N/A`，**但上述靜態證據仍須完整保存**。
+>
+> ⚠ **② 的比較基準必須寫死，否則可被鑽**：此處的 byte-identical 指
+> **`actual_landed_tree` 之 emit vs `pre-merge main` 之 emit** ——
+> 因為要證明的是「**這次部署有沒有改變 runtime 行為**」（沒改變 ⇒ 部署不可能產生新副作用）。
+> 🚫 **不是**拿 actual vs reviewed 比（兩者相等的話根本沒有 violation），
+> 🚫 也不是拿 reviewed vs base 比（那是本棒的驗收項，與事故無關）。
+>
+> **對批 C2 之預期適用**：本棒設計上恰好落在該窄豁免內（type-only、byte-identical emit、
+> 零 migration／寫入／outbound）。⚠ 但這是**待驗結論而非前提** —— 仍須先取 (1) 靜態證據
+> 實際證明落地內容確在此範圍，才可援引豁免並走 fast path
 > （前提仍是 main tip 且無後續 commit）。
 >
 > ⚠ **emergency revert PR 本身走何種 gate，由 owner 於事故當下裁定**
