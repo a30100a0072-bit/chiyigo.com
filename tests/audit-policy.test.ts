@@ -382,7 +382,7 @@ describe('classifyForCold — 6 cold archive classes（migration 0038）', () =>
     ['payment.refund.success',            'info',     'immutable'],
     ['audit.archive.chunk_uploaded',      'info',     'immutable'],   // archive ops
     ['audit.archive.verification_failed', 'critical', 'immutable'],
-  ])('%s (severity=%s) → immutable', (e, sev, expected) => {
+  ] as const)('%s (severity=%s) → immutable', (e, sev, expected) => {
     expect(classifyForCold(e, sev)).toBe(expected)
   })
 
@@ -391,7 +391,7 @@ describe('classifyForCold — 6 cold archive classes（migration 0038）', () =>
     ['auth.refresh.fail',         'critical'],
     ['mfa.totp.verify.replay',    'critical'],
     ['auth.risk.blocked',         'critical'],
-  ])('%s critical → security_critical', (e, sev) => {
+  ] as const)('%s critical → security_critical', (e, sev) => {
     expect(classifyForCold(e, sev)).toBe('security_critical')
   })
 
@@ -400,7 +400,7 @@ describe('classifyForCold — 6 cold archive classes（migration 0038）', () =>
     ['auth.login.success',  'info'],
     ['auth.new_device',     'warn'],
     ['mfa.totp.verify.fail', 'warn'],
-  ])('%s non-critical → security_warn', (e, sev) => {
+  ] as const)('%s non-critical → security_warn', (e, sev) => {
     expect(classifyForCold(e, sev)).toBe('security_warn')
   })
 
@@ -432,7 +432,7 @@ describe('classifyForCold — 6 cold archive classes（migration 0038）', () =>
     ['unknown.event',          'info',     'immutable'],   // 未分類 → fallback immutable（最長 retention 保險）
     ['totally.fake',           'critical', 'immutable'],
     ['',                       'info',     'immutable'],
-  ])('未知 %s → fallback immutable', (e, sev, expected) => {
+  ] as const)('未知 %s → fallback immutable', (e, sev, expected) => {
     expect(classifyForCold(e, sev)).toBe(expected)
   })
 
@@ -441,7 +441,7 @@ describe('classifyForCold — 6 cold archive classes（migration 0038）', () =>
       ['auth.login.fail', 'critical'],
       ['auth.login.fail', 'warn'],
       ['unknown.event',   'info'],
-    ]
+    ] as const
     for (const [e, sev] of cases) {
       const first = classifyForCold(e, sev)
       for (let i = 0; i < 5; i++) {
