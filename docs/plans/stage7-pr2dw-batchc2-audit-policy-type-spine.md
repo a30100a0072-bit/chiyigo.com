@@ -467,8 +467,21 @@ owner 棒次（由上述功能判準決定）在 **coding 之前**，其 SPEC／
 
 #### 5.2.4 過渡期受控條件（五項，缺一不可）
 
-1. `user-audit.ts` 的 **`KNOWN_SEVERITY` 是唯一獲准的 legacy exception**。
-2. 🚫 **禁止新增第三套 validator 或 inline guard**（無論在哪個檔）。
+1. `user-audit.ts` 的 **`KNOWN_SEVERITY` 是 classifier boundary 上唯一獲准的 legacy exception**
+   （限定同第 2 項；🚫 不涉及 boundary 外之 validator）。
+2. 🚫 **禁止在 classifier boundary 上新增第三套 parser／validator／inline guard**
+   —— **無論它位於哪個檔案**（此處「無論哪個檔」修飾的是 *boundary 上的程式碼落在哪個檔*，
+   🚫 **不是**把禁令擴張回全 repo）。
+
+   **classifier boundary 外之 concern-specific validator 不計入本數量**（例：`admin/audit.ts`
+   的 HTTP query validator；未來其他 HTTP／輸入格式／業務域亦得合法新增自己的 validator），
+   但一律**不得**：
+   - 被 §5 表列之**四條 classifier call path 引用**；
+   - **自稱** canonical classifier parser；
+   - **重複實作** canonical parser 的分類職責。
+
+   ⚠ 本項於 R7 初稿誤寫為「禁止新增第三套 validator（無論在哪個檔）」，
+   會從側門恢復 R6 已否決的「全 repo 唯一」（`GPT-C2-ARCH-R7-RR1`）。現表述取代之。
 3. **legacy 與 canonical 的 domain 必須維持同一三值集合**（`'info' | 'warn' | 'critical'`）。
    ⚠ 此條**必須有機械保障**，🚫 不得只寫成 prose —— 否則兩套實作會靜默漂移。
    具體機制（測試／型別層／lint 擇一）由 Establishment owner 之 Plan Gate 定案，
@@ -483,8 +496,13 @@ owner 棒次（由上述功能判準決定）在 **coding 之前**，其 SPEC／
 #### 5.2.5 與 §5.1「終態唯一性」之關係
 
 §5.1 的「恰一個」是**終態**；§5.2 定義**到達終態的合法路徑**。
-兩者無牴觸：過渡期存在**恰兩個**（canonical ＋ 一個具名的 legacy exception），
+兩者無牴觸：**在 classifier boundary 上**，過渡期存在**恰兩個**
+（canonical ＋ 一個具名的 legacy exception ＝ `user-audit.ts` 的 `KNOWN_SEVERITY`），
 且該 legacy exception **被顯式列舉、被 closure condition 綁定**，不是無限期豁免。
+
+⚠ **「恰兩個」是 boundary 內的計數**，🚫 不是 repo 內 severity validator 的總數 ——
+boundary 外的 concern-specific validator（如 `admin/audit.ts` 的 query validator）
+**不計入**，其約束見 §5.2.4 第 2 項。
 
 ## 6. F-3 隔離
 
@@ -594,7 +612,7 @@ F3_FILE_EDIT_TRIGGER = NOT_TRIGGERED      # 本棒零修改受保護三檔
 | 階段 | 狀態 |
 |---|---|
 | SPEC | `SPEC_APPROVED` @ R2（`0 Blocking / 0 Required / 0 Non-blocking`；判級 `L1_CONDITIONAL`；`CODING_ALLOWED` 未核發。R1 → Claude 提 `SPEC-1` blocking → R2 以明列六值 union 關閉） |
-| ① ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0／**5 Required**／1 NB；錨定 PLAN R1 sha256 `25d7c9cf…d88d`、`27044` B、LF）→ **R2 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 Blocking／**0 Required**／1 NB〔`NB2`〕／**2 carry-forward locks**；錨定 PLAN R2 sha256 `c2428f74…fb6d`、`38878` B、LF；R1 五項全 `CLOSED`，其中 `RR1`／`RR3` 為 `CLOSED_WITH_LOCK`）→ **R3 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**1 Required**〔`GPT-C2-ARCH-RR3-RR1`：merge-integrity violation 缺 containment／recovery〕／0 NB；錨定 PLAN R3 sha256 `4d70c647…633b`、`42925` B、LF；`NB2`／`L2` `CLOSED`、`L1` `CLOSED_WITH_RR1`；R2 已批准架構全數 carry forward）→ **R4 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**2 Required**〔`RR4-RR1` HALT 封死自身 revert 出口；`RR4-RR2` 僅靠 tree diff 無法證明無不可逆副作用〕／0 NB；錨定 PLAN R4 sha256 `754c1c44…f270`、`47788` B、LF。**「已部署不當然阻擋 fast path」之實質裁決已獲批准、R5 不重開**；六項必要語意中四項成立、兩項須補）→ **R5 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（**0／0／0**；錨定 PLAN R5 sha256 `82d99ac5…2217`、`51455` B、LF；`RR4-RR1`／`RR4-RR2` 皆 `CLOSED`；全部 carry-forward locks 續行）→ **R6 重錨 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**1 Required**〔`GPT-C2-ARCH-R6-RR1`：canonical parser establishment、`user-audit.ts` legacy replacement 與「恰一個」三者在「第一個 owner 不含 `user-audit.ts`」時構成不可解集合〕／0 NB；錨定 PLAN R6 sha256 `43bf5195…90c7`、`57041` B、LF；三項 Codex Required 之 ① 複審：`R1-1`／`R1-3` `CLOSED`、`R1-2` 方向批准但含此內部矛盾；R5 已批准架構全數 carry forward）→ **R7 送審中**（採**方案 B 受控過渡**，見 §5.2） |
+| ① ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0／**5 Required**／1 NB；錨定 PLAN R1 sha256 `25d7c9cf…d88d`、`27044` B、LF）→ **R2 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 Blocking／**0 Required**／1 NB〔`NB2`〕／**2 carry-forward locks**；錨定 PLAN R2 sha256 `c2428f74…fb6d`、`38878` B、LF；R1 五項全 `CLOSED`，其中 `RR1`／`RR3` 為 `CLOSED_WITH_LOCK`）→ **R3 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**1 Required**〔`GPT-C2-ARCH-RR3-RR1`：merge-integrity violation 缺 containment／recovery〕／0 NB；錨定 PLAN R3 sha256 `4d70c647…633b`、`42925` B、LF；`NB2`／`L2` `CLOSED`、`L1` `CLOSED_WITH_RR1`；R2 已批准架構全數 carry forward）→ **R4 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**2 Required**〔`RR4-RR1` HALT 封死自身 revert 出口；`RR4-RR2` 僅靠 tree diff 無法證明無不可逆副作用〕／0 NB；錨定 PLAN R4 sha256 `754c1c44…f270`、`47788` B、LF。**「已部署不當然阻擋 fast path」之實質裁決已獲批准、R5 不重開**；六項必要語意中四項成立、兩項須補）→ **R5 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（**0／0／0**；錨定 PLAN R5 sha256 `82d99ac5…2217`、`51455` B、LF；`RR4-RR1`／`RR4-RR2` 皆 `CLOSED`；全部 carry-forward locks 續行）→ **R6 重錨 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**1 Required**〔`GPT-C2-ARCH-R6-RR1`：canonical parser establishment、`user-audit.ts` legacy replacement 與「恰一個」三者在「第一個 owner 不含 `user-audit.ts`」時構成不可解集合〕／0 NB；錨定 PLAN R6 sha256 `43bf5195…90c7`、`57041` B、LF；三項 Codex Required 之 ① 複審：`R1-1`／`R1-3` `CLOSED`、`R1-2` 方向批准但含此內部矛盾；R5 已批准架構全數 carry forward）→ **R7 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**1 Required**〔`GPT-C2-ARCH-R7-RR1`：§5.2.4 第 2 項「無論在哪個檔」使第三套禁令**外溢回全 repo**，從側門恢復 R6 已否決之範圍〕／0 NB；錨定 PLAN R7 sha256 `cf9fe7e2…f86d`、`63342` B、LF。**方案 B 受控過渡＝架構批准**、`R6-RR1` 核心不可解集合已解除；`PROJECTED` 論據處理正確、**不要求 spike**，且其為支持性理由、非 approval 必要前提）→ **R8 送審中** |
 | ② Codex Plan | **R1 ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（**0 Critical／3 Required／0 NB**；錨定 PLAN R5 `82d99ac5…`／blob `6d3312a5…`／commit `b8ede67d`）。三項：`R1-1` assertion 規則自相矛盾〔`as const` 本身是 const assertion，與「禁任何 cast」字面衝突〕／`R1-2`「全 repo 唯一 severity parser」與既定 scope 不相容〔`user-audit.ts:26,74`、`admin/audit.ts:31,97` 兩既有 validator〕／`R1-3` targeted test 指令走 `npx.ps1` shim 不夠穩健。② 本輪並實跑 `typecheck:ratchet:report` `373/14/323/337` ＋ 三支 read-only lint 全綠、確認 workflow 敘述與 live 相符 → **R6 待送**（① 重錨後） |
 | ③ Codex Code | 核發後以 **plan-doc-only commit**（僅改本 plan doc）append 於 `## 10`（本表不回填） |
 | ④ ChatGPT Faithfulness | 🚫 **本 PR 內不記錄** —— 見下方「④ 自我收據悖論」 |
