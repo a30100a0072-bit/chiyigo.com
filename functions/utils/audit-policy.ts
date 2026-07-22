@@ -26,6 +26,19 @@ export const AUDIT_CATEGORY = Object.freeze({
   DEBUG_FAILURE:   'debug_failure',
 })
 
+export type AuditCategory =
+  (typeof AUDIT_CATEGORY)[keyof typeof AUDIT_CATEGORY]
+
+export type AuditSeverity = 'info' | 'warn' | 'critical'
+
+export type AuditColdClass =
+  | 'immutable'
+  | 'security_critical'
+  | 'security_warn'
+  | 'read_audit'
+  | 'telemetry'
+  | 'debug_failure'
+
 // F-3 Phase 2 archive 操作事件（commit 0038 起加入；全部歸 immutable category，
 // archive 操作本身要永久保留作 forensic trail）
 const ARCHIVE_OPS_IMMUTABLE = [
@@ -357,7 +370,7 @@ const DEBUG_FAILURE = [
   'requisition.save_as_deal.fail',
 ]
 
-const REGISTRY = new Map()
+const REGISTRY = new Map<string, AuditCategory>()
 for (const e of IMMUTABLE)        REGISTRY.set(e, AUDIT_CATEGORY.IMMUTABLE)
 for (const e of SECURITY_SIGNAL)  REGISTRY.set(e, AUDIT_CATEGORY.SECURITY_SIGNAL)
 for (const e of TELEMETRY)        REGISTRY.set(e, AUDIT_CATEGORY.TELEMETRY)
@@ -369,7 +382,7 @@ for (const e of DEBUG_FAILURE)    REGISTRY.set(e, AUDIT_CATEGORY.DEBUG_FAILURE)
  * @param {string} eventType
  * @returns {string|null}
  */
-export function classifyAuditEvent(eventType: string) {
+export function classifyAuditEvent(eventType: string): AuditCategory | null {
   return REGISTRY.get(eventType) ?? null
 }
 
@@ -392,7 +405,7 @@ export function classifyAuditEvent(eventType: string) {
  * @param {string} severity   'info' | 'warn' | 'critical'
  * @returns {string}          immutable / security_critical / security_warn / read_audit / telemetry / debug_failure
  */
-export function classifyForCold(eventType: string, severity: string) {
+export function classifyForCold(eventType: string, severity: AuditSeverity): AuditColdClass {
   const category = REGISTRY.get(eventType)
   // 未分類事件 fallback 'immutable'，與 audit-policy unclassified warn 並存
   // （safeUserAudit 會 console.warn，但仍寫入；cold_class 拿最長 retention 保險）
@@ -410,7 +423,7 @@ export function classifyForCold(eventType: string, severity: string) {
  * @param {string} category
  * @returns {string[]}
  */
-export function listEventsByCategory(category: string) {
+export function listEventsByCategory(category: AuditCategory): string[] {
   const out = []
   for (const [event, cat] of REGISTRY) {
     if (cat === category) out.push(event)
