@@ -336,14 +336,44 @@ D1 row / 外部輸入
 > 兩者在 `DEFAULT_HOT_DAYS_BY_CLASS` 雖同為 `180`，但
 > `AUDIT_ARCHIVE_HOT_DAYS_SECURITY_WARN` 與 `_SECURITY_CRITICAL` 是**各自獨立可設的 env key**
 > （`audit-archive.ts:89` 動態組 key），ops 一旦把 warn 調短，該 coercion 即構成**實質 retention 降級**。
-> → 該棒次的規則應是「**非法 severity 解析為該 category 下 retention 最長的結果**」，
-> 而非無條件 `'info'`。此為該棒次 Plan Gate 之待決項，本棒僅記錄約束。
+> → **安全約束**（非凍結演算法）：「非法 severity 不得解析成 retention 較短的結果」，
+> 而非無條件 `'info'`。
+> ⚠ 依 `ARCH-C2-R2-L2`，**具體 API／演算法由實際 owner 棒次依其可取得的 category／env context 定案**；
+> 🚫 C2 **不預先凍結**實作方式，只鎖住「不得因 coercion 造成 retention 降級」這條安全性質。
 
-> **⚠ 未決（需 owner 於 ① R2 或該棒次 SPEC 確認）**：本棒**無法從 repo 內容**判定
-> 上述 owner 棒次對應 16 單元中的哪一個字母 —— 各單元的檔案對映定義在批 A 的
-> gate packet（`02-codex-plan-…batchA.md`）內，不在 repo。
-> 故本節以**功能判準**（scope 含四個消費檔之任一）鎖定 owner，該判準對凍結定序是確定的；
-> 🚫 但本棒**不猜**字母，避免無根據地指定「批 D」。
+> **功能判準之地位（① R2 已裁決）**：本棒**無法從 repo 內容**判定上述 owner 棒次對應
+> 16 單元中的哪一個字母 —— 各單元的檔案對映定義在批 A 的 gate packet
+> （`02-codex-plan-…batchA.md`）內，不在 repo。
+> ① R2 裁定：該功能判準「**可機械、唯一且不依主觀判斷**」，**優於**在缺乏 packet 證據時猜測字母；
+> 「在字母對映證據不在 repo 的情況下猜 D，反而是不合格治理」。
+> 🚫 故後續棒次**不得**以「PLAN 沒指定字母」為由自行改採猜測。
+
+#### `ARCH-C2-R2-L2`：owner 棒次 coding 前之必定案項（① R2 carry-forward lock）
+
+owner 棒次（由上述功能判準決定）在 **coding 之前**，其 SPEC／PLAN **必須**定案下列六項：
+
+| 必定案項 | 約束 |
+|---|---|
+| parser／guard API | **單一 canonical implementation**；其他 caller **只能 import** |
+| invalid 結果表示 | 🚫 不得用 assertion 把非法值**偽造成**合法 `AuditSeverity` |
+| fallback 位置 | 二擇一並明示：**parser 回傳失敗狀態**，或**由具 category context 的 classification 層處置** |
+| retention | 🚫 不得因 `'info'` coercion 導致**較短** retention |
+| 可觀測性 | **結構化 log**；🚫 不得靜默吞掉 |
+| F-3 | owner 若觸碰 `functions/utils/audit-archive.ts`，**必須同步啟動 F-3 條件驗證** |
+
+⚠ 本表是**必定案清單**，不是實作規格 —— C2 鎖住「必須決定什麼」與「不得違反什麼」，
+🚫 **不規定怎麼實作**（見上方安全約束之說明）。
+
+**兩張表之分工**（避免誤讀為重複或互相牴觸）：
+
+| 表 | 性質 | 效力 |
+|---|---|---|
+| §5.1「規格（對後續棒次具約束力）」 | **C2 頒布之約束** | 後續棒次**不得違反** |
+| §5.1「`ARCH-C2-R2-L2` 必定案項」 | **① R2 lock 之決策檢查表** | owner 棒次 coding 前**必須逐項明文定案**；未定案即不得進 coding |
+
+兩表在 parser 唯一性／invalid 表示／retention／可觀測性／F-3 上**刻意重疊**：
+前者說「界線在哪」，後者說「你必須明文回答」。**二者一致，無牴觸**；
+若未來出現不一致，以**較嚴者**為準並回報 gate。
 
 ## 6. F-3 隔離
 
@@ -437,7 +467,8 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 |---|---|
 | 標的 | `functions/api/admin/cron/audit-archive.ts:75` 之 comment |
 | 目標措辭 | 由「audit-policy 改動時 bump」→「**runtime cold-class classification semantics 改變時** bump」 |
-| **closure condition** | **第一個合法觸碰 `functions/api/admin/cron/audit-archive.ts` 的已核准棒次**，須在該棒 scope 內一併修正此 comment；若至 audit 域 16 單元全部完成仍未觸碰該檔，則**另立 docs/comment-only 棒次**收尾，不得無限延宕 |
+| **closure condition** | **第一個合法觸碰 `functions/api/admin/cron/audit-archive.ts` 的已核准棒次**，須在該棒 scope 內一併修正此 comment；若至 audit 域 16 單元全部完成仍未觸碰該檔，則**另立 source-comment-only 棒次**收尾，不得無限延宕 |
+| ⚠ fallback 之性質（`GPT-C2-ARCH-NB2`） | 該 fallback 棒次之標的是 **`functions/api/admin/cron/audit-archive.ts`（source 檔）**，**不是** `docs/`。故其為 **source-comment-only change**：🚫 **不得**解讀為 docs-only 豁免，仍須套用 **source 檔行尾規則、`lint`、`build`，以及該棒次適用之完整 gates**。（舊用語「docs/comment-only」已於 R3 更正） |
 | closure 可達性 | ✅ **必然可達**：該檔於 base 仍有 **73 條** `noImplicitAny` 診斷（14 個殘餘錯誤檔中第 2 大），故 audit 域收尾前**必有**棒次觸碰它 → fallback 分支實務上不會觸發 |
 | 效力界定 | §2.4.1 **僅**構成 C2 這種 **type-only、byte-identical emit** 變更的例外；🚫 **不是**「audit-policy 改動一律不 bump」的永久先例 |
 
@@ -450,9 +481,9 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 | 階段 | 狀態 |
 |---|---|
 | SPEC | `SPEC_APPROVED` @ R2（`0 Blocking / 0 Required / 0 Non-blocking`；判級 `L1_CONDITIONAL`；`CODING_ALLOWED` 未核發。R1 → Claude 提 `SPEC-1` blocking → R2 以明列六值 union 關閉） |
-| ① ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**5 Required**／1 Non-blocking；錨定 PLAN R1 sha256 `25d7c9cf…d88d`、`27044` bytes、LF）→ **R2 送審中**。R1 五項：`RR1` carve-out 分階段＋tree identity／`RR2` `COLD_CLASS_VERSION` comment drift 追蹤／`RR3` 單一 severity parser owner＋非法值 fail-safe／`RR4` §8.1 改為 merge 後生效／`RR5` targeted 137/137。已批准方向 carry forward、不重開 |
+| ① ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0／**5 Required**／1 NB；錨定 PLAN R1 sha256 `25d7c9cf…d88d`、`27044` B、LF）→ **R2 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 Blocking／**0 Required**／1 NB〔`NB2`〕／**2 carry-forward locks**；錨定 PLAN R2 sha256 `c2428f74…fb6d`、`38878` B、LF；R1 五項全 `CLOSED`，其中 `RR1`／`RR3` 為 `CLOSED_WITH_LOCK`）→ **R3 送審中**（本輪折入 `NB2` 用語更正 ＋ `ARCH-C2-R2-L1`／`L2` 兩鎖之 in-repo 落地；依工作流程 §9 fail-safe，改動 approved plan 一律回 ① 重審） |
 | ② Codex Plan | `PENDING`（① 未 approve 前不送） |
-| ③ Codex Code | 核發後以 **docs-only commit append 於 `## 10`**（本表不回填） |
+| ③ Codex Code | 核發後以 **plan-doc-only commit**（僅改本 plan doc）append 於 `## 10`（本表不回填） |
 | ④ ChatGPT Faithfulness | 🚫 **本 PR 內不記錄** —— 見下方「④ 自我收據悖論」 |
 
 > **①② 的錨定機制（避免與 ④ 相同的悖論）**：①② 審的是**本 plan doc 的文字**，
@@ -477,27 +508,52 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 >
 > ### ④ reviewed tree ≡ final squash tree（`GPT-C2-ARCH-RR1`）
 >
-> merge 前**必須**機械驗證：
+> **架構不變式**（平台中立）：④ 所審之樹，必須就是**實際進 main 的那棵樹**。
 >
 > ```
-> ④ reviewed_commit^{tree}  ==  final_squash_commit^{tree}
+> ④ reviewed_commit^{tree}  ==  進 main 之 tree
 > ```
+>
+> ⚠ **本式之驗證時點依平台而異** —— `final_squash_commit` 在 GitHub squash-merge 下
+> **merge 前並不存在**，故不得天真地寫成「merge 前驗 `final_squash_commit`」。
+> 實際操作程序見下方 **`ARCH-C2-R2-L1`**（分情況 A／B，情況 B 為本 repo 適用）。
 >
 > 不相等 → **`CHATGPT_CODE_FAITHFULNESS_APPROVED` 立即失效**，須回 ④ 重審；
 > 🚫 不得以「只差 receipt／只差 commit message」為由放行。
 >
 > **本要求與「④ 自我收據悖論」是同一件事的兩種表述**（形式化後即可機械檢查）：
 > 若把 ④ receipt append 進本檔，必然產生 ④ 之後的新 commit → tree 改變 →
-> `reviewed_commit^{tree} != final_squash_commit^{tree}` → 依本規則 ④ **當場失效**。
+> `reviewed_commit^{tree} !=` 進 main 之 tree → 依本規則 ④ **當場失效**。
 > 故下方「三選一」處置中，**選項 1／2 是唯一能同時滿足 tree identity 的**；
 > 選項 3（merge 後另立 closeout PR）亦滿足，因該 PR 在 merge **之後**、不改本次 squash 的 tree。
 >
 > **序列不變式**：`code commit → ③ → W-2 append → ④ 審此 commit → squash`。
 > ④ 之後 **🚫 禁止任何 commit**（含 receipt、typo 修正、rebase）；需要改 → 回 ④ 重審。
 >
+> #### `ARCH-C2-R2-L1`：merge 時之操作化程序（① R2 carry-forward lock）
+>
+> 上述不變式是**架構**陳述；merge 執行時須依「final squash object 何時才存在」分兩種情況機械化：
+>
+> **情況 A — merge 前即可產出實際 squash commit**：直接驗
+> ```
+> reviewed_commit^{tree} == final_squash_commit^{tree}
+> ```
+>
+> **情況 B — 平台只在 merge 動作中產生 squash commit**（GitHub squash-merge 屬此）：
+> ```
+> 1. merge 前：reviewed_commit^{tree} == current_merge_candidate^{tree}
+>              且「④ 之後的 commit count == 0」
+> 2. merge 後：立即確認 actual_squash_commit^{tree} == reviewed_commit^{tree}
+> 3. 不等   ：判定為 merge-integrity violation
+>              🚫 不得宣稱正常 closeout、🚫 不得補寫 receipt 掩蓋
+> ```
+>
+> ⚠ 本鎖是**操作性解釋**，不改變 §9 之架構不變式；兩步驗證**缺一不可**
+> （只驗 merge 前 ＝ 放過平台端 squash 產生的差異；只驗 merge 後 ＝ 錯誤已進 main）。
+>
 > ⚠ **①② vs ③ vs ④ 三段處置刻意不同**：
 > - **①②** 於 `CODING_ALLOWED` **之前**核發，且錨定 PLAN 文字 sha256 → 可直接填入本表。
-> - **③** 於落盤後核發，可於 **④ 之前**以 docs-only commit append 於 `## 10` —— 該 append 本身仍會被 ④ 覆核，無悖論。
+> - **③** 於落盤後核發，可於 **④ 之前**以 **plan-doc-only commit**（僅改本 plan doc，不觸 source／test）append 於 `## 10` —— 該 append 本身仍會被 ④ 覆核，無悖論。
 > - **④** 🚫 **禁在本 PR 自我追加**。
 >
 > ### ⚠ ④ 自我收據悖論
@@ -534,7 +590,8 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 
 ## 10. ③ Codex Code Gate receipt（append-only）
 
-> 🔒 本節 ＝ `## 9` 定義之 **carve-out 窗口 W-2**，於 ③ 核發後以 **docs-only commit** append：
+> 🔒 本節 ＝ `## 9` 定義之 **carve-out 窗口 W-2**，於 ③ 核發後以 **plan-doc-only commit**
+> （僅改本 plan doc，🚫 不觸 source／test）append：
 > **append-only、🚫 不回改既有內容、🚫 不編輯 `## 9` 表之任何列**、`## 9` 與 W-1 之外的既有內容 **0 byte 變動**。
 >
 > **性質硬約束（`GPT-C2-ARCH-RR1`）**：本節為 **evidence-only · non-normative**。
