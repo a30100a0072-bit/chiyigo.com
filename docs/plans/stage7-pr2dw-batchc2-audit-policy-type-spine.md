@@ -481,7 +481,7 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 | 階段 | 狀態 |
 |---|---|
 | SPEC | `SPEC_APPROVED` @ R2（`0 Blocking / 0 Required / 0 Non-blocking`；判級 `L1_CONDITIONAL`；`CODING_ALLOWED` 未核發。R1 → Claude 提 `SPEC-1` blocking → R2 以明列六值 union 關閉） |
-| ① ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0／**5 Required**／1 NB；錨定 PLAN R1 sha256 `25d7c9cf…d88d`、`27044` B、LF）→ **R2 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 Blocking／**0 Required**／1 NB〔`NB2`〕／**2 carry-forward locks**；錨定 PLAN R2 sha256 `c2428f74…fb6d`、`38878` B、LF；R1 五項全 `CLOSED`，其中 `RR1`／`RR3` 為 `CLOSED_WITH_LOCK`）→ **R3 送審中**（本輪折入 `NB2` 用語更正 ＋ `ARCH-C2-R2-L1`／`L2` 兩鎖之 in-repo 落地；依工作流程 §9 fail-safe，改動 approved plan 一律回 ① 重審） |
+| ① ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0／**5 Required**／1 NB；錨定 PLAN R1 sha256 `25d7c9cf…d88d`、`27044` B、LF）→ **R2 ＝ `CHATGPT_ARCH_APPROVED_WITH_LOCKS`**（0 Blocking／**0 Required**／1 NB〔`NB2`〕／**2 carry-forward locks**；錨定 PLAN R2 sha256 `c2428f74…fb6d`、`38878` B、LF；R1 五項全 `CLOSED`，其中 `RR1`／`RR3` 為 `CLOSED_WITH_LOCK`）→ **R3 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocking／**1 Required**〔`GPT-C2-ARCH-RR3-RR1`：merge-integrity violation 缺 containment／recovery〕／0 NB；錨定 PLAN R3 sha256 `4d70c647…633b`、`42925` B、LF；`NB2`／`L2` `CLOSED`、`L1` `CLOSED_WITH_RR1`；R2 已批准架構全數 carry forward）→ **R4 送審中**（補 `MERGE_INTEGRITY_VIOLATION` recovery 狀態機） |
 | ② Codex Plan | `PENDING`（① 未 approve 前不送） |
 | ③ Codex Code | 核發後以 **plan-doc-only commit**（僅改本 plan doc）append 於 `## 10`（本表不回填） |
 | ④ ChatGPT Faithfulness | 🚫 **本 PR 內不記錄** —— 見下方「④ 自我收據悖論」 |
@@ -550,6 +550,82 @@ registry size／value 變動、或 base 漂移 → 一律停手回 Plan Gate。
 >
 > ⚠ 本鎖是**操作性解釋**，不改變 §9 之架構不變式；兩步驗證**缺一不可**
 > （只驗 merge 前 ＝ 放過平台端 squash 產生的差異；只驗 merge 後 ＝ 錯誤已進 main）。
+>
+> ##### `MERGE_INTEGRITY_VIOLATION` recovery（`GPT-C2-ARCH-RR3-RR1`）
+>
+> 情況 B 步驟 3 觸發 ＝ **未經 ④ 核准的 tree 已進入 main**。以下為事故後之 fail-safe 狀態機，
+> 補在偵測規則的**同一載體**內（僅命名事故而不約束後續狀態，會讓未審 tree 成為後續工作的 base）。
+>
+> ```text
+> 1. 立即停止（HALT）
+>    - 本棒不得標 CLOSED
+>    - 🚫 禁止後續 merge 以該 tree 為 base
+>    - 🚫 禁止「進一步」部署／發布該未核准 tree
+>      （手動 re-deploy · release · promote · rollout 擴大）
+>      ⚠ 本 repo 之 Pages 部署為自動且無條件，偵測到時「首次部署」多半已完成
+>        → 該情形不是「阻止部署」，而是「儘速以 revert 觸發還原部署」（見下方特有事實）
+>    - 保存證據：reviewed commit/tree · pre-merge main · actual squash commit/tree
+>                · 兩 tree 之完整機械 diff
+>
+> 2. 預設回復路徑（fast path）
+>    條件：actual squash commit 仍是 main tip · 其後無其他 commit
+>          · 無不可逆外部副作用
+>    → 以獨立 emergency revert PR 撤回該 squash
+>    → 🚫 不得 direct push、🚫 不得改寫 main 歷史（對齊 CLAUDE.md §2 硬規則）
+>    → revert 後重新建立 candidate，從 ④ 重審
+>
+> 3. 不可自動 revert 之情況
+>    - main 已有後續 commit
+>    - 已產生不可逆外部副作用
+>    - revert 會破壞依賴它的變更
+>    → 維持 HALT
+>    → owner 以獨立 incident remediation plan 明確裁定 revert 或 forward-fix
+>    → remediation 必須經適用 gates，🚫 不得以 receipt 取代
+>
+> 4. 關閉條件
+>    - main 已恢復至核准 tree，或
+>    - replacement tree 已重新取得完整核准
+>    在此之前 🚫 不得宣稱正常 closeout
+> ```
+>
+> **⚠ 本 repo 特有事實（實測，直接影響步驟 2／3 之分界）**：
+> `.github/workflows/deploy.yml` 之 trigger 為 **`push: branches: [main]`**，且與 `ci.yml` 是
+> **兩個各自獨立的 workflow 檔**（非同一 workflow 的先後 job）—— 兩者間**無 `needs:` 依賴**，
+> 故 **deploy 不以 CI 綠燈為前提**。squash-merge 落地後 Cloudflare Pages **無條件自動部署**
+> （批 C 實測 deploy 約 `46s`）。
+>
+> → 這代表步驟 3 的「已部署」條件在本 repo **幾乎必然成立**。若把「已部署」一律當成
+> 「不可逆外部副作用」，步驟 2 的 fast path 將**永遠無法適用**、成為死條文。
+> **正確判準是「副作用是否可逆」，而非「是否已部署」**：
+>
+> | 副作用類型 | 可逆性 | 對步驟 2／3 之影響 |
+> |---|---|---|
+> | Pages 部署（static asset／Functions bundle） | **可逆** —— emergency revert PR 合入後會**再次觸發部署**，自動還原前一棵樹 | **不**阻擋 fast path |
+> | ↳ 但 **user 端可見時間**有延遲 | HTML `max-age=14400` 會讓舊資產在 client／edge 快取續存。⚠ 這影響「多久之後 user 不再拿到壞樹」，**不影響部署本身之可逆性** | 不阻擋，但 incident 記錄須註明 |
+> | D1 migration 已 apply | **不可逆**（除非有對應 down 且已驗證） | 阻擋 → 走步驟 3 |
+> | R2 物件寫入（尤其 retention lock 生效者） | **不可逆** | 阻擋 → 走步驟 3 |
+> | 已送出之對外副作用（付款／webhook／email／secret rotation） | **不可逆** | 阻擋 → 走步驟 3 |
+>
+> **⚠ 副作用評估必須針對「實際落地的 tree」，🚫 不得以本棒的預期內容推斷**：
+> merge-integrity violation 的定義就是「落地的 tree **不是** ④ 所審的那棵」——
+> 因此該樹**含有什麼是未知的**，可能包含本棒 scope 外的 migration／寫入路徑。
+> 評估順序固定為：
+>
+> ```text
+> (1) 先取 actual_squash_commit^{tree} 與 reviewed_commit^{tree} 之完整機械 diff
+> (2) 依該 diff 的「實際內容」查上表判定可逆性
+> (3) 才決定走步驟 2 或步驟 3
+> ```
+>
+> 🚫 **禁止**跳過 (1)(2) 直接引用「本棒是 type-only」作為 fast path 之依據。
+>
+> **僅在 diff 證實落地內容確為本棒預期範圍時**，方可援引：批 C2 為 type-only、
+> 零 migration、零 D1／R2 寫入、零對外副作用 → 此時預期適用步驟 2 fast path
+> （前提仍是 main tip 且無後續 commit）。
+>
+> ⚠ **emergency revert PR 本身走何種 gate，由 owner 於事故當下裁定**
+> （§12 唯一繞過 ＝ owner 當輪明示、逐次不跨輪繼承）；
+> 🚫 Claude **不得**自行決定跳過任何 gate，亦不得以「這是緊急處置」自我授權。
 >
 > ⚠ **①② vs ③ vs ④ 三段處置刻意不同**：
 > - **①②** 於 `CODING_ALLOWED` **之前**核發，且錨定 PLAN 文字 sha256 → 可直接填入本表。
