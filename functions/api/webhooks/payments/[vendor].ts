@@ -223,7 +223,9 @@ export async function onRequestPost({ request, env, params }: { request: Request
     await safeUserAudit(env, {
       event_type: 'payment.webhook.orphan_intent',
       severity:   'critical',
-      user_id:    liveIntent?.user_id ?? null,
+      user_id:    typeof liveIntent?.user_id === 'number'
+        ? liveIntent.user_id
+        : null,
       request,
       data: {
         vendor,

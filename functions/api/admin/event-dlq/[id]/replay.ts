@@ -15,11 +15,12 @@ import { SCOPES, effectiveScopesFromJwt } from '../../../../utils/scopes'
 import { safeUserAudit } from '../../../../utils/user-audit'
 import { checkRateLimit, recordRateLimit } from '../../../../utils/rate-limit'
 import { hashToken } from '../../../../utils/crypto'
+import type { AuditSeverity } from '../../../../utils/audit-policy'
 
 const RL_WINDOW_SEC = 60
 const RL_MAX = 30
 
-async function auditReplay(env: Env, request: Request, userId: number, severity: string, data: Record<string, unknown>) {
+async function auditReplay(env: Env, request: Request, userId: number, severity: AuditSeverity, data: Record<string, unknown>) {
   await safeUserAudit(env, { event_type: 'domain.event.replay', severity, user_id: userId, request, data })
 }
 

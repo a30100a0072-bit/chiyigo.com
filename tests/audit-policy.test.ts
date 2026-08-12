@@ -12,9 +12,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   AUDIT_CATEGORY,
+  AUDIT_SEVERITY,
   classifyAuditEvent,
   classifyForCold,
   listEventsByCategory,
+  parseAuditSeverity,
   _registrySize,
 } from '../functions/utils/audit-policy'
 
@@ -448,5 +450,31 @@ describe('classifyForCold — 6 cold archive classes（migration 0038）', () =>
         expect(classifyForCold(e, sev)).toBe(first)
       }
     }
+  })
+})
+
+// PR-2dw 批 D §8.1：severity runtime SoT（AUDIT_SEVERITY）與純 parser。
+// 「AuditSeverity 由常數衍生」是 compile-time 性質，刻意不放這裡（runtime expect 分不出
+// 「由常數衍生」與「手寫 union 值域碰巧相同」）——該子句由源碼單一衍生點 + Code Gate 核 diff 保證。
+describe('AUDIT_SEVERITY / parseAuditSeverity — severity runtime SoT', () => {
+  it('三個合法值 round-trip 回原值', () => {
+    expect(parseAuditSeverity('info')).toBe('info')
+    expect(parseAuditSeverity('warn')).toBe('warn')
+    expect(parseAuditSeverity('critical')).toBe('critical')
+  })
+
+  it('非法值一律回 null（大小寫敏感，與 D1 CHECK 一致）', () => {
+    expect(parseAuditSeverity('PANIC')).toBeNull()
+    expect(parseAuditSeverity('INFO')).toBeNull()      // 大小寫變體不放行
+    expect(parseAuditSeverity('')).toBeNull()
+    expect(parseAuditSeverity(null)).toBeNull()
+    expect(parseAuditSeverity(undefined)).toBeNull()
+    expect(parseAuditSeverity(0)).toBeNull()
+    expect(parseAuditSeverity({})).toBeNull()
+  })
+
+  it('AUDIT_SEVERITY 為 frozen，且 Object.values 恰為三個落庫值', () => {
+    expect(Object.isFrozen(AUDIT_SEVERITY)).toBe(true)
+    expect(Object.values(AUDIT_SEVERITY).slice().sort()).toEqual(['critical', 'info', 'warn'])
   })
 })

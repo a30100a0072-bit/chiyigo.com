@@ -249,7 +249,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
   event_data  TEXT,
   archived_at TEXT,                                    -- migration 0038（F-3 Phase 2）
   cold_class  TEXT    NOT NULL DEFAULT 'immutable',    -- migration 0038
-  created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  CHECK(severity IN ('info','warn','critical'))        -- 逐字對齊 migrations/0017_audit_log.sql:36
 );
 
 -- F-3 Phase 2 migration 0038：audit_archive_chunks（per-chunk 狀態機）

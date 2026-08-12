@@ -9,11 +9,11 @@
  *  5. GET /api/admin/audit query API：filter / pagination / 角色守門
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import { env } from 'cloudflare:test'
 import { resetDb, ensureJwtKeys, seedUser, jsonPost } from './_helpers'
 import { signJwt } from '../../functions/utils/jwt'
-import { safeUserAudit } from '../../functions/utils/user-audit'
+import { safeUserAudit, hashIdentifierForAudit } from '../../functions/utils/user-audit'
 import { onRequestPost as loginHandler } from '../../functions/api/auth/local/login'
 import { onRequestGet as auditHandler } from '../../functions/api/admin/audit'
 
@@ -286,5 +286,135 @@ describe('GET /api/admin/audit', () => {
     expect(data.result_count).toBe(2)
     expect(data.filters.user_id).toBe('500')
     expect(data.filters.limit).toBe(10)
+  })
+})
+
+// ── PR-2dw 批 D §8.2 / §8.2.1 / §8.2.2 ────────────────────────────────────────
+// 同一概念同一字串（feedback_state_machine_naming_no_alias）：測試端沿用 production 名稱，
+// 以結構萃取取得，不需 export（§4.2 的 file-local 決策不變）。
+type UserAuditEntry = Parameters<typeof safeUserAudit>[1]
+
+// 共用 helper（§5.5 suppression #2）：供兩個非法 severity 案例使用。
+// env 為參數而非閉包常數 —— §8.2 item 3 要求 webhook 經 reqWithSalt(extraEnv) 注入，
+// 否則「fetch 0 次」對正反案例皆成立、等於沒測。
+function writeWithInvalidSeverity(
+  auditEnv: Parameters<typeof safeUserAudit>[0],
+  entry: Omit<UserAuditEntry, 'severity'>,
+  severity: string,
+) {
+  // @ts-expect-error -- deliberate illegal severity: runtime negative control for the category-aware fallback
+  return safeUserAudit(auditEnv, { ...entry, severity })
+}
+
+describe('safeUserAudit severity 邊界（§4.3 二分）+ Discord gate（§4.6）', () => {
+  const WEBHOOK = 'https://discord.invalid/pr2dw-batchd'
+  let fetchMock
+
+  beforeAll(async () => { await ensureJwtKeys() })
+  beforeEach(async () => {
+    await resetDb()
+    // §8.2 stub 生命週期 item 2：每案重建，否則「恰 1 次／0 次」跨案例不可信。
+    fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
+  })
+  // §8.2 stub 生命週期 item 1：teardown 必配對（singleWorker + isolatedStorage:false，globalThis 跨檔共用）。
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  async function rowOf(eventType) {
+    return env.chiyigo_db
+      .prepare(`SELECT event_type, severity, cold_class FROM audit_log WHERE event_type = ?`)
+      .bind(eventType)
+      .first()
+  }
+
+  it('省略 severity 回歸：security_signal 事件仍落 info / security_warn（二分之省略側未被 fallback 汙染）', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await safeUserAudit(env, { event_type: 'auth.login.success', user_id: 42 })
+    const row = await rowOf('auth.login.success')
+    expect(row.severity).toBe('info')
+    expect(row.cold_class).toBe('security_warn')
+    // 省略側不得記 invalid log
+    expect(warnSpy.mock.calls.filter(c => String(c[0]).includes('[audit-severity-invalid]')).length).toBe(0)
+    warnSpy.mockRestore()
+  })
+
+  it('正向控制：合法 critical 走 notification path，fetch 恰 1 次（AUDIT_WEBHOOK_TIMEOUT_GUARD）', async () => {
+    vi.stubGlobal('fetch', fetchMock)
+    await safeUserAudit(reqWithSalt({ DISCORD_AUDIT_WEBHOOK: WEBHOOK }), {
+      event_type: 'account.delete', severity: 'critical', user_id: 7,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    // AUDIT_WEBHOOK_TIMEOUT_GUARD：§4.6 之 signal 必須實際傳入 fetch init
+    const init = fetchMock.mock.calls[0][1]
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+    expect(init.signal.aborted).toBe(false)   // 正常路徑不應已 abort
+  })
+
+  it('非法 severity + security_signal → critical / security_critical，記 invalid log，fetch 0 次', async () => {
+    vi.stubGlobal('fetch', fetchMock)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await writeWithInvalidSeverity(
+      reqWithSalt({ DISCORD_AUDIT_WEBHOOK: WEBHOOK }),
+      { event_type: 'auth.login.fail', user_id: 11 },
+      'PANIC',
+    )
+    const row = await rowOf('auth.login.fail')
+    expect(row.severity).toBe('critical')
+    expect(row.cold_class).toBe('security_critical')
+    const invalid = warnSpy.mock.calls.filter(c => String(c[0]).includes('[audit-severity-invalid]'))
+    expect(invalid.length).toBe(1)
+    // log 不得洩漏 raw 非法值
+    expect(JSON.stringify(invalid[0])).not.toContain('PANIC')
+    expect(errSpy.mock.calls.filter(c => String(c[0]).includes('[audit-loss]')).length).toBe(0)
+    // fallback 產生的 critical 一律不觸發 webhook（不變量 3：只由 parsed === 'critical' 決定）
+    expect(fetchMock).toHaveBeenCalledTimes(0)
+    warnSpy.mockRestore(); errSpy.mockRestore()
+  })
+
+  it('非法 severity + 非 security category → info / 該 category，記 invalid log，fetch 0 次', async () => {
+    vi.stubGlobal('fetch', fetchMock)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await writeWithInvalidSeverity(
+      reqWithSalt({ DISCORD_AUDIT_WEBHOOK: WEBHOOK }),
+      { event_type: 'auth.login.rate_limited', user_id: 12 },
+      'PANIC',
+    )
+    const row = await rowOf('auth.login.rate_limited')
+    expect(row.severity).toBe('info')
+    expect(row.cold_class).toBe('telemetry')
+    const invalid = warnSpy.mock.calls.filter(c => String(c[0]).includes('[audit-severity-invalid]'))
+    expect(invalid.length).toBe(1)
+    // 其餘同上：log 不得洩漏 raw 非法值
+    expect(JSON.stringify(invalid[0])).not.toContain('PANIC')
+    expect(errSpy.mock.calls.filter(c => String(c[0]).includes('[audit-loss]')).length).toBe(0)
+    expect(fetchMock).toHaveBeenCalledTimes(0)
+    warnSpy.mockRestore(); errSpy.mockRestore()
+  })
+
+  // GPT-D-ARCH-RR4：null 分支必須 load-bearing —— 鎖 `entry.severity === undefined`，
+  // 防日後被誤改成 `== null`（那會把 null 錯併入省略路徑，而現有非法字串案例不會轉紅）。
+  // strict:false ⇒ severity: null 可直接賦值給 severity?: AuditSeverity，零 suppression 成本。
+  it('null + security_signal → critical / security_critical（二分之 null 側鎖）', async () => {
+    vi.stubGlobal('fetch', fetchMock)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await safeUserAudit(reqWithSalt({ DISCORD_AUDIT_WEBHOOK: WEBHOOK }), {
+      event_type: 'auth.country_jump', severity: null, user_id: 13,
+    })
+    const row = await rowOf('auth.country_jump')
+    expect(row.severity).toBe('critical')
+    expect(row.cold_class).toBe('security_critical')
+    expect(warnSpy.mock.calls.filter(c => String(c[0]).includes('[audit-severity-invalid]')).length).toBe(1)
+    expect(errSpy.mock.calls.filter(c => String(c[0]).includes('[audit-loss]')).length).toBe(0)
+    expect(fetchMock).toHaveBeenCalledTimes(0)
+    warnSpy.mockRestore(); errSpy.mockRestore()
+  })
+
+  // ARCH-D-L4：測試名須帶穩定識別字 STRING_RAW_COLLISION_GUARD，供 Code Gate 清點
+  it('STRING_RAW_COLLISION_GUARD: undefined 與空字串必須產生相異摘要', async () => {
+    const a = await hashIdentifierForAudit(env, 'd', undefined)
+    const b = await hashIdentifierForAudit(env, 'd', '')
+    expect(a.hex).not.toBe(b.hex)
   })
 })

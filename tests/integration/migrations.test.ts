@@ -13,6 +13,9 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { env } from 'cloudflare:test'
+// PR-2dw 批 D §8.4-5(i)：本棒 SQL 側唯一機械耦合端點 —— 端態 CHECK 值集需與此常數雙向 set equality。
+// 該檔對 functions/ 的引用數原為 0，此為首次跨層 import（取捨論證見 PLAN §5.2 item 5）。
+import { AUDIT_SEVERITY } from '../../functions/utils/audit-policy'
 
 import baseSql from '../../migrations/0000_base.sql?raw'
 import up0001 from '../../migrations/0001_requisition_upgrade.sql?raw'
@@ -599,6 +602,47 @@ describe('full forward chain 0001..0056 vs prod snapshot', () => {
     // 0038: unique aggregate bucket with COALESCE sentinel for nullable user_id
     expect(byName.uniq_agg_tele_bucket).toMatch(/UNIQUE INDEX/i)
     expect(byName.uniq_agg_tele_bucket).toMatch(/COALESCE\s*\(\s*user_id\s*,\s*-1\s*\)/i)
+  })
+
+  // ── PR-2dw 批 D §8.4-5：severity CHECK 端態漂移偵測（conjunctive —— (i) 與 (ii) 皆須成立，
+  // 🚫 不得寫成「A 或 B」）。items 2-4 只保護本 PR 自己編輯的手工 fixture，對「migration 端把
+  // CHECK 改掉／移除」零偵測力；該方向在本 repo 是活的 pattern（0044 Part 3 曾 rebuild 掉
+  // audit_archive_chunks.cold_class 的 CHECK）。
+  it('audit_log severity CHECK：端態值集與 AUDIT_SEVERITY 雙向 set equality，且三合法值皆收、第四值被拒', async () => {
+    const row = await env.chiyigo_db
+      .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='audit_log'`)
+      .first()
+    expect(row?.sql).toBeTruthy()
+
+    // (i) fail-closed 解析契約：先全域枚舉候選，再於任何索引存取之前斷言恰一個。
+    // 🚫 不得用只回第一個的 match／exec 單次呼叫；0 個 match（CHECK 被整個移除，最致命方向）
+    // 與多於 1 個 match（未來 migration 重建出第二個 severity 約束）一律 fail，不得靜默通過。
+    const matches = [...String(row.sql).matchAll(/CHECK\s*\(\s*severity\s+IN\s*\(([^)]*)\)\s*\)/gi)]
+    expect(matches).toHaveLength(1)
+    const parsedValues = matches[0][1]
+      .split(',')
+      .map((s) => s.trim().replace(/^'(.*)'$/, '$1'))
+    // 雙向 set equality（非 presence、非 subset）；物件形常數取值集須經 Object.values()，
+    // 🚫 不得改比對 Object.keys()（那是 INFO/WARN/CRITICAL，非落庫值）。
+    expect(parsedValues.slice().sort()).toEqual(Object.values(AUDIT_SEVERITY).slice().sort())
+
+    // (ii) runtime 補強：三個合法值 INSERT 皆被接受（這半才對「CHECK 被改窄」有偵測力）且第四值被拒。
+    // 🚫 三值與第四值一律行內字面量，不得迭代 AUDIT_SEVERITY —— 否則產生第二個機械耦合端點，
+    // 直接打破 (i) 的「恰一個」closure。
+    for (const sev of ['info', 'warn', 'critical']) {
+      await env.chiyigo_db
+        .prepare(`INSERT INTO audit_log (event_type, severity) VALUES (?, ?)`)
+        .bind('migrations.severity_check.probe', sev).run()
+    }
+    const accepted = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE event_type = 'migrations.severity_check.probe'`)
+      .first()
+    expect(accepted.n).toBe(3)
+    await expect(
+      env.chiyigo_db
+        .prepare(`INSERT INTO audit_log (event_type, severity) VALUES (?, ?)`)
+        .bind('migrations.severity_check.probe', 'PANIC').run(),
+    ).rejects.toThrow()
   })
 })
 
@@ -1316,7 +1360,8 @@ describe('migrations smoke 0038 targeted (audit_log Phase 2)', () => {
         client_id   TEXT,
         ip_hash     TEXT,
         event_data  TEXT,
-        created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+        CHECK(severity IN ('info','warn','critical'))
       )
     `).run()
     // 五個 cold_class 各塞 sample row（驗 backfill 走對 IN list）
@@ -1443,6 +1488,27 @@ describe('migrations smoke 0038 targeted (audit_log Phase 2)', () => {
       ).run()
     } catch { nullDupRejected = true }
     expect(nullDupRejected).toBe(true)
+  })
+
+  // PR-2dw 批 D §8.4 item 4：驗當下生效的那份 fixture 之 CHECK（runtime 證據，非 SQL 字串比對）。
+  // 直接 SQL INSERT、不經 safeUserAudit —— 後者會先過 §4.3 的 parser，測不到 D1 層約束。
+  it('audit_log severity CHECK：三合法值皆收、第四值被拒（0038 targeted fixture）', async () => {
+    for (const sev of ['info', 'warn', 'critical']) {
+      await env.chiyigo_db
+        .prepare(`INSERT INTO audit_log (event_type, severity) VALUES (?, ?)`)
+        .bind('fixture.severity_check.probe', sev).run()
+    }
+    const accepted = await env.chiyigo_db
+      .prepare(`SELECT COUNT(*) AS n FROM audit_log WHERE event_type = 'fixture.severity_check.probe'`)
+      .first()
+    expect(accepted.n).toBe(3)
+    let rejected = false
+    try {
+      await env.chiyigo_db
+        .prepare(`INSERT INTO audit_log (event_type, severity) VALUES (?, ?)`)
+        .bind('fixture.severity_check.probe', 'PANIC').run()
+    } catch { rejected = true }
+    expect(rejected).toBe(true)
   })
 
   it('down 拆新表 + 新索引（archived_at/cold_class 欄留著，SQLite 限制）', async () => {

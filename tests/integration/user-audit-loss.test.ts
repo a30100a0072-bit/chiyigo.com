@@ -15,7 +15,9 @@ describe('safeUserAudit audit-loss observability', () => {
   it('logs once and resolves (never throws) when the audit write fails', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     // A non-string event_type makes D1 .bind throw inside safeUserAudit -> the outer catch (the ISO-ENUM-1 path).
-    // safeUserAudit has untyped params, so no cast is needed to pass a function here.
+    // safeUserAudit's entry is now typed (event_type: string), so passing a function needs a
+    // suppression -- the point of this test is precisely the runtime path a non-string takes.
+    // @ts-expect-error -- deliberate non-string event_type: runtime negative control for the audit-loss path
     const r = await safeUserAudit(env, { event_type: () => 'x', user_id: 1 })
     expect(r).toBeUndefined()   // swallowed: never throws, never breaks the caller
     const lossCalls = spy.mock.calls.filter((c) => String(c[0]).includes('[audit-loss]'))

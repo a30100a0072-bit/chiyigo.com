@@ -29,7 +29,31 @@ export const AUDIT_CATEGORY = Object.freeze({
 export type AuditCategory =
   (typeof AUDIT_CATEGORY)[keyof typeof AUDIT_CATEGORY]
 
-export type AuditSeverity = 'info' | 'warn' | 'critical'
+/**
+ * classifier boundary 上的 severity runtime 真相源。AuditSeverity 由本常數衍生，
+ * parseAuditSeverity 以本常數查表；三個值與 audit_log.severity 的 CHECK constraint
+ * 一一對應（該 CHECK 現由 migrations/0017_audit_log.sql 安裝）。
+ *
+ * 範圍限定：boundary 外之 concern-specific validator（如 admin/audit.ts 的 HTTP query
+ * validator）依 C2 §5.1 `CODEX-C2-PLAN-R1-2` 裁決刻意不納，非遺漏。
+ */
+export const AUDIT_SEVERITY = Object.freeze({
+  INFO:     'info',
+  WARN:     'warn',
+  CRITICAL: 'critical',
+})
+
+export type AuditSeverity = (typeof AUDIT_SEVERITY)[keyof typeof AUDIT_SEVERITY]
+
+/**
+ * 驗證外部傳入的 severity。只認 AUDIT_SEVERITY 三個字面值（大小寫敏感，與 D1 CHECK 一致）；
+ * 其他一律回 null。純驗證：不記 log、不看 event_type — 非法值的 fallback 需要 category
+ * context，屬呼叫端（classification 層）職責，見 ARCH-C2-R2-L2 第二支。
+ */
+export function parseAuditSeverity(raw: unknown): AuditSeverity | null {
+  for (const s of Object.values(AUDIT_SEVERITY)) if (s === raw) return s
+  return null
+}
 
 export type AuditColdClass =
   | 'immutable'
