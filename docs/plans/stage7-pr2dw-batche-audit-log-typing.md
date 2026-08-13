@@ -1,7 +1,7 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R9）；
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R12）；
 > 🚫 **不是** gate 通過 —— ①②③④ 皆尚未送審（§14）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
 > **維度 A self-review 形式**：**單 agent 對抗式**（owner 2026-08-13 當輪裁定；非 workflow）
@@ -53,7 +53,7 @@ repo git 歷史 · session transcript），結論為「對映從未落成 artifa
 |---|---|---|---|
 | `SPEC-E1` | 批 E scope | **`functions/utils/audit-log.ts` 單檔**（候選另有 aggregate 家族 4 檔／aggregate utils 2 檔／唯讀 admin 端點 2 檔，均落選） | 2026-08-13 |
 | `SPEC-E2` | 維度 A self-review 形式 | **單 agent 對抗式**（同批 D；非 multi-agent workflow） | 2026-08-13 |
-| `E-OD-1` | `AuditLogEntry.admin_email` 型別 | **`unknown`**（否決 `string` ＋ 同棒硬化 7 caller；否決「不標 `entry`、留 2 條」） | 2026-08-13 |
+| `E-OD-1` | `AuditLogEntry.admin_email` 型別 | **`unknown`**（否決「`string` ＋ 同棒硬化 caller」路徑；否決「不標 `entry`、留 2 條」）。⚠ 該路徑的真實規模見 §10.1（**今日下界 9 呼叫點／8 檔**），🚫 勿沿用選項標籤上的概數 | 2026-08-13 |
 
 `E-OD-1` 之量測依據與代價見 §4.3 與 §10.1。
 
@@ -84,6 +84,10 @@ object literal，不引用具名型別）。沿 PR-2do／PR-2dq「zero export �
 
 **為何 `AuditLogRow` 用交集而非重寫欄位**：`row` 就是 `entry` ＋ 落庫時間戳，
 交集型別讓兩者的欄位定義只有**一處** SoT，避免兩份清單漂移。
+
+⚠ **此 SoT 的範圍限定（`ARCH-E-R1-RR3` caveat）**：它是**這兩個 TypeScript 宣告之間**的
+單一來源，🚫 **不是** `admin_audit_log` 資料表結構的 SoT、🚫 不等同 DB schema truth。
+DB 的 nullability 與型別（如 `admin_email TEXT NOT NULL`）不因本宣告獲得任何 TypeScript 保證。
 
 **落點（gate ③ 可逐字核對）**：三個宣告插在 `const GENESIS_HASH = '0'.repeat(64)` 之後、
 `// ── 雜湊工具 ──` 分隔線之前。🚫 不動既有任何一行的相對順序。
@@ -143,9 +147,26 @@ functions/api/admin/users/[id]/unban.ts(64,7)
 🚫 上述為**推測非量測**，引用時不得省略此限定。裁定採 `unknown` 後該腿已無執行必要。
 
 **裁定＝`unknown`**（owner，§3）。理由：
-1. `unknown` **誠實描述現況** —— 該值是未驗證的 JWT claim。
-2. 相對 base 的隱性 `any` 是**淨改善**：`any` 允許任意操作，`unknown` 強制使用端先窄化。
+1. `unknown` **誠實描述現況** —— 該值是未驗證的 JWT claim（經 index signature 取得）。
+2. 移除該參數的 implicit `any`，使「未驗證」這件事在型別上**可見**。
 3. 保持本棒為 type-only、scope 1 檔。
+
+#### `admin_email: unknown` 的效力邊界（`ARCH-E-R1-RR3`，精確定性）
+
+✅ **它做到的**：移除 implicit `any`；把「未驗證 claim」誠實暴露在簽章上；
+禁止在該值上直接進行部分 typed operation（未先窄化即 `.length` / 算術 / 賦值給 `string` 等）。
+
+🚫 **它沒有做到的（逐條否認，禁止被引用為反面證據）**：
+- **不建立 `admin_email` 的 write contract** —— `unknown` 作為**輸入**屬性，
+  caller 可把**任何**型別賦進來；它收窄的是**使用端**，不是 **producer 端**。
+- **不證明 DB-safe** —— DB 是 `admin_email TEXT NOT NULL`，本標註對它零保證。
+- **不保證流入 DB sink 的路徑真的發生窄化** —— 本 repo 無 `@cloudflare/workers-types`，
+  `db` 解析為 `any`（§4.2），`.bind(row.admin_email, …)` 不受型別檢查。
+- **不 closure `TD-BATCHE-1`**（§10.1）。
+
+🚫 因此**不得**把本 interface 引用為「audit DB row 已受型別保護」或
+「write boundary 已硬化」之證據。⚠ 舊表述「相對隱性 `any` 是**淨改善**、`unknown` 強制
+使用端先窄化」**已作廢** —— 該句在 TypeScript 一般操作層成立，但套到本 write boundary 過度延伸。
 
 🚫 **此裁定不消滅底層落差、只記錄它** —— 見 §10.1 `TD-BATCHE-1`。
 
@@ -209,7 +230,10 @@ const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].fi
 | ratchet baseline（1119/175） | 🚫 凍結、🚫 不得 `--update` |
 | `admin_audit_log` schema / migration | 本棒零 DB 改動 |
 
-### 5.4.1 預測 diff shape（**可證偽**；coding 階段須逐項對上）
+### 5.4.1 `FINAL_PR_CHANGED_FILES` — 預測 diff shape（**可證偽**；coding 階段須逐項對上）
+
+> ⚠ 本節定義的是「**branch 相對 base 的最終淨變更**」，**不是**任何單一 commit 的 staged set。
+> 三者是**互相獨立的集合**，🚫 不得互相代入 —— 見 §5.6（`ARCH-E-R1-RR1`）。
 
 | 項目 | 預測 |
 |---|---|
@@ -233,13 +257,28 @@ const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].fi
 | **non-any `as` cast** | **恰 2** | 皆為 `err as ErrorLike`，同一行；ratchet 不攔 ⇒ 人工計數（§4.4） |
 | 新增 `export` | **0** | 型別宣告皆 module-local |
 
-### 5.6 落地機制
+### 5.6 落地機制 — **三個獨立 staged-set SSOT**（`ARCH-E-R1-RR1`）
 
-- 分支 `refactor/stage7-pr2dw-batche-audit-log` → PR → **squash-merge**（唯一進 main 路徑）。
-  ⚠ 批 D 曾由 owner 明示走非 PR 路徑；那是**當輪例外、不跨輪繼承**，本棒預設回 PR 路徑。
-- 🚫 禁 `git add .` / `git add -A`；**明確 stage 恰 2 檔**（§5.4.1），stage 後立即 commit。
+**為何要拆**（① R1 Required，已驗證的自相矛盾）：plan doc 已於 `de6cc72f` / `11fa0925`
+**先行 commit 進 branch**。舊 §5.6 寫「明確 stage 恰 2 檔」，而那個「2 檔」其實是 §5.4.1 的
+**net changed-files**。照字面執行 ⇒ operator 不可能同時滿足「PLAN 已 commit」與
+「coding commit stage 恰 2 檔」，因為 plan doc 已無內容可再 stage。三個集合必須各自為 SSOT：
+
+| SSOT | 定義 | 值 | 量測法 |
+|---|---|---|---|
+| `FINAL_PR_CHANGED_FILES` | branch 相對 **base** 的最終淨變更 | **恰 2**：`functions/utils/audit-log.ts`(M) ＋ plan doc(A) | `git diff --name-status main...HEAD` |
+| `CODE_COMMIT_STAGED_SET` | **coding commit** 當下的 staged set | **恰 1**：`functions/utils/audit-log.ts` | `git diff --cached --name-status` |
+| `PLAN_REMEDIATION_STAGED_SET` | 因 gate finding 修 PLAN 而產生的 **docs commit** | **恰 1**：plan doc；**每次獨立計數** | 同上 |
+
+- ⚠ `PLAN_REMEDIATION_STAGED_SET` **不與** `CODE_COMMIT_STAGED_SET` 合併計數；
+  docs commit 與 code commit 是**分開的 commit**，各自驗各自的 staged set。
+- ⚠ 若 coding 前 PLAN 又被 gate 要求修改，該次 docs commit 仍走 `PLAN_REMEDIATION_STAGED_SET`；
+  **不因此改變** `FINAL_PR_CHANGED_FILES` 仍為 2（同一 plan doc 多次 commit，net 仍是 1 個 A）。
+- 🚫 禁 `git add .` / `git add -A`；一律明確列檔 stage，**stage 後立即 commit**。
 - 🚫 禁直推 main、禁 force push、禁 `--no-verify`、禁 amend、禁空 commit。
 - commit 前後各核一次 staged set 與 net source diff（防 stray 檔被掃入）。
+- 分支 `refactor/stage7-pr2dw-batche-audit-log` → PR → **squash-merge**（唯一進 main 路徑）。
+  ⚠ 批 D 曾由 owner 明示走非 PR 路徑；那是**當輪例外、不跨輪繼承**，本棒預設回 PR 路徑。
 
 ---
 
@@ -390,7 +429,16 @@ checkout 以 LF 寫出；原 CRLF 是 `.gitattributes` 釘死前留下的陳舊�
 
 **規定**：行數一律用 **`[System.IO.File]::ReadAllLines(<abs>).Length`** 或直接數 `0x0A` byte
 （`[System.IO.File]::ReadAllBytes`），🚫 **禁**用裸 `Get-Content ... .Count`。
-✅ 交叉驗證：`git diff --stat` 的 insertions 與 `ReadAllLines` 一致（本檔 644/644）。
+✅ 交叉驗證法：`git diff --stat` 的 insertions 應與 `ReadAllLines` 一致。
+
+⚠ **本檔行數為活動值，引用必帶 commit 錨點**（`ARCH-E-R1-RR2`）：
+
+| commit | 本 plan doc 行數 | 性質 |
+|---|---|---|
+| `de6cc72f` | **644** | **歷史值**（該 commit 的 `git diff --stat` ＝ `644 insertions(+)`，與 `ReadAllLines` 一致） |
+| `11fa0925` | **690** | **現行值**（`git show 11fa0925:<path> \| wc -l` ＝ 690；sha256 `efd8dd28…`） |
+
+🚫 **禁**在未標錨點的情況下引用本檔行數 —— 644 一旦脫離 `de6cc72f` 錨點，就會被讀成現行機械規則。
 
 ### 7.2 ratchet `BAN_PATTERNS`
 
@@ -481,7 +529,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | # | 風險 | 處置 |
 |---|---|---|
 | R1 | `canonicalize` 鍵序被動到 → 全鏈 hash 失效、既有 row 永久不可驗 | 本棒**不改該函式本體**，僅加參數標註；§6.3 byte-identical 為機械證明；§8 既有測試為行為證明 |
-| R2 | `admin_email: unknown` 削弱寫入端契約 | 見 §10.1；相對 base 的隱性 `any` 為淨改善，非退化 |
+| R2 | `admin_email: unknown` 被誤讀為「寫入端已硬化」 | **不是** hardening、**不是** regression：它只移除 implicit `any` 並誠實暴露未驗證 claim。效力邊界逐條見 §4.3「效力邊界」；底層落差見 §10.1 `TD-BATCHE-1`（未 closure） |
 | R3 | `db` 標註被誤讀為「D1 row 已型別化」 | §4.2 已明文否認；本 repo 無 `@cloudflare/workers-types` |
 | R4 | overlay 未還原乾淨污染 base 量測 | §6.5 雙軌（raw bytes ＋ blob）驗證 |
 | R5 | 假綠（emit 兩側皆空、量測失靈） | §6.3 非空守衛 ＋ §6.4 負向控制 |
@@ -572,10 +620,40 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 
 | 道 | Gate | 狀態 | 錨點 |
 |---|---|---|---|
-| ① | ChatGPT Architecture | `PENDING` | — |
+| ① | ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（3 Required，全 PLAN-only）→ R2 待送 | 審查於 `11fa0925` / blob `a4b041e1` / PLAN sha `efd8dd28…` |
 | ② | Codex Plan | `PENDING` | — |
 | ③ | Codex Code | `PENDING` | — |
 | ④ | ChatGPT faithfulness | `PENDING` | — |
+
+`CODING_ALLOWED = NOT_GRANTED`。
+
+### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
+
+| 輪 | 載體 | 結果 | 損壞指紋 |
+|---|---|---|---|
+| R1 | `.md` | `TRANSPORT_INTEGRITY_FAILED` | markdown escape，**+4125 B**，行數/CR 不變 |
+| R2 | `.txt` | `TRANSPORT_INTEGRITY_FAILED` | LF→CRLF，**+811 B ＝ 行數**，CR 0→811 |
+| R3 | `.txt` ＋ base64 權威載體 | **transport 解除阻擋**，① 進入內容裁決 | ① 實測 decoded 40560 B / 690 LF / 0 CR / sha `efd8dd28…` ✅ |
+
+⚠ 三輪皆 **repo 內容零變動**（同一 commit / blob / PLAN sha）。
+🚫 傳輸失敗不得記為 `CHATGPT_ARCH_CHANGES_REQUESTED`。契約全文見 packet SECTION 0。
+
+### 14.1 ① R1 之處置（`CHATGPT_ARCH_CHANGES_REQUESTED`；0 Tier-0 Blocker／3 Required／1 non-blocking）
+
+**方向面 ① 已 PASS 之項目**（不再重開）：批 E scope 單檔 · module-local types / zero export ·
+`ErrorLike` ＋ 2 erased casts · type-only 證據方向 · 0 新測試 · rollback · `TD-BATCHE-1` defer。
+① 明示：**不要求拆棒、不要求換設計、不要求擴 scope**；阻擋點集中在「治理 artifact 必須先把自己說準」。
+
+| ID | 等級 | ① 的 finding | 我方處置 |
+|---|---|---|---|
+| `ARCH-E-R1-RR1` | Required | staged-set SSOT 自相矛盾：plan doc 已 commit，「stage 恰 2 檔」不可執行 | **接受**。§5.6 改寫為**三個獨立 SSOT**（`FINAL_PR_CHANGED_FILES` / `CODE_COMMIT_STAGED_SET` / `PLAN_REMEDIATION_STAGED_SET`），並在 §5.4.1 加「非任何單一 commit 的 staged set」之警語 |
+| `ARCH-E-R1-RR2` | Required | `644` 為 `de6cc72f` 的歷史值，卻活在現行機械規則與「final clean」敘述中 | **接受**。§7.1.1 改為 commit-anchored 對照表（`de6cc72f`＝644 歷史／`11fa0925`＝690 現行，皆以 `git show \| wc -l` 實測）；§15 R9 metrics 清單移除未錨點的 644；§15 `SR-19` 說明段與「量測工具失真」族說明段兩處歷史敘述補 `@ de6cc72f` 錨點。**全族已機械枚舉**（見 §15 R10）。⚠ 🚫 本表刻意**不用行號**指位 —— 行號會隨編輯漂移、引用會自我失效（`SR-20`） |
+| `ARCH-E-R1-RR3` | Required | `unknown` 的安全收益被過度描述；它不是 write-contract hardening | **接受**。§4.3 新增「效力邊界」：逐條否認「建立 write contract／證明 DB-safe／保證 sink 路徑窄化／closure `TD-BATCHE-1`」；舊句「淨改善…強制使用端先窄化」**明文作廢**；§10.1 風險表 R2 同步改寫；§4.1 補 `AuditLogRow` SoT 範圍限定（**非** DB schema truth） |
+| `TR-R3-NB1` | Non-blocking | packet 的 Git Bash replay 指令用 `sed -n "/TOKEN/,/TOKEN/p"`，會先撞到 SECTION 0 說明文字（① 實跑：decode 10 bytes、`invalid input`、exit≠0） | **接受**。屬 packet 缺陷非 PLAN 缺陷：R2 packet 改用 exact-line matcher，且**出貨前以真實 Git Bash 實跑驗證**（見報告） |
+
+⚠ `ARCH-E-R1-RR2` 是本 PLAN 自己定義的 **`SR-16` 族（族處置不完整）第四次復發**，
+且這次是由**外部 gate** 抓到、非自審抓到 —— 記錄此事實本身即為證據：
+單 agent 自審對「文件與外部世界不一致」這一類問題的偵測力有結構性上限。
 
 ---
 
@@ -585,10 +663,12 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R9，共 **19 條** finding，全部處置完畢；**R9** 為「一輪 0 新發現」。
+**輪次總計**：R1 → R12，共 **22 條** finding，全部處置完畢；**R12** 為「一輪 0 新發現」。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
-量測衝突推翻的）—— 四次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
-**這個軌跡本身就是本節最誠實的產出。**
+量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
+五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
+**這個軌跡本身就是本節最誠實的產出**，且 R9→① 那次證明：
+單 agent 自審對「文件與外部世界不一致」有**結構性偵測上限**，外部 gate 不可被取代。
 
 ### R1 — 4 finding（全部為**我方文件的機械宣稱失準**，非設計缺陷）
 
@@ -658,7 +738,7 @@ R7 以**機械枚舉**重核（非肉眼）：
 |---|---|---|
 | `SR-19` ⚠⚠ | §5.2／§8 寫 `audit-log.test.ts`「177 行」，**錯**，真實為 **187**。根因是 PS 5.1 `Get-Content` 以 cp950 解碼 UTF-8，CJK 行尾把 `0x0A` 當 Big5 trail byte 吞掉 ⇒ **系統性少算**（實測四檔少算 10／22／140／145 行） | §5.2／§8 更正為 187；新增 §7.1.1 把「禁用裸 `Get-Content` 數行」立為機械限制 |
 
-⚠ **這條是怎麼被抓到的，比它本身更重要**：`git commit` 回報 `644 insertions`，
+⚠ **這條是怎麼被抓到的，比它本身更重要**：`git commit`（@ `de6cc72f`）回報 `644 insertions`，
 而我先前用 `Get-Content` 量同一檔得 438 —— **兩個量測法互相矛盾**。
 若當時挑一個順眼的數字報，錯誤就會直接進 gate。
 **規則**：同一事實出現兩個不一致的量測結果時，🚫 **不得擇一採信**，
@@ -667,14 +747,37 @@ R7 以**機械枚舉**重核（非肉眼）：
 ⚠ R7 的機械掃描**設計上抓不到本條** —— 它掃的是「文件內部一致性」，
 而 `SR-19` 是**文件與外部世界不一致**。兩種掃描不可互相取代。
 
-### R9 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`
+### R9 — 0 新發現（**但非終輪** —— 被外部 ① gate 於 `ARCH-E-R1-RR2` 推翻，見 R10）
 
 R9 重掃全文所有數字，逐一標記其**量測法**，並剔除所有以裸 `Get-Content` 取得者：
 `tsc` 診斷數（362／10／8／0）· ratchet（362/324→352/325）· emit bytes（6769／6796）·
-raw bytes（6786／6614）· 行數（187／172／644，皆 `ReadAllLines` 或 `0x0A` 計數）·
+raw bytes（6786／6614）· 行數（`audit-log.test.ts` 187 · `audit-log.ts` 172 —— 皆 `ReadAllLines`；
+**本 plan doc 自身的行數為活動值、須帶 commit 錨點**，見 §7.1.1 表）·
 diff shape 預測（8／13／21／8）。未再發現新問題。
 
-**⚠ 自審的誠實邊界**：19 條 finding 的分類為 **16 條失準／矛盾 ＋ 3 條缺漏**，
+### R10 — 2 finding（① R1 remediation 之自審）
+
+處置 `ARCH-E-R1-RR1/RR2/RR3` 後，先做**機械全族枚舉**再宣稱乾淨（`SR-16` 族之教訓內化）：
+`644` 全族 · `stage/staged/changed-files` 全族 · `淨改善/硬化/hardening` 全族。
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-20` | §14.1 的 `RR2` 處置欄用**行號**（L661／L688）指位，而我在同一輪編輯後行號已漂移到 L739／L767 ⇒ **該引用自己就失效了**，正是 `SR-16` 族在「指位方式」上的變體 | 改用**章節／小節名**指位；並在該處明文禁用行號指位 |
+| `SR-21` | §3 `E-OD-1` 裁決列沿用選項標籤的「硬化 7 caller」概數，與 §10.1 實測「至少 9 呼叫點／8 檔」不一致 | 保留 owner 選項原文語意，但加指標到 §10.1 並標「勿沿用概數」 |
+
+### R11 — 1 finding
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-22` | R9 的標題仍寫「**0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`」，但它已被 ① `ARCH-E-R1-RR2` 推翻 ⇒ 文件內同時存在**兩個**終輪宣告 | R9 標題改為「0 新發現（**但非終輪**）」並註明被誰推翻。與 R7 的處置同型 —— **終輪標記是一個族，每次新增輪次都必須重掃** |
+
+### R12 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+
+R12 以機械枚舉重跑全部族：`644`（全數帶 `de6cc72f` 錨點或在對照表內）·
+`stage/staged/changed-files`（三 SSOT 一致）· `淨改善/硬化/hardening`（唯一出現處為明文作廢句）·
+輪次敘述（全為 `R1→R12`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
+
+**⚠ 自審的誠實邊界**：22 條 finding 的分類為 **19 條失準／矛盾 ＋ 3 條缺漏**，
 **全部**落在機械／宣稱層級，**0 條**是設計層級。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
@@ -685,6 +788,6 @@ diff shape 預測（8／13／21／8）。未再發現新問題。
    本棒 R5 在**文件層**再犯 1 次。
 
 3. `SR-19` 族 —— **量測工具本身失真**。同一事實有兩個不一致的量測結果時擇一採信，
-   等於把工具的 bug 當成事實。本棒差點如此（`Get-Content` 438 vs `git` 644）。
+   等於把工具的 bug 當成事實。本棒差點如此（@ `de6cc72f`：`Get-Content` 438 vs `git` 644）。
 
 **修過不代表免疫**，請以這三族為重點掃描角度。
