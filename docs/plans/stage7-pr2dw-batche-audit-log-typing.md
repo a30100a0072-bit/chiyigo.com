@@ -1,7 +1,7 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R7）；
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R9）；
 > 🚫 **不是** gate 通過 —— ①②③④ 皆尚未送審（§14）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
 > **維度 A self-review 形式**：**單 agent 對抗式**（owner 2026-08-13 當輪裁定；非 workflow）
@@ -184,7 +184,7 @@ const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].fi
 ### 5.2 Tests / fixtures allowlist（**空集合**）
 
 本棒 **0 個測試檔改動**。理由：
-1. 既有 `tests/integration/audit-log.test.ts`（177 行）已覆蓋 hash chain 正常／三種竄改／
+1. 既有 `tests/integration/audit-log.test.ts`（**187** 行）已覆蓋 hash chain 正常／三種竄改／
    空表／CAS race／`isUniquePrevHashError` 正負例（逐條對照見 §8）。
 2. 本棒為 type-only，**零新行為可測**。
 3. ⚠ 本檔被 coverage **exclude**（§9.1）⇒ 連「補覆蓋率」這個動機都**不存在**；
@@ -372,6 +372,26 @@ checkout 以 LF 寫出；原 CRLF 是 `.gitattributes` 釘死前留下的陳舊�
 - ⚠ 行尾量測一律 `tr -cd '\r' | wc -c`；`grep -c $'\r'` 在 Git Bash 不是可靠 CR oracle（批 C 教訓）。
   ⚠ 本機 PowerShell 無 `bash` on PATH ⇒ 改用 Node `fs` 計數（§6.4 腳本已內建 CRLF/LF 判定）。
 
+### 7.1.1 ⚠ 行數量測禁用 `Get-Content`（本棒實測發現，`SR-19`）
+
+**現象**：對含 CJK 的 UTF-8（無 BOM）檔案，PowerShell 5.1 的 `(Get-Content <f>).Count`
+**系統性少算行數**。本棒實測差距：
+
+| 檔案 | `Get-Content` | 真實 | 少算 |
+|---|---|---|---|
+| `tests/integration/audit-log.test.ts` | 177 | **187** | 10 |
+| `functions/utils/audit-log.ts` | 150 | **172** | 22 |
+| `functions/api/admin/cron/audit-archive.ts` | 999 | **1139** | 140 |
+| `functions/utils/audit-aggregate-archive-runner.ts` | 1207 | **1352** | 145 |
+
+**根因**：PS 5.1 `Get-Content` 未指定 `-Encoding` 時以系統 ANSI codepage（本機 cp950/Big5）
+解碼。UTF-8 的 CJK 字每個 byte 皆 ≥ 0x80，落在 Big5 **lead byte** 範圍；
+當某行以 CJK 結尾時，其末 byte 會把緊接的 `0x0A` **當作 trail byte 吞掉** ⇒ 兩行被併為一行。
+
+**規定**：行數一律用 **`[System.IO.File]::ReadAllLines(<abs>).Length`** 或直接數 `0x0A` byte
+（`[System.IO.File]::ReadAllBytes`），🚫 **禁**用裸 `Get-Content ... .Count`。
+✅ 交叉驗證：`git diff --stat` 的 insertions 與 `ReadAllLines` 一致（本檔 644/644）。
+
 ### 7.2 ratchet `BAN_PATTERNS`
 
 第一手讀 `scripts/typecheck-ratchet.mjs:269-295`（14 條）。與本棒相關者：
@@ -399,7 +419,7 @@ JSDoc `{any}` / `@ts-nocheck` / `@ts-ignore` / `@ts-expect-error`
 
 本棒 **0 新測試**（§5.2）。
 ⚠ 既有守備**全在 `test:int`**（本檔被 coverage exclude，見 §9.1）——
-`tests/integration/audit-log.test.ts`（177 行）：
+`tests/integration/audit-log.test.ts`（**187** 行）：
 
 | 既有測試 | 位置 | 對本棒的意義 |
 |---|---|---|
@@ -565,9 +585,10 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R7，共 **18 條** finding，全部處置完畢；**R7** 為「一輪 0 新發現」。
-⚠ R4 / R5 / R6 皆曾被我預先寫成「0 新發現」而後被自己推翻 —— 三次皆已就地更正、
-🚫 未靜默改寫成「一次就 clean」。**這個軌跡本身就是本節最誠實的產出**。
+**輪次總計**：R1 → R9，共 **19 條** finding，全部處置完畢；**R9** 為「一輪 0 新發現」。
+⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
+量測衝突推翻的）—— 四次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
+**這個軌跡本身就是本節最誠實的產出。**
 
 ### R1 — 4 finding（全部為**我方文件的機械宣稱失準**，非設計缺陷）
 
@@ -618,20 +639,42 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 
 | # | finding | 處置 |
 |---|---|---|
-| `SR-18` | R5 把輪次總計改成「R1 → R6」，但**狀態欄**（文件開頭）仍寫「R1→R5」⇒ 同一事實兩處不一致 | 改為 `R1→R7`（＝最終真實輪數），並以機械方式重掃全文其他輪次敘述 |
+| `SR-18` | R5 把輪次總計改成「R1 → R6」，但**狀態欄**（文件開頭）仍寫「R1→R5」⇒ 同一事實兩處不一致 | 兩處對齊，並改用機械枚舉重掃全文輪次敘述。⚠ 當時填的 `R1→R7` 後來又因 R8 而過期，於 R9 再次對齊為 `R1→R9` —— 正說明**輪次敘述本身就是一個需要每輪重掃的族** |
 
 ⚠ **這正是 `SR-16` 族的第三次復發**（R4 改標題漏掃結論段 → R5 改總計漏掃狀態欄）。
 族的定義是「**同一事實在文件中的全部出現點**」，處置時必須**枚舉全族成員**而非只改被指出那處。
 R7 起改用機械枚舉（`grep` 輪次字串 / `SR-\d+` 清單 / 「0 新發現」出現點）取代肉眼掃描。
 
-### R7 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`
+### R7 — 0 新發現（**但非終輪** —— 見 R8）
 
 R7 以**機械枚舉**重核（非肉眼）：
 `SR-\d+` 全出現點清單（SR-1..18 皆有定義列）· 「0 新發現」出現點 ·
-輪次字串（`R1 → R7` / `R1→R7`）· 「誠實邊界」段落數（＝1）· 章節交叉引用（§4.3/§5/§6/§8/§9/§10.1）。
-未再發現新問題。
+輪次字串 · 「誠實邊界」段落數（＝1）· 章節交叉引用（§4.3/§5/§6/§8/§9/§10.1）。
+在**當時的量測方法下**未再發現新問題。
 
-**⚠ 自審的誠實邊界**：17 條 finding 的分類為 **14 條失準／矛盾 ＋ 3 條缺漏**，
+### R8 — 1 finding（**由 commit 時的量測衝突觸發**，R7 的機械掃描抓不到）
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-19` ⚠⚠ | §5.2／§8 寫 `audit-log.test.ts`「177 行」，**錯**，真實為 **187**。根因是 PS 5.1 `Get-Content` 以 cp950 解碼 UTF-8，CJK 行尾把 `0x0A` 當 Big5 trail byte 吞掉 ⇒ **系統性少算**（實測四檔少算 10／22／140／145 行） | §5.2／§8 更正為 187；新增 §7.1.1 把「禁用裸 `Get-Content` 數行」立為機械限制 |
+
+⚠ **這條是怎麼被抓到的，比它本身更重要**：`git commit` 回報 `644 insertions`，
+而我先前用 `Get-Content` 量同一檔得 438 —— **兩個量測法互相矛盾**。
+若當時挑一個順眼的數字報，錯誤就會直接進 gate。
+**規則**：同一事實出現兩個不一致的量測結果時，🚫 **不得擇一採信**，
+必須查到根因並用**不可被中間層扭曲**的方法（raw byte）定案。
+
+⚠ R7 的機械掃描**設計上抓不到本條** —— 它掃的是「文件內部一致性」，
+而 `SR-19` 是**文件與外部世界不一致**。兩種掃描不可互相取代。
+
+### R9 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`
+
+R9 重掃全文所有數字，逐一標記其**量測法**，並剔除所有以裸 `Get-Content` 取得者：
+`tsc` 診斷數（362／10／8／0）· ratchet（362/324→352/325）· emit bytes（6769／6796）·
+raw bytes（6786／6614）· 行數（187／172／644，皆 `ReadAllLines` 或 `0x0A` 計數）·
+diff shape 預測（8／13／21／8）。未再發現新問題。
+
+**⚠ 自審的誠實邊界**：19 條 finding 的分類為 **16 條失準／矛盾 ＋ 3 條缺漏**，
 **全部**落在機械／宣稱層級，**0 條**是設計層級。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
@@ -641,4 +684,7 @@ R7 以**機械枚舉**重核（非肉眼）：
 2. `SR-16` 族 —— 族處置不完整（改了 X 卻沒掃 X 的其他成員）。批 D 在 code 層抓出 4 次，
    本棒 R5 在**文件層**再犯 1 次。
 
-**修過不代表免疫**，請以這兩族為重點掃描角度。
+3. `SR-19` 族 —— **量測工具本身失真**。同一事實有兩個不一致的量測結果時擇一採信，
+   等於把工具的 bug 當成事實。本棒差點如此（`Get-Content` 438 vs `git` 644）。
+
+**修過不代表免疫**，請以這三族為重點掃描角度。
