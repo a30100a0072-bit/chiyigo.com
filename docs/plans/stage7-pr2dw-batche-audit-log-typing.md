@@ -1,7 +1,7 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R27）；
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R29）；
 > 🚫 **不是** gate 通過。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger**；
 > 🚫 本行（及本檔其他任何章節）**不複述** gate 當前狀態（`ARCH-E-R3-RR1`）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
@@ -779,7 +779,8 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 6 | ① ChatGPT Architecture | R5（重判） | `CHATGPT_ARCH_CHANGES_REQUESTED` | `f76de40c` / blob `6f8e73ba` / sha `f80e8b6d…92eb39` | ② 四項之**架構方向全數 ACCEPTED**；**`OD-E2` 裁定採 overload / 0-cast**。0 設計退回／**2 Required**（`ARCH-E-R5-RR1` cast 家族未全同步・`ARCH-E-R5-RR2` 負向控制仍用舊 CRLF oracle）＋1 packet-level non-blocking（`PKT-E-R5-NB1`）。⚠ **① approval 未重綁到 `f76de40c`**。處置見 §14.6 |
 | 7 | ① ChatGPT Architecture | R6 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`ccaaeaaf`** / blob `7a9f5d6d` / sha `1d7b303f…8f371e` | `ARCH-E-R5-RR1`／`RR2`／`PKT-E-R5-NB1` 全 **CLOSED**；**Architecture design objection ＝ 0**。**重頒 `ARCH-E-R6-L1`..`L8`**（§14.7），其中 **R4 之 `ARCH-E-L2`／`ARCH-E-L5` 正式 superseded**。另 3 項 non-blocking 經 ① 明示**不另開 remediation**（§14.7 末）。⚠ **① 通過 ≠ `CODING_ALLOWED`** |
 | 8 | ② Codex Plan | R2 | `CODEX_PLAN_CHANGES_REQUIRED` | **`f38189d6`** / blob `b33ddfea` / sha `e91d0288…ba7f8` | **R1 四項 Required 全數經 ② 獨立重播並 CLOSED**（TS 5.9.3＋實際 tsconfig `362→352`、multiset `REMOVED=10/ADDED=0`・`NC-3` 恰 1 raw TS2345・immutable-LF emit `6760 B`/CR=0/`78eef5c2…`・overload/zero-cast、ESLint 0/0・危險 broad checkout 已移除）。**0 runtime Blocker／1 Major Required**（`CODEX-E-R2-RR1` `GOV-DRIFT-001` lock-state 自相矛盾）**／1 packet-only NB**（`PKT-E-R2-NB1`）。處置見 §14.8 |
-| 9 | ① ChatGPT Architecture | R7（重判） | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`bfb15cf3`** / blob `b18e3330` / sha `895f5b4a…aed70e` | `CODEX-E-R2-RR1` **CLOSED**（① 全掃舊 `ARCH-E-L1..L8` 共 19 處，逐處皆 historical／`SUPERSEDED` 語境，**0 處 live 用法**；`ARCH-E-R6-L*` 23 處現行引用）· `PKT-E-R2-NB1` **CLOSED**。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R7-RR1` ledger 漏記 ② R2）。處置見 §14.9 | `ARCH-E-R5-RR1`／`RR2`／`PKT-E-R5-NB1` 全 **CLOSED**；**Architecture design objection ＝ 0**。**重頒 `ARCH-E-R6-L1`..`L8`**（§14.7），其中 **R4 之 `ARCH-E-L2`／`ARCH-E-L5` 正式 superseded**。另 3 項 non-blocking 經 ① 明示**不另開 remediation**（§14.7 末）。⚠ **① 通過 ≠ `CODING_ALLOWED`** |
+| 9 | ① ChatGPT Architecture | R7（重判） | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`bfb15cf3`** / blob `b18e3330` / sha `895f5b4a…aed70e` | `CODEX-E-R2-RR1` **CLOSED**（① 全掃舊 `ARCH-E-L1..L8` 共 19 處，逐處皆 historical／`SUPERSEDED` 語境，**0 處 live 用法**；`ARCH-E-R6-L*` 23 處現行引用）· `PKT-E-R2-NB1` **CLOSED**。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R7-RR1` ledger 漏記 ② R2）。處置見 §14.9  |
+| 10 | ① ChatGPT Architecture | R8 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`67b57afc`** / blob `feebc69d` / sha `a064e0e5…41037` | `ARCH-E-R7-RR1` **CLOSED**（ledger 已補 #8／#9、§14.8／§14.9 receipt 存在、§15.2 oracle 已升級）。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R8-RR1` ledger row #9 schema corruption：7 cells，第 7 cell 逐字等於 row #7 摘要）。⚠ owner-level direction：治理 artifact 設 **surface cap** |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -990,6 +991,17 @@ overload／zero-cast、ESLint 0/0 · 危險 broad checkout 已移除。
 
 - **event key ＝ `(gate, round, verdict, reviewed-anchor)`** —— 四者齊備才算一個事件。
 - **cardinality 只能當附帶 sanity check**，🚫 不得單獨作為完整性證據。
+
+**結構判準（`ARCH-E-R8-RR1` 新增；與 membership **兩者都須 PASS**）**：
+- `every ledger data row has exactly 6 cells`（header 定義 `# | 道 | 輪 | verdict | 受審錨點 | 摘要`）
+- `event key unique`（10 列無重複）
+- ⚠ membership PASS **不蘊含** row schema 合法 —— `ARCH-E-R7-RR1`（membership 漏驗）與
+  `ARCH-E-R8-RR1`（row structural validity 漏驗）是「集合存在 ≠ 結構正確」的同一更高階模式。
+
+**時序規則（`ARCH-E-R8-RR1` 第 4 點；取代舊「本輪自身須納入枚舉」以免時序悖論）**：
+- **只有已完成 verdict 才進 `expected_completed_event_set`。**
+- 建下一版 PLAN 時，**必須把「剛完成的上一輪 verdict」納入**。
+- 🚫 正在受審的該輪**不得**預寫自己的 verdict。
 - 驗證法：對每個已收到的外部 gate verdict，枚舉其 `(gate, round, verdict, anchor)`，
   再機械確認該 anchor 在 PLAN 中**至少出現一次且位於 ledger 列內**。
 - ⚠ **本輪自身亦須納入枚舉** —— 否則「補上一輪、漏這一輪」會無限循環（`SR-33`）。
@@ -1015,7 +1027,7 @@ overload／zero-cast、ESLint 0/0 · 危險 broad checkout 已移除。
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R27，共 **34 條** finding，全部處置完畢；**R27** 為「一輪 0 新發現」。
+**輪次總計**：R1 → R29，共 **35 條** finding，全部處置完畢；**R29** 為「一輪 0 新發現」。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
 量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
 五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
@@ -1132,7 +1144,7 @@ R12 以機械枚舉重跑全部族：`644`（全數帶 `de6cc72f` 錨點或在�
 `stage/staged/changed-files`（三 SSOT 一致）· 硬化宣稱族（⚠ **本句原寫「唯一出現處為明文作廢句」，
 經 ① R2 `ARCH-E-R2-RR2` 判定失準 —— 那是**語意分類**結果，被我冒充成 **literal census** 結果。
 正確表述與真實計數見 §15.1；本處不再自行給數字）·
-輪次敘述（全為 `R1→R27`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
+輪次敘述（全為 `R1→R29`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
 
 ### R13 — 2 finding（**皆由 ① R2 抓到，非自審**）
 
@@ -1274,14 +1286,25 @@ R25 以機械枚舉重跑 lock-state 族（全部 `ARCH-E-L\d` 出現點逐一�
 查出是 `Get-Content` 的 cp950 解碼失真（`feedback_powershell_getcontent_cjk_line_undercount` 同源）。
 權威判準取 git。
 
-### R27 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+### R27 — 0 新發現（**但非終輪** —— 被 ① R8 `ARCH-E-R8-RR1` 推翻，見 R28）
 
 R27 依 **§15.2 新 oracle** 機械枚舉：九個已完成裁決事件之 `(gate, round, verdict, anchor)`
 逐一在 ledger 命中；五個新舊 anchor（`f38189d6`／`e91d0288`／`bfb15cf3`／`b18e3330`／`b33ddfea`）
 各出現 ≥1 次且位於 ledger 列；ledger 列數 9（僅作 sanity check）；
 另重跑 lock-state 族、`SR-id` 連續性、終輪宣告恰 1、誠實邊界恰 1。
 
-**⚠ 自審的誠實邊界**：34 條 finding 的分類為 **29 條失準／矛盾 ＋ 3 條缺漏 ＋ 1 條先例遷移失敗 ＋ 1 條編輯事故**，
+### R28 — 1 finding（① R8；**依 owner surface cap，本節起僅記最小 receipt**）
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-35` | ledger row #9 為 **7 cells**，第 7 cell 逐字等於 row #7 摘要（實測 256 字元 byte-identical）。⚠ 併同更正 `SR-34` 之敘述：當時**並非「資料遺失後還原」，而是原文被位移到 row #9 尾端、我又補了一份副本**；`git diff --numstat` 的 `2/0` 與此解釋同樣相容，我誤讀為還原成功 | 腳本手術：row #9 保留前 6 cell（逐字驗證與 `67b57afc` 相同）、刪除第 7 cell；ledger append `#10` ① R8 verdict；§15.2 增 row-schema 與 event-key-unique 兩判準，並改用不產生時序悖論之時序規則。🚫 未動 #1–#8、未動 source/tests/schema/scope、未順手修任何歷史 NB |
+
+### R29 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+
+機械驗證：ledger 10 列**全為 6 cells** · event key **唯一** · 九個已完成事件 membership 全命中 ·
+`git diff` 恰 `2 insertions / 1 deletion`（row #9 修剪 ＋ row #10 新增）。
+
+**⚠ 自審的誠實邊界**：35 條 finding 的分類為 **30 條失準／矛盾 ＋ 3 條缺漏 ＋ 1 條先例遷移失敗 ＋ 1 條編輯事故**，
 **全部**落在機械／宣稱層級，**0 條**是設計層級。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
