@@ -773,6 +773,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 4 | ① ChatGPT Architecture | R4 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`6c06ae26`** / blob `3418a843` / sha `7e2f7fbb…aca935` | `ARCH-E-R3-RR1` **CLOSED**（① 複掃無新 live gate-state 副本）。頒 **`ARCH-E-L1`..`L7`**（§14.4）＋ 1 non-blocking（`ARCH-E-R4-NB1`）。⚠ **① 通過 ≠ `CODING_ALLOWED`** —— 仍須 ② Codex Plan Gate ＋ owner 明示授權 |
 | 5 | ② Codex Plan | R1 | `CODEX_PLAN_CHANGES_REQUIRED` | `872ee8c9` / blob `25162631` / sha `e0225eb4…` | **0 runtime Blocker／4 Required**（`RR1` 未登錄 assertion・`RR2` emit 證據非 committed-blob replay 且「EOL 不敏感」為假・`RR3` set vs multiset・`RR4` 危險 fallback）。receipt delta 經 ② 確認成立。處置見 §14.5。⚠ 四項皆 normative ⇒ 依 `ARCH-E-L7` **`6c06ae26` 之 ① approval 須回 ① 重判** |
 | 6 | ① ChatGPT Architecture | R5（重判） | `CHATGPT_ARCH_CHANGES_REQUESTED` | `f76de40c` / blob `6f8e73ba` / sha `f80e8b6d…92eb39` | ② 四項之**架構方向全數 ACCEPTED**；**`OD-E2` 裁定採 overload / 0-cast**。0 設計退回／**2 Required**（`ARCH-E-R5-RR1` cast 家族未全同步・`ARCH-E-R5-RR2` 負向控制仍用舊 CRLF oracle）＋1 packet-level non-blocking（`PKT-E-R5-NB1`）。⚠ **① approval 未重綁到 `f76de40c`**。處置見 §14.6 |
+| 7 | ① ChatGPT Architecture | R6 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`ccaaeaaf`** / blob `7a9f5d6d` / sha `1d7b303f…8f371e` | `ARCH-E-R5-RR1`／`RR2`／`PKT-E-R5-NB1` 全 **CLOSED**；**Architecture design objection ＝ 0**。**重頒 `ARCH-E-R6-L1`..`L8`**（§14.7），其中 **R4 之 `ARCH-E-L2`／`ARCH-E-L5` 正式 superseded**。另 3 項 non-blocking 經 ① 明示**不另開 remediation**（§14.7 末）。⚠ **① 通過 ≠ `CODING_ALLOWED`** |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -907,6 +908,38 @@ PLAN-only 3 hunks `+33/-2`（receipt delta 成立）· overlay 重播 `362→352
 與 overload signatures 相容；**最終裁決 oracle ＝ repo 自身 TS 5.9.3 ＋ 實際 tsconfig 下的
 fresh forced-tsc**，🚫 不得只靠 `transpileModule`。本 PLAN §6.1／§9 已以 forced tsc 為準，
 `transpileModule` 僅用於 emit identity 之輔證。
+
+---
+
+### 14.7 ① R6 `CHATGPT_ARCH_APPROVED_WITH_LOCKS` @ `ccaaeaaf` — locks receipt（**current binding**）
+
+> **本節為 receipt**：逐字轉錄 ① R6 所頒之 lock，🚫 非我方新增規範、🚫 不得自行增刪改寫語意。
+> 依 `ARCH-E-R6-L8`，本節與 ledger 第 7 列同屬**純 receipt** 落盤，不使 approval 失效。
+> ⚠ **`ARCH-E-R6-L1`..`L8` 為 current binding；R4 之 `ARCH-E-L2`／`ARCH-E-L5` 已 superseded。**
+> §14.4 之 R4 receipt **原文保持原樣、不回寫歷史**。
+
+| Lock | 現行約束 |
+|---|---|
+| `ARCH-E-R6-L1` **SCOPE-LOCK** | Production scope 恰 `functions/utils/audit-log.ts`；tests／schema／migration／callers／F-3／`env.d.ts` 禁止。final PR net changed-files 恰 source M ＋ PLAN A；coding staged set 恰 source 1 檔。任何偏離**先 halt**。 |
+| `ARCH-E-R6-L2` **TYPE-ONLY-RUNTIME-LOCK** | 唯一允許 source surface：**10 parameter annotations ＋ 3 module-local declarations ＋ 1 declaration-only overload**。non-any casts ＝ 0。不得改 runtime expression；`msg` body、canonicalization、hash-chain、D1 query/bind、CAS/retry/error classification 均不動。**overload 必須位於既有 JSDoc 之前；JSDoc emit 不得改變。** |
+| `ARCH-E-R6-L3` **CASCADE-LOCK** | final source commit 必以 repo 自身 **TS 5.9.3 ＋ 實際 tsconfig ＋ fresh forced-tsc** 重跑；以 **multiset** 計算須 `REMOVED=10 / ADDED=0`。🚫 不得繼承 overlay 結果。`NC-3` 須恰產生預期的 **1 raw TS2345**；否則退回 PLAN。 |
+| `ARCH-E-R6-L4` **UNKNOWN-BOUNDARY-LOCK** | `admin_email: unknown` 僅代表未驗證 claim 被明示、implicit-any 被移除；**不**代表 write contract、DB-safe、sink narrowing 或 `TD-BATCHE-1` closure。caller／schema hardening 仍在 scope 外。 |
+| `ARCH-E-R6-L5` **ZERO-ASSERTION-LOCK** | **supersede 舊 R4 `L5`**：non-any `as` casts ＝ **0**；`: any`／`as any`／`<any>`／容器 any ＝ 0；`ts-ignore`／`nocheck`／`expect-error` ＝ 0；新 export ＝ 0；**不得為避免 overload 而新增 registry 或其他 governance file**。 |
+| `ARCH-E-R6-L6` **EVIDENCE-FAMILY-LOCK** | type-only 主 oracle、negative control、所有 live evidence reference 必使用**同一 immutable-LF provenance**。final code 後 fresh replay 必**同時**證明 nonempty、CR=0、emit byte-identical；negative control 必轉紅。**任一 oracle 遷移時須連同其 evidence family 一起重驗。** |
+| `ARCH-E-R6-L7` **TEST-REPLAY-LOCK** | final source commit **真跑** PLAN 指定 gates：lint、ratchet、browser pipeline、`test:cov`、`test:int`、`build:functions`、npm audit，以及列明的額外 lint。任何**首次紅燈 halt ＋ diagnose**，🚫 不得 rerun-to-green。 |
+| `ARCH-E-R6-L8` **ANCHOR-LEDGER-LOCK** | 本 approval 僅綁 `ccaaeaaf`。§14 append 本 R6 verdict 的**純 receipt commit 不使 approval 失效**；任何其他 normative PLAN 變更、source design 變更或 ② 要求的新 remediation，均**重新觸發 ① re-judgment**。② packet 必保留 `ccaaeaaf` approved anchor。 |
+
+**① R6 之 3 項 non-blocking — ① 明示不另開 remediation round，故本輪 🚫 不修 PLAN**
+（理由：現在改 §15 會依 `ARCH-E-R6-L8` 重新改變受審 normative artifact ⇒ 反而觸發 re-judgment）：
+
+| ID | 內容 | 狀態 |
+|---|---|---|
+| `ARCH-E-R6-NB1` | §15 寫「**兩個**高復發族」，下面實列 `SR-12`／`SR-16`／`SR-19` **三個** —— 集合基數筆誤 | **DEFERRED**（不影響 architecture contract／oracle／scope） |
+| `ARCH-E-R6-NB2` | R23 稱舊 emit 值 10 處「皆為作廢標註或 finding 原文」；① 機械重跑同得 10 行且 **0 處把舊值當 canonical current value**，但 §6.3 的 CRLF 對照列屬**有效的 comparative／root-cause evidence**，不嚴格屬那兩類。**真正成立的不變式＝「old values as current canonical evidence ＝ 0」**，非該二分類全稱 | **DEFERRED**（⚠ 引用 R23 結論時一律以此更精確的不變式為準） |
+| `PKT-E-R6-NB1` | R6 packet SECTION 2 之 `PLAN_REMEDIATION_STAGED_SET` 仍寫 commit `f76de40c`，本輪應為 `ccaaeaaf` —— **packet metadata stale copy**（N0 authoritative PLAN 與 R6 anchor 皆正確） | **已於 ② packet 修正**（packet 層，不涉 PLAN） |
+
+⚠ `ARCH-E-R6-NB1`／`NB2` 之修正**留待下一次本就會發生的 normative 改動時一併處置**，
+🚫 不為它們單獨開輪 —— 這是 ① 的明示裁示，亦符合「改動本身會製造新風險」之本棒教訓。
 
 ---
 
