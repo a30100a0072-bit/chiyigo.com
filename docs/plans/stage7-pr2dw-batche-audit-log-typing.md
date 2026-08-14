@@ -1,7 +1,7 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R33）；
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R35）；
 > 🚫 **不是** gate 通過。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger**；
 > 🚫 本行（及本檔其他任何章節）**不複述** gate 當前狀態（`ARCH-E-R3-RR1`）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
@@ -783,6 +783,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 10 | ① ChatGPT Architecture | R8 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`67b57afc`** / blob `feebc69d` / sha `a064e0e5…41037` | `ARCH-E-R7-RR1` **CLOSED**（ledger 已補 #8／#9、§14.8／§14.9 receipt 存在、§15.2 oracle 已升級）。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R8-RR1` ledger row #9 schema corruption：7 cells，第 7 cell 逐字等於 row #7 摘要）。⚠ owner-level direction：治理 artifact 設 **surface cap** |
 | 11 | ① ChatGPT Architecture | R9 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`6875095d`** / blob `65f2519e` / sha `8c609f5e…c8bc7` | `ARCH-E-R8-RR1` **CLOSED**（row #9 已修為 6 cells、#10 已 append、event key 唯一）。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R9-RR1` §15.2 oracle 時序／集合語意矛盾：舊「本輪自身須納入枚舉」仍存活、membership 只驗 anchor 未驗四元組、stale「9 completed」surface）。處置見 §15.2 |
 | 12 | ① ChatGPT Architecture | R10 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`f4541143`** / blob `0ec4ad7f` / sha `86ea2605…03763` | `ARCH-E-R9-RR1` **CLOSED**（§15.2 已改集合等式、四元組比對、唯一時間邊界；ledger #11 已 append；11 列全 6 cells、key 唯一）。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R10-RR1` R31 殘留舊 current-verification）。處置見 §15 R32 |
+| 13 | ① ChatGPT Architecture | R11 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`b613b43c`** / blob `69b6c4ff` / sha `c9ca252d…71e9f` | `ARCH-E-R10-RR1` **CLOSED**（舊 current-verification 僅剩 `SR-37` finding 原文）；ledger `#12` PASS、12 列全 6 cells、key 唯一、四元組等式 PASS；`ARCH-E-R6-NB1` 併修時機 **ACCEPTED**。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R11-RR1` closure family 未完整遷移）。處置見 §15 R34 |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -953,7 +954,8 @@ fresh forced-tsc**，🚫 不得只靠 `transpileModule`。本 PLAN §6.1／§9 
 | `ARCH-E-R6-NB2` | R23 稱舊 emit 值 10 處「皆為作廢標註或 finding 原文」；① 機械重跑同得 10 行且 **0 處把舊值當 canonical current value**，但 §6.3 的 CRLF 對照列屬**有效的 comparative／root-cause evidence**，不嚴格屬那兩類。**真正成立的不變式＝「old values as current canonical evidence ＝ 0」**，非該二分類全稱 | **DEFERRED**（⚠ 引用 R23 結論時一律以此更精確的不變式為準） |
 | `PKT-E-R6-NB1` | R6 packet SECTION 2 之 `PLAN_REMEDIATION_STAGED_SET` 仍寫 commit `f76de40c`，本輪應為 `ccaaeaaf` —— **packet metadata stale copy**（N0 authoritative PLAN 與 R6 anchor 皆正確） | **已於 ② packet 修正**（packet 層，不涉 PLAN） |
 
-⚠ `ARCH-E-R6-NB1`／`NB2` 之修正**留待下一次本就會發生的 normative 改動時一併處置**，
+⚠ `ARCH-E-R6-NB1` 已於 **R11 CLOSED**（見上表）。**僅 `ARCH-E-R6-NB2` 仍 DEFERRED**，
+其修正**留待下一次本就會發生的 normative 改動時一併處置**，
 🚫 不為它們單獨開輪 —— 這是 ① 的明示裁示，亦符合「改動本身會製造新風險」之本棒教訓。
 
 ---
@@ -1035,7 +1037,7 @@ overload／zero-cast、ESLint 0/0 · 危險 broad checkout 已移除。
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R33，共 **37 條** finding，全部處置完畢；**R33** 為「一輪 0 新發現」。
+**輪次總計**：R1 → R35，共 **38 條** finding，全部處置完畢；**R35** 為「一輪 0 新發現」。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
 量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
 五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
@@ -1152,7 +1154,7 @@ R12 以機械枚舉重跑全部族：`644`（全數帶 `de6cc72f` 錨點或在�
 `stage/staged/changed-files`（三 SSOT 一致）· 硬化宣稱族（⚠ **本句原寫「唯一出現處為明文作廢句」，
 經 ① R2 `ARCH-E-R2-RR2` 判定失準 —— 那是**語意分類**結果，被我冒充成 **literal census** 結果。
 正確表述與真實計數見 §15.1；本處不再自行給數字）·
-輪次敘述（全為 `R1→R33`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
+輪次敘述（全為 `R1→R35`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
 
 ### R13 — 2 finding（**皆由 ① R2 抓到，非自審**）
 
@@ -1317,19 +1319,33 @@ R27 依 **§15.2 新 oracle** 機械枚舉：九個已完成裁決事件之 `(ga
 
 ### R31 — 0 新發現（**但非終輪** —— 被 ① R10 `ARCH-E-R10-RR1` 推翻，見 R32）
 
+機械驗證 **@ `f4541143`**：`rows == expected` · row-schema 違規 **0** · event key **唯一** ·
+**四元組集合等式 true**（missing 0／phantom 0）。
+⚠ 此為**該輪 commit 之 snapshot**，🚫 不得讀成任何後續版本的 current value。
+
 ### R32 — 1 finding（① R10；surface-capped 最小 receipt）
 
 | # | finding | 處置 |
 |---|---|---|
 | `SR-37` | R31 之 **current** 驗證證據下同時留著上一輪的「ledger 10 列／九事件 membership／`2 insertions / 1 deletion`」 ⇒ 同一份 current-clean receipt 同時聲稱 ledger 為 11 與 10。根因＝**oracle 已修好，但其 current evidence family 未完整遷移**（`SR-30` 同型復發） | 刪除該舊驗證塊（🚫 未動歷史 R27）；R31 只保留四項 invariant 並**錨定 `@ f4541143`**；`SR-36(c)` 之前態描述改回 **R9 PLAN 10 列 vs R9 packet「9 completed」**；併同 closure `ARCH-E-R6-NB1`（「兩個高復發族」→ **三個**） |
 
-### R33 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+### R33 — 0 新發現（**但非終輪** —— 被 ① R11 `ARCH-E-R11-RR1` 推翻，見 R34）
 
-機械驗證（腳本，cardinality 由 ledger 計算）**@ `f4541143`**：`rows == expected` · row-schema 違規 **0** ·
-event key **唯一** · **四元組集合等式 true**（missing 0／phantom 0）。
-⚠ 此為該 commit 之 snapshot；🚫 後續 ledger append 後不得再讀成 current value。
+機械驗證 **@ `b613b43c`**：`rows == expected` · row-schema 違規 **0** · event key **唯一** ·
+**四元組集合等式 true**（missing 0／phantom 0）。⚠ 該輪 snapshot，🚫 勿讀成後續版本之 current value。
 
-**⚠ 自審的誠實邊界**：37 條 finding 的分類為 **32 條失準／矛盾 ＋ 3 條缺漏 ＋ 1 條先例遷移失敗 ＋ 1 條編輯事故**，
+### R34 — 1 finding（① R11；surface-capped 最小 receipt）
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-38` | closure family 未完整遷移，兩處：(a) `ARCH-E-R6-NB1` 表列已 `CLOSED @ R11`，但下方 prose 仍寫「`NB1`／`NB2` 之修正留待下一次…」⇒ 同一 PLAN 同時說 NB1 已結與待辦；(b) `SR-37` 處置欄宣稱「R31 只保留四項 invariant 並錨定 `@ f4541143`」，但 artifact 實況是 **R31 無該 snapshot、四項掛在 R33 且仍錨 `f4541143`** ⇒ 「哪一輪驗了哪個 artifact」失真 | (a) prose 改為**僅 `NB2` DEFERRED**；(b) 把 `@ f4541143` snapshot **放回 R31**，R33 之 current 證據改錨 **`b613b43c`**。🚫 未動 §15.2／ledger `#1`–`#12`／overload／scope／emit／multiset／tests |
+
+### R35 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+
+機械驗證 **@ 本版**：`rows == expected` · row-schema 違規 **0** · event key **唯一** ·
+**四元組集合等式 true**；輪次↔snapshot 錨點對齊（R31→`f4541143`／R33→`b613b43c`）。
+
+**⚠ 自審的誠實邊界**：38 條 finding 的分類為 **33 條失準／矛盾 ＋ 3 條缺漏 ＋ 1 條先例遷移失敗 ＋ 1 條編輯事故**，
 **全部**落在機械／宣稱層級，**0 條**是設計層級。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
