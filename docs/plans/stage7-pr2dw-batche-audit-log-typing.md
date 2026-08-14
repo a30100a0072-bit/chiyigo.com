@@ -1,7 +1,7 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R35）；
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R37）；
 > 🚫 **不是** gate 通過。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger**；
 > 🚫 本行（及本檔其他任何章節）**不複述** gate 當前狀態（`ARCH-E-R3-RR1`）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
@@ -171,96 +171,80 @@ functions/api/admin/users/[id]/unban.ts(64,7)
 
 🚫 **此裁定不消滅底層落差、只記錄它** —— 見 §10.1 `TD-BATCHE-1`。
 
-### 4.4 `E-OD-2`：`isUniquePrevHashError(err: unknown)` — **function overload / zero-assertion**
+### 4.4 `E-OD-2`：`isUniquePrevHashError(err: unknown)` ＋ **2 個「已登錄」erased cast**
 
 `err` 的型別**被測試鎖死為 `unknown`**：
 `tests/integration/audit-log.test.ts:142` 宣告 `let caught: unknown`，
 `:149` 以 `isUniquePrevHashError(caught)` 傳入。TS 中 `unknown` 僅可賦值給 `unknown` / `any`；
 `: any` 被 ratchet `BAN_PATTERNS`（`/:\s*any\b/`）擋 ⇒ **只剩 `unknown`**。
+而 `unknown` 上不能直接讀 `.message`。
 
-`unknown` 上不能直接讀 `.message`。
+#### ⚠ function overload 方案已作廢（`CODEX-E-R3-RR2`）
 
-> ⚠ **本節已於 ② R1 `CODEX-E-R1-RR1` 後全面改寫。**
-> 舊方案＝2 個 inline erased cast（`err as ErrorLike`）。② 判定：repo 無 TypeScript
-> governance manifest／unsafe-boundary registry，該 cast 屬**未登錄之 assertion**、
-> 違 advisory `TS-BOUNDARY-002`；且 repo **已有同型先例被 ② 退回**
-> （PR-2ds §「`toBase64Url` function overload」：原 `as ArrayBufferLike` 被判未登錄
-> assertion，改 **function overload** 後零 assertion、無需 registry）。
-> **舊方案作廢**，🚫 不得再被引用為本棒設計。
+② R1 曾以 `TS-BOUNDARY-002` 退回 cast 方案，我方改採 **function overload**（沿 PR-2ds 先例）。
+**② R3 判定該方案不可行，我方實測確認：**
 
-#### 現行方案：**function overload（零 assertion）**，沿 PR-2ds 既定 pattern
+| 事實 | 實測 |
+|---|---|
+| 方向與 PR-2ds **相反** | PR-2ds＝**public overload ⊂ implementation union**；本案為 **public（`unknown`）比 implementation（`ErrorLike | null | undefined`）寬** |
+| 只因 `strict:false` 才編得過 | `tsconfig.functions.json` 為 `strict:false`；同一 overlay 加 `--strict` ⇒ **`TS2394` This overload signature is not compatible with its implementation signature** |
+| 與 Stage 7 終局衝突 | 終局序為 `audit → rebaseline → **strict:true**`；該方案**保證**在 strict 那一步爆掉，且爆點在 audit hash-chain 檔內 |
+
+🚫 **overload 方案永久作廢**，🚫 不得再以「PR-2ds 先例」為由復活 ——
+先例方向相反，**不構成同型安全先例**。
+
+#### 現行方案（owner 2026-08-14 裁定 ＝ 選項 B）
 
 ```ts
-export function isUniquePrevHashError(err: unknown): boolean
-/**
- * （既有 JSDoc 原封不動）
- */
-export function isUniquePrevHashError(err: ErrorLike | null | undefined) {
+export function isUniquePrevHashError(err: unknown) {
   if (!err) return false
-  const msg = [err?.message, err?.cause?.message].filter(Boolean).join('\n')   // 本體一字不動
-  ...
+  const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].filter(Boolean).join('\n')
+  return /UNIQUE constraint failed:\s*admin_audit_log\.prev_hash/i.test(msg)
+}
 ```
 
-- **public overload** 收 `unknown` ⇒ 滿足 `audit-log.test.ts:149` 傳入 `caught: unknown`。
-- **implementation signature** 為窄型 ⇒ 本體 `err?.message` **零 cast、一字不動**。
-- overload signature 為 declaration-only ⇒ **emit 抹除**、byte-identical 維持（§6.3 實測）。
-- **suppression：`as` cast 由 2 降為 0**（§5.5）。
+- **erase 後與 base 逐字相同** ⇒ byte-identical emit 維持（§6.3 實測）。
+- cast 數量：**恰 2**（同一行）；型別 `ErrorLike`，🚫 非 `any`、🚫 非雙重 cast。
+- **strict-safe**：加 `--strict` 後**不產生**與本設計相關之錯誤（僅剩下方 base 既有之 `TS2339`）。
 
-#### ⚠ `ARCH-E-E1`：overload **落點**是 load-bearing（本棒實測發現，PR-2ds 未涵蓋）
+#### 🔒 `UNSAFE-BOUNDARY-REGISTRY`（本棒唯一登錄項；② 明示之替代路徑）
 
-overload signature **必須放在既有 JSDoc 區塊之前**。若放在 JSDoc 與實作之間，
-該 JSDoc 會**附著到被抹除的 overload 上、一併從 emit 消失**：
+> ② R3 原文：「若零 runtime delta 為硬限制，**明確登錄此 unsafe boundary，而非用 overload 隱藏**。」
+> repo **無** TypeScript governance manifest／unsafe-boundary registry；為守 SCOPE-LOCK
+> （🚫 不新增 repo 治理檔），本登錄置於 PLAN 內。
 
-| 變體 | overload 落點 | emit bytes | byte-identical |
-|---|---|---|---|
-| A | JSDoc **之後**（直覺寫法） | **6416**（−344） | ❌ JSDoc 被丟掉 |
-| **B（採用）** | JSDoc **之前** | **6760** | ✅ |
-
-🚫 故本棒不得只寫「改用 overload」而不鎖落點 —— 落點錯會**靜默刪掉一段安全說明文件**。
-
-#### `OD-E2` — **已裁決並已核准（CLOSED）**，非待裁事項
-
-| 時點（錨點） | 事件 |
+| 欄位 | 值 |
 |---|---|
-| ① R5 @ `f76de40c` | **裁定採 overload / 0-cast**。理由（①）：比「維持 2 casts ＋ 新建 registry」更符合本棒最小 scope，且沒有理由為了保存舊 lock 字面而新增治理檔 |
-| ① R6 @ **`ccaaeaaf`** | **正式核准並重頒 lock**：`ARCH-E-R6-L5` **ZERO-ASSERTION-LOCK**（non-any casts ＝ 0）· `ARCH-E-R6-L2` **TYPE-ONLY-RUNTIME-LOCK**（10 annotations ＋ 3 declarations ＋ 1 declaration-only overload，且 **overload 必位於 JSDoc 之前、JSDoc emit 不得改變**）。**R4 之 `ARCH-E-L2`／`ARCH-E-L5` 正式 SUPERSEDED** |
+| **id** | `UB-E-1` |
+| **位置** | `functions/utils/audit-log.ts` · `isUniquePrevHashError` 本體之 `msg` 行 |
+| **形式** | `(err as ErrorLike)` ×2（同一行） |
+| **未驗證假設** | `err` 若為物件，其 `message` / `cause.message` **可能不存在或非字串**（primitive、null-prototype、malformed `cause` 皆可能） |
+| **為何安全（runtime 層）** | 後續一律經 `?.` 存取 → 缺欄位得 `undefined`；`.filter(Boolean)` 濾除；`join('\n')` 對任意值皆安全；最終只餵給 regex `.test()`。**base 行為與此完全相同、本棒零 runtime 變更**，故不引入新的失效模式 |
+| **未涵蓋** | 🚫 **不**保證 `message` 為字串；🚫 **不**做輸入驗證；🚫 **不**構成 `err` 之型別契約 |
+| **為何不改用 runtime narrowing** | 該路徑 assertion＝0 且 strict-clean，但 **emit 不再 byte-identical**（破 `R12-L2` zero runtime delta）且需補測試（破 `R12-L1` scope）。owner 裁定保 type-only |
+| **closure** | Stage 7 `strict:true` 階段連同下列 base 既有問題一併處置 |
 
-**現行約束 ＝ `ARCH-E-R6-L1`..`L8` @ `ccaaeaaf`**（逐字 receipt 見 §14.7）。
-🚫 本節**不再**存在「待 ① 裁決」「須於下次 approval supersede」之未決狀態
-（`CODEX-E-R2-RR1` 修正 —— 舊文把已完成之裁決寫成待決，與 §14.7 自相矛盾）。
+#### ⚠ base 既有 strict 缺口（**非本棒引入**，誠實揭露）
 
-**舊 R4 lock 與本設計之落差（歷史紀錄，說明為何需要 supersede）**：
+同一 `--strict` 實測另有一條 **三個候選方案共有**、且**在 base 就存在**的診斷：
+`TS2339: Property 'message' does not exist on type '{}'` @ `appendAuditLog` 的 `lastErr?.message`
+（`let lastErr` 未初始化 ⇒ strict 下推為 `{}`）。
+🚫 本棒**不修**（超出 SCOPE-LOCK）；記錄於此，供 `strict:true` 階段承接。
 
-| 舊 lock（R4 receipt，**原文不得竄改**，已 SUPERSEDED @ `ccaaeaaf`） | 當時之落差 |
-|---|---|
-| `ARCH-E-L2` RUNTIME-HASH-LOCK ⚠ **SUPERSEDED @ `ccaaeaaf`**（由 `ARCH-E-R6-L2` 取代） | 其允許變更集合列「**2 erased casts**」；本設計為 **0 casts ＋ 1 行 declaration-only overload** |
-| `ARCH-E-L5` CAST-LOCK ⚠ **SUPERSEDED @ `ccaaeaaf`**（由 `ARCH-E-R6-L5` 取代） | 其字面要求「non-any casts **恰 2 個** `err as ErrorLike`」；本設計為 **0** |
+#### 🔒 live lock identity 不變式（`CODEX-E-R3-RR1` closure）
 
-**已否決之備選（僅供追溯）**：維持 2 casts ＋ 新增 governance registry record。
-代價：registry 檔為**新檔** ⇒ 觸 SCOPE-LOCK、且 repo **無**該 registry
-（PLAN §「順帶發現」與 ② 皆已確認 `TS-TYPE-001`／`GOV-*` 僅 advisory-not-enforced；
-`ARCH-E-R6-L5` 亦明文禁止「為避免 overload 而新增 registry 或其他 governance file」）。
-
-#### 硬化／cast 家族之 live-vs-history 分類（`ARCH-E-R5-RR1` ＋ `CODEX-E-R2-RR1`）
-
-| 類別 | 成員 | 狀態 |
-|---|---|---|
-| **live current contract** | §4.4 標題 · §11 高風險結論 · §5.5 suppression 預算 | overload / 0-cast，且對齊 `ARCH-E-R6-L5` |
-| **live lock 引用** | 本節 `OD-E2` | **指向 `ARCH-E-R6-L1`..`L8` @ `ccaaeaaf`**（現行）；🚫 不再指向已 superseded 之 R4 L2/L5 為現行約束 |
-| **historical receipt（🚫 原文不改）** | §14.4 R4 `ARCH-E-L2`／`ARCH-E-L5` 原文 · §14.7 R6 receipt · §14.3 ① R3 已 PASS 清單 | 保留原文 |
-| **historical finding 原文（🚫 原文不改）** | §4.4 舊 cast 方案作廢說明 · §14.5 `CODEX-E-R1-RR1` · §14.6 `ARCH-E-R5-RR1` | 保留原文 |
-
-⚠ 🚫 **不得**為了讓 grep 命中數歸零而竄改歷史 —— 目標是**分類正確**，不是計數歸零。
-⚠ **判準（`CODEX-E-R2-RR1` 之不變式）**：任何**以現行約束身分**被引用的 lock，
-必須是 `ARCH-E-R6-*`；舊 `ARCH-E-L*` 僅得以**歷史／已 superseded** 身分出現。
+> **現行約束 ＝ `ARCH-E-R12-L1`..`L10` @ `44c7f5f6`**（逐字 receipt 見 §14.10）。
+> 🚫 §1–§13（live 面）內**任何以「現行」身分引用之 lock 必須是 `ARCH-E-R12-*`**；
+> `ARCH-E-R6-*`／`ARCH-E-L*` 僅得出現在 §14 之 **historical receipt**，
+> 且 R12 對 R6-L1..L7 之繼承**只繼承實質約束、不繼承 lock identity 或 anchor**
+> （R6-L8 與 R12-L8 之 anchor 與 receipt carve-out 並不相同）。
+> ⚠ 本不變式不受 `ARCH-E-R12-L10` 之 historical carve-out 保護 —— 它管的正是 **live 面**。
 
 **負向控制 `NC-3`（coding 階段執行，注入後須還原）**：把 `err` 改標為比 `unknown` 窄的型別
 （例：`Error | null | undefined`）。**預測**：`tests/integration/audit-log.test.ts:149` 產生
 `TS2345`，且因 `tests/**` 只屬 tests 單一 leaf（§6.0）⇒ **恰 1 raw**、非成雙。
 其餘三個呼叫點（`:157` `null`、`:158-161` `new Error(...)`、`:165` `wrapped`）皆可賦值 ⇒ 不轉紅。
-若**不**轉紅，代表「測試鎖死 `unknown`」這條理由不成立，須回 `PLAN_DRAFT` 重新設計。
 
----
 
 ## 5. Exact change scope
 
@@ -304,9 +288,9 @@ overload signature **必須放在既有 JSDoc 區塊之前**。若放在 JSDoc �
 | 項目 | 預測 |
 |---|---|
 | changed files | **恰 2**（`functions/utils/audit-log.ts` M ＋ 本 plan doc A） |
-| 既有行**被修改** | **恰 7**：7 條函式簽章（L23 / L31 / L44 / L60 / L106 / L132 / L143）。⚠ `msg` 本體（L134）**不再被修改** —— function overload 版本體一字不動（`CODEX-E-R1-RR1` 後之改善） |
-| **新增**行 | **14**：`interface AuditLogEntry` 8 行 ＋ `type AuditLogRow` 1 行 ＋ `type ErrorLike` 1 行 ＋ 3 個分隔空行 ＋ **overload signature 1 行** |
-| `git diff --stat`（source 檔） | **`21 insertions(+), 7 deletions(-)`**（實測，非手算） |
+| 既有行**被修改** | **恰 8**：7 條函式簽章（L23 / L31 / L44 / L60 / L106 / L132 / L143）＋ 1 條 `msg` 本體（L134，erase 後與 base 逐字相同） |
+| **新增**行 | **13**：`interface AuditLogEntry` 8 行 ＋ `type AuditLogRow` 1 行 ＋ `type ErrorLike` 1 行 ＋ 3 個分隔空行 |
+| `git diff --stat`（source 檔） | **`21 insertions(+), 8 deletions(-)`**（實測 `git diff --numstat`，非手算） |
 | 既有行**被刪除**（淨刪） | **0** |
 
 🚫 若實測與上表不符，**不得**默默改寫本表 —— 須就地標註差異與原因，並重新評估是否仍為 type-only。
@@ -323,7 +307,7 @@ overload signature **必須放在既有 JSDoc 區塊之前**。若放在 JSDoc �
 | `: any` / `as any` / `<any>` / 容器 any | **0** | ratchet 機械攔截 |
 | JSDoc `{any}` | **0** | ratchet 機械攔截 |
 | `as const` | **0** | — |
-| **non-any `as` cast** | **0**（原 2，② `CODEX-E-R1-RR1` 後改 function overload） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **0**。✅ 符合現行 **`ARCH-E-R6-L5` ZERO-ASSERTION-LOCK @ `ccaaeaaf`**（`OD-E2` 已 CLOSED；舊 R4 `L5` 已 SUPERSEDED） |
+| **non-any `as` cast** | **恰 2**（已登錄 `UB-E-1`，§4.4） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **2**，皆為 `err as ErrorLike`、同一行。⚠ 與 `ARCH-E-R12-L5` **ZERO-ASSERTION-LOCK 字面衝突**，須 ① 重判並重頒（`CODEX-E-R3-RR2`，owner 2026-08-14 裁定採此路徑） |
 | 新增 `export` | **0** | 型別宣告皆 module-local |
 
 ### 5.6 落地機制 — **三個獨立 staged-set SSOT**（`ARCH-E-R1-RR1`）
@@ -360,7 +344,7 @@ overload signature **必須放在既有 JSDoc 區塊之前**。若放在 JSDoc �
 
 > ⚠ **`CODEX-E-R1-RR3` 修正**：舊文寫「集合比對」。若真按 **Set** 實作，本檔 10 條診斷
 > 會被折疊成 **6 個 distinct key**（實測：`db` ×3 · `entry` ×2 · `row` ×2 · `err`／`text`／`prevHash` 各 ×1），
-> `REMOVED` 會變成 6 而非 **`ARCH-E-R6-L3` CASCADE-LOCK**（現行 @ `ccaaeaaf`）要求的 10。
+> `REMOVED` 會變成 6 而非 **`ARCH-E-R12-L3` CASCADE-LOCK**（現行 @ `44c7f5f6`）要求的 10。
 > **必須是 multiset subtraction**（實作上 `Compare-Object` 逐筆輸出差異即具此語意，已實測得 10）。
 > 🚫 規格文字與實作語意必須一致，不得只靠實作恰好正確。
 > `ADDED` 一律**同時報 raw 與 distinct positions**（§7.3）。
@@ -707,9 +691,9 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | **持久性序列化契約** | ⚠ **是（但零改動）** | `canonicalize()` 產出的 JSON **鍵序**是 hash chain 的持久性契約 —— 既有每一列 row 的 `row_hash` 都依賴它，改動 ＝ 全表歷史永久不可驗。本棒對該函式**本體零改動**（§6.3 機械證明 ＋ §8 既有竄改測試） |
 | **稽核 audit log** | ⚠ **是（領域敏感）** | 檔案本身即 audit hash chain |
 
-**結論**：領域敏感 ⇒ 走 **first-do-no-harm 最小 diff**。現行 diff surface（`CODEX-E-R1-RR1` 後）＝
-**10 處參數標註 ＋ 3 個 module-local 型別宣告 ＋ 1 行 declaration-only overload signature ＋ 0 個 assertion**，
-**零函式本體改寫**（`msg` 本體亦一字不動）。但因**零 runtime delta**（§6.3 機械證明），
+**結論**：領域敏感 ⇒ 走 **first-do-no-harm 最小 diff**。現行 diff surface（`CODEX-E-R3-RR2` 後）＝
+**10 處參數標註 ＋ 3 個 module-local 型別宣告 ＋ 2 個已登錄 erased cast（`UB-E-1`）**，
+零函式本體改寫（唯一被修改之本體行為 `msg` 那一行，且 **erase 後與 base 逐字相同**）。但因**零 runtime delta**（§6.3 機械證明），
 🚫 不觸發「state machine / failure mode / idempotency / retry 四件式」——
 那四件針對行為變更，本棒無行為可變。
 
@@ -785,6 +769,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 12 | ① ChatGPT Architecture | R10 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`f4541143`** / blob `0ec4ad7f` / sha `86ea2605…03763` | `ARCH-E-R9-RR1` **CLOSED**（§15.2 已改集合等式、四元組比對、唯一時間邊界；ledger #11 已 append；11 列全 6 cells、key 唯一）。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R10-RR1` R31 殘留舊 current-verification）。處置見 §15 R32 |
 | 13 | ① ChatGPT Architecture | R11 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`b613b43c`** / blob `69b6c4ff` / sha `c9ca252d…71e9f` | `ARCH-E-R10-RR1` **CLOSED**（舊 current-verification 僅剩 `SR-37` finding 原文）；ledger `#12` PASS、12 列全 6 cells、key 唯一、四元組等式 PASS；`ARCH-E-R6-NB1` 併修時機 **ACCEPTED**。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R11-RR1` closure family 未完整遷移）。處置見 §15 R34 |
 | 14 | ① ChatGPT Architecture | R12 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`44c7f5f6`** / blob `f17302f7` / sha `7088633f…22fc8` | `ARCH-E-R11-RR1` **CLOSED**；**0 Blocker／0 Required／0 設計 objection**。頒 **`ARCH-E-R12-L1`..`L10`**（§14.10）：`L1`–`L7` 完整繼承 `R6-L1..L7` 實質約束；`L8` ANCHOR/RECEIPT LOCK；**`L9` SELF-REVIEW-FREEZE（§15 凍結於 R35）**；**`L10` HISTORICAL-SURFACE／NB2 LOCK**。⚠ **① 通過 ≠ `CODING_ALLOWED`** |
+| 15 | ② Codex Plan | R3 | `CODEX_PLAN_CHANGES_REQUIRED` | **`3c423097`** / blob `a56f2511` / sha `9721163e…b5be1` | **0 runtime Blocker／3 Major Required／1 non-blocking**。`RR1` live lock-reference family 仍指 R6@ccaaeaaf（與 §14.10 之 R12 current binding 衝突）· **`RR2` `TS-BOUNDARY-002`：overload public 比 implementation 寬，僅因 `strict:false` 通過，加 `--strict` 產生 `TS2394`**（方向與 PR-2ds 先例相反、非同型安全先例）· `RR3` packet live wrapper 復活舊內容 · NB commit subject 實含 BOM。處置見 §14.11 |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -1002,12 +987,29 @@ PLAN SHA-256 **`7088633f544bfcd272c418e9a9fe8e05ae0abdafc89479a6a25fa190af822fc8
 |---|---|
 | `ARCH-E-R12-L1`..`L7` | **完整繼承 `ARCH-E-R6-L1`..`L7` 之實質約束**：scope 恰 `functions/utils/audit-log.ts` · 10 annotations ＋ 3 declarations ＋ 1 declaration-only overload · **0 assertions** · fresh forced-tsc `REMOVED=10 / ADDED=0` · `NC-3` 恰 1 raw `TS2345` · immutable-LF emit family · final source gates 全部 fresh replay。**現行設計無任何方向變更。** |
 | `ARCH-E-R12-L8` **ANCHOR/RECEIPT LOCK** | approval 綁定上列三值。以下視為 **receipt-only、不使 approval 失效**：① §14 ledger append `#14` ＝ ① R12 verdict；② append 本 R12 approval receipt；③ 後續 append ② Codex verdict receipt；④ ② 通過後若 owner 明示 `CODING_ALLOWED`，append owner authorization receipt。**除此之外**，凡修改現行 normative contract（尤其 §§1–13／§15.1／§15.2／source design／scope／oracle／lock 語意）即**重新觸發 ①**。 |
-| `ARCH-E-R12-L9` **SELF-REVIEW-FREEZE** | **§15「維度 A 自審軌跡」凍結於 R35。** R35 之「@ 本版」在本 lock 下**永久綁定 `44c7f5f6`**。🚫 receipt-only append 後**不得新增 R36／R37…**；🚫 不得因 append ①／② receipt、ledger row 或 `CODING_ALLOWED` 而更新「R1→R35」「38 findings」等敘事。§15 自此為 **anchored historical audit trail**，非隨 gate 同步之 current-state surface。**唯有真正發生實質 normative remediation 時**才允許重開 self-review；**純 receipt 不算**。 |
+| `ARCH-E-R12-L9` **SELF-REVIEW-FREEZE** | **§15「維度 A 自審軌跡」凍結於 R35。** R35 之「@ 本版」在本 lock 下**永久綁定 `44c7f5f6`**。🚫 receipt-only append 後**不得新增 R36／R37…**；🚫 不得因 append ①／② receipt、ledger row 或 `CODING_ALLOWED` 而更新「R1→R37」「38 findings」等敘事。§15 自此為 **anchored historical audit trail**，非隨 gate 同步之 current-state surface。**唯有真正發生實質 normative remediation 時**才允許重開 self-review；**純 receipt 不算**。 |
 | `ARCH-E-R12-L10` **HISTORICAL-SURFACE ／ NB2 LOCK** | **撤銷 `ARCH-E-R6-NB2` 之未來 remediation 義務** ⇒ **`ARCH-E-R6-NB2 = CLOSED_BY_R12_DIRECTION / NO_ARTIFACT_REWRITE_REQUIRED`**。理由：其真正 invariant 已正確寫明為 `old values as current canonical evidence = 0`，僅 R23 歷史分類文字不夠精確；繼續等待「下一次 normative change」改歷史敘事只會再製造 mutation surface。**§14.7 原 `DEFERRED` 字樣不必回寫**，由本 receipt 明文 supersede；R23 原文保留為 historical evidence。<br>**通則（自本 approval 起）**：已明確標示為 historical／superseded／finding-original 之舊敘事，**🚫 不得僅因數字或措辭過時而再升為 Required**；**唯有**它重新滲入 **live contract／active oracle／current decision surface** 時才阻擋。 |
 
 ⚠ **①R12 明示之後續紀律**：receipt commit **🚫 不做 R36/R37 self-review、🚫 不改 §15 輪次敘事**；
 只驗 **ledger／event-set 與 receipt 本身的機械完整性**。
 ⚠ ② packet 之 **approved Architecture anchor 必須仍是 `44c7f5f6`**；後續 receipt commit 只作證明、不取代 reviewed anchor。
+
+---
+
+### 14.11 ② Codex Plan Gate R3 之處置（`CODEX_PLAN_CHANGES_REQUIRED` @ `3c423097`）
+
+**② R3 已 PASS 之 live replay**：packet SHA／N0／N1／PLAN blob `a56f2511` 一致 ·
+`3c423097` 直接承接 `44c7f5f6`、receipt delta 恰 PLAN 一檔 `+23/-0` 2 hunks ·
+§15 為 31,732 B／`6cfd90ed…` 兩端 byte-identical · ledger 14 列／6-cell／四元組唯一／event-set equality 全 PASS ·
+**source 仍為 blob `0894b592`，零 production delta** · overlay 可重現 `362→352`、`REMOVED=10/ADDED=0`、
+emit 6760 B byte-identical、`NC-3` 恰 1 個 `TS2345`。
+
+| ID | 等級 | ② 的 finding | 我方處置 |
+|---|---|---|---|
+| `CODEX-E-R3-RR2` | Major `TS-BOUNDARY-002` | overload 對外收 `unknown`、implementation 卻宣告較窄之 `ErrorLike \| null \| undefined` 且無 runtime narrowing；**只因 `strict:false` 通過**，加 `strictNullChecks + strictFunctionTypes` 產生 **`TS2394`**。PR-2ds 先例為「public ⊂ implementation」，**本案方向相反、不構成同型安全先例** | **接受，我方獨立實測確認 `TS2394`**（另量三候選：overload=2 errors／cast=1／runtime-narrowing=1）。**owner 2026-08-14 裁定採選項 B**：`err: unknown` ＋ 2 個 **已登錄** erased cast（`UB-E-1`，§4.4）。overload 方案**永久作廢**。⚠ 與 `ARCH-E-R12-L5` **字面衝突** ⇒ 依 `R12-L8` 重觸發 ① Architecture re-review |
+| `CODEX-E-R3-RR1` | Major `GOV-DRIFT-001` | §4.4／§5.5 等 live 面仍把 `ARCH-E-R6-L1..L8 @ ccaaeaaf` 明列為 current binding，與 §14.10 之 `ARCH-E-R12-L1..L10 @ 44c7f5f6` 衝突；R12 繼承 R6-L1..L7 **實質內容**不能消除 identity／anchor 衝突（R6-L8 與 R12-L8 之 anchor 與 receipt carve-out 不同） | **接受**。§4.4 整節重寫時一併移除舊 live 引用；殘餘一處（§6 RR3 說明之 `ARCH-E-R6-L3`）已改 `ARCH-E-R12-L3 @ 44c7f5f6`；新增 **live lock identity 不變式**（§4.4 末）明訂 §1–§13 之現行引用必須是 `ARCH-E-R12-*`、且**繼承不繼承 identity／anchor** |
+| `CODEX-E-R3-RR3` | Major `GOV-DRIFT-001`／`GOV-EVIDENCE-001` | ② R3 packet 之 **live wrapper** 復活舊內容：SECTION 2.1 仍寫 R6／`+33`／ledger #7／§14.7；SECTION 3.1 仍寫 `8/13/21/8`、已 superseded 之 R4 lock IDs、「2 erased casts」、`R1→R17／26 findings` | **接受**。根因：我方前次只重寫 SECTION 3，**SECTION 2.1／3.1 自 ② R1 builder 繼承後從未更新**。下一版 packet **整批重建該兩節**，並把 stale 掃描擴及 packet 全部自身區段 |
+| （non-blocking） | evidence correction | commit subject raw bytes 實為 `EF BB BF 64 6F 63…`，**不是渲染假象** | **接受並收回我方前述判斷**。以 `git cat-file` 讀原始 bytes 實測：`44c7f5f6`／`3c423097` **確含 BOM**，其餘 commit 無。根因＝該兩則訊息以 PowerShell `Out-File -Encoding utf8`（寫 BOM）產生。依 ② 指示 **🚫 不 amend**；後續 commit message 一律改用無 BOM 寫入 |
 
 ---
 
@@ -1060,7 +1062,7 @@ PLAN SHA-256 **`7088633f544bfcd272c418e9a9fe8e05ae0abdafc89479a6a25fa190af822fc8
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R35，共 **38 條** finding，全部處置完畢；**R35** 為「一輪 0 新發現」。
+**輪次總計**：R1 → R37，共 **40 條** finding，全部處置完畢；**R37** 為「一輪 0 新發現」。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
 量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
 五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
@@ -1177,7 +1179,7 @@ R12 以機械枚舉重跑全部族：`644`（全數帶 `de6cc72f` 錨點或在�
 `stage/staged/changed-files`（三 SSOT 一致）· 硬化宣稱族（⚠ **本句原寫「唯一出現處為明文作廢句」，
 經 ① R2 `ARCH-E-R2-RR2` 判定失準 —— 那是**語意分類**結果，被我冒充成 **literal census** 結果。
 正確表述與真實計數見 §15.1；本處不再自行給數字）·
-輪次敘述（全為 `R1→R35`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
+輪次敘述（全為 `R1→R37`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
 
 ### R13 — 2 finding（**皆由 ① R2 抓到，非自審**）
 
@@ -1363,13 +1365,26 @@ R27 依 **§15.2 新 oracle** 機械枚舉：九個已完成裁決事件之 `(ga
 |---|---|---|
 | `SR-38` | closure family 未完整遷移，兩處：(a) `ARCH-E-R6-NB1` 表列已 `CLOSED @ R11`，但下方 prose 仍寫「`NB1`／`NB2` 之修正留待下一次…」⇒ 同一 PLAN 同時說 NB1 已結與待辦；(b) `SR-37` 處置欄宣稱「R31 只保留四項 invariant 並錨定 `@ f4541143`」，但 artifact 實況是 **R31 無該 snapshot、四項掛在 R33 且仍錨 `f4541143`** ⇒ 「哪一輪驗了哪個 artifact」失真 | (a) prose 改為**僅 `NB2` DEFERRED**；(b) 把 `@ f4541143` snapshot **放回 R31**，R33 之 current 證據改錨 **`b613b43c`**。🚫 未動 §15.2／ledger `#1`–`#12`／overload／scope／emit／multiset／tests |
 
-### R35 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+### R35 — 0 新發現（**但非終輪** —— 被 ② R3 三項 Major Required 推翻，見 R36）
+
+> ⚠ `ARCH-E-R12-L9` 凍結 §15 於 R35，但明訂「**唯有真正發生實質 normative remediation 時**
+> 才允許重開 self-review」。② R3 之 `RR2` 為**設計層級**改動（overload → 已登錄 cast），
+> 屬實質 normative remediation ⇒ **本節依 L9 例外條款合法重開**，🚫 非違反 freeze。
+
+### R36 — 2 finding（② R3；surface-capped 最小 receipt）
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-39` | **我把 PR-2ds 的 overload 先例方向套反了**：該先例是 public ⊂ implementation，本案卻是 public（`unknown`）比 implementation 寬。只因 `strict:false` 才編得過，加 `--strict` 即 `TS2394` ⇒ **在「終局要開 strict:true」的遷移棒裡自己埋一顆必爆的雷**。這是本棒**唯一一條設計層級 finding**，且由 ② 抓到、我方三輪自審均未抓到 | 實測三候選後由 owner 裁定選項 B；overload 永久作廢；§4.4 全節重寫並新增 `UNSAFE-BOUNDARY-REGISTRY`（`UB-E-1`） |
+| `SR-40` | 我以 `git log --format='%s'` 經 PowerShell 檢查 commit subject BOM，得「無 BOM」並據此宣稱 ② 之觀察為「渲染假象」。**實測以 `git cat-file` 讀原始 bytes：`44c7f5f6`／`3c423097` 確含 `EF BB BF`** ⇒ **我的反駁是錯的、已收回** | 根因＝訊息檔以 PowerShell `Out-File -Encoding utf8`（寫 BOM）產生，且我的檢查工具本身吞掉 BOM（`SR-19` 族第四次）。後續 commit message 改用無 BOM 寫入；🚫 不 amend 既有 commit |
+
+### R37 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
 
 機械驗證 **@ 本版**：`rows == expected` · row-schema 違規 **0** · event key **唯一** ·
 **四元組集合等式 true**；輪次↔snapshot 錨點對齊（R31→`f4541143`／R33→`b613b43c`）。
 
-**⚠ 自審的誠實邊界**：38 條 finding 的分類為 **33 條失準／矛盾 ＋ 3 條缺漏 ＋ 1 條先例遷移失敗 ＋ 1 條編輯事故**，
-**全部**落在機械／宣稱層級，**0 條**是設計層級。
+**⚠ 自審的誠實邊界**：40 條 finding 的分類為 **34 條失準／矛盾 ＋ 3 條缺漏 ＋ 2 條先例遷移失敗 ＋ 1 條編輯事故**，
+其中 **39 條**落在機械／宣稱層級、**1 條（`SR-39`）為設計層級**（由 ② R3 抓到，自審三輪未抓到）。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
 
