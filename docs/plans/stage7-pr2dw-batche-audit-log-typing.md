@@ -784,6 +784,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 11 | ① ChatGPT Architecture | R9 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`6875095d`** / blob `65f2519e` / sha `8c609f5e…c8bc7` | `ARCH-E-R8-RR1` **CLOSED**（row #9 已修為 6 cells、#10 已 append、event key 唯一）。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R9-RR1` §15.2 oracle 時序／集合語意矛盾：舊「本輪自身須納入枚舉」仍存活、membership 只驗 anchor 未驗四元組、stale「9 completed」surface）。處置見 §15.2 |
 | 12 | ① ChatGPT Architecture | R10 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`f4541143`** / blob `0ec4ad7f` / sha `86ea2605…03763` | `ARCH-E-R9-RR1` **CLOSED**（§15.2 已改集合等式、四元組比對、唯一時間邊界；ledger #11 已 append；11 列全 6 cells、key 唯一）。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R10-RR1` R31 殘留舊 current-verification）。處置見 §15 R32 |
 | 13 | ① ChatGPT Architecture | R11 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`b613b43c`** / blob `69b6c4ff` / sha `c9ca252d…71e9f` | `ARCH-E-R10-RR1` **CLOSED**（舊 current-verification 僅剩 `SR-37` finding 原文）；ledger `#12` PASS、12 列全 6 cells、key 唯一、四元組等式 PASS；`ARCH-E-R6-NB1` 併修時機 **ACCEPTED**。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R11-RR1` closure family 未完整遷移）。處置見 §15 R34 |
+| 14 | ① ChatGPT Architecture | R12 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`44c7f5f6`** / blob `f17302f7` / sha `7088633f…22fc8` | `ARCH-E-R11-RR1` **CLOSED**；**0 Blocker／0 Required／0 設計 objection**。頒 **`ARCH-E-R12-L1`..`L10`**（§14.10）：`L1`–`L7` 完整繼承 `R6-L1..L7` 實質約束；`L8` ANCHOR/RECEIPT LOCK；**`L9` SELF-REVIEW-FREEZE（§15 凍結於 R35）**；**`L10` HISTORICAL-SURFACE／NB2 LOCK**。⚠ **① 通過 ≠ `CODING_ALLOWED`** |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -985,6 +986,28 @@ overload／zero-cast、ESLint 0/0 · 危險 broad checkout 已移除。
 | ID | 等級 | ① 的 finding | 我方處置 |
 |---|---|---|---|
 | `ARCH-E-R7-RR1` | Required（gate-state SoT completeness） | §14 ledger **漏記 ② R2**。PLAN 自訂 §14 為唯一 gate SoT 且規定「未出現於 ledger ＝ 尚無已完成裁決」，但 ledger 僅 7 列、無 ② R2；① 獨立掃描：`f38189d6` **0 次**、`e91d0288` **0 次**。⚠ 根因**不是**沒數 ledger，而是 **R25 只驗 cardinality（「ledger 7 列」）未驗 event-set completeness** —— 7 這個數字是真的，集合卻少一個事件 | **接受**。ledger append **兩列**：`#8` ② R2 `CODEX_PLAN_CHANGES_REQUIRED` @ `f38189d6`／blob `b33ddfea`／sha `e91d0288…`；`#9` ① R7 `CHATGPT_ARCH_CHANGES_REQUESTED` @ `bfb15cf3`／blob `b18e3330`／sha `895f5b4a…`。⚠ **只補 ② R2 會立刻重蹈覆轍**（`bfb15cf3` 當時同樣 0 次），故一併補 ① R7。新增 §14.8／§14.9 receipt（🚫 未回寫任何舊 receipt）。self-review oracle 升級見 §15.2 |
+
+---
+
+### 14.10 ① R12 `CHATGPT_ARCH_APPROVED_WITH_LOCKS` @ `44c7f5f6` — approval receipt（**current binding**）
+
+> **本節為 immutable receipt**：逐字轉錄 ① R12 所頒之 lock 與裁示，🚫 非我方新增規範、🚫 不得增刪改寫語意。
+> **Architecture remediation loop 於本輪結束**（`ARCH-E-R11-RR1` CLOSED；0 Blocker／0 Required／0 設計 objection）。
+> ⚠ **① 通過 ≠ `CODING_ALLOWED`** —— 仍須 ② Codex Plan targeted re-pass ＋ owner 明示核發。
+
+**approval 綁定**：PLAN commit **`44c7f5f6`** · blob **`f17302f7`** ·
+PLAN SHA-256 **`7088633f544bfcd272c418e9a9fe8e05ae0abdafc89479a6a25fa190af822fc8`**。
+
+| Lock | 內容 |
+|---|---|
+| `ARCH-E-R12-L1`..`L7` | **完整繼承 `ARCH-E-R6-L1`..`L7` 之實質約束**：scope 恰 `functions/utils/audit-log.ts` · 10 annotations ＋ 3 declarations ＋ 1 declaration-only overload · **0 assertions** · fresh forced-tsc `REMOVED=10 / ADDED=0` · `NC-3` 恰 1 raw `TS2345` · immutable-LF emit family · final source gates 全部 fresh replay。**現行設計無任何方向變更。** |
+| `ARCH-E-R12-L8` **ANCHOR/RECEIPT LOCK** | approval 綁定上列三值。以下視為 **receipt-only、不使 approval 失效**：① §14 ledger append `#14` ＝ ① R12 verdict；② append 本 R12 approval receipt；③ 後續 append ② Codex verdict receipt；④ ② 通過後若 owner 明示 `CODING_ALLOWED`，append owner authorization receipt。**除此之外**，凡修改現行 normative contract（尤其 §§1–13／§15.1／§15.2／source design／scope／oracle／lock 語意）即**重新觸發 ①**。 |
+| `ARCH-E-R12-L9` **SELF-REVIEW-FREEZE** | **§15「維度 A 自審軌跡」凍結於 R35。** R35 之「@ 本版」在本 lock 下**永久綁定 `44c7f5f6`**。🚫 receipt-only append 後**不得新增 R36／R37…**；🚫 不得因 append ①／② receipt、ledger row 或 `CODING_ALLOWED` 而更新「R1→R35」「38 findings」等敘事。§15 自此為 **anchored historical audit trail**，非隨 gate 同步之 current-state surface。**唯有真正發生實質 normative remediation 時**才允許重開 self-review；**純 receipt 不算**。 |
+| `ARCH-E-R12-L10` **HISTORICAL-SURFACE ／ NB2 LOCK** | **撤銷 `ARCH-E-R6-NB2` 之未來 remediation 義務** ⇒ **`ARCH-E-R6-NB2 = CLOSED_BY_R12_DIRECTION / NO_ARTIFACT_REWRITE_REQUIRED`**。理由：其真正 invariant 已正確寫明為 `old values as current canonical evidence = 0`，僅 R23 歷史分類文字不夠精確；繼續等待「下一次 normative change」改歷史敘事只會再製造 mutation surface。**§14.7 原 `DEFERRED` 字樣不必回寫**，由本 receipt 明文 supersede；R23 原文保留為 historical evidence。<br>**通則（自本 approval 起）**：已明確標示為 historical／superseded／finding-original 之舊敘事，**🚫 不得僅因數字或措辭過時而再升為 Required**；**唯有**它重新滲入 **live contract／active oracle／current decision surface** 時才阻擋。 |
+
+⚠ **①R12 明示之後續紀律**：receipt commit **🚫 不做 R36/R37 self-review、🚫 不改 §15 輪次敘事**；
+只驗 **ledger／event-set 與 receipt 本身的機械完整性**。
+⚠ ② packet 之 **approved Architecture anchor 必須仍是 `44c7f5f6`**；後續 receipt commit 只作證明、不取代 reviewed anchor。
 
 ---
 
