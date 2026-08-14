@@ -651,6 +651,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 1 | ① ChatGPT Architecture | R1 | `CHATGPT_ARCH_CHANGES_REQUESTED` | `11fa0925` / blob `a4b041e1` / sha `efd8dd28…` | 0 Blocker／**3 Required**（`RR1` staged-set·`RR2` 644·`RR3` unknown 定性）／1 non-blocking（`TR-R3-NB1`）。處置見 §14.1 |
 | 2 | ① ChatGPT Architecture | R2 | `CHATGPT_ARCH_CHANGES_REQUESTED` | `eed35026` / blob `73e52e36` / sha `1939b3d9…` | 0 Blocker／**2 Required**（`RR1` 現行值標籤·`RR2` census vs 語意分類）／**0 新設計 objection**。R1 三項＋`TR-R3-NB1` 皆 CLOSED。處置見 §14.2 |
 | 3 | ① ChatGPT Architecture | R3 | `CHATGPT_ARCH_CHANGES_REQUESTED` | `d4bcdbf9` / blob `8fc9bf5e` / sha `d33cb365…` | 0 Blocker／**1 Required**（`ARCH-E-R3-RR1` gate-state family drift）／**0 設計 objection**。R2 兩項 CLOSED、transport PASS。處置見 §14.3 |
+| 4 | ① ChatGPT Architecture | R4 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`6c06ae26`** / blob `3418a843` / sha `7e2f7fbb…aca935` | `ARCH-E-R3-RR1` **CLOSED**（① 複掃無新 live gate-state 副本）。頒 **`ARCH-E-L1`..`L7`**（§14.4）＋ 1 non-blocking（`ARCH-E-R4-NB1`）。⚠ **① 通過 ≠ `CODING_ALLOWED`** —— 仍須 ② Codex Plan Gate ＋ owner 明示授權 |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -723,6 +724,29 @@ gate R3 packet **+2069 B ＝ 2069 CR**。差別只在於 **[N0] base64 載體把
 **① R3 之 non-blocking（我方接受並順手處理）**：R15 寫「§7.1.1『現行值』出現數（0）」
 字面像整節 literal count，實為 R14 定義之 scoped check（**表內**）。① 明示不列 Required；
 本輪已把「表內」二字補回，消除下一輪歧義。
+
+### 14.4 ① R4 `CHATGPT_ARCH_APPROVED_WITH_LOCKS` @ `6c06ae26` — locks receipt
+
+> **本節為 receipt**：逐字轉錄 ① 所頒之 lock，🚫 **非我方新增規範**、🚫 不得自行增刪或改寫語意。
+> 依 `ARCH-E-L7`，本節與上方 ledger 第 4 列同屬 **receipt-only** 落盤，不使 ① anchor 失效。
+
+| Lock | 適用範圍與 closure |
+|---|---|
+| `ARCH-E-L1` **SCOPE-LOCK** | Production 只准改 `functions/utils/audit-log.ts`；tests／schema／migration／callers／F-3／`env.d.ts` 全禁。最終 PR net changed-files 恰 source M ＋ PLAN A；coding commit staged set 恰 source 1 檔。任何偏離**先停**。 |
+| `ARCH-E-L2` **RUNTIME-HASH-LOCK** | 10 個參數標註、3 個 module-local type declaration、2 個 erased casts **之外**，不得改 runtime expression。`canonicalize` 鍵序、hash-chain、D1 query/bind、CAS/retry/error-classification 行為須保持。final source commit 必重跑 **non-vacuous** byte-identical emit；`build:functions` 必綠。 |
+| `ARCH-E-L3` **CASCADE-LOCK** | final source commit **fresh** forced-tsc 必得 scoped **REMOVED=10 / ADDED=0**；🚫 不得沿用 overlay。`NC-3` 必如 PLAN 所述轉紅；若不轉紅或出現任何新 diagnostic，**退回 PLAN**。 |
+| `ARCH-E-L4` **UNKNOWN-BOUNDARY-LOCK** | `admin_email: unknown` 僅表示未驗證 claim ＋ 消除 implicit any；**不得**宣稱 caller contract hardened／DB-safe／sink 已 narrow／`TD-BATCHE-1` 已 closure。不得藉本棒順手修 callers/schema。 |
+| `ARCH-E-L5` **CAST-LOCK** | non-any casts 恰 **2 個 `err as ErrorLike`**；0 `any` suppression、0 `ts-ignore`/`nocheck`/`expect-error`、0 新 export、0 雙重 cast。 |
+| `ARCH-E-L6` **TEST-REPLAY-LOCK** | `test:int`、`test:cov`、lint、ratchet、browser pipeline、`build:functions`、npm audit 等 PLAN 指定 gate 均以 **final source commit 真跑**。任何**首次紅燈 halt + diagnose**，🚫 不得 rerun-to-green。 |
+| `ARCH-E-L7` **LEDGER-LOCK** | 本 approval 錨定 `6c06ae26`。若**只為收據**而在 §14 **append** 本 R4 verdict row，可視為 receipt-only；② packet 必**同時保留**本 approved anchor。除此之外任何 **normative** PLAN 改寫，都需重新判斷是否使 ① anchor 失效。 |
+
+**`ARCH-E-R4-NB1`（non-blocking，① 明示不另開 remediation round）**：R16 寫「命中 4 處」。
+① 依 R16 明列之 regex 對 959 行 PLAN 逐行重跑，實得 **13 行**。我方獨立重跑**逐字相符**：13 行。
+根因＝那個「4」量於我加入 §14.3 與 R16 本身**之前**，是**同一次編輯 session 內就過期的快照數字**
+—— 又一次 literal census 與 semantic classifier 混寫。
+① 逐項複核該 13 行後確認**全屬讀法規則／ledger／history／舊 finding 引述／自審 meta**，
+**current-state assertion 確為 0** ⇒ invariant 成立、`ARCH-E-R3-RR1` **不重開**。
+處置：依 ① 建議在本 receipt-only commit 順手改為**不帶 literal 數字**之表述（見 §15 R16）。
 
 ---
 
@@ -880,8 +904,15 @@ R15 以腳本重跑：§7.1.1 **表列內**「現行值」出現數（0；⚠ sc
 
 ### R16 — 1 finding（① R3 remediation 之自審）
 
-處置 `ARCH-E-R3-RR1` 後，機械重跑 gate-state 全族（`尚未送審|待送|PENDING|CODING_ALLOWED|CHATGPT_ARCH_*`）：
-命中 4 處**全為讀法規則或 finding 原文引述**，**current-state 斷言 0 處** ✅（可變 surface 由 2 → 0）。
+處置 `ARCH-E-R3-RR1` 後，機械重跑 gate-state 全族（regex `尚未送審|待送|PENDING|CODING_ALLOWED|CHATGPT_ARCH_`）：
+**候選命中行全數分類後，`current-state assertion = 0`** ✅（可變 surface 由 2 → 0）。
+
+⚠ 🚫 **此處刻意不寫 literal 命中數**（`ARCH-E-R4-NB1`）：本節初稿寫「命中 4 處」，
+但那個數字量於 §14.3 與本節自身落盤**之前**，同一次編輯 session 內即過期
+（① 與我方各自重跑皆得 **13 行**）。
+**不變式是分類結果（`current-state assertion = 0`），不是 literal 計數** ——
+literal 計數會隨本檔每次編輯改變，屬 §15.1 所定義之「不可變快照」類，
+須帶 commit 錨點才可引用。
 
 | # | finding | 處置 |
 |---|---|---|
