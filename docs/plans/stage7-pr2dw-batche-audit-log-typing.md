@@ -1,8 +1,9 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R15）；
-> 🚫 **不是** gate 通過 —— ①②③④ 皆尚未送審（§14）。
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R17）；
+> 🚫 **不是** gate 通過。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger**；
+> 🚫 本行（及本檔其他任何章節）**不複述** gate 當前狀態（`ARCH-E-R3-RR1`）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
 > **維度 A self-review 形式**：**單 agent 對抗式**（owner 2026-08-13 當輪裁定；非 workflow）
 > **base commit**：`0a6593f637b902e389d50e30415537c22226b9d0`（main）
@@ -626,14 +627,30 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 
 ## 14. Gate 軌跡
 
-| 道 | Gate | 狀態 | 錨點 |
-|---|---|---|---|
-| ① | ChatGPT Architecture | **R1 ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（3 Required，全 PLAN-only）→ R2 待送 | 審查於 `11fa0925` / blob `a4b041e1` / PLAN sha `efd8dd28…` |
-| ② | Codex Plan | `PENDING` | — |
-| ③ | Codex Code | `PENDING` | — |
-| ④ | ChatGPT faithfulness | `PENDING` | — |
+**本節是 gate 狀態的唯一 SoT，且為 append-only 裁決 ledger。**（`ARCH-E-R3-RR1` 結構性修法）
 
-`CODING_ALLOWED = NOT_GRANTED`。
+**讀法規則（永久成立，故不會漂移）**：
+1. **每一列 ＝ 一個已完成的裁決**，附其受審 commit 錨點 ⇒ 列一旦寫入即**不可變**。
+2. 🚫 **本 ledger 不記錄瞬時狀態**（「待送」「審查中」「PENDING」等）。
+   瞬時狀態只存在於**當輪 packet SECTION 2 與中文報告**，**不寫進 durable PLAN**。
+3. **未出現於本 ledger 的 gate ＝ 尚無已完成裁決。**
+4. `CODING_ALLOWED` 僅由 owner 明示核發；核發時**新增一列**記錄。
+   **本 ledger 無該列 ⇒ 未核發。**
+5. 🚫 本檔任何其他章節**不得**複述 gate 當前狀態（可引用歷史 verdict，但須帶輪次＋commit 錨點）。
+
+> **為何這樣設計**：R3 之前，header 與本表各自持有一份「當前 gate 狀態」，
+> 兩份都會隨每輪過期 —— 認知更新了、durable artifact 沒更新，於是 header 寫「①②③④ 皆尚未送審」
+> 而 §14.1／§14.2 已記錄 ① 兩輪裁決，**同一份 artifact 自我否定**。
+> 這與 `644`／「現行值」是**同一族**（current-state surface 重複 ⇒ 必然漂移）。
+> 修法一致：**消滅重複 surface、把可變值換成讀法規則**，而不是把字改對。
+
+### 裁決 ledger（append-only）
+
+| # | 道 | 輪 | verdict | 受審錨點 | 摘要 |
+|---|---|---|---|---|---|
+| 1 | ① ChatGPT Architecture | R1 | `CHATGPT_ARCH_CHANGES_REQUESTED` | `11fa0925` / blob `a4b041e1` / sha `efd8dd28…` | 0 Blocker／**3 Required**（`RR1` staged-set·`RR2` 644·`RR3` unknown 定性）／1 non-blocking（`TR-R3-NB1`）。處置見 §14.1 |
+| 2 | ① ChatGPT Architecture | R2 | `CHATGPT_ARCH_CHANGES_REQUESTED` | `eed35026` / blob `73e52e36` / sha `1939b3d9…` | 0 Blocker／**2 Required**（`RR1` 現行值標籤·`RR2` census vs 語意分類）／**0 新設計 objection**。R1 三項＋`TR-R3-NB1` 皆 CLOSED。處置見 §14.2 |
+| 3 | ① ChatGPT Architecture | R3 | `CHATGPT_ARCH_CHANGES_REQUESTED` | `d4bcdbf9` / blob `8fc9bf5e` / sha `d33cb365…` | 0 Blocker／**1 Required**（`ARCH-E-R3-RR1` gate-state family drift）／**0 設計 objection**。R2 兩項 CLOSED、transport PASS。處置見 §14.3 |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -645,6 +662,12 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 
 ⚠ 三輪皆 **repo 內容零變動**（同一 commit / blob / PLAN sha）。
 🚫 傳輸失敗不得記為 `CHATGPT_ARCH_CHANGES_REQUESTED`。契約全文見 packet SECTION 0。
+
+⚠ **「3 輪」指的是造成阻擋的輪數，🚫 不表示通道之後就正常了**（`SR-26`）：
+LF→CRLF **在其後每一次傳輸都仍然發生**，① 逐輪實測 —— gate R2 packet **+1837 B ＝ 1837 CR**、
+gate R3 packet **+2069 B ＝ 2069 CR**。差別只在於 **[N0] base64 載體把它吸收掉**，
+故不再構成 blocker。**通道並未被修好，是契約承受住了。**
+⇒ 後續棒次沿用本契約時，🚫 不得因「R3 之後沒再失敗」而推論可以改回純文字載體。
 
 ### 14.1 ① R1 之處置（`CHATGPT_ARCH_CHANGES_REQUESTED`；0 Tier-0 Blocker／3 Required／1 non-blocking）
 
@@ -679,6 +702,28 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 加上 R9 那次，這是**第二次**同一結構：自審查得了「文件內部一致」，
 查不出「文件與外部世界／與自己宣稱的量測方法不一致」。此事實已寫入 §15 誠實邊界。
 
+### 14.3 ① R3 之處置（`CHATGPT_ARCH_CHANGES_REQUESTED`；0 Tier-0 Blocker／1 Required／**0 設計 objection**）
+
+**① R3 已 closure 之項**：`ARCH-E-R2-RR1`（§7.1.1 改 immutable `(commit, line-count)` 配對）·
+`ARCH-E-R2-RR2`（literal census 與 semantic oracle 已分離）· `SR-25` remediation **PASS**
+（① 認可「保留事故紀錄 ＋ 逐項歸戶而非只驗 Σ=17」）。**transport PASS**
+（① 實測 decoded 58464 B / 897 LF / 0 CR / sha `d33cb365…`；收到之 packet 再度被轉 CRLF，
++2069 B ＝ 2069 CR，N0 仍逐 byte 還原）。
+① 亦獨立複掃硬化宣稱族，確認 **`LIVE_POSITIVE_HARDENING_ASSERTION` 仍為 0**，
+🚫 不因本檔變長而重新打開 `RR2`。
+
+| ID | 等級 | ① 的 finding | 我方處置 |
+|---|---|---|---|
+| `ARCH-E-R3-RR1` | Required（治理 artifact correctness，非設計） | **current gate-state family 自相矛盾**：header 仍寫「①②③④ 皆尚未送審」、§14 主表仍寫「R1 → R2 待送」，但 §14.1／§14.2 已記錄 ① 兩輪裁決 ⇒ 同一 artifact 的 current-state summary 與歷史明細互相否定。與 644／「現行值」**同族**，作用域換成 gate-state | **接受，且採結構性修法**：§14 改為 **append-only 裁決 ledger ＋ 5 條讀法規則**（每列＝已完成裁決且不可變 · 🚫 不記瞬時狀態 · 未列＝尚無裁決 · `CODING_ALLOWED` 無列即未核發 · 🚫 他節不得複述 current state）；header 的 current-state 句**整句移除**，改為指向 §14 之唯一 SoT 宣告。⇒ **可變 surface 由 2 個降為 0 個**，該族結構上不再可能漂移 |
+
+⚠ **同族第三次**（`644` → 「現行值」 → gate-state），且**三次皆由外部 gate 抓到**。
+三次的共同根因不是粗心，而是**在 durable artifact 裡放了 current-state 副本**。
+故本輪不再逐字修，而是把該族的**可變 surface 數量歸零**。
+
+**① R3 之 non-blocking（我方接受並順手處理）**：R15 寫「§7.1.1『現行值』出現數（0）」
+字面像整節 literal count，實為 R14 定義之 scoped check（**表內**）。① 明示不列 Required；
+本輪已把「表內」二字補回，消除下一輪歧義。
+
 ---
 
 ## 15. 維度 A 自審軌跡（PLAN 階段）
@@ -687,7 +732,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R15，共 **25 條** finding，全部處置完畢；**R15** 為「一輪 0 新發現」。
+**輪次總計**：R1 → R17，共 **26 條** finding，全部處置完畢；**R17** 為「一輪 0 新發現」。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
 量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
 五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
@@ -801,7 +846,7 @@ R12 以機械枚舉重跑全部族：`644`（全數帶 `de6cc72f` 錨點或在�
 `stage/staged/changed-files`（三 SSOT 一致）· 硬化宣稱族（⚠ **本句原寫「唯一出現處為明文作廢句」，
 經 ① R2 `ARCH-E-R2-RR2` 判定失準 —— 那是**語意分類**結果，被我冒充成 **literal census** 結果。
 正確表述與真實計數見 §15.1；本處不再自行給數字）·
-輪次敘述（全為 `R1→R15`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
+輪次敘述（全為 `R1→R17`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
 
 ### R13 — 2 finding（**皆由 ① R2 抓到，非自審**）
 
@@ -826,12 +871,29 @@ R14 重跑機械枚舉，並**新增兩項針對本輪的檢查**：
 ⚠ **這條的位置最難堪也最有價值**：它發生在一份**專門修正「未驗證數字」的 remediation 裡**。
 證明「知道規則」與「執行規則」是兩件事 —— 唯一可靠的差別是**有沒有真的跑那支腳本**。
 
-### R15 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+### R15 — 0 新發現（**但非終輪** —— 被 ① R3 `ARCH-E-R3-RR1` 推翻，見 R16）
 
-R15 以腳本重跑：§7.1.1「現行值」出現數（0）· §15.1 census 與分類（4/4/9；4/4/3/6/0，Σ=17）·
+R15 以腳本重跑：§7.1.1 **表列內**「現行值」出現數（0；⚠ scope 限定為**表列**，
+整節仍有規則句提及該詞 —— 依 ① R3 non-blocking 建議補回「表內」二字消除歧義）·
+§15.1 census 與分類（4/4/9；4/4/3/6/0，Σ=17）·
 輪次族 · `SR-\d+` 定義列數 · 終輪宣告恰 1 · 誠實邊界恰 1 段。
 
-**⚠ 自審的誠實邊界**：25 條 finding 的分類為 **22 條失準／矛盾 ＋ 3 條缺漏**，
+### R16 — 1 finding（① R3 remediation 之自審）
+
+處置 `ARCH-E-R3-RR1` 後，機械重跑 gate-state 全族（`尚未送審|待送|PENDING|CODING_ALLOWED|CHATGPT_ARCH_*`）：
+命中 4 處**全為讀法規則或 finding 原文引述**，**current-state 斷言 0 處** ✅（可變 surface 由 2 → 0）。
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-26` | §14.0 標題「傳輸前置（**3 輪**）」會被讀成「通道之後就正常了」。實測**並非如此**：LF→CRLF 在其後每次傳輸都仍發生（gate R2 packet +1837 B＝1837 CR、gate R3 packet +2069 B＝2069 CR），只是被 `[N0]` 吸收 | 補明「3 輪指造成**阻擋**的輪數」＋逐輪實測數據＋結論「**通道並未被修好，是契約承受住了**」；並禁止後續棒次因「沒再失敗」而改回純文字載體 |
+
+### R17 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+
+R17 機械重跑：gate-state 族（current-state 斷言 0）· `CHATGPT_ARCH_*` 全帶輪次或為規則句 ·
+§7.1.1 表列「現行值」0 · §15.1 census 4/4/9 與分類 4/4/3/6/0（Σ=17）· 輪次族 ·
+`SR-\d+` 定義列數 · 終輪宣告恰 1 · 誠實邊界恰 1 段。
+
+**⚠ 自審的誠實邊界**：26 條 finding 的分類為 **23 條失準／矛盾 ＋ 3 條缺漏**，
 **全部**落在機械／宣稱層級，**0 條**是設計層級。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
