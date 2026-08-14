@@ -1,7 +1,7 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R17）；
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R20）；
 > 🚫 **不是** gate 通過。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger**；
 > 🚫 本行（及本檔其他任何章節）**不複述** gate 當前狀態（`ARCH-E-R3-RR1`）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
@@ -178,16 +178,56 @@ functions/api/admin/users/[id]/unban.ts(64,7)
 `:149` 以 `isUniquePrevHashError(caught)` 傳入。TS 中 `unknown` 僅可賦值給 `unknown` / `any`；
 `: any` 被 ratchet `BAN_PATTERNS`（`/:\s*any\b/`）擋 ⇒ **只剩 `unknown`**。
 
-`unknown` 上不能直接讀 `.message`，故本體改為 inline erased cast：
+`unknown` 上不能直接讀 `.message`。
+
+> ⚠ **本節已於 ② R1 `CODEX-E-R1-RR1` 後全面改寫。**
+> 舊方案＝2 個 inline erased cast（`err as ErrorLike`）。② 判定：repo 無 TypeScript
+> governance manifest／unsafe-boundary registry，該 cast 屬**未登錄之 assertion**、
+> 違 advisory `TS-BOUNDARY-002`；且 repo **已有同型先例被 ② 退回**
+> （PR-2ds §「`toBase64Url` function overload」：原 `as ArrayBufferLike` 被判未登錄
+> assertion，改 **function overload** 後零 assertion、無需 registry）。
+> **舊方案作廢**，🚫 不得再被引用為本棒設計。
+
+#### 現行方案：**function overload（零 assertion）**，沿 PR-2ds 既定 pattern
 
 ```ts
-const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].filter(Boolean).join('\n')
+export function isUniquePrevHashError(err: unknown): boolean
+/**
+ * （既有 JSDoc 原封不動）
+ */
+export function isUniquePrevHashError(err: ErrorLike | null | undefined) {
+  if (!err) return false
+  const msg = [err?.message, err?.cause?.message].filter(Boolean).join('\n')   // 本體一字不動
+  ...
 ```
 
-- **erase 後與 base 逐字相同**（`err?.message` / `err?.cause?.message`）→ 不破壞 byte-identical（§6 已實測）。
-- cast 數量：**恰 2**（同一行）；型別為 `ErrorLike`，🚫 非 `any`、🚫 非雙重 cast（`as unknown as T`）。
-- ratchet `BAN_PATTERNS` **不攔** non-any `as`（實測讀 `scripts/typecheck-ratchet.mjs:269-295`），
-  故此處以**人工計數**列入 §5.5 suppression 預算，供 gate 覆核。
+- **public overload** 收 `unknown` ⇒ 滿足 `audit-log.test.ts:149` 傳入 `caught: unknown`。
+- **implementation signature** 為窄型 ⇒ 本體 `err?.message` **零 cast、一字不動**。
+- overload signature 為 declaration-only ⇒ **emit 抹除**、byte-identical 維持（§6.3 實測）。
+- **suppression：`as` cast 由 2 降為 0**（§5.5）。
+
+#### ⚠ `ARCH-E-E1`：overload **落點**是 load-bearing（本棒實測發現，PR-2ds 未涵蓋）
+
+overload signature **必須放在既有 JSDoc 區塊之前**。若放在 JSDoc 與實作之間，
+該 JSDoc 會**附著到被抹除的 overload 上、一併從 emit 消失**：
+
+| 變體 | overload 落點 | emit bytes | byte-identical |
+|---|---|---|---|
+| A | JSDoc **之後**（直覺寫法） | **6416**（−344） | ❌ JSDoc 被丟掉 |
+| **B（採用）** | JSDoc **之前** | **6760** | ✅ |
+
+🚫 故本棒不得只寫「改用 overload」而不鎖落點 —— 落點錯會**靜默刪掉一段安全說明文件**。
+
+#### `OD-E2`（**須由 ① 裁決**，因與已頒 lock 字面衝突）
+
+`ARCH-E-L5` **CAST-LOCK** 之字面為「non-any casts **恰 2 個** `err as ErrorLike`」。
+本方案為 **0 個**。就 lock **意圖**（最小化未登錄 assertion）而言是嚴格更強，
+但就**字面**而言不符 ⇒ 依 `ARCH-E-L7`，須回 ① 重判並重新頒 `L5`。
+🚫 我方**不自行**認定「更嚴格所以合規」。
+
+備選（供 ① 對照，本棒**不推薦**）：維持 2 casts ＋ 新增 governance registry record。
+代價：registry 檔為**新檔** ⇒ 觸 `ARCH-E-L1` SCOPE-LOCK、且 repo 目前**無**該 registry
+（PLAN §「順帶發現」與 ② 皆已確認 `TS-TYPE-001`／`GOV-*` 僅 advisory-not-enforced）。
 
 **負向控制 `NC-3`（coding 階段執行，注入後須還原）**：把 `err` 改標為比 `unknown` 窄的型別
 （例：`Error | null | undefined`）。**預測**：`tests/integration/audit-log.test.ts:149` 產生
@@ -239,12 +279,15 @@ const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].fi
 | 項目 | 預測 |
 |---|---|
 | changed files | **恰 2**（`functions/utils/audit-log.ts` M ＋ 本 plan doc A） |
-| 既有行**被修改** | **恰 8**：7 條函式簽章（L23 / L31 / L44 / L60 / L106 / L132 / L143）＋ 1 條 `msg` 本體（L134） |
-| **新增**行 | **13**：`interface AuditLogEntry` 8 行 ＋ `type AuditLogRow` 1 行 ＋ `type ErrorLike` 1 行 ＋ 3 個分隔空行 |
-| `git diff --stat`（source 檔） | **`21 insertions(+), 8 deletions(-)`** |
+| 既有行**被修改** | **恰 7**：7 條函式簽章（L23 / L31 / L44 / L60 / L106 / L132 / L143）。⚠ `msg` 本體（L134）**不再被修改** —— function overload 版本體一字不動（`CODEX-E-R1-RR1` 後之改善） |
+| **新增**行 | **14**：`interface AuditLogEntry` 8 行 ＋ `type AuditLogRow` 1 行 ＋ `type ErrorLike` 1 行 ＋ 3 個分隔空行 ＋ **overload signature 1 行** |
+| `git diff --stat`（source 檔） | **`21 insertions(+), 7 deletions(-)`**（實測，非手算） |
 | 既有行**被刪除**（淨刪） | **0** |
 
 🚫 若實測與上表不符，**不得**默默改寫本表 —— 須就地標註差異與原因，並重新評估是否仍為 type-only。
+
+⚠ 計數法：`git diff --numstat` 為準。🚫 **禁**用 `grep -c '^+[^+]'` —— 它會**漏掉空的 `+` 行**
+（本棒實測：該法得 18、實際 21，差 3 個分隔空行；批 C2 曾因同一陷阱數出 56 而非 72）。
 
 ### 5.5 Suppression 預算（人工計數，供 gate 覆核）
 
@@ -255,7 +298,7 @@ const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].fi
 | `: any` / `as any` / `<any>` / 容器 any | **0** | ratchet 機械攔截 |
 | JSDoc `{any}` | **0** | ratchet 機械攔截 |
 | `as const` | **0** | — |
-| **non-any `as` cast** | **恰 2** | 皆為 `err as ErrorLike`，同一行；ratchet 不攔 ⇒ 人工計數（§4.4） |
+| **non-any `as` cast** | **0**（原 2，② `CODEX-E-R1-RR1` 後改 function overload） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **0**。⚠ 與 `ARCH-E-L5` **字面**（恰 2）衝突，須 ① 重判（`OD-E2`） |
 | 新增 `export` | **0** | 型別宣告皆 module-local |
 
 ### 5.6 落地機制 — **三個獨立 staged-set SSOT**（`ARCH-E-R1-RR1`）
@@ -287,7 +330,15 @@ const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].fi
 
 **量測時點**：base `0a6593f6`，working tree 除 untracked `CLEANUP_PLAN.md` 外 clean。
 **量測法**：`npx tsc -b tsconfig.solution.json --force --pretty false`，
-診斷正規化為 `file|code|message`（**strip 行號與欄號**，避免行位移造成假差集）後做集合比對。
+診斷正規化為 stable key `file|code|message`（**strip 行號與欄號**，避免行位移造成假差集），
+再做 **multiset（bag）subtraction —— 保留每個 key 的 multiplicity**。
+
+> ⚠ **`CODEX-E-R1-RR3` 修正**：舊文寫「集合比對」。若真按 **Set** 實作，本檔 10 條診斷
+> 會被折疊成 **6 個 distinct key**（實測：`db` ×3 · `entry` ×2 · `row` ×2 · `err`／`text`／`prevHash` 各 ×1），
+> `REMOVED` 會變成 6 而非 `ARCH-E-L3` 要求的 10。
+> **必須是 multiset subtraction**（實作上 `Compare-Object` 逐筆輸出差異即具此語意，已實測得 10）。
+> 🚫 規格文字與實作語意必須一致，不得只靠實作恰好正確。
+> `ADDED` 一律**同時報 raw 與 distinct positions**（§7.3）。
 
 ### 6.0 dual-leaf 的**實際**行為（⚠ 自審修正，勿沿用直覺）
 
@@ -340,36 +391,52 @@ baseline 維持 `errorCount=1119 cleanFiles=175`（🚫 未 `--update`）；over
 
 ### 6.3 type-only（byte-identical emit）
 
-以 repo 自帶 `typescript@5.9.3`（`ts.version` 實測輸出）的 `ts.transpileModule`
-轉譯 base 與 overlay 後比對。**可重播規格**（gate 得自行複製執行；本腳本刻意**不入 repo**，
-以免擴張 §5 allowlist）：
+> ⚠ **本節已於 ② R1 `CODEX-E-R1-RR2` 後全面重做。舊證據作廢。**
+> 舊文宣稱「`NewLineKind.LineFeed` ⇒ 本量測對行尾不敏感」，**實測為假**；
+> 且舊記錄之 `3657b0ac…` 是**當時 CRLF 工作區副本**的 emit，**不是 committed blob 的 replay**
+> （§6.5 已記載量測當時工作區為 CRLF）。🚫 舊 hash 不得再被引用。
+
+**輸入一律取 immutable Git blob**（`git show <commit>:<path>`），**先斷言 `CR=0` 與非空**，再 emit。
 
 ```js
-// node <this>.mjs <baseFile> <overlayFile>   —— 需在 repo 根目錄可 require typescript
+// 需在 repo 根目錄可 require typescript
+const src = execFileSync('git', ['-C', REPO, 'show', `${COMMIT}:${REL}`]).toString('utf8')
+if (src.includes('\r')) throw new Error('blob unexpectedly contains CR')   // 前置斷言
 const opts = {
   target: ts.ScriptTarget.ES2022,   // 對齊 tsconfig target
   module: ts.ModuleKind.ESNext,     // 對齊 tsconfig module
-  removeComments: false,            // 🚫 不剝註解（批 C 曾因剝註解需另配 hunk allowlist）
-  newLine: ts.NewLineKind.LineFeed, // 輸出端行尾正規化 → 本量測對行尾不敏感（見下方 ⚠）
+  removeComments: false,            // 🚫 不剝註解
+  newLine: ts.NewLineKind.LineFeed, // 只影響 emitter 自己的換行，🚫 不正規化字面內容
 }
-const out = ts.transpileModule(readFileSync(f, 'utf8'),
-  { compilerOptions: opts, fileName: 'audit-log.ts', reportDiagnostics: true })
-// 報 outputText 的 byteLength / sha256 / diagnostics.length，並斷言 byteLength > 0
+// 報 outputText 的 byteLength / sha256 / CR 數 / diagnostics.length；斷言 byteLength>0 且 CR=0
 ```
 
-比對結果：
+**實測（source ＝ `0a6593f6:functions/utils/audit-log.ts`，6614 B，CR=0）**：
 
 ```
-BASE    bytes=6769 sha256=3657b0acb0212983c74fb67f44c9c7db4e558686f4f2f958f2de6f9b438424b1
-OVERLAY bytes=6769 sha256=3657b0acb0212983c74fb67f44c9c7db4e558686f4f2f958f2de6f9b438424b1
-NON-EMPTY GUARD : base>0=true overlay>0=true      transpileDiags: 0 / 0
+BASE    (LF blob)      bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
+OVERLAY (overload 版)  bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
+NON-EMPTY GUARD : base>0=true overlay>0=true
+CR=0 GUARD      : base=true overlay=true
 BYTE-IDENTICAL  : true
 ```
 
+#### ⚠ 為何「EOL 不敏感」是假的（`CODEX-E-R1-RR2` 之根因，實測）
+
+`NewLineKind` 只管 **emitter 產生的**換行，**不會**正規化**字面內容**內的換行。
+本檔有兩處 **SQL template literal**（`.prepare(\`…\`)`），其內容逐字保留：
+
+| source | emit bytes | emit CR | emit sha256 |
+|---|---|---|---|
+| committed LF blob | **6760** | **0** | `78eef5c2…d0d5e57` |
+| 同內容 CRLF 副本 | **6769** | **9** | `3657b0ac…8424b1` |
+
+9 個殘留 CR 全落在 SQL template literal 行內（emit 之 L73-76、L129-133）。
+⇒ **emit 對輸入 EOL 敏感**；不從 immutable blob 取樣就會量到錯的東西。
+
 ⚠ **非空守衛不可省** —— 批 C2 曾踩到「兩邊皆 0 bytes 而 `cmp` 回報相同、sha 為空字串常數
-`e3b0c442…`」的假綠。本量測同時報 `bytes>0` 與 `transpileDiags=0`。
+`e3b0c442…`」的假綠。本量測同時報 `bytes>0`、`CR=0` 與 `diags=0`。
 ⚠ 此為**單檔 transpile identity**，🚫 **不是** production bundle identity。
-⚠ 輸出端 newline 經 `NewLineKind.LineFeed` 正規化 ⇒ **此量測對行尾差異不敏感**，行尾另由 §7.1 守。
 
 ### 6.4 負向控制（emit 量測本身會不會轉紅）
 
@@ -468,7 +535,22 @@ JSDoc `{any}` / `@ts-nocheck` / `@ts-ignore` / `@ts-expect-error`
 
 已取得（base `0a6593f6`）：`lint` EXIT 0 · `typecheck:ratchet` 362/324 · tsc 全量診斷 362 行。
 ⚠ **禁**在 commit 之後用 `git stash` 取 base（source 已 commit ⇒ stash 為 no-op ⇒ 等於量了兩次 after）——
-批 D 曾踩此假量測。若需重取，用 `git checkout <base> -- functions tests` 並以 tree hash 驗還原。
+批 D 曾踩此假量測。
+
+> ⚠ **`CODEX-E-R1-RR4`：舊 fallback `git checkout <base> -- functions tests` 已刪除。**
+> 該指令會**同時改寫共用 worktree 與 index 的兩個大目錄**，可能覆蓋平行 session 的
+> unrelated work、把大範圍 rollback 誤 stage，且本 PLAN 未附完整安全還原程序。
+> （與 [[feedback_parallel_track_staging_collision]] 直接衝突 —— 本 repo 多 session 並行是常態。）
+
+**取代方案（擇一，皆不觸碰共用 worktree／index）**：
+1. **immutable object 直讀**（本棒採用）：`git show <base>:<path>` 取內容進記憶體／temp 檔後量測。
+   §6.3 之 emit 證據即以此法取得。
+2. **隔離 temp worktree**：`git worktree add <temp> <base>`，量完 `git worktree remove`。
+   ⚠ 本機曾有 junction 相關風險（[[feedback_worktree_junction_deletes_target]]），採用前先確認。
+
+🚫 **缺 base evidence 時一律 fail closed**（停手回報），不得為了取得數字而改寫共用工作區。
+⚠ 唯一允許碰工作區的還原形式＝**單檔** `git checkout -- <單一檔案路徑>`（本棒 overlay 即此形式），
+🚫 禁對目錄使用。
 
 ---
 
@@ -652,6 +734,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 2 | ① ChatGPT Architecture | R2 | `CHATGPT_ARCH_CHANGES_REQUESTED` | `eed35026` / blob `73e52e36` / sha `1939b3d9…` | 0 Blocker／**2 Required**（`RR1` 現行值標籤·`RR2` census vs 語意分類）／**0 新設計 objection**。R1 三項＋`TR-R3-NB1` 皆 CLOSED。處置見 §14.2 |
 | 3 | ① ChatGPT Architecture | R3 | `CHATGPT_ARCH_CHANGES_REQUESTED` | `d4bcdbf9` / blob `8fc9bf5e` / sha `d33cb365…` | 0 Blocker／**1 Required**（`ARCH-E-R3-RR1` gate-state family drift）／**0 設計 objection**。R2 兩項 CLOSED、transport PASS。處置見 §14.3 |
 | 4 | ① ChatGPT Architecture | R4 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`6c06ae26`** / blob `3418a843` / sha `7e2f7fbb…aca935` | `ARCH-E-R3-RR1` **CLOSED**（① 複掃無新 live gate-state 副本）。頒 **`ARCH-E-L1`..`L7`**（§14.4）＋ 1 non-blocking（`ARCH-E-R4-NB1`）。⚠ **① 通過 ≠ `CODING_ALLOWED`** —— 仍須 ② Codex Plan Gate ＋ owner 明示授權 |
+| 5 | ② Codex Plan | R1 | `CODEX_PLAN_CHANGES_REQUIRED` | `872ee8c9` / blob `25162631` / sha `e0225eb4…` | **0 runtime Blocker／4 Required**（`RR1` 未登錄 assertion・`RR2` emit 證據非 committed-blob replay 且「EOL 不敏感」為假・`RR3` set vs multiset・`RR4` 危險 fallback）。receipt delta 經 ② 確認成立。處置見 §14.5。⚠ 四項皆 normative ⇒ 依 `ARCH-E-L7` **`6c06ae26` 之 ① approval 須回 ① 重判** |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -740,6 +823,30 @@ gate R3 packet **+2069 B ＝ 2069 CR**。差別只在於 **[N0] base64 載體把
 | `ARCH-E-L6` **TEST-REPLAY-LOCK** | `test:int`、`test:cov`、lint、ratchet、browser pipeline、`build:functions`、npm audit 等 PLAN 指定 gate 均以 **final source commit 真跑**。任何**首次紅燈 halt + diagnose**，🚫 不得 rerun-to-green。 |
 | `ARCH-E-L7` **LEDGER-LOCK** | 本 approval 錨定 `6c06ae26`。若**只為收據**而在 §14 **append** 本 R4 verdict row，可視為 receipt-only；② packet 必**同時保留**本 approved anchor。除此之外任何 **normative** PLAN 改寫，都需重新判斷是否使 ① anchor 失效。 |
 
+### 14.5 ② Codex Plan Gate R1 之處置（`CODEX_PLAN_CHANGES_REQUIRED`；**0 runtime Blocker／4 Required**）
+
+**② 已通過之項**：packet／N0／N1／PLAN blob·hash 全吻合 · `872ee8c9` 對 `6c06ae26` 確為
+PLAN-only 3 hunks `+33/-2`（receipt delta 成立）· overlay 重播 `362→352`、`REMOVED=10/ADDED=0` ·
+`NC-3` 恰一條 TS2345 · diff shape · `NB1` current-state assertion=0 · `TD-BATCHE-1` 可維持 defer。
+**Queue／Payment／Distributed state／Observability ＝ Not Applicable。**
+
+⚠ **四條我方皆獨立實測驗證後接受**，非僅採信主張：
+
+| ID | 等級 | ② 的 finding | 我方獨立驗證 | 處置 |
+|---|---|---|---|---|
+| `CODEX-E-R1-RR1` | Major `TS-BOUNDARY-002` | 2 個 `err as ErrorLike` 為**未登錄 assertion**；repo 無 governance manifest／unsafe-boundary registry；PR-2ds 有同型被退先例 | 讀 PR-2ds §「`toBase64Url` function overload」確認先例：原 `as ArrayBufferLike` 被 ② 判未登錄 assertion → 改 overload 後**零 assertion、無需 registry** | **改 function overload**（§4.4 全面改寫）。實測 `as` cast **2 → 0**、`REMOVED=10/ADDED=0` 不變、eslint EXIT 0、emit byte-identical。⚠ 與 `ARCH-E-L5` **字面**衝突 ⇒ `OD-E2` 交 ① 重判 |
+| `CODEX-E-R1-RR2` | Major `GOV-EVIDENCE-001` | §6.3「`NewLineKind.LineFeed` ⇒ 對輸入 EOL 不敏感」為假；記錄之 hash 是 CRLF 副本而非 committed-LF blob replay | **實測完全吻合 ②**：LF blob → 6760 B／`78eef5c2…`／CR=0；CRLF 副本 → 6769 B／`3657b0ac…`／**CR=9**，9 個 CR 全在 SQL template literal 內（emit L73-76、L129-133） | §6.3 **全面重做**：輸入改取 immutable blob、前置斷言 CR=0 與非空、重報 hash／diagnostics／負向控制；**刪除「EOL 不敏感」宣稱**、舊 hash 明文作廢 |
+| `CODEX-E-R1-RR3` | Major `GOV-EVIDENCE-001` | §6 寫「集合比對」，但純 Set 會把重複 key 折疊 ⇒ `REMOVED` 只剩 6，與 `ARCH-E-L3` 要求的 10 不符 | **實測確認**：10 occurrences ／ **6 distinct key**（`db`×3・`entry`×2・`row`×2・`err`／`text`／`prevHash` 各×1） | §6 量測法改明定 **multiset（bag）subtraction、保留 multiplicity**；`ADDED` 同時報 raw 與 distinct positions |
+| `CODEX-E-R1-RR4` | Major `GOV-DECISION-001` | §7.4 fallback `git checkout <base> -- functions tests` 會改寫共用 worktree／index 兩個大目錄，可能覆蓋 unrelated work、誤 stage 大範圍 rollback | 成立，且與本 repo「多 session 並行」常態直接衝突 | **刪除該 fallback**；改 immutable object 直讀／隔離 temp worktree；缺 base evidence 一律 **fail closed**；唯一允許之工作區還原＝**單檔** `git checkout -- <file>` |
+
+**⚠ `ARCH-E-E1`（本棒新發現，PR-2ds 未涵蓋）**：overload **落點 load-bearing** ——
+放在 JSDoc **之後**會使該 JSDoc 附著到被抹除的 overload、**一併從 emit 消失**（實測 −344 B）；
+必須放在 JSDoc **之前**。詳見 §4.4。
+
+**⚠ 依 `ARCH-E-L7`**：上述四項皆屬 receipt carve-out **以外**的 normative 改寫 ⇒
+`6c06ae26` 之 ① approval **須回 ① 重判**，通過後再重送 ②。
+本棒 🚫 不自行認定 anchor 仍有效。
+
 **`ARCH-E-R4-NB1`（non-blocking，① 明示不另開 remediation round）**：R16 寫「命中 4 處」。
 ① 依 R16 明列之 regex 對 959 行 PLAN 逐行重跑，實得 **13 行**。我方獨立重跑**逐字相符**：13 行。
 根因＝那個「4」量於我加入 §14.3 與 R16 本身**之前**，是**同一次編輯 session 內就過期的快照數字**
@@ -756,7 +863,7 @@ gate R3 packet **+2069 B ＝ 2069 CR**。差別只在於 **[N0] base64 載體把
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R17，共 **26 條** finding，全部處置完畢；**R17** 為「一輪 0 新發現」。
+**輪次總計**：R1 → R20，共 **29 條** finding，全部處置完畢；**R20** 為「一輪 0 新發現」。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
 量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
 五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
@@ -870,7 +977,7 @@ R12 以機械枚舉重跑全部族：`644`（全數帶 `de6cc72f` 錨點或在�
 `stage/staged/changed-files`（三 SSOT 一致）· 硬化宣稱族（⚠ **本句原寫「唯一出現處為明文作廢句」，
 經 ① R2 `ARCH-E-R2-RR2` 判定失準 —— 那是**語意分類**結果，被我冒充成 **literal census** 結果。
 正確表述與真實計數見 §15.1；本處不再自行給數字）·
-輪次敘述（全為 `R1→R17`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
+輪次敘述（全為 `R1→R20`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
 
 ### R13 — 2 finding（**皆由 ① R2 抓到，非自審**）
 
@@ -918,13 +1025,43 @@ literal 計數會隨本檔每次編輯改變，屬 §15.1 所定義之「不可�
 |---|---|---|
 | `SR-26` | §14.0 標題「傳輸前置（**3 輪**）」會被讀成「通道之後就正常了」。實測**並非如此**：LF→CRLF 在其後每次傳輸都仍發生（gate R2 packet +1837 B＝1837 CR、gate R3 packet +2069 B＝2069 CR），只是被 `[N0]` 吸收 | 補明「3 輪指造成**阻擋**的輪數」＋逐輪實測數據＋結論「**通道並未被修好，是契約承受住了**」；並禁止後續棒次因「沒再失敗」而改回純文字載體 |
 
-### R17 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+### R17 — 0 新發現（**但非終輪** —— 被 ② R1 四項 Required 推翻，見 R18）
 
 R17 機械重跑：gate-state 族（current-state 斷言 0）· `CHATGPT_ARCH_*` 全帶輪次或為規則句 ·
 §7.1.1 表列「現行值」0 · §15.1 census 4/4/9 與分類 4/4/3/6/0（Σ=17）· 輪次族 ·
 `SR-\d+` 定義列數 · 終輪宣告恰 1 · 誠實邊界恰 1 段。
 
-**⚠ 自審的誠實邊界**：26 條 finding 的分類為 **23 條失準／矛盾 ＋ 3 條缺漏**，
+### R18 — 1 finding（② R1 remediation 之自審）
+
+處置 ② 四項 Required 時，**每一項都先自行實測再接受**（🚫 不採信主張）：
+PR-2ds 先例讀原文 · LF/CRLF 雙腿 emit · distinct-vs-occurrence 計數 · overload 兩種落點對照。
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-27` | 直接套用 PR-2ds 的 overload 先例會**靜默刪掉一段 JSDoc**：overload 若插在 JSDoc 與實作之間，該 JSDoc 附著到被抹除的 overload、一併從 emit 消失（實測 **−344 B**、byte-identical 轉 false） | 鎖定落點為「overload 置於 JSDoc **之前**」並立為 `ARCH-E-E1`；§4.4 附兩變體實測對照表 |
+
+⚠ **這條是「照先例辦事」也會出事的實例**：先例本身正確，但它沒有涵蓋
+「目標函式帶 JSDoc」這個條件。**先例可遷移性必須自己量，不能假設。**
+
+### R19 — 2 finding
+
+R19 機械重跑：diff shape（`git diff --numstat` 實測 21/7）· cast 計數（0）·
+emit 三守衛（非空／CR=0／diags=0）· multiset REMOVED=10 ADDED=0 · eslint EXIT 0 ·
+gate-state 族 current-state assertion=0 · 輪次族 · `SR-\d+` 定義列數 · 終輪宣告數。
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-28` | finding 總數寫成 **28**，實際 SR-id 為 **1..27 連續無缺、共 27 條**（機械枚舉）。分類亦連帶算錯 | 更正為 27（**23 失準／矛盾 ＋ 3 缺漏 ＋ 1 先例遷移失敗**）；並改為每輪以 `SR-id` 枚舉核對，🚫 不再手算加總 |
+| `SR-29` | R17 標題仍為終輪宣告「**0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`」，但已被 ② R1 推翻 ⇒ 文件內再度出現兩個終輪宣告（`SR-16`／`SR-22` 同族**第七次**） | R17 標題改「0 新發現（**但非終輪**）」並註明被誰推翻 |
+
+⚠ `SR-28` 與 `SR-25`（分類表手算 5/5）**同型**：都是「合計看起來對、分項是手算的」。
+⇒ 本 PLAN 自此**任何 finding 計數一律由 `SR-id` 機械枚舉導出**。
+
+### R20 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+
+R20 以機械枚舉重跑全部族，含 `SR-id` 連續性與總數、終輪宣告恰 1、輪次敘述一致。
+
+**⚠ 自審的誠實邊界**：29 條 finding 的分類為 **25 條失準／矛盾 ＋ 3 條缺漏 ＋ 1 條先例遷移失敗**，
 **全部**落在機械／宣稱層級，**0 條**是設計層級。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
