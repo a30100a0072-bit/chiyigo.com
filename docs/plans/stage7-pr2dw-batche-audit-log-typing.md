@@ -1,7 +1,7 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R23）；
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R25）；
 > 🚫 **不是** gate 通過。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger**；
 > 🚫 本行（及本檔其他任何章節）**不複述** gate 當前狀態（`ARCH-E-R3-RR1`）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
@@ -218,37 +218,41 @@ overload signature **必須放在既有 JSDoc 區塊之前**。若放在 JSDoc �
 
 🚫 故本棒不得只寫「改用 overload」而不鎖落點 —— 落點錯會**靜默刪掉一段安全說明文件**。
 
-#### `OD-E2`（**須由 ① 裁決**，因與已頒 lock 字面衝突）
+#### `OD-E2` — **已裁決並已核准（CLOSED）**，非待裁事項
 
-**① R5 已裁定：採 overload / 0-cast。** 理由（①）：比「維持 2 casts ＋ 新建 registry」更符合本棒
-最小 scope，且沒有理由為了保存舊 lock 字面而新增治理檔。
-
-#### ⚠ lock impact ＝ **`ARCH-E-L2` 與 `ARCH-E-L5` 兩者**皆須於下次 approval supersede（`ARCH-E-R5-RR1`）
-
-| 舊 lock（R4 receipt，**原文不得竄改**） | 與現行設計之落差 |
+| 時點（錨點） | 事件 |
 |---|---|
-| `ARCH-E-L2` RUNTIME-HASH-LOCK | 其允許變更集合列「**2 erased casts**」；現行為 **0 casts ＋ 1 行 declaration-only overload** |
-| `ARCH-E-L5` CAST-LOCK | 其字面要求「non-any casts **恰 2 個** `err as ErrorLike`」；現行為 **0** |
+| ① R5 @ `f76de40c` | **裁定採 overload / 0-cast**。理由（①）：比「維持 2 casts ＋ 新建 registry」更符合本棒最小 scope，且沒有理由為了保存舊 lock 字面而新增治理檔 |
+| ① R6 @ **`ccaaeaaf`** | **正式核准並重頒 lock**：`ARCH-E-R6-L5` **ZERO-ASSERTION-LOCK**（non-any casts ＝ 0）· `ARCH-E-R6-L2` **TYPE-ONLY-RUNTIME-LOCK**（10 annotations ＋ 3 declarations ＋ 1 declaration-only overload，且 **overload 必位於 JSDoc 之前、JSDoc emit 不得改變**）。**R4 之 `ARCH-E-L2`／`ARCH-E-L5` 正式 SUPERSEDED** |
 
-🚫 我方**不自行**認定「更嚴格所以合規」，亦**不修改** §14.4 之 R4 receipt 原文。
-① R5 已預告下次 approval 之重頒方向：`L2` → 「10 annotations ＋ 3 declarations ＋
-1 declaration-only overload，runtime expressions／JSDoc emit 不變」；`L5` → **zero-assertion lock**
-（non-any casts ＝ 0）並把 `ARCH-E-E1`（overload 置於 JSDoc 之前）納入 load-bearing constraint。
+**現行約束 ＝ `ARCH-E-R6-L1`..`L8` @ `ccaaeaaf`**（逐字 receipt 見 §14.7）。
+🚫 本節**不再**存在「待 ① 裁決」「須於下次 approval supersede」之未決狀態
+（`CODEX-E-R2-RR1` 修正 —— 舊文把已完成之裁決寫成待決，與 §14.7 自相矛盾）。
+
+**舊 R4 lock 與本設計之落差（歷史紀錄，說明為何需要 supersede）**：
+
+| 舊 lock（R4 receipt，**原文不得竄改**，已 SUPERSEDED @ `ccaaeaaf`） | 當時之落差 |
+|---|---|
+| `ARCH-E-L2` RUNTIME-HASH-LOCK ⚠ **SUPERSEDED @ `ccaaeaaf`**（由 `ARCH-E-R6-L2` 取代） | 其允許變更集合列「**2 erased casts**」；本設計為 **0 casts ＋ 1 行 declaration-only overload** |
+| `ARCH-E-L5` CAST-LOCK ⚠ **SUPERSEDED @ `ccaaeaaf`**（由 `ARCH-E-R6-L5` 取代） | 其字面要求「non-any casts **恰 2 個** `err as ErrorLike`」；本設計為 **0** |
 
 **已否決之備選（僅供追溯）**：維持 2 casts ＋ 新增 governance registry record。
-代價：registry 檔為**新檔** ⇒ 觸 `ARCH-E-L1` SCOPE-LOCK、且 repo 目前**無**該 registry
-（PLAN §「順帶發現」與 ② 皆已確認 `TS-TYPE-001`／`GOV-*` 僅 advisory-not-enforced）。
+代價：registry 檔為**新檔** ⇒ 觸 SCOPE-LOCK、且 repo **無**該 registry
+（PLAN §「順帶發現」與 ② 皆已確認 `TS-TYPE-001`／`GOV-*` 僅 advisory-not-enforced；
+`ARCH-E-R6-L5` 亦明文禁止「為避免 overload 而新增 registry 或其他 governance file」）。
 
-#### 硬化／cast 家族之分類（`ARCH-E-R5-RR1`；🚫 歷史面一律保留原文）
+#### 硬化／cast 家族之 live-vs-history 分類（`ARCH-E-R5-RR1` ＋ `CODEX-E-R2-RR1`）
 
-| 類別 | 成員 | 處置 |
+| 類別 | 成員 | 狀態 |
 |---|---|---|
-| **live current contract** | §4.4 標題 · §11 高風險結論 | **已改為 overload / 0-cast 現況** |
-| **live 但屬 lock 影響說明** | 本節 `OD-E2` | 已由「僅衝突 L5」擴為「**L2 ＋ L5 皆須 supersede**」 |
-| **historical receipt（🚫 不改）** | §14.4 `ARCH-E-L2` / `ARCH-E-L5` 原文 · §14.3 ① R3 已 PASS 清單 | 保留原文 |
-| **historical finding 原文（🚫 不改）** | §4.4 舊方案作廢說明 · §14.5 `CODEX-E-R1-RR1` 敘述 | 保留原文 |
+| **live current contract** | §4.4 標題 · §11 高風險結論 · §5.5 suppression 預算 | overload / 0-cast，且對齊 `ARCH-E-R6-L5` |
+| **live lock 引用** | 本節 `OD-E2` | **指向 `ARCH-E-R6-L1`..`L8` @ `ccaaeaaf`**（現行）；🚫 不再指向已 superseded 之 R4 L2/L5 為現行約束 |
+| **historical receipt（🚫 原文不改）** | §14.4 R4 `ARCH-E-L2`／`ARCH-E-L5` 原文 · §14.7 R6 receipt · §14.3 ① R3 已 PASS 清單 | 保留原文 |
+| **historical finding 原文（🚫 原文不改）** | §4.4 舊 cast 方案作廢說明 · §14.5 `CODEX-E-R1-RR1` · §14.6 `ARCH-E-R5-RR1` | 保留原文 |
 
 ⚠ 🚫 **不得**為了讓 grep 命中數歸零而竄改歷史 —— 目標是**分類正確**，不是計數歸零。
+⚠ **判準（`CODEX-E-R2-RR1` 之不變式）**：任何**以現行約束身分**被引用的 lock，
+必須是 `ARCH-E-R6-*`；舊 `ARCH-E-L*` 僅得以**歷史／已 superseded** 身分出現。
 
 **負向控制 `NC-3`（coding 階段執行，注入後須還原）**：把 `err` 改標為比 `unknown` 窄的型別
 （例：`Error | null | undefined`）。**預測**：`tests/integration/audit-log.test.ts:149` 產生
@@ -319,7 +323,7 @@ overload signature **必須放在既有 JSDoc 區塊之前**。若放在 JSDoc �
 | `: any` / `as any` / `<any>` / 容器 any | **0** | ratchet 機械攔截 |
 | JSDoc `{any}` | **0** | ratchet 機械攔截 |
 | `as const` | **0** | — |
-| **non-any `as` cast** | **0**（原 2，② `CODEX-E-R1-RR1` 後改 function overload） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **0**。⚠ 與 `ARCH-E-L5` **字面**（恰 2）衝突，須 ① 重判（`OD-E2`） |
+| **non-any `as` cast** | **0**（原 2，② `CODEX-E-R1-RR1` 後改 function overload） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **0**。✅ 符合現行 **`ARCH-E-R6-L5` ZERO-ASSERTION-LOCK @ `ccaaeaaf`**（`OD-E2` 已 CLOSED；舊 R4 `L5` 已 SUPERSEDED） |
 | 新增 `export` | **0** | 型別宣告皆 module-local |
 
 ### 5.6 落地機制 — **三個獨立 staged-set SSOT**（`ARCH-E-R1-RR1`）
@@ -356,7 +360,7 @@ overload signature **必須放在既有 JSDoc 區塊之前**。若放在 JSDoc �
 
 > ⚠ **`CODEX-E-R1-RR3` 修正**：舊文寫「集合比對」。若真按 **Set** 實作，本檔 10 條診斷
 > 會被折疊成 **6 個 distinct key**（實測：`db` ×3 · `entry` ×2 · `row` ×2 · `err`／`text`／`prevHash` 各 ×1），
-> `REMOVED` 會變成 6 而非 `ARCH-E-L3` 要求的 10。
+> `REMOVED` 會變成 6 而非 **`ARCH-E-R6-L3` CASCADE-LOCK**（現行 @ `ccaaeaaf`）要求的 10。
 > **必須是 multiset subtraction**（實作上 `Compare-Object` 逐筆輸出差異即具此語意，已實測得 10）。
 > 🚫 規格文字與實作語意必須一致，不得只靠實作恰好正確。
 > `ADDED` 一律**同時報 raw 與 distinct positions**（§7.3）。
@@ -851,6 +855,12 @@ gate R3 packet **+2069 B ＝ 2069 CR**。差別只在於 **[N0] base64 載體把
 
 > **本節為 receipt**：逐字轉錄 ① 所頒之 lock，🚫 **非我方新增規範**、🚫 不得自行增刪或改寫語意。
 > 依 `ARCH-E-L7`，本節與上方 ledger 第 4 列同屬 **receipt-only** 落盤，不使 ① anchor 失效。
+>
+> 🔒 **本節下表全體已於 ① R6 @ `ccaaeaaf` 整批 SUPERSEDED**（`CODEX-E-R2-RR1`）。
+> **現行約束一律見 §14.7 `ARCH-E-R6-L1`..`L8`。**
+> 🚫 下表任一列**不得**被引用為現行約束；原文依 ①／② 指示**保留不改、不回寫歷史**。
+> ⚠ 分類判準（供機械掃描）：**§14.4 表格內之 `ARCH-E-L*` 一律屬 historical**；
+> 現行約束之引用**必須**寫作 `ARCH-E-R6-L*`。
 
 | Lock | 適用範圍與 closure |
 |---|---|
@@ -959,7 +969,7 @@ fresh forced-tsc**，🚫 不得只靠 `transpileModule`。本 PLAN §6.1／§9 
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R23，共 **31 條** finding，全部處置完畢；**R23** 為「一輪 0 新發現」。
+**輪次總計**：R1 → R25，共 **32 條** finding，全部處置完畢；**R25** 為「一輪 0 新發現」。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
 量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
 五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
@@ -1076,7 +1086,7 @@ R12 以機械枚舉重跑全部族：`644`（全數帶 `de6cc72f` 錨點或在�
 `stage/staged/changed-files`（三 SSOT 一致）· 硬化宣稱族（⚠ **本句原寫「唯一出現處為明文作廢句」，
 經 ① R2 `ARCH-E-R2-RR2` 判定失準 —— 那是**語意分類**結果，被我冒充成 **literal census** 結果。
 正確表述與真實計數見 §15.1；本處不再自行給數字）·
-輪次敘述（全為 `R1→R23`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
+輪次敘述（全為 `R1→R25`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
 
 ### R13 — 2 finding（**皆由 ① R2 抓到，非自審**）
 
@@ -1183,13 +1193,30 @@ R22 機械重跑：cast 家族分類 · §6.4 Δ 自洽 · `SR-id` 連續性 · 
 **立完規則、按規則枚舉，就抓到自己剛才仍漏掉的第三個成員**。
 ⇒ 規則有效，但也證明「宣稱已全族處置」在**未實際枚舉前**一律不可信。
 
-### R23 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+### R23 — 0 新發現（**但非終輪** —— 被 ② R2 `CODEX-E-R2-RR1` 推翻，見 R24）
 
 R23 依 `SR-30` 規則對 emit 證據族做**完整枚舉**（`6769` / `6796` / `3732d797` / `3657b0ac`
 四個舊值的全部出現點），確認每一處皆為「作廢標註」或「finding 原文」，
 **無任何一處仍以現行值身分被引用**；其餘機械族同 R22。
 
-**⚠ 自審的誠實邊界**：31 條 finding 的分類為 **27 條失準／矛盾 ＋ 3 條缺漏 ＋ 1 條先例遷移失敗**，
+### R24 — 1 finding（② R2 remediation 之自審）
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-32` | ② `CODEX-E-R2-RR1` 之根因是我方：① R6 approve 後我**只 append 了 §14.7 receipt**，未把 §4.4／§5.5 這兩個仍停在「待 ① 裁決／須於下次 approval supersede」的 **live surface** 一起遷移 ⇒ 同一 PLAN 同時宣告「等待重判」與「重判完成」。**`SR-30` 立的規則沒有套用到 lock-state 這一族** | §4.4 `OD-E2` 改為**已 CLOSED 並帶雙錨點**（R5 `f76de40c` 裁定 · R6 `ccaaeaaf` 核准並 supersede）；§5.5 改為對齊 `ARCH-E-R6-L5`；並立**不變式**：任何以**現行約束**身分被引用的 lock 必須是 `ARCH-E-R6-*`，舊 `ARCH-E-L*` 僅得以歷史／已 superseded 身分出現 |
+
+⚠ **`SR-30` 規則的適用範圍被我讀窄了**：我把它當成「evidence 族」規則，
+但 lock-state 同樣是一個會隨 gate 輪次改變的族。**規則本身沒錯，是我沒把它推廣。**
+⇒ 現行表述：**任何隨 gate 輪次變動的事實（evidence／lock-state／gate-state／計數）
+都必須以「族」為單位遷移，且遷移後須機械枚舉驗證。**
+
+### R25 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+
+R25 以機械枚舉重跑 lock-state 族（全部 `ARCH-E-L\d` 出現點逐一分類為 live／historical，
+確認**無任何一處以現行約束身分引用舊 R4 lock**）· 待裁狀態字串（`須由①裁決`／`須①重判`／
+`下次 approval`／`已預告`）僅存於「已不再存在」之否定句 · 其餘機械族同 R23。
+
+**⚠ 自審的誠實邊界**：32 條 finding 的分類為 **28 條失準／矛盾 ＋ 3 條缺漏 ＋ 1 條先例遷移失敗**，
 **全部**落在機械／宣稱層級，**0 條**是設計層級。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
