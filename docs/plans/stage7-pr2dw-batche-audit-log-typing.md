@@ -215,14 +215,16 @@ export function isUniquePrevHashError(err: unknown) {
 > `L2` TYPE-ONLY-RUNTIME-LOCK 的 source surface 與 `L5` ZERO-ASSERTION-LOCK。
 > 🚫 因此「B 只犧牲 L5、C 才犧牲 L2」的說法**不成立、已作廢**。
 
-**待 ① 重頒之收斂文字（我方提案，最終以 ① 頒布者為準）**：
+**① R14 已同輪 supersede／rebind L2 ＋ L5（`CHATGPT_ARCH_APPROVED_WITH_LOCKS @ 0a2fdc5a`）**。
+下表左欄為**已被 supersede 的舊約束**（歷史對照）、右欄為 ① 實際頒布之新約束；
+逐字 receipt 見 §14.12。🚫 本表不再是「提案」。
 
-| lock | 現行（`@ 44c7f5f6`，因 B 而失效） | 提案 rebind |
+| 舊 lock（已 SUPERSEDED） | 舊約束（`@ 44c7f5f6`，因 B 而失效） | ① R14 頒布之新 lock（現行 @ `0a2fdc5a`） |
 |---|---|---|
-| `ARCH-E-R12-L2`<br>TYPE-ONLY-RUNTIME-LOCK | source surface ＝ 10 annotations ＋ 3 declarations ＋ **1 declaration-only overload** | 唯一 source surface ＝ **10 annotations ＋ 3 declarations ＋ 恰 2 個 `UB-E-1` erased cast**；**0 overload**；除該 `msg` 行之型別 assertion 外 🚫 不得改動任何 runtime expression；**emit 必 byte-identical**（§6.3 為判準） |
-| `ARCH-E-R12-L5`<br>ZERO-ASSERTION-LOCK | assertion ＝ **0** | non-any cast **恰 2**、皆為 `err as ErrorLike`、皆歸屬 `UB-E-1`；其餘 assertion／suppression（`@ts-*`／`eslint-disable`）／新增 export ＝ **0** |
+| `ARCH-E-R12-L2` ⇒ **`ARCH-E-R14-L2`**<br>TYPE-ONLY-RUNTIME-LOCK | source surface ＝ 10 annotations ＋ 3 declarations ＋ **1 declaration-only overload** | 唯一 source surface ＝ **10 annotations ＋ 3 declarations ＋ 恰 2 個 `UB-E-1` erased cast**；**0 overload**；除該 `msg` 行之型別 assertion 外 🚫 不得改動任何 runtime expression；**emit 必 byte-identical**（§6.3 為判準） |
+| `ARCH-E-R12-L5` ⇒ **`ARCH-E-R14-L5`**<br>REGISTERED-ASSERTION-LOCK | assertion ＝ **0** | non-any cast **恰 2**、皆為 `err as ErrorLike`、皆歸屬 `UB-E-1`；其餘 assertion／suppression（`@ts-*`／`eslint-disable`）／新增 export ＝ **0** |
 
-⚠ 兩條**必須同一輪一起 supersede**；🚫 只重頒其一會留下與 receipt 字面矛盾的殘體。
+⚠ 兩條**已於同一輪一起 supersede**（① R14）；當初的擔憂（只重頒其一會留下與 receipt 字面矛盾的殘體）**未發生**。
 
 #### 🔒 `UNSAFE-BOUNDARY-REGISTRY`（本棒唯一登錄項；② 明示之替代路徑）
 
@@ -239,7 +241,7 @@ export function isUniquePrevHashError(err: unknown) {
 | **安全論證（唯一成立的那一種）** | **兩個 assertion 皆 erased ⇒ 不新增任何 runtime 行為 ⇒ 相對 base 不新增 failure mode。** base 本來就在做同一組 property access／`filter(Boolean)`／`join`／`regex.test`。⚠ 本論證是**相對 base 的差分論證**，🚫 **不是**「這段程式碼安全」的絕對宣稱 |
 | **仍然存在的既有 failure mode（本棒 🚫 不 harden）** | ⚠ ① R13 `ARCH-E-R13-RR3` 指正、我方實測確認：`.join('\n')` **並非對任意值皆安全** —— truthy `Symbol` 會在字串化時丟 `TypeError: Cannot convert a Symbol value to a string`；`message` 為 throwing getter 或 Proxy trap 時，`?.` 存取階段即 throw（實測 `RangeError` / `TypeError`）。`?.` 只處理 nullish，不會把任意 unknown 存取變成 exception-free。這些**在 base 就存在**，本棒不改善也不惡化 |
 | **未涵蓋** | 🚫 **不**保證 `message` 為字串；🚫 **不**做輸入驗證；🚫 **不**構成 `err` 之型別契約；🚫 **不**宣稱該路徑 exception-free |
-| **為何不改用 runtime narrowing** | 該路徑 assertion＝0 且 strict-clean，但 **emit 不再 byte-identical**（破 `R12-L2`）且需補測試（破 `R12-L1` scope）。owner 裁定保 type-only |
+| **為何不改用 runtime narrowing** | 該路徑 assertion＝0 且 strict-clean，但 **emit 不再 byte-identical**（破 `R14-L2`）且需補測試（破 `R14-L1` scope）。owner 裁定保 type-only |
 | **closure（強制）** | Stage 7 `strict:true` 階段**必須顯式 review `UB-E-1`**，連同下列 base 既有 `TS2339` 一併處置。⚠ 明文警示：cast 本身**不會**在 `strict:true` 報錯，故 🚫 **不得**以「compiler 沒抱怨」當作已處置 —— 這正是本條目存在的理由 |
 
 #### ⚠ base 既有 strict 缺口（**非本棒引入**，誠實揭露）
@@ -251,12 +253,15 @@ export function isUniquePrevHashError(err: unknown) {
 
 #### 🔒 live lock identity 不變式（`CODEX-E-R3-RR1` closure）
 
-> **現行約束 ＝ `ARCH-E-R12-L1`..`L10` @ `44c7f5f6`**（逐字 receipt 見 §14.10）。
-> 🚫 §1–§13（live 面）內**任何以「現行」身分引用之 lock 必須是 `ARCH-E-R12-*`**；
-> `ARCH-E-R6-*`／`ARCH-E-L*` 僅得出現在 §14 之 **historical receipt**，
-> 且 R12 對 R6-L1..L7 之繼承**只繼承實質約束、不繼承 lock identity 或 anchor**
-> （R6-L8 與 R12-L8 之 anchor 與 receipt carve-out 並不相同）。
-> ⚠ 本不變式不受 `ARCH-E-R12-L10` 之 historical carve-out 保護 —— 它管的正是 **live 面**。
+> **現行約束 ＝ `ARCH-E-R14-L1`..`L10` @ `0a2fdc5a`**（逐字 receipt 見 §14.12）。
+> 🚫 §1–§13（live 面）內**任何以「現行」身分引用之 lock 必須是 `ARCH-E-R14-*`**；
+> `ARCH-E-R6-*`／`ARCH-E-R12-*`／`ARCH-E-L*` 僅得出現在 §14 之 **historical receipt**，
+> 且後繼 approval 對前一輪 lock 之繼承**只繼承實質約束、不繼承 lock identity 或 anchor**
+> （R6-L8／R12-L8／R14-L8 之 anchor 與 receipt carve-out 三者皆不相同）。
+> ⚠ ① R14 明示**不採 hybrid lock family**：R14 重頒完整 `L1..L10`，成為**單一** current binding，
+> `ARCH-E-R12-L2`／`L5` 由 `R14-L2`／`L5` 正式 supersede、`R12-L8` 之 anchor 由 `R14-L8` supersede、
+> `R12-L9` 之 R35 freeze 由 `R14-L9` 重綁至 **R40**。
+> ⚠ 本不變式不受 `ARCH-E-R14-L10` 之 historical carve-out 保護 —— 它管的正是 **live 面**。
 
 **負向控制 `NC-3`（coding 階段執行，注入後須還原）**：把 `err` 改標為比 `unknown` 窄的型別
 （例：`Error | null | undefined`）。**預測**：`tests/integration/audit-log.test.ts:149` 產生
@@ -325,7 +330,7 @@ export function isUniquePrevHashError(err: unknown) {
 | `: any` / `as any` / `<any>` / 容器 any | **0** | ratchet 機械攔截 |
 | JSDoc `{any}` | **0** | ratchet 機械攔截 |
 | `as const` | **0** | — |
-| **non-any `as` cast** | **恰 2**（已登錄 `UB-E-1`，§4.4） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **2**，皆為 `err as ErrorLike`、同一行。⚠ 同時牴觸 `ARCH-E-R12-L5`（ZERO-ASSERTION-LOCK）**與 `ARCH-E-R12-L2`**（TYPE-ONLY-RUNTIME-LOCK 之 source surface 含 overload），**兩條須同輪一起重頒**（`CODEX-E-R3-RR2` ＋ `ARCH-E-R13-RR1`；owner 2026-08-14 裁定採此路徑，提案 rebind 文字見 §4.4） |
+| **non-any `as` cast** | **恰 2**（已登錄 `UB-E-1`，§4.4） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **2**，皆為 `err as ErrorLike`、同一行。⚠ 本設計曾同時牴觸**當時的** `ARCH-E-R12-L5`（ZERO-ASSERTION）與 `ARCH-E-R12-L2`（其 source surface 含 overload）；**兩條已於 ① R14 同輪 supersede／rebind**，故該牴觸**已消解**。現行約束 ＝ `ARCH-E-R14-L2`（TYPE-ONLY-RUNTIME，0 overload ＋ 恰 2 cast）／`ARCH-E-R14-L5`（REGISTERED-ASSERTION）（`CODEX-E-R3-RR2` ＋ `ARCH-E-R13-RR1` 之 closure；owner 2026-08-14 裁定採此路徑，新舊對照見 §4.4、逐字 receipt 見 §14.12） |
 | 新增 `export` | **0** | 型別宣告皆 module-local |
 
 ### 5.6 落地機制 — **三個獨立 staged-set SSOT**（`ARCH-E-R1-RR1`）
@@ -362,7 +367,7 @@ export function isUniquePrevHashError(err: unknown) {
 
 > ⚠ **`CODEX-E-R1-RR3` 修正**：舊文寫「集合比對」。若真按 **Set** 實作，本檔 10 條診斷
 > 會被折疊成 **6 個 distinct key**（實測：`db` ×3 · `entry` ×2 · `row` ×2 · `err`／`text`／`prevHash` 各 ×1），
-> `REMOVED` 會變成 6 而非 **`ARCH-E-R12-L3` CASCADE-LOCK**（現行 @ `44c7f5f6`）要求的 10。
+> `REMOVED` 會變成 6 而非 **`ARCH-E-R14-L3` CASCADE-LOCK**（現行 @ `0a2fdc5a`）要求的 10。
 > **必須是 multiset subtraction**（實作上 `Compare-Object` 逐筆輸出差異即具此語意，已實測得 10）。
 > 🚫 規格文字與實作語意必須一致，不得只靠實作恰好正確。
 > `ADDED` 一律**同時報 raw 與 distinct positions**（§7.3）。
@@ -457,7 +462,7 @@ const opts = {
 
 > ⚠ **本節已於 ① R13 `ARCH-E-R13-RR2` 後第二次遷移。**
 > 舊記錄之 overlay 為 **overload 版**，而 overload 已於 `CODEX-E-R3-RR2` 永久作廢。
-> §6.3／§6.4 是 §§1、11 直接引用的 **active evidence oracle**，🚫 不適用 `R12-L10`
+> §6.3／§6.4 是 §§1、11 直接引用的 **active evidence oracle**，🚫 不適用 `R14-L10`
 > 之 historical carve-out ⇒ 必須**對 cast-B overlay 重新量測**。
 > 🚫 **不得只把 `overload` 字樣換成 `cast`** —— 下列數值係 2026-08-15 對 B **fresh replay 實得**。
 
@@ -555,7 +560,7 @@ checkout 以 LF 寫出；原 CRLF 是 `.gitattributes` 釘死前留下的陳舊�
 |---|---|---|---|
 | forced-tsc 全量診斷 | 362 | — | — |
 | `audit-log.ts` occurrences | **10**（6 distinct keys） | **0** | — |
-| `REMOVED`（multiset） | — | **10** | 等於 `ARCH-E-R12-L3` CASCADE-LOCK 要求 |
+| `REMOVED`（multiset） | — | **10** | 等於 `ARCH-E-R14-L3` CASCADE-LOCK 要求 |
 | `ADDED`（multiset，this file） | — | **0** | 零 cascade |
 | `ADDED`（multiset，**repo-wide**） | — | **0** | 無跨檔外溢 |
 | `typecheck:ratchet` current | 362 / 324 | **352 / 325** | `ratchet OK`、exit 0 |
@@ -580,7 +585,7 @@ x1  TS7006  Parameter 'err' implicitly has an 'any' type.
 raw 6614 B、CR=0 ✅ ／ `git status --porcelain` 僅 `?? CLEANUP_PLAN.md` ✅ ／
 ratchet 回到 `current: 362 / 324` ✅。
 
-⚠ 本節仍是 **overlay 預測**，🚫 不取代 coding 階段在真實 commit 上的重跑（`ARCH-E-R12-L3`／`L7`）。
+⚠ 本節仍是 **overlay 預測**，🚫 不取代 coding 階段在真實 commit 上的重跑（`ARCH-E-R14-L3`／`ARCH-E-R14-L7`）。
 
 ---
 
@@ -865,6 +870,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 14 | ① ChatGPT Architecture | R12 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`44c7f5f6`** / blob `f17302f7` / sha `7088633f…22fc8` | `ARCH-E-R11-RR1` **CLOSED**；**0 Blocker／0 Required／0 設計 objection**。頒 **`ARCH-E-R12-L1`..`L10`**（§14.10）：`L1`–`L7` 完整繼承 `R6-L1..L7` 實質約束；`L8` ANCHOR/RECEIPT LOCK；**`L9` SELF-REVIEW-FREEZE（§15 凍結於 R35）**；**`L10` HISTORICAL-SURFACE／NB2 LOCK**。⚠ **① 通過 ≠ `CODING_ALLOWED`** |
 | 15 | ② Codex Plan | R3 | `CODEX_PLAN_CHANGES_REQUIRED` | **`3c423097`** / blob `a56f2511` / sha `9721163e…b5be1` | **0 runtime Blocker／3 Major Required／1 non-blocking**。`RR1` live lock-reference family 仍指 R6@ccaaeaaf（與 §14.10 之 R12 current binding 衝突）· **`RR2` `TS-BOUNDARY-002`：overload public 比 implementation 寬，僅因 `strict:false` 通過，加 `--strict` 產生 `TS2394`**（方向與 PR-2ds 先例相反、非同型安全先例）· `RR3` packet live wrapper 復活舊內容 · NB commit subject 實含 BOM。處置見 §14.11 |
 | 16 | ① ChatGPT Architecture | R13 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`bb410903`** / blob `4cb6bc61` / sha `55327eb1…42b8f` | **0 Blocker／3 Required／0 新的設計方向退回**。**方案 B（`err: unknown` ＋ 2 個已登錄 erased cast）之架構方向 ACCEPTED**；`CODEX-E-R3-RR1` **CLOSED**（§§1–13 live 面舊 lock id／anchor 命中 0）、packet wrapper stale-copy remediation 成立。3 Required：`ARCH-E-R13-RR1` lock-family 影響漏算（B 同時牴觸 `L2` 與 `L5`，須同輪一起 supersede；§11 「零函式本體改寫」與「唯一被修改之本體行」字面互斥）／`ARCH-E-R13-RR2` evidence family 未遷移（§6.3／§6.4 仍掛 overload overlay，且為 active oracle、不受 `R12-L10` carve-out 保護）／`ARCH-E-R13-RR3` `UB-E-1` 安全論證過度宣稱（`join` 對任意值皆安全為假）。我方主動申報之兩項（§15 標題失序、base `TS2339`）① **明示不升 finding**。處置見 §15 R38 |
+| 17 | ① ChatGPT Architecture | R14 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`0a2fdc5a`** / blob `fdb9d739` / sha `493ced2b…503fb` | **0 Blocker／0 Required／0 新 design objection**。`ARCH-E-R13-RR1`／`RR2`／`RR3` **皆 CLOSED**；方案 B 維持接受。① **不採 hybrid lock family**，重頒完整 `ARCH-E-R14-L1..L10`（逐字 receipt §14.12）成為**單一 current binding**：`R12-L2`／`L5` 由 `R14-L2`／`L5` supersede、`R12-L8` anchor 由 `R14-L8` supersede、`R12-L9` freeze 由 `R14-L9` 重綁至 **R40**。另授權一次 **decision materialization carve-out**（本列 ＋ §14.12 receipt ＋ §§1–13 live lock identity 遷移 ＋ verdict-state closure ＋ 機械驗證），**視同本 verdict 之落盤、🚫 不觸發 ① R15、🚫 不得新增 R41**。下一步＝② Codex Plan R4 targeted re-pass。`CODING_ALLOWED` 仍 **NOT_GRANTED** |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -1107,6 +1113,57 @@ emit 6760 B byte-identical、`NC-3` 恰 1 個 `TS2345`。
 | （non-blocking） | evidence correction | commit subject raw bytes 實為 `EF BB BF 64 6F 63…`，**不是渲染假象** | **接受並收回我方前述判斷**。以 `git cat-file` 讀原始 bytes 實測：`44c7f5f6`／`3c423097` **確含 BOM**，其餘 commit 無。根因＝該兩則訊息以 PowerShell `Out-File -Encoding utf8`（寫 BOM）產生。依 ② 指示 **🚫 不 amend**；後續 commit message 一律改用無 BOM 寫入 |
 
 ---
+
+### 14.12 ① R14 `CHATGPT_ARCH_APPROVED_WITH_LOCKS` @ `0a2fdc5a` — approval receipt（**current binding**）
+
+> **本節為 immutable receipt。** 下表 `ARCH-E-R14-L1`..`L10` 為 ① 於 R14 頒布之**逐字**內容。
+> 🚫 不得改寫、不得「順手更新」；後續若有 supersede，一律**另立新 receipt**並在此標註被誰取代。
+> ⚠ **關於較早 receipt 的 `（current binding）` 標籤**：§14.7（R6）與 §14.10（R12）之標題仍帶該字樣，
+> 那是**各自輪次當下**的敘述。依 `ARCH-E-R14-L10` 與 ① R14「§14 historical receipts 禁止回寫」之
+> 明示，本次**刻意未修改**它們。**current binding 的唯一 SoT ＝ §4.4 之 live lock identity 不變式
+> ＋ §14 ledger 最後一列 approval**，🚫 不是 §14 各 receipt 的標題字樣。
+
+**裁決**：0 Blocker ／ 0 Required ／ 0 新 Architecture design objection。
+`ARCH-E-R13-RR1` = **CLOSED** · `ARCH-E-R13-RR2` = **CLOSED** · `ARCH-E-R13-RR3` = **CLOSED**。
+transport 複驗：實收 carrier 為 CRLF 化之 333,876 B／4194 CR，逐 CRLF→LF 復原後
+＝ 我方宣告之 **329,682 B／sha `2ad95aca…ead89`**；N0 decode 得
+**131,658 B／1580 LF／CR=0／sha `493ced2b…503fb`**，且 SECTION 4 text 與 N0 decoded PLAN byte-identical。
+
+| lock | 逐字內容 |
+|---|---|
+| `ARCH-E-R14-L1` **SCOPE-LOCK** | production 只准 `functions/utils/audit-log.ts`；tests／schema／migration／callers／F-3／`env.d.ts` 不動。final PR net 恰 source M ＋ PLAN A；coding commit staged set 恰 source 一檔 |
+| `ARCH-E-R14-L2` **TYPE-ONLY-RUNTIME-LOCK** | 唯一 source surface ＝ **10 parameter annotations ＋ 3 module-local declarations ＋ exactly 2 `UB-E-1` erased casts ＋ 0 overload**。除 `isUniquePrevHashError` 的 `msg` 行加入這兩個 assertion 外，不得改其他 runtime expression；final emit 必 **non-vacuous byte-identical** |
+| `ARCH-E-R14-L3` **CASCADE-LOCK** | final source commit 用 repo TS 5.9.3 ＋ 實際 tsconfig ＋ fresh forced-tsc；multiset **REMOVED=10 ／ ADDED=0 repo-wide**；`NC-3` 必恰 **1 raw TS2345**。Overlay 證據不得代替 final replay |
+| `ARCH-E-R14-L4` **UNKNOWN-BOUNDARY-LOCK** | `admin_email: unknown` 只表示未驗證 claim 被顯式化及 implicit-any 被移除；**不等於** write contract、DB-safe、sink narrowing 或 `TD-BATCHE-1` closure |
+| `ARCH-E-R14-L5` **REGISTERED-ASSERTION-LOCK** | non-any cast **恰 2**，皆為 `(err as ErrorLike)`、皆屬 `UB-E-1`、同一 `msg` 行；其他 non-any assertion、任何 any suppression、`@ts-*` suppression、`eslint-disable`、雙重 cast 及新增 export 皆為 **0**。`UB-E-1` 必在 `strict:true` 階段**顯式 review**，compiler 沒報錯不能視為 closure |
+| `ARCH-E-R14-L6` **EVIDENCE-FAMILY-LOCK** | type-only oracle、negative control 及所有 live evidence 必共享 **immutable-LF provenance**；final replay 同時驗 nonempty、CR=0、emit identity 與 negative-control turn-red |
+| `ARCH-E-R14-L7` **TEST-REPLAY-LOCK** | final source commit 真跑 PLAN 所列 lint、ratchet、browser pipeline、`test:cov`、`test:int`、`build:functions`、npm audit 及額外 lints；**第一次紅燈即 halt＋diagnose，🚫 rerun-to-green** |
+| `ARCH-E-R14-L8` **ANCHOR ／ DECISION-MATERIALIZATION LOCK** | 本 approval 綁 **PLAN `0a2fdc5a`／blob `fdb9d739`／sha `493ced2b…503fb`**。授權一次精確、機械式之 decision materialization（見下方五項），**視同本 verdict 落盤、不觸發 ① R15**；該 materialization commit **不取代** Architecture reviewed anchor `0a2fdc5a` |
+| `ARCH-E-R14-L9` **SELF-REVIEW-FREEZE** | §15 重新凍結於 **R40**。R14 decision materialization、② receipt、owner authorization **皆不得新增 R41**；只有真正新的 substantive normative remediation 才能再開 |
+| `ARCH-E-R14-L10` **HISTORICAL-SURFACE-LOCK** | 延續 `R12-L10`：明確 historical／superseded／finding-original 之舊內容**不因過時本身**阻擋；只有**滲回 live contract、active oracle 或 current decision surface** 才阻擋。§15 標題失序**仍不要求整理** |
+
+**supersede 關係（① R14 明示，不採 hybrid family）**：
+
+| 舊 | 新 | 說明 |
+|---|---|---|
+| `ARCH-E-R12-L2` | `ARCH-E-R14-L2` | source surface 由「1 declaration-only overload ＋ 0 assertions」改為「恰 2 個 `UB-E-1` erased cast ＋ 0 overload」 |
+| `ARCH-E-R12-L5` | `ARCH-E-R14-L5` | ZERO-ASSERTION ⇒ **REGISTERED-ASSERTION** |
+| `ARCH-E-R12-L8` | `ARCH-E-R14-L8` | anchor `44c7f5f6` ⇒ `0a2fdc5a`；新增 decision-materialization carve-out |
+| `ARCH-E-R12-L9` | `ARCH-E-R14-L9` | freeze 由 **R35** 重綁至 **R40** |
+| `ARCH-E-R12-L1`/`L3`/`L4`/`L6`/`L7`/`L10` | `ARCH-E-R14-` 同號 | **實質約束未放寬**，僅重新發行為單一 R14 identity family |
+
+**① 授權之 materialization 五項（本次逐項執行）**：
+1. §14 ledger append **#17 ＝ ① R14 `CHATGPT_ARCH_APPROVED_WITH_LOCKS @ 0a2fdc5a`** ✅
+2. append 本 immutable R14 approval receipt（逐字保存 `L1..L10`） ✅
+3. 僅於 **§§1–13 live lock references** 將 current identity `ARCH-E-R12-*` 遷為 `ARCH-E-R14-*`，
+   §4.4 live identity 改為 `ARCH-E-R14-L1..L10 @ 0a2fdc5a`；**§14 historical receipts 未回寫** ✅
+4. §4.4「待①重頒／提案 rebind」與 §5.5「須同輪一起重頒」只做 **verdict-state closure**，
+   🚫 未改任何設計內容、數值、oracle 或 evidence ✅
+5. 只驗 live `R12` lock identity residue ＝ 0、R14 current identity 完整、
+   ledger 17 rows／6-cell／key unique／event-set equality；**🚫 未新增 R41** ✅
+
+⚠ **本 materialization commit 不是 Architecture reviewed anchor。** ② Codex Plan R4 packet
+必同時標明：`0a2fdc5a` ＝ ① approved anchor；其後之 materialization commit ＝ gate-decision evidence。
 
 ## 15.2 gate-event 完整性 oracle（`ARCH-E-R7-RR1` ／ `R8-RR1` ／ `R9-RR1` 之結構性修法）
 
