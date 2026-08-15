@@ -1,7 +1,7 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
 > **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R37）；
+> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R40）；
 > 🚫 **不是** gate 通過。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger**；
 > 🚫 本行（及本檔其他任何章節）**不複述** gate 當前狀態（`ARCH-E-R3-RR1`）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
@@ -203,9 +203,26 @@ export function isUniquePrevHashError(err: unknown) {
 }
 ```
 
-- **erase 後與 base 逐字相同** ⇒ byte-identical emit 維持（§6.3 實測）。
+- **erase 後與 base 逐字相同** ⇒ byte-identical emit 維持（§6.3 **對本方案 fresh replay** 實測）。
 - cast 數量：**恰 2**（同一行）；型別 `ErrorLike`，🚫 非 `any`、🚫 非雙重 cast。
 - **strict-safe**：加 `--strict` 後**不產生**與本設計相關之錯誤（僅剩下方 base 既有之 `TS2339`）。
+
+#### 🔒 本方案觸及之 lock family ＝ **L2 ＋ L5 兩條**（`ARCH-E-R13-RR1`）
+
+> ⚠ 我方前一版只申報「牴觸 `L5`」，**漏算 `L2`**。① R13 指正：`ARCH-E-R12` receipt 把
+> L1..L7 的實質約束定為「10 annotations ＋ 3 declarations ＋ **1 declaration-only overload
+> ＋ 0 assertions**」；把 overload 刪掉、換成 2 個 cast，**同時**改動
+> `L2` TYPE-ONLY-RUNTIME-LOCK 的 source surface 與 `L5` ZERO-ASSERTION-LOCK。
+> 🚫 因此「B 只犧牲 L5、C 才犧牲 L2」的說法**不成立、已作廢**。
+
+**待 ① 重頒之收斂文字（我方提案，最終以 ① 頒布者為準）**：
+
+| lock | 現行（`@ 44c7f5f6`，因 B 而失效） | 提案 rebind |
+|---|---|---|
+| `ARCH-E-R12-L2`<br>TYPE-ONLY-RUNTIME-LOCK | source surface ＝ 10 annotations ＋ 3 declarations ＋ **1 declaration-only overload** | 唯一 source surface ＝ **10 annotations ＋ 3 declarations ＋ 恰 2 個 `UB-E-1` erased cast**；**0 overload**；除該 `msg` 行之型別 assertion 外 🚫 不得改動任何 runtime expression；**emit 必 byte-identical**（§6.3 為判準） |
+| `ARCH-E-R12-L5`<br>ZERO-ASSERTION-LOCK | assertion ＝ **0** | non-any cast **恰 2**、皆為 `err as ErrorLike`、皆歸屬 `UB-E-1`；其餘 assertion／suppression（`@ts-*`／`eslint-disable`）／新增 export ＝ **0** |
+
+⚠ 兩條**必須同一輪一起 supersede**；🚫 只重頒其一會留下與 receipt 字面矛盾的殘體。
 
 #### 🔒 `UNSAFE-BOUNDARY-REGISTRY`（本棒唯一登錄項；② 明示之替代路徑）
 
@@ -218,11 +235,12 @@ export function isUniquePrevHashError(err: unknown) {
 | **id** | `UB-E-1` |
 | **位置** | `functions/utils/audit-log.ts` · `isUniquePrevHashError` 本體之 `msg` 行 |
 | **形式** | `(err as ErrorLike)` ×2（同一行） |
-| **未驗證假設** | `err` 若為物件，其 `message` / `cause.message` **可能不存在或非字串**（primitive、null-prototype、malformed `cause` 皆可能） |
-| **為何安全（runtime 層）** | 後續一律經 `?.` 存取 → 缺欄位得 `undefined`；`.filter(Boolean)` 濾除；`join('\n')` 對任意值皆安全；最終只餵給 regex `.test()`。**base 行為與此完全相同、本棒零 runtime 變更**，故不引入新的失效模式 |
-| **未涵蓋** | 🚫 **不**保證 `message` 為字串；🚫 **不**做輸入驗證；🚫 **不**構成 `err` 之型別契約 |
-| **為何不改用 runtime narrowing** | 該路徑 assertion＝0 且 strict-clean，但 **emit 不再 byte-identical**（破 `R12-L2` zero runtime delta）且需補測試（破 `R12-L1` scope）。owner 裁定保 type-only |
-| **closure** | Stage 7 `strict:true` 階段連同下列 base 既有問題一併處置 |
+| **未驗證假設** | `err` 若為物件，其 `message` / `cause.message` **可能不存在、非字串、或存取時 throw**（primitive、null-prototype、malformed `cause`、getter／Proxy 皆可能） |
+| **安全論證（唯一成立的那一種）** | **兩個 assertion 皆 erased ⇒ 不新增任何 runtime 行為 ⇒ 相對 base 不新增 failure mode。** base 本來就在做同一組 property access／`filter(Boolean)`／`join`／`regex.test`。⚠ 本論證是**相對 base 的差分論證**，🚫 **不是**「這段程式碼安全」的絕對宣稱 |
+| **仍然存在的既有 failure mode（本棒 🚫 不 harden）** | ⚠ ① R13 `ARCH-E-R13-RR3` 指正、我方實測確認：`.join('\n')` **並非對任意值皆安全** —— truthy `Symbol` 會在字串化時丟 `TypeError: Cannot convert a Symbol value to a string`；`message` 為 throwing getter 或 Proxy trap 時，`?.` 存取階段即 throw（實測 `RangeError` / `TypeError`）。`?.` 只處理 nullish，不會把任意 unknown 存取變成 exception-free。這些**在 base 就存在**，本棒不改善也不惡化 |
+| **未涵蓋** | 🚫 **不**保證 `message` 為字串；🚫 **不**做輸入驗證；🚫 **不**構成 `err` 之型別契約；🚫 **不**宣稱該路徑 exception-free |
+| **為何不改用 runtime narrowing** | 該路徑 assertion＝0 且 strict-clean，但 **emit 不再 byte-identical**（破 `R12-L2`）且需補測試（破 `R12-L1` scope）。owner 裁定保 type-only |
+| **closure（強制）** | Stage 7 `strict:true` 階段**必須顯式 review `UB-E-1`**，連同下列 base 既有 `TS2339` 一併處置。⚠ 明文警示：cast 本身**不會**在 `strict:true` 報錯，故 🚫 **不得**以「compiler 沒抱怨」當作已處置 —— 這正是本條目存在的理由 |
 
 #### ⚠ base 既有 strict 缺口（**非本棒引入**，誠實揭露）
 
@@ -307,7 +325,7 @@ export function isUniquePrevHashError(err: unknown) {
 | `: any` / `as any` / `<any>` / 容器 any | **0** | ratchet 機械攔截 |
 | JSDoc `{any}` | **0** | ratchet 機械攔截 |
 | `as const` | **0** | — |
-| **non-any `as` cast** | **恰 2**（已登錄 `UB-E-1`，§4.4） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **2**，皆為 `err as ErrorLike`、同一行。⚠ 與 `ARCH-E-R12-L5` **ZERO-ASSERTION-LOCK 字面衝突**，須 ① 重判並重頒（`CODEX-E-R3-RR2`，owner 2026-08-14 裁定採此路徑） |
+| **non-any `as` cast** | **恰 2**（已登錄 `UB-E-1`，§4.4） | 實測 overlay 內 `\bas\s+[A-Za-z]` 命中 **2**，皆為 `err as ErrorLike`、同一行。⚠ 同時牴觸 `ARCH-E-R12-L5`（ZERO-ASSERTION-LOCK）**與 `ARCH-E-R12-L2`**（TYPE-ONLY-RUNTIME-LOCK 之 source surface 含 overload），**兩條須同輪一起重頒**（`CODEX-E-R3-RR2` ＋ `ARCH-E-R13-RR1`；owner 2026-08-14 裁定採此路徑，提案 rebind 文字見 §4.4） |
 | 新增 `export` | **0** | 型別宣告皆 module-local |
 
 ### 5.6 落地機制 — **三個獨立 staged-set SSOT**（`ARCH-E-R1-RR1`）
@@ -374,12 +392,18 @@ base 的 362 **本身就是無重複的真實數量**（＝`typecheck:ratchet` �
 
 ### 6.1 兩腿量測
 
+> ⚠ 命名衝突警示：本表的 **腿 B／腿 C** 指的是 `admin_email` 的兩種標註（`string | null` vs
+> `unknown`），與 §4.4 的**方案 A／B／C**（overload／cast／runtime narrowing）是**兩組不同的字母**。
+> 兩者互相正交：本表兩腿皆在 §4.4 **方案 B（cast）** 之下量測。
+
 | 腿 | `admin_email` 標註 | REMOVED (raw＝真實) | ADDED (raw) | ADDED (distinct 位置) | 結論 |
 |---|---|---|---|---|---|
 | **B** | `string \| null` | 10 | 16 | **8** | 8 個位置全落 `admin_email:` → 該欄位型別 **load-bearing** |
 | **C**（採用） | `unknown` | **10** | **0** | **0** | 零 cascade |
 
-⚠ 本表為 **base overlay 之預測終態**；coding 階段須在真實 commit 上**重跑並重報**，
+⚠ 腿 C 之 `REMOVED=10 / ADDED=0` 已於 2026-08-15 對 **cast-B overlay fresh replay 重測確認**
+（§6.6；`ADDED` 同時查 this-file 與 **repo-wide**，皆為 0）。
+本表仍為 **base overlay 之預測終態**；coding 階段須在真實 commit 上**重跑並重報**，
 🚫 不得以本表代替 coding 後量測。
 
 Leg B 同時**即是** Leg C 的負向控制：證明「ADDED=0」不是因為量測失靈，
@@ -390,13 +414,24 @@ Leg B 同時**即是** Leg C 的負向控制：證明「ADDED=0」不是因為�
 | | errors ¹ | clean files ¹ | dirty files ² | total ² |
 |---|---|---|---|---|
 | base | 362 | 324 | 13 | 337 |
-| **after（預期）** | **352** | **325** | **12** | 337 |
+| **after（cast-B 實測）** | **352** | **325** | **12** | 337 |
 
 ¹ `typecheck:ratchet` **直接輸出**（`errorCount` / `cleanFiles`）。
 ² **推導值**：dirty ＝ 有診斷的相異檔數（由全量診斷分組得出）；total ＝ clean ＋ dirty。
 🚫 ratchet 不直接輸出 dirty / total，引用時須標明其為推導值。
 
+`after` 一列已由「預期」升級為 **cast-B overlay 實測**（§6.6，`ARCH-E-R13-RR2`）。逐字輸出：
+
+```
+base       baseline: errorCount=1119 cleanFiles=175 (baseRef=origin/main effectiveRange=origin/main...HEAD)
+           current : errorCount=362 cleanFiles=324          ratchet OK   exit=0
+overlay-B  baseline: errorCount=1119 cleanFiles=175 (baseRef=origin/main effectiveRange=origin/main...HEAD)
+           current : errorCount=352 cleanFiles=325          ratchet OK   exit=0
+```
+
 baseline 維持 `errorCount=1119 cleanFiles=175`（🚫 未 `--update`）；overlay 下 `ratchet OK`。
+⚠ 自審記錄：首次擷取時我的 regex 抓到 **baseline 那一組（1119/175）** 而非 `current`，
+差點把 baseline 當成 current 落盤；改為印**完整輸出**後才得上表（`SR-41`）。
 
 ### 6.3 type-only（byte-identical emit）
 
@@ -420,15 +455,26 @@ const opts = {
 // 報 outputText 的 byteLength / sha256 / CR 數 / diagnostics.length；斷言 byteLength>0 且 CR=0
 ```
 
-**實測（source ＝ `0a6593f6:functions/utils/audit-log.ts`，6614 B，CR=0）**：
+> ⚠ **本節已於 ① R13 `ARCH-E-R13-RR2` 後第二次遷移。**
+> 舊記錄之 overlay 為 **overload 版**，而 overload 已於 `CODEX-E-R3-RR2` 永久作廢。
+> §6.3／§6.4 是 §§1、11 直接引用的 **active evidence oracle**，🚫 不適用 `R12-L10`
+> 之 historical carve-out ⇒ 必須**對 cast-B overlay 重新量測**。
+> 🚫 **不得只把 `overload` 字樣換成 `cast`** —— 下列數值係 2026-08-15 對 B **fresh replay 實得**。
+
+**實測（source ＝ `0a6593f6:functions/utils/audit-log.ts`，6614 B，CR=0；overlay ＝ **cast-B**，
+on-disk 7072 B / CR=0 / `\bas\s+[A-Za-z]` 命中 2）**：
 
 ```
-BASE    (LF blob)      bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
-OVERLAY (overload 版)  bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
+BASE        (LF blob)    bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
+OVERLAY-B   (2 casts)    bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
 NON-EMPTY GUARD : base>0=true overlay>0=true
 CR=0 GUARD      : base=true overlay=true
 BYTE-IDENTICAL  : true
 ```
+
+⚠ 數值與 overload 版**恰好相同**（6760／`78eef5c2…`）—— 這是**預期**而非抄襲：
+兩案差異僅在型別層，erase 後皆與 base 逐字相同。但本組是**重量得同值**，
+🚫 不是沿用舊數字；重跑腳本與完整輸出見 §6.6。
 
 #### ⚠ 為何「EOL 不敏感」是假的（`CODEX-E-R1-RR2` 之根因，實測）
 
@@ -455,13 +501,16 @@ BYTE-IDENTICAL  : true
 > 根因：`RR2` 修好了**主 oracle**（改 immutable LF blob），但**負向控制族沒有一起遷移**。
 > 🚫 舊數據與「UTF-8 與 CRLF 皆保留」之敘述皆已作廢，不得再引用。
 
+> ⚠ **本節已於 ① R13 `ARCH-E-R13-RR2` 後再次重做（第四版）**：舊版之 overlay 與
+> negative-control **基準皆為 overload overlay**，該方案已作廢 ⇒ 基準必須換成 cast-B 並重量。
+
 **重做規格**：與 §6.3 **同一 immutable LF source**（`0a6593f6:functions/utils/audit-log.ts`，CR=0）
-＋ **同一 overload overlay**，注入**恰一行** runtime 敘述 `const __NEG__ = 1`（單變數、UTF-8 保真、LF）。
+＋ **同一 cast-B overlay**，注入**恰一行** runtime 敘述 `const __NEG__ = 1`（單變數、UTF-8 保真、LF）。
 🚫 **實跑後落盤，不得由預期值手算回填。**
 
 ```
 BASE        (LF blob)    bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
-OVERLAY     (overload)   bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
+OVERLAY-B   (2 casts)    bytes=6760  CR=0  diags=0  sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57
 NEG-CONTROL (+1 stmt)    bytes=6779  CR=0  diags=0  sha256=2405ebb5cfa6708b66eeaa416f8b58ea63794398e6bea5c4358cbdbf9d2e906a
 BYTE-IDENTICAL (overlay) : true
 NEG-CONTROL turns red    : true        Δ = +19 bytes
@@ -469,11 +518,14 @@ NEG-CONTROL turns red    : true        Δ = +19 bytes
 
 Δ ＝ `6779 − 6760 = 19`，恰等於 emit 之 `const __NEG__ = 1;` ＋ 換行的位元組數 ⇒ **算術自洽**。
 
-⚠ **兩次作廢紀錄（保留，因其為量測紀律之證據）**：
+⚠ **三次作廢紀錄（保留，因其為量測紀律之證據）**：
 1. 初版負向控制以 PowerShell `-replace` ＋ `Set-Content` 產生，中文註解被打成 Big5 亂碼
    ⇒ **同時改了兩個變數**，控制不乾淨；改用 Node `fs`（UTF-8 保真）重做。
-2. 第二版（`Δ=+27`）基準為 CRLF 工作區副本，隨 `RR2` 一併作廢；本節為**第三版**，
-   基準為 immutable LF blob。
+2. 第二版（`Δ=+27`）基準為 CRLF 工作區副本，隨 `CODEX-E-R1-RR2` 一併作廢。
+3. 第三版基準為 **overload overlay**，隨 `CODEX-E-R3-RR2` 作廢；本節為**第四版**，
+   基準為 immutable LF blob ＋ **cast-B** overlay。
+   ⚠ 根因族與第二版相同：**主 oracle 換了，負向控制族沒跟著換**（`ARCH-E-R5-RR2` 已警示過一次，
+   `ARCH-E-R13-RR2` 是同族第二次復發）。
 
 ### 6.5 overlay 還原證明
 
@@ -490,6 +542,45 @@ checkout 以 LF 寫出；原 CRLF 是 `.gitattributes` 釘死前留下的陳舊�
 **git 層零差異**（clean filter 使兩者 blob 相同），且新狀態更貼近 committed blob。
 ⚠ 亦即 **`git hash-object` 鎖的是 committed blob、攔不到行尾差異**（批 C 已證），
 故上列還原驗證同時報了 raw bytes 與 blob 兩軌。
+
+### 6.6 cast-B fresh replay（`ARCH-E-R13-RR2` 之證據遷移；2026-08-15，單一 session 一次跑完）
+
+**為何需要本節**：① R13 指出 §6.3／§6.4 是 §§1、11 仍在引用的 **active evidence oracle**，
+其 overlay 卻仍是已作廢的 overload 版。**證據必須重量，不能改字**。
+
+前置斷言（全部實跑）：工作區除 untracked `CLEANUP_PLAN.md` 外 clean；
+`functions/utils/audit-log.ts` 之 worktree blob ＝ `HEAD:` blob；base blob CR=0 且非空。
+
+| 量測項 | base | **cast-B overlay** | 判定 |
+|---|---|---|---|
+| forced-tsc 全量診斷 | 362 | — | — |
+| `audit-log.ts` occurrences | **10**（6 distinct keys） | **0** | — |
+| `REMOVED`（multiset） | — | **10** | 等於 `ARCH-E-R12-L3` CASCADE-LOCK 要求 |
+| `ADDED`（multiset，this file） | — | **0** | 零 cascade |
+| `ADDED`（multiset，**repo-wide**） | — | **0** | 無跨檔外溢 |
+| `typecheck:ratchet` current | 362 / 324 | **352 / 325** | `ratchet OK`、exit 0 |
+| ratchet baseline | 1119 / 175 | 1119 / 175 | 🚫 未 `--update` |
+| `npx eslint functions/utils/audit-log.ts` | — | **EXIT 0** | 無 warning／error |
+| `git diff --numstat` | — | **21 / 8** | `1 file changed, 21 insertions(+), 8 deletions(-)` |
+| overlay on-disk | — | 7072 B / CR=0 / cast 命中 **2** | — |
+
+`REMOVED` 之 multiset 明細（逐 key 附 multiplicity，🚫 非 distinct）：
+
+```
+x1  TS7006  Parameter 'text' implicitly has an 'any' type.
+x2  TS7006  Parameter 'row' implicitly has an 'any' type.
+x1  TS7006  Parameter 'prevHash' implicitly has an 'any' type.
+x3  TS7006  Parameter 'db' implicitly has an 'any' type.
+x2  TS7006  Parameter 'entry' implicitly has an 'any' type.
+x1  TS7006  Parameter 'err' implicitly has an 'any' type.
+                                          合計 occurrences = 10（distinct key = 6）
+```
+
+還原驗證（同一次執行內）：`git diff -- <單檔>` 空 ✅ ／ worktree blob ＝ `HEAD:` blob ✅ ／
+raw 6614 B、CR=0 ✅ ／ `git status --porcelain` 僅 `?? CLEANUP_PLAN.md` ✅ ／
+ratchet 回到 `current: 362 / 324` ✅。
+
+⚠ 本節仍是 **overlay 預測**，🚫 不取代 coding 階段在真實 commit 上的重跑（`ARCH-E-R12-L3`／`L7`）。
 
 ---
 
@@ -692,8 +783,11 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | **稽核 audit log** | ⚠ **是（領域敏感）** | 檔案本身即 audit hash chain |
 
 **結論**：領域敏感 ⇒ 走 **first-do-no-harm 最小 diff**。現行 diff surface（`CODEX-E-R3-RR2` 後）＝
-**10 處參數標註 ＋ 3 個 module-local 型別宣告 ＋ 2 個已登錄 erased cast（`UB-E-1`）**，
-零函式本體改寫（唯一被修改之本體行為 `msg` 那一行，且 **erase 後與 base 逐字相同**）。但因**零 runtime delta**（§6.3 機械證明），
+**10 處參數標註 ＋ 3 個 module-local 型別宣告 ＋ 2 個已登錄 erased cast（`UB-E-1`）**。
+本體改動之精確描述（`ARCH-E-R13-RR1` 修正，舊文「零函式本體改寫」與「唯一被修改之本體行」
+**字面互斥**，已作廢）：**恰 1 行函式本體（`isUniquePrevHashError` 的 `msg` 行）有 source-level
+型別 assertion 變更，但其 emitted runtime byte delta ＝ 0**（§6.3／§6.6 機械證明）。
+因**零 runtime delta**，
 🚫 不觸發「state machine / failure mode / idempotency / retry 四件式」——
 那四件針對行為變更，本棒無行為可變。
 
@@ -770,6 +864,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 13 | ① ChatGPT Architecture | R11 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`b613b43c`** / blob `69b6c4ff` / sha `c9ca252d…71e9f` | `ARCH-E-R10-RR1` **CLOSED**（舊 current-verification 僅剩 `SR-37` finding 原文）；ledger `#12` PASS、12 列全 6 cells、key 唯一、四元組等式 PASS；`ARCH-E-R6-NB1` 併修時機 **ACCEPTED**。**Architecture design objection ＝ 0**／**1 Required**（`ARCH-E-R11-RR1` closure family 未完整遷移）。處置見 §15 R34 |
 | 14 | ① ChatGPT Architecture | R12 | **`CHATGPT_ARCH_APPROVED_WITH_LOCKS`** | **`44c7f5f6`** / blob `f17302f7` / sha `7088633f…22fc8` | `ARCH-E-R11-RR1` **CLOSED**；**0 Blocker／0 Required／0 設計 objection**。頒 **`ARCH-E-R12-L1`..`L10`**（§14.10）：`L1`–`L7` 完整繼承 `R6-L1..L7` 實質約束；`L8` ANCHOR/RECEIPT LOCK；**`L9` SELF-REVIEW-FREEZE（§15 凍結於 R35）**；**`L10` HISTORICAL-SURFACE／NB2 LOCK**。⚠ **① 通過 ≠ `CODING_ALLOWED`** |
 | 15 | ② Codex Plan | R3 | `CODEX_PLAN_CHANGES_REQUIRED` | **`3c423097`** / blob `a56f2511` / sha `9721163e…b5be1` | **0 runtime Blocker／3 Major Required／1 non-blocking**。`RR1` live lock-reference family 仍指 R6@ccaaeaaf（與 §14.10 之 R12 current binding 衝突）· **`RR2` `TS-BOUNDARY-002`：overload public 比 implementation 寬，僅因 `strict:false` 通過，加 `--strict` 產生 `TS2394`**（方向與 PR-2ds 先例相反、非同型安全先例）· `RR3` packet live wrapper 復活舊內容 · NB commit subject 實含 BOM。處置見 §14.11 |
+| 16 | ① ChatGPT Architecture | R13 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`bb410903`** / blob `4cb6bc61` / sha `55327eb1…42b8f` | **0 Blocker／3 Required／0 新的設計方向退回**。**方案 B（`err: unknown` ＋ 2 個已登錄 erased cast）之架構方向 ACCEPTED**；`CODEX-E-R3-RR1` **CLOSED**（§§1–13 live 面舊 lock id／anchor 命中 0）、packet wrapper stale-copy remediation 成立。3 Required：`ARCH-E-R13-RR1` lock-family 影響漏算（B 同時牴觸 `L2` 與 `L5`，須同輪一起 supersede；§11 「零函式本體改寫」與「唯一被修改之本體行」字面互斥）／`ARCH-E-R13-RR2` evidence family 未遷移（§6.3／§6.4 仍掛 overload overlay，且為 active oracle、不受 `R12-L10` carve-out 保護）／`ARCH-E-R13-RR3` `UB-E-1` 安全論證過度宣稱（`join` 對任意值皆安全為假）。我方主動申報之兩項（§15 標題失序、base `TS2339`）① **明示不升 finding**。處置見 §15 R38 |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -1062,7 +1157,7 @@ emit 6760 B byte-identical、`NC-3` 恰 1 個 `TS2345`。
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → R37，共 **40 條** finding，全部處置完畢；**R37** 為「一輪 0 新發現」。
+**輪次總計**：R1 → R40，共 **44 條** finding，全部處置完畢；**R40** 為「一輪 0 新發現」。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
 量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
 五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
@@ -1179,7 +1274,9 @@ R12 以機械枚舉重跑全部族：`644`（全數帶 `de6cc72f` 錨點或在�
 `stage/staged/changed-files`（三 SSOT 一致）· 硬化宣稱族（⚠ **本句原寫「唯一出現處為明文作廢句」，
 經 ① R2 `ARCH-E-R2-RR2` 判定失準 —— 那是**語意分類**結果，被我冒充成 **literal census** 結果。
 正確表述與真實計數見 §15.1；本處不再自行給數字）·
-輪次敘述（全為 `R1→R37`）· `SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
+輪次敘述（全文一致；⚠ **此處原本內嵌當時的活動值，會隨每輪過期** —— 依 `SR-23` 結構性修法
+改為指標：現行總計見 §15 開頭之「輪次總計」列，🚫 歷史輪次段落不再自帶該數字）·
+`SR-\d+` 定義列數 · 終輪宣告**恰 1 個** · 誠實邊界段落**恰 1 段**。
 
 ### R13 — 2 finding（**皆由 ① R2 抓到，非自審**）
 
@@ -1378,12 +1475,12 @@ R27 依 **§15.2 新 oracle** 機械枚舉：九個已完成裁決事件之 `(ga
 | `SR-39` | **我把 PR-2ds 的 overload 先例方向套反了**：該先例是 public ⊂ implementation，本案卻是 public（`unknown`）比 implementation 寬。只因 `strict:false` 才編得過，加 `--strict` 即 `TS2394` ⇒ **在「終局要開 strict:true」的遷移棒裡自己埋一顆必爆的雷**。這是本棒**唯一一條設計層級 finding**，且由 ② 抓到、我方三輪自審均未抓到 | 實測三候選後由 owner 裁定選項 B；overload 永久作廢；§4.4 全節重寫並新增 `UNSAFE-BOUNDARY-REGISTRY`（`UB-E-1`） |
 | `SR-40` | 我以 `git log --format='%s'` 經 PowerShell 檢查 commit subject BOM，得「無 BOM」並據此宣稱 ② 之觀察為「渲染假象」。**實測以 `git cat-file` 讀原始 bytes：`44c7f5f6`／`3c423097` 確含 `EF BB BF`** ⇒ **我的反駁是錯的、已收回** | 根因＝訊息檔以 PowerShell `Out-File -Encoding utf8`（寫 BOM）產生，且我的檢查工具本身吞掉 BOM（`SR-19` 族第四次）。後續 commit message 改用無 BOM 寫入；🚫 不 amend 既有 commit |
 
-### R37 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+### R37 — 0 新發現（**但非終輪** —— 被 ① R13 三項 Required 推翻，見 R38）
 
 機械驗證 **@ 本版**：`rows == expected` · row-schema 違規 **0** · event key **唯一** ·
 **四元組集合等式 true**；輪次↔snapshot 錨點對齊（R31→`f4541143`／R33→`b613b43c`）。
 
-**⚠ 自審的誠實邊界**：40 條 finding 的分類為 **34 條失準／矛盾 ＋ 3 條缺漏 ＋ 2 條先例遷移失敗 ＋ 1 條編輯事故**，
+**⚠ 自審的誠實邊界（R37 當下之記錄；總計已由 R39 取代）**：40 條 finding 的分類為 **34 條失準／矛盾 ＋ 3 條缺漏 ＋ 2 條先例遷移失敗 ＋ 1 條編輯事故**，
 其中 **39 條**落在機械／宣稱層級、**1 條（`SR-39`）為設計層級**（由 ② R3 抓到，自審三輪未抓到）。
 這正說明單 agent 自審的能力邊界 —— 它與主線共享盲點，
 🚫 **不構成**「設計正確」之保證；架構級判斷仍以 ① ChatGPT Architecture 與 ② Codex Plan 為準。
@@ -1400,6 +1497,39 @@ R27 依 **§15.2 新 oracle** 機械枚舉：九個已完成裁決事件之 `(ga
 **修過不代表免疫**，請以這三族為重點掃描角度。
 
 ---
+
+### R38 — 3 finding（① R13；normative remediation）
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-41` ⚠⚠ | 擷取 `typecheck:ratchet` 數字時，我的 regex 抓到 **baseline 那一組（`1119/175`）** 而非 `current`。若直接落盤，§6.2 的 `after` 列會被寫成 baseline 值，且**看起來合理**（因 baseline 本來就不該動）⇒ 假綠。根因＝**用 regex 摘要工具輸出，而非讀完整輸出**（`SR-19` 族第五次：檢查工具本身吞掉了要檢查的東西） | 改印**完整 ratchet 輸出**重跑；§6.2 落 base `362/324` → overlay-B `352/325`（`ratchet OK`、exit 0），並把此次失誤寫進 §6.2 |
+| `SR-42` ⚠ | §6.1 的「腿 B／腿 C」與 §4.4 的「方案 A／B／C」是**兩組不同的字母**，同一份 PLAN 內同時活著。我在寫 §6.1 遷移註記時差點把「腿 C（採用）」讀成「方案 C（runtime narrowing，已否決）」 | §6.1 開頭加正交性警示，明列兩組字母的語義與「兩腿皆在方案 B 之下量測」 |
+| `SR-43` ⚠ | §6.4 的三次作廢紀錄，前兩次都標了根因，**第三次（overload → cast）沒標**。而它與第二次是**同一族**（主 oracle 換了、負向控制族沒跟著換），`ARCH-E-R5-RR2` 已警示過一次 | §6.4 第 3 項補「根因族與第二版相同 …… 同族第二次復發」 |
+
+### R39 — 1 finding（`SR-44`）
+
+| # | finding | 處置 |
+|---|---|---|
+| `SR-44` ⚠⚠ | 我把輪次總計從 `R1→R37` 更新為 `R1→R39` 時用了**全域字串取代**，連 **§15 R12 段落內的歷史紀錄**一起改掉 ⇒ 該段變成宣稱「R12 當時驗過 `R1→R39`」，而 R38/R39 在 R12 當下**根本不存在**。這是**竄改歷史**，比 stale 更嚴重。⚠ 根因有二：(a) 全域取代未先枚舉命中點分類 live／historical；(b) 那個位置**本來就內嵌活動值**（`SR-23` 族：歷史段落自帶會過期的數字），所以它每輪都在被改，只是以前改的人也是我 | 該處改為**指標式**（指向 §15 開頭之輪次總計），🚫 歷史輪次段落不再自帶活動值；並立規則：**輪次總計之更新一律逐點分類 live／historical，🚫 禁全域取代** |
+
+⚠ 本條坐實 ① R13 對 evidence/lock family 的同一結構性擔憂：
+**「一個值同時活在 live 與 historical 兩面」時，任何批次更新都會污染 historical 面。**
+
+### R40 — **0 新發現** ⇒ `PLAN_SELF_REVIEW_CLEAN`（重新達成）
+
+機械驗證 **@ 本版**：ledger `rows == expected` · row-schema 違規 **0** · event key **唯一** ·
+**四元組集合等式 true**；§§1–13 live 面舊 lock id／anchor 命中 **0**；
+§6.3／§6.4 已無「overload overlay 作為現行證據」之引用；
+§15 歷史輪次段落內**不再內嵌活動輪次值**（`SR-44` closure）。
+
+**⚠ 誠實邊界（隨 ① R13 更新）**：R38／R39 共 4 條 finding **全部**是我在修 Required 的過程中**自己**踩到的
+量測／命名／族處置問題，🚫 **沒有一條**是「發現 ① 的三個 Required 之外還有設計問題」。
+亦即：**`SR-39`（設計層級）仍是本棒唯一一條設計層級 finding，且仍是外部 gate 抓到的。**
+自審在本輪的實際貢獻＝**防止我在修 Required 的過程中製造新的假證據**（`SR-41` 若落盤即為假綠），
+🚫 **不是**「已獨立驗證設計正確」。
+⚠ 其中 `SR-44` 更是**修 Required 的動作本身製造出來的新缺陷**（全域取代污染 historical 面），
+這正是「每次改動都要重跑自審到 0」而非「改完就送」的理由。
+
 
 ## 15.1 硬化宣稱族 —— literal census ＋ oracle 定義（`ARCH-E-R2-RR2`）
 
