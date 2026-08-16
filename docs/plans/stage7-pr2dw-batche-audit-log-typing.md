@@ -1,7 +1,9 @@
 # Stage 7 · PR-2dw 批 E — `functions/utils/audit-log.ts` noImplicitAny 10 → 0
 
-> **狀態**：`PLAN_SELF_REVIEW_CLEAN`（Dual Gate v3.1；四道外部審查全走）
-> ⚠ 此 state 僅表示**維度 A 自審**已達「一輪 0 新發現」（§15，R1→R46）；
+> **狀態讀法**（`ARCH-E-R18-G1`；永久規則，🚫 本身不含任何會過期的值）：
+> **本 artifact 🚫 不自我宣告 current self-review closure。**
+> closure 僅由**綁定 exact PLAN commit／blob 之有效 detached attestation** 建立（§7.6.2）；
+> 🚫 本檔任何章節不得持有 live 的「最新輪次／finding 總數／freeze 狀態」副本。
 > 🚫 **不是** gate 通過。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger**；
 > 🚫 本行（及本檔其他任何章節）**不複述** gate 當前狀態（`ARCH-E-R3-RR1`）。
 > **級別**：實作 L1 ／ 審查 care L2（沿 PR-2ce 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
@@ -622,7 +624,7 @@ ratchet 回到 `current: 362 / 324` ✅。
 
 ## 7. 機械限制
 
-### 7.5 🔒 `MEASURE-BEFORE-MATERIALIZE` ／ `EVIDENCE-PROVENANCE-LOCK`（① R17 Q3）
+### 7.5 🔒 `EVIDENCE-PROVENANCE-LOCK` ／ `ACYCLIC-PROVENANCE`（① R17 Q3；① R18 RR1 精確化）
 
 > **本節為全文件單一 SoT。** §6.4 之「🚫 實跑後落盤，不得由預期值手算回填」
 > 自此**降為本節的一個具體實例**，🚫 不得在多章複製兩套規則。
@@ -638,6 +640,29 @@ ratchet 回到 `current: 362 / 324` ✅。
 ⚠ `ARCH-E-R17-RR2` 認定：本棒 R45 真正違反的正是後者 —— 不是「2 寫錯成 3」，
 而是 **verdict-bearing evidence 可以在 oracle 執行前被物化**。
 
+#### 7.5.1 `ACYCLIC-PROVENANCE`（`ARCH-E-R18-RR1`）
+
+⚠ **① R18 明文修正我方 R18 packet 之過度全稱**：🚫 **不得**把本規則寫成
+「所有 self-reference 在數學上都沒有 fixed point」。嚴格說，某些自指布林方程**可以**
+存在循環 fixed point；真正的問題是**該 verdict 沒有獨立、well-founded 的 provenance，
+無法用自己證明自己**。⇒ 應鎖的是 provenance 的**無環性**，不是 fixed point 的存在性。
+
+**規則**：
+
+> 若 verdict 的 oracle input 包含承載該 verdict 的**同一 artifact exact bytes**，
+> 且沒有先經明確、外部審過的 canonicalization 打斷依賴，
+> 該 verdict **不得**作為該 artifact 自身之 acceptance evidence。
+
+**兩類 claim 的分界（這才是可操作的判準）**：
+
+| 類別 | 判準 | 落點 |
+|---|---|---|
+| **ordinary measured claim** | oracle dependency 對自身位元組 **acyclic**，且 post-render replay 可**經驗證明**其收斂 | **可**留在 artifact（§7.6.1 Phase 1） |
+| **self-acceptance verdict** | 形如「此 exact final artifact 已完整 replay ／ 已通過 ／ 已 freeze」 | **必須**移出 artifact（§7.6.2 Phase 2） |
+
+⚠ `R46-16` 屬後者卻被寫成前者，且 replay 母體又納入它、以其自身字面值作為判準 ⇒
+**gate 反過來替 hard-code 背書**。處置見 §14.20。
+
 #### 適用母體（精確限定，🚫 不是「所有數字」）
 
 **母體 ＝ 本輪新增或修改、且宣稱為 current measured evidence／current gate disposition 的 claim。**
@@ -651,64 +676,112 @@ ratchet 回到 `current: 362 / 324` ✅。
 |---|---|
 | immutable historical receipt 中**以前量過**的數字 | 它們的 canonical 由 `RECEIPT-CORE-IDENTITY-GATE` 保護，重量反而是竄改 |
 | 明確標為 **historical snapshot** 的舊值 | 其真值錨定於當時的 commit |
-| finding-original **引文** | 引文的正確性 ＝ 與原文相符，非與現況相符 |
+| finding-original **引文**／gate verdict 逐字引用 | 引文的正確性 ＝ 與原文相符，非與現況相符 |
 | 純規格 **expected value** | 前提：**明確標成 expected、不是 actual** |
 
 #### 落地形式
 
-見 §7.6 `EVIDENCE-MATERIALIZATION-ORDER-GATE`（機械強制），
-以及 §7.7 `AUTHZ-COVERAGE-EXACT`（授權面之對應強制）。
+見 §7.6（機械強制之兩階段管線），以及 §7.7 `AUTHZ-SURFACE-COVERAGE`（授權面之對應強制）。
 
-### 7.6 🔒 `EVIDENCE-MATERIALIZATION-ORDER-GATE`（① R17 Q4 頒布）
+### 7.6 🔒 `EVIDENCE-MATERIALIZATION-ORDER-GATE`（① R17 Q4；① R18 `G1` 改為兩階段）
 
 > ⚠ ① R17 明示：**不採「偵測表格是否先存在」這個字面實作** ——
 > 「表格 skeleton 可以先存在；**不可以先存在的是 verdict-bearing actual cell**。」
 > 真正要機械保證的是**資料依賴**，不是檔案時間戳（後者脆弱）。
+> ⚠ ① R18 `ARCH-E-R18-G1` 追加：本 gate 拆為 **Phase 1（in-artifact）**
+> 與 **Phase 2（detached final attestation）**；Phase 2 之 verdict 🚫 **永不回寫 artifact**。
+
+#### 7.6.1 Phase 1 — in-artifact（限 §7.5.1 之 ordinary measured claim）
 
 管線（強制順序）：
 
-    measure() → immutable structured result → renderEvidence(result) → post-render replay → write/commit
+    measure() → immutable result（content-addressed）→ renderEvidence(result)
+              → post-render replay（結果寫入**另一份** result 檔）→ write/commit
+
+**Observation ／ Assertion schema 分離（`ARCH-E-R18-A1` item 4）**：
+
+| 種類 | 欄位 | `pass` 從何而來 |
+|---|---|---|
+| **Observation** | `claim_id` · `oracle_id` · `input` · `actual` | **無 `pass` 欄** —— 純觀測值不假裝有 verdict |
+| **Assertion** | 上列 ＋ `expected` · `comparator` · `pass` | `pass` **必由 `comparator(actual, expected)` 運算導出**；🚫 producer 不得指定 |
+
+⚠ 為何要拆 schema、而不是只用 regex 禁 `true`：舊 schema 把兩者塞進同一個 `pass` 欄，
+於是 `ERR-*`／census 這類**純觀測值**被迫帶一個 producer 手寫的 `true`。
+它們當時沒被渲染成 `✅` 只是僥倖 —— **一旦日後有人替那些表加上 verdict 欄，
+false green 會靜默出現**。拆 schema 是從**模型上**消掉該潛伏面；
+regex 禁字面 `true` 擋不住 `!!1`／`1 === 1` 這類等價寫法。
 
 **六項必要條件**：
 
 | # | 條件 |
 |---|---|
-| 1 | 每個 current measured claim 有**穩定 `claim_id`** |
-| 2 | renderer 的 actual／PASS／`✅` 欄位**只能取自當輪 measurement result object**；🚫 禁 literal hard-code |
-| 3 | measurement result 必**綁定受測 input anchor／hash 與 oracle id** |
+| 1 | 每個 durable current-measured claim 有**穩定 `claim_id`**，且**登錄於 durable claim registry** |
+| 2 | renderer 的 actual／`✅` 欄位**只能取自當輪 result object**；🚫 禁 literal hard-code |
+| 3 | result 必**綁定受測 input anchor／hash 與 oracle id**，且以 **content-addressed** 檔名落盤、**寫後不覆寫** |
 | 4 | **missing result／extra result／duplicate claim／unregistered measured claim** 任一存在即 **fail closed** |
-| 5 | render 完成後**再 replay 一次 final candidate**，解析 durable claim 與 oracle actual，**必須逐項等值** |
-| 6 | 負向控制至少三條（見下） |
+| 5 | render 後**再 replay 一次 final candidate**；replay 母體 ＝ **registry 全體**，🚫 不得以 id 前綴（如 `startsWith('R46-')`）縮小母體；replay 結果寫入**另一份** result 檔，🚫 不覆寫 stage-1 產物 |
+| 6 | 負向控制至少三條（見下），且**一律只操作暫存副本，🚫 永不寫真實 PLAN 路徑** |
 
 **必備負向控制**：
 
 | # | 注入 | 期望 |
 |---|---|---|
-| a | 無 measurement result 直接 render | **必敗** |
+| a | 無 result 直接 render | **必敗** |
 | b | 把 rendered actual 任改一個值 | **必敗** |
 | c | 新增一個帶 `✅`／actual 的 claim 但**無 producer mapping** | **必敗** |
 
-### 7.7 🔒 `AUTHZ-COVERAGE-EXACT`（`ARCH-E-R17-RR3` 之結構性修法）
+#### 7.6.2 Phase 2 — detached final attestation（`ARCH-E-R18-G1`）
 
-> ⚠ ① R17 認定：舊 `AUTHORIZATION-DIFF ALLOWLIST` **並未真正做到它宣稱的「每個 hunk 精確歸入一類」**
-> —— 實作是**依序找第一個 matching rule 後 `break`**，且多個 pure-add rule 只要求 `hk.add.some(...)`；
-> 因此**一個 hunk 只要含一行合法 token，就可能夾帶其他未授權行仍被放行**。
-> 實際 stdout 已出現 **跨 §14.16／§14.17 的大 hunk 被整包歸成一類** —— 這正證明
-> **hunk 是 diff formatter 產物、不是安全的授權原子**（相鄰的兩個合法修改本來就會被合併）。
+**時序（不可調換）**：
 
-**新判準（授權原子改為 changed line／changed semantic object）**：
+    artifact 凍結（commit 成立）→ 對 immutable Git object 重播 → attestation record
 
+| 規則 | 內容 |
+|---|---|
+| **讀取來源** | 一律取自 **immutable Git object**（`git show <commit>:<path>`）；🚫 不讀 worktree |
+| **綁定欄位（至少）** | `commit SHA` · `blob_oid` · `doc_sha256` · byte length／CR／LF／BOM · `oracle_manifest_sha256` · claim-population count ＋ hash · `mismatch_count` · verdict · 每支工具之 source SHA-256 · 實際 invocation／args · runtime version · 完整 stdout（或其 byte-bound embedded copy） |
+| **執行契約** | packet builder 必驗「內嵌 tool source／stdout ＝ **實際執行者**」逐 byte 相同 |
+| **🚫 回寫禁令** | artifact **不得**回寫該 PASS／freeze —— 一旦回寫，bytes 即變，該 attestation 隨即失效 |
+| **失效條件** | 任何 attestation 之後若 repo 再產生新 commit，**舊 attestation 立即失效**，🚫 不得沿用到新 HEAD |
+
+### 7.7 🔒 `AUTHZ-SURFACE-COVERAGE`（`ARCH-E-R18-RR3` 之誠實化；原名 `AUTHZ-COVERAGE-EXACT`）
+
+> ⚠ **① R18 `RR3` 認定舊名過度宣稱。** 對 wholly-new section，舊規則實際退化為
+> 「行落在指定 section ＋ 不是 shell／exec 外觀 ⇒ 整行授權」，而注入的 poison 只有
+> 兩條**危險指令樣本**（recursive-delete 與 pipe-to-shell）。那證明的是**危險指令 denylist 有效**，
+> **不是**語意授權 exact —— 一行良性外觀的散文（例如「production scope 同時允許 `tests/**`」）
+> 只要放進 §7.6 就會過關。故本節**降格並改名**。
+>
+> ⚠ 附帶實證：本節初稿曾直接寫出那兩條指令的**字面**，於是被自己的 detector 判為
+> unclassified —— gate 因此 fail closed。🚫 我方**未**為該行加例外（那正是 ① R16
+> 永久刪除 `RULE_TEXT` 時所禁止的 hidden whitelist），改為以**描述取代字面**。
+
+**本 gate 證明什麼（三項，逐項有界）**：
+
+| # | 主張 | 判準 |
+|---|---|---|
+| 1 | **surface coverage** | 每個 changed line 落在**已批准的結構 surface**，且**恰被分類一次**；🚫 不得「第一個 rule match 就 break」 |
+| 2 | **schema exactness** | 對 structured object（ledger 列、receipt-core registry、erratum 表、R47 表）驗**形狀／key-set／arity** |
+| 3 | **dangerous-command net** | shell／exec 外觀行之 denylist。**是網，不是證明** |
+
+**本 gate 🚫 不證明什麼**：
+
+> **prose contract 文字之語意忠實度。** 該面仍由 ①／② gate 審查，
+> 🚫 不得用 regex 假裝已機械證明。
+
+⚠ **已知限制控制（必備，且期望值就是「抓不到」）**：於 §7.6 注入一行良性外觀但未授權的
+散文 ⇒ 本 gate **不會**轉紅。此控制存在的目的正是**把限制顯式化**，
+🚫 不得因為它「不好看」就移除 —— 隱藏限制比限制本身更危險。
+
+**授權原子與門檻**：
+
+    授權原子 = changed line
     coverage(changed_surface) = 100%
     unclassified        = 0
     multiply_classified = 0
 
-🚫 **不得**再「第一個 rule match 就 break」。
-**必備負向控制**：於一個本來合法的 pure-add hunk 中**偷插 1 行未授權文字** ⇒ **必紅**
-（此控制正是用來殺掉 `some()` 型 false green）。
-
-⚠ 另一項紀律（① R17 明示）：量詞 parser **必解析成明確整數或直接用 machine integer field**，
-🚫 不得再用 `/四|4/` 這類 substring acceptance ——
-該 predicate 已被行內的「L27**4**」吞掉過一次（`SR-19` 族）；
+⚠ 另一項紀律（① R17 明示，續有效）：量詞 parser **必解析成明確整數或直接用 machine integer field**，
+🚫 不得用 `/四|4/` 這類 substring acceptance —— 該 predicate 已被行內的「L27**4**」吞掉過一次（`SR-19` 族）；
 **只把搜尋範圍縮小、卻保留同類模糊 predicate 亦不合格。**
 
 ### 7.1 EOL / encoding
@@ -995,6 +1068,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 19 | ① ChatGPT Architecture | R15 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`a190b35d`** / blob `a3f12917` / sha `e7d9b72d…edaf6` | **0 runtime Blocker／0 新 design objection／0 新 Architecture Required**。② R4 兩項 Major **均成立**；本輪功能為**授權其修復**，因 `a190b35d` 自身仍含已知缺陷故不發 APPROVED。頒 **`ARCH-E-R15-A1` BOUNDED GOVERNANCE REMEDIATION AUTHORIZATION**（逐字見 §14.14）：Q1 不屬原 `R14-L8` carve-out、亦**不需新 design anchor**（design anchor 仍為 **`0a2fdc5a`**）；Q2 採**選項 A** 且 erratum 須為**獨立 sibling section**、🚫 不得塞回 receipt core；Q3 invariant 收斂為 `CURRENT_BINDING`／`LEGACY_REFERENCE`／`SCANNER_EQUIVALENCE` 三分類；Q4 **批准 R41**（僅一次 targeted，0 finding 即重新 freeze）；Q5 立 **`RECEIPT-CORE-IDENTITY-GATE`**（母體縮為 receipt core、byte equality 為主 oracle、baseline 一次性重整）。全 PASS 則**不回 ① R16，直送 ② Codex Plan R5** |
 | 20 | ① ChatGPT Architecture | R16 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`d8ea0964`** / blob `7c467784` / sha `7cbb28f6…be8d4` | **0 runtime Blocker／0 新 production-design objection／3 governance Required**。維持 ② R4／R16-return 三項 Major 全部成立；**`ARCH-E-R15-A1` 於當時確應 fail closed**（R41 已產生 finding 卻被一般「跑到 0」通則擴張）。裁定：R40 標題修改 **否決**（須自 `a190b35d` 機械恢復）；**R42–R44 不刪除**，定性為 `HISTORICAL_UNAUTHORIZED_FOLLOW_ON`、其 R44 freeze **不具規範效力**，但 `SR-47`／`SR-48` 導出之 explicit registry 與 brace-scoped parser 經 R16 獨立重審 **方向 ACCEPTED、重新授權保留**；ledger `#19` **禁止回寫**，改 append sibling pointer erratum（§14.16）；採 ② 之 scanner 收斂並**永久刪除 `RULE_TEXT`**；SECTION 6 之「逐字轉錄」標籤 **過度宣稱**，須改為忠實節錄／結構化摘要。頒 **`ARCH-E-R16-A1` FAIL-CLOSED GOVERNANCE RECOVERY AUTHORIZATION**（12 項，逐字見 §14.17），**取代 A1 成為下一次 PLAN mutation 之唯一授權、🚫 不追溯合法化越權過程**。scanner／gate **本 PR 🚫 不進 repo、🚫 不進 CI**（會改變 R14-L1 鎖定之 changed-file shape）。R14 design approval @ `0a2fdc5a` **仍有效**；`CODING_ALLOWED` 仍 **NOT_GRANTED** |
 | 21 | ① ChatGPT Architecture | R17 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`e54b06b3`** / blob `bc25d6c8` / sha `69a9bc8a…c429e` | **0 runtime Blocker／0 新 production-design objection／3 governance Required**。維持 ② R5-preflight 之兩項數值判定成立。3 Required：`ARCH-E-R17-RR1` **R45 durable evidence 失效** ⇒ `R45=0`／合法 freeze／`PLAN_SELF_REVIEW_CLEAN @ R45` **全部無效**；`ARCH-E-R17-RR2` **MEASURE-BEFORE-MATERIALIZE-GAP**（根因＝verdict-bearing evidence 可在 oracle 執行前被物化，我方申報之根因成立）；`ARCH-E-R17-RR3` **AUTHZ-COVERAGE-NOT-EXACT**（allowlist 為 first-match ＋ `some()` membership，非完整 changed-surface coverage，仍有假綠空間 —— 由 ① 獨立抓到、我方未發現）。裁決：Q1 **批准 R46 且僅一次**（R16「🚫 不得 R46」之 fail-closed 目的已履行；🚫 不創 R45b／R45.1 分支輪號）；Q2 R45 **不得就地更正**、採 sibling erratum（要保存的是「R45 當時確實以錯誤 evidence 宣告了 0 finding」）；Q3 §6.4 提升為 §7.5 全文件 SoT，但母體**精確限定**為「本輪新增／修改且宣稱為 current measured evidence／gate disposition 之 claim」；Q4 批准機械強制，但**不採「偵測表格是否先存在」**之字面實作 ——「skeleton 可先存在，verdict-bearing actual cell 不可」；Q5 頒 **`ARCH-E-R17-A1`**（12 項，逐字見 §14.18）。路由：**R46 ＝ 0 ＋ exact coverage 全綠 ⇒ 直送 ② R5、不需 ① R18**；**R46 > 0／coverage 有未分類或多重分類／post-render replay 不一致 ⇒ 停止、直接回 ① R18、🚫 不得 R47** |
+| 22 | ① ChatGPT Architecture | R18 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`89551194`** / blob `67d0a09d` / sha `961bc173…653a3` | **0 runtime Blocker／0 新 production-design objection／3 governance Required／1 packet-only NB**。② R5-preflight #3 之 `CODEX-E-R5-PREFLIGHT-RR1` **成立**。3 Required：`ARCH-E-R18-RR1` **SELF-ATTESTATION-CIRCULARITY／R46 CLOSURE INVALID**（`R46-16` pass 與 actual 皆 stage-1 literal，replay 又以該 literal 尋 durable row ⇒ 自我背書；`R46-RESULT` 被 replay population 明文排除、`FREEZE-STATE` 無 durable claim-id ⇒ `R46=0`／合法 freeze／header `PLAN_SELF_REVIEW_CLEAN` 皆不能維持 current normative effect。⚠ ① 同時**修正我方過度全稱**：應鎖 **acyclic evidence dependency**，🚫 不得寫成「所有 self-reference 皆無 fixed point」）；`ARCH-E-R18-RR2` **EVIDENCE-PROTOCOL FAMILY INCOMPLETE**（我方主動枚舉之 **E-1…E-6** **全數納入 Required scope、不 defer**；**E-3** 之修法須為 **Observation／Assertion schema 分離**，🚫 不是只用 regex 禁 `true`）；`ARCH-E-R18-RR3` **AUTHZ-COVERAGE STILL OVERCLAIMS EXACTNESS**（wholly-new section 規則實際退化為「在指定 section ＋ 非 FOREIGN ⇒ 授權」，poison 只證明危險指令 denylist；須降格改名為 `AUTHZ-SURFACE-COVERAGE` ＋ structured-object schema check —— ⚠ **由 ① 獨立抓到**）。`PKT-E-R18-NB1`（non-blocking）：packet SECTION 7 之 `SR-id census` 為 stale copy（舊計法含 reference 列），下一 packet 須由同一 definition-row oracle 直接產生。裁決：Q1 R46 採 sibling erratum ＋ **清掉 header／§15 之 live closure surface**（改為永久讀法規則，🚫 不再填下一個 freeze 值）；Q2 採 **(c)** ＝ `ARCH-E-R18-A1` ＋ **恰一次 R47**（`PRE-ATTESTATION_TARGETED_REVIEW`；🚫 不得有 final-blob-attestation 列、🚫 不得宣告 freeze／`PLAN_SELF_REVIEW_CLEAN`；detached attestation 未執行**不算 finding**）；Q3 頒 **`ARCH-E-R18-G1`**（作用域＝本 batch E PLAN 與自 R18 起為它產生之 gate evidence／packet，**不是 repo-wide**；**不加入亦不重頒 `ARCH-E-R14-L1..L10`**）；Q4 **E-1…E-6** ＋ `RR3` 全納入；Q5 路由 ＝ remediation → R47 恰一次 → commit → detached attestation → PASS 則**直送 ② R5**，任何 failure 則**回 ① R19、🚫 不得 R48**。R14 design approval @ `0a2fdc5a` **仍有效**；source blob 仍鎖 `0894b592`；`CODING_ALLOWED` 仍 **NOT_GRANTED** |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -1327,7 +1401,7 @@ transport 複驗：實收 carrier 為 CRLF 化之 333,876 B／4194 CR，逐 CRLF
 
 | 項目 | 規格 |
 |---|---|
-| **母體（顯式 registry）** | `{ §14.4, §14.7, §14.10, §14.12, §14.15, §14.17, §14.18 }` —— 即**自我宣告為 receipt／immutable receipt／逐字 gate receipt** 之 decision-evidence core。🚫 ledger、remediation narrative、transport history、erratum、**本 §14.14 自身**皆**不屬**母體 |
+| **母體（顯式 registry）** | `{ §14.4, §14.7, §14.10, §14.12, §14.15, §14.17, §14.18, §14.21 }` —— 即**自我宣告為 receipt／immutable receipt／逐字 gate receipt** 之 decision-evidence core。🚫 ledger、remediation narrative、transport history、erratum、**本 §14.14 自身**皆**不屬**母體 |
 | **為何用 registry 而非標題比對** | ⚠ 初版以「`### 14.N` 標題含 `receipt`」判定，**誤收** §14.13（erratum，標題含「receipt-integrity」）與 §14.14（gate 規格自身，標題含 `RECEIPT-CORE-…`）⇒ 正是本輪剛立之 `SCANNER_EQUIVALENCE` 所禁止的規格／實作分歧（`SR-47`）。**替代方案「在每個 core 內加機器可讀標記」不可行** —— 那要寫進 core，會直接毀掉本 gate 存在的意義（byte-identity）。故 membership 一律維護在**core 之外**的本節 |
 | **registry 維護規則** | 新建 receipt core 時，**同一個 commit 內**把它加入上列 registry；🚫 registry 與實際 core 不一致即 violation（gate 須同時檢查「registry 內每項都存在」與「不在 registry 的 §14.N 標題**不得**自稱 receipt core」） |
 | **legacy baseline** | 既有 receipt core 之 canonical ＝ **本次 R15 remediation commit** 中之 bytes（機械可解析為「首次含有 §14.14 之 commit」）。⚠ 這**不表示**它們從未被改過；事故歷史完整保存於 §14.13 |
@@ -1509,6 +1583,98 @@ negative-control 結果；scripts 可在 repo 外作 ephemeral executable，**�
 
 ⚠ 依 ① R17 Q2 明示：**本 erratum 🚫 不手填任何新的「finding 總數」** ——
 總數必須由 **SR-id census 重算**後產生（見 §15 輪次總計）。
+### 14.20 🚨 R46 disposition ／ evidence erratum（`ARCH-E-R18-RR1`；① R18 Q1 指定形式）
+
+> ⚠ **append-only sibling disposition；R46 原 bytes 逐字保留、🚫 不得就地更正。**
+> ① R18 Q1 之理由同 R45：要保存的是「**R46 當時確實以自我背書的 evidence 宣告了 0 finding**」；
+> 就地洗白會讓後人看到一份「看起來當時就驗對」的紀錄，**反而破壞 audit semantics**。
+
+| 欄位 | 值 |
+|---|---|
+| **affected** | §15 R46 evidence table |
+| `R46-16` | **`INVALID_EVIDENCE`** —— `pass` 與 `actual` **皆為 stage-1 字面常數**，非任何 oracle 之輸出 |
+| **自我背書機制** | post-render replay 之母體**包含** `R46-16`，判準為「該列是否含 `c.actual`」；而 `c.actual` 正是那個字面字串 ⇒ **replay 反過來替 hard-code 背書** |
+| `R46-RESULT` | **NO NORMATIVE EFFECT** —— 其母體 `fails` 因上列而**結構性不可能**納入 `R46-16` |
+| **R46 freeze** | **INVALID** |
+| **R46 `PLAN_SELF_REVIEW_CLEAN` claim** | **INVALID** |
+| **discovered** | ② R5-preflight #3（點名 `R46-16`）＋ 我方族枚舉（另 5 項）＋ ① R18 |
+| `R46-BYTES` **R46 原 bytes** | **逐字保留（byte-identical vs `89551194`）** |
+
+**同族其餘 5 項**（② 未點名，**我方主動申報**；① R18 Q4 裁定**全數納入 Required scope、不 defer**）：
+
+| id | 缺陷 | 母數 | 修法落點 |
+|---|---|---|---|
+| `E-2` | durable claim 不在 stage-3 replay 母體（母體以 `startsWith('R46-')` 硬編） | 7 | §7.6.1 條件 5（母體改為 registry 全體） |
+| `E-3` | 字面 `pass`、目前未渲染成 verdict（**潛伏** false green） | 8 | §7.6.1 Observation／Assertion schema 分離 |
+| `E-4` | stage-1 之 immutable result 被 stage-3 **就地覆寫** ⇒ 證據鏈第一環不可回復 | 1 | §7.6.1 條件 3／5（content-addressed ＋ 另檔） |
+| `E-5` | 負向控制把合成文件**寫到真實 PLAN 路徑** | 1 | §7.6.1 條件 6（只操作暫存副本） |
+| `E-6` | durable current-measured 值**無 `claim_id` 錨點**（含 `FREEZE-STATE`） | 4 | §7.6.1 條件 1 ＋ 本輪移除該 surface |
+
+⚠ 依 ① R18 Q1 明示：**本 disposition 🚫 不填任何新的 freeze 值或 finding 總數。**
+
+### 14.21 ① R18 `ARCH-E-R18-A1` — DETACHED-EVIDENCE RECOVERY AUTHORIZATION（授權 receipt）
+
+> **本節為 immutable receipt core**（已同 commit 加入 §14.14 explicit registry）。
+
+**裁決**：`CHATGPT_ARCH_CHANGES_REQUESTED @ 89551194` ｜
+0 runtime Blocker ／ 0 新 production-design objection ／ **3 governance Required ／ 1 packet-only NB**。
+**R14 design approval @ `0a2fdc5a` 仍有效**；source blob 仍鎖 `0894b592`；`CODING_ALLOWED = NOT_GRANTED`。
+本輪 🚫 不重開 cast-B／scope／emit／cascade／test strategy。
+
+| Required | 內容 |
+|---|---|
+| `ARCH-E-R18-RR1` **SELF-ATTESTATION-CIRCULARITY ／ R46 CLOSURE INVALID** | ② 之 `R46-16` 完全成立且非單一 cell 錯誤；`R46-RESULT` 被 replay population 明文排除、`FREEZE-STATE` 無 durable claim-id ⇒ `R46=0`／合法 freeze／header `PLAN_SELF_REVIEW_CLEAN` 皆**不能維持 current normative effect**。⚠ 對我方 packet SECTION 3 之**精確修正**：🚫 不得寫成「fixed point 不存在」，應鎖 **acyclic evidence dependency** |
+| `ARCH-E-R18-RR2` **EVIDENCE-PROTOCOL FAMILY INCOMPLETE** | **E-1…E-6** **全部納入 Required scope、不 defer**。**E-3** 之修法須為 **Observation／Assertion schema 分離**（Observation 只有 `actual`、無 `pass`；Assertion 之 `pass` 必由 comparator 導出），🚫 不是只用 regex 禁 `true` |
+| `ARCH-E-R18-RR3` **AUTHZ-COVERAGE STILL OVERCLAIMS EXACTNESS** | 對 wholly-new section，規則實際退化為「在指定 section ＋ 非 `FOREIGN` ⇒ 授權」；poison 只證明 dangerous-command detector。須降格改名 **`AUTHZ-SURFACE-COVERAGE`**，並對 structured object 加 schema／key-set exactness；prose 語意仍由 ①／② 審。⚠ **由 ① 獨立抓到** |
+
+**`ARCH-E-R18-G1` — DETACHED-FINAL-ATTESTATION ／ ACYCLIC-PROVENANCE LOCK（`ACTIVE`）**
+
+| 面向 | 內容 |
+|---|---|
+| **地位** | **新的 governance evidence lock**；🚫 **不加入、亦不重頒 `ARCH-E-R14-L1..L10`** ⇒ R14 production-design binding **不變** |
+| **作用域** | **本 batch E PLAN，以及自 R18 起為它產生之 gate evidence／packet**。🚫 **不是** repo-wide 規範 |
+| **核心規則** | ordinary measured claim 可留在 artifact，前提是其 oracle dependency 對自身位元組 **acyclic** 且 post-render replay 可驗；對「此 exact final artifact 本身已完整 replay／已通過／已 freeze」之 verdict，**必須在 artifact 凍結後以 detached attestation 表達**，target artifact 本身 🚫 不得承載該 verdict |
+| **不受限者** | historical receipt · finding-original · 明確標為 expected 之值 |
+| **失效** | 任何 attestation 後若 repo 再產生新 commit，**舊 attestation 立即失效**，🚫 不得沿用到新 HEAD |
+
+**授權集合（下一個 PLAN commit 僅授權以下 16 項；取代已耗盡之 `ARCH-E-R17-A1`）**：
+
+| # | 授權內容 |
+|---|---|
+| 1 | R46 原 bytes 不動；append R46 sibling disposition／erratum |
+| 2 | 移除／改寫 header 與 §15 之 live self-closure／freeze 副本，改為 detached-attestation 靜態讀法規則 |
+| 3 | §7.5／§7.6 改為 `ARCH-E-R18-G1` 之 acyclic two-phase model；🚫 不得寫「fixed point 不存在」之過度全稱 |
+| 4 | Observation ／ Assertion schema 分離 |
+| 5 | durable claim registry 覆蓋所有 ordinary current-measured claim；🚫 禁 prefix whitelist |
+| 6 | stage-1 immutable result **content-addressed**；replay result **另檔** |
+| 7 | negative controls **只碰 temp copies** |
+| 8 | `AUTHZ-COVERAGE-EXACT` 收斂為誠實的 surface coverage；structured objects 加 exact schema gate |
+| 9 | ledger append **`#22` ＝ ① R18 `CHATGPT_ARCH_CHANGES_REQUESTED @ 89551194`** |
+| 10 | append 最小 R18 authorization receipt；若自稱 receipt core，**同 commit** 加入 explicit registry |
+| 11 | 所有既有 receipt cores **byte-identical**；§14.10 續等於 `3c423097` canonical |
+| 12 | source／tests／schema／migration **0 delta**；source blob 必仍 `0894b592` |
+| 13 | `PLAN_REMEDIATION_STAGED_SET` **恰一檔** |
+| 14 | **只新增 R47 一輪**，且只能是 `PRE-ATTESTATION_TARGETED_REVIEW` |
+| 15 | R47 > 0 ⇒ **只記錄、停手、回 ① R19**；🚫 **不得 R48** |
+| 16 | R47 ＝ 0 ⇒ commit；其後 detached attestation 綁 **exact committed blob**。attestation PASS 才能直送 ② R5；**artifact 本身 🚫 不得回寫該 PASS／freeze** |
+
+**R47 之地位（① R18 Q2；與 R45／R46 不同）**：
+
+    R47 = PRE-ATTESTATION_TARGETED_REVIEW，恰一次
+    🚫 不得有「final blob attestation PASS」列
+    🚫 不得宣告 legal freeze
+    🚫 不得宣告 PLAN_SELF_REVIEW_CLEAN
+    detached attestation 尚未執行 = 正常狀態，🚫 不算 R47 finding
+
+**路由（① R18 Q5）**：
+
+    R18-A1 remediation → R47 恰一次 → commit exact PLAN blob → detached attestation
+    attestation PASS ⇒ 直送 ② Codex Plan R5 targeted re-pass（🚫 不需回 ① R19）
+    R47 > 0 ／ commit 後 attestation mismatch ／ tool·source binding 不一致 ／
+    authz surface gate 轉紅 ／ source blob 改變  ⇒ 任一發生即回 ① R19、🚫 不得 R48
+
+**ephemeral gate 之處置（沿 R16／R17 裁決）**：scanner／gate／renderer **🚫 不進 repo、🚫 不進 CI**；
+本 PR 不為治理 verifier 擴 changed-file scope。
 
 ## 15.2 gate-event 完整性 oracle（`ARCH-E-R7-RR1` ／ `R8-RR1` ／ `R9-RR1` 之結構性修法）
 
@@ -1559,8 +1725,13 @@ negative-control 結果；scripts 可在 repo 外作 ephemeral executable，**�
 🚫 未使用 multi-agent workflow、🚫 未採信任何未經主線複核之產出。
 **紀律**：預設「本文件是錯的」，逐輪嘗試證偽自己下的機械宣稱。
 
-**輪次總計**：R1 → **R46**，共 **48** 條 finding，全部處置完畢；freeze 狀態 ＝ **合法 freeze @ R46**（`PLAN_SELF_REVIEW_CLEAN`；由 machine result 導出）。
-（⚠ 本行三個值**由 measurement result 物化**，🚫 未手填；來源 oracle ＝ SR-id census ／ round census ／ R46 verdict。）
+**輪次總計之讀法**（`ARCH-E-R18-G1`；永久規則）：本節 🚫 **不持有** live 的
+「最新輪次／finding 總數／freeze 狀態」副本。需要現值時，一律由 **artifact census**
+（round heading 枚舉 ／ SR-id definition-row 枚舉）**即時導出**；
+closure 則另由**綁定 exact commit／blob 之 detached attestation** 建立（§7.6.2）。
+⚠ 為何不再填一個新值：R45 與 R46 **連續兩次**都是「填入一個當下看似正確的 freeze 值，
+而該值在下一次 byte 變動後即失效、卻仍留在文件裡被後人當現值讀」。
+⇒ 修法是**消滅這個 surface**，不是把值改對（與 §14 header 之 current-state surface 同族）。
 ⚠ R4 / R5 / R6 / R7 皆曾被我寫成或視為「0 新發現」而後被推翻（R7 是被 commit 時的
 量測衝突推翻的）；**R9 之後更被外部 ① gate 推翻**（`ARCH-E-R1-RR2`）——
 五次皆已就地更正、🚫 未靜默改寫成「一次就 clean」。
@@ -2078,6 +2249,49 @@ R44 之 freeze 已由上方 R16 disposition 明示**不具規範效力**。
 | `R46-17` | SR-id census（finding 總數，🚫 不得手填） | SR-id census | 48 條（連續且不重複 = true） | ✅ |
 
 **R46 結果**（`R46-RESULT`）：**0 finding**
+
+
+### R47 — `PRE-ATTESTATION_TARGETED_REVIEW`（`ARCH-E-R18-A1` item 14；**一次且僅一次**）
+
+⚠ 本表之 **actual／`✅` 欄位全部為 `@@CLAIM:<id>@@` placeholder**，
+只能由 `renderEvidence(result)` 填入（§7.6.1 條件 2）。
+🚫 本節在 render 之前**不含任何 verdict-bearing actual**。
+🚫 依 ① R18 Q2：本輪**不得**有「final blob attestation PASS」列；
+🚫 **不得**宣告 legal freeze；🚫 **不得**宣告 `PLAN_SELF_REVIEW_CLEAN`。
+🚫 若 R47 > 0：只准記錄、🚫 不准修、🚫 不得 R48，**直接回 ① R19**。
+
+| claim_id | 驗項 | oracle | actual | verdict |
+|---|---|---|---|---|
+| `R47-01` | R46 原文未改（vs `89551194`） | section byte-compare | byte-identical | ✅ |
+| `R47-02` | R45 原文續未改（vs `e54b06b3`） | section byte-compare | byte-identical | ✅ |
+| `R47-03` | §7.5.1 `ACYCLIC-PROVENANCE` 存在，且全文 🚫 無「fixed-point 全稱否定」式過度宣稱 | section presence ＋ literal ban（排除帶 🚫 之禁令引文；附負向注入控制） | §7.5.1 × 1；違規宣稱 **0**；負向注入 ⇒ 命中 1（predicate 有效） | ✅ |
+| `R47-04` | §7.6.1 Phase 1 ／ §7.6.2 Phase 2 各恰 1 | section presence | §7.6.1 × 1；§7.6.2 × 1 | ✅ |
+| `R47-05` | Observation／Assertion schema 分離已載明且**實作相符** | doc ＋ scanner equivalence | 文件載明 = true；實作字面 pass = **0**；comparator 導出處 = 1 | ✅ |
+| `R47-06` | replay 母體 ＝ registry 全體；**實作內 🚫 無 id 前綴硬編** | scanner equivalence | 實作內 id-前綴硬編母體 **0** 處（母體 ＝ registry 全體） | ✅ |
+| `R47-07` | §7.7 已改名 `AUTHZ-SURFACE-COVERAGE`，且 live 面 🚫 無殘留舊名 | rename census | §7.7 已改名 = true；live 面殘留舊名 **0** 處 | ✅ |
+| `R47-08` | header 🚫 已無 live self-closure 副本 | header scan | header live self-closure 副本 **0** 處 | ✅ |
+| `R47-09` | §15 head 🚫 已無 live 輪次／freeze 副本 | §15 head scan | §15 head live 輪次／freeze 副本 **0** 處 | ✅ |
+| `R47-10` | ledger `#22` 存在；22 列全 6 cells；四元組集合等式成立 | ledger set-equality oracle | #22 存在 = true；列數 = **22**；四元組集合等式 = true | ✅ |
+| `R47-11` | §14.21 存在且已入 §14.14 registry（8 項） | registry 雙向一致性 | §14.21 存在 = true；已入 registry = true；registry 項數 = **8** | ✅ |
+| `R47-12` | 既有 receipt cores 與 `89551194` byte-identical | `RECEIPT-CORE-IDENTITY-GATE` | 既有 7 個 core 與 `89551194` 不一致者 **0** 個 | ✅ |
+| `R47-13` | §14.10 續與 `3c423097` canonical byte-identical | grandfathered canonical check | byte-identical | ✅ |
+| `R47-14` | source blob 仍 `0894b592` | git rev-parse | `0894b592` | ✅ |
+| `R47-15` | changed files ＝ 1（僅 PLAN） | git diff --name-only | **1** 檔（僅 PLAN） | ✅ |
+| `R47-16` | 只新增 R47 一輪、🚫 無 R48 | round-heading census | 最後一輪 **R47**；R48 = 無 | ✅ |
+| `R47-17` | authz surface：unclassified ＝ 0、multiply ＝ 0、schema exact | `AUTHZ-SURFACE-COVERAGE` | unclassified **0**／multiply **0**／schema FAIL **0** | ✅ |
+| `R47-18` | 三條負向控制全紅；**已知限制控制 (K) 如實回報「抓不到」** | injected controls | render 三控制全紅 = true；(D) 危險指令轉紅 = true；**(K) 已知限制如實回報「抓不到」= true** | ✅ |
+| `R47-19` | durable claim registry 覆蓋率 ＝ 100%（🚫 無 unanchored durable 值） | registry coverage | claim 母體 **32**；unanchored **0**／locator 歧義 **0** | ✅ |
+| `R47-20` | 本節自身**遵守** R47 三禁（🚫 attestation 列／🚫 freeze／🚫 `PLAN_SELF_REVIEW_CLEAN`） | self-constraint scan | R47 三禁之違反 **0** 處 | ✅ |
+| `R47-21` | stage-1 result **content-addressed ＋ 寫後不覆寫**，stage-3 用**獨立 pointer** | scanner equivalence | content-addressed = true；寫後不覆寫 = true；stage-3 獨立 pointer = true | ✅ |
+
+**Observation（無 verdict 欄 —— §7.6.1 schema 分離之實例）**：
+
+| claim_id | 觀測項 | actual |
+|---|---|---|
+| `R47-OBS-1` | Phase 2 detached attestation 之狀態 | **尚未執行** —— 依 ① R18 Q2 為正常狀態，🚫 不計為 R47 finding |
+| `R47-OBS-2` | 本輪 changed line 總數（surface coverage 母數） | **276** 行 |
+
+**R47 結果**（`R47-RESULT`）：**0 finding**
 
 
 ## 15.1 硬化宣稱族 —— literal census ＋ oracle 定義（`ARCH-E-R2-RR2`）
