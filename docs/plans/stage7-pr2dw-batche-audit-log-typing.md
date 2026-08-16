@@ -705,6 +705,15 @@ ratchet 回到 `current: 362 / 324` ✅。
 | **Observation** | `claim_id` · `oracle_id` · `input` · `actual` | **無 `pass` 欄** —— 純觀測值不假裝有 verdict |
 | **Assertion** | 上列 ＋ `expected` · `comparator` · `pass` | `pass` **必由 `comparator(actual, expected)` 運算導出**；🚫 producer 不得指定 |
 
+**phase classification（`ARCH-E-R19-A1` item 6；三類，缺類即 fail closed）**：
+每個 claim 除上列欄位外，必再帶一個 `phase_class`：
+
+| `phase_class` | 定義 | 可否 materialize 進 artifact |
+|---|---|---|
+| `ARTIFACT_PHASE_STABLE` | oracle 為 **artifact bytes ／ 固定 immutable historical object** 的函數，且 freeze 前後語意不變 | **可** |
+| `DETACHED_ONLY` | 依賴 **freeze 轉換或 final commit identity** 之性質（staged set、commit changed-files、final source blob、`HEAD` state、worktree cleanliness…） | **🚫 不可** —— 只在 Phase 2 對 exact target commit／blob 驗 |
+| `EXPECTED_ONLY` | 規格值（例如「預期 staged set 恰一 PLAN 檔」） | **可**，但**必明標 expected**，🚫 不得冒充 actual evidence |
+
 ⚠ 為何要拆 schema、而不是只用 regex 禁 `true`：舊 schema 把兩者塞進同一個 `pass` 欄，
 於是 `ERR-*`／census 這類**純觀測值**被迫帶一個 producer 手寫的 `true`。
 它們當時沒被渲染成 `✅` 只是僥倖 —— **一旦日後有人替那些表加上 verdict 欄，
@@ -742,7 +751,8 @@ regex 禁字面 `true` 擋不住 `!!1`／`1 === 1` 這類等價寫法。
 | **綁定欄位（至少）** | `commit SHA` · `blob_oid` · `doc_sha256` · byte length／CR／LF／BOM · `oracle_manifest_sha256` · claim-population count ＋ hash · `mismatch_count` · verdict · 每支工具之 source SHA-256 · 實際 invocation／args · runtime version · 完整 stdout（或其 byte-bound embedded copy） |
 | **執行契約** | packet builder 必驗「內嵌 tool source／stdout ＝ **實際執行者**」逐 byte 相同 |
 | **🚫 回寫禁令** | artifact **不得**回寫該 PASS／freeze —— 一旦回寫，bytes 即變，該 attestation 隨即失效 |
-| **失效條件** | 任何 attestation 之後若 repo 再產生新 commit，**舊 attestation 立即失效**，🚫 不得沿用到新 HEAD |
+| **適用範圍與時效**（① R19 Q1 **修正**） | attestation **永遠只對其綁定的 exact commit／blob 有效**。`HEAD` 前進後，舊 attestation **不再適用於 current HEAD**，但**仍是該舊 commit 的 immutable historical receipt** —— 🚫 不得說成「歷史上失效」。⚠ §14.21 之 R18 receipt core 保留其當時措辭（「立即失效」），依 ① R19 item 4 **🚫 不得回寫**；本列為 live 契約，語意以本列為準 |
+| **changed-file oracle**（① R19 item 11） | 對 final commit 的 changed-file 判定一律使用 **immutable target**（`<parent-full-OID>..<target-full-OID>`）；🚫 不得使用 worktree-relative diff |
 
 ### 7.7 🔒 `AUTHZ-SURFACE-COVERAGE`（`ARCH-E-R18-RR3` 之誠實化；原名 `AUTHZ-COVERAGE-EXACT`）
 
@@ -783,6 +793,86 @@ regex 禁字面 `true` 擋不住 `!!1`／`1 === 1` 這類等價寫法。
 ⚠ 另一項紀律（① R17 明示，續有效）：量詞 parser **必解析成明確整數或直接用 machine integer field**，
 🚫 不得用 `/四|4/` 這類 substring acceptance —— 該 predicate 已被行內的「L27**4**」吞掉過一次（`SR-19` 族）；
 **只把搜尋範圍縮小、卻保留同類模糊 predicate 亦不合格。**
+### 7.8 🔒 `ARCH-E-R19-G2` — PHASE-STABILITY ／ ORACLE-LIFETIME LOCK（① R19 Q3）
+
+> **additive lock。** 🚫 **不回寫** §14.21 之 `ARCH-E-R18-G1` receipt core；
+> G1 之 provenance 規則續有效，本節在其上**追加**一個獨立條件。
+> **作用域同 G1**：本 batch E PLAN ＋ 自 R18 起為它產生之 gate evidence／packet；
+> **🚫 不是 repo-wide**，且 🚫 不加入亦不重頒 `ARCH-E-R14-L1..L10`。
+
+**核心規則**：
+
+> 可 materialize 進 artifact 的 measured claim，除 provenance **acyclic** 之外，
+> 其 **oracle semantics 還必須跨 materialize→freeze boundary 穩定**。
+> 任何依賴 **freeze transition 或 final commit identity** 的 actual／verdict，
+> 一律 **detached-only**。
+
+**為何 §7.5.1 原本的兩個條件不夠**（`ARCH-E-R19-RR1`）：
+§7.5.1 要求「acyclic ＋ post-render replay 可驗」，而 **post-render replay 一律跑在 commit 之前**。
+freeze 是一個**狀態轉換**（worktree dirty→clean、`HEAD` 前進），
+所以 **replay-stable ⊉ freeze-stable**。`R47-15` 正落在該差集。
+⚠ 修法**不得**只寫成「禁無參數 `git diff`／`git status`」—— ① R19 明示那仍太窄：
+`HEAD`、branch ref、index、worktree **全都是 mutable alias**；
+`git rev-parse HEAD:<path>` 同樣具 phase dependency，只是本次 source 恰好沒變才沒暴露。
+
+**機械 gate（靜態 input-contract，🚫 不要求建立暫存 clone 模擬凍結）**：
+凡宣告為 `ARTIFACT_PHASE_STABLE` 之 claim，其 oracle **不得**使用下列任一：
+
+| 禁用輸入 | 理由 |
+|---|---|
+| `HEAD` ／ branch ref | mutable alias，freeze 會使其前進 |
+| index state ／ worktree dirtiness | freeze 的定義就是把它清空 |
+| 無固定端點之 `git diff` ／ `git status` | 端點隱含為上列 mutable 狀態 |
+
+**允許**：固定 **historical full OID**。
+且當 oracle 要比較「current candidate artifact vs fixed base」時，
+**優先讓函式直接吃 candidate bytes ＋ fixed-base bytes**，
+🚫 不得偷偷從 repository mutable state 抽 target。
+
+### 7.9 🔒 `ROUND_START_MANIFEST`（`ARCH-E-R19-RR2`；① R19 Q2）
+
+> ⚠ `ARCH-E-R19-RR2` 認定：先前**沒有機械定義「一輪從哪一刻開始」**。
+> 若任何 finding 都能被說成「還在 render 前／還在建工具，所以不算」，
+> 則「finding > 0 ⇒ 不准修」可被無限往後推、實質失去 fail-closed 意義；
+> 反之若把 remediation construction 期間每次 parser／debug 修正都算 finding，
+> 有界授權根本無法落地。⇒ 需要一條**可稽核的邊界**，而非靠 agent 自行解釋。
+
+**規則**：
+
+    remediation construction → ROUND_START_MANIFEST freeze → named review round
+
+manifest **凍結後**，該輪任一 material finding > 0 ⇒ **只記錄、🚫 不得同輪修復**。
+manifest **凍結前**可修 authorization implementation defects。
+
+**manifest 至少綁定四項**：
+
+| 綁定 | 內容 |
+|---|---|
+| candidate artifact hash | 凍結當下之 **skeleton bytes** sha256（尚未 render） |
+| claim registry hash | 該輪 claim_id ＋ `phase_class` 排序後之 sha256 |
+| tool manifest hash | 各 producer／gate 之 source sha256 清單 |
+| authorization anchor | 本輪授權 id ＋ 其受審 commit |
+
+⚠ **manifest 本身必為 detached artifact**（隨 packet 出貨），🚫 不寫進 PLAN ——
+理由正是 §7.8：manifest 綁定 candidate 自身的 hash，寫進去就會改變該 hash，
+形成 `ARCH-E-R18-RR1` 所禁止的自證循環。
+
+### 7.10 🔒 `ACTIVE_ORACLE_PHASE_DEPENDENCY_CENSUS`（① R19 Q4）
+
+**母體**：所有**仍具 current effect** 的 measured-claim producer。
+每一條逐一分類為 `ARTIFACT_PHASE_STABLE` ／ `DETACHED_ONLY` ／ `EXPECTED_ONLY`；
+**未分類 ＝ fail closed**。
+
+**🚫 不得**要求回溯修改 R45／R46：它們已有 disposition、已失去 current normative effect，
+重新打開只會製造新的 historical mutation surface（① R19 Q4 明示）。
+census 掃到它們時**只能**標為 `HISTORICAL_INVALIDATED`。
+
+| 分類 | 處置 |
+|---|---|
+| `ARTIFACT_PHASE_STABLE` | 可留在 durable review table |
+| `DETACHED_ONLY` | 移出 durable table，改由 Phase 2 attestation 驗 |
+| `EXPECTED_ONLY` | 可留，但必明標 expected |
+| `HISTORICAL_INVALIDATED` | **只記錄、🚫 不修** |
 
 ### 7.1 EOL / encoding
 
@@ -1069,6 +1159,7 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 20 | ① ChatGPT Architecture | R16 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`d8ea0964`** / blob `7c467784` / sha `7cbb28f6…be8d4` | **0 runtime Blocker／0 新 production-design objection／3 governance Required**。維持 ② R4／R16-return 三項 Major 全部成立；**`ARCH-E-R15-A1` 於當時確應 fail closed**（R41 已產生 finding 卻被一般「跑到 0」通則擴張）。裁定：R40 標題修改 **否決**（須自 `a190b35d` 機械恢復）；**R42–R44 不刪除**，定性為 `HISTORICAL_UNAUTHORIZED_FOLLOW_ON`、其 R44 freeze **不具規範效力**，但 `SR-47`／`SR-48` 導出之 explicit registry 與 brace-scoped parser 經 R16 獨立重審 **方向 ACCEPTED、重新授權保留**；ledger `#19` **禁止回寫**，改 append sibling pointer erratum（§14.16）；採 ② 之 scanner 收斂並**永久刪除 `RULE_TEXT`**；SECTION 6 之「逐字轉錄」標籤 **過度宣稱**，須改為忠實節錄／結構化摘要。頒 **`ARCH-E-R16-A1` FAIL-CLOSED GOVERNANCE RECOVERY AUTHORIZATION**（12 項，逐字見 §14.17），**取代 A1 成為下一次 PLAN mutation 之唯一授權、🚫 不追溯合法化越權過程**。scanner／gate **本 PR 🚫 不進 repo、🚫 不進 CI**（會改變 R14-L1 鎖定之 changed-file shape）。R14 design approval @ `0a2fdc5a` **仍有效**；`CODING_ALLOWED` 仍 **NOT_GRANTED** |
 | 21 | ① ChatGPT Architecture | R17 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`e54b06b3`** / blob `bc25d6c8` / sha `69a9bc8a…c429e` | **0 runtime Blocker／0 新 production-design objection／3 governance Required**。維持 ② R5-preflight 之兩項數值判定成立。3 Required：`ARCH-E-R17-RR1` **R45 durable evidence 失效** ⇒ `R45=0`／合法 freeze／`PLAN_SELF_REVIEW_CLEAN @ R45` **全部無效**；`ARCH-E-R17-RR2` **MEASURE-BEFORE-MATERIALIZE-GAP**（根因＝verdict-bearing evidence 可在 oracle 執行前被物化，我方申報之根因成立）；`ARCH-E-R17-RR3` **AUTHZ-COVERAGE-NOT-EXACT**（allowlist 為 first-match ＋ `some()` membership，非完整 changed-surface coverage，仍有假綠空間 —— 由 ① 獨立抓到、我方未發現）。裁決：Q1 **批准 R46 且僅一次**（R16「🚫 不得 R46」之 fail-closed 目的已履行；🚫 不創 R45b／R45.1 分支輪號）；Q2 R45 **不得就地更正**、採 sibling erratum（要保存的是「R45 當時確實以錯誤 evidence 宣告了 0 finding」）；Q3 §6.4 提升為 §7.5 全文件 SoT，但母體**精確限定**為「本輪新增／修改且宣稱為 current measured evidence／gate disposition 之 claim」；Q4 批准機械強制，但**不採「偵測表格是否先存在」**之字面實作 ——「skeleton 可先存在，verdict-bearing actual cell 不可」；Q5 頒 **`ARCH-E-R17-A1`**（12 項，逐字見 §14.18）。路由：**R46 ＝ 0 ＋ exact coverage 全綠 ⇒ 直送 ② R5、不需 ① R18**；**R46 > 0／coverage 有未分類或多重分類／post-render replay 不一致 ⇒ 停止、直接回 ① R18、🚫 不得 R47** |
 | 22 | ① ChatGPT Architecture | R18 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`89551194`** / blob `67d0a09d` / sha `961bc173…653a3` | **0 runtime Blocker／0 新 production-design objection／3 governance Required／1 packet-only NB**。② R5-preflight #3 之 `CODEX-E-R5-PREFLIGHT-RR1` **成立**。3 Required：`ARCH-E-R18-RR1` **SELF-ATTESTATION-CIRCULARITY／R46 CLOSURE INVALID**（`R46-16` pass 與 actual 皆 stage-1 literal，replay 又以該 literal 尋 durable row ⇒ 自我背書；`R46-RESULT` 被 replay population 明文排除、`FREEZE-STATE` 無 durable claim-id ⇒ `R46=0`／合法 freeze／header `PLAN_SELF_REVIEW_CLEAN` 皆不能維持 current normative effect。⚠ ① 同時**修正我方過度全稱**：應鎖 **acyclic evidence dependency**，🚫 不得寫成「所有 self-reference 皆無 fixed point」）；`ARCH-E-R18-RR2` **EVIDENCE-PROTOCOL FAMILY INCOMPLETE**（我方主動枚舉之 **E-1…E-6** **全數納入 Required scope、不 defer**；**E-3** 之修法須為 **Observation／Assertion schema 分離**，🚫 不是只用 regex 禁 `true`）；`ARCH-E-R18-RR3` **AUTHZ-COVERAGE STILL OVERCLAIMS EXACTNESS**（wholly-new section 規則實際退化為「在指定 section ＋ 非 FOREIGN ⇒ 授權」，poison 只證明危險指令 denylist；須降格改名為 `AUTHZ-SURFACE-COVERAGE` ＋ structured-object schema check —— ⚠ **由 ① 獨立抓到**）。`PKT-E-R18-NB1`（non-blocking）：packet SECTION 7 之 `SR-id census` 為 stale copy（舊計法含 reference 列），下一 packet 須由同一 definition-row oracle 直接產生。裁決：Q1 R46 採 sibling erratum ＋ **清掉 header／§15 之 live closure surface**（改為永久讀法規則，🚫 不再填下一個 freeze 值）；Q2 採 **(c)** ＝ `ARCH-E-R18-A1` ＋ **恰一次 R47**（`PRE-ATTESTATION_TARGETED_REVIEW`；🚫 不得有 final-blob-attestation 列、🚫 不得宣告 freeze／`PLAN_SELF_REVIEW_CLEAN`；detached attestation 未執行**不算 finding**）；Q3 頒 **`ARCH-E-R18-G1`**（作用域＝本 batch E PLAN 與自 R18 起為它產生之 gate evidence／packet，**不是 repo-wide**；**不加入亦不重頒 `ARCH-E-R14-L1..L10`**）；Q4 **E-1…E-6** ＋ `RR3` 全納入；Q5 路由 ＝ remediation → R47 恰一次 → commit → detached attestation → PASS 則**直送 ② R5**，任何 failure 則**回 ① R19、🚫 不得 R48**。R14 design approval @ `0a2fdc5a` **仍有效**；source blob 仍鎖 `0894b592`；`CODING_ALLOWED` 仍 **NOT_GRANTED** |
+| 23 | ① ChatGPT Architecture | R19 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`4f6d45f5`** / blob `7d64c22f` / sha `fbbb331f…4ca05` | **0 runtime Blocker／0 新 production-design objection／2 governance Required／0 packet-only NB**。`ARCH-E-R18-A1` 全 16 項落地經 ① 獨立確認；`PKT-E-R18-NB1` **CLOSED**（SR census 已改回 definition-row oracle，報 48 且連續）。2 Required：`ARCH-E-R19-RR1` **ORACLE-PHASE-LIFETIME GAP**（我方根因**成立**且「比 `R47-15` 本身更重要」；`R47-15` 在 pre-commit phase 的「1 檔」**當時是真的**，commit 後同一無參數 `git diff --name-only` 變 0，因為它量的是「`HEAD`／index／worktree 當前關係」而非 artifact 的 phase-invariant property；detached attestation 因此**正確地**拒絕它，`R47-RESULT` 只是級聯。⚠ ① **不批准**把修法只寫成「禁無參數 `git diff`／`git status`」——仍太窄，`HEAD`／branch ref／index／worktree 皆 mutable alias，`git rev-parse HEAD:<path>` 同具 phase dependency；須改為 **claim lifecycle 三分類**）；`ARCH-E-R19-RR2` **REVIEW-ROUND-START BOUNDARY UNSPECIFIED**（我方申報之 stage-1 `3→1→0` 與七項修正暴露：目前沒有機械定義「一輪從哪一刻開始」。① 裁定該七項**不追溯計入 R47 material finding** —— R18 未定義 round-start boundary，且七項全發生在 final durable candidate materialization 前、屬已授權 remediation construction／debugging，**不能事後用一條當時不存在的邊界反向定罪**；packet 亦已完整申報未藏。自 R48 起必新增 `ROUND_START_MANIFEST`）。裁決：Q1 `4f6d45f5` **保留並作為下一次 remediation base**；R47 採 sibling disposition 但**定性不同於 R45／R46** —— R46 是 self-backed false evidence，R47 是**真值的生命週期被錯誤建模**；另修正 G1 一處語意（新 commit **不**使舊 attestation「歷史上失效」）；Q2 頒 `ARCH-E-R19-A1` ＋ **R48 恰一次**，且多一前置 manifest freeze；Q3 **不回寫** G1 receipt core，改頒 additive lock `ARCH-E-R19-G2`，採**分類＋靜態 input-contract**、🚫 不要求 temp clone 模擬凍結；Q4 **不回溯** R45／R46，但下一 packet 必做 read-only `ACTIVE_ORACLE_PHASE_DEPENDENCY_CENSUS`；Q5 路由 ＝ remediation → manifest → R48 恰一次 → commit → detached attestation → **PASS 則直送 ② R5、不需回 ① R20**。R14 design approval @ `0a2fdc5a` **仍有效**；`ARCH-E-R18-G1` 續 `ACTIVE`；source blob 仍鎖 `0894b592`；`CODING_ALLOWED` 仍 **NOT_GRANTED** |
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -1401,7 +1492,7 @@ transport 複驗：實收 carrier 為 CRLF 化之 333,876 B／4194 CR，逐 CRLF
 
 | 項目 | 規格 |
 |---|---|
-| **母體（顯式 registry）** | `{ §14.4, §14.7, §14.10, §14.12, §14.15, §14.17, §14.18, §14.21 }` —— 即**自我宣告為 receipt／immutable receipt／逐字 gate receipt** 之 decision-evidence core。🚫 ledger、remediation narrative、transport history、erratum、**本 §14.14 自身**皆**不屬**母體 |
+| **母體（顯式 registry）** | `{ §14.4, §14.7, §14.10, §14.12, §14.15, §14.17, §14.18, §14.21, §14.23 }` —— 即**自我宣告為 receipt／immutable receipt／逐字 gate receipt** 之 decision-evidence core。🚫 ledger、remediation narrative、transport history、erratum、**本 §14.14 自身**皆**不屬**母體 |
 | **為何用 registry 而非標題比對** | ⚠ 初版以「`### 14.N` 標題含 `receipt`」判定，**誤收** §14.13（erratum，標題含「receipt-integrity」）與 §14.14（gate 規格自身，標題含 `RECEIPT-CORE-…`）⇒ 正是本輪剛立之 `SCANNER_EQUIVALENCE` 所禁止的規格／實作分歧（`SR-47`）。**替代方案「在每個 core 內加機器可讀標記」不可行** —— 那要寫進 core，會直接毀掉本 gate 存在的意義（byte-identity）。故 membership 一律維護在**core 之外**的本節 |
 | **registry 維護規則** | 新建 receipt core 時，**同一個 commit 內**把它加入上列 registry；🚫 registry 與實際 core 不一致即 violation（gate 須同時檢查「registry 內每項都存在」與「不在 registry 的 §14.N 標題**不得**自稱 receipt core」） |
 | **legacy baseline** | 既有 receipt core 之 canonical ＝ **本次 R15 remediation commit** 中之 bytes（機械可解析為「首次含有 §14.14 之 commit」）。⚠ 這**不表示**它們從未被改過；事故歷史完整保存於 §14.13 |
@@ -1675,6 +1766,80 @@ negative-control 結果；scripts 可在 repo 外作 ephemeral executable，**�
 
 **ephemeral gate 之處置（沿 R16／R17 裁決）**：scanner／gate／renderer **🚫 不進 repo、🚫 不進 CI**；
 本 PR 不為治理 verifier 擴 changed-file scope。
+
+### 14.22 🚨 R47 phase-disposition（`ARCH-E-R19-RR1`；① R19 Q1 指定形式）
+
+> ⚠ **append-only sibling disposition；R47 原 bytes 逐字保留、🚫 不得就地更正。**
+> ⚠ **定性與 R45／R46 不同**（① R19 Q1 明示）：
+> R46 是 **self-backed false evidence**；R47 是 **真值的生命週期被錯誤建模** ——
+> 🚫 **不得**寫成「`R47-15` 當時為 false」，那不精確。
+
+| 欄位 | 值 |
+|---|---|
+| **affected** | §15 R47 evidence table |
+| `R47-15` | **`PRECOMMIT_TRUE` ／ `NOT_PHASE_ATTESTABLE`** —— 其 oracle 為無參數 `git diff --name-only`，量的是「`HEAD`／index／worktree 當前關係」，非 artifact 之 phase-invariant property |
+| `R47-RESULT` | **`VALID_AS_PRECOMMIT_REVIEW_RESULT`** ／ **NO FINAL-CLOSURE EFFECT**（第二個 mismatch 為前列之級聯，非獨立缺陷） |
+| **Phase-2 attestation @ `4f6d45f5`** | **`FAIL`**（`mismatch_count` ＝ 2） |
+| **final routing ／ closure** | **NOT ESTABLISHED** |
+| `R47-BYTES` **R47 原 bytes** | **逐字保留（byte-identical vs `4f6d45f5`）** |
+| **保存之歷史事實** | precommit review 曾為 0；但**它不足以取得 final attestation** |
+| **discovered** | 我方 Phase 2 detached attestation（自行執行、自行申報）＋ ① R19 |
+
+⚠ 該 FAIL attestation **仍值得保留**：依 §7.6.2 修正後之語意，
+attestation 永遠只對其綁定的 exact commit／blob 有效 ——
+它是 `4f6d45f5` 的 **immutable historical receipt**，🚫 不是「歷史上失效」的東西。
+
+### 14.23 ① R19 `ARCH-E-R19-A1` — PHASE-STABLE EVIDENCE RECOVERY AUTHORIZATION（授權 receipt）
+
+> **本節為 immutable receipt core**（已同 commit 加入 §14.14 explicit registry）。
+
+**裁決**：`CHATGPT_ARCH_CHANGES_REQUESTED @ 4f6d45f5` ｜
+0 runtime Blocker ／ 0 新 production-design objection ／ **2 governance Required ／ 0 packet-only NB**。
+**R14 design approval @ `0a2fdc5a` 仍有效**；`ARCH-E-R18-G1` 續 `ACTIVE`；
+source blob 仍鎖 `0894b592`；`CODING_ALLOWED = NOT_GRANTED`。
+本輪只處理 evidence lifecycle，🚫 不重開 cast-B／scope／emit／cascade／tests。
+
+| Required | 內容 |
+|---|---|
+| `ARCH-E-R19-RR1` **ORACLE-PHASE-LIFETIME GAP** | 我方根因成立，且「比 `R47-15` 本身更重要」。⚠ ① **不批准**只禁無參數 `git diff`／`git status`（仍太窄）；須改為 claim lifecycle 三分類 `ARTIFACT_PHASE_STABLE` ／ `DETACHED_ONLY` ／ `EXPECTED_ONLY` |
+| `ARCH-E-R19-RR2` **REVIEW-ROUND-START BOUNDARY UNSPECIFIED** | 七項 stage-1 修正**不追溯計入** R47 material finding（R18 未定義邊界，🚫 不得事後以當時不存在之邊界反向定罪）；自 R48 起必立 `ROUND_START_MANIFEST` |
+
+**`ARCH-E-R19-G2` — PHASE-STABILITY ／ ORACLE-LIFETIME LOCK（`ACTIVE`）**
+
+| 面向 | 內容 |
+|---|---|
+| **地位** | **additive lock**；🚫 不回寫 `ARCH-E-R18-G1` receipt core，🚫 不加入 `ARCH-E-R14-L1..L10` |
+| **作用域** | 同 G1：本 batch E PLAN ＋ 自 R18 起為它產生之 evidence／packet；**🚫 不是 repo-wide** |
+| **核心規則** | measured claim 除 provenance acyclic 外，其 oracle semantics 必須**跨 materialize→freeze boundary 穩定**；依賴 freeze transition 或 final commit identity 者一律 **detached-only** |
+| **實作形式** | **分類 ＋ 靜態 input-contract**；🚫 不要求建立 temporary clone 模擬凍結 |
+
+**授權集合（下一個 PLAN commit 僅授權以下 16 項；取代已耗盡之 `ARCH-E-R18-A1`）**：
+
+| # | 授權內容 |
+|---|---|
+| 1 | R47 原 bytes 不動；append sibling phase-disposition |
+| 2 | ledger append **`#23` ＝ ① R19 `CHATGPT_ARCH_CHANGES_REQUESTED @ 4f6d45f5`** |
+| 3 | append 最小 R19 authorization receipt；若自稱 receipt core，**同 commit** 入 registry |
+| 4 | 新增 `ARCH-E-R19-G2` live contract；**🚫 不回寫 R18-G1 receipt core** |
+| 5 | 把「新 commit 使舊 attestation invalid」修正為「舊 attestation 僅**不再適用於新 `HEAD`**；仍對 bound target 有歷史效力」 |
+| 6 | claim schema 增加 phase classification：`ARTIFACT_PHASE_STABLE` ／ `DETACHED_ONLY` ／ `EXPECTED_ONLY` |
+| 7 | 所有 final-commit ／ transition-state actual **從 durable review table 移出**；改由 detached attestation 驗 |
+| 8 | 新增 `ACTIVE_ORACLE_PHASE_DEPENDENCY_CENSUS`；current claim **100% 分類、0 unclassified** |
+| 9 | 新增 `ROUND_START_MANIFEST`；正式 R48 僅能在 manifest freeze 後開始 |
+| 10 | **R48 恰一次**；manifest 後任何 material finding > 0 ⇒ 只記錄、回 ① R20 |
+| 11 | detached attestation 對 final commit 之 changed-file oracle 須用 **immutable target**（parent／target commit diff），🚫 非 worktree-relative |
+| 12 | R18／R19 前既有 receipt cores **byte-identical**；§14.10 canonical 不變 |
+| 13 | source／tests／schema／migration **0 delta**；source blob 仍須 `0894b592` |
+| 14 | `PLAN_REMEDIATION_STAGED_SET` **恰一 PLAN 檔** |
+| 15 | R48 ＝ 0 後 commit，再執行 detached attestation；**PASS 才能 ② R5** |
+| 16 | artifact 仍 🚫 不得寫 final attestation PASS ／ freeze ／ `PLAN_SELF_REVIEW_CLEAN` |
+
+**路由（① R19 Q5）**：
+
+    R19-A1 remediation → ROUND_START_MANIFEST → R48 恰一次 → R48 ＝ 0 才 commit
+    → detached final attestation → PASS ⇒ **直接 ② Codex Plan R5**（🚫 不需回 ① R20）
+    R48 > 0 ／ Phase-2 mismatch ／ tool binding mismatch ／ source blob drift ／
+    authz gate failure ⇒ 任一發生即 **① R20，🚫 不得 R49**
 
 ## 15.2 gate-event 完整性 oracle（`ARCH-E-R7-RR1` ／ `R8-RR1` ／ `R9-RR1` 之結構性修法）
 
@@ -2292,6 +2457,62 @@ R44 之 freeze 已由上方 R16 disposition 明示**不具規範效力**。
 | `R47-OBS-2` | 本輪 changed line 總數（surface coverage 母數） | **276** 行 |
 
 **R47 結果**（`R47-RESULT`）：**0 finding**
+
+
+### R48 — named review round（`ARCH-E-R19-A1` item 10；**一次且僅一次**）
+
+⚠ 本輪之正式起點 ＝ **`ROUND_START_MANIFEST` freeze**（§7.9）。manifest 之前屬
+remediation construction；manifest **之後**任一 material finding > 0 ⇒
+🚫 只准記錄、🚫 不准同輪修復、🚫 不得 R49，**直接回 ① R20**。
+⚠ 本表之 **actual／`✅` 欄位全部為 `@@CLAIM:<id>@@` placeholder**，只能由
+`renderEvidence(result)` 填入（§7.6.1 條件 2）。
+🚫 依 ① R19 item 16：本輪**不得**寫 final attestation PASS ／ freeze ／ `PLAN_SELF_REVIEW_CLEAN`。
+🚫 依 ① R19 item 7：**transition-state ／ final-commit 性質不得出現在本表**（見下方 `DETACHED_ONLY` 清單）。
+
+**本表全部 claim 之 `phase_class` ＝ `ARTIFACT_PHASE_STABLE`**（§7.8）。
+
+| claim_id | 驗項 | oracle | actual | verdict |
+|---|---|---|---|---|
+| `R48-01` | R47 原文未改（vs `4f6d45f5` full OID） | section byte-compare | byte-identical | ✅ |
+| `R48-02` | R46 原文續未改（vs `89551194` full OID） | section byte-compare | byte-identical | ✅ |
+| `R48-03` | R45 原文續未改（vs `e54b06b3` full OID） | section byte-compare | byte-identical | ✅ |
+| `R48-04` | §7.8 ／ §7.9 ／ §7.10 各恰 1 | section presence | §7.8 × 1；§7.9 × 1；§7.10 × 1 | ✅ |
+| `R48-05` | §7.6.2 已改為「僅不再適用於新 `HEAD`」語意，且 §14.21 receipt core **未被回寫** | doc scan ＋ byte-compare | 語意已修正 = true；§14.21 receipt core 未被回寫 = true | ✅ |
+| `R48-06` | claim schema 含三類 phase classification，且**實作相符** | doc ＋ scanner equivalence | 三類皆載明 = true；實作相符（無字面 pass、claim 帶 phase_class）= true | ✅ |
+| `R48-07` | 本表 🚫 無 `DETACHED_ONLY` 類 actual（① R19 item 7） | claim-class scan | producer 非 `ARTIFACT_PHASE_STABLE` 之 claim **0** 個；oracle 欄宣告 mutable alias 之列 **0** 列 | ✅ |
+| `R48-08` | ledger `#23` 存在；23 列全 6 cells；四元組集合等式成立 | ledger set-equality oracle | #23 存在 = true；列數 = **23**；四元組集合等式 = true | ✅ |
+| `R48-09` | §14.23 存在且已入 §14.14 registry（9 項） | registry 雙向一致性 | §14.23 存在 = true；已入 registry = true；registry 項數 = **9** | ✅ |
+| `R48-10` | 既有 receipt cores 與 `4f6d45f5` byte-identical（含 §14.21 未被回寫） | `RECEIPT-CORE-IDENTITY-GATE` | 既有 8 個 core 與 `4f6d45f5` 不一致者 **0** 個 | ✅ |
+| `R48-11` | §14.10 續與 `3c423097` canonical byte-identical | grandfathered canonical check | byte-identical | ✅ |
+| `R48-12` | 只新增 R48 一輪、🚫 無 R49 | round-heading census | 最後一輪 **R48**；R49 = 無 | ✅ |
+| `R48-13` | authz surface：unclassified ＝ 0、multiply ＝ 0、schema exact | `AUTHZ-SURFACE-COVERAGE` | unclassified **0**／multiply **0**／schema FAIL **0** | ✅ |
+| `R48-14` | 三條負向控制全紅；**已知限制控制 (K) 如實回報「抓不到」** | injected controls | render 三控制全紅 = true；(D) 危險指令轉紅 = true；**(K) 已知限制如實回報「抓不到」= true** | ✅ |
+| `R48-15` | durable claim registry 覆蓋率 ＝ 100%（🚫 無 unanchored／歧義 locator） | registry coverage | claim 母體 **24**；unanchored **0**／locator 歧義 **0** | ✅ |
+| `R48-16` | 本節自身遵守 item 16 三禁 | self-constraint scan | item 16 三禁之違反 **0** 處 | ✅ |
+| `R48-17` | `ACTIVE_ORACLE_PHASE_DEPENDENCY_CENSUS`：current claim 100% 分類、unclassified ＝ 0 | §7.10 census | 母體 **82**；unclassified **0**（分類：`ARTIFACT_PHASE_STABLE`／`DETACHED_ONLY`／`EXPECTED_ONLY`／`HISTORICAL_INVALIDATED`） | ✅ |
+| `R48-18` | 每個 `ARTIFACT_PHASE_STABLE` oracle **未使用**任何 mutable alias（`HEAD`／branch ref／index／worktree dirtiness／無端點 `git diff`·`git status`） | static input-contract scan | phase-stable producer 使用 mutable alias **0** 處（掃 4 支，🚫 排除註解行） | ✅ |
+| `R48-19` | `ROUND_START_MANIFEST` 已凍結，且四項綁定齊備並與現況相符 | manifest 驗證 | 已凍結；四項綁定齊備（anchor ＝ ARCH-E-R19-A1 @ 4f6d45f5e461213ae113828af4fc957d4e0d32e2） | ✅ |
+| `R48-20` | frozen skeleton copy 之 sha256 ＝ manifest 綁定值 | content-address check | frozen skeleton sha256 ＝ manifest 綁定值（`9ba48a653959…`） | ✅ |
+
+**Observation（無 verdict 欄 —— §7.6.1 schema 分離之實例）**：
+
+| claim_id | 觀測項 | actual |
+|---|---|---|
+| `R48-OBS-1` | Phase 2 detached attestation 之狀態 | **尚未執行** —— 依 §7.6.2 必須在 commit 之後進行，🚫 不計為 R48 finding |
+| `R48-OBS-2` | 本輪 changed line 總數（surface coverage 母數） | **225** 行 |
+| `R48-OBS-3` | 本輪被分類為 `DETACHED_ONLY` 而**移出本表**之項目 | final source blob ／ staged set ・ changed files ／ worktree cleanliness —— 🚫 皆不在本表，改由 Phase 2 attestation 對 exact target commit 驗 |
+
+**`EXPECTED_ONLY`（規格值，🚫 不是 actual evidence —— §7.6.1 phase classification）**：
+
+| 項目 | 預期值 |
+|---|---|
+| `PLAN_REMEDIATION_STAGED_SET` | **預期**恰一 PLAN 檔 |
+| production source ／ tests ／ schema ／ migration | **預期** 0 delta；source blob **預期**仍 `0894b592` |
+
+> ⚠ 上表兩列**只是規格**。其 actual 一律由 **Phase 2 detached attestation** 對
+> exact target commit／blob 驗（① R19 items 7／11／13／14），🚫 不在本 artifact 內宣稱已驗。
+
+**R48 結果**（`R48-RESULT`）：**0 finding**
 
 
 ## 15.1 硬化宣稱族 —— literal census ＋ oracle 定義（`ARCH-E-R2-RR2`）
