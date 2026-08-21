@@ -874,6 +874,63 @@ census 掃到它們時**只能**標為 `HISTORICAL_INVALIDATED`。
 | `EXPECTED_ONLY` | 可留，但必明標 expected |
 | `HISTORICAL_INVALIDATED` | **只記錄、🚫 不修** |
 
+### 7.11 EXTERNAL REPLAY CONTRACT（① R21 `ARCH-E-R21-RR2` 指定之 blocking evidence 上限）
+
+> ⚠ 本節**不是**新的 lock，也**不是**新的治理機制 —— 它是 ① R21 指定之**上限**，
+> 其作用是**移除**機制而非新增。故 🚫 不冠 `🔒`、🚫 不另立 lock id、🚫 不進 lock family。
+
+**① R21 `RR1` 裁定（逐字）**：
+
+> **在目前安排下，自建 checker 無法提供「獨立 closure」；它只能提供自我檢查與可重播證據。**
+
+⚠ ① 明示**不**裁定為「任何 self-verification 都數學上不可能」——
+若 verifier binary、candidate identity、population definition、root key 等至少有一個
+落在**真正外部的 immutable trust anchor**，仍可建立更強保證。目前不是這種架構：
+作者同時控制 artifact、checker、population、freeze/root construction 與執行環境。
+
+**本棒 blocking evidence 上限 ＝ 下列四個可由外部 reviewer 直接重播之 predicate**
+（① 原文轉錄；⚠ 標點與全半形經本檔排版正規化，🚫 **非 byte-exact**。⚠ ① R21 裁決之 byte-exact 原文**目前不在任何既有 packet 內**——R21 packet 產於該裁決之前，其 SECTION 2 裝的是 ① R20 裁決——故將隨 **② R6 packet** 首次出貨）：
+
+| Blocking predicate | Authority |
+|---|---|
+| exact candidate identity：commit ＋ path ＋ blob | Git immutable object |
+| scope：source diff 僅符合已批准之 type-only surface | Git diff，由外部 gate 直接讀 |
+| compile correctness：full-solution forced `tsc`，目標 10 條消失且 repo-wide `ADDED=0` | TypeScript compiler |
+| runtime invariance：base vs candidate **非空** emit byte-identical | deterministic transpile replay |
+
+- `eslint`、ratchet、相關既有 tests 可以照正常 CODE gate 執行，
+  但**不得再衍生成一套自證 governance protocol**（① 原文；同上正規化說明）。
+- PASS **必須由外部 gate 在 exact Git object 上自行重播後建立**（① R21 Q3）。
+
+**我方工具之地位**：降為 **diagnostic ／ claim generator ／ replay recipe**（① R21 Q3 採納）；
+自建工具**可以抓錯**、🚫 **不得再自稱 final authority**（① R21 **Q2**）。
+
+**`ARCH-E-R20-G3` 之地位**：`NORMATIVE_ROLE_RETIRED ／ DIAGNOSTIC_ONLY`（① R21 最終 gate-state；同上正規化說明）。
+⚠ 誠實記錄其來歷：該識別碼由**我方**在 R20 之後的 PLAN 草稿中自行命名，
+① R20 裁決原文與 R20 packet 內**皆未出現**該字串；① 於 R21 採用之並宣告其 normative 地位終止。
+含該 lock 定義之 PLAN 稿依 ① R21 Q4(c) **整份丟棄、未進 repo**
+（保存紀錄見 §14.27）。
+
+> **開放項（僅記錄；🚫 不指派裁定者、不規定後續動作）**：§7.5–§7.10 為 R17–R19 期由 ① 頒布、且**已落地**之
+> evidence-protocol 規則，其中 **§7.9 `ROUND_START_MANIFEST` 明確以具名 review round 為對象**；
+> §7.8 `ARCH-E-R19-G2` 之作用域自載為「本 batch E PLAN ＋ 自 R18 起為它產生之 gate evidence／packet；🚫 不是 repo-wide」，
+> 其機械 gate 僅約束**宣告為 `ARTIFACT_PHASE_STABLE` 之 claim**；§7.10 census 之母體為「仍具 current effect 之 measured-claim producer」。
+> ⇒ 三節之作用域**各不相同**，🚫 不得一概而論。
+> 而 ① R21 Q5 已裁定 **R49 取消其 blocking 必要性、不建立 R49**。
+> ⚠ `ARCH-E-R21-A1` 之授權表共 10 列，其中與 lock 地位相關者**只有一列**
+> （「將 `ARCH-E-R20-G3` 降為 historical/diagnostic ＝ 必須」）；
+> 該表與 ① R21 最終 gate-state 對 `ARCH-E-R18-G1`／`ARCH-E-R19-G2` **皆未提及**。
+> ⇒ 我方**不自行**改變該六節之地位（那將越出列舉式授權），亦**不改寫其 bytes**。
+> 🚫 本節僅**記錄**此張力：不指派裁定者、不設釋出條件、不規定任何後續動作。
+> （任何 gate 於其職權內如何處置，由該 gate 自行決定，🚫 非本節所能指定。）
+>
+> ⚠ 由此衍生之具體張力（一併記錄，🚫 不自行解決）：§7.5 之母體自載為
+> 「本輪新增或修改、且宣稱為 current measured evidence／current gate disposition 的 claim」
+> （⚠ 此為節錄，🚫 非逐字；完整定義以 §7.5 原文為準），
+> 而 §14.27 之保存紀錄正屬此類，卻未建立 claim_id／durable registry／phase_class／
+> measure→render→replay 管線 —— 因為建立它們需要新機制，而 `ARCH-E-R21-A1` 明文禁止。
+> ⇒ 我方受兩條授權夾擊，選擇**如實暴露**而非單方面認定其一失效。
+
 ### 7.1 EOL / encoding
 
 - `.gitattributes`：`* text=auto eol=lf`；本檔 `git check-attr` ＝ `text: auto` / `eol: lf`。
@@ -1160,6 +1217,16 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 21 | ① ChatGPT Architecture | R17 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`e54b06b3`** / blob `bc25d6c8` / sha `69a9bc8a…c429e` | **0 runtime Blocker／0 新 production-design objection／3 governance Required**。維持 ② R5-preflight 之兩項數值判定成立。3 Required：`ARCH-E-R17-RR1` **R45 durable evidence 失效** ⇒ `R45=0`／合法 freeze／`PLAN_SELF_REVIEW_CLEAN @ R45` **全部無效**；`ARCH-E-R17-RR2` **MEASURE-BEFORE-MATERIALIZE-GAP**（根因＝verdict-bearing evidence 可在 oracle 執行前被物化，我方申報之根因成立）；`ARCH-E-R17-RR3` **AUTHZ-COVERAGE-NOT-EXACT**（allowlist 為 first-match ＋ `some()` membership，非完整 changed-surface coverage，仍有假綠空間 —— 由 ① 獨立抓到、我方未發現）。裁決：Q1 **批准 R46 且僅一次**（R16「🚫 不得 R46」之 fail-closed 目的已履行；🚫 不創 R45b／R45.1 分支輪號）；Q2 R45 **不得就地更正**、採 sibling erratum（要保存的是「R45 當時確實以錯誤 evidence 宣告了 0 finding」）；Q3 §6.4 提升為 §7.5 全文件 SoT，但母體**精確限定**為「本輪新增／修改且宣稱為 current measured evidence／gate disposition 之 claim」；Q4 批准機械強制，但**不採「偵測表格是否先存在」**之字面實作 ——「skeleton 可先存在，verdict-bearing actual cell 不可」；Q5 頒 **`ARCH-E-R17-A1`**（12 項，逐字見 §14.18）。路由：**R46 ＝ 0 ＋ exact coverage 全綠 ⇒ 直送 ② R5、不需 ① R18**；**R46 > 0／coverage 有未分類或多重分類／post-render replay 不一致 ⇒ 停止、直接回 ① R18、🚫 不得 R47** |
 | 22 | ① ChatGPT Architecture | R18 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`89551194`** / blob `67d0a09d` / sha `961bc173…653a3` | **0 runtime Blocker／0 新 production-design objection／3 governance Required／1 packet-only NB**。② R5-preflight #3 之 `CODEX-E-R5-PREFLIGHT-RR1` **成立**。3 Required：`ARCH-E-R18-RR1` **SELF-ATTESTATION-CIRCULARITY／R46 CLOSURE INVALID**（`R46-16` pass 與 actual 皆 stage-1 literal，replay 又以該 literal 尋 durable row ⇒ 自我背書；`R46-RESULT` 被 replay population 明文排除、`FREEZE-STATE` 無 durable claim-id ⇒ `R46=0`／合法 freeze／header `PLAN_SELF_REVIEW_CLEAN` 皆不能維持 current normative effect。⚠ ① 同時**修正我方過度全稱**：應鎖 **acyclic evidence dependency**，🚫 不得寫成「所有 self-reference 皆無 fixed point」）；`ARCH-E-R18-RR2` **EVIDENCE-PROTOCOL FAMILY INCOMPLETE**（我方主動枚舉之 **E-1…E-6** **全數納入 Required scope、不 defer**；**E-3** 之修法須為 **Observation／Assertion schema 分離**，🚫 不是只用 regex 禁 `true`）；`ARCH-E-R18-RR3` **AUTHZ-COVERAGE STILL OVERCLAIMS EXACTNESS**（wholly-new section 規則實際退化為「在指定 section ＋ 非 FOREIGN ⇒ 授權」，poison 只證明危險指令 denylist；須降格改名為 `AUTHZ-SURFACE-COVERAGE` ＋ structured-object schema check —— ⚠ **由 ① 獨立抓到**）。`PKT-E-R18-NB1`（non-blocking）：packet SECTION 7 之 `SR-id census` 為 stale copy（舊計法含 reference 列），下一 packet 須由同一 definition-row oracle 直接產生。裁決：Q1 R46 採 sibling erratum ＋ **清掉 header／§15 之 live closure surface**（改為永久讀法規則，🚫 不再填下一個 freeze 值）；Q2 採 **(c)** ＝ `ARCH-E-R18-A1` ＋ **恰一次 R47**（`PRE-ATTESTATION_TARGETED_REVIEW`；🚫 不得有 final-blob-attestation 列、🚫 不得宣告 freeze／`PLAN_SELF_REVIEW_CLEAN`；detached attestation 未執行**不算 finding**）；Q3 頒 **`ARCH-E-R18-G1`**（作用域＝本 batch E PLAN 與自 R18 起為它產生之 gate evidence／packet，**不是 repo-wide**；**不加入亦不重頒 `ARCH-E-R14-L1..L10`**）；Q4 **E-1…E-6** ＋ `RR3` 全納入；Q5 路由 ＝ remediation → R47 恰一次 → commit → detached attestation → PASS 則**直送 ② R5**，任何 failure 則**回 ① R19、🚫 不得 R48**。R14 design approval @ `0a2fdc5a` **仍有效**；source blob 仍鎖 `0894b592`；`CODING_ALLOWED` 仍 **NOT_GRANTED** |
 | 23 | ① ChatGPT Architecture | R19 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`4f6d45f5`** / blob `7d64c22f` / sha `fbbb331f…4ca05` | **0 runtime Blocker／0 新 production-design objection／2 governance Required／0 packet-only NB**。`ARCH-E-R18-A1` 全 16 項落地經 ① 獨立確認；`PKT-E-R18-NB1` **CLOSED**（SR census 已改回 definition-row oracle，報 48 且連續）。2 Required：`ARCH-E-R19-RR1` **ORACLE-PHASE-LIFETIME GAP**（我方根因**成立**且「比 `R47-15` 本身更重要」；`R47-15` 在 pre-commit phase 的「1 檔」**當時是真的**，commit 後同一無參數 `git diff --name-only` 變 0，因為它量的是「`HEAD`／index／worktree 當前關係」而非 artifact 的 phase-invariant property；detached attestation 因此**正確地**拒絕它，`R47-RESULT` 只是級聯。⚠ ① **不批准**把修法只寫成「禁無參數 `git diff`／`git status`」——仍太窄，`HEAD`／branch ref／index／worktree 皆 mutable alias，`git rev-parse HEAD:<path>` 同具 phase dependency；須改為 **claim lifecycle 三分類**）；`ARCH-E-R19-RR2` **REVIEW-ROUND-START BOUNDARY UNSPECIFIED**（我方申報之 stage-1 `3→1→0` 與七項修正暴露：目前沒有機械定義「一輪從哪一刻開始」。① 裁定該七項**不追溯計入 R47 material finding** —— R18 未定義 round-start boundary，且七項全發生在 final durable candidate materialization 前、屬已授權 remediation construction／debugging，**不能事後用一條當時不存在的邊界反向定罪**；packet 亦已完整申報未藏。自 R48 起必新增 `ROUND_START_MANIFEST`）。裁決：Q1 `4f6d45f5` **保留並作為下一次 remediation base**；R47 採 sibling disposition 但**定性不同於 R45／R46** —— R46 是 self-backed false evidence，R47 是**真值的生命週期被錯誤建模**；另修正 G1 一處語意（新 commit **不**使舊 attestation「歷史上失效」）；Q2 頒 `ARCH-E-R19-A1` ＋ **R48 恰一次**，且多一前置 manifest freeze；Q3 **不回寫** G1 receipt core，改頒 additive lock `ARCH-E-R19-G2`，採**分類＋靜態 input-contract**、🚫 不要求 temp clone 模擬凍結；Q4 **不回溯** R45／R46，但下一 packet 必做 read-only `ACTIVE_ORACLE_PHASE_DEPENDENCY_CENSUS`；Q5 路由 ＝ remediation → manifest → R48 恰一次 → commit → detached attestation → **PASS 則直送 ② R5、不需回 ① R20**。R14 design approval @ `0a2fdc5a` **仍有效**；`ARCH-E-R18-G1` 續 `ACTIVE`；source blob 仍鎖 `0894b592`；`CODING_ALLOWED` 仍 **NOT_GRANTED** |
+| 24 | ② Codex Plan | R5 | `CODEX_PLAN_CHANGES_REQUIRED` | **`6c5e2508`** / plan_blob_oid `cd2c35fc6359081ef76372510c27efbb2cb33835` / plan_sha256 `6aac4daa659723f8b672332506226c5fdff17f14496a54e674e3c653b4b9e011` / packet_sha256 `92abbf496e7eaf7bee7a8f41f8fb750c47369a248c01b38980f65cd0857d1441` | **0 runtime Blocker／4 Major Required／1 packet-only NB**。`R48 = 0` 與原 Phase-2 `PASS` 不成立為 final closure。4 Major：`CODEX-E-R5-RR1`（`R48-OBS-1` 為 transition-state actual 卻標 phase-stable）·`RR2`（四項 manifest binding 未 exact-compare）·`RR3`（census 非 producer/dependency census）·`RR4`（ledger `#21` blob 錯、checker 忽略 blob／SHA 子欄）。② 獨立重跑 attestation 得 exit 1／`mismatch_count = 1`／`VERDICT = FAIL`。⚠ 本列補記：該裁決於 `6c5e2508` 之後完成，而其後兩輪（① R20／R21）皆未產生 commit，故直至本次 cleanup 才得 append |
+| 25 | ① ChatGPT Architecture | R20 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`6c5e2508`** / plan_blob_oid `cd2c35fc6359081ef76372510c27efbb2cb33835` / plan_sha256 `6aac4daa659723f8b672332506226c5fdff17f14496a54e674e3c653b4b9e011` / packet_sha256 `d3eca465fde429d4a8f8dda9a9fefc0a2b456ebdfa81e11b158ad0f49ecfd95f` | **0 Blocker／4 Required／0 Non-blocking**。② R5 四項 Major 之接受經 ① 確認正確。4 Required：`ARCH-E-R20-RR1` descriptor 與實際 read target 未結構綁定·`RR2` pre-freeze contract 與 runtime observed closure 混成同一件事·`RR3` `FROZEN_MANIFEST` 尚無 immutable root·`RR4` ledger expected-side 仍可與 ledger 同源抄錯。頒 `ARCH-E-R20-A1`（要旨見 §14.25）。⚠ 該授權已於 ① R21 **`SUPERSEDED`**；其唯一一份 PLAN 落地稿依 ① R21 Q4(c) 整份丟棄，🚫 未進 repo |
+| 26 | ① ChatGPT Architecture | R21 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`6c5e2508`** / plan_blob_oid `cd2c35fc6359081ef76372510c27efbb2cb33835` / plan_sha256 `6aac4daa659723f8b672332506226c5fdff17f14496a54e674e3c653b4b9e011` / packet_sha256 `8d0de48063805ba1305127954a76287cfbc2533e051dadb9a00ab8a13eabc8d5` | **0 runtime Blocker／0 production-design objection／2 governance Required**。① 接受本輪偏離 R20 路由，明示**未 commit 是正確處置**。2 Required：`ARCH-E-R21-RR1` SELF-CERTIFICATION TRUST BOUNDARY MISPLACED·`ARCH-E-R21-RR2` EVIDENCE COST／CHANGE RISK DISPROPORTIONATE。**終止以自建 evidence machine 作為 batch E blocking gate 之方向**；blocking evidence 上限收斂為四個外部可重播 predicate（§7.11）。頒 `ARCH-E-R21-A1`（要旨見 §14.26）。`ARCH-E-R20-G3` ＝ `NORMATIVE_ROLE_RETIRED／DIAGNOSTIC_ONLY`；`R49` ＝ `RETIRED／NOT_REQUIRED`；🚫 不需 ① R22。路由 ＝ 極小 PLAN cleanup commit → 直送 ② Codex Plan R6 |
+
+> ⚠ **`#24` 起採 forward-only 分欄 schema**（① R20 Q4(b) 採納）：受審錨點格改為
+> `commit` / `plan_blob_oid`(40-hex) / `plan_sha256`(64-hex) / `packet_sha256`(64-hex)。
+> 該格仍為**單一 cell**，故 §15.2 之「每列恰 6 cells」不變式不受影響；
+> §15.2 之 event key 仍為**四元組** `(gate, round, verdict, reviewed-anchor)`，
+> `#24`–`#26` 之四元組互異（`#24` gate 為 ②；`#25`／`#26` 同為 ① 而 round 不同）。`#1`–`#23` 維持原格式，其語意由 §14.27 界定，**🚫 不回寫**。
+> ⚠ `#24`／`#25`／`#26` 之受審 commit 相同（`6c5e2508`）—— 三輪之間**未產生任何 commit**，屬事實紀錄。
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -1492,7 +1559,7 @@ transport 複驗：實收 carrier 為 CRLF 化之 333,876 B／4194 CR，逐 CRLF
 
 | 項目 | 規格 |
 |---|---|
-| **母體（顯式 registry）** | `{ §14.4, §14.7, §14.10, §14.12, §14.15, §14.17, §14.18, §14.21, §14.23 }` —— 即**自我宣告為 receipt／immutable receipt／逐字 gate receipt** 之 decision-evidence core。🚫 ledger、remediation narrative、transport history、erratum、**本 §14.14 自身**皆**不屬**母體 |
+| **母體（顯式 registry）** | `{ §14.4, §14.7, §14.10, §14.12, §14.15, §14.17, §14.18, §14.21, §14.23, §14.25, §14.26 }` —— 即**自我宣告為 receipt／immutable receipt／逐字 gate receipt** 之 decision-evidence core。🚫 ledger、remediation narrative、transport history、erratum、**本 §14.14 自身**皆**不屬**母體 |
 | **為何用 registry 而非標題比對** | ⚠ 初版以「`### 14.N` 標題含 `receipt`」判定，**誤收** §14.13（erratum，標題含「receipt-integrity」）與 §14.14（gate 規格自身，標題含 `RECEIPT-CORE-…`）⇒ 正是本輪剛立之 `SCANNER_EQUIVALENCE` 所禁止的規格／實作分歧（`SR-47`）。**替代方案「在每個 core 內加機器可讀標記」不可行** —— 那要寫進 core，會直接毀掉本 gate 存在的意義（byte-identity）。故 membership 一律維護在**core 之外**的本節 |
 | **registry 維護規則** | 新建 receipt core 時，**同一個 commit 內**把它加入上列 registry；🚫 registry 與實際 core 不一致即 violation（gate 須同時檢查「registry 內每項都存在」與「不在 registry 的 §14.N 標題**不得**自稱 receipt core」） |
 | **legacy baseline** | 既有 receipt core 之 canonical ＝ **本次 R15 remediation commit** 中之 bytes（機械可解析為「首次含有 §14.14 之 commit」）。⚠ 這**不表示**它們從未被改過；事故歷史完整保存於 §14.13 |
@@ -1840,6 +1907,240 @@ source blob 仍鎖 `0894b592`；`CODING_ALLOWED = NOT_GRANTED`。
     → detached final attestation → PASS ⇒ **直接 ② Codex Plan R5**（🚫 不需回 ① R20）
     R48 > 0 ／ Phase-2 mismatch ／ tool binding mismatch ／ source blob drift ／
     authz gate failure ⇒ 任一發生即 **① R20，🚫 不得 R49**
+
+### 14.24 ② Codex Plan Gate R5 之處置（`CODEX_PLAN_CHANGES_REQUIRED` @ `6c5e2508`）
+
+> ⚠ 本節為**處置紀錄**，🚫 非 receipt core、🚫 不進 §14.14 registry。
+
+**裁決**：`CODEX_PLAN_CHANGES_REQUIRED` ｜ 0 runtime Blocker ／ 0 新 production-design objection ／
+**4 Major Required** ／ 1 packet-only NB。
+
+| Major | 內容（要旨） |
+|---|---|
+| `CODEX-E-R5-RR1` | `R48-OBS-1` 為 transition-state actual 卻被 materialize 並標為 phase-stable；producer 以 scratch 檔存在性決定 actual，attester 建檔後同一 oracle 翻面 |
+| `CODEX-E-R5-RR2` | `R48-19` 宣稱四項 manifest binding「與現況相符」，實作僅檢查四欄非空；Phase 2 verdict 未比較 current 與 frozen tool hash |
+| `CODEX-E-R5-RR3` | census 非 promised producer/dependency census：以 claim ID regex ＋ section 位置分類，未列舉 producer 之直接與 transitive inputs |
+| `CODEX-E-R5-RR4` | ledger `#21` 記 blob `bc25d6c8`，immutable Git replay 得 `dfd57722…` 且前者非 Git object；checker 完全忽略 blob／SHA 子欄 |
+
+② 獨立重跑 detached attestation 得 exit `1`／`mismatch_count = 1`／`VERDICT = FAIL`。
+
+**packet-only NB（1 項）之內容與處置**：
+② 指出我方 handoff 宣稱「11 支工具皆 attestation-manifest-bound」，實際 manifest 僅 **10** 支
+（`scanner-convergence-probe.mjs` 未列入）；另「41 個 PASS entry」只有 **38** 個 unique control ID。
+② 判其非 R48 blocker（其已獨立重跑該 scanner 得 0 violation／3-of-3 negatives），
+但要求「**packet 敘述必須收斂**」。
+**已發生之事實**：自 R20 packet 起，我方 packet 內之控制項計數由 builder 導出而非手寫
+（R20 packet 記「控制項總數 : 36（由 builder 導出，🚫 非手寫）」；R21 packet 記 23，同註記）。
+我方於 R21 packet 仍再次發生同型失準（diff 行數），已立 §14.27 erratum 3。
+🚫 本節僅記錄已發生之事實，**不**訂立任何前瞻性規則。
+⚠ 🚫 本項**未** closed —— 迄今無任何 gate 宣告其已 closed。
+
+**四項 Major 之處置**：皆經 ① R20 確認成立；其後之修補路線由 ① R21 整體終止（見 §14.26）。
+`CODEX-E-R5-RR4` 之 ledger 面處置見 §14.27。
+⚠ 🚫 ① R21 **未**宣告該四項已 closed —— 迄今無任何 gate 宣告其已 closed。
+
+### 14.25 ① R20 `ARCH-E-R20-A1` — PLAN-REMEDIATION-ONLY BOUNDED AUTHORIZATION（授權 receipt）
+
+> **本節為 immutable receipt core**（已同 commit 加入 §14.14 explicit registry）。
+> ⚠ 本節**主體**為 ① R20 裁決之轉錄；我方之量測與 erratum 置於 §14.27。
+> ⚠ 誠實限定：本節仍含少量**我方文字**（以 ⚠ 起首之限定句與狀態註記），🚫 不得誤讀為 ① 原文。
+> ⚠ **`ARCH-E-R20-A1` 這個授權**已於 ① R21 **`SUPERSEDED`**（見 §14.26）
+> ⇒ 🚫 **下方「授權邊界」與「Q1–Q6」兩表任一列**不得被引用為現行約束。
+> ⚠ 🚫 但 ① R21 **未**宣告 `ARCH-E-R20-RR1`–`RR4` 已 closed —— 迄今無任何 gate 宣告其已 closed；
+> 🚫 本節不得被讀成「四項 Required 已成歷史」。
+
+**裁決**：`CHATGPT_ARCH_CHANGES_REQUESTED @ 6c5e2508` ｜ 0 Blocker ／ **4 Required** ／ 0 Non-blocking。
+
+| Required | 內容（**要旨**，🚫 非逐字） |
+|---|---|
+| `ARCH-E-R20-RR1` **DESCRIPTOR_READ_TARGET_BINDING** | descriptor 與實際 read target 未結構綁定；stable descriptor 不得帶任意 command/argv；`FIXED_GIT_OID.oid` 須為完整 40-hex；`FROZEN_TOOL`／`FROZEN_MANIFEST` 須 compare-before-use；「宣告 stable 但 binding 不符」不得降級續跑，必須停止 |
+| `ARCH-E-R20-RR2` **DECLARED_CONTRACT ≠ OBSERVED_INPUTS** | 須拆為 round 前靜態 freeze 之 `declared_input_contract` 與 runtime 記錄之 `observed_inputs`，驗 `observed ⊆ declared`；mandatory 須 exact presence，optional 須事先明列觸發條件；tool manifest equality 之對象為 predeclared reachable evidence tool closure，不是 runtime 剛好執行到的集合 |
+| `ARCH-E-R20-RR3` **MANIFEST ROOT STILL MUTABLE** | ① 明示為該輪最重要之新 Required：named round 開始前，manifest 完整 bytes 之 digest 須先被不可變來源錨定；後續 reader 先核 bytes 再讀 bindings。scratch pathname／read-only flag／內容自帶自己的 sha 皆不算 immutable root |
+| `ARCH-E-R20-RR4` **LEDGER EXPECTED AUTHORITY** | 手寫 23 元組 `EXPECTED` 須移除；`expected_completed_event_set` 必須由 canonical gate receipt population 機械導出，不得再維護第二份手寫 tuple 陣列 |
+
+**授權邊界（要旨）**：PLAN doc／R48 sibling disposition／RR4 erratum／INPUT-CLOSURE protocol／
+scratch verifier·builder **允許**；production source／tests／schema／migration／R49／
+實際 R49 manifest freeze **禁止**；`functions/utils/audit-log.ts` **0 byte delta**；
+`CODING_ALLOWED` **NOT_GRANTED**。
+
+**Q1–Q6 裁定（要旨）**：Q1 同意通用修法，但為「批准方向、要求補強」；
+Q2 (a)(b) 皆 YES —— R48 原 bytes 逐字保留，同族全數納入 Required scope 且由新機制重分類；
+Q3 YES 但 AST 只是底線，`V-SELF-1` 不得作 normative PASS oracle；
+Q4 (a) sibling erratum、(b) 採納 `plan_blob_oid`／`plan_sha256`／`packet_sha256` 分欄、
+(c) **`#1`–`#21` 的 PLAN SHA** 既已以 immutable Git replay 全數重現，不標 unverified
+（⚠ 該豁免**限於 PLAN SHA 子欄**，🚫 不涵蓋 blob 子欄；② R5 原文另要求「歷史無法驗證的值須明標 unverified」）；
+Q5 先 protocol remediation、該輪不得 R49，完成後送 ① R21；
+Q6 同意把 `scanner-convergence-probe.mjs` 上修為 `RR2` Required family。
+
+⚠ ① 明示（`[待驗證]`）：① 無我方本機 repo execution surface，
+故 packet 宣告之 controls 數、Windows repo 實際狀態與 scratch 工具執行結果，
+**🚫 不得被描述為 ① 親自重跑**。
+
+### 14.26 ① R21 `ARCH-E-R21-A1` — PLAN-SIMPLIFICATION-ONLY BOUNDED AUTHORIZATION（授權 receipt）
+
+> **本節為 immutable receipt core**（已同 commit 加入 §14.14 explicit registry）。
+> ⚠ 本節**主體**為 ① R21 裁決之轉錄；我方之量測與 erratum 置於 §14.27。
+> ⚠ 誠實限定：本節仍含少量**我方文字**（以 ⚠ 起首之限定句與狀態註記），🚫 不得誤讀為 ① 原文。
+
+**裁決**：`CHATGPT_ARCH_CHANGES_REQUESTED @ 6c5e2508` ｜
+0 runtime Blocker ／ 0 production-design objection ／ **2 governance Required**。
+
+**最終 gate-state**（① 原文轉錄；⚠ 標點與全半形經本檔排版正規化，🚫 **非 byte-exact**。⚠ ① R21 裁決之 byte-exact 原文**目前不在任何既有 packet 內**——R21 packet 產於該裁決之前，其 SECTION 2 裝的是 ① R20 裁決——故將隨 **② R6 packet** 首次出貨）：`ARCH-E-R20-A1 = SUPERSEDED`；
+`ARCH-E-R21-A1 = ACTIVE — PLAN_SIMPLIFICATION_ONLY`；
+`ARCH-E-R20-G3 = NORMATIVE_ROLE_RETIRED / DIAGNOSTIC_ONLY`；
+`R49 = RETIRED / NOT_REQUIRED`；`CODING_ALLOWED = NOT_GRANTED`；
+`R14 production design anchor 0a2fdc5a = PRESERVED`；`source blob 0894b592 = LOCKED`。
+
+⚠ **`ARCH-E-R20-A1` 自本裁決起 SUPERSEDED。新的 A1 只允許一次 PLAN cleanup commit。**（① 原文）
+
+① 接受本輪偏離 R20 原路由，並明示：**未 commit 是正確處置** ——
+已知包含錯誤 normative claim 之 diff 不應進 repo。
+① 同時**終止以自建 evidence machine 作為 batch E blocking gate 的方向**：
+「不是因為『checker 不值得做』，而是它的角色放錯：它可以是 diagnostic / replay generator，
+但不能在目前信任配置下成為自己的最終認證 authority。」
+
+| Required | 內容（**要旨**，🚫 非逐字；核心句已於 §7.11 逐字引用） |
+|---|---|
+| `ARCH-E-R21-RR1` **SELF-CERTIFICATION TRUST BOUNDARY MISPLACED** | 在目前安排下自建 checker 無法提供獨立 closure，只能提供自我檢查與可重播證據。⚠ ① **不**裁定為「任何 self-verification 皆數學上不可能」。作者同時控制 artifact／checker／population／freeze-root construction／執行環境，故新增一層 checker 只是在同一信任域內多一個 predicate。兩個重現足為 class-killer：錯誤 candidate 得 `ROUND_FINDINGS=0`（vacuous truth）；判決邏輯可被中和而 `MANIFEST_ROOT` 不變。① 並明確指出「Packet 本身也明確指出第一、第三完整輪仍為 **73→71 存活 findings，沒有呈現收斂**」。⇒ 第三輪 71 findings **不逐項升格為 Required** |
+| `ARCH-E-R21-RR2` **EVIDENCE COST／CHANGE RISK DISPROPORTIONATE** | 本棒 production 目標為單檔 10 條 `TS7006` 且要求 emit byte-identical；治理複雜度已遠超被控制之風險。**證據複雜度本身已成為主要 failure surface。** ⇒ blocking evidence 上限收斂為四項外部可重播 predicate（§7.11） |
+
+**授權邊界**（① 原文轉錄；⚠ 標點與全半形經本檔排版正規化，🚫 **非 byte-exact**。⚠ ① R21 裁決之 byte-exact 原文**目前不在任何既有 packet 內**——R21 packet 產於該裁決之前，其 SECTION 2 裝的是 ① R20 裁決——故將隨 **② R6 packet** 首次出貨）：
+
+| 項目 | `ARCH-E-R21-A1` |
+|---|---|
+| 保存現有未 commit patch ＋ hash | **必須先做** |
+| 丟棄目前 +490/−1 worktree PLAN diff | **允許** |
+| 從 `6c5e2508` 重建最小 PLAN delta | **允許** |
+| R20/R21 receipt、R48 sibling disposition | **允許** |
+| #21 blob / #22–23 schema erratum | **允許，forward-only** |
+| 將 `ARCH-E-R20-G3` 降為 historical/diagnostic | **必須** |
+| 新增另一套 closure/checker/sandbox protocol | **禁止** |
+| R49 | **取消／不得建立** |
+| production source | **禁止，本授權仍是 PLAN-only** |
+| `CODING_ALLOWED` | **NOT_GRANTED** |
+
+**Q1–Q6 裁定（要旨）**：
+Q1 **接受縮減**，blocking evidence 上限即 §7.11 四項；不得為證明這四件事再建第二層自我認證平台。
+Q2 **接受，但限定為「目前 trust arrangement 無法形成獨立 closure」**。
+Q3 **採納**：`ARCH-E-R20-G3` 之 normative gate 地位終止，工具降為 diagnostic／claim generator／replay recipe。
+Q4 選 **(c)**：先保存完整 patch/hash，整份丟棄，回 `6c5e2508` 乾淨基底，再重建極小 R21 delta；
+有效的 R48 disposition／ledger erratum 可以從已保存 packet 重新寫入，
+🚫 但不是 cherry-pick 已污染之 normative block。
+Q5 **R49 取消其 blocking 必要性**；歷史 R48 保留並標示 closure invalid；不建立 R49。
+Q6 **YES**，production coding 與治理機器正式拆軸；但**不是立即** `CODING_ALLOWED` ——
+先完成本 cleanup 後直送 ② Codex Plan R6，② 通過後再由 owner 核發。
+
+**路由（要旨）**：
+`保存 patch → restore PLAN @ 6c5e2508 → 依 R21-A1 建極小 cleanup → PLAN-only commit
+→ 直送 ② Codex Plan R6 → ② 對 exact commit 自行重跑 Git／forced-tsc／emit identity
+→ ② finding > 0 則按 finding 回 ①（不是重開自證機器）→ ② APPROVED → owner 核發 CODING_ALLOWED
+→ production implementation → 正常 code self-review／③／④`。
+**🚫 不需要 ① R22。🚫 不需要 R49。**
+
+⚠ ① 另指定最小 delta 之範圍：「**只需要說清楚三件事**：R48 closure 已失效；
+R20 自建 closure 路徑經 R21 撤銷其 normative 地位；batch E 往後採 external replay contract。」
+並明示「**不要把 71 findings 全寫入 PLAN**。保存於 packet 即足夠，它們是研究證據，
+不是 production plan 的永久規格。」
+
+⚠ **免 R22 之硬邊界**（① 原文；同上正規化說明）：本 cleanup 若引入任何**新的 production design、type choice、
+runtime contract、測試策略或新的治理機制**，授權**立即失效**，必須回 ①。
+
+⚠ ① 明示（`[待驗證]`）：packet 所報 builder controls、四輪 agent token 數、
+Windows 本機重現輸出，① 無 live repo execution surface，**🚫 不得描述為 ① 親自執行**；
+惟本裁決之決定性結論不依賴「71 是否窮盡」，只依賴 packet 已提供之兩個反例。
+
+### 14.27 🚨 我方 errata ／ 量測紀錄（`CODEX-E-R5-RR4`；① R20 Q4；① R21「保存必須先做」）
+
+> ⚠ 本節為**我方自產之 erratum 與量測紀錄**，🚫 非 receipt core、🚫 不進 §14.14 registry。
+> 依 §14.14 母體定義，erratum 與 remediation narrative **本就不屬** receipt core 母體。
+
+**erratum 1 —— ledger `#21` 之 blob 子欄（⚠ 標為 `unverified`）**
+ledger `#21` 記 blob `bc25d6c8`。immutable git replay 得
+`dfd57722dc4e8e8c73d7bc10854360d2b18200e9`；`bc25d6c8` **不是本 repo 的 git object**
+（`git cat-file -t bc25d6c8` → `Not a valid object name`）。
+⇒ 依 ② R5 `RR4`「歷史無法驗證的值須明標 unverified」，
+**`#21` 之 blob 子欄在此明標 `unverified`**。
+⚠ ① R20 Q4(c) 之不標 unverified 豁免**僅限 `#1`–`#21` 之 PLAN SHA 子欄**，🚫 不涵蓋本項。
+根因：blob／sha 兩子欄**從未有任何宣告 oracle** —— 舊 checker 之四元組為
+`(gate, round, verdict, anchor)`，其 `anchor` 只取受審錨點格之第一個 8-hex。
+🚫 **不回寫 `#21`**。
+
+**erratum 2 —— `#22`／`#23` 之 sha 子欄語意轉換**
+逐列量測：**`#1`–`#21`（21 列）之 sha 子欄 ＝ 該 commit 之 PLAN blob sha256，21/21 由 immutable git replay 重現**；
+**`#22`／`#23` ＝ 對應 gate packet 檔之 sha256**。⇒ 語意斷點**精確落在 `#22`**。
+依 ① R20 Q4(c)：`#1`–`#21` **🚫 不標 `unverified`**。🚫 不回寫。
+
+**forward-only schema（自 `#24` 起）**
+
+| 子欄 | 宣告 oracle | 可由外部 gate 以 git 重播？ |
+|---|---|---|
+| commit | `git rev-parse <commit>^{commit}` | **是** |
+| `plan_blob_oid` | `git rev-parse <commit>:<PLAN>` | **是** |
+| `plan_sha256` | `sha256(git cat-file blob <commit>:<PLAN>)` | **是** |
+| `packet_sha256` | `sha256(送審 packet bytes)` | **否** —— packet 位於 repo 外且未被 git 追蹤；🚫 不得宣稱可由 git 重播。它由**收到該 packet 之 gate** 自行核對 |
+
+**erratum 3 —— 我方對被丟棄 diff 行數之宣稱失準**
+① R21 裁決逐字寫「+490/−1 diff」（原文 3 處）。該數字源自**我方 R21 packet**（恰 2 處：SECTION 1 與 Q4）。
+**實測值為 `+483 / −1`**：對保存之 patch 執行 `git apply --numstat` 得 `483  1  docs/plans/…md`。
+🚫 本 PLAN **不改寫 ① 原文之數字**（§14.26 授權表保留 ① 逐字「+490/−1」）；此處僅記錄差異與實測值。
+⚠ 我方**無法**由任何留存物重播「該數字如何產生」，故 🚫 不對其成因作宣稱。
+
+**保存紀錄（① R21「保存現有未 commit patch ＋ hash」＝必須先做）**
+
+| 保存物（位於 repo 外之 `chiyigo-packets/`） | sha256 | bytes |
+|---|---|---|
+| `stage7-pr2dw-batchE-R21-DISCARDED-plan.patch` | `852eebe03abba71a9a8d36bb83c19869741563e59523a5bf2c23cda71ec066da` | 52,141 |
+| `stage7-pr2dw-batchE-R21-DISCARDED-plan-worktree.md` | `87574aa39a9fe49ab24ab2b1098af5aaa1604037d2666f1230fbbd80c37f2d6f` | 261,527 |
+
+被丟棄檔之 git blob OID ＝ `f72ce4f35e855bbef9fb49412c57861012af28be`。
+
+**還原性驗證之 oracle**（可由外部 gate 直接重播；`P` ＝ `docs/plans/stage7-pr2dw-batche-audit-log-typing.md`）：
+
+    mkdir -p /tmp/r21/docs/plans
+    git -C <repo> -c core.autocrlf=false show 6c5e250859882708cb47f36b0ebd982442bcc9ab:$P > /tmp/r21/$P
+    cd /tmp/r21 && git -c core.autocrlf=false apply <path-to>/stage7-pr2dw-batchE-R21-DISCARDED-plan.patch
+    sha256sum /tmp/r21/$P
+    ⇒ 87574aa39a9fe49ab24ab2b1098af5aaa1604037d2666f1230fbbd80c37f2d6f
+
+⚠ **下列條件缺一即必失敗**（🚫 本表不宣稱窮盡；初稿於前兩項皆錯，於落地前逐一實跑修正）：
+1. **端點必為固定 commit**，🚫 不得用 `HEAD` —— `HEAD` 是 mutable alias，
+   本 cleanup 一旦 commit 即指向新內容。此為 §7.8 明文禁用之輸入，亦是 `R47-15` 之同型失效。
+2. **base 必須落在 patch 所宣告之路徑上**（`docs/plans/…md`），🚫 不得只是導向任意檔名。
+   `git apply`（無 `--cached`／`--index`）作用於 **worktree 之該路徑**，
+   初稿寫成 `> base.md` 而該檔從不被 step 2 消費 ⇒ 逐字執行得
+   `error: docs/plans/…md: No such file or directory`。
+   ⚠ 這兩者是**不同的缺陷**；初稿只修了第 1 項就宣告修復完成，是族處置不完整之實例。
+
+3. **重播目錄之 EOL 行為**：本 repo 之 `.gitattributes` 對該路徑判定 `eol=lf`，故自本 repo 執行 `git show`
+   不注入 CR；但於**不繼承該 `.gitattributes` 之目錄**重播時，Windows 預設 `core.autocrlf=true` 可能注入 CR
+   使 sha256 不符。該不符為**量測假影**，非內容差異。⚠ 我方實測過此假影一次（3,046 個 CR），
+   🚫 但不對其確切成因作機械宣稱。
+
+### 14.28 🚨 R48 sibling disposition（① R20 Q2 ／ ① R21 Q5 之最終形式）
+
+> ⚠ 本節為**處置紀錄**，🚫 非 receipt core、🚫 不進 §14.14 registry。
+> ⚠ **R48 原 bytes 逐字保留、🚫 未回寫**；本節為 sibling，🚫 不修改 §15 R48 任何一個 byte。
+
+**失效範圍**：`R48-OBS-1` 之 actual 由 scratch 檔案存在性決定，該 oracle 在 attester 建立該檔後翻面
+⇒ 依當時之 `ARCH-E-R19-G2` 屬 detached-only，卻被 materialize 進 durable table。
+⇒ **`R48-RESULT` ＝ 0 finding 不成立為 closure**；原 Phase 2 attestation `PASS` 亦然
+（經 ② R5 獨立重跑得 `FAIL` ／ `mismatch_count = 1`）。
+
+**最終處置（① R21 Q5 要旨）**：**R49 取消其 blocking 必要性**；
+歷史 R48 **保留並標示 closure invalid**；**不建立 R49**。
+① 之理由：R49 原本的存在理由是驗證新 evidence protocol，該 protocol 已降級，
+再跑 R49 只會延續同一循環。
+
+⚠ **同族之 11 個 claim 目前無歸宿（我方主動申報，🚫 未解決）**：
+① R20 Q2(b) 曾裁定「`R48-OBS-1` 加我方枚舉之**其他 11 個同族 claim 全部納 Required scope、不 defer**」，
+且其指定之處置手段為「**由新 closure mechanism 對全部重分類**」。
+該 closure mechanism 已由 ① R21 整體終止 ⇒ **該 11 項失去原定處置手段，而 ① R21 未指定替代**。
+⇒ 本節**不**自行為其指定新處置（那將需要新機制，為 `ARCH-E-R21-A1` 所禁止），
+僅如實記錄其懸置狀態。
+（該 11 項之名單見 R20 packet；🚫 依 ① R21「不要把 findings 全寫入 PLAN」，此處不複製。）
+
+⚠ 🚫 本節**不**對「batch E 是否還會有其他具名 review round」作前瞻宣稱 ——
+① R21 同時指定了「② finding > 0 則按 finding 回 ①」之回頭路。
 
 ## 15.2 gate-event 完整性 oracle（`ARCH-E-R7-RR1` ／ `R8-RR1` ／ `R9-RR1` 之結構性修法）
 
