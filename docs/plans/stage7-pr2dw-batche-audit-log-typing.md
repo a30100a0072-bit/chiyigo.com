@@ -1097,7 +1097,10 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 > ③ `audit/[id].ts:55` 不顯現之**原因判斷有誤** —— 其 `stepCheck.user.email` 為 `string`（具名欄位）
 >   而非 implicit any，故「該檔型別化後會加入此清單」**不成立**；
 > ④ 母體**漏列** `admin/oauth-clients/[client_id].ts:161`、`:213`。
-> ⇒ **`TD-BATCHE-1` 之母體 SoT 改以 §14.30 之表為準**（12 sites／9 檔），🚫 不得沿用本節數字定 backlog 範圍。
+> ⇒ 上述四點之實測值（12 sites／9 檔之逐項列表）見 **§14.30**。
+> ⚠ §14.30 為 **factual errata、🚫 不具規範地位**（原「母體 SoT」表述已依 ③ Codex Code 之
+>   finding 與 owner 2026-08-22 之裁定移除）。承接 `TD-BATCHE-1` 之棒次**須自行重新量測母體**，
+>   🚫 不得直接沿用本節或 §14.30 之數字定 scope。
 
 **事實**（實測，非推論）：
 
@@ -1245,8 +1248,10 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 > `#1`–`#23` 維持原格式，其語意由 §14.27 界定，**🚫 不回寫**。
 > ⚠ `#24`／`#25`／`#26` 之受審 commit 相同（`6c5e2508`）—— 三輪之間**未產生任何 commit**，屬事實紀錄。
 > ⚠ `#27`／`#28` 之錨點同為 `156b9565`：② R6 審的是該 commit，而 owner 核發時 branch HEAD 亦為該 commit。
-> ⚠ `#28` 之 `packet_sha256` 為 `n/a` —— owner 核發不經 packet 承載。此為 schema 之誠實留空，
-> 🚫 不得被讀成「packet 遺失」或「該欄未量測」。
+> ⚠ `#28` 之 `packet_sha256` 為 `n/a`。⚠ **該填法違反本 schema（64-hex），已由 ③ Codex Code
+> 判為 Major**；我方原「schema 之誠實留空」之解釋**不成立、已作廢**。
+> 正確之 discriminated schema（owner 授權事件改用 `authorization_carrier_sha256`）與 `#28` 之
+> 實際值見 **§14.31**。依 §14 讀法規則 1，`#28` 原 bytes **不回寫**。
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -2254,10 +2259,17 @@ commit 後重跑，`git diff --name-only origin/main...HEAD -- functions/utils/a
 | `admin/users/[id]/unban.ts` | `:64` | `requireRole` ⇒ `unknown` |
 | `utils/role-change.ts` | `:86` | `actorEmail ?? null` ⇒ `string \| null` |
 
-**影響**：`TD-BATCHE-1`（§10.1）是要**外送 backlog 的稽核寫入端 scope 定義**。
-若沿用少算檔數、機制講錯、且漏兩個 site 的敘述，下一棒的守衛母體會**天生不足**
-—— 這正是 `feedback_guard_population_must_cover_property` 所述之結構性假綠。
-故本節之表取代 §4.3／§10.1 之相應數字，作為 `TD-BATCHE-1` 之**母體 SoT**。
+**影響（factual 陳述，🚫 非規範）**：`TD-BATCHE-1`（§10.1）是要外送 backlog 的稽核寫入端
+scope 定義。上述數字若被沿用，該 backlog 的守衛母體會小於真實母體
+—— 即 `feedback_guard_population_must_cover_property` 所述之結構性假綠。
+
+⚠ **本節僅記錄我方於 coding 階段之實測值，🚫 不自行取得規範地位。**
+前一版曾寫「本節之表取代 §4.3／§10.1 之相應數字，作為 `TD-BATCHE-1` 之母體 SoT」——
+該句把 factual errata **升格為對未來棒次有約束力的 normative rebind**，
+**超出 owner A-3 之授權範圍**（授權內容＝「補 ledger 兩列 ＋ errata 一節」），
+經 ③ Codex Code 判定需 ①→② 明確認可，owner 於 2026-08-22 裁定**降回 factual errata**，故已移除。
+⇒ 承接 `TD-BATCHE-1` 之棒次**須自行重新量測母體**並走其自身 gate；
+本節之數字僅供**交叉檢查**，🚫 不得被引用為該棒次之母體定義來源。
 
 🚫 **本節不修 `TD-BATCHE-1` 本身**（§13 非目標），亦 🚫 不改動任何 production 檔；
 僅更正母體描述。實際硬化仍屬 backlog。
@@ -2266,6 +2278,52 @@ commit 後重跑，`git diff --name-only origin/main...HEAD -- functions/utils/a
 **24 輪外部審查**（① 21／② 3），①②皆未抓到，最後由一個**唯讀對抗式 agent** 在 coding
 階段逐條重播 grep 抓出。⇒ 佐證 §7.11 之方向正確：**能被外部獨立重播的機械 predicate，
 比再多輪 prose 審查更能抓到量化失準**。
+
+### 14.31 🚨 ledger `#28` schema ／ locator erratum（③ Codex Code `CODEX_DOCS_CHANGES_REQUIRED` 之處置）
+
+> ⚠ 本節為 **sibling erratum**，🚫 非 receipt core、🚫 不進 §14.14 registry。
+> ⚠ **ledger `#28` 之原 bytes 逐字保留、🚫 未回寫。**
+> 理由：§14 讀法規則 1 明訂「列一旦寫入即不可變」；且 `CODEX-E-R4-RR2` 正是因
+> 「§14.10 之列被事後靜默改寫」而成為 Major，① R16 對 `#19` 亦裁定**禁止回寫、改 append sibling
+> pointer erratum**（§14.16）。故本節採同一形式，🚫 不就地修 `#28`。
+> ⚠ 若 ③ 認為此讀法有誤、要求就地改列，請明示；我方不自行在兩條規則間選邊。
+
+**E-A｜`packet_sha256` 欄之 schema 違反**
+
+`#28` 於該欄填 `n/a（非 packet 承載之裁決）`，違反 `#24` 起之 forward-only schema
+（該欄要求 64-hex）。我方原以「schema 之誠實留空」自我解釋 —— **該解釋不成立**：
+schema 不因填寫者覺得不適用就失效。
+
+**修法（③ 指定之 discriminated schema，自本節起 forward-only 生效）**：
+owner 授權類事件（gate ＝ `owner`）**不使用** `packet_sha256`，改用專屬欄位：
+
+| 欄位 | 型別 | 語義 |
+|---|---|---|
+| `authorization_carrier_sha256` | 64-hex | 該次授權**原始訊息 bytes** 之 SHA-256 |
+
+`#28` 之正確值（自 session transcript 機械擷取，🚫 非人工轉錄）：
+
+```
+authorization_carrier_sha256 = bc2068fcf411d22f5d27baf0d94311bb097b45d4ee5069dcf8244e9b5cd901ff
+carrier bytes                = 14        (內容恰為 `CODING_ALLOWED`，無結尾 LF)
+transcript record            = line 1990
+uuid                         = 08c7bca1-0ea7-4a0e-81b5-53f07c4838d6
+timestamp                    = 2026-08-21T16:04:22.240Z  ＝ 2026-08-22 00:04:22 (UTC+8)
+```
+
+⚠ 該時點**早於** code commit `56af5afe` 之 `2026-08-22T00:52:27+08:00` ⇒ 授權鏈時序成立
+（③ 已獨立確認）。
+
+**E-B｜`#28` 之「逐字見 §14.29」為假指標**
+
+`#28` 末句寫「逐字見 §14.29」，但 §14.29 對該授權**只有摘要、無逐字原文** ⇒ 指標不成立。
+**更正**：§14.29 為**要旨**；逐字原文之權威載體 ＝ 上列 `authorization_carrier_sha256`
+所指之 transcript record，並以 raw bytes 嵌入 ③ 之 gate packet。
+
+⚠ **同族第三次復發**（`R47-15` 家族：把「指標」寫成「逐字」／指向錯誤位置）。
+前兩次為 ① R21 packet 之 `SECTION 2` 誤指、`ARCH-E-R21-A1` 之 locator。
+根因一致：**我方在寫指標時未實際開啟被指向的位置核對**。
+⇒ 教訓已外送 memory `feedback_verify_before_self_correction` 同族（指標類宣稱一律先開檔核對）。
 
 ## 15.2 gate-event 完整性 oracle（`ARCH-E-R7-RR1` ／ `R8-RR1` ／ `R9-RR1` 之結構性修法）
 
