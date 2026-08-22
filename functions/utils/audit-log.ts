@@ -18,9 +18,22 @@
 
 const GENESIS_HASH = '0'.repeat(64)
 
+interface AuditLogEntry {
+  admin_id: number
+  admin_email: unknown
+  action: string
+  target_id: number
+  target_email: string
+  ip_address?: string | null
+}
+
+type AuditLogRow = AuditLogEntry & { created_at: string }
+
+type ErrorLike = { message?: unknown; cause?: { message?: unknown } }
+
 // ── 雜湊工具 ────────────────────────────────────────────────────
 
-async function sha256Hex(text) {
+async function sha256Hex(text: string) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
   return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('')
 }
@@ -28,7 +41,7 @@ async function sha256Hex(text) {
 /**
  * canonical(row)：固定欄位順序，JSON.stringify 不可信，需手寫保證 key 順序。
  */
-function canonicalize(row) {
+function canonicalize(row: AuditLogRow) {
   const ordered = {
     admin_id:     row.admin_id,
     admin_email:  row.admin_email,
@@ -41,7 +54,7 @@ function canonicalize(row) {
   return JSON.stringify(ordered)
 }
 
-async function computeRowHash(prevHash, row) {
+async function computeRowHash(prevHash: string, row: AuditLogRow) {
   return sha256Hex(prevHash + canonicalize(row))
 }
 
@@ -57,7 +70,7 @@ async function computeRowHash(prevHash, row) {
  * Batch caller 收到失敗時應回 500 讓 admin 重送（不適合 batch 內 retry —
  * 重新算 hash 後 batch 內其他 statement 的綁定可能也需要重做）。
  */
-export async function prepareAppendAuditLog(db, entry) {
+export async function prepareAppendAuditLog(db: Env['chiyigo_db'], entry: AuditLogEntry) {
   const lastRow = await db
     .prepare('SELECT row_hash FROM admin_audit_log ORDER BY id DESC LIMIT 1')
     .first()
@@ -103,7 +116,7 @@ export async function prepareAppendAuditLog(db, entry) {
 const CAS_MAX_RETRIES = 5
 const CAS_BASE_DELAY_MS = 5
 
-export async function appendAuditLog(db, entry) {
+export async function appendAuditLog(db: Env['chiyigo_db'], entry: AuditLogEntry) {
   let lastErr
   for (let attempt = 0; attempt < CAS_MAX_RETRIES; attempt++) {
     try {
@@ -129,9 +142,9 @@ export async function appendAuditLog(db, entry) {
  * SQLite 錯誤包在 cause 裡，外層只是泛用 'D1_ERROR'）。
  * 嚴格限定欄位避免捕捉到不相關的 UNIQUE 違例（防呆）。
  */
-export function isUniquePrevHashError(err) {
+export function isUniquePrevHashError(err: unknown) {
   if (!err) return false
-  const msg = [err?.message, err?.cause?.message].filter(Boolean).join('\n')
+  const msg = [(err as ErrorLike)?.message, (err as ErrorLike)?.cause?.message].filter(Boolean).join('\n')
   return /UNIQUE constraint failed:\s*admin_audit_log\.prev_hash/i.test(msg)
 }
 
@@ -140,7 +153,7 @@ export function isUniquePrevHashError(err) {
  *
  * brokenAt: 第一筆 hash 不符的 id，valid=true 時為 null
  */
-export async function verifyAuditChain(db): Promise<{
+export async function verifyAuditChain(db: Env['chiyigo_db']): Promise<{
   valid: boolean,
   total: number,
   brokenAt: number | null,
