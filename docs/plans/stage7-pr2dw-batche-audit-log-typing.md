@@ -126,6 +126,10 @@ DB 的 nullability 與型別（如 `admin_email TEXT NOT NULL`）不因本宣告
 
 ### 4.3 `E-OD-1`：`admin_email: unknown`
 
+> 🚨 **本節「7 個檔」已於 §14.30 errata 更正為 6 個檔**（8 sites 正確；下列證據 block 即為反證）。
+> 且下列**不是** `admin_email` producer 之完整母體 —— 完整母體（12 sites／9 檔，含本節未提及之
+> `admin/oauth-clients/[client_id].ts:161`、`:213`）見 **§14.30**。原 bytes 逐字保留、🚫 未回寫。
+
 **實測事實**（§6 Leg B）：把 `admin_email` 標為 **`string | null`**，
 會在 **7 個檔、8 個呼叫點**產生 `TS2322: Type 'unknown' is not assignable to type 'string'`，
 且**每一條都落在 `admin_email: user.email` 這一個欄位**：
@@ -1087,6 +1091,14 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 
 ### 10.1 `TD-BATCHE-1`：`admin_email` 型別與 DB 契約落差（**本棒不修，記錄並外送 backlog**）
 
+> 🚨 **本節四處數字／機制敘述已於 §14.30 errata 更正，原 bytes 逐字保留、🚫 未回寫**：
+> ① `changeUserRole` 命中 **15 → 16**（測試 11 → **12**）；
+> ② 硬化 scope 「9 處／8 檔」→ **9 處／7 檔**，屆時「10 處／9 檔」→ **10 處／8 檔**；
+> ③ `audit/[id].ts:55` 不顯現之**原因判斷有誤** —— 其 `stepCheck.user.email` 為 `string`（具名欄位）
+>   而非 implicit any，故「該檔型別化後會加入此清單」**不成立**；
+> ④ 母體**漏列** `admin/oauth-clients/[client_id].ts:161`、`:213`。
+> ⇒ **`TD-BATCHE-1` 之母體 SoT 改以 §14.30 之表為準**（12 sites／9 檔），🚫 不得沿用本節數字定 backlog 範圍。
+
 **事實**（實測，非推論）：
 
 1. `migrations/0003_admin_audit_log.sql:5` ＝ `admin_email TEXT NOT NULL`。
@@ -1221,12 +1233,20 @@ type-only 改動若造成任何測試行為變化 ⇒ 代表它不是 type-only 
 | 25 | ① ChatGPT Architecture | R20 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`6c5e2508`** / plan_blob_oid `cd2c35fc6359081ef76372510c27efbb2cb33835` / plan_sha256 `6aac4daa659723f8b672332506226c5fdff17f14496a54e674e3c653b4b9e011` / packet_sha256 `d3eca465fde429d4a8f8dda9a9fefc0a2b456ebdfa81e11b158ad0f49ecfd95f` | **0 Blocker／4 Required／0 Non-blocking**。② R5 四項 Major 之接受經 ① 確認正確。4 Required：`ARCH-E-R20-RR1` descriptor 與實際 read target 未結構綁定·`RR2` pre-freeze contract 與 runtime observed closure 混成同一件事·`RR3` `FROZEN_MANIFEST` 尚無 immutable root·`RR4` ledger expected-side 仍可與 ledger 同源抄錯。頒 `ARCH-E-R20-A1`（要旨見 §14.25）。⚠ 該授權已於 ① R21 **`SUPERSEDED`**；其唯一一份 PLAN 落地稿依 ① R21 Q4(c) 整份丟棄，🚫 未進 repo |
 | 26 | ① ChatGPT Architecture | R21 | `CHATGPT_ARCH_CHANGES_REQUESTED` | **`6c5e2508`** / plan_blob_oid `cd2c35fc6359081ef76372510c27efbb2cb33835` / plan_sha256 `6aac4daa659723f8b672332506226c5fdff17f14496a54e674e3c653b4b9e011` / packet_sha256 `8d0de48063805ba1305127954a76287cfbc2533e051dadb9a00ab8a13eabc8d5` | **0 runtime Blocker／0 production-design objection／2 governance Required**。① 接受本輪偏離 R20 路由，明示**未 commit 是正確處置**。2 Required：`ARCH-E-R21-RR1` SELF-CERTIFICATION TRUST BOUNDARY MISPLACED·`ARCH-E-R21-RR2` EVIDENCE COST／CHANGE RISK DISPROPORTIONATE。**終止以自建 evidence machine 作為 batch E blocking gate 之方向**；blocking evidence 上限收斂為四個外部可重播 predicate（§7.11）。頒 `ARCH-E-R21-A1`（要旨見 §14.26）。`ARCH-E-R20-G3` ＝ `NORMATIVE_ROLE_RETIRED／DIAGNOSTIC_ONLY`；`R49` ＝ `RETIRED／NOT_REQUIRED`；🚫 不需 ① R22。路由 ＝ 極小 PLAN cleanup commit → 直送 ② Codex Plan R6 |
 
+| 27 | ② Codex Plan | R6 | **`CODEX_PLAN_APPROVED`** | **`156b9565`** / plan_blob_oid `4a78c9267cb77f50615739779efa5f7d3404df0a` / plan_sha256 `dbdf8cf7c33b854ce8853c206c1382d8ff68b4dbf9c4a8310e3c4047fce12f63` / packet_sha256 `d4396eb19e2effbbcab62e2a936f21b87feae88908eccad6b2ac174267bd318a` | **0 runtime Blocker／0 production-design objection／0 governance Required／2 packet-only NB**。② 獨立確認：scope 恰一檔 `+302/−1`、source blob 仍 `0894b592`、27 份先前 batch-E packet 均不含 R21 裁決（R6 packet 確為第一載體）、discarded hashes 與 `483/1` numstat 全吻合、各 hunk 均可歸入 `ARCH-E-R21-A1` 授權且未新增 checker／sandbox／lock／R49／production design。`ARCH-E-R21-A1` ＝ **`CONSUMED`**。2 NB：`PKT-E-R6-NB1`（packet 將 P3／P4 標 `N/A`，② 已自行補跑；後續 code handoff 🚫 不得再稱 N/A）·`PKT-E-R6-NB2`（`[N1]` extraction rule 未明定是否捨棄 framing LF；`[N0]` base64 carrier 為權威故不影響 candidate identity）。`PKT-E-R5-NB1` **CLOSED**。⚠ ② 另註：repo 無 `governance/rules.json` ⇒ `TS-TYPE-001`／`TS-BOUNDARY-002`／`GOV-EVIDENCE-001` 皆 **advisory／not enforced**。處置見 §14.29 |
+| 28 | owner | — | **`CODING_ALLOWED`** | **`156b9565`**（核發時 branch HEAD） / plan_blob_oid `4a78c9267cb77f50615739779efa5f7d3404df0a` / plan_sha256 `dbdf8cf7c33b854ce8853c206c1382d8ff68b4dbf9c4a8310e3c4047fce12f63` / packet_sha256 `n/a（非 packet 承載之裁決）` | owner 於 **2026-08-22** 明示核發，並指定維度 A 自審採**單 agent 對抗式**（L1 形式）。⚠ 依讀法規則 4，**本列即為核發之唯一 durable 紀錄**。實作落於 **`56af5afe`**（恰 1 檔 `functions/utils/audit-log.ts`、`+21/−8`、source blob `0894b592` → `2fb18ebd`）；§7.11 四個 predicate 對該 commit 全 PASS。逐字見 §14.29 |
+
 > ⚠ **`#24` 起採 forward-only 分欄 schema**（① R20 Q4(b) 採納）：受審錨點格改為
 > `commit` / `plan_blob_oid`(40-hex) / `plan_sha256`(64-hex) / `packet_sha256`(64-hex)。
 > 該格仍為**單一 cell**，故 §15.2 之「每列恰 6 cells」不變式不受影響；
 > §15.2 之 event key 仍為**四元組** `(gate, round, verdict, reviewed-anchor)`，
-> `#24`–`#26` 之四元組互異（`#24` gate 為 ②；`#25`／`#26` 同為 ① 而 round 不同）。`#1`–`#23` 維持原格式，其語意由 §14.27 界定，**🚫 不回寫**。
+> `#24`–`#28` 之四元組互異（`#24` gate 為 ②；`#25`／`#26` 同為 ① 而 round 不同；
+> `#27` gate 為 ②、round `R6`；`#28` gate 為 `owner`、round `—`、verdict `CODING_ALLOWED`）。
+> `#1`–`#23` 維持原格式，其語意由 §14.27 界定，**🚫 不回寫**。
 > ⚠ `#24`／`#25`／`#26` 之受審 commit 相同（`6c5e2508`）—— 三輪之間**未產生任何 commit**，屬事實紀錄。
+> ⚠ `#27`／`#28` 之錨點同為 `156b9565`：② R6 審的是該 commit，而 owner 核發時 branch HEAD 亦為該 commit。
+> ⚠ `#28` 之 `packet_sha256` 為 `n/a` —— owner 核發不經 packet 承載。此為 schema 之誠實留空，
+> 🚫 不得被讀成「packet 遺失」或「該欄未量測」。
 
 ### 14.0 傳輸前置（3 輪，**皆非內容 finding**）
 
@@ -2141,6 +2161,111 @@ ledger `#21` 記 blob `bc25d6c8`。immutable git replay 得
 
 ⚠ 🚫 本節**不**對「batch E 是否還會有其他具名 review round」作前瞻宣稱 ——
 ① R21 同時指定了「② finding > 0 則按 finding 回 ①」之回頭路。
+
+### 14.29 ② Codex Plan Gate R6 之處置 ＋ owner `CODING_ALLOWED` 核發 ＋ code commit receipt
+
+> ⚠ 本節為**處置紀錄**，🚫 非 receipt core、🚫 不進 §14.14 registry。
+> ⚠ 本節記錄之外部裁決以其原文為準；🚫 本節不得被引用為「我方已自證通過」。
+
+**② R6 ＝ `CODEX_PLAN_APPROVED @ 156b9565`**（ledger `#27`）。② 之 Minimal Safe Fix 明示：
+不需重建 packet、不需再做 PLAN commit；後續 coding／code gate 必 (a) 僅修改
+`functions/utils/audit-log.ts`、(b) 對 **actual committed source** fresh 重跑四項 predicate、
+(c) 另跑既定 ESLint／ratchet／tests／functions build、(d) **🚫 不得沿用 ② 該輪之 prospective
+overlay 結果**取代 code-gate evidence。
+
+**2 項 packet-only NB 之處置**：
+- `PKT-E-R6-NB1`：本輪 code handoff **未**再使用 `N/A` —— 四項 predicate 皆對 `56af5afe` 實跑（見下）。
+- `PKT-E-R6-NB2`：`[N1]` extraction rule 之 framing-LF 語義將於**下一份 packet** 明定。
+  ⚠ 本節🚫 不宣稱其已修復 —— 該修法屬 packet builder，尚未產出新 packet。
+
+**owner `CODING_ALLOWED`**（ledger `#28`）：2026-08-22 明示核發，並指定維度 A 採單 agent 對抗式。
+
+**code commit receipt ＝ `56af5afe`**（`ARCH-E-R14-L1` 之 `CODE_COMMIT_STAGED_SET` 恰 1 檔）：
+
+| §7.11 predicate | 實測（對 `56af5afe`） |
+|---|---|
+| ① candidate identity | commit `56af5afea678be7c6be5a0abd53a0a2d9af72270` · path `functions/utils/audit-log.ts` · blob `2fb18ebd47ab459f69c4c9425ce6fb4076a7eb52`（base blob `0894b592c580ad77077b19047fb34fb3db12ab2a`） |
+| ② scope | `git diff --name-status main...HEAD` ＝ 恰 2（plan doc `A` ＋ source `M`）；source numstat **`21 8`**，與 §5.4.1 預測逐項相符 |
+| ③ forced tsc | `362 → 352`；**REMOVED raw ＝ 10**，全為 `TS7006`、全在本檔、逐條對應 §4.2 之 `(line,col)`；**ADDED ＝ 0**（repo-wide，raw 與 distinct 皆 0）；本檔剩餘診斷 **0**。比對法為 **multiset(bag) subtraction 並保留 multiplicity**（`CODEX-E-R1-RR3`），且斷言母體非空 |
+| ④ 非空 emit byte-identical | base 與候選皆 `bytes=6760 CR=0 diags=0`、`sha256=78eef5c2210d0882e19045a10146b370729a86b64f7edda930d02e412d0d5e57` ⇒ **identical**。候選取自 **immutable committed blob**，非 worktree |
+
+**負向控制（三個，皆轉紅，證上述量測非恆綠）**：
+1. emit 注入恰一行 runtime 敘述 `const __NEG__ = 1` ⇒ `6779 B`、`Δ = +19`，與 §6.4 之 Δ 相同。
+   ⚠ 本輪注入點在檔尾，得 `sha256=099d945f…`；§6.4 記錄之 `2405ebb5…` 係注入於
+   `GENESIS_HASH` 之後。我方**實測驗證**：於本候選之該位置注入即精確重現 `2405ebb5…`
+   ⇒ 兩值差異純由注入位置造成，**且反向佐證本候選與 §6.3 之 cast-B overlay source 逐字相同**。
+2. `NC-3`（§4.4 指定）：將 `err` 收窄為 `Error | null | undefined` ⇒
+   `tests/integration/audit-log.test.ts(149,34)` 產生 **`TS2345` 恰 1 raw**（非成雙，符 §6.0 單 leaf 推論），
+   證 `err: unknown` 之標註 **load-bearing**。已還原，還原後檔案 sha256 與注入前逐字相同。
+3. coverage exclude：本檔於 `test:cov` 報表命中 **0**，而同目錄未被 exclude 之 `audit-policy.ts`
+   **確有出現** ⇒ 該 0 是真實排除，🚫 不是報表格式造成的假綠。
+
+**gates**：`lint` 0 · `verify:browser-pipeline` 0 · `test:cov` 740/740 · `test:int` 1385/1385
+（含 `audit-log.test.ts` 9/9）· `build:functions` 0 · `npm audit --omit=dev --audit-level=high` 0 ·
+`typecheck:ratchet` `352/325`（baseline `1119/175` 凍結、未 `--update`）·
+非 CI 之 `lint:migrations`／`lint:handlers`／`lint:archive-no-delete` 各 0。
+
+⚠ **ratchet 之 diff-based 規則母體曾一度為空（自審抓到，已修正）**：`typecheck:ratchet` 的
+`BAN_PATTERNS`（規則 C/D/E）掃的是 `origin/main...HEAD` 之 unified diff。在 code 尚未 commit 時，
+該母體**不含本改動** ⇒ 當時的 `ratchet OK` 對「0 新增 suppression」而言是 **vacuous**。
+commit 後重跑，`git diff --name-only origin/main...HEAD -- functions/utils/audit-log.ts` 已命中該檔
+（母體非空），ratchet 仍 exit 0。🚫 pre-commit 那次不得被引用為 suppression gate 之證據。
+（同族教訓見 [[feedback_guard_population_must_cover_property]]。）
+
+### 14.30 🚨 §4.3 ／ §10.1 `admin_email` producer census errata
+
+> ⚠ 本節為**errata**，🚫 非 receipt core、🚫 不進 §14.14 registry。
+> ⚠ §4.3 與 §10.1 之**原 bytes 逐字保留、🚫 未回寫** —— 保存的是「當時確實宣稱了錯誤數字」。
+> 兩處僅就地加一行指標指向本節（依 §5.4.1「須就地標註差異與原因」）。
+
+三項失準由本棒 coding 階段之單 agent 對抗式自審抓到，我方逐條實測確認**全部成立**。
+三者同屬 **quantified claim ／ 母體宣稱失準**族（`feedback_pr_coverage_claim_accuracy` ＋
+`feedback_guard_population_must_cover_property`），非孤立筆誤：
+
+| # | 位置 | 原宣稱 | 實測 | 性質 |
+|---|---|---|---|---|
+| E-1 | §4.3 | 「**7 個檔**、8 個呼叫點」 | 其自列證據僅 **6 個相異檔**（8 sites 正確） | 檔數與自帶證據互斥 |
+| E-2 | §10.1 | 「至少 9 個呼叫點、**8 個檔**」；屆時「10 處、**9 檔**」 | 承 E-1 ⇒ 應為 **9 處 / 7 檔**、屆時 **10 處 / 8 檔** | E-1 之級聯 |
+| E-3 | §10.1 | `changeUserRole` 命中 **15**（測試 11） | base `0a6593f6` 重播得 **16**（測試 **12**） | 計數失準；latent 結論不受影響 |
+
+**E-4（母體漏列 ＋ 機制判斷錯誤，最實質的一項）**：§10.1 稱
+`functions/api/admin/audit/[id].ts:55` 之所以不顯現，是因「該檔仍是 13 個殘域檔之一、
+其 `user` 仍為 implicit any」，並預測「該檔型別化後會加入此清單」。**兩句皆不成立**：
+
+- `stepCheck` 來自 `requireStepUp()`，而 `functions/utils/auth.ts` 對其有**顯式回傳標註**
+  `Promise<{ user: AuthedUser | null; error: Response | null }>`，且 `AuthedUser` 之 `email?: string`
+  是**具名欄位**、非 index signature ⇒ `stepCheck.user.email` 之型別為 `string`，**不是** implicit `any`。
+- 該檔確為殘域檔（`(20,41)/(20,50)/(20,55)` 三條 `TS7031`），但那是 **handler binding element**
+  （`request`／`env`／`params`）；標註它們**不會**改變 `stepCheck.user.email` 的型別
+  ⇒ 「型別化後會加入此清單」為假。
+- 真正的分野是 **`RoleCheckedUser` 之 index-signature（⇒ `unknown`）vs `AuthedUser` 之具名欄位（⇒ `string`）**。
+
+**真實母體（實測全枚舉，排除 `audit-log.ts` 自身）＝ 12 個 producer site ／ 9 個檔**：
+
+| 檔 | site | `user.email` 之來源型別 |
+|---|---|---|
+| `admin/audit/[id].ts` | `:55` | `stepCheck` ⇒ `string` |
+| `admin/audit-aggregate-archive/retry.ts` | `:239` | `requireRole` ⇒ `unknown` |
+| `admin/audit-archive/retry.ts` | `:164` | `requireRole` ⇒ `unknown` |
+| `admin/oauth-clients.ts` | `:160` | `requireRole` ⇒ `unknown` |
+| **`admin/oauth-clients/[client_id].ts`** | **`:161` · `:213`** | `stepCheck` ⇒ `string` ｜ ⚠ **§4.3／§10.1 全文未提及** |
+| `admin/revoke.ts` | `:73` · `:120` · `:153` | `requireRole` ⇒ `unknown` |
+| `admin/users/[id]/ban.ts` | `:62` | `requireRole` ⇒ `unknown` |
+| `admin/users/[id]/unban.ts` | `:64` | `requireRole` ⇒ `unknown` |
+| `utils/role-change.ts` | `:86` | `actorEmail ?? null` ⇒ `string \| null` |
+
+**影響**：`TD-BATCHE-1`（§10.1）是要**外送 backlog 的稽核寫入端 scope 定義**。
+若沿用少算檔數、機制講錯、且漏兩個 site 的敘述，下一棒的守衛母體會**天生不足**
+—— 這正是 `feedback_guard_population_must_cover_property` 所述之結構性假綠。
+故本節之表取代 §4.3／§10.1 之相應數字，作為 `TD-BATCHE-1` 之**母體 SoT**。
+
+🚫 **本節不修 `TD-BATCHE-1` 本身**（§13 非目標），亦 🚫 不改動任何 production 檔；
+僅更正母體描述。實際硬化仍屬 backlog。
+
+⚠ **本 errata 之發現時點與意義**：三項失準（E-1／E-2／E-3）在 §4.3／§10.1 中存活了
+**24 輪外部審查**（① 21／② 3），①②皆未抓到，最後由一個**唯讀對抗式 agent** 在 coding
+階段逐條重播 grep 抓出。⇒ 佐證 §7.11 之方向正確：**能被外部獨立重播的機械 predicate，
+比再多輪 prose 審查更能抓到量化失準**。
 
 ## 15.2 gate-event 完整性 oracle（`ARCH-E-R7-RR1` ／ `R8-RR1` ／ `R9-RR1` 之結構性修法）
 
