@@ -944,7 +944,7 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 6. 不新增／不修改測試（§8）
 7. 不新增任何 runtime validation、不改任何 SQL、不改任何 audit event 名
 8. 不建立 repo 內 scanner／gate script（§5.4）
-9. 不裁定其他 15 個單元的字母對映（`SPEC-B3`）
+9. 不裁定其餘 **10** 個未裁定單元的字母對映（`SPEC-B3`；對映帳見 §2.1.1）
 10. 不處置 `TD-BATCHB-1` / `TD-BATCHB-2`（外送 backlog）
 
 ---
@@ -972,6 +972,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 11 | 2026-08-22 | PLAN R1 commit `9d1f29d5`；① packet v1 送出（`2aa808b8…` ＋ plan 副本 `942afd65…`） | §14.2 |
 | 12 | 2026-08-23 | **① R1 verdict ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocker／2 Required／2 Non-blocking），錨點 PLAN `9d1f29d5` | §14.2 |
 | 13 | 2026-08-23 | ① R1 兩個 Required 處置完成（ultra-narrow，**PLAN-only、零 code diff 變動**） | §14.2 |
+| 14 | 2026-08-23 | PLAN R2 HEAD `d31cb3e2`；① R2 delta packet 送出（`5f68f9d2…`） | §14.3 |
+| 15 | 2026-08-23 | **① R2 verdict ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocker／**1 Required**／2 NB carry-forward）：`ARCH-BR-R1` 與 `ARCH-BR-R2` **CLOSED**；新增 `ARCH-BR-R2-RR1-VERDICT-AMPLIFICATION` | §14.3 |
+| 16 | 2026-08-23 | `ARCH-BR-R2-RR1` 族處置完成（4 成員；**PLAN-only、零 code diff 變動**） | §14.3 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1012,8 +1015,10 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-29` | 依 `SR-28` 教訓做**族掃描**後發現：`ARCH-BR-R2` 之過度宣稱**不只在 §12** —— §1 之「零 runtime delta」與 §8 之「不存在任何新的 runtime 行為」同樣是由單檔 transpile 證據跨推 runtime 級性質 | **R2 族存活成員**（① 只點名 §12） | 兩處一併加範圍限定；三處（§1／§8／§12）同時封上。⚠ 這是**同一個 Required 的完整族處置**，🚫 非新增 scope |
 | `SR-30` | §14.0 表格內有**三個**空行（在 `SR-21`／`SR-24`／`SR-25` 三列之後）⇒ markdown 把單一表格切成四張，渲染破碎 | 文件結構 | 刪除三個空行，恢復單一連續表格。⚠ **肉眼只抓到 2 個，第 3 個由機械掃描抓出**（母體＝全檔 25 張表之全部列）—— 再次印證「族處置須靠枚舉、不靠記憶」 |
 | `SR-31` | `SR-28` 註記被插在「代替對真實母體的量測。」與其結論句「⇒ 印證…修過不代表免疫」之間 ⇒ 該結論句脫離其所屬段落、看起來像在總結 `SR-28` | 文脈斷裂 | 把結論句移回原段落末；`SR-28`／`SR-29` 合併為獨立註記段 |
+| `SR-32` | §13 非目標第 9 項仍寫「其他 **15** 個單元」⇒ `SR-13`（單元數帳）之**第三個成員**，我修 §2.1.1 與 §3 時漏掉 | **實質錯誤**（族處置不完整，第 3 次） | 改為「其餘 **10** 個未裁定單元」＋ 指向 §2.1.1 對映帳 |
+| `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
 
-**根因分布（供後續棒次參考）**：31 條中 **10 條**
+**根因分布（供後續棒次參考）**：33 條中 **10 條**
 （`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26`）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
@@ -1029,6 +1034,19 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 與 [[feedback_guard_population_must_cover_property]] 同一紀律（母體先於處置），
 亦即使用者基線所稱「**處置單位是族、不是案例**」。
 
+⚠ **`SR-32` ／ `SR-33` ＝ 同一紀律的第三、四次實測（族處置在本棒共失敗 4 次）**：
+
+| 輪次 | finding | 被點名的成員 | 族的真實規模 | 我漏掉幾個 |
+|---|---|---|---|---|
+| 自審 | `SR-13`（單元數帳） | — | **3**（§2.1.1 · §3 · §13） | 1（§13，`SR-32` 才補） |
+| ① R1 → R2 | `ARCH-BR-R1`（SoT 矛盾） | 開頭段落 | **2**（＋ ledger 標題） | 1（`SR-28` 才補） |
+| ① R1 → R2 | `ARCH-BR-R2`（emit 跨推） | §12 | **3**（＋ §1 · §8） | 2（`SR-29` 才補） |
+| ① R2 → R3 | `ARCH-BR-R2-RR1`（語氣升格） | §14.2.3 標題 · `B-OD-2` | **4**（＋ `B-OD-1` · §14.1 標題） | 2（`SR-33` 才補） |
+
+**四次的共同形態**：外部 gate 只點名它**看得到的**成員（它無 repo 全文），
+我若照字面處置就必然漏；**族的枚舉責任在我方，不在 gate**。
+⇒ 收到任何語意類 finding，**先寫下「這個語意的母體是什麼」再動手**，🚫 不得從被點名的那一處開始修。
+
 ⚠ **`SR-21` 屬另一族且值得單獨記錄**：它不是量測失準，而是**新引入的識別字撞上既有識別字、且語意不同**。
 自審之所以抓到，是因為對「新增的每一個公開/半公開名稱」主動跑一次 repo-wide 命名母體掃描 ——
 🚫 不是靠「我覺得這個名字很自然」。建議後續棒次把此步驟列為**新增型別/常數時的固定動作**。
@@ -1042,7 +1060,14 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 > - ③ Codex Code Gate：verdict ＋ 錨點 SHA — _待填_
 > - ④ ChatGPT faithfulness：verdict ＋ 錨點 SHA — _待填_
 
-### 14.1 承接自批 E 之未結項（**非本棒新發現，🚫 不得當成 blocker 重開**）
+### 14.1 承接自批 E 之未結項（**非本棒新發現；本棒不處置**）
+
+> ⚠ **效力範圍（`ARCH-BR-R2-RR1` 族之處置，`SR-33`）**：本節初稿標題曾寫
+> 「🚫 不得當成 blocker 重開」—— 那是**我自行核發的、對未來 gate 的永久禁令，無任何授權來源**。
+> 已改回忠實語意：這些是**繼承自批 E 的既有未結項，不在本棒 scope 內**；
+> 🚫 本節**不剝奪**任何後續 gate 就其升級 blocker 的權力。
+> 若某後續 gate 認為其中一項對本棒構成 blocker，正確處理是**回報 owner 裁定 scope**，
+> 而非由本檔預先封殺。
 
 | ID | 內容 | 處置 |
 |---|---|---|
@@ -1080,16 +1105,33 @@ R2 複核三點＝(1) SoT 模型不再矛盾 (2) §12 不再跨推 bundle (3) `B
 | `ARCH-BR-NB1-PROJECTION-NAME` | `UserAuditProjectionRow` 語意更強，但現有 JSDoc 已充分限定；**不值得為此阻擋或增加本輪 diff** | **不做**，carry-forward | ① 明示不值得增加本輪 diff；改名會動到 §4.1 逐字 block ⇒ 改變 code diff 與 anchor `79792231…`，違反 R2 之 ultra-narrow 與「code diff 未擴張」複核點 |
 | `ARCH-BR-NB2-GUARANTEE-WORDING` | 「唯一保證」宜改為「維護義務／人工契約」；**後續若正在碰同段**再改；本項單獨不阻擋 | **不做**，carry-forward | 該措辭同時存在於 §4.4 **與 §4.1 之 JSDoc 逐字內容**（後者即 production source 文字）。只改 PLAN 散文會使兩者**去同步**，比不改更糟；要改就得動 source ⇒ 違反 ① 之「不得改 `audit.ts`」。⚠ 若後續 gate 認為值得，應**整組**（JSDoc ＋ §4.4）一起改並重測 anchor |
 
-#### 14.2.3 ① 對四個架構問題之裁決（**已 accept，🚫 後續不得重開為 blocker**）
+#### 14.2.3 ① 對四個架構問題之 R1 裁決（**於 R1 受審錨點與證據下 accepted**）
+
+> ⚠ **本節之效力範圍（`ARCH-BR-R2-RR1` 之處置）**：
+> Architecture acceptance 只表示「**在 R1 當時的受審 anchor（PLAN `9d1f29d5` / base `acc98dfb`）、
+> scope 與證據之下**，該項無 blocker」。🚫 **不是**永久 immutable 裁決。
+> 若 anchor 漂移、scope 改變、證據失效、出現新事實，或發現原裁決依據有誤，
+> **後續 gate 保留重新升級為 blocker 的權力** —— 這是 fail-safe gate 的必要屬性，🚫 不得被本檔削弱。
+>
+> 反向的節流（防無限重開）：**除 anchor／scope／evidence 改變、出現新事實、或發現裁決依據錯誤外，
+> 後續不得無理由重審已裁項。**
+>
+> ⚠ 本節初稿曾把標題寫成「已 accept，🚫 後續不得重開為 blocker」，
+> 係**轉錄時的權限升格**（`accepted → immutable`），① R1 從未核發該永久鎖。見 `SR-33`。
 
 1. **字母 → scope 首次落成 artifact ＝ 接受** —— 正確區分 authority（owner `SPEC-B1`）與 evidence（結構量測），
    未把「殘域恰一組 GET/DELETE 配對」倒推成字母權威。
 2. **`B-OD-1` ＝ 接受 v2** —— 但 ① 明示理由是**結構性的**（單一邊界建型別／callback 自然 contextual typing／
-   `filteredRows` 不再是 `any`／標註數更少），**byte-identical 只是額外證據與 tie-breaker，
-   🚫 不得升格為凌駕型別正確性的硬原則**。⚠ 後續棒次引用本案時須照此限定，不得寫成「emit 差一 byte 即不可接受」。
-3. **`B-OD-2` ＝ 接受避名，不要求本棒重構** —— 且 ① 明確**否決**「統一兩者」方向
-   （兩者本就不是同一概念）；若未來要改善，方向是**更明確地 disambiguate**
-   （例：`AdminAuditLogRow` ／ `UserAuditProjectionRow`）。⚠ 🚫 不得開「統一命名」backlog。
+   `filteredRows` 不再是 `any`／標註數更少）；① 之原話為「byte-identical 是很好的額外證據／tie-breaker，
+   **不應**升格成凌駕型別正確性的硬原則」。
+   ⚠ 故引用本案時**宜**寫成「tie-breaker」而非「emit 差一 byte 即不可接受」。
+   （⚠ 本節初稿把 ① 的「不應」轉錄成「🚫 不得」並自行外加「後續棒次…須照此限定」，
+   屬同族的語氣升格，已改回 ① 原有強度；見 `SR-33`。）
+3. **`B-OD-2` ＝ 接受避名，不要求本棒重構** —— ① R1 **不建議**以「統一兩者」作為 backlog 方向
+   （理由：兩者本就不是同一概念）；**若未來要改善，① 建議以更明確的 disambiguation 為方向**
+   （例：`AdminAuditLogRow` ／ `UserAuditProjectionRow`）。
+   ⚠ 本棒據此**不開**「統一命名」backlog —— 這是**本棒的處置決定**，
+   🚫 **不是** ① 核發的「禁止建立該類 backlog」之治理命令；owner／後續 gate 之權限不受本節限制。
 4. **`UserAuditRow` ＝ 現方案可接受，不退回 `Record<string, unknown>`** —— 固定 SELECT projection 的
    局部契約值得明確建模；關鍵是已正確承認 D1 `any` 使賦值無 compiler/runtime validation。
 
@@ -1103,6 +1145,61 @@ R2 複核三點＝(1) SoT 模型不再矛盾 (2) §12 不再跨推 bundle (3) `B
 
 依 ① 之建議採用：**保留 in-flight marker**，但視為**非權威 cache**；
 **清理義務**＝branch abandon／rebase 失效／merge 後**皆須同步更新或清除**該 marker。
+
+---
+
+### 14.3 ① ChatGPT Architecture Gate — R2 verdict 與處置 receipt
+
+**verdict**：`CHATGPT_ARCH_CHANGES_REQUESTED` — **0 Blocker ／ 1 Required ／ 2 Non-blocking carry-forward**
+**受審錨點**：PLAN commit `d31cb3e2`；base `acc98dfb`
+**① R2 對三個指定複核點之結果**：
+
+| 複核點 | 結果 |
+|---|---|
+| 1. SoT ／ self-review closure 不再矛盾 | **PASS** |
+| 2. 單檔 emit 不再跨推 bundle | **PASS** |
+| 3. OD ／ `UserAuditRow` ／ scope ／ code diff 未擴張 | **code/design PASS；governance transcription FAIL**（唯一 Required） |
+
+**R1 兩項 Required 之終局**：
+
+| ID | R2 判定 |
+|---|---|
+| `ARCH-BR-R1-STATE-SOT-CLOSURE-GAP` | **CLOSED** |
+| `ARCH-BR-R2-EMIT-EVIDENCE-SCOPE-ESCAPE` | **CLOSED** |
+
+#### 14.3.1 `ARCH-BR-R2-RR1-VERDICT-AMPLIFICATION`（新 Required）之處置
+
+**① 之 finding**：R2 在**記錄 R1 裁決時**把 anchor-scoped acceptance 擴張成永久 governance prohibition，
+超過 R1 實際裁決。①：「`accepted → immutable`、`不建議 → 禁止` 都是轉錄時發生的**權限升格**」，
+並指出這與本棒自審的 `SR-28`／`SR-29` 屬同一紀律，**只是母體換成了「裁決轉錄的語氣強度」**。
+
+**族枚舉（`SR-33`；母體 ＝ 全檔中歸屬外部方之敘述行，零收窄）** —— 共 **4 個成員**，① 只點名前 2 個：
+
+| # | 位置 | 原文（升格後） | ① 之實際裁決 | 處置 |
+|---|---|---|---|---|
+| 1 | §14.2.3 標題 | 「已 accept，**🚫 後續不得重開為 blocker**」 | acceptance 只在受審 anchor／scope／證據下成立 | 標題改為「**於 R1 受審錨點與證據下 accepted**」；刪除永久鎖；補明「後續 gate 保留升級 blocker 之權力」＋ 反向節流條款 |
+| 2 | §14.2.3 `B-OD-2` | 「① **明確否決**『統一兩者』方向」＋「**🚫 不得開**『統一命名』backlog」 | ①「**不建議**」以統一兩者作 backlog 方向；建議方向為 disambiguation | 改回「不建議／建議」；明標「本棒不開該 backlog ＝ **本棒的處置決定**，非 ① 之治理命令；owner／後續 gate 權限不受限」 |
+| 3 | §14.2.3 `B-OD-1` | 「**🚫 不得**升格為硬原則」＋ 自行外加「後續棒次引用本案時**須**照此限定」 | ① 原話為「**不應**升格成凌駕型別正確性的硬原則」 | 引 ① 原話與原強度；自行外加之條款降為「**宜**」 |
+| 4 | **§14.1 標題** | 「非本棒新發現，**🚫 不得當成 blocker 重開**」 | **無任何授權來源** —— 此為我自行核發之永久禁令 | 改為「非本棒新發現；本棒不處置」；明標不剝奪後續 gate 之升級權；若後續 gate 認其構成 blocker，正確處理是回報 owner 裁定 scope |
+
+⚠ 第 3、4 項**未被 ① 點名**，是依 ① 指出的族定義自行掃出的。
+第 4 項尤其值得記錄：它**不是轉錄升格，而是我憑空自簽的治理命令** —— 沒有任何外部裁決作為來源。
+
+#### 14.3.2 本輪 code diff 面不變式（① 複核點 3）
+
+| 不變式 | 值 | 三輪是否變動 |
+|---|---|---|
+| production source blob | `ec2a9b0795d500d72159988071807be86e8d049f` | **未動一行** |
+| overlay anchor sha256 | `7979223135b8e6ed80b807f1f1262f2c4bebbe57e40e568eadc69705af39d450` | 未變 |
+| code diff stat | `+29 / -3` | 未變 |
+| hunk 標頭 ×3 | `@@ -42,7 +42,33 @@` · `@@ -58,7 +84,7 @@` · `@@ -127,7 +153,7 @@` | 未變 |
+| `SPEC-B1/2/3` · `B-OD-1` · `B-OD-2` · `interface UserAuditRow` | — | **零修改行** |
+
+#### 14.3.3 兩項 Non-blocking：維持 carry-forward
+
+① R2 重申 `ARCH-BR-NB1-PROJECTION-NAME` 與 `ARCH-BR-NB2-GUARANTEE-WORDING` 為
+**Non-blocking carry-forward，本輪不需要做**，且明確認可
+「**不為 NB2 去碰 source 的判斷正確**」。處置理由見 §14.2.2，本輪不變。
 
 ---
 
