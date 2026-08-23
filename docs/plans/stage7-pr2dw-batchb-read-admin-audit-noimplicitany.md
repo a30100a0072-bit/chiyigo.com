@@ -589,15 +589,24 @@ OVERLAY(temp)    srcBytes= 7495 srcCR=0  emitBytes= 6599 emitCR=0 diags=0  sha25
 exit=0
 ```
 
-**逐條負向控制實測（每條各注入一次，全部 `exit 1`）**：
+**逐條負向控制實測（`SR-39` 修正後；每條同時斷言 exit code ＋ 失敗守衛身分）**：
 ```
-[守衛1 src 空]        exit=1
-[守衛2 src 含 CR]     exit=1
-[守衛5 diags>0]       exit=1
-[守衛6 非 identical]  exit=1     ← 注入＝落選設計 v1
+═══ 正向 ═══
+  ✓ 真實 overlay              exit=0  命中「ALL GUARDS PASSED」
+═══ 負向（逐條隔離；斷言守衛身分）═══
+  ✓ guard 1  src 非空          exit=1  命中「source is EMPTY」
+  ✓ guard 2  src CR=0          exit=1  命中「source contains」
+  ✓ guard 5  transpile diags=0 exit=1  命中「transpile diagnostics」   ← 注入＝ type __BROKEN = ;
+  ✓ guard 6  BYTE-IDENTICAL    exit=1  命中「BYTE-IDENTICAL FAILED」   ← 注入＝落選設計 v1
+  結果：5 passed, 0 failed
 ```
 ⚠ 守衛 3／4（emit 非空／emit CR=0）在本檔輸入下**無法獨立注入**（其前提已被守衛 1／2 攔下）
-⇒ 如實標示為「未獨立驗證」，🚫 不宣稱 6/6 皆已個別證明；**實測獨立轉紅者為 4 條**。
+⇒ 如實標示為「未獨立驗證」，🚫 不宣稱 6/6；**獨立驗證者恰 4 條（1／2／5／6）**。
+
+> 🚨 **errata（`SR-39`）**：本節上一版列的同樣是「4 條」，但當時 guard 5 的注入
+> （`const x: number = "str"`）**實際觸發的是 guard 6** —— `transpileModule` 不做 semantic 檢查、
+> 該注入之 `diagnostics = 0`，是新增的 runtime `const` 改了 emit。
+> ⇒ 上一版的「4 條」**為假，真實只有 3 條**（1／2／6）。現在的 4 條是換注入後重測所得。
 
 ⚠ **`srcBytes` 差 1297 而 `emitBytes` 一位元組不差** —— 這正是「型別層全部 erase」的直接觀測：
 新增的 26 行（JSDoc ＋ `interface`）與 3 處標註在 emit 中完全消失。
@@ -618,8 +627,10 @@ coding 階段落地後之 `functions/api/admin/audit.ts` **必須**雜湊到此�
 > `srcCR = 0`、`emitCR = 0`、`diags = 0`」—— **該宣稱當時為假**。舊腳本只對空 input／空 output
 > `throw`，其餘三項與 `BYTE-IDENTICAL:false` **只是 `console.log`，程序仍 exit 0**。
 > ⇒ 一個「印出 `GUARD: false` 卻回報成功」的量測器，正是本棒反覆在批判的**結構性假綠**，
-> 而這次是**我自己的守衛**。已於 §6.6 步驟 4 改為 6 條守衛全部累積失敗 → non-zero exit，
-> 並補上逐條負向控制（**實測獨立轉紅 4 條**；守衛 3／4 在本檔輸入下無法獨立注入，如實標示）。
+> 而這次是**我自己的守衛**。已於 §6.6 步驟 4 改為 6 條守衛全部累積失敗 → non-zero exit。
+> ⚠ **本 errata 當時同時宣稱「實測獨立轉紅 4 條」，該數字亦為假**（真實 3 條）——
+> 見 `SR-39`：當時 guard 5 的注入實際觸發的是 guard 6。修正後才真正達到 4 條（1／2／5／6）。
+> ⇒ 一個 errata 自己帶著另一個未被發現的錯值，是本棒第 2 次（前次為 `SR-1` → `SR-21` 之連鎖）。
 
 **現行守衛（fail-closed，共 6 條）**：src 非空 · src CR=0 · emit 非空 · emit CR=0 · transpile diags=0 · BYTE-IDENTICAL。
 腳本與逐條負向控制見 §6.6 步驟 4／5。
@@ -705,39 +716,106 @@ git status --porcelain → 僅 "?? CLEANUP_PLAN.md"
 **Shell 需求（不可省）**：步驟 2／3 使用 process substitution `<(...)` 與 `comm`，需 **bash**
 （本機為 Git Bash；Linux/macOS 原生可）。🚫 PowerShell 不支援 `<(...)`。步驟 4 為 Node ESM，任何 shell 皆可。
 
-### 6.6.0 🔒 隔離契約（`ISOLATION-CONTRACT`；**先讀完再執行任何一行**）
+### 6.6.0 🔒 `REPLAY-AUTHORIZATION-TIERS`（② R2 Blocker 之處置；**先讀完再執行任何一行**）
 
-**硬規則：本 recipe 的任何步驟 🚫 不得在共用工作樹執行。**
+> 🚨 **② R2 指出兩件事，我方實測確認皆成立：**
+> 1. 舊 §6.6.1 是 **happy-path isolation** —— `mktemp` / clone / `cd` / checkout / `npm ci` 之間
+>    **沒有逐步失敗終止**。若 clone 或 `cd "$WORK/repo"` 失敗，bash 仍會往下走，
+>    後續 `git checkout` 可能落在 **caller 原 cwd（含來源共用 repo）** ⇒ 重現 R1 的污染風險。
+> 2. `.claude/agents/readonly-reviewer.md` 禁止**所有**寫檔／安裝／checkout／rm，
+>    **不限於共用工作樹**。⇒「disposable clone 保護了來源 repo」**不等於**授權 readonly reviewer 執行它。
+>    ⚠ ② 同時撤回其 R1 建議（把「isolated clone ＋ own npm ci」直接列為 reviewer-safe 是過廣的）。
 
-| 步驟 | 是否觸碰檔案系統 | 隔離方式 |
-|---|---|---|
-| 取 base source | ❌ 純讀 | `git show <sha>:<path>`（immutable blob → stdout／temp） |
-| emit identity（步驟 4） | 只讀 temp | 全記憶體 transpile；🚫 不需 checkout、🚫 不需 `npm ci` |
-| tsc 全量診斷 ／ ratchet ／ lint（步驟 2-3） | **需完整專案樹** | **一次性 disposable clone**（下方 §6.6.1），完事 `rm -rf` |
+**⇒ 本 recipe 分為兩個授權層。🚫 不得混用。**
 
-⚠ **為何 tsc 面無法全記憶體**：`tsc -b tsconfig.solution.json` 需要真實檔案樹與 `node_modules`。
-故該面**必須**用 disposable clone，🚫 不得退回共用樹。
-⚠ **🚫 不用 `git worktree add`**：本機曾有 junction 相關風險 —— `worktree remove` 會穿過 link
-清空目標（[[feedback_worktree_junction_deletes_target]] 實際發生過）。用 `git clone --local` 較安全。
-⚠ disposable clone **自帶 `npm ci`**，🚫 不借共用 repo 的 `node_modules`（同上風險）。
+| Tier | 誰可執行 | 涵蓋 | 對檔案系統之作用 |
+|---|---|---|---|
+| **A · readonly** | **readonly reviewer 可直接執行**（落在 `readonly-reviewer.md` 契約內） | base 側全部事實：base blob 身分 · base source 內容 · **base emit sha256** · changed-files · 不變式比對 | **零寫檔 · 零安裝 · 零 checkout · 零 rm**（`git show` ＋ `node --input-type=module -e`，內容走 **stdin**） |
+| **B · mutable disposable runner** | **需另行授權**；🚫 **readonly reviewer 不得執行** | overlay 重建 · `tsc` 全量診斷 · ratchet · lint · emit identity 之 overlay 側 · 逐條負向控制 | 寫 temp · `git clone` · `npm ci` · `rm -rf` |
 
-### 6.6.1 前置 — 建立一次性隔離環境（🚫 不動來源 repo）
+⚠ **為何 Tier B 無法降級為 Tier A**：`tsc -b tsconfig.solution.json` 需要真實檔案樹與 `node_modules`，
+無法全記憶體。⇒ 該面**必須**由具寫入授權者在 disposable 環境執行，
+🚫 不得退回共用樹、🚫 不得要求 readonly reviewer 代跑。
+⚠ **🚫 不用 `git worktree add`**：`worktree remove` 會穿過 junction 清空目標
+（[[feedback_worktree_junction_deletes_target]] 本機實際發生過）。用 `git clone --local`。
+⚠ Tier B 之 clone **自帶 `npm ci`**，🚫 不借共用 repo 的 `node_modules`（同上風險）。
+
+### 6.6.A Tier A — readonly 子集（**零寫檔**；readonly reviewer 可直接跑）
 
 ```bash
-SRC=<你的 chiyigo.com repo 路徑>        # 唯讀來源，全程不被修改
-WORK="$(mktemp -d)"                     # 一次性工作區
-trap 'rm -rf "$WORK"' EXIT              # ← 保證清理（含中途失敗）
+SRC=<chiyigo.com repo 路徑>          # 全程唯讀
+BASE=acc98dfbeeed237533b5b844338b5798a148ce8f
+PLAN=548e2b896d84e8d8693b565329dd342b7a6bc4fd     # 或後續 PLAN commit
 
-git clone --local --no-hardlinks "$SRC" "$WORK/repo"
-cd "$WORK/repo"
-git checkout --detach acc98dfbeeed237533b5b844338b5798a148ce8f   # detached：clone 內部，來源 repo 不受影響
-npm ci
+# A1 身分與 changed-files（純 git 讀）
+git -C "$SRC" rev-parse "$BASE:functions/api/admin/audit.ts"   # 期望 ec2a9b0795d500d72159988071807be86e8d049f
+git -C "$SRC" rev-parse "$PLAN:functions/api/admin/audit.ts"   # 期望同上 ⇒ source 未動一行
+git -C "$SRC" diff "$BASE" "$PLAN" --name-status                # 期望恰一行：A  docs/plans/…md
+
+# A2 base emit sha256 —— 內容走 stdin，🚫 不寫任何檔、🚫 不裝任何東西
+git -C "$SRC" show "$BASE:functions/api/admin/audit.ts" | node --input-type=module -e '
+import { createHash } from "node:crypto"; import { createRequire } from "node:module";
+const ts = createRequire(process.env.SRC + "/package.json")("typescript");
+let src = ""; for await (const c of process.stdin) src += c;
+const fails = []; const A = (c, m) => { if (!c) fails.push(m) };
+A(Buffer.byteLength(src,"utf8") > 0, "source is EMPTY");
+A((src.match(/\r/g)||[]).length === 0, "source contains CR");
+const out = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.ESNext, removeComments: false, newLine: ts.NewLineKind.LineFeed }, reportDiagnostics: true });
+const t = out.outputText;
+A(Buffer.byteLength(t,"utf8") > 0, "emit is EMPTY");
+A((t.match(/\r/g)||[]).length === 0, "emit contains CR");
+A(out.diagnostics.length === 0, "transpile diagnostics = " + out.diagnostics.length);
+const sha = createHash("sha256").update(t,"utf8").digest("hex");
+console.log("base emit sha256 = " + sha);
+A(sha === "10c1d1f87d28787475b481f8a210007863fd60bfd4bcabd827488139778b0b86", "BASE EMIT SHA MISMATCH");
+if (fails.length) { console.error("✗ " + fails.join(" · ")); process.exit(1) }
+console.log("✓ base 側 5 條守衛全過");'
+```
+⚠ 上式需 `SRC` 已 export（`export SRC=<路徑>`），因為 `node -e` 內以 `process.env.SRC` 取 typescript。
+**本棒實測**：exit 0、`base emit sha256 = 10c1d1f8…`、`✓ base 側 5 條守衛全過`。
+
+### 6.6.B Tier B — 前置：一次性隔離環境（**需寫入授權**；逐步 fail-closed）
+
+> ⚠ **🚫 不要盲加全域 `set -e`**（② R2 明示）：`tsc -b` 在本案**預期回非零**（base 有 352 條診斷），
+> 全域 `set -e` 會把預期中的非零當成失敗而中止。⇒ 逐步顯式判斷，預期非零者單獨捕捉。
+
+```bash
+set -u
+SRC=<chiyigo.com repo 路徑>
+BASE=acc98dfbeeed237533b5b844338b5798a148ce8f
+
+# B0 保存來源 repo 的 before 狀態（結束時做精確 equality 斷言）
+BEFORE_HEAD="$(git -C "$SRC" rev-parse HEAD)"                || { echo "FAIL: rev-parse"; exit 1; }
+BEFORE_BRANCH="$(git -C "$SRC" rev-parse --abbrev-ref HEAD)" || { echo "FAIL: branch"; exit 1; }
+BEFORE_STATUS="$(git -C "$SRC" status --porcelain)"          || { echo "FAIL: status"; exit 1; }
+
+# B1 建立 temp 並驗證 canonical containment（cleanup 前也再驗一次）
+WORK="$(mktemp -d)"                                          || { echo "FAIL: mktemp"; exit 1; }
+WORK="$(cd "$WORK" && pwd -P)"                               || { echo "FAIL: canonicalize"; exit 1; }
+TMPROOT="$(cd "${TMPDIR:-/tmp}" && pwd -P)"                  || { echo "FAIL: tmproot"; exit 1; }
+case "$WORK" in "$TMPROOT"/?*) : ;; *) echo "REFUSE: WORK 不在 temp 根之下：$WORK"; exit 1;; esac
+
+cleanup() {
+  case "$WORK" in "$TMPROOT"/?*) rm -rf "$WORK";;             # ← 再驗一次才刪
+    *) echo "REFUSE cleanup: $WORK 不在 temp 根之下，未刪除";; esac
+}
+trap cleanup EXIT
+
+# B2 clone / cd / checkout / install —— 每一步各自終止
+git clone --local --no-hardlinks "$SRC" "$WORK/repo" || { echo "FAIL: clone"; exit 1; }
+cd "$WORK/repo"                                      || { echo "FAIL: cd（🚫 後續步驟絕不可在原 cwd 執行）"; exit 1; }
+git rev-parse --show-toplevel | grep -qx "$WORK/repo" || { echo "FAIL: cwd 不是 clone 內部"; exit 1; }
+git checkout --detach "$BASE"                        || { echo "FAIL: checkout"; exit 1; }
+npm ci                                               || { echo "FAIL: npm ci"; exit 1; }
 ```
 
-**驗證來源 repo 未被觸碰**（執行後在**來源** repo 跑，應與執行前一致）：
+**B3 收尾 — 對來源 repo 做精確 equality 斷言**（🚫 不是「印出來看一眼」）：
 ```bash
-git -C "$SRC" rev-parse --abbrev-ref HEAD    # branch 未變
-git -C "$SRC" status --porcelain             # 未新增／未修改任何檔
+[ "$(git -C "$SRC" rev-parse HEAD)" = "$BEFORE_HEAD" ]                || { echo "SOURCE MUTATED: HEAD"; exit 1; }
+[ "$(git -C "$SRC" rev-parse --abbrev-ref HEAD)" = "$BEFORE_BRANCH" ] || { echo "SOURCE MUTATED: branch"; exit 1; }
+[ "$(git -C "$SRC" status --porcelain)" = "$BEFORE_STATUS" ]          || { echo "SOURCE MUTATED: worktree/index"; exit 1; }
+echo "✓ 來源 repo 未被觸碰（HEAD / branch / status 三項逐字相等）"
 ```
 
 **步驟 1 — base 診斷／ratchet／lint**（在 `$WORK/repo` 內）
@@ -810,27 +888,67 @@ assert(b.sha === o.sha, `BYTE-IDENTICAL FAILED: ${b.sha} !== ${o.sha}`)   // 守
 if (failures.length) { console.error('\n✗ ASSERTION FAILURES:'); for (const f of failures) console.error('  · ' + f); process.exit(1) }
 console.log('\n✓ ALL GUARDS PASSED (6/6)')
 ```
+**完整可執行 invocation（`SR-40`；舊版只給 usage 字串，缺實際命令與三個實參）**：
+```bash
+# 於 Tier B 環境內。把上方腳本存成 emit-identity.mjs（temp 目錄，🚫 不進 repo）
+cat > "$WORK/emit-identity.mjs" <<'MJS'
+…（上方腳本全文）…
+MJS
+node "$WORK/emit-identity.mjs" \
+     "$WORK/repo" \
+     acc98dfbeeed237533b5b844338b5798a148ce8f \
+     "$WORK/repo/functions/api/admin/audit.ts"
+#    └─ argv[2]=REPO（供 createRequire 解析 typescript）
+#       argv[3]=BASE_SHA（base 側走 git show，immutable）
+#       argv[4]=OVERLAY_PATH（overlay 側；此處為 clone 內已施標註的檔）
+echo "exit=$?"   # 期望 0
+```
+
 期望：兩側 `emitBytes = 6599`、`emitCR = 0`、`diags = 0`、`sha256 = 10c1d1f8…`、**exit 0 ＋ `ALL GUARDS PASSED (6/6)`**。
 
-**步驟 5 — 負向控制**（🚫 不只測一條；**每一條守衛各注入一次，全部期望 `exit 1`**）
+⚠ `ALL GUARDS PASSED (6/6)` 指**本次執行 6 條守衛皆成立**，
+🚫 **不**表示 6 條都已被負向控制個別證明 —— 後者見步驟 5（**恰 4 條**）。
 
-| 守衛 | 注入方式 | 期望 |
-|---|---|---|
-| 1 src 非空 | 傳入 0-byte 檔 | exit 1 |
-| 2 src CR=0 | 把 overlay 全部 `\n` 換成 `\r\n` | exit 1 |
-| 5 diags=0 | overlay 首行插 `const x: number = "str"` | exit 1 |
-| 6 BYTE-IDENTICAL | 改用落選設計 v1（標註兩個 callback 參數） | exit 1 |
+**步驟 5 — 負向控制**（🚫 不只看 exit code；**必須同時斷言「失敗的是哪一條守衛」**）
 
-⚠ 守衛 3（emit 非空）與守衛 4（emit CR=0）在本檔輸入下**無法獨立注入**
-（emit 為空需 source 為空 ⇒ 已被守衛 1 攔；emit CR 需 source CR ⇒ 已被守衛 2 攔）。
-**如實標示為「未獨立驗證」**，🚫 不宣稱 6/6 皆已個別注入證明 —— 實測獨立轉紅者為 **4 條**。
+> 🚨 **② R2 Required 之處置（`SR-39`）**：舊版 guard 5 注入 `const x: number = "str"`，
+> **並未測到 diagnostics guard**。我方以 repo 之 TypeScript 5.9.3 實測確認 ② 所言：
+> `transpileModule` **不做 semantic type checking** ⇒ 該注入之 `transpile diagnostics = 0`；
+> 其 `exit 1` 來自 **guard 6**（新增的 runtime `const` 改變了 emit），**不是 guard 5**。
+> ⇒ 舊「4 條獨立轉紅」之宣稱**為假，實際只有 3 條**（1／2／6）。
+> **根因**：負向控制只斷言 exit code，未斷言**失敗身分** —— 一個測不到自己要測的東西的負向控制。
+
+**修正後之注入（本棒實測）**：guard 5 改用**會被 erase 的語法錯誤** `type __BROKEN = ;`
+—— 實測 `transpile diagnostics = 1`（**TS1110**）且 **emit sha256 不變** ⇒ 乾淨隔離 guard 5。
+
+| 守衛 | 注入 | 期望 exit | **期望失敗訊息含** | 實測 |
+|---|---|---|---|---|
+| — 正向 | 真實 overlay | 0 | `ALL GUARDS PASSED` | ✓ |
+| 1 src 非空 | 0-byte 檔 | 1 | `source is EMPTY` | ✓ |
+| 2 src CR=0 | overlay 全 `\n`→`\r\n` | 1 | `source contains` | ✓ |
+| 5 diags=0 | overlay 首行插 `type __BROKEN = ;` | 1 | `transpile diagnostics` | ✓ |
+| 6 BYTE-IDENTICAL | 落選設計 v1 | 1 | `BYTE-IDENTICAL FAILED` | ✓ |
+
+**實測結果：`5 passed, 0 failed`**（1 正向 ＋ 4 負向，全部連**守衛身分**一起斷言）。
+
+⚠ 守衛 3（emit 非空）／守衛 4（emit CR=0）在本檔輸入下**無法獨立注入**
+（emit 空需 src 空 ⇒ 已被守衛 1 攔；emit CR 需 src CR ⇒ 已被守衛 2 攔）。
+**如實標示為「未獨立驗證」**，🚫 不宣稱 6/6 —— **獨立驗證者恰 4 條（1／2／5／6）**。
+
+⚠ **`transpile diagnostics` 這條守衛的涵蓋範圍（誠實限定）**：`transpileModule` 只回報
+**syntax／options** 層級的診斷，🚫 **不做 semantic type checking**。
+⇒ guard 5 **不能**用來證明「型別正確」；semantic 正確性由**完整 `tsc` oracle**負責
+（＝步驟 1／3 的 `tsc -b tsconfig.solution.json` 與 §6.1 之 set-diff）。
+🚫 不得把 emit oracle 的綠燈讀成型別檢查通過。
 
 另兩組屬**診斷 oracle**（非 emit oracle）之負向控制見 §6.4：
 `raw: unknown → raw: number` ⇒ `ADDED = 2`；設計 v1 ⇒ `BYTE-IDENTICAL: false`。
 
-**步驟 6 — 清理**：`rm -rf "$WORK"`（§6.6.1 的 `trap` 已保證，含中途失敗）。
-🚫 **不需要、也不得**對來源 repo 執行任何 `git checkout` / `git restore` ——
-本 recipe 全程未修改它。以 §6.6.1 末的兩行驗證來源 repo 之 branch 與 `status --porcelain` 未變。
+**步驟 6 — 清理與收尾斷言**（Tier B）：`cleanup()` 由 §6.6.B 的 `trap … EXIT` 保證（含中途失敗），
+且**刪除前再驗一次 canonical temp containment**，不符則拒刪並告警。
+🚫 **不需要、也不得**對來源 repo 執行任何 `git checkout` / `git restore` —— 本 recipe 全程未修改它。
+收尾須跑 **§6.6.B3 的三項逐字 equality 斷言**（`BEFORE_HEAD` / `BEFORE_BRANCH` / `BEFORE_STATUS`），
+🚫 不是「印出來看一眼」。
 
 ⚠ **本 recipe 的信任模型**：所有 base 側輸入皆 content-addressed（commit / blob SHA），
 外部可自行 `git cat-file` 驗證；overlay 側由 §6.3 anchor sha256 綁定。
@@ -1130,6 +1248,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 19 | 2026-08-23 | PLAN `ee240a1e`；② Codex Plan Gate packet 送出（`142cb51f…`） | §14.5 |
 | 20 | 2026-08-23 | **② R1 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（**1 Blocker `TS-BOUNDARY-002`**／1 Required `GOV-EVIDENCE-001`+`GOV-FAIL-001`）＠ `ee240a1e` | §14.5 |
 | 21 | 2026-08-23 | ② R1 兩個 family 處置完成（`UB-B-1` 登錄 ＋ replay recipe 隔離化 ＋ 守衛 fail-closed；**PLAN-only、零 code diff 變動**） | §14.5 |
+| 22 | 2026-08-23 | PLAN R2 `548e2b89`；② R2 delta packet 送出（`eedabcc3…`） | §14.6 |
+| 23 | 2026-08-23 | **② R2 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（1 Blocker／1 Required）；**`TS-BOUNDARY-002` CLOSED**；② **撤回**其 R1 之「必然改 changed-files／需重送 ①」與「isolated clone 即 reviewer-safe」兩項過廣前提 | §14.6 |
+| 24 | 2026-08-23 | ② R2 兩個 family 處置完成（`REPLAY-AUTHORIZATION-TIERS` 兩層 ＋ 逐步 fail-closed ＋ before/after equality 斷言 ＋ guard 5 注入改 `type __BROKEN = ;`；**PLAN-only、零 code diff 變動**） | §14.6 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1173,12 +1294,16 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-32` | §13 非目標第 9 項仍寫「其他 **15** 個單元」⇒ `SR-13`（單元數帳）之**第三個成員**，我修 §2.1.1 與 §3 時漏掉 | **實質錯誤**（族處置不完整，第 3 次） | 改為「其餘 **10** 個未裁定單元」＋ 指向 §2.1.1 對映帳 |
 | `SR-34` | §14 待填清單標頭仍寫「留空待填」，但 ① 已由實際 gate 回覆填入 ⇒ 標頭與內容不一致 | 內部一致性 | 改為「只由實際 gate 回覆填入（已回覆者填 verdict／未回覆者維持 `_待填_`）」 |
 | `SR-35` | §5.6 suppression 預算的**母體是「文字上的 suppression 語法」**（`as T` / `: any` / `@ts-*`），但要保護的性質是「**未經檢查的型別宣稱**」⇒ `const rawRows: UserAuditRow[] = <any>` 這種**隱式 unchecked assignment 落在母體外**，卻是本棒最強的型別宣稱 | **實質錯誤**（母體 < 性質，第 11 次；② `TS-BOUNDARY-002` 之根因） | §5.6 補「unchecked assignment」列（預算 1／實際 1）＋ errata；登錄 `UB-B-1`；附啟發式重播指令並標明其非機械閘 |
+| `SR-41` | `SR-36` 的 errata **自己帶著另一個錯值**：它宣稱「實測獨立轉紅 4 條」，但當時 guard 5 的注入實際觸發 guard 6 ⇒ 真實 3 條。**errata 帶錯值**是本棒第 2 次（前次 `SR-1`→`SR-21` 連鎖） | **實質錯誤**（errata 未被自審覆蓋） | 於該 errata 內就地更正並指向 `SR-39` |
+| `SR-42` | §6.6 步驟 6 兩處引用 **§6.6.1**，但該節已於本輪改名為 §6.6.B ⇒ 死引用 | 交叉引用漂移 | 改指 §6.6.B／§6.6.B3，並補「刪除前再驗 containment」與「三項 equality 斷言」之實質內容 |
+| `SR-39` | guard 5 的負向控制注入 `const x: number = "str"`，**實際觸發的是 guard 6** —— `transpileModule` 不做 semantic 檢查（該注入 `diagnostics=0`），exit 1 來自新增 runtime `const` 改了 emit ⇒ **「4 條獨立轉紅」為假，真實 3 條**。根因＝負向控制**只斷言 exit code、未斷言失敗身分** | **實質錯誤**（負向控制測不到自己要測的東西；② R2 Required） | guard 5 改注入 `type __BROKEN = ;`（實測 `TS1110` ＋ emit 不變 ⇒ 乾淨隔離）；全部負向控制改為**同時斷言守衛身分**；重測得 `5 passed, 0 failed`（1 正向＋4 負向）；並補「transpile diagnostics 只覆蓋 syntax／options、semantic 由完整 `tsc` oracle 負責」之限定 |
+| `SR-40` | §6.6 步驟 4 只給 usage 字串，**缺可直接執行的完整 Node invocation 與三個實參** | 可執行性（② R2 Required） | 補完整命令（含 heredoc 落檔到 `$WORK`、三個實參逐一註明），並註明 `ALL GUARDS PASSED (6/6)` ≠「6 條都被負控證明」 |
 | `SR-37` | §6.3 的**逐字輸出 block 仍是舊（非 fail-closed）腳本的輸出**（`NON-EMPTY GUARD : true` 等格式）⇒ 修了腳本卻沒換證據，兩者脫節 | **證據與實作脫節** | 以 fail-closed 腳本重跑並換上真實輸出（含 `ALL GUARDS PASSED (6/6)` ＋ `exit=0`）＋ 逐條負向控制實測 |
 | `SR-38` | 插入之 §10.3 落在 §10.2 **之前** ⇒ 子章節編號亂序（10.1→10.3→10.2）。與 `SR-27` 同一形態、**第 2 次** | 文件結構 | 交換兩節位置，恢復遞增 |
 | `SR-36` | §6.3 宣稱「同時斷言 `bytes>0`／`srcCR=0`／`emitCR=0`／`diags=0`」，但腳本**只對空 input/output `throw`**，其餘守衛與 `BYTE-IDENTICAL:false` 僅 `console.log`、仍 exit 0 ⇒ **我自己的守衛在假綠** | **實質錯誤**（結構性假綠；② `GOV-FAIL-001`） | 腳本改 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；補逐條負向控制（**實測獨立轉紅 4 條**，守衛 3／4 無法獨立注入、如實標示） |
 | `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
 
-**根因分布（供後續棒次參考）**：38 條中 **11 條**
+**根因分布（供後續棒次參考）**：42 條中 **11 條**
 （`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26` **`SR-35`**）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
@@ -1451,7 +1576,7 @@ typed／validated D1 boundary。並認為兩案「都會改變 `FINAL_PR_CHANGED
 
 | ② 之 finding | 我方確認 | 處置 |
 |---|---|---|
-| replay recipe 在**共用工作樹** checkout base、跑 `npm ci`、改 source，結尾只還原單檔，未復原 branch/ref、dependency state、scratch | **成立。** 逐字查證 `.claude/agents/readonly-reviewer.md` 存在且載明「never check out into the shared working tree／installs packages」；`CLAUDE.md` §6 亦禁 checkout／切 branch。**舊 recipe 等於指示審查者違反 repo 自己的 reviewer 契約** | §6.6 全面重做：新增 `🔒 ISOLATION-CONTRACT`（§6.6.0）＋ **disposable `git clone --local` ＋ `trap rm -rf`**（§6.6.1）；🚫 不用 `git worktree`（junction 風險）；clone 自帶 `npm ci`；末附「來源 repo 未被觸碰」之驗證兩行 |
+| replay recipe 在**共用工作樹** checkout base、跑 `npm ci`、改 source，結尾只還原單檔，未復原 branch/ref、dependency state、scratch | **成立。** 逐字查證 `.claude/agents/readonly-reviewer.md` 存在且載明「never check out into the shared working tree／installs packages」；`CLAUDE.md` §6 亦禁 checkout／切 branch。**舊 recipe 等於指示審查者違反 repo 自己的 reviewer 契約** | §6.6 全面重做：新增 `🔒 ISOLATION-CONTRACT`（§6.6.0）＋ **disposable `git clone --local` ＋ `trap rm -rf`**（§6.6.1）；🚫 不用 `git worktree`（junction 風險）；clone 自帶 `npm ci`；末附「來源 repo 未被觸碰」之驗證兩行。⚠ **[SUPERSEDED by ② R2 → §14.6.2]**：此版仍是 happy-path isolation、且把 disposable clone 誤當 reviewer-safe。`ISOLATION-CONTRACT`／§6.6.1 已由 **`REPLAY-AUTHORIZATION-TIERS`（§6.6.0）＋ §6.6.A／§6.6.B** 取代；本列保留為 R1 當時之處置紀錄，🚫 其指向之節號已不存在 |
 | 內嵌 emit script 只對空 input/output `throw`，`srcCR`／emit CR／diagnostics／`BYTE-IDENTICAL:false` 僅印出、仍 exit 0，與 PLAN 宣稱之「斷言守衛」不符 | **成立，且這是我自己的守衛在假綠。** §6.3 舊句「同時斷言 bytes>0／srcCR=0／emitCR=0／diags=0」**當時為假** | 腳本改為 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；§6.6 步驟 5 補**逐條**負向控制。⚠ 實測**獨立轉紅 4 條**；守衛 3／4 在本檔輸入下無法獨立注入，如實標示為「未獨立驗證」、🚫 不宣稱 6/6 皆已個別證明 |
 
 #### 14.5.3 本輪不變式（code diff 面完全未動）
@@ -1470,6 +1595,66 @@ typed／validated D1 boundary。並認為兩案「都會改變 `FINAL_PR_CHANGED
 - **Observability**：runtime observability 未改；七道 CI gate 未跑、committed-diff `BAN_PATTERNS` 仍 vacuous —— ② 認為「正確保留為 coding-stage 必驗項」。
 - ② 明示：`TS-TYPE-001`／`TS-BOUNDARY-001/002`／`GOV-DECISION-001`／`GOV-DRIFT-001`／`GOV-EVIDENCE-001`／`GOV-FAIL-001` **均不得宣稱為 repo machine-enforced**（repo 無 TypeScript governance manifest）。
 - ② 確認其審查全程未寫檔、未 commit、未 push；工作樹僅有既有的 `?? CLEANUP_PLAN.md`。
+
+---
+
+### 14.6 ② Codex Plan Gate — R2 verdict 與處置 receipt
+
+**verdict**：`CODEX_PLAN_CHANGES_REQUESTED` — **1 Blocker ／ 1 Required**
+**受審錨點**：PLAN commit `548e2b89`；base `acc98dfb`
+
+#### 14.6.1 已 CLOSED ＋ ② 撤回之過廣前提
+
+- **`TS-BOUNDARY-002` ＝ CLOSED**。② 認定 `UB-B-1` 涵蓋 boundary id／精確 scope／reason／risk／
+  evidence／recheck triggers，且**符合批 E 的 PLAN-local registry 先例**。
+- **② 明示撤回其 R1 前提**：「你對 R1 前提的反駁成立；我先前說『兩條修正路徑都必然改
+  changed-files 或 production design』**過廣，予以撤回**。本案**不需因此重送 ①**。」
+  ⚠ 記錄用途：後續棒次引用「unsafe boundary 登錄置於 PLAN 內」時，此為第二個 gate 認可先例。
+- ② 亦撤回其 R1 建議之另一半：把「isolated clone ＋ own npm ci」直接列為 reviewer-safe **同樣過廣**。
+
+#### 14.6.2 Blocker（`GOV-FAIL-001`／`GOV-EVIDENCE-001`）之處置
+
+| ② 之 finding | 我方確認 | 處置 |
+|---|---|---|
+| 新 recipe 仍是 **happy-path isolation**：`mktemp`／clone／`cd`／checkout／`npm ci` 之間無逐步失敗終止；若 clone 或 `cd` 失敗，後續 checkout 可能落在 **caller 原 cwd（含來源共用 repo）** | **成立** | §6.6.B 每一步各自 `\|\| { echo FAIL…; exit 1; }`；`cd` 後再以 `git rev-parse --show-toplevel` 確認確實在 clone 內部才往下 |
+| `sha256sum -c` 失敗不會終止整段 | **成立** | 步驟 2 之 anchor 驗證維持 `sha256sum -c -`（本身非零即終止），並於 §6.6.B 明示逐步終止原則 |
+| 來源 branch／status **只有事後列印，未保存 before 值並斷言相等** | **成立** | §6.6.B0 先存 `BEFORE_HEAD`／`BEFORE_BRANCH`／`BEFORE_STATUS`；B3 做**三項逐字 equality 斷言** |
+| `readonly-reviewer.md` 禁止**所有**寫檔／安裝／checkout／rm，**不限共用工作樹** ⇒ disposable clone 保護來源 ≠ 授權 readonly reviewer 執行 | **成立**（逐字重讀該檔確認） | §6.6.0 改為 **`REPLAY-AUTHORIZATION-TIERS`** 兩層：**Tier A · readonly**（零寫檔／零安裝／零 checkout／零 rm；`git show` ＋ `node --input-type=module -e`、內容走 stdin）＝ readonly reviewer 可直接跑；**Tier B · mutable disposable runner**（需另行授權，🚫 readonly reviewer 不得執行） |
+| cleanup 前需驗 canonical temp containment | **成立** | `WORK` 經 `pwd -P` canonicalize，並與 `TMPDIR` canonical 根做 `case` 比對；`cleanup()` **刪除前再驗一次**，不符則拒刪並告警 |
+| 預期非零的 `tsc` 要另外捕捉，**不能盲加全域 `set -e`** | **成立**（base 有 352 條診斷，`tsc -b` 預期回非零） | §6.6.B 明文警示；採 `set -u` ＋ 逐步顯式判斷，🚫 不用全域 `set -e` |
+
+**Tier A 已實測可行**（零寫檔）：`git show <base>:<path> \| node --input-type=module -e '…'`
+⇒ exit 0、`base emit sha256 = 10c1d1f8…`、`✓ base 側 5 條守衛全過`。
+
+#### 14.6.3 Required（guard 5 負向控制無效）之處置 —— **② 完全正確，我方實測復現**
+
+② 指出我的 guard 5 注入 `const x: number = "str"` 其實觸發 guard 6。**本棒以 repo 之 TypeScript 5.9.3 實測**：
+
+| 注入 | `transpile diagnostics` | emit sha 是否改變 | 實際觸發 |
+|---|---|---|---|
+| `const x: number = "str"`（舊） | **0** | **是** | **guard 6**，🚫 非 guard 5 |
+| `type __BROKEN = ;`（② 建議，採用） | **1（TS1110）** | **否** | **guard 5**，乾淨隔離 |
+
+⇒ 舊「4 條獨立轉紅」**為假（真實 3 條）**。已換注入並把**所有**負向控制改為
+**同時斷言 exit code ＋ 失敗守衛身分**，重測得 `5 passed, 0 failed`。
+另補 ② 要求之「完整可執行 Node invocation（含三實參）」與
+「transpile diagnostics 只覆蓋 syntax／options、semantic 正確性由完整 `tsc` oracle 負責」之限定。
+
+**根因（誠實記錄）**：我的負向控制**只斷言 exit code**，沒斷言「失敗的是哪一條守衛」——
+於是一個測不到自己標的的負向控制，看起來是綠的。
+⇒ 與本棒 `SR-35`（母體 < 性質）同源：**斷言的粒度小於它宣稱驗證的性質**。
+
+#### 14.6.4 ② 之其他認定（記錄，🚫 不轉錄升格）
+
+- Immutable evidence 全部吻合：六 commit 線性鏈 · R2 僅 plan `+256/-40` · base→R2 恰一個 added plan doc ·
+  `audit.ts` 全程 `ec2a9b07…` · PLAN／packet 副本 blob 均 `ec94fdd0…` · 工作樹僅既有 `?? CLEANUP_PLAN.md`。
+- State Consistency／Queue／Payment／Distributed State：**Not Applicable**。
+- Observability：runtime observability 未變；七道 coding-stage CI、committed-diff ratchet、
+  production bundle 仍未執行，維持既有 residual risk。
+- ② 重申：repo 無 TypeScript governance manifest ⇒ `TS-*`／`GOV-*` 諸 rule ID 皆
+  **advisory／not enforced**；其退回依據是「**實際可重播行為 ＋ repo reviewer 契約**」，
+  🚫 不是 machine-enforcement 宣稱。
+- ② 明示：本輪修正可做成 **PLAN-only R3**；若 production design／overlay 不變，**不要求重送 ①**。
 
 ---
 
