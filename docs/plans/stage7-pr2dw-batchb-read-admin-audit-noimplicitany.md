@@ -975,6 +975,8 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 14 | 2026-08-23 | PLAN R2 HEAD `d31cb3e2`；① R2 delta packet 送出（`5f68f9d2…`） | §14.3 |
 | 15 | 2026-08-23 | **① R2 verdict ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocker／**1 Required**／2 NB carry-forward）：`ARCH-BR-R1` 與 `ARCH-BR-R2` **CLOSED**；新增 `ARCH-BR-R2-RR1-VERDICT-AMPLIFICATION` | §14.3 |
 | 16 | 2026-08-23 | `ARCH-BR-R2-RR1` 族處置完成（4 成員；**PLAN-only、零 code diff 變動**） | §14.3 |
+| 17 | 2026-08-23 | PLAN R3 HEAD `24a073f5`；① R3 delta packet 送出（`92896a86…`） | §14.4 |
+| 18 | 2026-08-23 | **① R3 verdict ＝ `CHATGPT_ARCH_APPROVED`**（0 Blocker／0 Required／2 NB carry-forward）＠ `24a073f5`；三個 Required 全 CLOSED；`SR-32` 經 ① 裁定保留 | §14.4 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1016,9 +1018,10 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-30` | §14.0 表格內有**三個**空行（在 `SR-21`／`SR-24`／`SR-25` 三列之後）⇒ markdown 把單一表格切成四張，渲染破碎 | 文件結構 | 刪除三個空行，恢復單一連續表格。⚠ **肉眼只抓到 2 個，第 3 個由機械掃描抓出**（母體＝全檔 25 張表之全部列）—— 再次印證「族處置須靠枚舉、不靠記憶」 |
 | `SR-31` | `SR-28` 註記被插在「代替對真實母體的量測。」與其結論句「⇒ 印證…修過不代表免疫」之間 ⇒ 該結論句脫離其所屬段落、看起來像在總結 `SR-28` | 文脈斷裂 | 把結論句移回原段落末；`SR-28`／`SR-29` 合併為獨立註記段 |
 | `SR-32` | §13 非目標第 9 項仍寫「其他 **15** 個單元」⇒ `SR-13`（單元數帳）之**第三個成員**，我修 §2.1.1 與 §3 時漏掉 | **實質錯誤**（族處置不完整，第 3 次） | 改為「其餘 **10** 個未裁定單元」＋ 指向 §2.1.1 對映帳 |
+| `SR-34` | §14 待填清單標頭仍寫「留空待填」，但 ① 已由實際 gate 回覆填入 ⇒ 標頭與內容不一致 | 內部一致性 | 改為「只由實際 gate 回覆填入（已回覆者填 verdict／未回覆者維持 `_待填_`）」 |
 | `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
 
-**根因分布（供後續棒次參考）**：33 條中 **10 條**
+**根因分布（供後續棒次參考）**：34 條中 **10 條**
 （`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26`）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
@@ -1051,11 +1054,12 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 自審之所以抓到，是因為對「新增的每一個公開/半公開名稱」主動跑一次 repo-wide 命名母體掃描 ——
 🚫 不是靠「我覺得這個名字很自然」。建議後續棒次把此步驟列為**新增型別/常數時的固定動作**。
 
-> 🚫 以下欄位**留空待填**，由實際 gate 回覆填入；🚫 不得預先自我宣告。
+> 以下欄位**只由實際 gate 回覆填入**（已回覆者填 verdict ＋ 錨點 SHA；未回覆者維持 `_待填_`）；
+> 🚫 不得預先自我宣告、🚫 不得以「預期會過」代填。
 > ⚠ **本清單只列外部 gate**（`ARCH-BR-R1` 之處置）。維度 A self-review 的 closure
 > **不在本檔的 SoT 範圍內**（見開頭狀態讀法之兩列表格）；§14.0 僅為其 append-only 歷史，🚫 非 closure。
 >
-> - ① ChatGPT Architecture Gate：verdict ＋ 錨點 SHA — _待填_
+> - ① ChatGPT Architecture Gate：**`CHATGPT_ARCH_APPROVED` ＠ PLAN `24a073f5`**（R3；R1→R2→R3 共 3 輪，2 次 CHANGES_REQUESTED）— 詳見 §14.2 / §14.3 / §14.4
 > - ② Codex Plan Gate：verdict ＋ 錨點 SHA — _待填_
 > - ③ Codex Code Gate：verdict ＋ 錨點 SHA — _待填_
 > - ④ ChatGPT faithfulness：verdict ＋ 錨點 SHA — _待填_
@@ -1200,6 +1204,56 @@ R2 複核三點＝(1) SoT 模型不再矛盾 (2) §12 不再跨推 bundle (3) `B
 ① R2 重申 `ARCH-BR-NB1-PROJECTION-NAME` 與 `ARCH-BR-NB2-GUARANTEE-WORDING` 為
 **Non-blocking carry-forward，本輪不需要做**，且明確認可
 「**不為 NB2 去碰 source 的判斷正確**」。處置理由見 §14.2.2，本輪不變。
+
+---
+
+### 14.4 ① ChatGPT Architecture Gate — R3 verdict（**APPROVED**）
+
+**verdict**：**`CHATGPT_ARCH_APPROVED`** — **0 Blocker ／ 0 Required ／ 2 Non-blocking carry-forward**
+**受審錨點**：PLAN commit `24a073f5`；base `acc98dfb`
+
+| finding | R3 裁決 |
+|---|---|
+| `ARCH-BR-R1-STATE-SOT-CLOSURE-GAP` | **CLOSED**（沿 R2） |
+| `ARCH-BR-R2-EMIT-EVIDENCE-SCOPE-ESCAPE` | **CLOSED**（沿 R2） |
+| `ARCH-BR-R2-RR1-VERDICT-AMPLIFICATION` | **CLOSED** |
+| `ARCH-BR-NB1-PROJECTION-NAME` | Non-blocking carry-forward |
+| `ARCH-BR-NB2-GUARANTEE-WORDING` | Non-blocking carry-forward |
+
+#### 14.4.1 ① 對 `SR-32`（§13 之 `15 → 10`）之裁決
+
+該行嚴格說超出 R3 指定之族，我方已於 packet §3 主動揭露。**① 裁定：接受，不要 revert。**
+① 之理由（逐字要點）：它是「**允許的 factual errata closure，不構成 scope expansion**」——
+§2.1.1 與 `SPEC-B3` 已建立「6 已落成 ＋ 10 未裁定 ＝ 16」之帳，§13 的「15」只是同一 derived-copy
+的殘留錯值；改回一致**未修改 `SPEC-B3` 的 authority／scope／任何 code design**。
+① 並指出「把它 revert 回已知錯值，反而會刻意恢復 cognition–artifact drift」。
+⇒ `SR-32` 保留，🚫 不需為該行另起 gate。
+
+#### 14.4.2 ① 對兩項 Non-blocking 之指示
+
+① R3 明示（本棒範圍內）：**不要**為 `NB1` 改型別名；**不要**為 `NB2` **現在**去動 `audit.ts`。
+`NB2` 之理由：現在處置會要求同步改 production JSDoc、**重建 overlay anchor**，
+「收益不足以抵銷重新打開已穩定 code diff 的成本」。
+⚠ 依 §14.2.3 之效力範圍條款，上述為**本棒情境下的指示**，🚫 不轉錄為永久禁令。
+
+#### 14.4.3 ① 對 R3 不變式之認定
+
+① 就受審 artifact 所提供之 receipt 認定：production source 仍為 base blob `ec2a9b07…`，
+預定 overlay anchor `79792231…`、`+29 / -3`、三個 hunk 與 §4.1 之 26 行 block
+**均未因 Architecture 修訂而改變** —— 即「這三輪修的都是 PLAN governance，
+不是偷偷重新設計 production diff」。
+
+#### 14.4.4 ⚠ 明確排除於本 gate 之外者（① 主動劃界）
+
+同期進行之 **memory `check-memory.mjs` ／ harness hook「KB」單位更正**（詳見該 memory repo）
+**不在本次受審 artifact 內**。① 表示：依所提供之驗算，撤回「bytes gate 與 char gate 衝突」
+這個前提是正確的修正方向；但 **① 不把它標成本 gate 的「已驗證」事實**。
+🚫 本 PLAN 不得引用 ① 之 approval 作為該 memory 改動的背書。
+
+#### 14.4.5 gate 推進之界線（① 明示）
+
+「① Architecture Gate 到此通過。下一關可送 ② Codex Plan Gate；
+**這仍不等於 `CODING_ALLOWED`，也不授權現在修改 `functions/api/admin/audit.ts`**。」
 
 ---
 
