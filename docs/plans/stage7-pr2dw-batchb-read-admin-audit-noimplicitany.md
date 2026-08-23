@@ -286,6 +286,28 @@ interface UserAuditRow {
 ⚠ **連帶效果（沿批 E §4.2 同一誠實記錄）**：`db` / `rowsResult` / `countRow` 仍為 `any`。
 本棒收益＝消除 `noImplicitAny` 診斷 ＋ 標示參數與投影契約，🚫 **不得**宣稱「D1 row 已型別化」。
 
+#### 🔒 `UNSAFE-BOUNDARY-REGISTRY`（② R1 `TS-BOUNDARY-002` 之處置；本棒唯一登錄項）
+
+> ② R1 判定 `const rawRows: UserAuditRow[] = <any>` 為 **D1 legacy interop 邊界之 type laundering**，
+> 並指出「JSDoc 誠實揭露 ＋ 文字 suppression 為零」**不能取代** unsafe-boundary registry。
+> ⚠ repo **無** TypeScript governance manifest／unsafe-boundary registry（本棒實測：
+> `git ls-files | grep -iE '(^|/)AGENTS?\.md$'` ⇒ **0 命中**；`governance/rules.json` 不存在）。
+> **沿批 E `UB-E-1` 之 gate-approved 先例**（該棒 ② R3 明示「明確登錄此 unsafe boundary」，
+> 且因 SCOPE-LOCK 禁新增 repo 治理檔而**把登錄置於 PLAN 內**）：本登錄同置於 PLAN。
+> ⇒ **不新增檔案、不改 `FINAL_PR_CHANGED_FILES`、不改 production design、不改 overlay anchor。**
+
+| 欄位 | 值 |
+|---|---|
+| **id** | `UB-B-1` |
+| **位置（scope）** | `functions/api/admin/audit.ts` · 單一行 `const rawRows: UserAuditRow[] = rowsResult?.results ?? []`。🚫 不涵蓋本檔其他行、🚫 不涵蓋其他檔 |
+| **形式** | **unchecked assignment**（`any` → 具名型別之隱式賦值），🚫 **不是** `as` cast。⚠ 與批 E `UB-E-1`（`err as ErrorLike`）**形式不同** —— 這正是 §5.6 舊預算漏掉它的原因，見該節 errata |
+| **未驗證假設（reason 之對象）** | D1 回傳列確實具備本宣告之 8 欄及其型別。TypeScript **無從驗證**：repo 未裝 `@cloudflare/workers-types`（實測 17 個依賴 0 命中）⇒ `Env['chiyigo_db']` 解析為 `any` ⇒ `.all()` 回 `any` ⇒ 賦值恆合法 |
+| **安全論證（evidence；唯一成立的那一種）** | **標註全部 erased ⇒ 不新增任何 runtime 行為 ⇒ 相對 base 不新增 failure mode。** 機械證據＝§6.3 之 emit byte-identical（`10c1d1f8…`，6 道守衛全 fail-closed）。⚠ 這是**相對 base 的差分論證**，🚫 **不是**「這段程式碼安全」的絕對宣稱 |
+| **仍然存在的既有 failure mode（本棒 🚫 不 harden）** | 若 D1 列缺 `event_type`／型別不符：`canRoleSeeAuditEvent(eventType: unknown, role)`（`functions/utils/roles.ts:73-81`，本棒實測逐字）僅在 `role === 'support'` 分支做 `typeof !== 'string' → return false`；**其餘角色一律 `return true`**（L80 註解明載「audit 內容不再裁切」）。⇒ 非 support 角色不因欄位缺失而被擋。**此為 base 既有行為，本棒不改善也不惡化。** |
+| **未涵蓋** | 🚫 不保證欄位存在／型別／非空；🚫 不做輸入驗證；🚫 不構成 D1 row 之型別契約；🚫 不宣稱該路徑 exception-free |
+| **recheck trigger（任一成立即須重審本登錄）** | ① 本檔 SELECT 欄位清單變更 ② `migrations/*` 改動 `audit_log` 結構 ③ 安裝 `@cloudflare/workers-types`（`any` 消失⇒賦值將被真檢查） ④ `strict: true` 落地 ⑤ 本行被移動或改寫 |
+| **為何不改用 runtime validation** | 會破 type-only 性質（emit 不再 byte-identical）、需補測試、需重測 anchor；且 `SPEC-B1` 之 scope 是 `noImplicitAny` 清零、**不是** D1 邊界硬化 ⇒ 外送 `TD-BATCHB-3`（§10.3） |
+
 ### 4.5 SELECT 欄位清單 ↔ 宣告之逐欄對照（gate ③ 可逐字核對）
 
 base `functions/api/admin/audit.ts:121` 之 SELECT：
@@ -448,10 +470,23 @@ coding 階段須以 `git diff --stat` 對上 `+29 / -3` 與上列三個 `@@` 標
 | `: any` / `as any` / `<any>` 等 ratchet `BAN_PATTERNS` | **0** | 0 |
 | `@ts-ignore` / `@ts-expect-error` / `@ts-nocheck` | **0** | 0 |
 | non-`any` 型別 assertion（`as T`） | **0** | 0 |
+| **unchecked assignment（`any` → 具名型別，隱式）** | **1** | **1**（`UB-B-1`，見 §4.4） |
 | 新增 `eslint-disable` | **0** | 0 |
 
 ⚠ `BAN_PATTERNS` 不涵蓋 non-`any` `as`（§7.2），故該列以**人工計數**補位。
 重播指令：`grep -nE "\bas\s+[A-Za-z]|: any|as any|@ts-(ignore|expect-error|nocheck)" functions/api/admin/audit.ts`
+
+> 🚨 **errata（② R1 `TS-BOUNDARY-002` 之根因；`SR-35`）**：本表初版**只有 `as T` 一列**，
+> 並據以宣稱「suppression 全為 0」。但 `const rawRows: UserAuditRow[] = <any>` 是
+> **隱式的 unchecked assignment，不含 `as`**，因此既不被 `BAN_PATTERNS` 攔、也不被上述 grep 命中
+> ⇒ **它落在預算母體之外，卻是本棒最強的型別宣稱。**
+> 這是本棒第 11 次「母體 < 性質」：我把母體定義成「**文字上的** suppression 語法」，
+> 而要保護的性質是「**未經檢查的型別宣稱**」—— 後者包含前者但不等於前者。
+> ⇒ 已補上該列並登錄 `UB-B-1`。
+> ⚠ 補充重播指令（母體含隱式賦值）：
+> `grep -nE ":\s*[A-Z][A-Za-z0-9_]*(\[\])?\s*=" functions/api/admin/audit.ts`
+> —— ⚠ 此 pattern 是**啟發式**（會命中無害的已檢查賦值），🚫 不得當機械閘；
+> 真正的判準是「RHS 是否為 `any`／`unknown` 而未經 narrowing」，須人工判讀。
 
 ---
 
@@ -545,15 +580,24 @@ sourceFilesTotal: 337
 **先斷言非空與 `CR = 0`**，再 emit。⚠ EOL 會影響 emit（template literal 內容逐字保留），
 不從 immutable blob 取樣就會量到錯的東西。
 
+**逐字輸出（fail-closed 腳本，2026-08-23 重跑；`SR-37` 之處置）**：
 ```
-BASE(blob)         srcBytes= 6198 srcCR=0  emitBytes= 6599 emitCR=0 diags=0  sha256=10c1d1f87d28787475b481f8a210007863fd60bfd4bcabd827488139778b0b86
-OVERLAY(on-disk)   srcBytes= 7495 srcCR=0  emitBytes= 6599 emitCR=0 diags=0  sha256=10c1d1f87d28787475b481f8a210007863fd60bfd4bcabd827488139778b0b86
+BASE(blob)       srcBytes= 6198 srcCR=0  emitBytes= 6599 emitCR=0 diags=0  sha256=10c1d1f87d28787475b481f8a210007863fd60bfd4bcabd827488139778b0b86
+OVERLAY(temp)    srcBytes= 7495 srcCR=0  emitBytes= 6599 emitCR=0 diags=0  sha256=10c1d1f87d28787475b481f8a210007863fd60bfd4bcabd827488139778b0b86
 
-NON-EMPTY GUARD : base=true overlay=true
-SRC CR=0 GUARD  : base=true overlay=true
-EMIT CR=0 GUARD : base=true overlay=true
-BYTE-IDENTICAL  : true
+✓ ALL GUARDS PASSED (6/6)：src 非空 · src CR=0 · emit 非空 · emit CR=0 · diags=0 · BYTE-IDENTICAL
+exit=0
 ```
+
+**逐條負向控制實測（每條各注入一次，全部 `exit 1`）**：
+```
+[守衛1 src 空]        exit=1
+[守衛2 src 含 CR]     exit=1
+[守衛5 diags>0]       exit=1
+[守衛6 非 identical]  exit=1     ← 注入＝落選設計 v1
+```
+⚠ 守衛 3／4（emit 非空／emit CR=0）在本檔輸入下**無法獨立注入**（其前提已被守衛 1／2 攔下）
+⇒ 如實標示為「未獨立驗證」，🚫 不宣稱 6/6 皆已個別證明；**實測獨立轉紅者為 4 條**。
 
 ⚠ **`srcBytes` 差 1297 而 `emitBytes` 一位元組不差** —— 這正是「型別層全部 erase」的直接觀測：
 新增的 26 行（JSDoc ＋ `interface`）與 3 處標註在 emit 中完全消失。
@@ -568,7 +612,17 @@ BYTE-IDENTICAL  : true
 coding 階段落地後之 `functions/api/admin/audit.ts` **必須**雜湊到此值；不符即代表實作與被量測的 overlay 不同，須停手回報。
 
 ⚠ **非空守衛不可省** —— 批 C2 曾踩到「兩邊皆 0 bytes、`cmp` 回報相同、sha 為空字串常數
-`e3b0c442…`」的假綠。本量測同時斷言 `bytes > 0`、`srcCR = 0`、`emitCR = 0`、`diags = 0`。
+`e3b0c442…`」的假綠。
+
+> 🚨 **errata（② R1 `GOV-FAIL-001`；`SR-36`）**：本節初版寫「本量測**同時斷言** `bytes > 0`、
+> `srcCR = 0`、`emitCR = 0`、`diags = 0`」—— **該宣稱當時為假**。舊腳本只對空 input／空 output
+> `throw`，其餘三項與 `BYTE-IDENTICAL:false` **只是 `console.log`，程序仍 exit 0**。
+> ⇒ 一個「印出 `GUARD: false` 卻回報成功」的量測器，正是本棒反覆在批判的**結構性假綠**，
+> 而這次是**我自己的守衛**。已於 §6.6 步驟 4 改為 6 條守衛全部累積失敗 → non-zero exit，
+> 並補上逐條負向控制（**實測獨立轉紅 4 條**；守衛 3／4 在本檔輸入下無法獨立注入，如實標示）。
+
+**現行守衛（fail-closed，共 6 條）**：src 非空 · src CR=0 · emit 非空 · emit CR=0 · transpile diags=0 · BYTE-IDENTICAL。
+腳本與逐條負向控制見 §6.6 步驟 4／5。
 
 ⚠ **範圍限定**：此為**單檔 transpile identity**，🚫 **不是** production bundle identity
 （實際 bundle 由 `wrangler pages functions build` 之 esbuild 產出，未在此量測範圍內）。
@@ -637,64 +691,146 @@ git status --porcelain → 僅 "?? CLEANUP_PLAN.md"
 
 ### 6.6 `EXTERNAL REPLAY RECIPE`（外部可自行重跑；🚫 不需信任本檔任何數字）
 
-**Shell 需求（不可省）**：步驟 1／3／6 之指令使用 process substitution `<(...)` 與 `comm`，
-需 **bash**（本機為 Git Bash；Linux/macOS 原生可）。🚫 PowerShell 不支援 `<(...)`，照貼會失敗。
-步驟 4 為 Node ESM，任何 shell 皆可。
+> 🚨 **本節已於 ② R1 `GOV-EVIDENCE-001` 後全面重做（`SR-36`）。舊 recipe 作廢、🚫 不得再執行。**
+>
+> **舊 recipe 的缺陷（② 指出，我方確認成立）**：它要求審查者在 **`<repo>` 共用工作樹**上
+> `git checkout <base>`、跑 `npm ci`、改 source，結尾只還原**單一檔案** ——
+> **未還原原 branch／ref、未還原 dependency state、未清 scratch 檔**。
+> 這直接違反：
+> · `CLAUDE.md` §6 平行 session 紀律（「非當前任務 → 唯讀優先，不 `git add`/commit/**checkout**/切 branch」）
+> · `.claude/agents/readonly-reviewer.md`（本棒逐字查證存在）：「Never run a command that writes files,
+>   **installs packages**, or mutates git state … **never check out into the shared working tree**」
+> ⇒ 舊 recipe 等於指示審查者違反 repo 自己的 reviewer 契約。**這是我方的設計錯誤，非審查者的問題。**
 
-**前置**：`git -C <repo> fetch && git -C <repo> checkout acc98dfbeeed237533b5b844338b5798a148ce8f && npm ci`
+**Shell 需求（不可省）**：步驟 2／3 使用 process substitution `<(...)` 與 `comm`，需 **bash**
+（本機為 Git Bash；Linux/macOS 原生可）。🚫 PowerShell 不支援 `<(...)`。步驟 4 為 Node ESM，任何 shell 皆可。
 
-**步驟 1 — base 診斷／ratchet**
+### 6.6.0 🔒 隔離契約（`ISOLATION-CONTRACT`；**先讀完再執行任何一行**）
+
+**硬規則：本 recipe 的任何步驟 🚫 不得在共用工作樹執行。**
+
+| 步驟 | 是否觸碰檔案系統 | 隔離方式 |
+|---|---|---|
+| 取 base source | ❌ 純讀 | `git show <sha>:<path>`（immutable blob → stdout／temp） |
+| emit identity（步驟 4） | 只讀 temp | 全記憶體 transpile；🚫 不需 checkout、🚫 不需 `npm ci` |
+| tsc 全量診斷 ／ ratchet ／ lint（步驟 2-3） | **需完整專案樹** | **一次性 disposable clone**（下方 §6.6.1），完事 `rm -rf` |
+
+⚠ **為何 tsc 面無法全記憶體**：`tsc -b tsconfig.solution.json` 需要真實檔案樹與 `node_modules`。
+故該面**必須**用 disposable clone，🚫 不得退回共用樹。
+⚠ **🚫 不用 `git worktree add`**：本機曾有 junction 相關風險 —— `worktree remove` 會穿過 link
+清空目標（[[feedback_worktree_junction_deletes_target]] 實際發生過）。用 `git clone --local` 較安全。
+⚠ disposable clone **自帶 `npm ci`**，🚫 不借共用 repo 的 `node_modules`（同上風險）。
+
+### 6.6.1 前置 — 建立一次性隔離環境（🚫 不動來源 repo）
+
 ```bash
-npx tsc -b tsconfig.solution.json --force > tsc-base.txt 2>&1   # 期望 352 行
-npm run typecheck:ratchet:report                                 # 期望 352 / 12 / 325 / 337
-npm run lint                                                     # 期望 EXIT 0
+SRC=<你的 chiyigo.com repo 路徑>        # 唯讀來源，全程不被修改
+WORK="$(mktemp -d)"                     # 一次性工作區
+trap 'rm -rf "$WORK"' EXIT              # ← 保證清理（含中途失敗）
+
+git clone --local --no-hardlinks "$SRC" "$WORK/repo"
+cd "$WORK/repo"
+git checkout --detach acc98dfbeeed237533b5b844338b5798a148ce8f   # detached：clone 內部，來源 repo 不受影響
+npm ci
 ```
 
-**步驟 2 — 重建 overlay**：對 `functions/api/admin/audit.ts` 施以 §4.2 三處標註 ＋ §4.1 逐字宣告 block；
-以 `sha256sum` 驗其為 `79792231…`（§6.3 anchor）。
-
-**步驟 3 — overlay 診斷／set-diff**
+**驗證來源 repo 未被觸碰**（執行後在**來源** repo 跑，應與執行前一致）：
 ```bash
-npx tsc -b tsconfig.solution.json --force > tsc-over.txt 2>&1   # 期望 347 行
+git -C "$SRC" rev-parse --abbrev-ref HEAD    # branch 未變
+git -C "$SRC" status --porcelain             # 未新增／未修改任何檔
+```
+
+**步驟 1 — base 診斷／ratchet／lint**（在 `$WORK/repo` 內）
+```bash
+npx tsc -b tsconfig.solution.json --force > "$WORK/tsc-base.txt" 2>&1   # 期望 352 行
+npm run typecheck:ratchet:report                                        # 期望 352 / 12 / 325 / 337
+npm run lint                                                            # 期望 EXIT 0
+```
+
+**步驟 2 — 重建 overlay**（在 `$WORK/repo` 內；此處改動只影響 disposable clone）：
+對 `functions/api/admin/audit.ts` 施以 §4.2 三處標註 ＋ §4.1 逐字宣告 block；然後**強制驗 anchor**：
+```bash
+echo "7979223135b8e6ed80b807f1f1262f2c4bebbe57e40e568eadc69705af39d450  functions/api/admin/audit.ts" \
+  | sha256sum -c -   # ← fail-closed：不符即 non-zero exit，🚫 不要「看起來差不多」就往下走
+```
+⚠ 這是**檔案位元組的 SHA-256**，🚫 不是 git blob SHA（勿用 `git hash-object` 比對）。
+
+**步驟 3 — overlay 診斷／set-diff**（在 `$WORK/repo` 內）
+```bash
+npx tsc -b tsconfig.solution.json --force > "$WORK/tsc-over.txt" 2>&1   # 期望 347 行
 norm() { sed -E 's/\(([0-9]+),([0-9]+)\)//' "$1" | sort; }
-comm -23 <(norm tsc-base.txt) <(norm tsc-over.txt)   # 期望 5 行，全為本檔 TS7006/TS7031
-comm -13 <(norm tsc-base.txt) <(norm tsc-over.txt)   # 期望 0 行
-npm run typecheck:ratchet:report                      # 期望 347 / 11 / 326 / 337
+comm -23 <(norm "$WORK/tsc-base.txt") <(norm "$WORK/tsc-over.txt")   # 期望恰 5 行，全為本檔 TS7006/TS7031
+comm -13 <(norm "$WORK/tsc-base.txt") <(norm "$WORK/tsc-over.txt")   # 期望恰 0 行
+npm run typecheck:ratchet:report                                      # 期望 347 / 11 / 326 / 337
+
+# fail-closed 版（🚫 不靠肉眼看行數）
+[ "$(comm -23 <(norm "$WORK/tsc-base.txt") <(norm "$WORK/tsc-over.txt") | wc -l)" -eq 5 ] || { echo "REMOVED != 5"; exit 1; }
+[ "$(comm -13 <(norm "$WORK/tsc-base.txt") <(norm "$WORK/tsc-over.txt") | wc -l)" -eq 0 ] || { echo "ADDED != 0"; exit 1; }
 ```
 
-**步驟 4 — emit identity**（可獨立執行之等效腳本；🚫 不進 repo、🚫 不進 CI）
+**步驟 4 — emit identity**（**fail-closed**；🚫 不進 repo、🚫 不進 CI、🚫 不觸碰共用工作樹）
+
+> 🚨 **舊版腳本已作廢（② R1 `GOV-FAIL-001`）**：它只對「空 input／空 output」`throw`，
+> 而 `srcCR` / `emitCR` / `diagnostics` / `BYTE-IDENTICAL:false` **只是 `console.log`，仍 exit 0**。
+> §6.3 卻宣稱「本量測同時斷言 `bytes>0`、`srcCR=0`、`emitCR=0`、`diags=0`」—— **該宣稱當時為假**。
+> 本版把**6 條守衛全部**改成累積失敗 → non-zero exit。
+
 ```js
-// 母體 = 恰 2 個輸入：(1) base immutable git blob (2) on-disk overlay 檔
+// 母體 = 恰 2 個輸入：(1) base immutable git blob (2) overlay temp 檔（🚫 非共用工作樹）
 // 宣稱保護的性質 = 「型別標註 erase 後，emit 逐字不變」
 // 🚫 單檔 transpile identity，不是 production bundle identity
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
-const REPO = '<repo>', REL = 'functions/api/admin/audit.ts'
+const [, , REPO, BASE_SHA, OVERLAY_PATH] = process.argv
+if (!REPO || !BASE_SHA || !OVERLAY_PATH) { console.error('usage: node x.mjs <repo> <base-sha> <overlay-path>'); process.exit(2) }
+const REL = 'functions/api/admin/audit.ts'
 const ts = createRequire(REPO + '/package.json')('typescript')
 const opts = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
                removeComments: false, newLine: ts.NewLineKind.LineFeed }
+const failures = []
+const assert = (c, m) => { if (!c) failures.push(m) }
 function measure(label, src) {
-  const srcCR = (src.match(/\r/g) || []).length
-  if (src.length === 0) throw new Error(`${label}: source is EMPTY`)
+  const srcBytes = Buffer.byteLength(src, 'utf8'), srcCR = (src.match(/\r/g) || []).length
+  assert(srcBytes > 0, `${label}: source is EMPTY`)                       // 守衛 1
+  assert(srcCR === 0, `${label}: source contains ${srcCR} CR`)            // 守衛 2
   const out = ts.transpileModule(src, { compilerOptions: opts, reportDiagnostics: true })
   const text = out.outputText, bytes = Buffer.byteLength(text, 'utf8')
-  if (bytes === 0) throw new Error(`${label}: emit is EMPTY`)
-  return { label, srcBytes: Buffer.byteLength(src,'utf8'), srcCR, bytes,
-           cr: (text.match(/\r/g)||[]).length,
-           sha: createHash('sha256').update(text,'utf8').digest('hex'),
-           diags: out.diagnostics.length }
+  const cr = (text.match(/\r/g) || []).length, diags = out.diagnostics.length
+  assert(bytes > 0, `${label}: emit is EMPTY`)                            // 守衛 3
+  assert(cr === 0, `${label}: emit contains ${cr} CR`)                    // 守衛 4
+  assert(diags === 0, `${label}: transpile diagnostics = ${diags}`)       // 守衛 5
+  return { label, srcBytes, srcCR, bytes, cr, diags, sha: createHash('sha256').update(text, 'utf8').digest('hex') }
 }
-const b = measure('BASE(blob)', execFileSync('git',['-C',REPO,'show',`${process.argv[2]}:${REL}`]).toString('utf8'))
-const o = measure('OVERLAY(on-disk)', readFileSync(process.argv[3],'utf8'))
-console.log(b, o, 'BYTE-IDENTICAL:', b.sha === o.sha)
+const b = measure('BASE(blob)', execFileSync('git', ['-C', REPO, 'show', `${BASE_SHA}:${REL}`]).toString('utf8'))
+const o = measure('OVERLAY(temp)', readFileSync(OVERLAY_PATH, 'utf8'))
+for (const m of [b, o]) console.log(`${m.label.padEnd(16)} srcBytes=${m.srcBytes} srcCR=${m.srcCR} emitBytes=${m.bytes} emitCR=${m.cr} diags=${m.diags} sha256=${m.sha}`)
+assert(b.sha === o.sha, `BYTE-IDENTICAL FAILED: ${b.sha} !== ${o.sha}`)   // 守衛 6
+if (failures.length) { console.error('\n✗ ASSERTION FAILURES:'); for (const f of failures) console.error('  · ' + f); process.exit(1) }
+console.log('\n✓ ALL GUARDS PASSED (6/6)')
 ```
-期望：兩側 `emitBytes = 6599`、`emitCR = 0`、`diags = 0`、`sha256 = 10c1d1f8…`、`BYTE-IDENTICAL: true`。
+期望：兩側 `emitBytes = 6599`、`emitCR = 0`、`diags = 0`、`sha256 = 10c1d1f8…`、**exit 0 ＋ `ALL GUARDS PASSED (6/6)`**。
 
-**步驟 5 — 兩組負向控制**：依 §6.4.1／§6.4.2 各注入一次，期望分別得 `ADDED = 2` 與 `BYTE-IDENTICAL: false`。
+**步驟 5 — 負向控制**（🚫 不只測一條；**每一條守衛各注入一次，全部期望 `exit 1`**）
 
-**步驟 6 — 還原**：`git checkout -- functions/api/admin/audit.ts`，驗 `git hash-object` ＝ `ec2a9b07…`。
+| 守衛 | 注入方式 | 期望 |
+|---|---|---|
+| 1 src 非空 | 傳入 0-byte 檔 | exit 1 |
+| 2 src CR=0 | 把 overlay 全部 `\n` 換成 `\r\n` | exit 1 |
+| 5 diags=0 | overlay 首行插 `const x: number = "str"` | exit 1 |
+| 6 BYTE-IDENTICAL | 改用落選設計 v1（標註兩個 callback 參數） | exit 1 |
+
+⚠ 守衛 3（emit 非空）與守衛 4（emit CR=0）在本檔輸入下**無法獨立注入**
+（emit 為空需 source 為空 ⇒ 已被守衛 1 攔；emit CR 需 source CR ⇒ 已被守衛 2 攔）。
+**如實標示為「未獨立驗證」**，🚫 不宣稱 6/6 皆已個別注入證明 —— 實測獨立轉紅者為 **4 條**。
+
+另兩組屬**診斷 oracle**（非 emit oracle）之負向控制見 §6.4：
+`raw: unknown → raw: number` ⇒ `ADDED = 2`；設計 v1 ⇒ `BYTE-IDENTICAL: false`。
+
+**步驟 6 — 清理**：`rm -rf "$WORK"`（§6.6.1 的 `trap` 已保證，含中途失敗）。
+🚫 **不需要、也不得**對來源 repo 執行任何 `git checkout` / `git restore` ——
+本 recipe 全程未修改它。以 §6.6.1 末的兩行驗證來源 repo 之 branch 與 `status --porcelain` 未變。
 
 ⚠ **本 recipe 的信任模型**：所有 base 側輸入皆 content-addressed（commit / blob SHA），
 外部可自行 `git cat-file` 驗證；overlay 側由 §6.3 anchor sha256 綁定。
@@ -877,6 +1013,20 @@ expand→migrate→contract 序列**不適用**。（⚠ 這是「不適用」�
 
 ---
 
+### 10.3 `TD-BATCHB-3`：D1 讀取邊界之 typed／validated boundary（`UB-B-1` 之根本解）
+
+**內容**：`UB-B-1`（§4.4）登錄的是「`any` → `UserAuditRow[]` 之 unchecked assignment」。
+根本解＝讓 D1 讀取邊界**真的有型別或有驗證**，兩條路徑：
+(a) 安裝 `@cloudflare/workers-types` ⇒ `D1Database` 不再解析為 `any`，賦值會被真檢查；
+(b) 在邊界加 runtime validation（schema 驗證後才進 domain）。
+
+**本棒不做**：(a) 是 repo-wide 依賴變更（影響全部 `functions/**` 的型別面，且會與 Stage 7
+的 ratchet baseline 交互作用）；(b) 破 type-only 性質、需補測試、需重測 anchor。
+兩者皆遠超 `SPEC-B1` 之單檔 `noImplicitAny` 清零 scope ⇒ **外送 backlog**。
+
+⚠ **本 TD 的母體未量測**：repo 中「D1 讀取後賦值給具名型別」的配對總數本棒**未清點**，
+🚫 接手者不得沿用「只有這一處」的印象，須自行量測。
+
 ## 11. 高風險領域加碼判定
 
 依全域 §高風險領域加碼層，逐條檢查觸發條件（母體＝該節列舉之 7 類，零收窄）：
@@ -977,6 +1127,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 16 | 2026-08-23 | `ARCH-BR-R2-RR1` 族處置完成（4 成員；**PLAN-only、零 code diff 變動**） | §14.3 |
 | 17 | 2026-08-23 | PLAN R3 HEAD `24a073f5`；① R3 delta packet 送出（`92896a86…`） | §14.4 |
 | 18 | 2026-08-23 | **① R3 verdict ＝ `CHATGPT_ARCH_APPROVED`**（0 Blocker／0 Required／2 NB carry-forward）＠ `24a073f5`；三個 Required 全 CLOSED；`SR-32` 經 ① 裁定保留 | §14.4 |
+| 19 | 2026-08-23 | PLAN `ee240a1e`；② Codex Plan Gate packet 送出（`142cb51f…`） | §14.5 |
+| 20 | 2026-08-23 | **② R1 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（**1 Blocker `TS-BOUNDARY-002`**／1 Required `GOV-EVIDENCE-001`+`GOV-FAIL-001`）＠ `ee240a1e` | §14.5 |
+| 21 | 2026-08-23 | ② R1 兩個 family 處置完成（`UB-B-1` 登錄 ＋ replay recipe 隔離化 ＋ 守衛 fail-closed；**PLAN-only、零 code diff 變動**） | §14.5 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1019,10 +1172,14 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-31` | `SR-28` 註記被插在「代替對真實母體的量測。」與其結論句「⇒ 印證…修過不代表免疫」之間 ⇒ 該結論句脫離其所屬段落、看起來像在總結 `SR-28` | 文脈斷裂 | 把結論句移回原段落末；`SR-28`／`SR-29` 合併為獨立註記段 |
 | `SR-32` | §13 非目標第 9 項仍寫「其他 **15** 個單元」⇒ `SR-13`（單元數帳）之**第三個成員**，我修 §2.1.1 與 §3 時漏掉 | **實質錯誤**（族處置不完整，第 3 次） | 改為「其餘 **10** 個未裁定單元」＋ 指向 §2.1.1 對映帳 |
 | `SR-34` | §14 待填清單標頭仍寫「留空待填」，但 ① 已由實際 gate 回覆填入 ⇒ 標頭與內容不一致 | 內部一致性 | 改為「只由實際 gate 回覆填入（已回覆者填 verdict／未回覆者維持 `_待填_`）」 |
+| `SR-35` | §5.6 suppression 預算的**母體是「文字上的 suppression 語法」**（`as T` / `: any` / `@ts-*`），但要保護的性質是「**未經檢查的型別宣稱**」⇒ `const rawRows: UserAuditRow[] = <any>` 這種**隱式 unchecked assignment 落在母體外**，卻是本棒最強的型別宣稱 | **實質錯誤**（母體 < 性質，第 11 次；② `TS-BOUNDARY-002` 之根因） | §5.6 補「unchecked assignment」列（預算 1／實際 1）＋ errata；登錄 `UB-B-1`；附啟發式重播指令並標明其非機械閘 |
+| `SR-37` | §6.3 的**逐字輸出 block 仍是舊（非 fail-closed）腳本的輸出**（`NON-EMPTY GUARD : true` 等格式）⇒ 修了腳本卻沒換證據，兩者脫節 | **證據與實作脫節** | 以 fail-closed 腳本重跑並換上真實輸出（含 `ALL GUARDS PASSED (6/6)` ＋ `exit=0`）＋ 逐條負向控制實測 |
+| `SR-38` | 插入之 §10.3 落在 §10.2 **之前** ⇒ 子章節編號亂序（10.1→10.3→10.2）。與 `SR-27` 同一形態、**第 2 次** | 文件結構 | 交換兩節位置，恢復遞增 |
+| `SR-36` | §6.3 宣稱「同時斷言 `bytes>0`／`srcCR=0`／`emitCR=0`／`diags=0`」，但腳本**只對空 input/output `throw`**，其餘守衛與 `BYTE-IDENTICAL:false` 僅 `console.log`、仍 exit 0 ⇒ **我自己的守衛在假綠** | **實質錯誤**（結構性假綠；② `GOV-FAIL-001`） | 腳本改 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；補逐條負向控制（**實測獨立轉紅 4 條**，守衛 3／4 無法獨立注入、如實標示） |
 | `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
 
-**根因分布（供後續棒次參考）**：34 條中 **10 條**
-（`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26`）
+**根因分布（供後續棒次參考）**：38 條中 **11 條**
+（`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26` **`SR-35`**）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
 ⇒ 印證 [[feedback_guard_population_must_cover_property]]「**修過不代表免疫**」：
@@ -1254,6 +1411,65 @@ R2 複核三點＝(1) SoT 模型不再矛盾 (2) §12 不再跨推 bundle (3) `B
 
 「① Architecture Gate 到此通過。下一關可送 ② Codex Plan Gate；
 **這仍不等於 `CODING_ALLOWED`，也不授權現在修改 `functions/api/admin/audit.ts`**。」
+
+---
+
+### 14.5 ② Codex Plan Gate — R1 verdict 與處置 receipt
+
+**verdict**：`CODEX_PLAN_CHANGES_REQUESTED` — **1 Blocker ／ 1 Required**
+**受審錨點**：PLAN commit `ee240a1e`；base `acc98dfb`
+**② 已重播確認無誤者**：commit 鏈／changed-files／packet hashes／PLAN blob `8850a2ca…`；
+overlay `7495 B` ＋ sha256 `79792231…`；診斷 `352 → 347`、`REMOVED=5`、`ADDED=0`；
+emit `6599 B` / `10c1d1f8…` byte-identical；負向控制／contextual typing／DDL 八欄對照／
+suppression 預算／單一直接 test caller。
+
+#### 14.5.1 Blocker `TS-BOUNDARY-002` 之處置
+
+**② 之 finding**：§4.4 承認 `rowsResult` 實為 `any`，再未經檢查賦值成 `UserAuditRow[]`
+（checker 重播：`initializer = any` / `rawRows = UserAuditRow[]`）＝ D1 legacy interop 邊界之
+**type laundering**；JSDoc 誠實揭露與零文字 suppression **不能取代 unsafe-boundary registry**。
+② 給兩條最小修正：(1) 增加具 `reason / scope / evidence / recheck` 的 record；(2) 改用真正
+typed／validated D1 boundary。並認為兩案「都會改變 `FINAL_PR_CHANGED_FILES` 或 production design」，
+故 owner 須裁定是否重送 ①。
+
+**我方處置＝路徑 (1)，並主張其不觸發上述 owner 裁定條件。理由（皆可查證）**：
+
+| 主張 | 查證 |
+|---|---|
+| repo **無** unsafe-boundary registry／governance manifest，故不存在「現場該有卻沒填」的檔 | 本棒實測：`git ls-files \| grep -iE '(^\|/)AGENTS?\.md$'` ⇒ **0 命中**；`governance/rules.json` 不存在。⚠ ② 自己亦於同份 verdict 結語確認「repo 沒有 TypeScript governance manifest；`TS-BOUNDARY-001/002` 等**均不得宣稱為 repo machine-enforced**」 |
+| **登錄置於 PLAN 內**是本 repo **已經 gate 核可的先例** | 批 E `docs/plans/stage7-pr2dw-batche-audit-log-typing.md` §4.4 之 `🔒 UNSAFE-BOUNDARY-REGISTRY`／`UB-E-1`：該棒 ② R3 原文「明確登錄此 unsafe boundary，而非用 overload 隱藏」，並因 SCOPE-LOCK 禁新增 repo 治理檔而置於 PLAN 內 |
+| ⇒ 故 **不改 `FINAL_PR_CHANGED_FILES`**（plan doc 本就是唯一的 `A`）、**不改 production design**（code diff 與 anchor 均未動） | §14.5.3 不變式表 |
+
+⇒ 已於 §4.4 新增 `🔒 UNSAFE-BOUNDARY-REGISTRY` 之 `UB-B-1`，欄位涵蓋 ② 要求之
+`reason`（未驗證假設 ＋ 安全論證）／`scope`（位置，明列不涵蓋範圍）／`evidence`（emit byte-identical）／
+`recheck`（5 條 trigger），並額外記錄「仍存在的既有 failure mode」與「為何不改用 runtime validation」。
+
+⚠ **本節是我方對 ② 前提的具名反駁，🚫 不是自我核准。** 若 ② 仍認為需 owner 裁定或需重送 ①，
+請於 R2 明示；owner 亦可直接推翻本判斷。
+
+#### 14.5.2 Required `GOV-EVIDENCE-001` ／ `GOV-FAIL-001` 之處置（**② 完全正確，我方無異議**）
+
+| ② 之 finding | 我方確認 | 處置 |
+|---|---|---|
+| replay recipe 在**共用工作樹** checkout base、跑 `npm ci`、改 source，結尾只還原單檔，未復原 branch/ref、dependency state、scratch | **成立。** 逐字查證 `.claude/agents/readonly-reviewer.md` 存在且載明「never check out into the shared working tree／installs packages」；`CLAUDE.md` §6 亦禁 checkout／切 branch。**舊 recipe 等於指示審查者違反 repo 自己的 reviewer 契約** | §6.6 全面重做：新增 `🔒 ISOLATION-CONTRACT`（§6.6.0）＋ **disposable `git clone --local` ＋ `trap rm -rf`**（§6.6.1）；🚫 不用 `git worktree`（junction 風險）；clone 自帶 `npm ci`；末附「來源 repo 未被觸碰」之驗證兩行 |
+| 內嵌 emit script 只對空 input/output `throw`，`srcCR`／emit CR／diagnostics／`BYTE-IDENTICAL:false` 僅印出、仍 exit 0，與 PLAN 宣稱之「斷言守衛」不符 | **成立，且這是我自己的守衛在假綠。** §6.3 舊句「同時斷言 bytes>0／srcCR=0／emitCR=0／diags=0」**當時為假** | 腳本改為 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；§6.6 步驟 5 補**逐條**負向控制。⚠ 實測**獨立轉紅 4 條**；守衛 3／4 在本檔輸入下無法獨立注入，如實標示為「未獨立驗證」、🚫 不宣稱 6/6 皆已個別證明 |
+
+#### 14.5.3 本輪不變式（code diff 面完全未動）
+
+| 不變式 | 值 | 本輪是否變動 |
+|---|---|---|
+| production source blob | `ec2a9b0795d500d72159988071807be86e8d049f` | **未動一行** |
+| overlay anchor sha256 | `7979223135b8e6ed80b807f1f1262f2c4bebbe57e40e568eadc69705af39d450` | 未變 |
+| code diff stat ／ 三個 hunk 標頭 ／ §4.1 之 26 行 block | `+29 / -3` 等 | 未變 |
+| `FINAL_PR_CHANGED_FILES` | `A` plan doc ＋ `M` audit.ts（恰 2 檔） | 未變 |
+
+#### 14.5.4 ② 之其他認定（記錄，🚫 不轉錄升格）
+
+- **State Consistency**：production diff 無資料寫入／migration／state transition，squash revert 模型成立；Blocker 屬型別邊界治理、非 runtime state mutation。
+- **Queue / Payment / Distributed State**：Not Applicable。
+- **Observability**：runtime observability 未改；七道 CI gate 未跑、committed-diff `BAN_PATTERNS` 仍 vacuous —— ② 認為「正確保留為 coding-stage 必驗項」。
+- ② 明示：`TS-TYPE-001`／`TS-BOUNDARY-001/002`／`GOV-DECISION-001`／`GOV-DRIFT-001`／`GOV-EVIDENCE-001`／`GOV-FAIL-001` **均不得宣稱為 repo machine-enforced**（repo 無 TypeScript governance manifest）。
+- ② 確認其審查全程未寫檔、未 commit、未 push；工作樹僅有既有的 `?? CLEANUP_PLAN.md`。
 
 ---
 
