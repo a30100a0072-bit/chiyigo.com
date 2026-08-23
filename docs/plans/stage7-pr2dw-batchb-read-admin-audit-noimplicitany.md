@@ -1,8 +1,19 @@
 # Stage 7 · PR-2dw 批 B-read — `functions/api/admin/audit.ts` noImplicitAny 5 → 0
 
-> **狀態讀法**（沿批 E `ARCH-E-R18-G1`；永久規則，🚫 本身不含任何會過期的值）：
-> 🚫 本檔任何章節**不複述** gate 當前狀態。**gate 狀態的唯一 SoT ＝ §14 裁決 ledger。**
-> 🚫 本 artifact **不自我宣告** self-review closure，🚫 不持有「最新輪次／finding 總數」之 live 副本。
+> **狀態讀法**（沿批 E `ARCH-E-R18-G1`；永久規則，🚫 本身不含任何會過期的值。
+> 本段之 SoT 模型於 ① R1 `ARCH-BR-R1-STATE-SOT-CLOSURE-GAP` 後收窄，見 §14.2）：
+>
+> **兩個狀態各有其 SoT，邊界互斥且窮盡，🚫 不得互相推導：**
+>
+> | 狀態種類 | SoT 位置 | 本檔的角色 |
+> |---|---|---|
+> | **外部 gate verdict**（①②③④） | **本檔 §14 裁決 ledger** | 持有（append-only） |
+> | **維度 A self-review closure**（`PLAN_SELF_REVIEW_CLEAN` ／ `CODE_SELF_REVIEW_CLEAN`） | **owner ／ workflow state，🚫 不在本檔** | 🚫 不持有、🚫 不可由本檔推導 |
+>
+> 🚫 本檔 §14 以外的任何章節**不複述**外部 gate 狀態。
+> 🚫 本檔 **不自我宣告** self-review closure；§14.0 只記 finding 與處置之 **append-only 歷史**，
+> 🚫 不記 closure、🚫 不持有「最新輪次／目前是否乾淨」之 live 副本。
+> ⇒ 「唯一 SoT 在本檔」與「某必要狀態不在本檔」不再並存 —— 前者已限定為**外部 gate verdict**。
 >
 > **級別**：實作 L1 ／ 審查 care L2（沿批 D／E 先例；⚠ 任一 gate 得挑戰，疑義一律 fail-safe 升級）
 > **維度 A self-review 形式**：**單 agent 對抗式**（owner 2026-08-22 當輪裁定；非 workflow）
@@ -16,8 +27,14 @@
 把 `functions/api/admin/audit.ts` 的 **5 條 `noImplicitAny` 診斷清為 0**（`TS7006`×3 ＋ `TS7031`×2），
 使該檔進入 ratchet 的 clean set。
 
-**性質＝純 type-only、零 runtime delta**（§6.3 有 byte-identical emit 實測 ＋ §6.4 兩組負向控制）。
+**性質＝純 type-only**：全部改動皆為型別標註與型別宣告，**erase 後不產生任何語句**。
 🚫 本棒**不**修改任何行為、不動 schema、不動 migration、不動測試、不動 caller、不動 SQL。
+
+⚠ **證據與其範圍限定（`ARCH-BR-R2` 族，`SR-29`）**：上述性質之機械證據＝§6.3 的
+**單檔 transpile emit byte-identical** ＋ §6.4 兩組負向控制。
+該證據**只覆蓋本檔 transpile 後的 JS**，🚫 **不是** production bundle identity；
+bundle 面由 §9.1 第 6 道 `build:functions` 守備。
+🚫 本節不得被讀成「已證明 production 行為零差異」。
 
 ---
 
@@ -399,6 +416,13 @@ A  docs/plans/stage7-pr2dw-batchb-read-admin-audit-noimplicitany.md    ← 新�
 M  functions/api/admin/audit.ts
 ```
 
+> ⚠ **`MEMORY.md` 不在此清單內，且不應在**（① R1 條件式提問之解答，**本棒實測**）：
+> 本專案的 `MEMORY.md` 位於 **repo 外之 agent-local 路徑**
+> `~/.claude/projects/C--Users-User-Desktop-chiyigo-com/memory/`，
+> `git ls-files --error-unmatch MEMORY.md` **不存在**、repo 工作樹亦無此檔
+> ⇒ 對它的任何更新**不影響本 PR 的 changed-files**，「恰 2 檔」不變。
+> 其地位與清理義務見 §14.2.4。
+
 **恰 2 檔**。`functions/api/admin/audit.ts` 之 hunk shape —— ⚠ 下列**不是預測，是對 §6.3 overlay 快照
 （`sha256 = 79792231…`）與 base blob 之實測 `diff -u` 結果**：
 
@@ -730,9 +754,13 @@ BAN_PATTERNS 的真實驗證只能在 **commit 之後**取得，列為 §9 codin
 
 **本棒不新增測試**，理由逐條：
 
-1. **無行為可測**：§6.3 已證 emit byte-identical ⇒ 不存在任何新的 runtime 行為可供 regression test 鎖定。
+1. **無行為可測**：全部改動 erase 後不產生任何語句（§4.2 逐條可核），
+   §6.3 之單檔 transpile emit byte-identical 為其機械證據
+   ⇒ **本檔內**不存在任何新的 runtime 行為可供 regression test 鎖定。
    依 [[feedback_regression_test_must_lock_exact_failure]]，測不到 exact failure 的 test 即為
    「為覆蓋率寫的無意義 test」，本基線明文禁止。
+   ⚠ **範圍限定（`ARCH-BR-R2` 族，`SR-29`）**：此推論之作用域是**本檔的 transpile 輸出**，
+   🚫 不延伸到 production bundle（該面由 §9.1 `build:functions` 守備）。
 2. **既有覆蓋存在且已實證與新標註相容**（見 §8.1）。
 3. **型別宣告本身不可測**：`UserAuditRow` 為 erase-only 宣告，無 runtime 存在。
 
@@ -896,7 +924,11 @@ bundle 面的守備是 §9.1 第 6 道 `build:functions`，🚫 不得把 §6.3 
 **回滾單位＝整個 squash commit**（`git revert <squash-sha>`）。
 
 無 migration、無 schema、無 env 變更、無 R2 狀態 ⇒ **revert 即完全復原**，無殘留副作用、無資料面補償動作。
-emit byte-identical ⇒ revert 前後的 production bundle 行為亦無差異。
+
+⚠ **rollback 之成立不需要、也不援引 bundle-equivalence 這個命題**（`ARCH-BR-R2` 之處置）：
+上述四個「無」已足以說明 repo／資料面 rollback。
+production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
+🚫 **不由 §6.3 之單檔 transpile identity 推導** —— 該證據的範圍限定見 §6.3 末段與 §11.1。
 
 ---
 
@@ -919,7 +951,11 @@ emit byte-identical ⇒ revert 前後的 production bundle 行為亦無差異。
 
 ## 14. Gate 軌跡
 
-### 裁決 ledger（append-only；**gate 狀態之唯一 SoT**）
+### 裁決 ledger（append-only；**外部 gate verdict 之唯一 SoT**）
+
+> ⚠ 本標題於 ① R1 `ARCH-BR-R1` 後由「gate 狀態之唯一 SoT」收窄為「**外部 gate verdict** 之唯一 SoT」——
+> 維度 A self-review closure 不在本檔範圍內（見開頭狀態讀法）。自審 `SR-28` 補抓：R1 首次處置時
+> 只改了開頭段落、**漏改本標題**，等於同一個矛盾仍原地存活。
 
 | # | 時點 | 事件 | 錨點 |
 |---|---|---|---|
@@ -933,6 +969,9 @@ emit byte-identical ⇒ revert 前後的 production bundle 行為亦無差異。
 | 8 | 2026-08-22 | 負向控制於採用案 overlay 上重測（`SR-18` 之處置） | §6.4.1 |
 | 9 | 2026-08-22 | `B-OD-2` 命名裁決（`AuditLogRow` → `UserAuditRow`，避同字串異概念） | §4.3.1 |
 | 10 | 2026-08-22 | **改名後全套證據重測**：anchor `79792231…` · diff `+29/-3` · set-diff `5/0` · emit `10c1d1f8…` byte-identical · 負向控制 `ADDED=2` · ratchet 347/326/337 · lint EXIT 0 | §5.5 §6 |
+| 11 | 2026-08-22 | PLAN R1 commit `9d1f29d5`；① packet v1 送出（`2aa808b8…` ＋ plan 副本 `942afd65…`） | §14.2 |
+| 12 | 2026-08-23 | **① R1 verdict ＝ `CHATGPT_ARCH_CHANGES_REQUESTED`**（0 Blocker／2 Required／2 Non-blocking），錨點 PLAN `9d1f29d5` | §14.2 |
+| 13 | 2026-08-23 | ① R1 兩個 Required 處置完成（ultra-narrow，**PLAN-only、零 code diff 變動**） | §14.2 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -971,11 +1010,21 @@ emit byte-identical ⇒ revert 前後的 production bundle 行為亦無差異。
 | `SR-25` | §4.3.1 稱 `user-audit.ts` 為 `audit_log`「唯一寫入端」，**經量測證偽**（另有 1 `UPDATE` ＋ 1 `DELETE`） | **實質錯誤**（全稱宣稱） | 新增 §4.3.1.1 三型態母體量測；表述改為「唯一的**列產生**端」 |
 
 | `SR-26` | §4.6 稱既有寫法「一律 inline 物件型別」，但支撐之 grep 輸出被 `head -12` **截斷** ⇒ 對前 12 筆下全稱斷言 | **實質錯誤**（截斷母體） | 重跑完整母體（143 個 handler ＋ 兩道反向掃描），結論成立且更強（本棒形式為 99/143 多數） |
+| `SR-27` | ① R1 處置時插入之 §14.2 落在 §14.1 **之前** ⇒ 子章節編號亂序（14.0→14.2→14.1） | 文件結構 | 把較短的 §14.1 移到 §14.2 之前；🚫 未改任何 §14.2 交叉引用（4 處皆仍指 §14.2） |
+| `SR-28` | ① R1 之 SoT 收窄**只改了開頭段落**，`### 裁決 ledger` 標題仍寫「**gate 狀態**之唯一 SoT」⇒ 同一矛盾在標題原地存活 | **R1 漏修**（Required 未真正封上） | 標題同步收窄為「**外部 gate verdict** 之唯一 SoT」＋ 加註本次漏修事實 |
+| `SR-29` | 依 `SR-28` 教訓做**族掃描**後發現：`ARCH-BR-R2` 之過度宣稱**不只在 §12** —— §1 之「零 runtime delta」與 §8 之「不存在任何新的 runtime 行為」同樣是由單檔 transpile 證據跨推 runtime 級性質 | **R2 族存活成員**（① 只點名 §12） | 兩處一併加範圍限定；三處（§1／§8／§12）同時封上。⚠ 這是**同一個 Required 的完整族處置**，🚫 非新增 scope |
 
-**根因分布（供後續棒次參考）**：26 條中 **10 條**
+**根因分布（供後續棒次參考）**：29 條中 **10 條**
 （`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26`）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
+
+⚠ **`SR-28` 值得單獨記錄（族：「修了一處就以為修完」）**：① R1 的 Required 是一個**語意矛盾**，
+而該矛盾的字面在文件中出現**兩處**（開頭段落 ＋ ledger 標題）。我只修了自己記得的那一處，
+若非自審再掃一次，送回 ① 的會是「宣稱已封上、實際仍矛盾」。
+⇒ **處置語意類 finding 時，第一步應是把該語意的所有字面出現點枚舉出來**，
+與 [[feedback_guard_population_must_cover_property]] 同一紀律（母體先於處置），
+亦即使用者基線所稱「**處置單位是族、不是案例**」。
 ⇒ 印證 [[feedback_guard_population_must_cover_property]]「**修過不代表免疫**」：
 該族在**新撰寫的段落**最易復發，即使作者剛讀過該教訓。
 
@@ -984,8 +1033,9 @@ emit byte-identical ⇒ revert 前後的 production bundle 行為亦無差異。
 🚫 不是靠「我覺得這個名字很自然」。建議後續棒次把此步驟列為**新增型別/常數時的固定動作**。
 
 > 🚫 以下欄位**留空待填**，由實際 gate 回覆填入；🚫 不得預先自我宣告。
+> ⚠ **本清單只列外部 gate**（`ARCH-BR-R1` 之處置）。維度 A self-review 的 closure
+> **不在本檔的 SoT 範圍內**（見開頭狀態讀法之兩列表格）；§14.0 僅為其 append-only 歷史，🚫 非 closure。
 >
-> - 維度 A self-review（單 agent 對抗式）：輪次與 findings — _待填_
 > - ① ChatGPT Architecture Gate：verdict ＋ 錨點 SHA — _待填_
 > - ② Codex Plan Gate：verdict ＋ 錨點 SHA — _待填_
 > - ③ Codex Code Gate：verdict ＋ 錨點 SHA — _待填_
@@ -999,6 +1049,59 @@ emit byte-identical ⇒ revert 前後的 production bundle 行為亦無差異。
 | `TD-BATCHE-1` | audit 寫入端 `admin_email` 契約硬化 | 接手棒次須**自行重新量測母體**（批 E §14.30 為 factual errata、不具規範地位）；🚫 本棒不處置 |
 | ① R20 Q2(b) 11 個同族 claim | closure mechanism 已由 ① R21 終止且未指定替代 | 維持 unresolved |
 | `governance/rules.json` 不存在 | TypeScript governance rule 仍為 advisory／not enforced | 現況記錄 |
+
+---
+
+### 14.2 ① ChatGPT Architecture Gate — R1 verdict 與處置 receipt
+
+**verdict**：`CHATGPT_ARCH_CHANGES_REQUESTED` — **0 Blocker ／ 2 Required ／ 2 Non-blocking**
+**受審錨點**：PLAN commit `9d1f29d5`；base `acc98dfb`；production source 為 base blob `ec2a9b07…`（未動）
+**① 明示之 R2 範圍限制**：ultra-narrow，只封兩個 Required；
+🚫 **不得因本裁決去改 `functions/api/admin/audit.ts`**（須維持 base blob）；
+R2 複核三點＝(1) SoT 模型不再矛盾 (2) §12 不再跨推 bundle (3) `B-OD-1`／`B-OD-2`／`UserAuditRow`／scope／code diff 均未順手擴張。
+
+#### 14.2.1 兩個 Required 之處置
+
+| ID | ① 之 finding | 處置 | 落點 |
+|---|---|---|---|
+| `ARCH-BR-R1-STATE-SOT-CLOSURE-GAP` | 開頭宣告「gate 狀態的唯一 SoT ＝ §14」，同時宣告本檔不持有 self-review closure；但 §14 無 terminal closure receipt ⇒ `PLAN_SELF_REVIEW_CLEAN` 無法由被宣稱為唯一 SoT 的 ledger 推導。「唯一 SoT 在這裡」與「這個必要狀態不在這裡」不可並存 | 採 ① 提供之**第二種最小修法**：**收窄 SoT 宣稱**。開頭改為兩列表格 —— 外部 gate verdict 的 SoT ＝ §14；維度 A closure ＝ **owner／workflow state、不在本檔**。並刪除 §14 待填清單中的 self-review 列（該列曾隱含 ledger 會持有 self-review 狀態）。🚫 **未**改為由本檔自我核發 closure | 開頭狀態讀法 · §14 待填清單 |
+| `ARCH-BR-R2-EMIT-EVIDENCE-SCOPE-ESCAPE` | §12 寫「emit byte-identical ⇒ revert 前後的 production bundle 行為亦無差異」，把單檔證據提升到其未覆蓋的 production-bundle 性質，與本 PLAN 自己在 §6.3／§11.1 的證據邊界矛盾 | **刪除該句**；改寫為「rollback 之成立不需要、也不援引 bundle-equivalence；bundle 面仍由 coding-stage `build:functions` 驗證，🚫 不由 §6.3 推導」。⚠ **族處置**：自審 `SR-29` 另抓到同族存活成員 §1（「零 runtime delta」）與 §8（「不存在任何新的 runtime 行為」），一併加限定 ⇒ **三處同時封上**（§1／§8／§12） | §1 · §8 · §12 |
+
+⚠ **根因（誠實記錄）**：`ARCH-BR-R2` 是典型 **cognition–artifact drift** —— 我在 §6.3、§7.2、§11.1
+**三處**都正確寫了範圍限定，卻在 §12 又把同一證據跨推出去。
+⇒ 「已在別處限定過」**不構成**該限定會自動套用到新寫段落的理由；
+與 §14.0 之「母體 < 性質」族同源（皆為**新撰寫段落最易復發**），列為本棒第 11 次同類復發。
+
+#### 14.2.2 兩個 Non-blocking 之 carry-forward（🚫 本輪不做，理由逐條）
+
+| ID | ① 之建議 | 本輪處置 | 理由 |
+|---|---|---|---|
+| `ARCH-BR-NB1-PROJECTION-NAME` | `UserAuditProjectionRow` 語意更強，但現有 JSDoc 已充分限定；**不值得為此阻擋或增加本輪 diff** | **不做**，carry-forward | ① 明示不值得增加本輪 diff；改名會動到 §4.1 逐字 block ⇒ 改變 code diff 與 anchor `79792231…`，違反 R2 之 ultra-narrow 與「code diff 未擴張」複核點 |
+| `ARCH-BR-NB2-GUARANTEE-WORDING` | 「唯一保證」宜改為「維護義務／人工契約」；**後續若正在碰同段**再改；本項單獨不阻擋 | **不做**，carry-forward | 該措辭同時存在於 §4.4 **與 §4.1 之 JSDoc 逐字內容**（後者即 production source 文字）。只改 PLAN 散文會使兩者**去同步**，比不改更糟；要改就得動 source ⇒ 違反 ① 之「不得改 `audit.ts`」。⚠ 若後續 gate 認為值得，應**整組**（JSDoc ＋ §4.4）一起改並重測 anchor |
+
+#### 14.2.3 ① 對四個架構問題之裁決（**已 accept，🚫 後續不得重開為 blocker**）
+
+1. **字母 → scope 首次落成 artifact ＝ 接受** —— 正確區分 authority（owner `SPEC-B1`）與 evidence（結構量測），
+   未把「殘域恰一組 GET/DELETE 配對」倒推成字母權威。
+2. **`B-OD-1` ＝ 接受 v2** —— 但 ① 明示理由是**結構性的**（單一邊界建型別／callback 自然 contextual typing／
+   `filteredRows` 不再是 `any`／標註數更少），**byte-identical 只是額外證據與 tie-breaker，
+   🚫 不得升格為凌駕型別正確性的硬原則**。⚠ 後續棒次引用本案時須照此限定，不得寫成「emit 差一 byte 即不可接受」。
+3. **`B-OD-2` ＝ 接受避名，不要求本棒重構** —— 且 ① 明確**否決**「統一兩者」方向
+   （兩者本就不是同一概念）；若未來要改善，方向是**更明確地 disambiguate**
+   （例：`AdminAuditLogRow` ／ `UserAuditProjectionRow`）。⚠ 🚫 不得開「統一命名」backlog。
+4. **`UserAuditRow` ＝ 現方案可接受，不退回 `Record<string, unknown>`** —— 固定 SELECT projection 的
+   局部契約值得明確建模；關鍵是已正確承認 D1 `any` 使賦值無 compiler/runtime validation。
+
+#### 14.2.4 `MEMORY.md` 之地位（① 條件式提問之解答，**本棒實測**）
+
+① 指出：若 `MEMORY.md` 是 repo tracked file，則「`FINAL_PR_CHANGED_FILES` 恰 2 檔」會被破壞。
+
+**實測**（`git ls-files --error-unmatch MEMORY.md` ⇒ 不存在；repo 工作樹亦無此檔）：
+`MEMORY.md` 位於 **repo 外之 agent-local 路徑** `~/.claude/projects/C--Users-User-Desktop-chiyigo-com/memory/`，
+**非 repo tracked** ⇒ **不影響** `FINAL_PR_CHANGED_FILES`（§5.5 之「恰 2 檔」不變）。
+
+依 ① 之建議採用：**保留 in-flight marker**，但視為**非權威 cache**；
+**清理義務**＝branch abandon／rebase 失效／merge 後**皆須同步更新或清除**該 marker。
 
 ---
 
