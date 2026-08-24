@@ -631,13 +631,14 @@ coding 階段落地後之 `functions/api/admin/audit.ts` **必須**雜湊到此�
 > `srcCR = 0`、`emitCR = 0`、`diags = 0`」—— **該宣稱當時為假**。舊腳本只對空 input／空 output
 > `throw`，其餘三項與 `BYTE-IDENTICAL:false` **只是 `console.log`，程序仍 exit 0**。
 > ⇒ 一個「印出 `GUARD: false` 卻回報成功」的量測器，正是本棒反覆在批判的**結構性假綠**，
-> 而這次是**我自己的守衛**。已於 §6.6 步驟 4 改為 6 條守衛全部累積失敗 → non-zero exit。
+> 而這次是**我自己的守衛**。已改為 6 條守衛全部累積失敗 → non-zero exit（現行實作見 §6.6.B 之 driver）。
+> ⚠ **[指標更新 2026-08-24]** 原文指向「§6.6 步驟 4」，該分段編號已隨 driver 化取消。
 > ⚠ **本 errata 當時同時宣稱「實測獨立轉紅 4 條」，該數字亦為假**（真實 3 條）——
 > 見 `SR-39`：當時 guard 5 的注入實際觸發的是 guard 6。修正後才真正達到 4 條（1／2／5／6）。
 > ⇒ 一個 errata 自己帶著另一個未被發現的錯值，是本棒第 2 次（前次為 `SR-1` → `SR-21` 之連鎖）。
 
 **現行守衛（fail-closed，共 6 條）**：src 非空 · src CR=0 · emit 非空 · emit CR=0 · transpile diags=0 · BYTE-IDENTICAL。
-腳本與逐條負向控制見 §6.6 步驟 4／5。
+腳本與逐條負向控制見 **§6.6.B**（driver 全文 ＋ 內嵌 helper ＋ 負向控制）。
 
 ⚠ **範圍限定**：此為**單檔 transpile identity**，🚫 **不是** production bundle identity
 （實際 bundle 由 `wrangler pages functions build` 之 esbuild 產出，未在此量測範圍內）。
@@ -717,8 +718,12 @@ git status --porcelain → 僅 "?? CLEANUP_PLAN.md"
 >   **installs packages**, or mutates git state … **never check out into the shared working tree**」
 > ⇒ 舊 recipe 等於指示審查者違反 repo 自己的 reviewer 契約。**這是我方的設計錯誤，非審查者的問題。**
 
-**Shell 需求（不可省）**：步驟 2／3 使用 process substitution `<(...)` 與 `comm`，需 **bash**
-（本機為 Git Bash；Linux/macOS 原生可）。🚫 PowerShell 不支援 `<(...)`。步驟 4 為 Node ESM，任何 shell 皆可。
+**Shell 需求（不可省）**：Tier B driver 需 **bash**（本機為 Git Bash；Linux/macOS 原生可）——
+用到 `trap`／`local`／`case` 等 POSIX-sh 之外或 bash 慣用語法。🚫 PowerShell 不可直接執行。
+⚠ **[指標更新 2026-08-24]** 原文宣稱使用 **process substitution `<(...)`** ——
+現行 driver **已改為先落檔再讀**（`comm … > "$WORK/added.txt"` 後 `wc -l < 檔`），
+正是為了讓 `comm` 的 rc 可被 guard（② R4 `SR-46`）。🚫 該敘述已不成立。
+Tier A 僅需 `git` ＋ `node`，🚫 不需 bash-only 語法。
 
 ### 6.6.0 🔒 `REPLAY-AUTHORIZATION-TIERS`（② R2 Blocker 之處置；**先讀完再執行任何一行**）
 
@@ -749,8 +754,20 @@ git status --porcelain → 僅 "?? CLEANUP_PLAN.md"
 > 🚨 **② R3 Required 之處置（`SR-43`）**：上一版此段寫 `SRC=…` 但 Node 讀 `process.env.SRC`，
 > **按字面執行會得到 `undefined/package.json`**；且 `PLAN` 仍釘在已過時的 R2 commit。已修。
 
+> 🚨 **② R5 Required 之處置（`SR-51`）**：上一版 Tier A 接受一般 `<repo path>`，但 A2 直接把
+> **環境值**餵給 `createRequire()` ⇒ 依公開 recipe 用 `SRC=.` 會得 `ERR_INVALID_ARG_VALUE`（實測復現）。
+> ⇒ 現在**先 canonicalize、驗證、再 re-export absolute `SRC`**，A1／A2 才開始。
+
 ```bash
-export SRC=<chiyigo.com repo 路徑>        # ← 必須 export（Node 以 process.env.SRC 取 typescript）
+SRC_IN=<chiyigo.com repo 路徑>            # 可為相對路徑（例：. 或 ../chiyigo.com）
+# A0 canonicalize：把 SRC 固定為「已驗證的 absolute git top-level」後才 export
+git -C "$SRC_IN" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+  || { echo "FAIL: SRC 不是 git work tree"; exit 1; }
+SRC_TOP="$(git -C "$SRC_IN" rev-parse --show-toplevel)" || { echo "FAIL: show-toplevel"; exit 1; }
+export SRC="$(cd "$SRC_TOP" && pwd -P)"   || { echo "FAIL: canonicalize SRC"; exit 1; }
+case "$SRC" in /*) : ;; *) echo "FAIL: SRC 非 absolute：$SRC"; exit 1;; esac
+echo "✓ A0：SRC canonicalized → $SRC"
+
 BASE=acc98dfbeeed237533b5b844338b5798a148ce8f
 PLAN=<本輪 PLAN commit —— 完整 40-hex，取自送審 packet §0>
 #   ⚠ 本檔無法自我引用其所在 commit（chicken-and-egg），故 PLAN 由 operator 依 packet 填入。
@@ -851,27 +868,22 @@ driver v2 rc=0
 ```bash
 #!/usr/bin/env bash
 # ============================================================================
-# Tier B replay driver v2 — Stage 7 PR-2dw 批 B-read
-# ⚠ 需**寫入授權**。🚫 readonly reviewer 不得執行（.claude/agents/readonly-reviewer.md
-#    禁止所有寫檔／安裝／checkout／rm，不限共用工作樹）。
+# Tier B replay driver v3 — Stage 7 PR-2dw 批 B-read
+# ⚠ 需**寫入授權**。🚫 readonly reviewer 不得執行。
+# 🚫 不用 `set -e`（`tsc -b` 預期回非零）；改逐一顯式 guard。
 #
-# 🚫 **不用 `set -e`**：`tsc -b` 在本案預期回非零（base 有 352 條診斷）。
-#    改為：expected-zero 逐一顯式 guard；expected-non-zero 捕捉 rc 並斷言**確切值**。
+# v3 修正（② R5 Blocker + Required）：
+#   C1 未禁止 TMPROOT/WORK 位於 SRC 內 ⇒ `TMPDIR="$SRC/node_modules"` 會把 clone 建在共用來源 repo 內，
+#      且該路徑被 .gitignore 忽略 ⇒ `status --porcelain` 仍相同 ⇒ 「來源未被觸碰」假綠
+#   C2 `cd / || true` 吞掉「離開 $WORK 失敗」⇒ 改為失敗即**拒絕刪除**
+#   C3 來源 probe 只在 rm 前跑 ⇒ 改為 **cleanup 前後各跑一次**
+#   C4 cleanup 未重驗 reparse/junction ⇒ 刪前斷言 `cd d && pwd -P` == d（junction 會解析到別處）
+#   C5 三個 heredoc `cat` 未檢查 rc ⇒ 全部 guard（`-s` 無法排除部分寫入）
+#   R-npx 「🚫 不用 npx」宣稱**為假**：`npm run typecheck:ratchet:report` 內部
+#      （scripts/typecheck-ratchet.mjs:188）仍 `execSync('npx tsc …')`。
+#      ⇒ 誠實縮窄宣稱，並以 `npx --no-install` 斷言**不可能走下載 fallback**
 #
-# v2 修正（② R4 Blocker + Required family）：
-#   B1 `comm | wc` 的 pipeline rc 被丟棄 ⇒ 改為先輸出到受 guard 的檔案再計數
-#   B2 finalizer 的 after-probe 只比字串；probe 失敗產生空字串會與 BEFORE_STATUS="" 誤判相等
-#      ⇒ 每個 probe 先斷言 rc=0 再比較
-#   B3 `mktemp` 成功但 trap 未裝的窗口；`WORK="$(…)"` 失敗會把路徑覆寫為空
-#      ⇒ 先 canonicalize SRC/TMPROOT，再 mktemp，**立刻**裝 trap（保留 WORK_RAW 保底）
-#   R1 set-diff 只驗「5 條屬 TS7006/7031」⇒ 改為與 exact multiset **逐位元組比對**
-#   R2 ratchet 只驗 errorCount ⇒ 兩側皆驗 errorCount / cleanFiles / sourceFilesTotal
-#   R3 裸 `npm ci` + `npx tsc` ⇒ `npm ci --include=dev` + 斷言本地 tsc 存在且版本 5.9.3，🚫 禁 npx
-#   R4 `SRC` 未 canonicalize（`SRC=.` 在 finalizer `cd /` 後會從錯位置跑 git）
-#      ⇒ 一開始即固定為已驗證的 absolute git top-level
-#
-# 用法：  SRC=<chiyigo.com repo> bash replay-tier-b-v2.sh
-# 回傳：  0 = 全部斷言成立；非 0 = 任一斷言／invariant／cleanup 失敗
+# 用法：  SRC=<chiyigo.com repo> bash replay-tier-b-v3.sh
 # ============================================================================
 set -u
 set -o pipefail
@@ -881,69 +893,94 @@ BASE=acc98dfbeeed237533b5b844338b5798a148ce8f
 ANCHOR=7979223135b8e6ed80b807f1f1262f2c4bebbe57e40e568eadc69705af39d450
 BASE_EMIT_SHA=10c1d1f87d28787475b481f8a210007863fd60bfd4bcabd827488139778b0b86
 EXPECT_TS_VERSION=5.9.3
-EXPECT_TSC_RC=2                  # 有診斷時之確切 rc；工具失敗為其他值（實測 config 不存在＝1）
+EXPECT_TSC_RC=2
 EXPECT_BASE_DIAGS=352 ; EXPECT_BASE_CLEAN=325 ; EXPECT_BASE_TOTAL=337
 EXPECT_OVER_DIAGS=347 ; EXPECT_OVER_CLEAN=326 ; EXPECT_OVER_TOTAL=337
 REL=functions/api/admin/audit.ts
 
+WORK=""; WORK_RAW=""; SKIP_RM=0
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-# ── R4：SRC 一開始就固定為「已驗證的 absolute git top-level」──────────────────
+# ── R4(v2)：SRC 固定為已驗證之 absolute git top-level ───────────────────────
 git -C "$SRC" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "SRC 不是 git work tree：$SRC"
 SRC_TOP="$(git -C "$SRC" rev-parse --show-toplevel)" || fail "SRC rev-parse --show-toplevel"
 SRC="$(cd "$SRC_TOP" && pwd -P)" || fail "canonicalize SRC"
 case "$SRC" in /*) : ;; *) fail "SRC 非 absolute：$SRC";; esac
 
-# ── 0. 保存來源 repo before-state（每個 probe 都 guard rc）────────────────────
+# ── 0. before-state（每個 probe guard rc）──────────────────────────────────
 BEFORE_HEAD="$(git -C "$SRC" rev-parse HEAD)"                || fail "before rev-parse HEAD"
 BEFORE_BRANCH="$(git -C "$SRC" rev-parse --abbrev-ref HEAD)" || fail "before rev-parse branch"
 BEFORE_STATUS="$(git -C "$SRC" status --porcelain)"          || fail "before status"
 
-# ── B3：先 canonicalize TMPROOT，再 mktemp，**立刻**裝 trap ──────────────────
-TMPROOT="$(cd "${TMPDIR:-/tmp}" && pwd -P)" || fail "canonicalize TMPROOT"
+# ── probe / 安全刪除 helper ────────────────────────────────────────────────
+probe_source() { # $1=label；三項皆先斷言 rc=0 再比較
+  local label="$1" now prc bad=0
+  now="$(git -C "$SRC" rev-parse HEAD 2>/dev/null)"; prc=$?
+  if [ "$prc" -ne 0 ]; then echo "AFTER PROBE FAILED[$label]: rev-parse HEAD (rc=$prc)" >&2; bad=1
+  elif [ "$now" != "$BEFORE_HEAD" ]; then echo "SOURCE MUTATED[$label]: HEAD" >&2; bad=1; fi
+  now="$(git -C "$SRC" rev-parse --abbrev-ref HEAD 2>/dev/null)"; prc=$?
+  if [ "$prc" -ne 0 ]; then echo "AFTER PROBE FAILED[$label]: branch (rc=$prc)" >&2; bad=1
+  elif [ "$now" != "$BEFORE_BRANCH" ]; then echo "SOURCE MUTATED[$label]: branch" >&2; bad=1; fi
+  now="$(git -C "$SRC" status --porcelain 2>/dev/null)"; prc=$?
+  if [ "$prc" -ne 0 ]; then echo "AFTER PROBE FAILED[$label]: status (rc=$prc)" >&2; bad=1
+  elif [ "$now" != "$BEFORE_STATUS" ]; then echo "SOURCE MUTATED[$label]: worktree/index" >&2; bad=1; fi
+  return "$bad"
+}
+
+safe_rm() { # C1+C4：刪前重驗 containment、非 SRC 內、且自身不是 reparse/junction
+  local d="$1" canon
+  [ -n "$d" ] || return 0
+  [ -e "$d" ] || return 0
+  case "$d" in "$TMPROOT"/?*) : ;; *) echo "REFUSE rm: $d 不在 temp 根之下" >&2; return 1;; esac
+  case "$d" in "$SRC"|"$SRC"/*) echo "REFUSE rm: $d 位於 SRC 內" >&2; return 1;; esac
+  canon="$(cd "$d" && pwd -P 2>/dev/null)" || { echo "REFUSE rm: 無法 canonicalize $d" >&2; return 1; }
+  # junction/symlink：canonical 會解析到別處 ⇒ 與自身不等即拒刪
+  # ⚠ 誠實限制：本檢查只涵蓋 $d **自身**；🚫 不掃描其子樹內的 reparse point
+  #   （子樹掃描在 Linux 會把 node_modules/.bin 的正常 symlink 誤判）。
+  [ "$canon" = "$d" ] || { echo "REFUSE rm: $d 為 reparse/junction（canonical=$canon）" >&2; return 1; }
+  rm -rf "$d" || { echo "CLEANUP FAILED: rm -rf $d" >&2; return 1; }
+  if [ -e "$d" ]; then echo "CLEANUP INCOMPLETE: $d 仍存在" >&2; return 1; fi
+  return 0
+}
 
 finalize() {
-  local rc=$?                       # ← 必須第一行
-  local ok=1 prc now
-  cd / 2>/dev/null || true          # 先離開 $WORK 才能刪
-
-  # (a) after-probe：**先斷言 rc=0 再比較**（B2：失敗的 git 會回空字串、與 "" 誤判相等）
-  now="$(git -C "$SRC" rev-parse HEAD 2>/dev/null)"; prc=$?
-  if [ "$prc" -ne 0 ]; then echo "AFTER PROBE FAILED: rev-parse HEAD (rc=$prc)" >&2; ok=0
-  elif [ "$now" != "$BEFORE_HEAD" ]; then echo "SOURCE MUTATED: HEAD" >&2; ok=0; fi
-
-  now="$(git -C "$SRC" rev-parse --abbrev-ref HEAD 2>/dev/null)"; prc=$?
-  if [ "$prc" -ne 0 ]; then echo "AFTER PROBE FAILED: rev-parse branch (rc=$prc)" >&2; ok=0
-  elif [ "$now" != "$BEFORE_BRANCH" ]; then echo "SOURCE MUTATED: branch" >&2; ok=0; fi
-
-  now="$(git -C "$SRC" status --porcelain 2>/dev/null)"; prc=$?
-  if [ "$prc" -ne 0 ]; then echo "AFTER PROBE FAILED: status (rc=$prc)" >&2; ok=0
-  elif [ "$now" != "$BEFORE_STATUS" ]; then echo "SOURCE MUTATED: worktree/index" >&2; ok=0; fi
-
-  # (b) cleanup：WORK_RAW 與 WORK 都清（B3 窗口保底）；刪前再驗 containment
-  local d
-  for d in "${WORK:-}" "${WORK_RAW:-}"; do
-    [ -n "$d" ] || continue
-    case "$d" in
-      "$TMPROOT"/?*) rm -rf "$d" || { echo "CLEANUP FAILED: rm -rf $d" >&2; ok=0; } ;;
-      *) echo "REFUSE cleanup: $d 不在 temp 根之下，未刪除" >&2; ok=0 ;;
-    esac
-    [ -e "$d" ] && { echo "CLEANUP INCOMPLETE: $d 仍存在" >&2; ok=0; }
-  done
-
+  local rc=$? ok=1 d
+  # C3(a)：cleanup **前** probe
+  probe_source pre-cleanup || ok=0
+  # C2：離開 $WORK 失敗即拒絕刪除（🚫 不吞）
+  if ! cd / 2>/dev/null; then echo "FAIL: 無法離開 \$WORK ⇒ 拒絕刪除" >&2; ok=0; SKIP_RM=1; fi
+  if [ "$SKIP_RM" -eq 0 ]; then
+    for d in "$WORK" "$WORK_RAW"; do
+      [ -n "$d" ] || continue
+      safe_rm "$d" || ok=0
+    done
+  else
+    echo "SKIPPED cleanup（未能離開 \$WORK）；殘留：$WORK $WORK_RAW" >&2
+  fi
+  # C3(b)：cleanup **後** 再 probe 一次
+  probe_source post-cleanup || ok=0
   if [ "$ok" -ne 1 ]; then echo "finalizer invariant 失敗（原始 rc=$rc）" >&2; exit 1; fi
-  [ "$rc" -eq 0 ] && echo "✓ finalizer：來源 repo 三項 probe rc=0 且逐字相等、workdir 已清理"
+  [ "$rc" -eq 0 ] && echo "✓ finalizer：來源 probe（cleanup 前後各一次）皆 rc=0 且逐字相等、workdir 已清理"
   exit "$rc"
 }
 
+# ── C1：TMPROOT 必須在 SRC 之外 ─────────────────────────────────────────────
+TMPROOT="$(cd "${TMPDIR:-/tmp}" && pwd -P)" || fail "canonicalize TMPROOT"
+case "$TMPROOT" in
+  "$SRC"|"$SRC"/*) fail "TMPROOT 位於 SRC 內：$TMPROOT（會把 clone 建在共用來源 repo 內；若該路徑被 .gitignore 忽略，status 比對將假綠）";;
+esac
+
+# ── C-trap：trap 在**任何 allocation 之前**就緒（WORK/WORK_RAW 為空時 finalizer 自動跳過）──
+trap finalize EXIT
+
 WORK_RAW="$(mktemp -d)" || fail "mktemp"
 WORK="$WORK_RAW"
-trap finalize EXIT                  # ← mktemp 一成功就裝，🚫 中間不留窗口
 WORK_CANON="$(cd "$WORK_RAW" && pwd -P)" || fail "canonicalize WORK"
 WORK="$WORK_CANON"
 case "$WORK" in "$TMPROOT"/?*) : ;; *) fail "WORK 不在 temp 根之下：$WORK";; esac
+case "$WORK" in "$SRC"|"$SRC"/*) fail "WORK 位於 SRC 內：$WORK";; esac
 
-# ── 1. disposable clone（🚫 不用 git worktree：junction 風險）─────────────────
+# ── 1. disposable clone ────────────────────────────────────────────────────
 git clone --local --no-hardlinks "$SRC" "$WORK/repo" >/dev/null 2>&1 || fail "clone"
 cd "$WORK/repo" || fail "cd（🚫 後續步驟絕不可在原 cwd 執行）"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "不在 git work tree 內"
@@ -951,22 +988,26 @@ TOP_CANON="$(cd "$(git rev-parse --show-toplevel)" && pwd -P)" || fail "canonica
 [ "$TOP_CANON" = "$WORK/repo" ] || fail "cwd 不是 clone 內部：$TOP_CANON != $WORK/repo"
 git checkout --detach "$BASE" >/dev/null 2>&1 || fail "checkout $BASE"
 
-# ── R3：devDependencies 必裝；🚫 不用 npx（可能改走下載／cache）────────────────
+# ── 2. 依賴：devDependencies 必裝 ───────────────────────────────────────────
 npm ci --include=dev >/dev/null 2>&1 || fail "npm ci --include=dev"
 TSV="$(node -e 'process.stdout.write(require("typescript").version)')" || fail "讀取本地 typescript 版本"
 [ "$TSV" = "$EXPECT_TS_VERSION" ] || fail "typescript $TSV（預期 $EXPECT_TS_VERSION）"
 TSC="$WORK/repo/node_modules/.bin/tsc"
-[ -x "$TSC" ] || [ -f "$TSC" ] || fail "本地 tsc 不存在於 $TSC（🚫 不得 fallback 到 npx）"
+[ -x "$TSC" ] || [ -f "$TSC" ] || fail "本地 tsc 不存在於 $TSC"
+# R-npx：⚠ 本 driver **無法**消除 npx —— `npm run typecheck:ratchet:report` 內部
+#   （scripts/typecheck-ratchet.mjs:188）自行 `execSync('npx tsc …')`，不在本 driver 控制內。
+#   ⇒ 改以 `--no-install` 斷言「本地已可解析、絕不走下載 fallback」，並固定版本。
+NPXV="$(npx --no-install tsc --version 2>/dev/null)" || fail "npx --no-install tsc 失敗 ⇒ 本地未解析（🚫 不得讓 npx 下載）"
+[ "$NPXV" = "Version $EXPECT_TS_VERSION" ] || fail "npx 解析到 '$NPXV'（預期 'Version $EXPECT_TS_VERSION'）"
 
-# ── helper：ratchet 三欄全驗（R2）──────────────────────────────────────────────
 assert_ratchet() { # $1=報告檔 $2=label $3=errorCount $4=cleanFiles $5=sourceFilesTotal
-  grep -qE "errorCount +: $3\$"       "$1" || fail "$2 ratchet errorCount != $3"
-  grep -qE "cleanFiles +: $4\$"       "$1" || fail "$2 ratchet cleanFiles != $4"
-  grep -qE "sourceFilesTotal: $5\$"   "$1" || fail "$2 ratchet sourceFilesTotal != $5"
+  grep -qE "errorCount +: $3\$"     "$1" || fail "$2 ratchet errorCount != $3"
+  grep -qE "cleanFiles +: $4\$"     "$1" || fail "$2 ratchet cleanFiles != $4"
+  grep -qE "sourceFilesTotal: $5\$" "$1" || fail "$2 ratchet sourceFilesTotal != $5"
 }
 
-# ── 2. helper 腳本（heredoc 內嵌，🚫 無外部依賴、🚫 不進 repo）─────────────────
-cat > "$WORK/materialize-overlay.mjs" <<'___MATERIALIZE_EOF___'
+# ── 3. helper 腳本（C5：每個 heredoc 的 cat 都 guard rc）────────────────────
+cat > "$WORK/materialize-overlay.mjs" <<'___MATERIALIZE_EOF___' || fail "cat materialize-overlay.mjs"
 // 從 immutable base blob 物化 overlay，🚫 不用 git apply。
 // 理由（2026-08-24 實測）：Windows Git Bash 下 `git apply` 會在無 .gitattributes 的樹把 LF 轉 CRLF
 //   （實測 +179 CR、7674 vs 7495 bytes），使 anchor 必然不符 —— 環境相依、非確定性。
@@ -1045,9 +1086,9 @@ console.log(`overlay bytes=${Buffer.byteLength(src, 'utf8')} CR=0 sha256=${sha}`
 if (sha !== EXPECT_SHA) { console.error(`FAIL: anchor 不符\n  實得 ${sha}\n  期望 ${EXPECT_SHA}`); process.exit(1) }
 console.log('✓ overlay 物化完成且 anchor 相符')
 ___MATERIALIZE_EOF___
-[ -s "$WORK/materialize-overlay.mjs" ] || fail "materialize-overlay.mjs 寫出失敗"
+[ -s "$WORK/materialize-overlay.mjs" ] || fail "materialize-overlay.mjs 為空"
 
-cat > "$WORK/emit-identity.mjs" <<'___EMIT_EOF___'
+cat > "$WORK/emit-identity.mjs" <<'___EMIT_EOF___' || fail "cat emit-identity.mjs"
 // 單檔 transpile identity 量測（fail-closed 版；② `GOV-FAIL-001` 之處置）。
 //
 // 母體 = 恰 2 個輸入：(1) base immutable git blob (2) overlay 檔（temp，🚫 非共用工作樹）
@@ -1127,41 +1168,40 @@ if (failures.length) {
 console.log('\n✓ ALL GUARDS PASSED (6/6)：src 非空 · src CR=0 · emit 非空 · emit CR=0 · diags=0 · BYTE-IDENTICAL')
 process.exit(0)
 ___EMIT_EOF___
-[ -s "$WORK/emit-identity.mjs" ] || fail "emit-identity.mjs 寫出失敗"
+[ -s "$WORK/emit-identity.mjs" ] || fail "emit-identity.mjs 為空"
 
-# ── R1：REMOVED 的 exact multiset（逐位元組比對，🚫 不只驗「5 條且屬 TS70xx」）──
-cat > "$WORK/expected-removed.txt" <<'___REMOVED_EOF___'
+cat > "$WORK/expected-removed.txt" <<'___REMOVED_EOF___' || fail "cat expected-removed.txt"
 functions/api/admin/audit.ts: error TS7006: Parameter 'r' implicitly has an 'any' type.
 functions/api/admin/audit.ts: error TS7006: Parameter 'r' implicitly has an 'any' type.
 functions/api/admin/audit.ts: error TS7006: Parameter 'raw' implicitly has an 'any' type.
 functions/api/admin/audit.ts: error TS7031: Binding element 'env' implicitly has an 'any' type.
 functions/api/admin/audit.ts: error TS7031: Binding element 'request' implicitly has an 'any' type.
 ___REMOVED_EOF___
-[ -s "$WORK/expected-removed.txt" ] || fail "expected-removed.txt 寫出失敗"
+[ "$(wc -l < "$WORK/expected-removed.txt")" -eq 5 ] || fail "expected-removed.txt 不是 5 行（部分寫入？）"
 
-# ── 3. base 面 ───────────────────────────────────────────────────────────────
+# ── 4. base 面 ─────────────────────────────────────────────────────────────
 "$TSC" -b tsconfig.solution.json --force > "$WORK/tsc-base.txt" 2>&1
-rc=$?; [ "$rc" -eq "$EXPECT_TSC_RC" ] || fail "base tsc rc=$rc（預期 $EXPECT_TSC_RC）—— 疑為工具失敗而非預期診斷"
-n=$(wc -l < "$WORK/tsc-base.txt") || fail "wc base 診斷"
+rc=$?; [ "$rc" -eq "$EXPECT_TSC_RC" ] || fail "base tsc rc=$rc（預期 $EXPECT_TSC_RC）—— 疑為工具失敗"
+n=$(wc -l < "$WORK/tsc-base.txt") || fail "wc base"
 [ "$n" -eq "$EXPECT_BASE_DIAGS" ] || fail "base 診斷 $n（預期 $EXPECT_BASE_DIAGS）"
-npm run typecheck:ratchet:report > "$WORK/ratchet-base.txt" 2>&1 || fail "base ratchet（expected-zero）"
+npm run typecheck:ratchet:report > "$WORK/ratchet-base.txt" 2>&1 || fail "base ratchet"
 assert_ratchet "$WORK/ratchet-base.txt" base "$EXPECT_BASE_DIAGS" "$EXPECT_BASE_CLEAN" "$EXPECT_BASE_TOTAL"
-npm run lint > "$WORK/lint-base.txt" 2>&1 || fail "base lint（expected-zero）"
+npm run lint > "$WORK/lint-base.txt" 2>&1 || fail "base lint"
 
-# ── 4. 物化 overlay（🚫 不用 git apply：Windows 下會把 LF 轉 CRLF）────────────
+# ── 5. 物化 overlay ────────────────────────────────────────────────────────
 node "$WORK/materialize-overlay.mjs" "$WORK/repo" "$BASE" "$WORK/repo/$REL" "$ANCHOR" \
-  > "$WORK/materialize.txt" 2>&1 || { cat "$WORK/materialize.txt" >&2; fail "物化 overlay／anchor 驗證"; }
+  > "$WORK/materialize.txt" 2>&1 || { cat "$WORK/materialize.txt" >&2; fail "物化 overlay／anchor"; }
 
-# ── 5. overlay 面 ────────────────────────────────────────────────────────────
+# ── 6. overlay 面 ──────────────────────────────────────────────────────────
 "$TSC" -b tsconfig.solution.json --force > "$WORK/tsc-over.txt" 2>&1
 rc=$?; [ "$rc" -eq "$EXPECT_TSC_RC" ] || fail "overlay tsc rc=$rc（預期 $EXPECT_TSC_RC）"
-n=$(wc -l < "$WORK/tsc-over.txt") || fail "wc overlay 診斷"
+n=$(wc -l < "$WORK/tsc-over.txt") || fail "wc overlay"
 [ "$n" -eq "$EXPECT_OVER_DIAGS" ] || fail "overlay 診斷 $n（預期 $EXPECT_OVER_DIAGS）"
-npm run typecheck:ratchet:report > "$WORK/ratchet-over.txt" 2>&1 || fail "overlay ratchet（expected-zero）"
+npm run typecheck:ratchet:report > "$WORK/ratchet-over.txt" 2>&1 || fail "overlay ratchet"
 assert_ratchet "$WORK/ratchet-over.txt" overlay "$EXPECT_OVER_DIAGS" "$EXPECT_OVER_CLEAN" "$EXPECT_OVER_TOTAL"
-npm run lint > "$WORK/lint-over.txt" 2>&1 || fail "overlay lint（expected-zero）"
+npm run lint > "$WORK/lint-over.txt" 2>&1 || fail "overlay lint"
 
-# ── 6. set-diff（line-shift robust）—— B1：先落檔再計數，每步 guard ───────────
+# ── 7. set-diff（每步 guard；exact multiset 逐位元組比對）───────────────────
 sed -E 's/\(([0-9]+),([0-9]+)\)//' "$WORK/tsc-base.txt" > "$WORK/n-base-u.txt" || fail "sed base"
 sort "$WORK/n-base-u.txt" > "$WORK/n-base.txt" || fail "sort base"
 sed -E 's/\(([0-9]+),([0-9]+)\)//' "$WORK/tsc-over.txt" > "$WORK/n-over-u.txt" || fail "sed overlay"
@@ -1172,20 +1212,17 @@ removed=$(wc -l < "$WORK/removed.txt") || fail "wc REMOVED"
 added=$(wc -l < "$WORK/added.txt")     || fail "wc ADDED"
 [ "$removed" -eq 5 ] || fail "REMOVED=$removed（預期 5）"
 [ "$added" -eq 0 ]   || fail "ADDED=$added（預期 0）"
-# R1：與 exact multiset 逐位元組比對（🚫 不只驗條數與 TS 碼）
 cmp -s "$WORK/removed.txt" "$WORK/expected-removed.txt" \
   || { echo "--- actual ---"; cat "$WORK/removed.txt"; echo "--- expected ---"; cat "$WORK/expected-removed.txt"; fail "REMOVED multiset 與 §6.1 宣稱不逐字相符"; }
 
-# ── 7. emit identity（正向）───────────────────────────────────────────────────
+# ── 8. emit identity（正向）─────────────────────────────────────────────────
 node "$WORK/emit-identity.mjs" "$WORK/repo" "$BASE" "$WORK/repo/$REL" > "$WORK/emit.txt" 2>&1 \
   || { cat "$WORK/emit.txt" >&2; fail "emit identity（正向應 exit 0）"; }
 grep -q "ALL GUARDS PASSED" "$WORK/emit.txt" || fail "emit 正向未見 ALL GUARDS PASSED"
 grep -q "$BASE_EMIT_SHA" "$WORK/emit.txt"    || fail "base emit sha 不符"
 
-# ── 8. 負向控制：斷言 exit≠0 **且**失敗集合完全相符 ──────────────────────────
-#     ⚠ G1／G2 為 coupled activation（空輸入必連帶 G3＋G6；CRLF 必連帶 G4＋G6）；
-#        只有 G5／G6 是 isolated。🚫 不得宣稱四條皆隔離。
-negctl() { # $1=label $2=overlay 檔 $3..=期望之完整失敗字串集合
+# ── 9. 負向控制（斷言完整失敗集合）──────────────────────────────────────────
+negctl() {
   local label="$1" file="$2"; shift 2
   local out rc got s
   out="$(node "$WORK/emit-identity.mjs" "$WORK/repo" "$BASE" "$file" 2>&1)"; rc=$?
@@ -1206,11 +1243,109 @@ negctl "G5 diags=0 [isolated]"  "$WORK/n_diag.ts"  "transpile diagnostics"
 negctl "G6 identity [isolated]" "$WORK/n_emit.ts"  "BYTE-IDENTICAL FAILED"
 
 echo ""
-echo "✓ Tier B v2 全部斷言成立"
-echo "  base/overlay：tsc rc=2 · 診斷 352/347 · ratchet 三欄全驗 · lint 0"
-echo "  set-diff：REMOVED 與 exact multiset 逐位元組相符 · ADDED=0"
-echo "  emit identity 正向 + 4 組負向控制（完整失敗集合）"
+echo "✓ Tier B v3 全部斷言成立"
+echo "  隔離：TMPROOT/WORK 均在 SRC 之外 · trap 先於 allocation · cleanup 前後各 probe 一次"
+echo "  依賴：npm ci --include=dev · 本地 tsc 5.9.3 · npx --no-install 解析為 Version 5.9.3（禁下載）"
+echo "  證據：診斷 352/347 · ratchet 三欄 · REMOVED exact multiset · ADDED=0 · emit identity · 4 組負控"
 exit 0
+```
+
+### 6.6.C driver 級負向控制 harness（② R5 Required：**可重播**）
+
+> ⚠ 需寫入授權；🚫 readonly reviewer 不得執行。
+> ② R5 指出上一版「五組負控只有結果表，未提供 mutation harness／命令／artifact hash，無法從 packet 重播」。
+> ⇒ 本節發布**完整 harness**：逐組以 `sed` 變異 driver、斷言 **rc ＋ 訊息 ＋ 該次新增 temp 殘留數**。
+> ⚠ 殘留以「執行前後 `$TMPROOT/tmp.*` 集合差」量測 ——
+> 🚫 **不再**用「含 `repo/` 或 materializer」當特徵（② 指出那會恰好漏掉 canonicalize 失敗留下的**空目錄**，`SR-52`）。
+
+**實跑結果（2026-08-24）**：
+```
+── driver 級負向控制（7 組）──
+  ✓ NC1-anchor: rc=1 · 命中「anchor 不符」· 殘留 0
+  ✓ NC2-diagcount: rc=1 · 命中「overlay 診斷 347（預期 999）」· 殘留 0
+  ✓ NC3-preclone-fail: rc=1 · 命中「canonicalize WORK」· 殘留 0
+  ✓ NC4-probe-fail: rc=1 · 命中「AFTER PROBE FAILED」· 殘留 0
+  ✓ NC5-comm-fail: rc=1 · 命中「comm ADDED」· 殘留 0
+  ✓ NC6-tmp-inside-src: rc=1 · 命中「TMPROOT 位於 SRC 內」· 殘留 0
+  ✓ NC7-cd-out-fail: rc=1 · 命中「拒絕刪除」· 殘留 1
+
+  結果：7 passed, 0 failed
+```
+
+⚠ **NC7 期望殘留＝1 是正確行為**：無法離開 `$WORK` 時 driver **拒絕刪除**（寧可留下也不冒險刪錯），
+harness 自行清理該次殘留。🚫 不得把它讀成 cleanup 失效。
+⚠ NC6／NC7 為 ② R5 新指出之兩個洞（temp 位於 SRC 內 ／ `cd /` 失敗被吞）之對應負控。
+
+```bash
+#!/usr/bin/env bash
+# ============================================================================
+# driver 級負向控制 harness（② R5 Required：可重播、逐組斷言 rc + 訊息 + 無殘留）
+# ⚠ 需寫入授權；🚫 readonly reviewer 不得執行。
+# 用法：  SRC=<repo> DRIVER=<replay-tier-b-v3.sh 路徑> bash negctl-driver.sh
+# ============================================================================
+set -u
+: "${SRC:?請設 SRC}"; : "${DRIVER:?請設 DRIVER}"
+TMPROOT="$(cd "${TMPDIR:-/tmp}" && pwd -P)" || { echo "canonicalize TMPROOT 失敗"; exit 1; }
+H="$(mktemp -d)" || { echo "mktemp 失敗"; exit 1; }
+trap 'rm -rf "$H"' EXIT
+pass=0; failn=0
+
+snapshot() { ls -1d "$TMPROOT"/tmp.* 2>/dev/null | sort; }
+
+run_case() { # $1=id $2=期望rc $3=期望訊息 $4=期望殘留(0|1) $5..=sed 運算式
+  local id="$1" want_rc="$2" want_msg="$3" want_leak="$4"; shift 4
+  local f="$H/$id.sh" before after newdirs rc out ok=1
+  cp "$DRIVER" "$f" || { echo "  ✗ $id: cp 失敗"; failn=$((failn+1)); return; }
+  local e; for e in "$@"; do sed -i "$e" "$f" || { echo "  ✗ $id: sed 失敗"; failn=$((failn+1)); return; }; done
+  bash -n "$f" || { echo "  ✗ $id: 變異後語法錯"; failn=$((failn+1)); return; }
+  before="$(snapshot)"
+  out="$(SRC="$SRC" bash "$f" 2>&1)"; rc=$?
+  after="$(snapshot)"
+  newdirs="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | grep -c . || true)"
+
+  [ "$rc" -eq "$want_rc" ] || { echo "  ✗ $id: rc=$rc（期望 $want_rc）"; ok=0; }
+  printf '%s\n' "$out" | grep -q -- "$want_msg" || { echo "  ✗ $id: 未命中訊息「$want_msg」"; ok=0; printf '%s\n' "$out" | tail -5 | sed 's/^/      /'; }
+  [ "$newdirs" -eq "$want_leak" ] || { echo "  ✗ $id: 新增 temp 殘留 $newdirs（期望 $want_leak）"; ok=0; }
+
+  # 若期望有殘留（拒刪情境），harness 自行清掉，避免污染後續 case
+  if [ "$want_leak" -ne 0 ]; then
+    comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | while read -r d; do
+      [ -n "$d" ] && case "$d" in "$TMPROOT"/?*) rm -rf "$d";; esac
+    done
+  fi
+
+  if [ "$ok" -eq 1 ]; then echo "  ✓ $id: rc=$rc · 命中「$want_msg」· 殘留 $newdirs"; pass=$((pass+1))
+  else failn=$((failn+1)); fi
+}
+
+echo "── driver 級負向控制（7 組）──"
+
+run_case NC1-anchor            1 "anchor 不符"                 0 \
+  's|^ANCHOR=.*|ANCHOR=0000000000000000000000000000000000000000000000000000000000000000|'
+
+run_case NC2-diagcount         1 "overlay 診斷 347（預期 999）" 0 \
+  's|^EXPECT_OVER_DIAGS=.*|EXPECT_OVER_DIAGS=999 ; EXPECT_OVER_CLEAN=326 ; EXPECT_OVER_TOTAL=337|'
+
+run_case NC3-preclone-fail     1 "canonicalize WORK"           0 \
+  's|WORK_CANON="\$(cd "\$WORK_RAW" \&\& pwd -P)"|WORK_CANON="$(cd /definitely-nonexistent-xyz \&\& pwd -P)"|'
+
+run_case NC4-probe-fail        1 "AFTER PROBE FAILED"          0 \
+  's|now="\$(git -C "\$SRC" status --porcelain 2>/dev/null)"; prc=\$?|now="$(git -C /definitely-nonexistent-xyz status --porcelain 2>/dev/null)"; prc=$?|'
+
+run_case NC5-comm-fail         1 "comm ADDED"                  0 \
+  's|comm -13 "\$WORK/n-base.txt" "\$WORK/n-over.txt" > "\$WORK/added.txt"|comm -13 "$WORK/nonexistent-a.txt" "$WORK/nonexistent-b.txt" > "$WORK/added.txt"|'
+
+# ② R5 新指出的兩個洞
+run_case NC6-tmp-inside-src    1 "TMPROOT 位於 SRC 內"          0 \
+  's|^TMPROOT="\$(cd "\${TMPDIR:-/tmp}" \&\& pwd -P)".*|TMPROOT="$(cd "$SRC/node_modules" \&\& pwd -P)" \|\| fail "canonicalize TMPROOT"|'
+
+# 離開 $WORK 失敗 ⇒ 必須**拒絕刪除**（故期望殘留 1，harness 自清）
+run_case NC7-cd-out-fail       1 "拒絕刪除"                     1 \
+  's|if ! cd / 2>/dev/null; then|if ! cd /definitely-nonexistent-xyz 2>/dev/null; then|'
+
+echo ""
+echo "  結果：$pass passed, $failn failed"
+[ "$failn" -eq 0 ]
 ```
 
 > ⚠ **`git apply` 為何不可用於物化 overlay（`SR-43`；本棒實測）**：Windows Git Bash 下，
@@ -1360,8 +1495,9 @@ const resp = await auditHandler({
 
 | 命令 | 地位 |
 |---|---|
-| `npx tsc -b tsconfig.solution.json --force` ＋ set-diff | **診斷器**，🚫 非 gate、🚫 不進 CI |
-| §6.6 步驟 4 emit identity | **診斷器**，🚫 非 gate、🚫 不進 CI |
+| `tsc -b tsconfig.solution.json --force` ＋ set-diff（**Tier B driver 內以本地 `node_modules/.bin/tsc` 執行**） | **診斷器**，🚫 非 gate、🚫 不進 CI |
+| §6.6.B driver 之 emit identity 段 | **診斷器**，🚫 非 gate、🚫 不進 CI |
+| ⚠ **npx 之誠實限定（`SR-50`）** | 本 driver 直接呼叫 tsc 時用**本地 binary**；但 `npm run typecheck:ratchet:report` **內部**（`scripts/typecheck-ratchet.mjs:188`）仍 `execSync('npx tsc …')`，**不在本 driver 控制範圍內** ⇒ 🚫 **不得宣稱「本流程完全不用 npx」**。緩解＝driver 斷言 `npx --no-install tsc --version` 恰為 `Version 5.9.3`（本地已解析 ⇒ **不可能走下載 fallback**） |
 | `npm run lint:handlers` · `npm run lint:archive-no-delete` · `npm run lint:migrations` | 非 CI step；**個別直跑**（見下方警語），本棒無 migration、無 archive 檔改動，跑之為額外保險 |
 
 > ⚠ **🚫 本棒不跑 `npm run build`**（自審 `SR-10`）。
@@ -1535,6 +1671,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 28 | 2026-08-24 | PLAN R4 `956ebe3a`；② R4 delta packet 送出（`a8ca80b3…`） | §14.8 |
 | 29 | 2026-08-24 | **② R4 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（1 Blocker family／1 Required family ＋ 4 項文字清理）；Tier A・連續 driver・overlay/emit 重播・coupled/isolated 分類 判 CLOSED | §14.8 |
 | 30 | 2026-08-24 | ② R4 處置完成：**driver v2 端到端實跑 rc=0 ＋ 5 組 driver 級負控全紅**；四項文字清理併入；**PLAN-only、零 code diff 變動** | §14.8 |
+| 31 | 2026-08-24 | PLAN R5 `dd4bb881`；② R5 delta packet 送出（`2cbcd9fb…`） | §14.9 |
+| 32 | 2026-08-24 | **② R5 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（1 Blocker／2 Required／1 Minor）；R4 之 comm rc・after-probe rc・exact multiset・ratchet 三欄・emit guard 判**已關閉** | §14.9 |
+| 33 | 2026-08-24 | ② R5 處置完成：**driver v3 實跑 rc=0** ＋ **§6.6.C 可重播 harness 7 組全紅** ＋ Tier A canonicalize ＋ npx 宣稱誠實縮窄 ＋ stale pointer 斷言式清理；**PLAN-only、零 code diff 變動** | §14.9 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1578,6 +1717,10 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-32` | §13 非目標第 9 項仍寫「其他 **15** 個單元」⇒ `SR-13`（單元數帳）之**第三個成員**，我修 §2.1.1 與 §3 時漏掉 | **實質錯誤**（族處置不完整，第 3 次） | 改為「其餘 **10** 個未裁定單元」＋ 指向 §2.1.1 對映帳 |
 | `SR-34` | §14 待填清單標頭仍寫「留空待填」，但 ① 已由實際 gate 回覆填入 ⇒ 標頭與內容不一致 | 內部一致性 | 改為「只由實際 gate 回覆填入（已回覆者填 verdict／未回覆者維持 `_待填_`）」 |
 | `SR-35` | §5.6 suppression 預算的**母體是「文字上的 suppression 語法」**（`as T` / `: any` / `@ts-*`），但要保護的性質是「**未經檢查的型別宣稱**」⇒ `const rawRows: UserAuditRow[] = <any>` 這種**隱式 unchecked assignment 落在母體外**，卻是本棒最強的型別宣稱 | **實質錯誤**（母體 < 性質，第 11 次；② `TS-BOUNDARY-002` 之根因） | §5.6 補「unchecked assignment」列（預算 1／實際 1）＋ errata；登錄 `UB-B-1`；附啟發式重播指令並標明其非機械閘 |
+| `SR-50` | **「🚫 不用 npx」之宣稱為假**：driver 呼叫 `npm run typecheck:ratchet:report`，而該 script 內部（`scripts/typecheck-ratchet.mjs:188`）自行 `execSync('npx tsc …')` ⇒ 我把宣稱的**作用域限縮成「我自己直接寫的那一行」**，未涵蓋間接執行面 | **過度宣稱**（② R5 Required；「宣稱作用域 < 實際執行面」族） | 誠實縮窄宣稱並標明該 npx 不在 driver 控制內；改以 `npx --no-install tsc --version` 斷言**恰為 `Version 5.9.3`**（本地已解析 ⇒ 不可能走下載 fallback）；§9.2 診斷器表同步更正 |
+| `SR-51` | Tier B finalizer **仍非 fail-closed**：未禁 `TMPROOT`/`WORK` 位於 `SRC` 內（`TMPDIR="$SRC/node_modules"` 被 gitignore ⇒ `status` 比對假綠）· `cd / \|\| true` 吞掉「離開 `$WORK` 失敗」· 來源 probe 只在 `rm` 前跑 · cleanup 未重驗 junction/reparse · 三個 heredoc `cat` 未 guard rc。另 Tier A 直接把環境值餵 `createRequire()`（`SRC=.` → `ERR_INVALID_ARG_VALUE`，實測復現） | **Blocker**（② R5） | driver v3：禁 temp 位於 SRC 內 · trap 移到**任何 allocation 之前** · `cd` 失敗即**拒絕刪除** · probe 改 **cleanup 前後各一次** · 刪前斷言 `cd d && pwd -P == d` · 全部 `cat` guard；Tier A 新增 **A0 canonicalize** 後才 export（`SRC=.` 負控：修正前 rc=1、修正後 rc=0） |
+| `SR-52` | 五組負控**只有結果表、無 mutation harness** ⇒ 無法從 packet 重播；且「殘留 0」的掃描以「含 `repo/` 或 materializer」為特徵，**恰好漏掉 canonicalize 失敗留下的空目錄** | **證據可重播性**（② R5 Required；又一次「檢查母體 < 要保護的性質」） | 發布 §6.6.C 完整 harness（7 組，逐組斷言 rc ＋ 訊息 ＋ **前後 `tmp.*` 集合差**，🚫 不再用內容特徵）；新增 NC6（temp 在 SRC 內）／NC7（`cd` 失敗拒刪）兩組 |
+| `SR-53` | 上一輪自報「四項文字清理已做」**與 live PLAN 不符**：仍有舊 step 4/5 指標 · 仍宣稱 process substitution · §9.2 仍寫 `npx tsc` | **自報與實況不符**（② R5 Minor `GOV-DRIFT-001`） | 以斷言式腳本（每條命中必須恰 1，否則 non-zero exit）逐條更新現行指標；歷史 receipt 一律加 `[SUPERSEDED]`、🚫 不改寫原裁決 |
 | `SR-46` | `added=$(comm … \| wc -l)` 之 **pipeline rc 被丟棄** ⇒ `comm` 失敗時 `added=0`，`ADDED=0` 斷言仍通過（**實測復現：`pipeline_rc=1` 而 `added=0`**） | **結構性假綠**（② R4 Blocker） | `comm` 先落檔（`\|\| fail`）再由檔案計數；`sed`／`sort`／`wc` 亦逐一 guard；新增負控「`comm` 失敗 → rc=1」 |
 | `SR-47` | finalizer 三個 after-probe **只比字串**，未驗 git rc ⇒ 來源 repo 本就 clean（`BEFORE_STATUS=""`）時，**失敗的 `git status` 也回空字串、被判相等**（實測 `[ "$(false)" = "" ]` → true） | **結構性假綠**（② R4 Blocker） | 每個 probe 先斷言 `rc=0` 再比較；新增負控「after-status probe 失敗 → 原始 rc=0 被提升為 1」 |
 | `SR-48` | `mktemp` 成功後到 trap 安裝之間有**窗口**；且 `WORK="$(…)"` 失敗會把路徑**覆寫為空** ⇒ temp 洩漏且無從清理 | **資源洩漏**（② R4 Blocker） | 先 canonicalize `SRC`／`TMPROOT` → `mktemp` → **立刻裝 trap**（保留 `WORK_RAW`）→ 才 canonicalize；finalizer 對兩者都清；新增負控「pre-clone early failure → 殘留 0」 |
@@ -1594,7 +1737,7 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-36` | §6.3 宣稱「同時斷言 `bytes>0`／`srcCR=0`／`emitCR=0`／`diags=0`」，但腳本**只對空 input/output `throw`**，其餘守衛與 `BYTE-IDENTICAL:false` 僅 `console.log`、仍 exit 0 ⇒ **我自己的守衛在假綠** | **實質錯誤**（結構性假綠；② `GOV-FAIL-001`） | 腳本改 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；補逐條負向控制（**實測獨立轉紅 4 條**，守衛 3／4 無法獨立注入、如實標示） |
 | `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
 
-**根因分布（供後續棒次參考）**：49 條中 **11 條**
+**根因分布（供後續棒次參考）**：53 條中 **11 條**
 （`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26` **`SR-35`**）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
@@ -2068,6 +2211,71 @@ driver 本體**成功（原始 rc=0）**，但 finalizer 因無法驗證來源�
 - ⚠ **② 之 residual risk 提醒（如實轉錄）**：修正後仍須由**具 Tier B 寫入授權的 runner**
   重跑成功路徑與三組新負控。我方已於本機以該授權執行（§14.8.2），
   🚫 但這**不等於** ② 自身已重跑 Tier B —— ② 明載其未跑 Tier B clone/npm/checkout/rm。
+
+---
+
+### 14.9 ② Codex Plan Gate — R5 verdict 與處置 receipt
+
+**verdict**：`CODEX_PLAN_CHANGES_REQUESTED` — **1 Blocker ／ 2 Required ／ 1 Minor**
+**受審錨點**：PLAN commit `dd4bb881`；base `acc98dfb`
+
+**② R5 判為已關閉**：`comm` rc · after-probe rc · exact multiset · ratchet 三欄 · emit guard
+（皆為 R4 缺陷）。**Production overlay 未變 ⇒ 不需重送 ①。**
+
+#### 14.9.1 我方逐條實測復現（🚫 未實測前不動手）
+
+| ② 之宣稱 | 我方實測 |
+|---|---|
+| `TMPDIR="$SRC/node_modules"` ⇒ clone 建在共用來源 repo 內，且被 `.gitignore` 忽略 ⇒ `status` 仍相同 | ✅ `git check-ignore -q node_modules` → **yes** ⇒ 「來源未被觸碰」會**假綠** |
+| Tier A 以 `SRC=.` 執行 → `ERR_INVALID_ARG_VALUE` | ✅ 復現（rc≠0） |
+| **`scripts/typecheck-ratchet.mjs:188` 仍 `execSync('npx tsc …')`** | ✅ 逐字確認 ⇒ 我方「🚫 不用 npx」**為假** |
+| L634／L720-721／L1363 仍是 stale pointer | ✅ 三處皆在 |
+
+#### 14.9.2 Blocker（`SR-51`）之處置 — driver v3
+
+| ② 之 finding | v3 處置 |
+|---|---|
+| 未禁 `TMPROOT`/`WORK` 位於 `SRC` 內 | 兩者皆以 `case … in "$SRC"\|"$SRC"/*) fail` 拒絕；負控 **NC6** |
+| `cd / \|\| true` 吞掉失敗 | 改 `if ! cd /; then … SKIP_RM=1; fi` ⇒ **拒絕刪除**（寧留勿誤刪）；負控 **NC7** |
+| 來源 probe 只在 `rm` 前 | `probe_source()` 於 **cleanup 前後各跑一次** |
+| cleanup 未重驗 junction/reparse | `safe_rm()` 刪前斷言 `cd d && pwd -P == d`（junction 會解析到別處）。⚠ **誠實限制**：只涵蓋 `$d` **自身**，🚫 不掃子樹（子樹掃描會把 Linux `node_modules/.bin` 的正常 symlink 誤判） |
+| 三個 heredoc `cat` 未 guard rc | 全部 `\|\| fail`；`expected-removed.txt` 另斷言**恰 5 行**（`-s` 無法排除部分寫入） |
+| trap 應在 allocation 前就緒 | `trap finalize EXIT` 移到 `mktemp` **之前**（`WORK`/`WORK_RAW` 為空時 finalizer 自動跳過） |
+
+**driver v3 端到端實跑 rc=0**；PLAN 內嵌版本與實跑版本**逐位元組相同（382 行）**。
+
+#### 14.9.3 Required（`SR-50`／`SR-52`）之處置
+
+- **npx**：誠實縮窄宣稱（見 `SR-50`），並加 `npx --no-install tsc --version` 恰為 `Version 5.9.3` 之斷言。
+  🚫 **本 PLAN 不再宣稱「本流程完全不用 npx」**。
+- **可重播 harness**：發布 §6.6.C（7 組，逐組斷言 rc ＋ 訊息 ＋ **前後 `tmp.*` 集合差**）。
+  ⚠ 殘留量測改用**集合差**，🚫 不再用「含 `repo/` 或 materializer」之內容特徵 ——
+  ② 指出那會恰好漏掉 canonicalize 失敗留下的**空目錄**（`SR-52`）。
+- **Tier A canonicalize**：新增 A0（`--is-inside-work-tree` → `--show-toplevel` → `pwd -P` → 驗 absolute → `export`）。
+  `SRC=.` 負控：**修正前 rc=1、修正後 rc=0**。
+
+#### 14.9.4 Minor `GOV-DRIFT-001`（`SR-53`）
+
+上一輪自報「四項文字清理已做」與 live PLAN 不符。已以**斷言式腳本**逐條更新
+（每條命中必須恰 1，否則 non-zero exit ⇒ 🚫 不可能靜默略過）；歷史 receipt 一律加
+`[SUPERSEDED]`、🚫 不改寫原裁決。
+
+⚠ **根因**：我把「已做」的判準放在**我記得做了什麼**，而不是**對 live artifact 再掃一次**。
+與 `SR-30`（肉眼只抓到 2/3 個空行）同形態。
+
+#### 14.9.5 ② 之其他認定（記錄，🚫 不轉錄升格）
+
+- ② 獨立確認：R5＝`dd4bb881…`、九 commit 鏈與 parent 全相符 · base→R5 恰一個 added PLAN ·
+  R4→R5 實際 `+245/-88` · PLAN blob／packet 副本＝`899d8853…` ·
+  `audit.ts` 在 base／九個 commits／index／worktree 均為 `ec2a9b07…` ·
+  overlay 7,495 B／CR=0／`79792231…` · emit identity 與 exact 5 removed／0 added 重播通過 ·
+  382 行 driver 與兩個 Node helper 語法通過 · 工作樹仍只有既存 `?? CLEANUP_PLAN.md`。
+- Queue／payment／distributed-state：本輪 PLAN-only，**均不適用**。
+- Observability：七道 CI · committed-diff ratchet · production bundle 仍未跑（揭露正確）。
+- ⚠ **② 之 residual risk（如實轉錄，🚫 不由本 PLAN 宣稱關閉）**：
+  「目前負控成功仍是**作者自報**，非本輪獨立 Tier B 證據」——
+  ② 明載其未跑 Tier B clone/npm/checkout/rm。我方已以寫入授權在本機執行（§6.6.B／§6.6.C），
+  **但這不等於 ② 自身已重跑**。此差距只能由具授權之 runner 或 ② 自行執行來關閉。
 
 ---
 
