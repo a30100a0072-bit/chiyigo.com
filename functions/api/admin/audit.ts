@@ -42,7 +42,33 @@ const SAFE_EVENT_DATA_KEYS = new Set([
   'kind', 'severity', 'reason',
 ])
 
-function redactEventData(raw) {
+/**
+ * 本檔 `audit_log` 查詢的**投影列**（projection），🚫 不是 `audit_log` 資料表的完整結構 ——
+ * 表自 migration 0038 起另有 `archived_at` / `cold_class`，本查詢未投影、故不在此宣告內。
+ * 欄位型別依 migration 0017 之 DDL（`event_type` / `severity` / `created_at` 為 NOT NULL；
+ * `user_id` / `client_id` / `ip_hash` / `event_data` 可為 NULL）。
+ *
+ * ⚠ 本宣告**未經編譯期檢查**：本 repo 未安裝 `@cloudflare/workers-types`，
+ * `Env['chiyigo_db']` 解析為 `any`，TypeScript 無從驗證實際 row 與此形狀相符。
+ * 唯一保證＝下方 SELECT 欄位清單與本宣告必須同步維護。
+ * 🚫 不得據此宣稱「D1 row 已型別化」。
+ *
+ * ⚠ 命名：🚫 不叫 `AuditLogRow` —— 該名已由 `utils/audit-log.ts` 用於 `admin_audit_log`
+ * （hash-chain 表），與本表 `audit_log` 是**不同的表**。前綴沿 `user-audit.ts` 的
+ * `UserAuditEnv` / `UserAuditEntry` 家族（該模組即本表的寫入端）。
+ */
+interface UserAuditRow {
+  id: number
+  event_type: string
+  severity: string
+  user_id: number | null
+  client_id: string | null
+  ip_hash: string | null
+  event_data: string | null
+  created_at: string
+}
+
+function redactEventData(raw: unknown) {
   if (raw == null) return null
   let parsed
   try { parsed = JSON.parse(String(raw)) }
@@ -58,7 +84,7 @@ function redactEventData(raw) {
   return out
 }
 
-export async function onRequestGet({ request, env }) {
+export async function onRequestGet({ request, env }: { request: Request; env: Env }) {
   // P1-17 Phase 3: GET 同時接受 read 或 write（write token 也能 GET）
   const { user, error } = await requireAnyScope(request, env, SCOPES.ADMIN_AUDIT_READ, SCOPES.ADMIN_AUDIT_WRITE)
   if (error) return error
@@ -127,7 +153,7 @@ export async function onRequestGet({ request, env }) {
   ])
 
   // P2-6：每列 event_data 走白名單裁切，避免 PII 直回
-  const rawRows = rowsResult?.results ?? []
+  const rawRows: UserAuditRow[] = rowsResult?.results ?? []
   // P1-17 Phase 2 latent：support role 額外按 event_type 前綴白/黑名單裁切，
   // 避免客服看到 risk engine internals / role 變更等敏感事件。super_admin /
   // admin / developer / finance 走 canRoleSeeAuditEvent 全 true（no-op）。
