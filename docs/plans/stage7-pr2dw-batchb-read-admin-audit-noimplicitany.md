@@ -836,7 +836,13 @@ console.log("✓ A2：base 側 5 條守衛全過");'
 driver v2 rc=0
 ```
 
-**v2 相對 v1 之實質強化（② R4 逐條）**：
+**v4 相對 v1 之實質強化（② R4／R5／R6 逐條累積）**：
+
+> ⚠ **[指標更新 2026-08-24]** 本表原標「v2 相對 v1」；driver 現已迭代至 **v4**。
+> v3 增：禁 temp 位於 `SRC` 內 · trap 移到 **allocation 之前** · `cd` 失敗拒刪 · probe 前後各一次 · junction 檢查 · heredoc `cat` guard。
+> **v4 增（② R6 之縮減）：移除 `safe_rm()` 與所有 `rm -rf`——driver 不再執行任何刪除，workspace 交 runner；
+> ratchet 兩次執行改帶 `npm_config_offline=true npm_config_yes=false`。**
+
 
 | ② 之 finding | v2 處置 |
 |---|---|
@@ -868,7 +874,13 @@ driver v2 rc=0
 ```bash
 #!/usr/bin/env bash
 # ============================================================================
-# Tier B replay driver v3 — Stage 7 PR-2dw 批 B-read
+# Tier B replay driver v4 — Stage 7 PR-2dw 批 B-read
+#
+# ⚠ v4 之核心變更（② R6 建議「不再擴寫 shell machinery」）：
+#   **本 driver 不再執行任何刪除**。workspace 生命週期交給 **runner**。
+#   理由：v3 的 safe_rm() 只驗 $WORK 根自身、明示不掃子樹 junction，卻仍遞迴刪整棵 npm tree；
+#   在一份「給人重播的文件」裡放 rm -rf 的風險大於它提供的保證。
+#   ⇒ 保留唯讀的來源 equality probe（有價值），移除破壞性邏輯（風險來源）。
 # ⚠ 需**寫入授權**。🚫 readonly reviewer 不得執行。
 # 🚫 不用 `set -e`（`tsc -b` 預期回非零）；改逐一顯式 guard。
 #
@@ -898,7 +910,7 @@ EXPECT_BASE_DIAGS=352 ; EXPECT_BASE_CLEAN=325 ; EXPECT_BASE_TOTAL=337
 EXPECT_OVER_DIAGS=347 ; EXPECT_OVER_CLEAN=326 ; EXPECT_OVER_TOTAL=337
 REL=functions/api/admin/audit.ts
 
-WORK=""; WORK_RAW=""; SKIP_RM=0
+WORK=""; WORK_RAW=""
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 # ── R4(v2)：SRC 固定為已驗證之 absolute git top-level ───────────────────────
@@ -927,40 +939,22 @@ probe_source() { # $1=label；三項皆先斷言 rc=0 再比較
   return "$bad"
 }
 
-safe_rm() { # C1+C4：刪前重驗 containment、非 SRC 內、且自身不是 reparse/junction
-  local d="$1" canon
-  [ -n "$d" ] || return 0
-  [ -e "$d" ] || return 0
-  case "$d" in "$TMPROOT"/?*) : ;; *) echo "REFUSE rm: $d 不在 temp 根之下" >&2; return 1;; esac
-  case "$d" in "$SRC"|"$SRC"/*) echo "REFUSE rm: $d 位於 SRC 內" >&2; return 1;; esac
-  canon="$(cd "$d" && pwd -P 2>/dev/null)" || { echo "REFUSE rm: 無法 canonicalize $d" >&2; return 1; }
-  # junction/symlink：canonical 會解析到別處 ⇒ 與自身不等即拒刪
-  # ⚠ 誠實限制：本檢查只涵蓋 $d **自身**；🚫 不掃描其子樹內的 reparse point
-  #   （子樹掃描在 Linux 會把 node_modules/.bin 的正常 symlink 誤判）。
-  [ "$canon" = "$d" ] || { echo "REFUSE rm: $d 為 reparse/junction（canonical=$canon）" >&2; return 1; }
-  rm -rf "$d" || { echo "CLEANUP FAILED: rm -rf $d" >&2; return 1; }
-  if [ -e "$d" ]; then echo "CLEANUP INCOMPLETE: $d 仍存在" >&2; return 1; fi
-  return 0
-}
+# ⚠ v4：safe_rm() 已整段移除 —— 本 driver 不刪任何東西（② R6 Blocker 之處置）。
 
 finalize() {
   local rc=$? ok=1 d
   # C3(a)：cleanup **前** probe
   probe_source pre-cleanup || ok=0
-  # C2：離開 $WORK 失敗即拒絕刪除（🚫 不吞）
-  if ! cd / 2>/dev/null; then echo "FAIL: 無法離開 \$WORK ⇒ 拒絕刪除" >&2; ok=0; SKIP_RM=1; fi
-  if [ "$SKIP_RM" -eq 0 ]; then
-    for d in "$WORK" "$WORK_RAW"; do
-      [ -n "$d" ] || continue
-      safe_rm "$d" || ok=0
-    done
-  else
-    echo "SKIPPED cleanup（未能離開 \$WORK）；殘留：$WORK $WORK_RAW" >&2
+  # v4：離開 $WORK 只為方便 runner 之後處置；失敗不影響正確性（本 driver 不刪任何東西）
+  cd / 2>/dev/null || echo "NOTE: 未能離開 \$WORK（本 driver 不執行刪除，故不影響）" >&2
+  # v4：🚫 本 driver 不刪除任何路徑。workspace 交由 runner 處置。
+  if [ -n "$WORK" ]; then
+    echo "WORKSPACE（**由 runner 負責清理**；本 driver 不刪）：$WORK" >&2
   fi
-  # C3(b)：cleanup **後** 再 probe 一次
-  probe_source post-cleanup || ok=0
+  # 再 probe 一次（此處已無刪除動作，仍保留以偵測期間之外部變動）
+  probe_source post-run || ok=0
   if [ "$ok" -ne 1 ]; then echo "finalizer invariant 失敗（原始 rc=$rc）" >&2; exit 1; fi
-  [ "$rc" -eq 0 ] && echo "✓ finalizer：來源 probe（cleanup 前後各一次）皆 rc=0 且逐字相等、workdir 已清理"
+  [ "$rc" -eq 0 ] && echo "✓ finalizer：來源 probe（前後各一次）皆 rc=0 且逐字相等；workspace 未刪除（交 runner）"
   exit "$rc"
 }
 
@@ -1184,7 +1178,8 @@ ___REMOVED_EOF___
 rc=$?; [ "$rc" -eq "$EXPECT_TSC_RC" ] || fail "base tsc rc=$rc（預期 $EXPECT_TSC_RC）—— 疑為工具失敗"
 n=$(wc -l < "$WORK/tsc-base.txt") || fail "wc base"
 [ "$n" -eq "$EXPECT_BASE_DIAGS" ] || fail "base 診斷 $n（預期 $EXPECT_BASE_DIAGS）"
-npm run typecheck:ratchet:report > "$WORK/ratchet-base.txt" 2>&1 || fail "base ratchet"
+npm_config_offline=true npm_config_yes=false \
+  npm run typecheck:ratchet:report > "$WORK/ratchet-base.txt" 2>&1 || fail "base ratchet"
 assert_ratchet "$WORK/ratchet-base.txt" base "$EXPECT_BASE_DIAGS" "$EXPECT_BASE_CLEAN" "$EXPECT_BASE_TOTAL"
 npm run lint > "$WORK/lint-base.txt" 2>&1 || fail "base lint"
 
@@ -1197,7 +1192,8 @@ node "$WORK/materialize-overlay.mjs" "$WORK/repo" "$BASE" "$WORK/repo/$REL" "$AN
 rc=$?; [ "$rc" -eq "$EXPECT_TSC_RC" ] || fail "overlay tsc rc=$rc（預期 $EXPECT_TSC_RC）"
 n=$(wc -l < "$WORK/tsc-over.txt") || fail "wc overlay"
 [ "$n" -eq "$EXPECT_OVER_DIAGS" ] || fail "overlay 診斷 $n（預期 $EXPECT_OVER_DIAGS）"
-npm run typecheck:ratchet:report > "$WORK/ratchet-over.txt" 2>&1 || fail "overlay ratchet"
+npm_config_offline=true npm_config_yes=false \
+  npm run typecheck:ratchet:report > "$WORK/ratchet-over.txt" 2>&1 || fail "overlay ratchet"
 assert_ratchet "$WORK/ratchet-over.txt" overlay "$EXPECT_OVER_DIAGS" "$EXPECT_OVER_CLEAN" "$EXPECT_OVER_TOTAL"
 npm run lint > "$WORK/lint-over.txt" 2>&1 || fail "overlay lint"
 
@@ -1243,111 +1239,50 @@ negctl "G5 diags=0 [isolated]"  "$WORK/n_diag.ts"  "transpile diagnostics"
 negctl "G6 identity [isolated]" "$WORK/n_emit.ts"  "BYTE-IDENTICAL FAILED"
 
 echo ""
-echo "✓ Tier B v3 全部斷言成立"
-echo "  隔離：TMPROOT/WORK 均在 SRC 之外 · trap 先於 allocation · cleanup 前後各 probe 一次"
-echo "  依賴：npm ci --include=dev · 本地 tsc 5.9.3 · npx --no-install 解析為 Version 5.9.3（禁下載）"
+echo "✓ Tier B v4 全部斷言成立"
+echo "  隔離：TMPROOT/WORK 均在 SRC 之外 · trap 先於 allocation · 前後各 probe 一次 · 🚫 driver 不執行刪除"
+echo "  依賴：npm ci --include=dev · 本地 tsc 5.9.3 · npx --no-install → Version 5.9.3 · ratchet 以 npm_config_offline=true 執行"
 echo "  證據：診斷 352/347 · ratchet 三欄 · REMOVED exact multiset · ADDED=0 · emit identity · 4 組負控"
 exit 0
 ```
 
-### 6.6.C driver 級負向控制 harness（② R5 Required：**可重播**）
+### 6.6.C driver 級負向控制 —— **宣告式清單**（② R6 Blocker 之處置：`SR-54`）
 
-> ⚠ 需寫入授權；🚫 readonly reviewer 不得執行。
-> ② R5 指出上一版「五組負控只有結果表，未提供 mutation harness／命令／artifact hash，無法從 packet 重播」。
-> ⇒ 本節發布**完整 harness**：逐組以 `sed` 變異 driver、斷言 **rc ＋ 訊息 ＋ 該次新增 temp 殘留數**。
-> ⚠ 殘留以「執行前後 `$TMPROOT/tmp.*` 集合差」量測 ——
-> 🚫 **不再**用「含 `repo/` 或 materializer」當特徵（② 指出那會恰好漏掉 canonicalize 失敗留下的**空目錄**，`SR-52`）。
+> 🚨 **上一版在此內嵌了一支會自動 `rm -rf` 的 harness，已整節移除。**
+> ② R6 指出它**未隔離自己的 cleanup**：掃描整個共享 `$TMPROOT/tmp.*`，
+> 並對「前後集合差」中的所有新目錄 `rm -rf` ⇒ **其他程序在該 case 執行期間建立的 `tmp.*`
+> 會被當成 harness 殘留刪除**。另有三個 fail-open（`ls|sort` 無 pipefail、
+> `comm … | grep -c . || true` 把量測失敗轉成 0、`trap` 內刪除失敗不提升 rc）——
+> 三者我方皆以純 bash 復現。
+>
+> ⇒ **處置＝縮減，不是再加固**（② R6 明示「建議 R7 不再擴寫 shell machinery」）。
+> 本節改為**宣告式變異清單**：只描述「改哪一行、期望什麼」，
+> 🚫 **不提供會自動刪除任何東西的腳本**。要重播者請在 **runner 自有的 disposable workspace** 內套用。
 
-**實跑結果（2026-08-24）**：
-```
-── driver 級負向控制（7 組）──
-  ✓ NC1-anchor: rc=1 · 命中「anchor 不符」· 殘留 0
-  ✓ NC2-diagcount: rc=1 · 命中「overlay 診斷 347（預期 999）」· 殘留 0
-  ✓ NC3-preclone-fail: rc=1 · 命中「canonicalize WORK」· 殘留 0
-  ✓ NC4-probe-fail: rc=1 · 命中「AFTER PROBE FAILED」· 殘留 0
-  ✓ NC5-comm-fail: rc=1 · 命中「comm ADDED」· 殘留 0
-  ✓ NC6-tmp-inside-src: rc=1 · 命中「TMPROOT 位於 SRC 內」· 殘留 0
-  ✓ NC7-cd-out-fail: rc=1 · 命中「拒絕刪除」· 殘留 1
+**變異清單（對 §6.6.B 之 driver 逐一施加；每組期望 `rc=1` 並命中指定訊息）**：
 
-  結果：7 passed, 0 failed
-```
+| # | 變異（`sed` 運算式之語意） | 期望訊息 | 覆蓋之缺陷 |
+|---|---|---|---|
+| NC1 | `ANCHOR` 改為全 0 | `anchor 不符` | overlay 身分 |
+| NC2 | `EXPECT_OVER_DIAGS` 改 999 | `overlay 診斷 347（預期 999）` | 診斷數 |
+| NC3 | `WORK_CANON` 之 `cd` 改指不存在路徑 | `canonicalize WORK` | mktemp/trap 窗口 |
+| NC4 | finalizer 內 `git status` 之 `-C` 改指不存在路徑 | `AFTER PROBE FAILED` | probe 假綠 |
+| NC5 | `comm -13` 之輸入改為不存在檔 | `comm ADDED` | pipeline rc 丟棄 |
+| NC6 | `TMPROOT` 改為 `$SRC` 自身 | `TMPROOT 位於 SRC 內` | temp/source overlap |
 
-⚠ **NC7 期望殘留＝1 是正確行為**：無法離開 `$WORK` 時 driver **拒絕刪除**（寧可留下也不冒險刪錯），
-harness 自行清理該次殘留。🚫 不得把它讀成 cleanup 失效。
-⚠ NC6／NC7 為 ② R5 新指出之兩個洞（temp 位於 SRC 內 ／ `cd /` 失敗被吞）之對應負控。
+> ⚠ **NC6 已改用 `$SRC` 自身（`SR-55`）**：上一版用 `$SRC/node_modules`，
+> 但那**依賴來源 repo 已存在未追蹤的 `node_modules`** ——
+> 乾淨 checkout 會先失敗在 `canonicalize TMPROOT` 而非預期訊息 ⇒ **非環境獨立**（② R6 指出，我方確認）。
+> `$SRC` 自身保證存在，equality rejection 可穩定重播。
+>
+> ⚠ **舊 NC7（`cd /` 失敗 ⇒ 拒絕刪除）已一併移除**：v4 driver **不執行任何刪除**，
+> 該路徑已不存在 ⇒ 沒有可測的對象。（v3 之 `safe_rm()` 亦整段移除。）
 
-```bash
-#!/usr/bin/env bash
-# ============================================================================
-# driver 級負向控制 harness（② R5 Required：可重播、逐組斷言 rc + 訊息 + 無殘留）
-# ⚠ 需寫入授權；🚫 readonly reviewer 不得執行。
-# 用法：  SRC=<repo> DRIVER=<replay-tier-b-v3.sh 路徑> bash negctl-driver.sh
-# ============================================================================
-set -u
-: "${SRC:?請設 SRC}"; : "${DRIVER:?請設 DRIVER}"
-TMPROOT="$(cd "${TMPDIR:-/tmp}" && pwd -P)" || { echo "canonicalize TMPROOT 失敗"; exit 1; }
-H="$(mktemp -d)" || { echo "mktemp 失敗"; exit 1; }
-trap 'rm -rf "$H"' EXIT
-pass=0; failn=0
-
-snapshot() { ls -1d "$TMPROOT"/tmp.* 2>/dev/null | sort; }
-
-run_case() { # $1=id $2=期望rc $3=期望訊息 $4=期望殘留(0|1) $5..=sed 運算式
-  local id="$1" want_rc="$2" want_msg="$3" want_leak="$4"; shift 4
-  local f="$H/$id.sh" before after newdirs rc out ok=1
-  cp "$DRIVER" "$f" || { echo "  ✗ $id: cp 失敗"; failn=$((failn+1)); return; }
-  local e; for e in "$@"; do sed -i "$e" "$f" || { echo "  ✗ $id: sed 失敗"; failn=$((failn+1)); return; }; done
-  bash -n "$f" || { echo "  ✗ $id: 變異後語法錯"; failn=$((failn+1)); return; }
-  before="$(snapshot)"
-  out="$(SRC="$SRC" bash "$f" 2>&1)"; rc=$?
-  after="$(snapshot)"
-  newdirs="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | grep -c . || true)"
-
-  [ "$rc" -eq "$want_rc" ] || { echo "  ✗ $id: rc=$rc（期望 $want_rc）"; ok=0; }
-  printf '%s\n' "$out" | grep -q -- "$want_msg" || { echo "  ✗ $id: 未命中訊息「$want_msg」"; ok=0; printf '%s\n' "$out" | tail -5 | sed 's/^/      /'; }
-  [ "$newdirs" -eq "$want_leak" ] || { echo "  ✗ $id: 新增 temp 殘留 $newdirs（期望 $want_leak）"; ok=0; }
-
-  # 若期望有殘留（拒刪情境），harness 自行清掉，避免污染後續 case
-  if [ "$want_leak" -ne 0 ]; then
-    comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | while read -r d; do
-      [ -n "$d" ] && case "$d" in "$TMPROOT"/?*) rm -rf "$d";; esac
-    done
-  fi
-
-  if [ "$ok" -eq 1 ]; then echo "  ✓ $id: rc=$rc · 命中「$want_msg」· 殘留 $newdirs"; pass=$((pass+1))
-  else failn=$((failn+1)); fi
-}
-
-echo "── driver 級負向控制（7 組）──"
-
-run_case NC1-anchor            1 "anchor 不符"                 0 \
-  's|^ANCHOR=.*|ANCHOR=0000000000000000000000000000000000000000000000000000000000000000|'
-
-run_case NC2-diagcount         1 "overlay 診斷 347（預期 999）" 0 \
-  's|^EXPECT_OVER_DIAGS=.*|EXPECT_OVER_DIAGS=999 ; EXPECT_OVER_CLEAN=326 ; EXPECT_OVER_TOTAL=337|'
-
-run_case NC3-preclone-fail     1 "canonicalize WORK"           0 \
-  's|WORK_CANON="\$(cd "\$WORK_RAW" \&\& pwd -P)"|WORK_CANON="$(cd /definitely-nonexistent-xyz \&\& pwd -P)"|'
-
-run_case NC4-probe-fail        1 "AFTER PROBE FAILED"          0 \
-  's|now="\$(git -C "\$SRC" status --porcelain 2>/dev/null)"; prc=\$?|now="$(git -C /definitely-nonexistent-xyz status --porcelain 2>/dev/null)"; prc=$?|'
-
-run_case NC5-comm-fail         1 "comm ADDED"                  0 \
-  's|comm -13 "\$WORK/n-base.txt" "\$WORK/n-over.txt" > "\$WORK/added.txt"|comm -13 "$WORK/nonexistent-a.txt" "$WORK/nonexistent-b.txt" > "$WORK/added.txt"|'
-
-# ② R5 新指出的兩個洞
-run_case NC6-tmp-inside-src    1 "TMPROOT 位於 SRC 內"          0 \
-  's|^TMPROOT="\$(cd "\${TMPDIR:-/tmp}" \&\& pwd -P)".*|TMPROOT="$(cd "$SRC/node_modules" \&\& pwd -P)" \|\| fail "canonicalize TMPROOT"|'
-
-# 離開 $WORK 失敗 ⇒ 必須**拒絕刪除**（故期望殘留 1，harness 自清）
-run_case NC7-cd-out-fail       1 "拒絕刪除"                     1 \
-  's|if ! cd / 2>/dev/null; then|if ! cd /definitely-nonexistent-xyz 2>/dev/null; then|'
-
-echo ""
-echo "  結果：$pass passed, $failn failed"
-[ "$failn" -eq 0 ]
-```
-
+**我方實測（2026-08-24，v3 driver ＋ 當時的 harness）**：7 組全部 `rc=1` 且命中預期訊息。
+⚠ **誠實標示**：該次實測用的是 **v3 driver ＋ 已被移除的 harness**；
+**v4 之上僅重跑了正向路徑（rc=0）**，🚫 未在 v4 上重跑全部變異。
+⇒ 上表為**宣告式期望**，🚫 不宣稱「已在 v4 上逐組驗證」。
+⚠ 且依 ② R6：這些結果**始終是作者自報**，非獨立 Tier B 證據。
 > ⚠ **`git apply` 為何不可用於物化 overlay（`SR-43`；本棒實測）**：Windows Git Bash 下，
 > 於無 `.gitattributes` 的樹執行 `git apply` 會把 LF 轉成 CRLF
 > （實測 **+179 CR、7674 vs 7495 bytes**）⇒ anchor 必然不符，且**環境相依、非確定性**。
@@ -1497,7 +1432,7 @@ const resp = await auditHandler({
 |---|---|
 | `tsc -b tsconfig.solution.json --force` ＋ set-diff（**Tier B driver 內以本地 `node_modules/.bin/tsc` 執行**） | **診斷器**，🚫 非 gate、🚫 不進 CI |
 | §6.6.B driver 之 emit identity 段 | **診斷器**，🚫 非 gate、🚫 不進 CI |
-| ⚠ **npx 之誠實限定（`SR-50`）** | 本 driver 直接呼叫 tsc 時用**本地 binary**；但 `npm run typecheck:ratchet:report` **內部**（`scripts/typecheck-ratchet.mjs:188`）仍 `execSync('npx tsc …')`，**不在本 driver 控制範圍內** ⇒ 🚫 **不得宣稱「本流程完全不用 npx」**。緩解＝driver 斷言 `npx --no-install tsc --version` 恰為 `Version 5.9.3`（本地已解析 ⇒ **不可能走下載 fallback**） |
+| ⚠ **npx 之誠實限定（`SR-50`）** | 本 driver 直接呼叫 tsc 時用**本地 binary**；但 `npm run typecheck:ratchet:report` **內部**（`scripts/typecheck-ratchet.mjs:188`）仍 `execSync('npx tsc …')`，**不在本 driver 控制範圍內** ⇒ 🚫 **不得宣稱「本流程完全不用 npx」**。緩解兩層：(a) driver 斷言 `npx --no-install tsc --version` 恰為 `Version 5.9.3`（本地已解析）；(b) **v4 起**兩次 ratchet 皆以 `npm_config_offline=true npm_config_yes=false` 執行（實測不改變輸出）。⚠ 仍非絕對保證 —— ② R6 指出 `--no-install` 只證明**當下**可解析；🚫 不得宣稱「機械上不可能下載」 |
 | `npm run lint:handlers` · `npm run lint:archive-no-delete` · `npm run lint:migrations` | 非 CI step；**個別直跑**（見下方警語），本棒無 migration、無 archive 檔改動，跑之為額外保險 |
 
 > ⚠ **🚫 本棒不跑 `npm run build`**（自審 `SR-10`）。
@@ -1674,6 +1609,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 31 | 2026-08-24 | PLAN R5 `dd4bb881`；② R5 delta packet 送出（`2cbcd9fb…`） | §14.9 |
 | 32 | 2026-08-24 | **② R5 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（1 Blocker／2 Required／1 Minor）；R4 之 comm rc・after-probe rc・exact multiset・ratchet 三欄・emit guard 判**已關閉** | §14.9 |
 | 33 | 2026-08-24 | ② R5 處置完成：**driver v3 實跑 rc=0** ＋ **§6.6.C 可重播 harness 7 組全紅** ＋ Tier A canonicalize ＋ npx 宣稱誠實縮窄 ＋ stale pointer 斷言式清理；**PLAN-only、零 code diff 變動** | §14.9 |
+| 34 | 2026-08-24 | PLAN R6 `c4317d63`；② R6 delta packet 送出（`0585a9e7…`） | §14.10 |
+| 35 | 2026-08-24 | **② R6 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（1 Blocker／2 Required／1 Minor）；Blocker **由我方新發布的 harness 自身引入**；② 主動建議「不再擴寫 shell machinery」 | §14.10 |
+| 36 | 2026-08-24 | ② R6 處置＝**verification strategy 縮減**：§6.6.C harness 整節移除改宣告式清單 ＋ driver v4 移除全部 `rm -rf`（workspace 交 runner）＋ NC6 改用 `$SRC` 自身 ＋ ratchet 帶 offline ＋ 382→362 ＋ 根因帳 11→14；**PLAN-only、零 code diff 變動** | §14.10 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1717,6 +1655,10 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-32` | §13 非目標第 9 項仍寫「其他 **15** 個單元」⇒ `SR-13`（單元數帳）之**第三個成員**，我修 §2.1.1 與 §3 時漏掉 | **實質錯誤**（族處置不完整，第 3 次） | 改為「其餘 **10** 個未裁定單元」＋ 指向 §2.1.1 對映帳 |
 | `SR-34` | §14 待填清單標頭仍寫「留空待填」，但 ① 已由實際 gate 回覆填入 ⇒ 標頭與內容不一致 | 內部一致性 | 改為「只由實際 gate 回覆填入（已回覆者填 verdict／未回覆者維持 `_待填_`）」 |
 | `SR-35` | §5.6 suppression 預算的**母體是「文字上的 suppression 語法」**（`as T` / `: any` / `@ts-*`），但要保護的性質是「**未經檢查的型別宣稱**」⇒ `const rawRows: UserAuditRow[] = <any>` 這種**隱式 unchecked assignment 落在母體外**，卻是本棒最強的型別宣稱 | **實質錯誤**（母體 < 性質，第 11 次；② `TS-BOUNDARY-002` 之根因） | §5.6 補「unchecked assignment」列（預算 1／實際 1）＋ errata；登錄 `UB-B-1`；附啟發式重播指令並標明其非機械閘 |
+| `SR-54` | **我新發布的 §6.6.C harness 自己引入 Blocker**：掃描整個共享 `$TMPROOT/tmp.*`，並對「前後集合差」中所有新目錄 `rm -rf` ⇒ **其他程序於該 case 期間建立的 `tmp.*` 會被當成殘留刪除**；另三個 fail-open（`ls\|sort` 無 pipefail · `comm…\|grep -c . \|\| true` 把量測失敗轉成 0 · `trap` 內刪除失敗不提升 rc），三者皆以純 bash 復現 | **Blocker**（② R6；**「為了證明安全而寫的工具本身變成危險來源」**） | **縮減而非加固**（② 明示「不再擴寫 shell machinery」）：§6.6.C 整節改為**宣告式變異清單**、🚫 不再內嵌任何會刪除的腳本；driver 亦升 v4，**移除 `safe_rm()` 與全部 `rm -rf`**，workspace 交 runner。全檔 bash block 可執行行**刪除語句命中 0** |
+| `SR-55` | NC6 用 `$SRC/node_modules` 測「temp 位於 SRC 內」，**依賴來源 repo 已存在未追蹤的 `node_modules`** ⇒ 乾淨 checkout 會先失敗在 `canonicalize TMPROOT`、得到不同訊息 ⇒ **7/7 非環境獨立** | **證據環境相依**（② R6 Required） | NC6 改用**保證存在的 `$SRC` 自身**測 equality rejection；舊 NC7 隨 v4 移除刪除邏輯而失去測試對象，一併刪除 |
+| `SR-56` | §14.9.5 把 ② 對 **R5（362 行）** driver 的查證寫成 **382 行**（382 是 R6 的 v3） | **transcript drift**（② R6 Minor） | 更正為 362 並註明兩者之別 |
+| `SR-57` | 我為了驗證「v4 已無刪除語句」而寫的檢查**把自己解釋『為何移除』的註解行也算進命中** ⇒ 誤報 | 母體（自審工具本身，第 3 次） | 檢查改為**宣告式排除註解／引文行**後再計數，並印出母體規模 |
 | `SR-50` | **「🚫 不用 npx」之宣稱為假**：driver 呼叫 `npm run typecheck:ratchet:report`，而該 script 內部（`scripts/typecheck-ratchet.mjs:188`）自行 `execSync('npx tsc …')` ⇒ 我把宣稱的**作用域限縮成「我自己直接寫的那一行」**，未涵蓋間接執行面 | **過度宣稱**（② R5 Required；「宣稱作用域 < 實際執行面」族） | 誠實縮窄宣稱並標明該 npx 不在 driver 控制內；改以 `npx --no-install tsc --version` 斷言**恰為 `Version 5.9.3`**（本地已解析 ⇒ 不可能走下載 fallback）；§9.2 診斷器表同步更正 |
 | `SR-51` | Tier B finalizer **仍非 fail-closed**：未禁 `TMPROOT`/`WORK` 位於 `SRC` 內（`TMPDIR="$SRC/node_modules"` 被 gitignore ⇒ `status` 比對假綠）· `cd / \|\| true` 吞掉「離開 `$WORK` 失敗」· 來源 probe 只在 `rm` 前跑 · cleanup 未重驗 junction/reparse · 三個 heredoc `cat` 未 guard rc。另 Tier A 直接把環境值餵 `createRequire()`（`SRC=.` → `ERR_INVALID_ARG_VALUE`，實測復現） | **Blocker**（② R5） | driver v3：禁 temp 位於 SRC 內 · trap 移到**任何 allocation 之前** · `cd` 失敗即**拒絕刪除** · probe 改 **cleanup 前後各一次** · 刪前斷言 `cd d && pwd -P == d` · 全部 `cat` guard；Tier A 新增 **A0 canonicalize** 後才 export（`SRC=.` 負控：修正前 rc=1、修正後 rc=0） |
 | `SR-52` | 五組負控**只有結果表、無 mutation harness** ⇒ 無法從 packet 重播；且「殘留 0」的掃描以「含 `repo/` 或 materializer」為特徵，**恰好漏掉 canonicalize 失敗留下的空目錄** | **證據可重播性**（② R5 Required；又一次「檢查母體 < 要保護的性質」） | 發布 §6.6.C 完整 harness（7 組，逐組斷言 rc ＋ 訊息 ＋ **前後 `tmp.*` 集合差**，🚫 不再用內容特徵）；新增 NC6（temp 在 SRC 內）／NC7（`cd` 失敗拒刪）兩組 |
@@ -1737,7 +1679,7 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-36` | §6.3 宣稱「同時斷言 `bytes>0`／`srcCR=0`／`emitCR=0`／`diags=0`」，但腳本**只對空 input/output `throw`**，其餘守衛與 `BYTE-IDENTICAL:false` 僅 `console.log`、仍 exit 0 ⇒ **我自己的守衛在假綠** | **實質錯誤**（結構性假綠；② `GOV-FAIL-001`） | 腳本改 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；補逐條負向控制（**實測獨立轉紅 4 條**，守衛 3／4 無法獨立注入、如實標示） |
 | `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
 
-**根因分布（供後續棒次參考）**：53 條中 **11 條**
+**根因分布（供後續棒次參考）**：57 條中 **14 條**
 （`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26` **`SR-35`**）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
@@ -2269,13 +2211,79 @@ driver 本體**成功（原始 rc=0）**，但 finalizer 因無法驗證來源�
   R4→R5 實際 `+245/-88` · PLAN blob／packet 副本＝`899d8853…` ·
   `audit.ts` 在 base／九個 commits／index／worktree 均為 `ec2a9b07…` ·
   overlay 7,495 B／CR=0／`79792231…` · emit identity 與 exact 5 removed／0 added 重播通過 ·
-  382 行 driver 與兩個 Node helper 語法通過 · 工作樹仍只有既存 `?? CLEANUP_PLAN.md`。
+  **362 行** driver 與兩個 Node helper 語法通過（⚠ `SR-56`：原誤寫 382 —— 382 是 R6 之 v3，② R5 當時查證的是 **v3 前身的 362 行版**）· 工作樹仍只有既存 `?? CLEANUP_PLAN.md`。
 - Queue／payment／distributed-state：本輪 PLAN-only，**均不適用**。
 - Observability：七道 CI · committed-diff ratchet · production bundle 仍未跑（揭露正確）。
 - ⚠ **② 之 residual risk（如實轉錄，🚫 不由本 PLAN 宣稱關閉）**：
   「目前負控成功仍是**作者自報**，非本輪獨立 Tier B 證據」——
   ② 明載其未跑 Tier B clone/npm/checkout/rm。我方已以寫入授權在本機執行（§6.6.B／§6.6.C），
   **但這不等於 ② 自身已重跑**。此差距只能由具授權之 runner 或 ② 自行執行來關閉。
+
+---
+
+### 14.10 ② Codex Plan Gate — R6 verdict 與處置 receipt（**本輪為 verification strategy 縮減**）
+
+**verdict**：`CODEX_PLAN_CHANGES_REQUESTED` — **1 Blocker ／ 2 Required ／ 1 Minor**
+**受審錨點**：PLAN commit `c4317d63`；base `acc98dfb`
+
+**② R6 判為已實質關閉**：Tier A · temp/source overlap · trap timing · `cd` 失敗 · 前後 probe · heredoc rc。
+**Production overlay 未變 ⇒ 不需重送 ①。**
+
+#### 14.10.1 🔴 本輪的關鍵轉向：② 主動建議**縮減**，而非再加固
+
+② R6 原文：「**你的投入產出疑問是合理的。建議 R7 不再擴寫 shell machinery**」，
+並具體指出更安全的做法是「把整個 mutable lifecycle 交給 disposable runner，**不在 PLAN 內自行 `rm -rf`**」。
+
+⚠ **這是本棒的一個結構性教訓**：`SR-54` 的 Blocker **不是來自被審的 3 行標註，
+而是來自我為了證明那 3 行安全而新寫的工具**。一個掃描並刪除共享 temp 的 harness，
+其自身風險已超過它提供的保證。
+⇒ 與批 E ① R21「終止自建 evidence machine」屬同一結論，**本棒是第 2 次踩到**。
+
+#### 14.10.2 逐條實測復現（🚫 未實測前不動手）
+
+| ② 之宣稱 | 我方實測 |
+|---|---|
+| `ls \| sort` 無 pipefail ⇒ 失敗仍 rc=0 | ✅ 復現 |
+| `comm … \| grep -c . \|\| true` 把量測失敗轉成 `0` | ✅ 復現 |
+| `trap 'false' EXIT; true` ⇒ 最終 rc=0 | ✅ 復現 |
+| NC6 依賴既存 `node_modules` ⇒ 非環境獨立 | ✅ 確認（乾淨 checkout 會先失敗在 canonicalize） |
+| §14.9.5 誤寫 382（應 362）· §6.6.B 前言仍寫 v2 · 根因帳仍 11 條 | ✅ 三處皆確認 |
+
+#### 14.10.3 處置＝縮減（`SR-54`／`SR-55`）
+
+| 項目 | 處置 |
+|---|---|
+| §6.6.C 自動化 harness | **整節移除**，改為**宣告式變異清單**（只說改哪行、期望什麼）。🚫 PLAN 內不再有任何會刪除的腳本 |
+| driver `safe_rm()` ＋ 全部 `rm -rf` | **v4 整段移除**；workspace 路徑改為**回報給 runner**，由 runner 負責清理 |
+| NC6 環境相依 | 改用**保證存在的 `$SRC` 自身**測 equality rejection |
+| 舊 NC7（`cd` 失敗拒刪） | 隨刪除邏輯移除而**失去測試對象**，一併刪除 |
+
+**機械驗證**：全檔 bash code block 之**可執行行 368 行、刪除語句命中 0**
+（母體宣告：排除註解行與引文行）。
+**driver v4 實跑 rc=0**，正向路徑全綠、workspace 路徑已回報。
+
+#### 14.10.4 Required 2（npx）之處置
+
+`npm_config_offline=true npm_config_yes=false` 加在**兩次 ratchet 執行**上（實測不改變輸出）。
+⚠ **但仍不宣稱「機械上不可能下載」** —— ② 正確指出 `--no-install` 只證明**當下**可解析。
+本 PLAN 之宣稱限定為：(a) 本地已解析且版本恰 5.9.3；(b) ratchet 以 offline 模式執行。
+
+#### 14.10.5 Minor（`SR-56`／根因帳）
+
+§14.9.5 之 **382 → 362**（382 是 R6 的 v3，② R5 當時查證的是 362 行版）。
+根因帳由 11 → **14**，納入 `SR-49`／`SR-50`／`SR-52`（三者皆自稱同族卻未入帳）。
+
+#### 14.10.6 ② 之其他認定（記錄）
+
+- ② 獨立確認：base→R6 恰一個 added PLAN · R5→R6 只有 PLAN（`+305/-97`）·
+  PLAN blob／副本 `c9108dab…` · `audit.ts` 在 base／十個 commits／index／worktree 均 `ec2a9b07…` ·
+  **literal Tier A 以 `SRC_IN=.` ＋ 完整 R6 SHA 重播 rc=0**，且前後 repo 狀態與 source/index blob 相同 ·
+  driver 382 行、harness 69 行、兩個 Node helper 語法通過 · 工作樹仍只有既存 `?? CLEANUP_PLAN.md`。
+- ② 另澄清：其收到的請求末尾有一處 SHA 轉錄錯字，**packet 與 Git object 本身一致**
+  （我方 packet §0 所載為完整 40-hex `c4317d63c42c517554c8be26ae7a86ad483cd49f`，無誤）。
+- Queue／payment／distributed-state：**Not Applicable**。
+- ⚠ **② 之 residual risk（如實轉錄）**：本輪 ② **依唯讀契約未執行 Tier B 或任何刪除**；
+  「目前 7/7 仍是**作者環境證據**」。此差距 🚫 不由本 PLAN 宣稱關閉。
 
 ---
 
