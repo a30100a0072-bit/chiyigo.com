@@ -593,15 +593,19 @@ exit=0
 ```
 ═══ 正向 ═══
   ✓ 真實 overlay              exit=0  命中「ALL GUARDS PASSED」
-═══ 負向（逐條隔離；斷言守衛身分）═══
+═══ 負向（斷言守衛身分；⚠ 分類見下方 errata：僅 G5／G6 為 isolated）═══
   ✓ guard 1  src 非空          exit=1  命中「source is EMPTY」
   ✓ guard 2  src CR=0          exit=1  命中「source contains」
   ✓ guard 5  transpile diags=0 exit=1  命中「transpile diagnostics」   ← 注入＝ type __BROKEN = ;
   ✓ guard 6  BYTE-IDENTICAL    exit=1  命中「BYTE-IDENTICAL FAILED」   ← 注入＝落選設計 v1
   結果：5 passed, 0 failed
 ```
-⚠ 守衛 3／4（emit 非空／emit CR=0）在本檔輸入下**無法獨立注入**（其前提已被守衛 1／2 攔下）
-⇒ 如實標示為「未獨立驗證」，🚫 不宣稱 6/6；**獨立驗證者恰 4 條（1／2／5／6）**。
+> 🚨 **errata（`SR-44`；② R3 之處置）**：上一版此處寫「守衛 3／4 **無法獨立注入**、
+> **獨立驗證者恰 4 條（1／2／5／6）**」—— **兩句皆為假**，本棒已實測更正：
+> · 空輸入實際命中 **G1＋G3＋G6**、CRLF 實際命中 **G2＋G4＋G6** ⇒ G3／G4 **會被啟動**（耦合），
+>   正確用詞是 **coupled activation**，🚫 不是「無法獨立注入／未驗證」。
+> · 因此 G1／G2 也**不是**隔離的 ⇒ **真正 isolated 者恰 2 條（G5／G6）**。
+> 完整實測表與新 driver 見 §6.6.B 末。
 
 > 🚨 **errata（`SR-39`）**：本節上一版列的同樣是「4 條」，但當時 guard 5 的注入
 > （`const x: number = "str"`）**實際觸發的是 guard 6** —— `transpileModule` 不做 semantic 檢查、
@@ -742,219 +746,409 @@ git status --porcelain → 僅 "?? CLEANUP_PLAN.md"
 
 ### 6.6.A Tier A — readonly 子集（**零寫檔**；readonly reviewer 可直接跑）
 
+> 🚨 **② R3 Required 之處置（`SR-43`）**：上一版此段寫 `SRC=…` 但 Node 讀 `process.env.SRC`，
+> **按字面執行會得到 `undefined/package.json`**；且 `PLAN` 仍釘在已過時的 R2 commit。已修。
+
 ```bash
-SRC=<chiyigo.com repo 路徑>          # 全程唯讀
+export SRC=<chiyigo.com repo 路徑>        # ← 必須 export（Node 以 process.env.SRC 取 typescript）
 BASE=acc98dfbeeed237533b5b844338b5798a148ce8f
-PLAN=548e2b896d84e8d8693b565329dd342b7a6bc4fd     # 或後續 PLAN commit
+PLAN=<本輪 PLAN commit —— 完整 40-hex，取自送審 packet §0>
+#   ⚠ 本檔無法自我引用其所在 commit（chicken-and-egg），故 PLAN 由 operator 依 packet 填入。
+#      🚫 不得填 branch 名或短 SHA。
+EXPECT_SRC_BLOB=ec2a9b0795d500d72159988071807be86e8d049f
 
-# A1 身分與 changed-files（純 git 讀）
-git -C "$SRC" rev-parse "$BASE:functions/api/admin/audit.ts"   # 期望 ec2a9b0795d500d72159988071807be86e8d049f
-git -C "$SRC" rev-parse "$PLAN:functions/api/admin/audit.ts"   # 期望同上 ⇒ source 未動一行
-git -C "$SRC" diff "$BASE" "$PLAN" --name-status                # 期望恰一行：A  docs/plans/…md
+# A1 身分與 changed-files —— fail-closed（🚫 不是印出來看一眼）
+[ "$(git -C "$SRC" rev-parse "$BASE:functions/api/admin/audit.ts")" = "$EXPECT_SRC_BLOB" ] \
+  || { echo "FAIL: base source blob 不符"; exit 1; }
+[ "$(git -C "$SRC" rev-parse "$PLAN:functions/api/admin/audit.ts")" = "$EXPECT_SRC_BLOB" ] \
+  || { echo "FAIL: PLAN commit 之 source blob 已變 ⇒ 不再是 type-only 未動狀態"; exit 1; }
+n=$(git -C "$SRC" diff "$BASE" "$PLAN" --name-status | wc -l)
+[ "$n" -eq 1 ] || { echo "FAIL: changed-files = $n（預期恰 1）"; exit 1; }
+git -C "$SRC" diff "$BASE" "$PLAN" --name-status \
+  | grep -qE '^A[[:space:]]+docs/plans/stage7-pr2dw-batchb-read-admin-audit-noimplicitany\.md$' \
+  || { echo "FAIL: 唯一 changed-file 不是 added plan doc"; exit 1; }
+echo "✓ A1：base/PLAN 之 source blob 皆為 ec2a9b07…，changed-files 恰 1 個 added plan doc"
 
-# A2 base emit sha256 —— 內容走 stdin，🚫 不寫任何檔、🚫 不裝任何東西
+# A2 base emit sha256 —— 內容走 stdin，🚫 不寫任何檔、🚫 不裝任何東西、🚫 不 checkout
 git -C "$SRC" show "$BASE:functions/api/admin/audit.ts" | node --input-type=module -e '
 import { createHash } from "node:crypto"; import { createRequire } from "node:module";
 const ts = createRequire(process.env.SRC + "/package.json")("typescript");
 let src = ""; for await (const c of process.stdin) src += c;
 const fails = []; const A = (c, m) => { if (!c) fails.push(m) };
-A(Buffer.byteLength(src,"utf8") > 0, "source is EMPTY");
-A((src.match(/\r/g)||[]).length === 0, "source contains CR");
+A(Buffer.byteLength(src, "utf8") > 0, "source is EMPTY");
+A((src.match(/\r/g) || []).length === 0, "source contains CR");
 const out = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022,
   module: ts.ModuleKind.ESNext, removeComments: false, newLine: ts.NewLineKind.LineFeed }, reportDiagnostics: true });
 const t = out.outputText;
-A(Buffer.byteLength(t,"utf8") > 0, "emit is EMPTY");
-A((t.match(/\r/g)||[]).length === 0, "emit contains CR");
+A(Buffer.byteLength(t, "utf8") > 0, "emit is EMPTY");
+A((t.match(/\r/g) || []).length === 0, "emit contains CR");
 A(out.diagnostics.length === 0, "transpile diagnostics = " + out.diagnostics.length);
-const sha = createHash("sha256").update(t,"utf8").digest("hex");
+const sha = createHash("sha256").update(t, "utf8").digest("hex");
 console.log("base emit sha256 = " + sha);
 A(sha === "10c1d1f87d28787475b481f8a210007863fd60bfd4bcabd827488139778b0b86", "BASE EMIT SHA MISMATCH");
 if (fails.length) { console.error("✗ " + fails.join(" · ")); process.exit(1) }
-console.log("✓ base 側 5 條守衛全過");'
+console.log("✓ A2：base 側 5 條守衛全過");'
 ```
-⚠ 上式需 `SRC` 已 export（`export SRC=<路徑>`），因為 `node -e` 內以 `process.env.SRC` 取 typescript。
-**本棒實測**：exit 0、`base emit sha256 = 10c1d1f8…`、`✓ base 側 5 條守衛全過`。
 
-### 6.6.B Tier B — 前置：一次性隔離環境（**需寫入授權**；逐步 fail-closed）
+**本棒實測**：A2 → exit 0、`base emit sha256 = 10c1d1f8…`、`✓ A2：base 側 5 條守衛全過`。
 
-> ⚠ **🚫 不要盲加全域 `set -e`**（② R2 明示）：`tsc -b` 在本案**預期回非零**（base 有 352 條診斷），
-> 全域 `set -e` 會把預期中的非零當成失敗而中止。⇒ 逐步顯式判斷，預期非零者單獨捕捉。
+---
+
+### 6.6.B Tier B — **完整連續 driver**（需寫入授權；🚫 readonly reviewer 不得執行）
+
+> 🚨 **② R3 Blocker 之處置（`SR-44`）**：上一版是**分段片斷**，且在 `set -u` 之下 ——
+> `tsc`／ratchet／lint 的 exit status 未被捕捉、裸 `sha256sum -c` 不終止整段、
+> `node …; echo "exit=$?"` 讓 Node 失敗被 echo 吃掉（**我方實測整段確實回 0**）、
+> B3 equality 不在 EXIT finalizer 內（早期 `exit 1` 會跳過來源 after-state 證明）、
+> cleanup 拒絕或 `rm` 失敗不提升最終 exit。
+> ⇒ 改為**一支連續、無省略、我方已端到端實跑過**的 driver（下方全文；兩支 helper 以 heredoc 內嵌，無外部依賴）。
+
+**實跑結果（2026-08-24，Windows Git Bash；含 clone ＋ `npm ci` ＋ 2× full `tsc -b --force`）**：
+
+```
+  ✓ G1 src 非空 [coupled]：exit=1，失敗集合恰 3 條且完全相符
+  ✓ G2 src CR=0 [coupled]：exit=1，失敗集合恰 3 條且完全相符
+  ✓ G5 diags=0 [isolated]：exit=1，失敗集合恰 1 條且完全相符
+  ✓ G6 identity [isolated]：exit=1，失敗集合恰 1 條且完全相符
+
+✓ Tier B 全部斷言成立（base/overlay 診斷·ratchet·lint·set-diff·emit identity·4 組負向控制）
+✓ finalizer：來源 repo 三項逐字相等、workdir 已清理
+driver rc=0
+```
+
+**driver 自身之負向控制（🚫 只證明它會綠不算數）**：
+
+| 注入 | 結果 |
+|---|---|
+| `ANCHOR` 竄改為全 0 | **rc=1**，停在物化步驟（`FAIL: anchor 不符`）；來源 repo 未受影響 |
+| `EXPECT_OVER_DIAGS` 改 999 | **rc=1**，`FAIL: overlay 診斷 347（預期 999）` |
+
+**來源 repo 前後比對（實測）**：`HEAD` / `branch` / `status --porcelain` 三項逐字相同。
+**cleanup 實證**：於 `$TMPDIR` canonical 根（本機解析為 `/tmp`）掃描 `tmp.*`，
+具 driver 特徵（`repo/` 或 `materialize-overlay.mjs`）者 **0 個**。
 
 ```bash
+#!/usr/bin/env bash
+# ============================================================================
+# Tier B replay driver — Stage 7 PR-2dw 批 B-read
+# ⚠ 需**寫入授權**。🚫 readonly reviewer 不得執行（.claude/agents/readonly-reviewer.md
+#    禁止所有寫檔／安裝／checkout／rm，不限共用工作樹）。
+#
+# 🚫 **不用 `set -e`**：`tsc -b` 在本案預期回非零（base 有 352 條診斷）。
+#    改為：expected-zero 命令逐一顯式 guard；expected-non-zero 命令捕捉 rc 並斷言**確切值**，
+#    以區分「預期診斷」與「工具失敗」（實測：有診斷 rc=2；config 不存在 rc=1）。
+#
+# 用法：  SRC=<chiyigo.com repo> bash replay-tier-b.sh
+# 回傳：  0 = 全部斷言成立；非 0 = 任一斷言／invariant／cleanup 失敗
+# ============================================================================
 set -u
-SRC=<chiyigo.com repo 路徑>
+set -o pipefail
+
+: "${SRC:?請設 SRC=<chiyigo.com repo 路徑>}"
 BASE=acc98dfbeeed237533b5b844338b5798a148ce8f
+ANCHOR=7979223135b8e6ed80b807f1f1262f2c4bebbe57e40e568eadc69705af39d450
+BASE_EMIT_SHA=10c1d1f87d28787475b481f8a210007863fd60bfd4bcabd827488139778b0b86
+EXPECT_BASE_DIAGS=352
+EXPECT_OVER_DIAGS=347
+EXPECT_TSC_RC=2          # 有診斷時之確切 rc；工具失敗為其他值 ⇒ 可區分
+REL=functions/api/admin/audit.ts
 
-# B0 保存來源 repo 的 before 狀態（結束時做精確 equality 斷言）
-BEFORE_HEAD="$(git -C "$SRC" rev-parse HEAD)"                || { echo "FAIL: rev-parse"; exit 1; }
-BEFORE_BRANCH="$(git -C "$SRC" rev-parse --abbrev-ref HEAD)" || { echo "FAIL: branch"; exit 1; }
-BEFORE_STATUS="$(git -C "$SRC" status --porcelain)"          || { echo "FAIL: status"; exit 1; }
+fail() { echo "FAIL: $*" >&2; exit 1; }
 
-# B1 建立 temp 並驗證 canonical containment（cleanup 前也再驗一次）
-WORK="$(mktemp -d)"                                          || { echo "FAIL: mktemp"; exit 1; }
-WORK="$(cd "$WORK" && pwd -P)"                               || { echo "FAIL: canonicalize"; exit 1; }
-TMPROOT="$(cd "${TMPDIR:-/tmp}" && pwd -P)"                  || { echo "FAIL: tmproot"; exit 1; }
-case "$WORK" in "$TMPROOT"/?*) : ;; *) echo "REFUSE: WORK 不在 temp 根之下：$WORK"; exit 1;; esac
+# ── 0. 保存來源 repo before-state（finalizer 每次退出都比對）────────────────
+BEFORE_HEAD="$(git -C "$SRC" rev-parse HEAD)"                || fail "rev-parse HEAD"
+BEFORE_BRANCH="$(git -C "$SRC" rev-parse --abbrev-ref HEAD)" || fail "rev-parse branch"
+BEFORE_STATUS="$(git -C "$SRC" status --porcelain)"          || fail "status"
 
-cleanup() {
-  case "$WORK" in "$TMPROOT"/?*) rm -rf "$WORK";;             # ← 再驗一次才刪
-    *) echo "REFUSE cleanup: $WORK 不在 temp 根之下，未刪除";; esac
+# ── 1. 一次性工作區 ＋ canonical containment ────────────────────────────────
+WORK="$(mktemp -d)"                          || fail "mktemp"
+WORK="$(cd "$WORK" && pwd -P)"               || fail "canonicalize WORK"
+TMPROOT="$(cd "${TMPDIR:-/tmp}" && pwd -P)"  || fail "canonicalize TMPROOT"
+case "$WORK" in "$TMPROOT"/?*) : ;; *) fail "WORK 不在 temp 根之下：$WORK";; esac
+
+# ── EXIT finalizer：保存原始 rc → 離開 $WORK → 來源 equality → containment → cleanup ──
+finalize() {
+  local rc=$?                      # ← 必須是第一行，否則會被下方命令覆寫
+  local ok=1
+  cd / 2>/dev/null || true         # 先離開 $WORK 才能刪
+  # (a) 來源 repo after-state 必須逐字等於 before（**每次退出都跑**，含早期 fail）
+  [ "$(git -C "$SRC" rev-parse HEAD 2>/dev/null)" = "$BEFORE_HEAD" ] \
+    || { echo "SOURCE MUTATED: HEAD" >&2; ok=0; }
+  [ "$(git -C "$SRC" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "$BEFORE_BRANCH" ] \
+    || { echo "SOURCE MUTATED: branch" >&2; ok=0; }
+  [ "$(git -C "$SRC" status --porcelain 2>/dev/null)" = "$BEFORE_STATUS" ] \
+    || { echo "SOURCE MUTATED: worktree/index" >&2; ok=0; }
+  # (b) cleanup 前再驗 containment；rm 失敗亦視為失敗
+  case "$WORK" in
+    "$TMPROOT"/?*) rm -rf "$WORK" || { echo "CLEANUP FAILED: rm -rf $WORK" >&2; ok=0; } ;;
+    *) echo "REFUSE cleanup: $WORK 不在 temp 根之下，未刪除" >&2; ok=0 ;;
+  esac
+  [ -e "$WORK" ] && { echo "CLEANUP INCOMPLETE: $WORK 仍存在" >&2; ok=0; }
+  if [ "$ok" -ne 1 ]; then echo "finalizer invariant 失敗（原始 rc=$rc）" >&2; exit 1; fi
+  [ "$rc" -eq 0 ] && echo "✓ finalizer：來源 repo 三項逐字相等、workdir 已清理"
+  exit "$rc"
 }
-trap cleanup EXIT
+trap finalize EXIT
 
-# B2 clone / cd / checkout / install —— 每一步各自終止
-git clone --local --no-hardlinks "$SRC" "$WORK/repo" || { echo "FAIL: clone"; exit 1; }
-cd "$WORK/repo"                                      || { echo "FAIL: cd（🚫 後續步驟絕不可在原 cwd 執行）"; exit 1; }
-git rev-parse --show-toplevel | grep -qx "$WORK/repo" || { echo "FAIL: cwd 不是 clone 內部"; exit 1; }
-git checkout --detach "$BASE"                        || { echo "FAIL: checkout"; exit 1; }
-npm ci                                               || { echo "FAIL: npm ci"; exit 1; }
-```
+# ── 2. disposable clone（🚫 不用 git worktree：junction 風險）───────────────
+git clone --local --no-hardlinks "$SRC" "$WORK/repo" >/dev/null 2>&1 || fail "clone"
+cd "$WORK/repo" || fail "cd（🚫 後續步驟絕不可在原 cwd 執行）"
+# cwd guard：🚫 不直接比較 git 與 shell 的路徑方言（Windows Git Bash: C:/… vs /c/…）
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "不在 git work tree 內"
+TOP_CANON="$(cd "$(git rev-parse --show-toplevel)" && pwd -P)" || fail "canonicalize toplevel"
+[ "$TOP_CANON" = "$WORK/repo" ] || fail "cwd 不是 clone 內部：$TOP_CANON != $WORK/repo"
+git checkout --detach "$BASE" >/dev/null 2>&1 || fail "checkout $BASE"
+npm ci >/dev/null 2>&1 || fail "npm ci"
 
-**B3 收尾 — 對來源 repo 做精確 equality 斷言**（🚫 不是「印出來看一眼」）：
-```bash
-[ "$(git -C "$SRC" rev-parse HEAD)" = "$BEFORE_HEAD" ]                || { echo "SOURCE MUTATED: HEAD"; exit 1; }
-[ "$(git -C "$SRC" rev-parse --abbrev-ref HEAD)" = "$BEFORE_BRANCH" ] || { echo "SOURCE MUTATED: branch"; exit 1; }
-[ "$(git -C "$SRC" status --porcelain)" = "$BEFORE_STATUS" ]          || { echo "SOURCE MUTATED: worktree/index"; exit 1; }
-echo "✓ 來源 repo 未被觸碰（HEAD / branch / status 三項逐字相等）"
-```
 
-**步驟 1 — base 診斷／ratchet／lint**（在 `$WORK/repo` 內）
-```bash
-npx tsc -b tsconfig.solution.json --force > "$WORK/tsc-base.txt" 2>&1   # 期望 352 行
-npm run typecheck:ratchet:report                                        # 期望 352 / 12 / 325 / 337
-npm run lint                                                            # 期望 EXIT 0
-```
+# ── 2b. 寫出兩支 helper（heredoc 內嵌，🚫 無外部依賴、🚫 不進 repo）───────────
+cat > "$WORK/materialize-overlay.mjs" <<'___MATERIALIZE_EOF___'
+// 從 immutable base blob 物化 overlay，🚫 不用 git apply。
+// 理由（2026-08-24 實測）：Windows Git Bash 下 `git apply` 會在無 .gitattributes 的樹把 LF 轉 CRLF
+//   （實測 +179 CR、7674 vs 7495 bytes），使 anchor 必然不符 —— 環境相依、非確定性。
+// 本法：讀 raw blob（git show 輸出即 LF）→ 三次「唯一字串」替換（各自斷言恰 1 命中）→ 以 LF 原樣寫出
+//   → 自驗 sha256 == anchor。任一步不成立即 non-zero exit。
+import { execFileSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 
-**步驟 2 — 重建 overlay**（在 `$WORK/repo` 內；此處改動只影響 disposable clone）：
-對 `functions/api/admin/audit.ts` 施以 §4.2 三處標註 ＋ §4.1 逐字宣告 block；然後**強制驗 anchor**：
-```bash
-echo "7979223135b8e6ed80b807f1f1262f2c4bebbe57e40e568eadc69705af39d450  functions/api/admin/audit.ts" \
-  | sha256sum -c -   # ← fail-closed：不符即 non-zero exit，🚫 不要「看起來差不多」就往下走
-```
-⚠ 這是**檔案位元組的 SHA-256**，🚫 不是 git blob SHA（勿用 `git hash-object` 比對）。
+const [, , REPO, BASE_SHA, OUT_PATH, EXPECT_SHA] = process.argv
+if (!REPO || !BASE_SHA || !OUT_PATH || !EXPECT_SHA) {
+  console.error('usage: node materialize-overlay.mjs <repo> <base-sha> <out-path> <expect-sha256>')
+  process.exit(2)
+}
+const REL = 'functions/api/admin/audit.ts'
 
-**步驟 3 — overlay 診斷／set-diff**（在 `$WORK/repo` 內）
-```bash
-npx tsc -b tsconfig.solution.json --force > "$WORK/tsc-over.txt" 2>&1   # 期望 347 行
-norm() { sed -E 's/\(([0-9]+),([0-9]+)\)//' "$1" | sort; }
-comm -23 <(norm "$WORK/tsc-base.txt") <(norm "$WORK/tsc-over.txt")   # 期望恰 5 行，全為本檔 TS7006/TS7031
-comm -13 <(norm "$WORK/tsc-base.txt") <(norm "$WORK/tsc-over.txt")   # 期望恰 0 行
-npm run typecheck:ratchet:report                                      # 期望 347 / 11 / 326 / 337
+let src = execFileSync('git', ['-C', REPO, 'show', `${BASE_SHA}:${REL}`]).toString('utf8')
+if ((src.match(/\r/g) || []).length !== 0) { console.error('FAIL: base blob 含 CR（不應發生）'); process.exit(1) }
 
-# fail-closed 版（🚫 不靠肉眼看行數）
-[ "$(comm -23 <(norm "$WORK/tsc-base.txt") <(norm "$WORK/tsc-over.txt") | wc -l)" -eq 5 ] || { echo "REMOVED != 5"; exit 1; }
-[ "$(comm -13 <(norm "$WORK/tsc-base.txt") <(norm "$WORK/tsc-over.txt") | wc -l)" -eq 0 ] || { echo "ADDED != 0"; exit 1; }
-```
+// 三處編輯（＝PLAN §4.2 的 3 個標註點 ＋ §4.1 的宣告 block）
+const EDITS = [
+  {
+    id: 'E1 §4.1 宣告 block ＋ redactEventData 簽章',
+    from: 'function redactEventData(raw) {',
+    to: `/**
+ * 本檔 \`audit_log\` 查詢的**投影列**（projection），🚫 不是 \`audit_log\` 資料表的完整結構 ——
+ * 表自 migration 0038 起另有 \`archived_at\` / \`cold_class\`，本查詢未投影、故不在此宣告內。
+ * 欄位型別依 migration 0017 之 DDL（\`event_type\` / \`severity\` / \`created_at\` 為 NOT NULL；
+ * \`user_id\` / \`client_id\` / \`ip_hash\` / \`event_data\` 可為 NULL）。
+ *
+ * ⚠ 本宣告**未經編譯期檢查**：本 repo 未安裝 \`@cloudflare/workers-types\`，
+ * \`Env['chiyigo_db']\` 解析為 \`any\`，TypeScript 無從驗證實際 row 與此形狀相符。
+ * 唯一保證＝下方 SELECT 欄位清單與本宣告必須同步維護。
+ * 🚫 不得據此宣稱「D1 row 已型別化」。
+ *
+ * ⚠ 命名：🚫 不叫 \`AuditLogRow\` —— 該名已由 \`utils/audit-log.ts\` 用於 \`admin_audit_log\`
+ * （hash-chain 表），與本表 \`audit_log\` 是**不同的表**。前綴沿 \`user-audit.ts\` 的
+ * \`UserAuditEnv\` / \`UserAuditEntry\` 家族（該模組即本表的寫入端）。
+ */
+interface UserAuditRow {
+  id: number
+  event_type: string
+  severity: string
+  user_id: number | null
+  client_id: string | null
+  ip_hash: string | null
+  event_data: string | null
+  created_at: string
+}
 
-**步驟 4 — emit identity**（**fail-closed**；🚫 不進 repo、🚫 不進 CI、🚫 不觸碰共用工作樹）
+function redactEventData(raw: unknown) {`,
+  },
+  {
+    id: 'E2 §4.2 handler ctx 標註',
+    from: 'export async function onRequestGet({ request, env }) {',
+    to: 'export async function onRequestGet({ request, env }: { request: Request; env: Env }) {',
+  },
+  {
+    id: 'E3 §4.2 邊界標註（B-OD-1）',
+    from: '  const rawRows = rowsResult?.results ?? []',
+    to: '  const rawRows: UserAuditRow[] = rowsResult?.results ?? []',
+  },
+]
 
-> 🚨 **舊版腳本已作廢（② R1 `GOV-FAIL-001`）**：它只對「空 input／空 output」`throw`，
-> 而 `srcCR` / `emitCR` / `diagnostics` / `BYTE-IDENTICAL:false` **只是 `console.log`，仍 exit 0**。
-> §6.3 卻宣稱「本量測同時斷言 `bytes>0`、`srcCR=0`、`emitCR=0`、`diags=0`」—— **該宣稱當時為假**。
-> 本版把**6 條守衛全部**改成累積失敗 → non-zero exit。
+for (const e of EDITS) {
+  const n = src.split(e.from).length - 1
+  if (n !== 1) { console.error(`FAIL: ${e.id} — 來源命中 ${n} 次（必須恰 1）`); process.exit(1) }
+  src = src.replace(e.from, e.to)
+}
 
-```js
-// 母體 = 恰 2 個輸入：(1) base immutable git blob (2) overlay temp 檔（🚫 非共用工作樹）
+if ((src.match(/\r/g) || []).length !== 0) { console.error('FAIL: overlay 含 CR'); process.exit(1) }
+writeFileSync(OUT_PATH, src, { encoding: 'utf8' })   // Node 原樣寫出，🚫 不做 EOL 轉換
+
+const sha = createHash('sha256').update(src, 'utf8').digest('hex')
+console.log(`overlay bytes=${Buffer.byteLength(src, 'utf8')} CR=0 sha256=${sha}`)
+if (sha !== EXPECT_SHA) { console.error(`FAIL: anchor 不符\n  實得 ${sha}\n  期望 ${EXPECT_SHA}`); process.exit(1) }
+console.log('✓ overlay 物化完成且 anchor 相符')
+___MATERIALIZE_EOF___
+[ -s "$WORK/materialize-overlay.mjs" ] || fail 'materialize-overlay.mjs 寫出失敗'
+
+cat > "$WORK/emit-identity.mjs" <<'___EMIT_EOF___'
+// 單檔 transpile identity 量測（fail-closed 版；② `GOV-FAIL-001` 之處置）。
+//
+// 母體 = 恰 2 個輸入：(1) base immutable git blob (2) overlay 檔（temp，🚫 非共用工作樹）
 // 宣稱保護的性質 = 「型別標註 erase 後，emit 逐字不變」
-// 🚫 單檔 transpile identity，不是 production bundle identity
+// 🚫 這是單檔 transpile identity，不是 production bundle identity。
+// 🚫 本腳本刻意留在 scratchpad，不得進 repo、不得進 CI。
+//
+// ⚠ ② R1 `GOV-FAIL-001` 指出舊版只對「空 input/output」throw，其餘守衛（srcCR / emitCR /
+//    diagnostics / BYTE-IDENTICAL）只是 console.log ⇒ 全部失敗仍 exit 0，與 PLAN 宣稱的
+//    「斷言守衛」不符。本版把**每一條**守衛都改成 throw / non-zero exit。
+// ⚠ 本腳本 🚫 不觸碰工作樹：base 側走 `git show <sha>:<path>`（immutable blob），
+//    overlay 側讀呼叫者給的 temp 路徑。
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
+
 const [, , REPO, BASE_SHA, OVERLAY_PATH] = process.argv
-if (!REPO || !BASE_SHA || !OVERLAY_PATH) { console.error('usage: node x.mjs <repo> <base-sha> <overlay-path>'); process.exit(2) }
+if (!REPO || !BASE_SHA || !OVERLAY_PATH) {
+  console.error('usage: node emit-identity.mjs <repo> <base-sha> <overlay-path>')
+  process.exit(2)
+}
 const REL = 'functions/api/admin/audit.ts'
-const ts = createRequire(REPO + '/package.json')('typescript')
-const opts = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
-               removeComments: false, newLine: ts.NewLineKind.LineFeed }
+
+const require = createRequire(REPO + '/package.json')
+const ts = require('typescript')
+
+const opts = {
+  target: ts.ScriptTarget.ES2022,   // 對齊 tsconfig target
+  module: ts.ModuleKind.ESNext,     // 對齊 tsconfig module
+  removeComments: false,            // 🚫 不剝註解
+  newLine: ts.NewLineKind.LineFeed, // 只影響 emitter 自己的換行
+}
+
 const failures = []
-const assert = (c, m) => { if (!c) failures.push(m) }
+const assert = (cond, msg) => { if (!cond) failures.push(msg) }
+
 function measure(label, src) {
-  const srcBytes = Buffer.byteLength(src, 'utf8'), srcCR = (src.match(/\r/g) || []).length
-  assert(srcBytes > 0, `${label}: source is EMPTY`)                       // 守衛 1
-  assert(srcCR === 0, `${label}: source contains ${srcCR} CR`)            // 守衛 2
+  const srcBytes = Buffer.byteLength(src, 'utf8')
+  const srcCR = (src.match(/\r/g) || []).length
+  // 守衛 1+2：source 非空、source CR=0（EOL 會改變 emit，見 PLAN §6.3）
+  assert(srcBytes > 0, `${label}: source is EMPTY (bytes=0)`)
+  assert(srcCR === 0, `${label}: source contains ${srcCR} CR — 必須取 LF 內容（immutable blob），否則量到的是錯的東西`)
   const out = ts.transpileModule(src, { compilerOptions: opts, reportDiagnostics: true })
-  const text = out.outputText, bytes = Buffer.byteLength(text, 'utf8')
-  const cr = (text.match(/\r/g) || []).length, diags = out.diagnostics.length
-  assert(bytes > 0, `${label}: emit is EMPTY`)                            // 守衛 3
-  assert(cr === 0, `${label}: emit contains ${cr} CR`)                    // 守衛 4
-  assert(diags === 0, `${label}: transpile diagnostics = ${diags}`)       // 守衛 5
+  const text = out.outputText
+  const bytes = Buffer.byteLength(text, 'utf8')
+  const cr = (text.match(/\r/g) || []).length
+  const diags = out.diagnostics.length
+  // 守衛 3+4+5：emit 非空、emit CR=0、transpile diagnostics=0
+  assert(bytes > 0, `${label}: emit is EMPTY (bytes=0) — 空字串 sha256 為 e3b0c442… 之假綠，批 C2 曾踩`)
+  assert(cr === 0, `${label}: emit contains ${cr} CR`)
+  assert(diags === 0, `${label}: transpile diagnostics = ${diags}（期望 0）`)
   return { label, srcBytes, srcCR, bytes, cr, diags, sha: createHash('sha256').update(text, 'utf8').digest('hex') }
 }
-const b = measure('BASE(blob)', execFileSync('git', ['-C', REPO, 'show', `${BASE_SHA}:${REL}`]).toString('utf8'))
-const o = measure('OVERLAY(temp)', readFileSync(OVERLAY_PATH, 'utf8'))
-for (const m of [b, o]) console.log(`${m.label.padEnd(16)} srcBytes=${m.srcBytes} srcCR=${m.srcCR} emitBytes=${m.bytes} emitCR=${m.cr} diags=${m.diags} sha256=${m.sha}`)
-assert(b.sha === o.sha, `BYTE-IDENTICAL FAILED: ${b.sha} !== ${o.sha}`)   // 守衛 6
-if (failures.length) { console.error('\n✗ ASSERTION FAILURES:'); for (const f of failures) console.error('  · ' + f); process.exit(1) }
-console.log('\n✓ ALL GUARDS PASSED (6/6)')
+
+const baseSrc = execFileSync('git', ['-C', REPO, 'show', `${BASE_SHA}:${REL}`]).toString('utf8')
+const overSrc = readFileSync(OVERLAY_PATH, 'utf8')
+
+const b = measure('BASE(blob)', baseSrc)
+const o = measure('OVERLAY(temp)', overSrc)
+
+for (const m of [b, o]) {
+  console.log(
+    `${m.label.padEnd(16)} srcBytes=${String(m.srcBytes).padStart(5)} srcCR=${m.srcCR}  ` +
+    `emitBytes=${String(m.bytes).padStart(5)} emitCR=${m.cr} diags=${m.diags}  sha256=${m.sha}`,
+  )
+}
+
+// 守衛 6：byte-identical（本量測的主張本身）
+assert(b.sha === o.sha, `BYTE-IDENTICAL FAILED: base ${b.sha} !== overlay ${o.sha}（emit 差 ${o.bytes - b.bytes} bytes）`)
+
+if (failures.length) {
+  console.error('\n✗ ASSERTION FAILURES (' + failures.length + '):')
+  for (const f of failures) console.error('  · ' + f)
+  process.exit(1)          // ← fail-closed：任一守衛不成立即 non-zero exit
+}
+console.log('\n✓ ALL GUARDS PASSED (6/6)：src 非空 · src CR=0 · emit 非空 · emit CR=0 · diags=0 · BYTE-IDENTICAL')
+process.exit(0)
+___EMIT_EOF___
+[ -s "$WORK/emit-identity.mjs" ] || fail 'emit-identity.mjs 寫出失敗'
+# ── 3. base 面 ─────────────────────────────────────────────────────────────
+npx tsc -b tsconfig.solution.json --force > "$WORK/tsc-base.txt" 2>&1
+rc=$?; [ "$rc" -eq "$EXPECT_TSC_RC" ] || fail "base tsc rc=$rc（預期 $EXPECT_TSC_RC）—— 疑為工具失敗而非預期診斷"
+n=$(wc -l < "$WORK/tsc-base.txt"); [ "$n" -eq "$EXPECT_BASE_DIAGS" ] || fail "base 診斷 $n（預期 $EXPECT_BASE_DIAGS）"
+npm run typecheck:ratchet:report > "$WORK/ratchet-base.txt" 2>&1 || fail "base ratchet（expected-zero）"
+grep -qE "errorCount +: $EXPECT_BASE_DIAGS" "$WORK/ratchet-base.txt" || fail "base ratchet errorCount 不符"
+npm run lint > "$WORK/lint-base.txt" 2>&1 || fail "base lint（expected-zero）"
+
+# ── 4. 物化 overlay（🚫 不用 git apply：Windows 下會把 LF 轉 CRLF、anchor 必不符）──
+node "$WORK/materialize-overlay.mjs" "$WORK/repo" "$BASE" "$WORK/repo/$REL" "$ANCHOR" \
+  > "$WORK/materialize.txt" 2>&1 || { cat "$WORK/materialize.txt" >&2; fail "物化 overlay／anchor 驗證"; }
+
+# ── 5. overlay 面 ──────────────────────────────────────────────────────────
+npx tsc -b tsconfig.solution.json --force > "$WORK/tsc-over.txt" 2>&1
+rc=$?; [ "$rc" -eq "$EXPECT_TSC_RC" ] || fail "overlay tsc rc=$rc（預期 $EXPECT_TSC_RC）"
+n=$(wc -l < "$WORK/tsc-over.txt"); [ "$n" -eq "$EXPECT_OVER_DIAGS" ] || fail "overlay 診斷 $n（預期 $EXPECT_OVER_DIAGS）"
+npm run typecheck:ratchet:report > "$WORK/ratchet-over.txt" 2>&1 || fail "overlay ratchet（expected-zero）"
+grep -qE "errorCount +: $EXPECT_OVER_DIAGS" "$WORK/ratchet-over.txt" || fail "overlay ratchet errorCount 不符"
+grep -qE "cleanFiles +: 326" "$WORK/ratchet-over.txt" || fail "overlay cleanFiles != 326"
+npm run lint > "$WORK/lint-over.txt" 2>&1 || fail "overlay lint（expected-zero）"
+
+# ── 6. set-diff（line-shift robust）──────────────────────────────────────────
+norm() { sed -E 's/\(([0-9]+),([0-9]+)\)//' "$1" | sort; }
+norm "$WORK/tsc-base.txt" > "$WORK/n-base.txt" || fail "norm base"
+norm "$WORK/tsc-over.txt" > "$WORK/n-over.txt" || fail "norm over"
+removed=$(comm -23 "$WORK/n-base.txt" "$WORK/n-over.txt" | wc -l)
+added=$(comm -13 "$WORK/n-base.txt" "$WORK/n-over.txt" | wc -l)
+[ "$removed" -eq 5 ] || fail "REMOVED=$removed（預期 5）"
+[ "$added" -eq 0 ]   || fail "ADDED=$added（預期 0）"
+comm -23 "$WORK/n-base.txt" "$WORK/n-over.txt" | grep -cE "TS7006|TS7031" | grep -qx 5 \
+  || fail "REMOVED 5 條並非全為 TS7006/TS7031"
+
+# ── 7. emit identity（正向）──────────────────────────────────────────────────
+node "$WORK/emit-identity.mjs" "$WORK/repo" "$BASE" "$WORK/repo/$REL" > "$WORK/emit.txt" 2>&1 \
+  || { cat "$WORK/emit.txt" >&2; fail "emit identity（正向應 exit 0）"; }
+grep -q "ALL GUARDS PASSED" "$WORK/emit.txt" || fail "emit 正向未見 ALL GUARDS PASSED"
+grep -q "$BASE_EMIT_SHA" "$WORK/emit.txt" || fail "base emit sha 不符"
+
+# ── 8. 負向控制：斷言 exit≠0 **且**失敗集合完全相符 ─────────────────────────
+#     ⚠ G1／G2 為 **coupled activation**（空輸入必連帶 G3＋G6；CRLF 必連帶 G4＋G6）；
+#        只有 G5／G6 是 **isolated**。🚫 不得宣稱四條皆隔離。
+negctl() { # $1=label  $2=overlay 檔  $3..=期望出現之失敗字串（完整集合）
+  local label="$1" file="$2"; shift 2
+  local out rc; out="$(node "$WORK/emit-identity.mjs" "$WORK/repo" "$BASE" "$file" 2>&1)"; rc=$?
+  [ "$rc" -ne 0 ] || { echo "$out" >&2; fail "負向控制 $label 竟 exit 0"; }
+  local got; got=$(echo "$out" | grep -c '^  · ')
+  [ "$got" -eq "$#" ] || { echo "$out" >&2; fail "負向控制 $label 失敗數 $got（預期 $#）"; }
+  local s; for s in "$@"; do echo "$out" | grep -q -- "$s" || { echo "$out" >&2; fail "負向控制 $label 未命中「$s」"; }; done
+  echo "  ✓ $label：exit=$rc，失敗集合恰 $# 條且完全相符"
+}
+printf '' > "$WORK/n_empty.ts"
+node -e "require('fs').writeFileSync(process.argv[2],require('fs').readFileSync(process.argv[1],'utf8').replace(/\n/g,'\r\n'))" "$WORK/repo/$REL" "$WORK/n_crlf.ts" || fail "造 CRLF fixture"
+node -e "require('fs').writeFileSync(process.argv[2],'type __BROKEN = ;\n'+require('fs').readFileSync(process.argv[1],'utf8'))" "$WORK/repo/$REL" "$WORK/n_diag.ts" || fail "造 TS1110 fixture"
+node -e "require('fs').writeFileSync(process.argv[2],require('fs').readFileSync(process.argv[1],'utf8')+'// G6 emit-changing comment\n')" "$WORK/repo/$REL" "$WORK/n_emit.ts" || fail "造 emit-diff fixture"
+
+negctl "G1 src 非空 [coupled]" "$WORK/n_empty.ts" "source is EMPTY" "emit is EMPTY" "BYTE-IDENTICAL FAILED"
+negctl "G2 src CR=0 [coupled]" "$WORK/n_crlf.ts"  "source contains" "emit contains" "BYTE-IDENTICAL FAILED"
+negctl "G5 diags=0 [isolated]" "$WORK/n_diag.ts"  "transpile diagnostics"
+negctl "G6 identity [isolated]" "$WORK/n_emit.ts" "BYTE-IDENTICAL FAILED"
+
+echo ""
+echo "✓ Tier B 全部斷言成立（base/overlay 診斷·ratchet·lint·set-diff·emit identity·4 組負向控制）"
+exit 0
 ```
-**完整可執行 invocation（`SR-40`；舊版只給 usage 字串，缺實際命令與三個實參）**：
-```bash
-# 於 Tier B 環境內。把上方腳本存成 emit-identity.mjs（temp 目錄，🚫 不進 repo）
-cat > "$WORK/emit-identity.mjs" <<'MJS'
-…（上方腳本全文）…
-MJS
-node "$WORK/emit-identity.mjs" \
-     "$WORK/repo" \
-     acc98dfbeeed237533b5b844338b5798a148ce8f \
-     "$WORK/repo/functions/api/admin/audit.ts"
-#    └─ argv[2]=REPO（供 createRequire 解析 typescript）
-#       argv[3]=BASE_SHA（base 側走 git show，immutable）
-#       argv[4]=OVERLAY_PATH（overlay 側；此處為 clone 內已施標註的檔）
-echo "exit=$?"   # 期望 0
-```
 
-期望：兩側 `emitBytes = 6599`、`emitCR = 0`、`diags = 0`、`sha256 = 10c1d1f8…`、**exit 0 ＋ `ALL GUARDS PASSED (6/6)`**。
+> ⚠ **`git apply` 為何不可用於物化 overlay（`SR-43`；本棒實測）**：Windows Git Bash 下，
+> 於無 `.gitattributes` 的樹執行 `git apply` 會把 LF 轉成 CRLF
+> （實測 **+179 CR、7674 vs 7495 bytes**）⇒ anchor 必然不符，且**環境相依、非確定性**。
+> ⇒ driver 改用「讀 immutable blob → 三次**唯一字串**替換（各自斷言恰 1 命中）→ Node 原樣寫出 → 自驗 sha256」。
 
-⚠ `ALL GUARDS PASSED (6/6)` 指**本次執行 6 條守衛皆成立**，
-🚫 **不**表示 6 條都已被負向控制個別證明 —— 後者見步驟 5（**恰 4 條**）。
-
-**步驟 5 — 負向控制**（🚫 不只看 exit code；**必須同時斷言「失敗的是哪一條守衛」**）
-
-> 🚨 **② R2 Required 之處置（`SR-39`）**：舊版 guard 5 注入 `const x: number = "str"`，
-> **並未測到 diagnostics guard**。我方以 repo 之 TypeScript 5.9.3 實測確認 ② 所言：
-> `transpileModule` **不做 semantic type checking** ⇒ 該注入之 `transpile diagnostics = 0`；
-> 其 `exit 1` 來自 **guard 6**（新增的 runtime `const` 改變了 emit），**不是 guard 5**。
-> ⇒ 舊「4 條獨立轉紅」之宣稱**為假，實際只有 3 條**（1／2／6）。
-> **根因**：負向控制只斷言 exit code，未斷言**失敗身分** —— 一個測不到自己要測的東西的負向控制。
-
-**修正後之注入（本棒實測）**：guard 5 改用**會被 erase 的語法錯誤** `type __BROKEN = ;`
-—— 實測 `transpile diagnostics = 1`（**TS1110**）且 **emit sha256 不變** ⇒ 乾淨隔離 guard 5。
-
-| 守衛 | 注入 | 期望 exit | **期望失敗訊息含** | 實測 |
-|---|---|---|---|---|
-| — 正向 | 真實 overlay | 0 | `ALL GUARDS PASSED` | ✓ |
-| 1 src 非空 | 0-byte 檔 | 1 | `source is EMPTY` | ✓ |
-| 2 src CR=0 | overlay 全 `\n`→`\r\n` | 1 | `source contains` | ✓ |
-| 5 diags=0 | overlay 首行插 `type __BROKEN = ;` | 1 | `transpile diagnostics` | ✓ |
-| 6 BYTE-IDENTICAL | 落選設計 v1 | 1 | `BYTE-IDENTICAL FAILED` | ✓ |
-
-**實測結果：`5 passed, 0 failed`**（1 正向 ＋ 4 負向，全部連**守衛身分**一起斷言）。
-
-⚠ 守衛 3（emit 非空）／守衛 4（emit CR=0）在本檔輸入下**無法獨立注入**
-（emit 空需 src 空 ⇒ 已被守衛 1 攔；emit CR 需 src CR ⇒ 已被守衛 2 攔）。
-**如實標示為「未獨立驗證」**，🚫 不宣稱 6/6 —— **獨立驗證者恰 4 條（1／2／5／6）**。
-
-⚠ **`transpile diagnostics` 這條守衛的涵蓋範圍（誠實限定）**：`transpileModule` 只回報
-**syntax／options** 層級的診斷，🚫 **不做 semantic type checking**。
-⇒ guard 5 **不能**用來證明「型別正確」；semantic 正確性由**完整 `tsc` oracle**負責
-（＝步驟 1／3 的 `tsc -b tsconfig.solution.json` 與 §6.1 之 set-diff）。
-🚫 不得把 emit oracle 的綠燈讀成型別檢查通過。
-
-另兩組屬**診斷 oracle**（非 emit oracle）之負向控制見 §6.4：
-`raw: unknown → raw: number` ⇒ `ADDED = 2`；設計 v1 ⇒ `BYTE-IDENTICAL: false`。
-
-**步驟 6 — 清理與收尾斷言**（Tier B）：`cleanup()` 由 §6.6.B 的 `trap … EXIT` 保證（含中途失敗），
-且**刪除前再驗一次 canonical temp containment**，不符則拒刪並告警。
-🚫 **不需要、也不得**對來源 repo 執行任何 `git checkout` / `git restore` —— 本 recipe 全程未修改它。
-收尾須跑 **§6.6.B3 的三項逐字 equality 斷言**（`BEFORE_HEAD` / `BEFORE_BRANCH` / `BEFORE_STATUS`），
-🚫 不是「印出來看一眼」。
-
-⚠ **本 recipe 的信任模型**：所有 base 側輸入皆 content-addressed（commit / blob SHA），
-外部可自行 `git cat-file` 驗證；overlay 側由 §6.3 anchor sha256 綁定。
-🚫 本檔**不**宣稱「已封閉」，只宣稱「已示範上列量測可被外部重播、且兩個 oracle 各已示範抓到一類注入」。
-
----
+> ⚠ **負向控制之 coupled vs isolated（`SR-44`；本棒實測，🚫 勿再宣稱四條皆隔離）**：
+>
+> | 注入 | 實際命中之守衛集合 | 分類 |
+> |---|---|---|
+> | 空輸入 | **G1 ＋ G3 ＋ G6**（3 條） | **coupled activation** |
+> | CRLF | **G2 ＋ G4 ＋ G6**（3 條） | **coupled activation** |
+> | `type __BROKEN = ;` | **G5**（1 條） | **isolated** ✅ |
+> | emit-changing 註解 | **G6**（1 條） | **isolated** ✅ |
+>
+> ⇒ 精確表述：**isolated 恰 2 條（G5／G6）**；G1／G2 只能宣稱「target guard 已被啟動」，
+> 🚫 **不得**宣稱逐條隔離。
+> ⚠ 附帶收穫：G3／G4 先前被我標為「無法獨立注入」，實測顯示它們**確實會被啟動**（只是耦合），
+> 故正確用詞是 **coupled activation**，🚫 不是「未驗證」。
+> driver 對每組斷言**完整失敗集合**（條數 ＋ 逐條字串），🚫 不只看 exit code ——
+> 這正是 ② R2 抓到 guard 5 測錯對象的根因。
 
 ## 7. 機械限制
 
@@ -1251,6 +1445,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 22 | 2026-08-23 | PLAN R2 `548e2b89`；② R2 delta packet 送出（`eedabcc3…`） | §14.6 |
 | 23 | 2026-08-23 | **② R2 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（1 Blocker／1 Required）；**`TS-BOUNDARY-002` CLOSED**；② **撤回**其 R1 之「必然改 changed-files／需重送 ①」與「isolated clone 即 reviewer-safe」兩項過廣前提 | §14.6 |
 | 24 | 2026-08-23 | ② R2 兩個 family 處置完成（`REPLAY-AUTHORIZATION-TIERS` 兩層 ＋ 逐步 fail-closed ＋ before/after equality 斷言 ＋ guard 5 注入改 `type __BROKEN = ;`；**PLAN-only、零 code diff 變動**） | §14.6 |
+| 25 | 2026-08-23 | PLAN R3 `ce327b6b`；② R3 delta packet 送出（`8f1e9cf4…`） | §14.7 |
+| 26 | 2026-08-24 | **② R3 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（1 Blocker family／1 Required family）；guard 5 修正與 actor split 概念判 CLOSED | §14.7 |
+| 27 | 2026-08-24 | ② R3 兩個 family 處置完成：**發布已端到端實跑之連續 Tier B driver**（rc=0）＋ Tier A 可執行化；**PLAN-only、零 code diff 變動** | §14.7 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1294,6 +1491,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-32` | §13 非目標第 9 項仍寫「其他 **15** 個單元」⇒ `SR-13`（單元數帳）之**第三個成員**，我修 §2.1.1 與 §3 時漏掉 | **實質錯誤**（族處置不完整，第 3 次） | 改為「其餘 **10** 個未裁定單元」＋ 指向 §2.1.1 對映帳 |
 | `SR-34` | §14 待填清單標頭仍寫「留空待填」，但 ① 已由實際 gate 回覆填入 ⇒ 標頭與內容不一致 | 內部一致性 | 改為「只由實際 gate 回覆填入（已回覆者填 verdict／未回覆者維持 `_待填_`）」 |
 | `SR-35` | §5.6 suppression 預算的**母體是「文字上的 suppression 語法」**（`as T` / `: any` / `@ts-*`），但要保護的性質是「**未經檢查的型別宣稱**」⇒ `const rawRows: UserAuditRow[] = <any>` 這種**隱式 unchecked assignment 落在母體外**，卻是本棒最強的型別宣稱 | **實質錯誤**（母體 < 性質，第 11 次；② `TS-BOUNDARY-002` 之根因） | §5.6 補「unchecked assignment」列（預算 1／實際 1）＋ errata；登錄 `UB-B-1`；附啟發式重播指令並標明其非機械閘 |
+| `SR-43` | replay recipe **按字面不可執行**：Tier A 寫 `SRC=…` 但 Node 讀 `process.env.SRC`（實際得 `undefined/package.json`）· `PLAN` 釘在過時的 R2 commit · Tier B cwd guard 直接比較 `/c/…` 與 `C:/…`（Windows Git Bash 必然假紅）· 「完整 invocation」的 heredoc 內容仍是字面 `…（上方腳本全文）…` | **可執行性**（② R3 Required） | Tier A 改 `export SRC` ＋ `PLAN` 由 packet 填入 ＋ A1 改 fail-closed；cwd guard 改「兩側各自 `cd … && pwd -P`」＋ `--is-inside-work-tree`；driver 改為 heredoc **內嵌兩支 helper**、無外部依賴。⚠ 另實測發現 `git apply` 在 Windows 會把 LF 轉 CRLF（+179 CR）⇒ 物化改用「唯一字串替換 ＋ 自驗 sha256」 |
+| `SR-44` | fail-closed family **仍未真正封住**：`set -u` 之下 `tsc`／ratchet／lint 的 rc 未捕捉 · 裸 `sha256sum -c` 不終止整段 · `node …; echo "exit=$?"` 讓 Node 失敗被 echo 吃掉（**實測整段回 0**）· B3 equality 不在 EXIT finalizer 內（早期 `exit 1` 會跳過）· cleanup 失敗不提升 exit。**且**負向控制分類錯誤：空輸入實際命中 G1+G3+G6、CRLF 命中 G2+G4+G6 ⇒ 「isolated 4 條」為假、真實 **2 條**（G5／G6） | **Blocker**（② R3；fail-closed 仍是表面功夫） | 改寫為**一支連續、無省略、已端到端實跑**的 driver：expected-zero 逐一 guard、`tsc` 斷言**確切 rc=2**（區分工具失敗）、finalizer 首行存原始 rc ＋ 先離開 `$WORK` ＋ 每次退出都跑來源三項 equality ＋ 刪前再驗 containment ＋ cleanup 失敗回非零；負向控制改斷言**完整失敗集合**並標 coupled／isolated |
+| `SR-45` | 我為了驗證 driver cleanup 而掃 `/tmp/tmp.*`，但 driver 的 `TMPDIR` 未必解析到 `/tmp` ⇒ **檢查母體選錯**（雖本機恰好相同、結論未受影響） | 母體（自審工具本身） | 改以 `$(cd "${TMPDIR:-/tmp}" && pwd -P)` 取得 canonical 根後再掃，並以 driver 特徵（`repo/`／`materialize-overlay.mjs`）辨識而非只看時間 |
 | `SR-41` | `SR-36` 的 errata **自己帶著另一個錯值**：它宣稱「實測獨立轉紅 4 條」，但當時 guard 5 的注入實際觸發 guard 6 ⇒ 真實 3 條。**errata 帶錯值**是本棒第 2 次（前次 `SR-1`→`SR-21` 連鎖） | **實質錯誤**（errata 未被自審覆蓋） | 於該 errata 內就地更正並指向 `SR-39` |
 | `SR-42` | §6.6 步驟 6 兩處引用 **§6.6.1**，但該節已於本輪改名為 §6.6.B ⇒ 死引用 | 交叉引用漂移 | 改指 §6.6.B／§6.6.B3，並補「刪除前再驗 containment」與「三項 equality 斷言」之實質內容 |
 | `SR-39` | guard 5 的負向控制注入 `const x: number = "str"`，**實際觸發的是 guard 6** —— `transpileModule` 不做 semantic 檢查（該注入 `diagnostics=0`），exit 1 來自新增 runtime `const` 改了 emit ⇒ **「4 條獨立轉紅」為假，真實 3 條**。根因＝負向控制**只斷言 exit code、未斷言失敗身分** | **實質錯誤**（負向控制測不到自己要測的東西；② R2 Required） | guard 5 改注入 `type __BROKEN = ;`（實測 `TS1110` ＋ emit 不變 ⇒ 乾淨隔離）；全部負向控制改為**同時斷言守衛身分**；重測得 `5 passed, 0 failed`（1 正向＋4 負向）；並補「transpile diagnostics 只覆蓋 syntax／options、semantic 由完整 `tsc` oracle 負責」之限定 |
@@ -1303,7 +1503,7 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-36` | §6.3 宣稱「同時斷言 `bytes>0`／`srcCR=0`／`emitCR=0`／`diags=0`」，但腳本**只對空 input/output `throw`**，其餘守衛與 `BYTE-IDENTICAL:false` 僅 `console.log`、仍 exit 0 ⇒ **我自己的守衛在假綠** | **實質錯誤**（結構性假綠；② `GOV-FAIL-001`） | 腳本改 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；補逐條負向控制（**實測獨立轉紅 4 條**，守衛 3／4 無法獨立注入、如實標示） |
 | `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
 
-**根因分布（供後續棒次參考）**：42 條中 **11 條**
+**根因分布（供後續棒次參考）**：45 條中 **11 條**
 （`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26` **`SR-35`**）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
@@ -1655,6 +1855,62 @@ typed／validated D1 boundary。並認為兩案「都會改變 `FINAL_PR_CHANGED
   **advisory／not enforced**；其退回依據是「**實際可重播行為 ＋ repo reviewer 契約**」，
   🚫 不是 machine-enforcement 宣稱。
 - ② 明示：本輪修正可做成 **PLAN-only R3**；若 production design／overlay 不變，**不要求重送 ①**。
+
+---
+
+### 14.7 ② Codex Plan Gate — R3 verdict 與處置 receipt
+
+**verdict**：`CODEX_PLAN_CHANGES_REQUESTED` — **1 Blocker family ／ 1 Required family**
+**受審錨點**：PLAN commit `ce327b6b`；base `acc98dfb`
+
+**② R3 判為 CLOSED**：guard 5 修正成立（`type __BROKEN = ;` 唯一 `TS1110`、emit 仍 6599 B／`10c1d1f8…`）·
+`REPLAY-AUTHORIZATION-TIERS` 的 actor split **概念正確** · `TS-BOUNDARY-002` 維持 CLOSED ·
+production design／overlay 未變 ⇒ **不需重送 ①**。
+
+#### 14.7.1 我方逐條實測復現 ②（🚫 未實測前不動手）
+
+| ② 之宣稱 | 我方實測 |
+|---|---|
+| `set -u; false; echo` 仍續行 | ✅ 復現（`set -u` 不擋 non-zero） |
+| `node …; echo "exit=$?"` 整段回 0 | ✅ 復現（Node exit 1 被 echo 吃掉，外層 rc=0） |
+| 空輸入實際命中 **G1+G3+G6** | ✅ 復現（3 條失敗訊息） |
+| CRLF 實際命中 **G2+G4+G6** | ✅ 復現（3 條失敗訊息） |
+| `pwd -P` vs `git rev-parse --show-toplevel` 方言不同 | ✅ 復現（`/c/Users/…` vs `C:/Users/…`）⇒ 舊 guard **必然假紅** |
+
+⇒ **五條全部成立。** 我方「isolated 4 條」之宣稱**為假，真實 2 條（G5／G6）**。
+
+#### 14.7.2 Blocker 之處置 — 發布**已實跑**的連續 driver
+
+依 ② 之 Minimal Safe Fix 六項逐條落實（全文見 §6.6.B）：
+
+| ② 要求 | 落實 |
+|---|---|
+| 1 連續無省略 driver；expected-zero 皆 guard | driver 為單一連續腳本，兩支 helper **heredoc 內嵌**；每個 expected-zero 命令 `\|\| fail …` |
+| 2 `tsc` 預期非零另捕捉、驗確切 status／診斷集合 | 斷言 **`rc == 2`**（實測：有診斷 rc=2、config 不存在 rc=1 ⇒ 可區分工具失敗）＋ 診斷行數 ＋ ratchet `errorCount`／`cleanFiles` |
+| 3 EXIT finalizer 保存原始 rc、每次退出跑來源 equality、先離開 `$WORK`、驗 containment、檢查 cleanup、任何失敗回非零 | `finalize()` 首行 `local rc=$?` → `cd /` → 三項 equality → containment `case` → `rm -rf` 失敗即 `ok=0` → `[ -e "$WORK" ]` 再驗 → `ok≠1` 則 `exit 1` |
+| 4 Windows cwd 驗證改 `pwd -P` equality ＋ `--is-inside-work-tree` | 兩側各自 `cd … && pwd -P` 後比對，並先 `git rev-parse --is-inside-work-tree` |
+| 5 Tier A 改 `export SRC`、pin 完整 commit、A1 fail closed | 已改；`PLAN` 由 operator 依 packet 填入（本檔無法自我引用其 commit，已註明） |
+| 6 Inline 完整 harness；斷言完整 failure set；G1／G2 標 coupled、G5／G6 才 isolated | 負向控制斷言**條數 ＋ 逐條字串**；分類表列於 §6.6.B 末 |
+
+**實跑證據**：driver rc=0；4 組負向控制各自「失敗集合恰 N 條且完全相符」；
+finalizer 回報來源三項逐字相等、workdir 已清理；來源 repo 前後 `HEAD`／`branch`／`status` 相同。
+**driver 自身負向控制**：`ANCHOR` 竄改 → rc=1；`EXPECT_OVER_DIAGS` 竄改 → rc=1。
+**cleanup 實證**：`$TMPDIR` canonical 根下具 driver 特徵者 **0 個**。
+
+⚠ **附帶發現（`SR-43`）**：原擬用 `git apply` 物化 overlay，實測 Windows Git Bash 下會把 LF 轉 CRLF
+（**+179 CR、7674 vs 7495 bytes**）⇒ anchor 必然不符。改用確定性物化（唯一字串替換 ＋ 自驗 sha256）。
+
+#### 14.7.3 ② 之其他認定（記錄，🚫 不轉錄升格）
+
+- Immutable evidence 吻合：七 commit 鏈及 parents · R3 只改 PLAN `+232/-47` ·
+  `audit.ts` 全程 `ec2a9b07…` · R3 PLAN／packet copy blob `af272e08…` · 工作樹與 index clean。
+- State Consistency／Queue／Payment／Distributed State：**Not Applicable**。
+- Observability：② 已跑 commit/blob/packet replay · R2→R3 完整 delta · **Tier A 唯讀重播** ·
+  guard 5／6 · Bash non-zero semantics · Windows Git Bash path-dialect probe；
+  未跑者為七道 coding-stage CI · committed-diff ratchet · production bundle（**正確揭露之 residual risk**）。
+- ② 重申 repo 無 TypeScript governance manifest ⇒ 相關 `TS-*`／`GOV-*` 皆 advisory／not enforced；
+  其退回依據是**實際重播結果 ＋ repo reviewer 契約**，🚫 非 machine-enforcement 宣稱。
+- ② 明示：可做成 **PLAN-only R4**；production design／overlay 不變則**仍不要求重送 ①**。
 
 ---
 
