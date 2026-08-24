@@ -308,6 +308,24 @@ interface UserAuditRow {
 | **recheck trigger（任一成立即須重審本登錄）** | ① 本檔 SELECT 欄位清單變更 ② `migrations/*` 改動 `audit_log` 結構 ③ 安裝 `@cloudflare/workers-types`（`any` 消失⇒賦值將被真檢查） ④ `strict: true` 落地 ⑤ 本行被移動或改寫 |
 | **為何不改用 runtime validation** | 會破 type-only 性質（emit 不再 byte-identical）、需補測試、需重測 anchor；且 `SPEC-B1` 之 scope 是 `noImplicitAny` 清零、**不是** D1 邊界硬化 ⇒ 外送 `TD-BATCHB-3`（§10.3） |
 
+> 📌 **ADDENDUM（coding 階段 `SR-59`；🚫 上表內文未改寫，保留 ①② 審查軌跡）**
+>
+> 上表「未驗證假設」欄把成因寫成**單一條件**（未安裝 `@cloudflare/workers-types`）。
+> coding 階段追查實際機制，發現是**兩個條件的合成**：
+> 1. `D1Database` 在本 repo **無任何宣告來源** —— `types/` 內 0 命中；
+>    `node_modules/@cloudflare/` 僅 `kv-asset-handler`／`vitest-pool-workers`／`workerd-windows-64`。
+> 2. `types/env.d.ts:23` 之 `chiyigo_db: D1Database` 之所以不噴 `TS2304`，
+>    **是靠 `tsconfig.functions.json` 的 `skipLibCheck: true`**（`.d.ts` 內的錯誤被跳過）。
+>    此機制在本 repo 既有註解中已載明：`functions/utils/auth.ts:127`
+>    「裸 `D1Database` 在 source `.ts` 不可解析（僅 `env.d.ts` 靠 `skipLibCheck` 過）」。
+>
+> ⇒ **結論方向不變**（`Env['chiyigo_db']` 解析為 `any`、賦值未經檢查、`UB-B-1` 成立），
+> 但上表 recheck trigger 少列一個成因。**新增 trigger ⑥**：
+> **`tsconfig.functions.json` 之 `skipLibCheck` 由 `true` 改為 `false`**
+> （屆時 `types/env.d.ts` 自身會先失敗，`any` 之來源鏈改變 ⇒ 須重審本登錄）。
+>
+> ⚠ 本 addendum **🚫 不改 production code、🚫 不改 overlay anchor `79792231…`、🚫 不改 `FINAL_PR_CHANGED_FILES`**。
+
 ### 4.5 SELECT 欄位清單 ↔ 宣告之逐欄對照（gate ③ 可逐字核對）
 
 base `functions/api/admin/audit.ts:121` 之 SELECT：
@@ -820,7 +838,15 @@ console.log("✓ A2：base 側 5 條守衛全過");'
 > cleanup 拒絕或 `rm` 失敗不提升最終 exit。
 > ⇒ 改為**一支連續、無省略、我方已端到端實跑過**的 driver（下方全文；兩支 helper 以 heredoc 內嵌，無外部依賴）。
 
-**實跑結果（2026-08-24，Windows Git Bash；含 clone ＋ `npm ci` ＋ 2× full `tsc -b --force`）**：
+**實跑結果 —— ⚠ 以下為 driver `v2` 之歷史輸出**（2026-08-24，Windows Git Bash；
+含 clone ＋ `npm ci` ＋ 2× full `tsc -b --force`）：
+
+> 🚨 **`GOV-DRIFT-001` 之處置（② R7 Minor；coding 階段 `SR-58`）**：本區塊是 **v2 時期**的實跑紀錄，
+> 🚫 **不是**下方 v4 driver 的輸出。逐字保留以存軌跡，但**兩處在 v4 語意下已不成立**：
+> · 末行 `driver v2 rc=0` —— v2 已被 v3／v4 取代（§14.9.2／§14.10.3）。
+> · `workdir 已清理` —— **v4 不再執行任何刪除**（`safe_rm()` 與全部 `rm -rf` 已移除，見 §14.10.3），
+>   workspace 生命週期改由具寫入授權的 runner 負責 ⇒ v4 只**回報** workspace 路徑、🚫 不清理它。
+> ⇒ 🚫 不得把本區塊讀成「v4 已端到端實跑且已自行清理」。
 
 ```
   ✓ G1 src 非空 [coupled]：exit=1，失敗集合恰 3 條且完全相符
@@ -895,7 +921,8 @@ driver v2 rc=0
 #      （scripts/typecheck-ratchet.mjs:188）仍 `execSync('npx tsc …')`。
 #      ⇒ 誠實縮窄宣稱，並以 `npx --no-install` 斷言**不可能走下載 fallback**
 #
-# 用法：  SRC=<chiyigo.com repo> bash replay-tier-b-v3.sh
+# 用法：  SRC=<chiyigo.com repo> bash replay-tier-b-v4.sh
+#         （⚠ `GOV-DRIFT-001`／`SR-58`：本行原誤寫 v3，driver 實為 v4）
 # ============================================================================
 set -u
 set -o pipefail
@@ -1612,6 +1639,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 34 | 2026-08-24 | PLAN R6 `c4317d63`；② R6 delta packet 送出（`0585a9e7…`） | §14.10 |
 | 35 | 2026-08-24 | **② R6 verdict ＝ `CODEX_PLAN_CHANGES_REQUESTED`**（1 Blocker／2 Required／1 Minor）；Blocker **由我方新發布的 harness 自身引入**；② 主動建議「不再擴寫 shell machinery」 | §14.10 |
 | 36 | 2026-08-24 | ② R6 處置＝**verification strategy 縮減**：§6.6.C harness 整節移除改宣告式清單 ＋ driver v4 移除全部 `rm -rf`（workspace 交 runner）＋ NC6 改用 `$SRC` 自身 ＋ ratchet 帶 offline ＋ 382→362 ＋ 根因帳 11→14；**PLAN-only、零 code diff 變動** | §14.10 |
+| 37 | 2026-08-24 | PLAN R7 `d22e8b5e`；② R7 delta packet 送出（`ff3683cc…`／6309 B ＋ plan 副本 `4c99c075…`／174888 B，與 PLAN blob 逐位元組相同） | §14.11 |
+| 38 | 2026-08-24 | **② R7 verdict ＝ `CODEX_PLAN_APPROVED`**（0 Blocker／0 Required／**1 Minor NB `GOV-DRIFT-001`**）＠ `d22e8b5e`；② 明示此 approval **≠ `CODING_ALLOWED`**，須 owner 明示；② 亦裁定不需重送 ① | §14.11 |
+| 39 | 2026-08-24 | **owner 當輪明示 `CODING_ALLOWED`** → Phase 2 實作落地：檔案 sha256 **逐位元組命中** approved overlay anchor `79792231…`；7 道 CI gate 全綠；`GOV-DRIFT-001` 四項併修（`SR-58`）＋ `UB-B-1` addendum（`SR-59`） | §14.11 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1678,13 +1708,35 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-38` | 插入之 §10.3 落在 §10.2 **之前** ⇒ 子章節編號亂序（10.1→10.3→10.2）。與 `SR-27` 同一形態、**第 2 次** | 文件結構 | 交換兩節位置，恢復遞增 |
 | `SR-36` | §6.3 宣稱「同時斷言 `bytes>0`／`srcCR=0`／`emitCR=0`／`diags=0`」，但腳本**只對空 input/output `throw`**，其餘守衛與 `BYTE-IDENTICAL:false` 僅 `console.log`、仍 exit 0 ⇒ **我自己的守衛在假綠** | **實質錯誤**（結構性假綠；② `GOV-FAIL-001`） | 腳本改 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；補逐條負向控制（**實測獨立轉紅 4 條**，守衛 3／4 無法獨立注入、如實標示） |
 | `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
+| `SR-58` | **`GOV-DRIFT-001` 之四項真 drift**（② R7 Minor 指出、coding 階段逐項復現）：(a) §6.6.B 用法行仍寫 `replay-tier-b-v3.sh`（driver 實為 v4）(b) §6.6.B 之 v2 實跑輸出區塊被留成像是現行結果，其 `workdir 已清理` 在 v4 語意下**已為假**（v4 不刪任何東西）(c) §14.10.5 稱根因帳 `11 → 14` 但**只改數字未改枚舉**（實列 11）(d) §14.10.3「可執行行 368 行」把 **44 個空白行**計為可執行行（實測總 420 ＝ 空白 44 ＋ 註解 52 ＋ 實碼 324） | **transcript drift ＋「修了一處就以為修完」**（(c) 本身即「母體 < 性質」之復發；本棒第 15 條） | 四項全數處置：(a) 改 v4 並標原誤 (b) 加 v2-historical 警語並逐條點出 v4 下不成立之兩句 (c) 補三個 ID ＋ 納入本條，並改為**下界**表述＋四項限定（因族歸屬係 prose 判定、非機械可導出：關鍵字掃描只命中 10 列且不含其中 8 個） (d) 改為「非空白非註解 324 行」並標明「刪除語句命中 0」之結論不受影響 |
+| `SR-59` | `UB-B-1` 與 §4.4 第 2 點把「賦值未經檢查」的成因寫成**單一條件**「repo 未安裝 `@cloudflare/workers-types`」。coding 階段追查實際機制：`D1Database` 在本 repo **無任何宣告來源**（`types/` 內 0 命中、`node_modules/@cloudflare/` 只有 `kv-asset-handler`／`vitest-pool-workers`／`workerd-windows-64`），`types/env.d.ts:23` 之所以不噴 `TS2304` 是**靠 `tsconfig.functions.json` 的 `skipLibCheck: true`**（既有 repo 註解 `functions/utils/auth.ts:127` 已載明「裸 `D1Database` 在 source `.ts` 不可解析（僅 `env.d.ts` 靠 `skipLibCheck` 過）」）⇒ 成因是**兩個條件的合成**，而 `UB-B-1` 的 recheck trigger 只列了其中一個 | **因果鏈不完整**（⚠ 結論方向正確 —— `any`／未經檢查成立；缺的是第二個成因與其對應 trigger） | 🚫 不改 production code、🚫 不改 overlay anchor（`79792231…` 已 gate-approved）。改以**標記式 addendum** 補在 `UB-B-1` 之後（見該表下方），新增 recheck trigger ⑥「`skipLibCheck` 由 true 改 false」。🚫 不改寫已核准之表格內文，保留審查軌跡 |
 
-**根因分布（供後續棒次參考）**：57 條中 **14 條**
-（`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26` **`SR-35`**）
+| `SR-60` | **`SR-58` 的處置段落自己就犯了 `SR-58` 在修的錯（同一輪內）**：我在 §14.11.2 寫「『🚫 不用 npx』該字串共 **4 處**（§6.6.B ／ §9.2 ／ `SR-50` ／ **§14.9.4**）」，**未掃母體、憑印象列舉**。coding 階段實測（母體＝全檔零收窄）：既存 **5 處**，且 §14.9.4 **不存在該字串** —— 真實位置是 **§14.9.1** 與 **§14.9.3**，我**漏列一處、錯標一處**。另同輪把根因帳分母寫成 `58 條`，但我自己同時加了 `SR-58`＋`SR-59` ⇒ 分母當下已是 **59**（再加本條為 60）：**改了分子與枚舉、分母卻又立刻 stale** | **「母體 < 性質」之復發（本棒第 17 條）＋ 自指性最強的一次** —— 該族在「**正在修該族的段落**」內復發，且距我寫下「該族在新撰寫的段落最易復發」不到十分鐘。⚠ substantive 結論**未受影響**（5/5 仍全在更正／限定語句內 ⇒「刻意不改」之裁決成立），錯的只有**計數與章節標** §14.11.2 之母體改為**錨定 `d22e8b5e` 版本**（🚫 非「當前 HEAD」）並附 `git show … \| grep -c` 重播指令 ⇒ 值恆為 `5`、不隨後續編輯漂移；五處逐一標章節與語境。⚠ **此錨定是必要的，不只是嚴謹**：任何*談論*該字串的句子本身都含該字串（本列即是），對 HEAD 計數必然自我遞增 —— 這是本族的一個**自指變體**，`SR-58` 的原始寫法沒察覺到它。根因帳分母改 **60**、枚舉補 `SR-59`／`SR-60` 共 **17**（實測列數 60、ID 連續 1…60、枚舉 17 三者互證）。並以本條明文化：**分子／分母／枚舉三者必須同時重算**，🚫 不得只改被點名的那個數字 |
+
+**根因分布（供後續棒次參考）**：60 條中 **至少 17 條**
+（`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26` **`SR-35`**
+`SR-49` `SR-50` `SR-52` **`SR-58`** `SR-59` **`SR-60`**）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
 ⇒ 印證 [[feedback_guard_population_must_cover_property]]「**修過不代表免疫**」：
 該族在**新撰寫的段落**最易復發，即使作者剛讀過該教訓。
+
+> 🚨 **`GOV-DRIFT-001` 之處置（② R7 Minor；coding 階段 `SR-58`）—— 本段自己就是該族的復發**：
+> §14.10.5 之 R6 處置宣稱「根因帳由 11 → **14**，納入 `SR-49`／`SR-50`／`SR-52`」，
+> 但**只改了數字、未改枚舉**（② R7 實測：稱 14、實列 11）。
+> ⇒ 「改了被點名的那個計數、沒改承載該計數的母體」＝與 `SR-28`／`SR-29` 同一「修了一處就以為修完」紀律。
+> 現已補齊三個 ID，並納入本輪 `SR-58`。
+>
+> ⚠ **四項限定（依 [[feedback_scope_qualified_universal_claims]]）**：
+> · **適用範圍** ＝ 本檔 §14.0 之 SR ledger（58 列），🚫 不含他棒。
+> · **生效時態** ＝ coding 階段（② R7 approved 之後）之快照。
+> · **例外集合／為何是「至少」** ＝ 本族歸屬是 **prose 判定，🚫 非機械可導出的集合**。
+>   coding 階段實測：以性質欄關鍵字（`母體`／`宣稱作用域`／`過度宣稱`／`全稱`）掃描 58 列
+>   只命中 **10 列**，且**不含**上列 15 個中的 8 個（`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13`
+>   `SR-17` `SR-18` 之性質欄無此類關鍵字）⇒ 關鍵字掃描與本判定**不是同一個母體**，🚫 不可互相導出。
+>   另 `SR-45`／`SR-57` 之性質欄自標「母體（自審工具本身）」且自帶獨立計數（至「第 3 次」），
+>   **未併入上列 15**；`SR-6`／`SR-16`／`SR-20` 標「過度宣稱」，是否同族**未逐條裁定**。
+> · **closure** ＝ 🚫 **無**。本數字是**下界**，🚫 不得讀成「已窮舉」或「族已封閉」。
 
 ⚠ **`SR-28` ／ `SR-29` 值得單獨記錄（族：「修了一處就以為修完」）**：① R1 的兩個 Required 各是一個
 **語意層的過度宣稱**，而該語意的字面在文件中都不只出現一次 ——
@@ -2258,8 +2310,15 @@ driver 本體**成功（原始 rc=0）**，但 finalizer 因無法驗證來源�
 | NC6 環境相依 | 改用**保證存在的 `$SRC` 自身**測 equality rejection |
 | 舊 NC7（`cd` 失敗拒刪） | 隨刪除邏輯移除而**失去測試對象**，一併刪除 |
 
-**機械驗證**：全檔 bash code block 之**可執行行 368 行、刪除語句命中 0**
-（母體宣告：排除註解行與引文行）。
+**機械驗證**：全檔 bash code block 之**刪除語句命中 0**。
+
+> 🚨 **行數宣稱之更正（`GOV-DRIFT-001`／`SR-58`；② R7 Minor）**：原文寫「**可執行行 368 行**」，
+> **該標籤為誤** —— 368 是「非註解行」之數，其中含 **44 個空白行**，空白行不是可執行行。
+> **coding 階段獨立複算**（母體 ＝ 全檔 bash fence 內全部行，零收窄）：
+> **總 420 行 ＝ 空白 44 ＋ 註解 52 ＋ 非空白非註解 324**（44＋52＋324 = 420，帳平）。
+> ⇒ 正確表述為「**非空白非註解 324 行**」；368 ＝ 44 ＋ 324，即原數把空白行計入。
+> ⚠ 但「**刪除語句命中 0**」之結論**不受影響** —— 被誤計入的 44 行皆為空白行，結構上不可能含指令。
+
 **driver v4 實跑 rc=0**，正向路徑全綠、workspace 路徑已回報。
 
 #### 14.10.4 Required 2（npx）之處置
@@ -2284,6 +2343,76 @@ driver 本體**成功（原始 rc=0）**，但 finalizer 因無法驗證來源�
 - Queue／payment／distributed-state：**Not Applicable**。
 - ⚠ **② 之 residual risk（如實轉錄）**：本輪 ② **依唯讀契約未執行 Tier B 或任何刪除**；
   「目前 7/7 仍是**作者環境證據**」。此差距 🚫 不由本 PLAN 宣稱關閉。
+
+---
+
+### 14.11 ② Codex Plan Gate — R7 verdict（**APPROVED**）＋ coding 階段落地 receipt
+
+**verdict**：**`CODEX_PLAN_APPROVED`** — **0 Blocker ／ 0 Required ／ 1 Minor（non-blocking）**
+**受審錨點**：PLAN commit `d22e8b5e`（＝當時 HEAD，錨點未漂移）；base `acc98dfb`
+**packet identity**：`02g-codex-plan-delta-r7-…-read.md` ＝ `ff3683cc…`／6309 B；
+plan 副本 ＝ `4c99c075…`／174888 B，**與 `d22e8b5e` 之 PLAN blob（git blob `8abccf8d`）逐位元組相同**
+（transport integrity 已驗，依 [[feedback_gate_packet_transport_integrity]]）。
+
+**② R7 明載之兩項邊界（如實轉錄，🚫 不得弱化）**：
+1. 「這項 approval 仍**不等於** `CODING_ALLOWED`」—— owner 明示前不得改 `audit.ts`／跑 Tier B／commit／push／deploy。
+2. **不需重送 ① Architecture Gate**（production design 自 ① R3 起 byte-identical）。
+
+⇒ owner 於 **2026-08-24 當輪明示 `CODING_ALLOWED`** 後才進 Phase 2（ledger 第 39 列）。
+
+#### 14.11.1 ② R7 判為已實質關閉
+
+driver v4 已移除 harness／`safe_rm()`／全部可執行刪除命令，workspace 生命週期交具授權 runner；
+clone／checkout／安裝／產物皆限於 `$WORK`；source 前後 probe 維持 fail-closed。
+state consistency 全項 PASS（blob 恆等 · overlay 7495 B／CR=0／`79792231…` · 診斷 352→347／REMOVED=5／ADDED=0 · emit 兩側 6599 B／`10c1d1f8…`）。
+
+#### 14.11.2 Minor `GOV-DRIFT-001` 之處置（`SR-58`；**4 項成立、1 項不成立**）
+
+| ② 之列舉 | coding 階段復現 | 處置 |
+|---|---|---|
+| §6.6.B 用法行仍寫 `replay-tier-b-v3.sh` | ✅ 成立 | 改 `v4` 並標原誤 |
+| §6.6.B 仍殘留 v2 cleanup 結果 | ✅ 成立；其 `workdir 已清理` 在 v4 語意下**已為假** | 加 v2-historical 警語，逐條點出 v4 下不成立之兩句 |
+| 根因帳稱 14、實列 11 個 ID | ✅ 成立（實測列舉數 ＝ 11） | 補 `SR-49`／`SR-50`／`SR-52` ＋ 納入 `SR-58`；改**下界**表述 ＋ 四項限定 |
+| 「368 可執行行」實含 44 個空白行 | ✅ 成立（獨立複算：總 420 ＝ 空白 44 ＋ 註解 52 ＋ 實碼 **324**） | 改「非空白非註解 324 行」；標明「刪除語句命中 0」不受影響 |
+| 「`🚫 不用 npx`」殘留 | ⚠ **不成立** | **母體 ＝ ② R7 受審錨點 `d22e8b5e` 版本之全檔（零收窄）該字串全部出現點；實測恰 5 處。**<br>⚠ **必須錨定版本**：任何*談論*該字串的句子本身都含該字串（本列與 `SR-60` 即是），故對「當前 HEAD」計數會隨編輯遞增 ⇒ 只有錨定版本的數字可重播。<br>**重播指令**：`git show d22e8b5e:docs/plans/stage7-pr2dw-batchb-read-admin-audit-noimplicitany.md \| grep -c "不用 npx"` ⇒ `5`。<br>五處分別為：§6.6.B driver header（「宣稱**為假**」）· §9.2「npx 之誠實限定」（「🚫 不得宣稱『本流程完全不用 npx』」）· §14.0 `SR-50` 列（「之宣稱為假」）· §14.9.1 實測復現表（「✅ 逐字確認 ⇒ 我方『🚫 不用 npx』**為假**」）· §14.9.3（「🚫 **本 PLAN 不再宣稱「本流程完全不用 npx」**」）。**5/5 皆落在更正或限定語句內**，🚫 無一處是 live 宣稱 ⇒ **刻意不改**。照字面「清掉」會把已誠實縮窄的限定改回過度宣稱（＝批 D 已記載之失效模式「照 gate 字面改反而重造問題」） |
+
+#### 14.11.3 coding 階段落地 receipt（**實跑輸出，🚫 非推理**）
+
+> ⚠ 依 §9.1 之自身禁令，7 道之結果**不寫回 §9.1**；此處僅作軌跡留存，
+> 其權威呈現在當輪中文報告第 5 欄。
+
+| 驗收項 | 期望（approved plan） | 實測 |
+|---|---|---|
+| 檔案 sha256 | `79792231…` | **完全相同** ✅ |
+| bytes ／ CR | 7495 ／ 0 | 7495 ／ 0 ✅ |
+| `git diff --stat` | `+29 / -3` | `+29 / -3` ✅ |
+| 三個 `@@` 標頭 | `-42,7 +42,33`／`-58,7 +84,7`／`-127,7 +153,7` | 三者逐字相同 ✅ |
+| 逐 hunk 增刪 | `+27/-1`／`+1/-1`／`+1/-1` | 相同 ✅ |
+| 診斷總數 | 347 | 347 ✅ |
+| 本檔殘餘診斷 | 0 | 0 ✅（5 條 `TS7006`/`TS7031` 全清） |
+| ratchet | 347／326／337 | `errorCount=347 cleanFiles=326`、baseline 1119/175 未動 ✅ |
+| emit identity | `10c1d1f8…` 兩側相同 | 兩側皆 `10c1d1f8…`／6599 B，`ALL GUARDS PASSED (6/6)` ✅ |
+| emit oracle 負向控制 | 注入落選案 v1 應轉紅 | emit 6603 B／`4f3da1fa…`／exit 1 ✅（差恰 4 B ＝ §4.3 之預測） |
+| suppression 預算 | 0／0／0／**1**／0 | 相同（唯一 unchecked assignment ＝ `UB-B-1`＠L156）✅ |
+| export 面 | 僅 `onRequestGet` | AST 實測 ＝ 1 項 ✅（`UserAuditRow` 確為 module-local） |
+| `B_EXCLUDES` | 零觸碰 | `git diff --name-only acc98dfb -- <全部排除項>` ⇒ 空 ✅ |
+
+**7 道 CI gate**：`lint` 0 · `typecheck:ratchet` 0 · `verify:browser-pipeline` 0 · `test:cov` 0（740 passed）·
+`test:int` 0（77 files／1385 tests）· `build:functions` 0（`Compiled Worker successfully`）· `npm audit` 0 vulnerabilities。
+**§9.2 附加**：`lint:handlers` ／ `lint:archive-no-delete` ／ `lint:migrations` 皆 EXIT 0。
+🚫 **未跑 `npm run build`**（會重寫 `public/*.html` ＝ scope creep，沿 `SR-10`）。
+
+**JSDoc 內事實宣稱之現地複驗**（該註解隨 production code 上線，故不沿用 PLAN 階段數字）：
+`@cloudflare/workers-types` 缺席（母體 17 項／0 命中）· `Env.chiyigo_db: D1Database`＠`types/env.d.ts:23` ·
+migration `0038:20-21` 確為 `archived_at`／`cold_class`（`0044` 之同名欄屬 `audit_log_aggregate_*`，**非本表**）·
+`0017` DDL 之 NOT NULL／nullable 分布與 §4.5 逐欄相符（含 `CHECK(severity IN …)`）·
+`AuditLogRow`＠`utils/audit-log.ts:30` · `UserAuditRow` 於本檔外 **0 命中**。
+
+#### 14.11.4 尚未取得（🚫 不得讀成已通過）
+
+③ Codex Code Gate · ④ ChatGPT faithfulness · squash-merge 後之 main CI／deploy。
+⇒ 本棒現態 ＝ **`CODE_SELF_REVIEW_CLEAN` 之後、`CODEX_CODE_APPROVED` 之前**，🚫 **不得**宣稱 CLOSED。
+Tier B 連續 driver 於本階段**仍未由外部執行** ⇒ ② R6／R7 所載「7/7 為作者環境證據」之差距**依然存在**，本節不宣稱其關閉。
 
 ---
 
