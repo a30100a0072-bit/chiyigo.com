@@ -320,7 +320,11 @@ interface UserAuditRow {
 >    實跑 `tsc -p tsconfig.functions.json --noEmit --skipLibCheck false` 得
 >    `types/env.d.ts(23,17): error TS2552: Cannot find name 'D1Database'. Did you mean 'IDBDatabase'?`
 >    —— 因 lib 內存在字面近似的 `IDBDatabase`，TypeScript 走 **`TS2552`（附建議）** 而非 `TS2304`。
->    同檔 `KVNamespace`／`R2Bucket`／`Ai` 才是 `TS2304`（無近似名）。
+>    **母體 ＝ 該指令對 `types/env.d.ts` 之全部診斷，實測恰 5 條（🚫 未截斷、非「例如」）**：
+>    `(23,17) TS2552 D1Database` · `(24,17) TS2304 KVNamespace` · `(25,27) TS2304 R2Bucket` ·
+>    `(26,9) TS2304 Ai` · `(48,19) TS2304 Fetcher`。
+>    ⇒ 只有 `D1Database` 走 `TS2552`（lib 內有近似名 `IDBDatabase`），其餘 4 個皆 `TS2304`（無近似名）。
+>    ⚠ `Fetcher` 係 ③ R2 Minor 補出 —— 我原列舉漏了它，根因＝以 `head -4` 取樣後就下列舉式結論（`SR-62`）。
 >    ⇒ 與本 repo 既有註解 `functions/utils/billing.ts:20`「只在 .d.ts 可見會 TS2552」一致
 >    —— ⚠ 我當時**引用了該註解卻抄錯碼**。結論方向不受影響。
 >    此機制在本 repo 既有註解中已載明：`functions/utils/auth.ts:127`
@@ -1651,7 +1655,9 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | 39 | 2026-08-24 | **owner 當輪明示 `CODING_ALLOWED`** → Phase 2 實作落地：檔案 sha256 **逐位元組命中** approved overlay anchor `79792231…`；7 道 CI gate 全綠；`GOV-DRIFT-001` 四項併修（`SR-58`）＋ `UB-B-1` addendum（`SR-59`） | §14.11 |
 | 40 | 2026-08-24 | code ＋ PLAN commit `39321dee`（恰 2 檔：`A` plan doc ／ `M` `audit.ts`）；送 ③ Codex Code Gate。⚠ **本輪無 packet 檔留存於 `~/Desktop/chiyigo-packets/`**（③ 自 repo 直接重播），故本列 🚫 不載 packet hash | §14.12 |
 | 41 | 2026-08-24 | **③ R1 verdict ＝ `CODEX_CODE_CHANGES_REQUESTED`** ＠ code `39321dee`；**production source lane PASS、0 個 introduced runtime/security finding**；reject 之唯一理由＝同一 commit 內本 PLAN 之 gate/evidence ledger 有 **1 個 Major/Required 治理 finding**（`GOV-DRIFT-001`／`GOV-EVIDENCE-001`，兩者皆 advisory、未 machine-enforced） | §14.12 |
-| 42 | 2026-08-24 | ③ R1 處置＝**docs-only 修復**（5 項，`SR-61`）：② verdict 填入 · SR 表結構修復（空行／分隔符）· 四項限定帳重算 · bash tally 錨定雙版本 · `TS2304`→`TS2552`。**`audit.ts` 零改動，blob 恆等 `379d2313`** | §14.12 |
+| 42 | 2026-08-24 | ③ R1 處置＝**docs-only 修復**（5 項，`SR-61`；分類依 ③ R2 之 canonical taxonomy）：**(a)** ② verdict 填入 · **(b)** 表格結構修復（空行＋分隔符，合為單一 table-integrity finding）· **(c)** 四項限定帳重算 · **(d)** bash tally 錨定雙版本 · **(e)** `TS2304`→`TS2552`。commit `5714448f`；**`audit.ts` 零改動，blob 恆等 `379d2313`** | §14.12 |
+| 43 | 2026-08-24 | **③ R2 verdict ＝ `CODEX_CODE_CHANGES_REQUESTED`** ＠ `5714448f`；**production source lane 續 PASS、0 個 Critical/High**；③ 明確**認可**我把 ③ 清單改為「R1 歷史 verdict ＋ 尚未取得 APPROVED」之作法（🚫 不屬 scope 逾越或自我核准）。4 Required ＋ 1 Minor，全在文件治理面 | §14.13 |
+| 44 | 2026-08-24 | ③ R2 處置＝**第二次 docs-only 修復**（`SR-62`）：歷史 keyword-hit 錨點更正（10 屬 `d22e8b5e` 非 `39321dee`）· 五項 taxonomy 三處統一 · 四處 section pointer `§14.11.2`→`§14.0` · 補 `REPLAY-BASH-TALLY` 實際可執行指令 · `Fetcher` 補入 `TS2304` 列舉。**`audit.ts` 仍零改動** | §14.13 |
 
 ### 14.0 維度 A self-review 處置（**append-only 歷史**）
 
@@ -1718,14 +1724,15 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 | `SR-38` | 插入之 §10.3 落在 §10.2 **之前** ⇒ 子章節編號亂序（10.1→10.3→10.2）。與 `SR-27` 同一形態、**第 2 次** | 文件結構 | 交換兩節位置，恢復遞增 |
 | `SR-36` | §6.3 宣稱「同時斷言 `bytes>0`／`srcCR=0`／`emitCR=0`／`diags=0`」，但腳本**只對空 input/output `throw`**，其餘守衛與 `BYTE-IDENTICAL:false` 僅 `console.log`、仍 exit 0 ⇒ **我自己的守衛在假綠** | **實質錯誤**（結構性假綠；② `GOV-FAIL-001`） | 腳本改 6 條守衛累積失敗 → non-zero exit；§6.3 加 errata；補逐條負向控制（**實測獨立轉紅 4 條**，守衛 3／4 無法獨立注入、如實標示） |
 | `SR-33` | 依 ① R2 `ARCH-BR-R2-RR1` 做**裁決轉錄語氣**族掃描，母體＝全檔歸屬外部方之敘述，共 **4 個成員**：§14.2.3 標題（`accepted → immutable`）· `B-OD-2`（`不建議 → 明確否決` ＋ 自行外加「🚫 不得開 backlog」）· `B-OD-1`（`不應 → 🚫 不得` ＋ 自行外加「後續棒次須照此限定」）· **§14.1 標題**（自行核發「🚫 不得當成 blocker 重開」，無授權來源） | **權限升格**（① 只點名前兩個） | 四處全數改回原裁決強度；§14.2.3 補「acceptance ＝ anchor-scoped、後續 gate 保留升級權」＋ 反向節流條款 |
-| `SR-58` | **`GOV-DRIFT-001` 之四項真 drift**（② R7 Minor 指出、coding 階段逐項復現）：(a) §6.6.B 用法行仍寫 `replay-tier-b-v3.sh`（driver 實為 v4）(b) §6.6.B 之 v2 實跑輸出區塊被留成像是現行結果，其 `workdir 已清理` 在 v4 語意下**已為假**（v4 不刪任何東西）(c) §14.10.5 稱根因帳 `11 → 14` 但**只改數字未改枚舉**（實列 11）(d) §14.10.3「可執行行 368 行」把 **44 個空白行**計為可執行行（**錨定 `d22e8b5e`** 實測總 420 ＝ 空白 44 ＋ 註解 52 ＋ 實碼 324） | **transcript drift ＋「修了一處就以為修完」**（(c) 本身即「母體 < 性質」之復發；本棒第 15 條） | 四項全數處置：(a) 改 v4 並標原誤 (b) 加 v2-historical 警語並逐條點出 v4 下不成立之兩句 (c) 補三個 ID ＋ 納入本條，並改為**下界**表述＋四項限定（因族歸屬係 prose 判定、非機械可導出：**當時**關鍵字掃描命中 10 列、不含其中 8 個 —— ⚠ 此為 `39321dee` 之快照，③ R1 後之最新值見 §14.11.2 四項限定） (d) 改為「非空白非註解 324 行」並標明「刪除語句命中 0」之結論不受影響 |
+| `SR-58` | **`GOV-DRIFT-001` 之四項真 drift**（② R7 Minor 指出、coding 階段逐項復現）：(a) §6.6.B 用法行仍寫 `replay-tier-b-v3.sh`（driver 實為 v4）(b) §6.6.B 之 v2 實跑輸出區塊被留成像是現行結果，其 `workdir 已清理` 在 v4 語意下**已為假**（v4 不刪任何東西）(c) §14.10.5 稱根因帳 `11 → 14` 但**只改數字未改枚舉**（實列 11）(d) §14.10.3「可執行行 368 行」把 **44 個空白行**計為可執行行（**錨定 `d22e8b5e`** 實測總 420 ＝ 空白 44 ＋ 註解 52 ＋ 實碼 324） | **transcript drift ＋「修了一處就以為修完」**（(c) 本身即「母體 < 性質」之復發；本棒第 15 條） | 四項全數處置：(a) 改 v4 並標原誤 (b) 加 v2-historical 警語並逐條點出 v4 下不成立之兩句 (c) 補三個 ID ＋ 納入本條，並改為**下界**表述＋四項限定（因族歸屬係 prose 判定、非機械可導出）<br>🚨 **錨點更正（③ R2 Required；`SR-62`）**：本欄原寫「命中 10 列、不含其中 8 個」並標為 `39321dee` 之快照 —— **該錨點為誤**。逐 commit 重播（母體＝ §14.0 表頭之下的**連續**表列區塊）：**`d22e8b5e` ＝ 57 列／10 命中** · **`39321dee` ＝ 59 列有效／11 命中**（另有 1 個被空行切出的孤列 `SR-60`，其性質欄亦命中 ⇒ 含孤列共 12） · **`5714448f` ＝ 61 列／12 命中**。⇒ 「10」屬 `d22e8b5e`、🚫 不屬 `39321dee`。最新值見 §14.0「四項限定」 (d) 改為「非空白非註解 324 行」並標明「刪除語句命中 0」之結論不受影響 |
 | `SR-59` | `UB-B-1` 與 §4.4 第 2 點把「賦值未經檢查」的成因寫成**單一條件**「repo 未安裝 `@cloudflare/workers-types`」。coding 階段追查實際機制：`D1Database` 在本 repo **無任何宣告來源**（`types/` 內 0 命中、`node_modules/@cloudflare/` 只有 `kv-asset-handler`／`vitest-pool-workers`／`workerd-windows-64`），`types/env.d.ts:23` 之所以不噴錯（實跑為 **`TS2552`**，🚫 非我原寫的 `TS2304` —— 見 `SR-61(e)`）是**靠 `tsconfig.functions.json` 的 `skipLibCheck: true`**（既有 repo 註解 `functions/utils/auth.ts:127` 已載明「裸 `D1Database` 在 source `.ts` 不可解析（僅 `env.d.ts` 靠 `skipLibCheck` 過）」）⇒ 成因是**兩個條件的合成**，而 `UB-B-1` 的 recheck trigger 只列了其中一個 | **因果鏈不完整**（⚠ 結論方向正確 —— `any`／未經檢查成立；缺的是第二個成因與其對應 trigger） | 🚫 不改 production code、🚫 不改 overlay anchor（`79792231…` 已 gate-approved）。改以**標記式 addendum** 補在 `UB-B-1` 之後（見該表下方），新增 recheck trigger ⑥「`skipLibCheck` 由 true 改 false」。🚫 不改寫已核准之表格內文，保留審查軌跡 |
 | `SR-60` | **`SR-58` 的處置段落自己就犯了 `SR-58` 在修的錯（同一輪內）**：我在 §14.11.2 寫「『🚫 不用 npx』該字串共 **4 處**（§6.6.B ／ §9.2 ／ `SR-50` ／ **§14.9.4**）」，**未掃母體、憑印象列舉**。coding 階段實測（母體＝全檔零收窄）：既存 **5 處**，且 §14.9.4 **不存在該字串** —— 真實位置是 **§14.9.1** 與 **§14.9.3**，我**漏列一處、錯標一處**。另同輪把根因帳分母寫成 `58 條`，但我自己同時加了 `SR-58`＋`SR-59` ⇒ 分母當下已是 **59**（再加本條為 60）：**改了分子與枚舉、分母卻又立刻 stale** | **「母體 < 性質」之復發（本棒第 17 條）＋ 自指性最強的一次** —— 該族在「**正在修該族的段落**」內復發，且距我寫下「該族在新撰寫的段落最易復發」不到十分鐘。⚠ substantive 結論**未受影響**（5/5 仍全在更正／限定語句內 ⇒「刻意不改」之裁決成立），錯的只有**計數與章節標** | §14.11.2 之母體改為**錨定 `d22e8b5e` 版本**（🚫 非「當前 HEAD」）並附 `git show … \| grep -c` 重播指令 ⇒ 值恆為 `5`、不隨後續編輯漂移；五處逐一標章節與語境。⚠ **此錨定是必要的，不只是嚴謹**：任何*談論*該字串的句子本身都含該字串（本列即是），對 HEAD 計數必然自我遞增 —— 這是本族的一個**自指變體**，`SR-58` 的原始寫法沒察覺到它。根因帳分母改 **60**、枚舉補 `SR-59`／`SR-60` 共 **17**（實測列數 60、ID 連續 1…60、枚舉 17 三者互證）。並以本條明文化：**分子／分母／枚舉三者必須同時重算**，🚫 不得只改被點名的那個數字 |
-| `SR-61` | **③ R1 之 5 項治理 finding —— 全部由我上一輪的修復動作自己造成**：(a) §14.0 外部 gate 清單仍寫 ② `_待填_`，而同檔 ledger 已記 `CODEX_PLAN_APPROVED` ⇒ **同一份文件內對同一個 gate 給出兩種狀態** (b) `SR-59`／`SR-60` 之間留了空行 ⇒ **markdown 表被切成兩張**、`SR-60` 成為無表頭孤列 (c) `SR-60` 列少一個未跳脫欄分隔符（實測 4，4 欄列應為 5）—— 我第二次改該列時**弄丟了處置欄的前導 `\|`** (d) §14.11.2「四項限定」blockquote 仍寫 `58 列／15 個／10 命中`，而同節 root-cause 行已改 60／17 ⇒ **我又一次只改被點名的那處** (e) `skipLibCheck:false` 之錯碼寫成 `TS2304`，實跑為 **`TS2552`**（lib 有近似名 `IDBDatabase`） | **「修了一處就以為修完」＋ 帳與 artifact 不同步之復發**。⚠ 值得單記：`SR-60` 才剛把「分子／分母／枚舉須同時重算」寫成明文規則，**下一個動作就違反它**（(d)）；且 (b)(c) 是**修復動作本身引入的新結構破損** —— 與 `SR-54`（為證明安全而寫的工具變成危險來源）同一形狀 | (a) 填入 ② verdict＋錨點，並把 ③ 由純 `_待填_` 改為誠實標示「R1 ＝ CHANGES_REQUESTED＠`39321dee`、APPROVED 未取得」（🚫 否則會原地重造同一個矛盾） (b) 刪空行、表格重新接合 (c) 補回前導 `\|` (d)(e) 見下方 **Step B 重算**與 §4.4 addendum 之錯碼更正。**紀律修正**：本輪把所有帳的重算移到**全部結構編輯定案之後**執行（③ 明示「在最終格式固定後，重新計算所有相依母體／分子／分母」），🚫 不再邊改邊算。<br>⚠ **本輪 Step C sweep 又自抓到同族的兩個第二現場**（③ 未點名，母體＝全檔殘留數字掃描）：① `SR-59` 列**仍寫 `TS2304`** —— 我只改了 §4.4 addendum、沒改 ledger 列，**(e) 原地復發一次**；② `SR-58` 列與 §14.11.2 表的「總 420」**未錨定版本**，對 HEAD（421）已 stale。兩者均已修（前者改 `TS2552` 並回指本條，後者補 `d22e8b5e` 錨點與 HEAD 對照）。<br>⚠ 另記：**本輪的量測工具自己也踩了第 3 次母體錯誤** —— v1 以字面特徵 `` ^\| `SR-N` `` 掃全檔，把 §14.12.3 復現表中第一欄恰為 `` `SR-60` `` 的 2 欄列掃了進來（誤報 62 列／重複 ID／分隔符異常）。v2 改以「§14.0 表頭之下的單一連續區塊」為母體，並加**負向控制**印出兩種母體之差（62 vs 61）以證明母體定義 load-bearing |
+| `SR-61` | **③ R1 之 5 項治理 finding —— 全部由我上一輪的修復動作自己造成**：⚠ **分類依 ③ R2 指定之 canonical taxonomy**（原本我把「空行」與「分隔符」拆成兩項、又把 bash tally 漏出編號清單，導致 ledger／`SR-61`／§14.12.3 三處分類互相衝突）：**(a)** §14.0 外部 gate 清單仍寫 ② `_待填_`，而同檔 ledger 已記 `CODEX_PLAN_APPROVED` ⇒ **同一份文件內對同一個 gate 給出兩種狀態** **(b)** **表格結構破損**（單一 table-integrity finding）：`SR-59`／`SR-60` 之間的空行把 ledger 連續區塊切斷 ⇒ 有效列僅 59、`SR-60` 成無表頭孤列；且該孤列少一個未跳脫欄分隔符（實測 4，4 欄列應為 5）—— 我第二次改該列時**弄丟了處置欄的前導 `\|`** **(c)** §14.0「四項限定」blockquote 仍寫 `58 列／15 個／10 命中`，而同節 root-cause 行已改 ⇒ **我又一次只改被點名的那處** **(d)** §14.10.3 之 bash tally 寫 `420=44+52+324` 而未錨定版本，HEAD 實為 `421=44+53+324` **(e)** `skipLibCheck:false` 之錯碼寫成 `TS2304`，實跑為 **`TS2552`**（lib 有近似名 `IDBDatabase`） | **「修了一處就以為修完」＋ 帳與 artifact 不同步之復發**。⚠ 值得單記：`SR-60` 才剛把「分子／分母／枚舉須同時重算」寫成明文規則，**下一個動作就違反它**（(c)）；且 (b) 是**修復動作本身引入的新結構破損** —— 與 `SR-54`（為證明安全而寫的工具變成危險來源）同一形狀 | **(a)** 填入 ② verdict＋錨點，並把 ③ 由純 `_待填_` 改為誠實標示「R1 ＝ CHANGES_REQUESTED＠`39321dee`、APPROVED 未取得」（🚫 否則會原地重造同一個矛盾；③ R2 已確認此舉**不屬 scope 逾越或自我核准**） **(b)** 刪空行使表格重新接合 ＋ 補回前導 `\|` **(c)** 見 Step B 重算 **(d)** 改雙錨點表（`d22e8b5e` 420 ／ HEAD 421；實碼 324 兩者皆同）並補 `REPLAY-BASH-TALLY` 可執行指令 **(e)** §4.4 addendum 之錯碼更正。**紀律修正**：本輪把所有帳的重算移到**全部結構編輯定案之後**執行（③ 明示「在最終格式固定後，重新計算所有相依母體／分子／分母」），🚫 不再邊改邊算。<br>⚠ **本輪 Step C sweep 又自抓到 (d)(e) 各自的「第二現場」**（母體＝全檔殘留數字掃描）：① `SR-59` 列**仍寫 `TS2304`** —— 我只改了 §4.4 addendum、沒改 ledger 列，**(e) 原地復發一次**；② `SR-58` 列與 §14.11.2 表的「總 420」**未錨定版本**，對 HEAD（421）已 stale ⇒ **(d) 之同族第二現場**。兩者均已修。⚠ **措辭更正（③ R2）**：上一版把這兩處寫成「③ 未點名」，語意上容易被讀成「bash tally 不是 ③ 的 finding」—— **不對，③ R1 明確點名了 bash tally**（即 (d)）；③ 未點名的只是這兩個**衍生位置**。<br>⚠ 另記：**本輪的量測工具自己也踩了第 3 次母體錯誤** —— v1 以字面特徵 `` ^\| `SR-N` `` 掃全檔，把 §14.12.3 復現表中第一欄恰為 `` `SR-60` `` 的 2 欄列掃了進來（誤報 62 列／重複 ID／分隔符異常）。v2 改以「§14.0 表頭之下的單一連續區塊」為母體，並加**負向控制**印出兩種母體之差（**錨定 `5714448f` ＝ 62 vs 61**）以證明母體定義 load-bearing。⚠ 該負向控制之後失效，見 `SR-62` |
+| `SR-62` | **③ R2 之 4 Required ＋ 1 Minor —— 又一次全部由我上一輪的修復動作造成**：(a) 把「10 keyword hits」錯標為 `39321dee` 快照（真值：`d22e8b5e`=57 列／10 · `39321dee`=59 列有效／11〔+孤列共 12〕· `5714448f`=61 列／12）(b) 「五項」分類在 ledger 第 42 列／`SR-61`／§14.12.3 **三處互相衝突**（我把空行與分隔符拆成兩項、又讓 bash tally 掉出編號清單，甚至寫成「③ 未點名」—— **③ R1 明明點名了**），且 §14.12.3 標題稱五項而表內有 6 列 (c) 四處 section pointer 寫 `§14.11.2「四項限定」`，該區塊實際位於 **§14.0**（緊接 SR ledger 之後；🚫 此處刻意不寫行號 —— 行號會隨編輯漂移，正是本族反覆踩的坑）(d) 寫「套下方 awk」卻**全檔不存在該 awk** ⇒ 指向不存在證據的 replay 宣稱 (e) Minor：`TS2304` 列舉漏掉 `types/env.d.ts(48,19) Fetcher` | **同族第 19 條**。三個各自獨立的失效面：① **歷史快照未逐 commit 重播就標錨點**（比不標錨點更糟——假可重播）② **分類漂移**（同一組 finding 在三處被我用三種切法描述，於是無法交叉校驗）③ **`head -4` 取樣後下列舉式結論** ＝ `SR-26` 原地復發。⚠ (d) 尤其嚴重：它讓一個**不存在**的東西被寫成 replay recipe —— 這是 `GOV-EVIDENCE-001` 的定義本身 | (a) 改為逐 commit 重播表、明標「10 屬 `d22e8b5e`」 (b) 採 ③ 指定之 canonical taxonomy（空行＋分隔符**合為單一 table-integrity finding**、bash tally **保留為 R1 finding (d)**），ledger 第 42 列／`SR-61`／§14.12.3 三處同步、§14.12.3 表改為 5 列 (c) 四處全改指 §14.0 (d) 補 `REPLAY-BASH-TALLY` 兩支完整可執行指令；⚠ 刻意置於 ` ```sh ` fence 而非 ` ```bash `，使其**不落入被量測母體** ⇒ 加入它不改變 420／421（**免自指**，同 npx 錨定之理由）(e) 改為完整母體列舉（實測恰 5 條、🚫 未截斷）並在兩處同步。<br>⚠ **Step B 順手發現的第 6 件事（③ 未點名，我方自報）—— 負向控制靜默失效**：`SR-61` 為自審工具建立的負向控制，是「用 v1 字面母體會得到 62、v2 連續區塊得 61」。但本輪 (b) 的處置**把 §14.12.3 那列合併掉了**，等於**移走了該負向控制唯一的誘餌** ⇒ 在 HEAD 上兩種母體恰好同值（**62 vs 62**），該控制**已不再鑑別任何東西、卻仍會印出「通過」**。這正是 [[feedback_guard_population_must_cover_property]] 所稱「負向控制自己變成假綠」，且**是我修別的東西時順手弄壞的**。處置：於 §14.0「四項限定」明載其已失效、🚫 不得以其未轉紅當作母體定義無關緊要之證據；🚫 **不**為了救這個控制而把誘餌加回去（那會為了守衛而扭曲被守衛的文件，＝ `SR-54` 之形狀） |
 
-**根因分布（供後續棒次參考）**：61 條中 **至少 18 條**
+**根因分布（供後續棒次參考）**：62 條中 **至少 19 條**
 （`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18` `SR-25` `SR-26` **`SR-35`**
-`SR-49` `SR-50` `SR-52` **`SR-58`** `SR-59` **`SR-60`** **`SR-61`**）
+`SR-49` `SR-50` `SR-52` **`SR-58`** `SR-59` **`SR-60`** **`SR-61`** **`SR-62`**）
 同屬批 E 已記載之「**母體 < 性質**」族 —— 以腦中計數／他棒引用／未掃描的印象／**被 `head` 截斷的輸出**，
 代替對真實母體的量測。
 ⇒ 印證 [[feedback_guard_population_must_cover_property]]「**修過不代表免疫**」：
@@ -1740,16 +1747,18 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 > ⚠ **四項限定（依 [[feedback_scope_qualified_universal_claims]]）**：
 > · **適用範圍** ＝ 本檔 §14.0 之 SR ledger，🚫 不含他棒。
 >   **母體定義（③ R1 後收窄，`SR-61`）** ＝ §14.0 表頭 `| ID | 內容 | 性質 | 處置 |` 之下的
->   **單一連續表列區塊**（本次修復後 ＝ **61 列**，ID 1…61 無缺號）。
->   🚫 **不得**用字面特徵 `^\| \`SR-N\`` 掃全檔當母體 —— §14.12.3 的復現表有一列第一欄恰為
->   `` `SR-60` ``，會被誤掃入（實測 62 ≠ 61）。此即本輪自審工具自身的母體錯誤。
-> · **生效時態** ＝ ③ R1 docs-only 修復定案後之快照（🚫 非 `d22e8b5e`、🚫 非 `39321dee`）。
+>   **單一連續表列區塊**（③ R2 修復後 ＝ **62 列**，ID 1…62 無缺號）。
+>   🚫 **不得**用字面特徵 `^\| \`SR-N\`` 掃全檔當母體 —— 於 `5714448f` 時 §14.12.3 的復現表有一列
+>   第一欄恰為 `` `SR-60` ``，會被誤掃入（該版實測 62 ≠ 61）。此即自審工具自身的母體錯誤。
+>   ⚠ **該誘餌已於 ③ R2 修復中被合併移除** ⇒ 在 HEAD 上兩種母體**恰好同值（62 vs 62）**，
+>   此負向控制**已失去鑑別力**（見 `SR-62` 之補記）。🚫 不得因它「沒轉紅」就認為母體定義無關緊要。
+> · **生效時態** ＝ ③ R2 docs-only 修復定案後之快照（🚫 非 `d22e8b5e`、🚫 非 `39321dee`、🚫 非 `5714448f`）。
 > · **例外集合／為何是「至少」** ＝ 本族歸屬是 **prose 判定，🚫 非機械可導出的集合**。
->   實測：以性質欄關鍵字（`母體`／`宣稱作用域`／`過度宣稱`／`全稱`）掃描 61 列
+>   實測：以性質欄關鍵字（`母體`／`宣稱作用域`／`過度宣稱`／`全稱`）掃描 62 列
 >   命中 **12 列**（`SR-6` `SR-16` `SR-20` `SR-25` `SR-26` `SR-35` `SR-45` `SR-50` `SR-52`
->   `SR-57` `SR-58` `SR-60`），與上列 18 個**兩邊互有出入**：
->   上列有 **11 個不在命中集合**（`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18`
->   `SR-49` `SR-59` `SR-61`，其性質欄無此類關鍵字）；命中集合有 **5 個不在上列**
+>   `SR-57` `SR-58` `SR-60`），與上列 19 個**兩邊互有出入**：
+>   上列有 **12 個不在命中集合**（`SR-1` `SR-2` `SR-7` `SR-11` `SR-12` `SR-13` `SR-17` `SR-18`
+>   `SR-49` `SR-59` `SR-61` `SR-62`，其性質欄無此類關鍵字）；命中集合有 **5 個不在上列**
 >   （`SR-6` `SR-16` `SR-20` `SR-45` `SR-57`）。
 >   ⇒ 關鍵字掃描與本判定**不是同一個母體**，🚫 不可互相導出、🚫 不可互相校驗。
 >   其中 `SR-45`／`SR-57` 自標「母體（自審工具本身）」且自帶獨立計數（至「第 3 次」）；
@@ -1789,7 +1798,7 @@ production bundle 面**仍由 coding-stage 之 `build:functions` 驗證**，
 >
 > - ① ChatGPT Architecture Gate：**`CHATGPT_ARCH_APPROVED` ＠ PLAN `24a073f5`**（R3；R1→R2→R3 共 3 輪，2 次 CHANGES_REQUESTED）— 詳見 §14.2 / §14.3 / §14.4
 > - ② Codex Plan Gate：**`CODEX_PLAN_APPROVED` ＠ PLAN `d22e8b5e`**（R7；R1→R7 共 7 輪，6 次 CHANGES_REQUESTED）— 詳見 §14.5 ～ §14.11
-> - ③ Codex Code Gate：**尚未取得 APPROVED**。已收 R1 ＝ **`CODEX_CODE_CHANGES_REQUESTED` ＠ code `39321dee`**（production lane PASS／0 introduced finding；1 個 Major 治理 finding 在本 PLAN 之 gate ledger）— 詳見 §14.12
+> - ③ Codex Code Gate：**尚未取得 APPROVED**。已收 **R1 ＝ `CODEX_CODE_CHANGES_REQUESTED` ＠ code `39321dee`**（§14.12）與 **R2 ＝ `CODEX_CODE_CHANGES_REQUESTED` ＠ docs `5714448f`**（§14.13）。**兩輪之 production source lane 皆 PASS、0 個 Critical/High**；兩次 reject 之理由**皆僅限本 PLAN 文件之治理／證據一致性**
 > - ④ ChatGPT faithfulness：verdict ＋ 錨點 SHA — _待填_
 
 ### 14.1 承接自批 E 之未結項（**非本棒新發現；本棒不處置**）
@@ -2338,8 +2347,33 @@ driver 本體**成功（原始 rc=0）**，但 finalizer 因無法驗證來源�
 >
 > | 錨點 | 總 | 空白 | 註解 | 非空白非註解 | 重播 |
 > |---|---|---|---|---|---|
-> | `d22e8b5e`（② R7 受審版） | **420** | 44 | 52 | **324** | `git show d22e8b5e:<本檔>` 後套下方 awk |
-> | HEAD（本次 docs 修復後） | **421** | 44 | **53** | **324** | 直接對工作樹套下方 awk |
+> | `d22e8b5e`（② R7 受審版） | **420** | 44 | 52 | **324** | 下方 `REPLAY-BASH-TALLY` 之指令 A |
+> | `39321dee` ／ `5714448f` ／ HEAD（三者同值） | **421** | 44 | **53** | **324** | 下方 `REPLAY-BASH-TALLY` 之指令 B |
+>
+> **`REPLAY-BASH-TALLY`（③ R2 `GOV-EVIDENCE-001` 之處置，`SR-62`）** —— 上一版只寫「套下方 awk」
+> 卻**從未附上該 awk**，是一個指向不存在證據的 replay 宣稱。現補完整可執行指令：
+>
+> ⚠ 本區塊刻意使用 ` ```sh ` fence（**非** ` ```bash `）。母體定義為「全檔 ` ```bash ` fence 內之行」，
+> 故本指令自身**不落在被量測的母體內** ⇒ 加入它**不改變** 420／421 兩個值。
+> 這是為了避免「量測指令寫進被量測檔案」的自指回歸（同 §14.11.2 npx 錨定之理由）。
+
+```sh
+# 指令 A —— 錨定 d22e8b5e（期望：總=420 空白=44 註解=52 實碼=324）
+PLAN=docs/plans/stage7-pr2dw-batchb-read-admin-audit-noimplicitany.md
+git show d22e8b5e:"$PLAN" | awk '
+  /^```bash/ { inb=1; next }
+  /^```/     { inb=0; next }
+  inb        { t++; if ($0 ~ /^[[:space:]]*$/) b++; else if ($0 ~ /^[[:space:]]*#/) c++; else k++ }
+  END        { printf "總=%d 空白=%d 註解=%d 實碼=%d 帳平=%s\n", t, b, c, k, (b+c+k==t ? "true" : "FALSE") }'
+
+# 指令 B —— 對工作樹（期望：總=421 空白=44 註解=53 實碼=324）
+awk '
+  /^```bash/ { inb=1; next }
+  /^```/     { inb=0; next }
+  inb        { t++; if ($0 ~ /^[[:space:]]*$/) b++; else if ($0 ~ /^[[:space:]]*#/) c++; else k++ }
+  END        { printf "總=%d 空白=%d 註解=%d 實碼=%d 帳平=%s\n", t, b, c, k, (b+c+k==t ? "true" : "FALSE") }' "$PLAN"
+```
+
 >
 > **母體 ＝ 全檔 bash fence 內全部行（零收窄）**；差異恰為那 1 行新增註解（註解 52→53）。
 > ⇒ 正確表述為「**非空白非註解 324 行**」（**兩個錨點皆為 324，未受影響**）；
@@ -2475,11 +2509,10 @@ Rule ID：`GOV-DRIFT-001`／`GOV-EVIDENCE-001`（⚠ 皆 **advisory、未 machin
 | ③ 之宣稱 | 我方獨立複驗 |
 |---|---|
 | §14.0 仍寫 ② `_待填_`，ledger 已記 `CODEX_PLAN_APPROVED` | ✅ 成立（同檔對同一 gate 兩種狀態） |
-| 空白行切斷 SR 表 | ✅ 成立（node 掃描：SR 表區間內空行 @ 1 處，`SR-60` 成無表頭孤列） |
-| `SR-60` 少一個未跳脫欄分隔符 | ✅ 成立。**錨定受審 commit `39321dee`**：該列未跳脫 `\|` 實測 **4**，4 欄列應為 **5**；當時 60 列中 59 列為 5、僅此列偏離 |
-| 一處 60／17，另一處仍 58／15／10；live 掃描為 12 | ✅ 成立（§14.11.2「四項限定」blockquote 未同步） |
+| **表格結構破損**（空白行切斷 SR 表 ＋ `SR-60` 少一個未跳脫欄分隔符） | ✅ 兩者皆成立，**錨定受審 commit `39321dee`**：ledger 連續區塊止於空行 ⇒ 僅 **59** 列有效、`SR-60` 成無表頭孤列；該孤列未跳脫 `\|` 實測 **4**（4 欄列應為 **5**）。⚠ **③ R2 指定合併為單一 table-integrity finding**（原本我拆成兩項，導致三處分類不一致） |
+| 一處 60／17，另一處仍 58／15／10；live 掃描為 12 | ✅ 成立（§14.0「四項限定」blockquote 未同步） |
 | bash tally `420=44+52+324`，HEAD 實為 `421=44+53+324` | ✅ 成立。**根因＝我自己**在 §6.6.B 用法行下方新增 1 行註解（v3→v4 標註）⇒ 註解 52→53 |
-| `skipLibCheck:false` 錯碼應為 `TS2552` 非 `TS2304` | ✅ 成立。實跑：`types/env.d.ts(23,17): error TS2552: Cannot find name 'D1Database'. Did you mean 'IDBDatabase'?`；同檔 `KVNamespace`／`R2Bucket`／`Ai` 才是 `TS2304` |
+| `skipLibCheck:false` 錯碼應為 `TS2552` 非 `TS2304` | ✅ 成立。**母體 ＝ `tsc -p tsconfig.functions.json --noEmit --skipLibCheck false` 對 `types/env.d.ts` 之全部診斷，實測恰 5 條（🚫 未截斷）**：`(23,17) TS2552 D1Database（Did you mean 'IDBDatabase'?）`· `(24,17) TS2304 KVNamespace` · `(25,27) TS2304 R2Bucket` · `(26,9) TS2304 Ai` · `(48,19) TS2304 Fetcher`。⚠ **`Fetcher` 係 ③ R2 Minor 補出** —— 我原列舉漏了它，根因＝當初以 `head -4` 取樣後就下了列舉式結論（**`SR-26`「`head -N` 後不得下全稱結論」原地復發**，見 `SR-62`） |
 
 #### 14.12.4 處置紀律（本輪之唯一結構性改變）
 
@@ -2488,7 +2521,7 @@ Rule ID：`GOV-DRIFT-001`／`GOV-EVIDENCE-001`（⚠ 皆 **advisory、未 machin
 **🚫 不再邊改邊算**。上一輪 `SR-60`／本輪 `SR-61(d)` 連續兩次栽在同一點：
 在 artifact 仍會變動時就把數字寫死。
 
-**Step B 之重算結果**（母體 ＝ 本次修復定案後之 HEAD，零收窄）見 §14.11.2「四項限定」與
+**Step B 之重算結果**（母體 ＝ 本次修復定案後之 HEAD，零收窄）見 §14.0「四項限定」與
 根因分布行；兩者之分母／分子／枚舉由同一次掃描產生，🚫 非分批更新。
 
 #### 14.12.5 本輪未動之處
@@ -2497,6 +2530,50 @@ Rule ID：`GOV-DRIFT-001`／`GOV-EVIDENCE-001`（⚠ 皆 **advisory、未 machin
 🚫 不需重回 ① Architecture Gate 或 ② Plan Gate（③ 明示）。
 🚫 `CLEANUP_PLAN.md` 仍 untracked、out of scope。
 ④ faithfulness／merge／push／deploy **均未授權**。
+
+---
+
+### 14.13 ③ Codex Code Gate — R2 verdict 與處置 receipt（**第二次 docs-only 修復**）
+
+**verdict**：**`CODEX_CODE_CHANGES_REQUESTED`** ＠ docs commit `5714448f`
+**4 Required（1 個 Major/Required 文件治理 family）＋ 1 Minor。**
+
+**③ R2 明確認可之一點（如實轉錄）**：把 ③ 清單更新為「歷史 R1 `CHANGES_REQUESTED` ＠ `39321dee`
+＋ 註明尚未取得 APPROVED」是**正確**的，**🚫 不屬 scope 逾越或自我核准**。
+⇒ 我在 §14.12 報告中主動標示的「自作主張判斷」已獲外部確認，本節記錄以結該疑義。
+
+#### 14.13.1 四項 Required ＋ Minor 之逐條復現（🚫 未實測前不動手）
+
+| ③ R2 之宣稱 | 我方獨立複驗 |
+|---|---|
+| 「10 keyword hits」被錯標為 `39321dee` snapshot | ✅ 成立。逐 commit 重播（母體＝ §14.0 表頭之下**連續**表列區塊）：`d22e8b5e` **57 列／10 命中** · `39321dee` **59 列有效／11 命中**（被空行切出的孤列 `SR-60` 亦命中 ⇒ 含孤列共 **12**）· `5714448f` **61 列／12 命中**。⇒ 「10」屬 `d22e8b5e` |
+| 「五項」分類在三處互相衝突 | ✅ 成立。ledger 第 42 列合併空行＋分隔符並含 bash（五面）；`SR-61` 拆開兩者、漏掉 bash 且稱其「③ 未點名」；§14.12.3 標題稱五項而**表內實測 6 資料列** |
+| 四處 section pointer 應指 §14.0 而非 §14.11.2 | ✅ 成立。「四項限定」blockquote 實際緊接 SR ledger（**§14.0**）；指向 §14.11.2 之 bash／npx 表者不需改 |
+| 「套下方 awk」但全檔無該 awk | ✅ 成立。全檔 `awk` 命中恰 **2**，皆為此兩句指涉本身、**無任何實際程式** ⇒ 指向不存在證據的 replay 宣稱 |
+| Minor：`Fetcher` 亦為 `TS2304` | ✅ 成立。完整母體（🚫 未截斷）恰 **5** 條：`(23,17) TS2552 D1Database` ·`(24,17) TS2304 KVNamespace` · `(25,27) TS2304 R2Bucket` · `(26,9) TS2304 Ai` · `(48,19) TS2304 Fetcher` |
+
+#### 14.13.2 ⚠ 三個各自獨立的失效面（`SR-62`；本輪最該記的東西）
+
+1. **歷史快照未逐 commit 重播就標錨點** —— 比「不標錨點」**更糟**：它讓一個錯值看起來可重播。
+   我上一輪剛把「錨定版本」立為紀律（`SR-60`），下一步就給了一個**錯的**錨點。
+2. **分類漂移** —— 同一組 finding 在 ledger／`SR-61`／§14.12.3 被我用**三種切法**描述，
+   於是三處無法互相校驗；而「無法交叉校驗」正是 ③ 兩輪 reject 的同一個根因。
+3. **`head -4` 取樣後下列舉式結論** —— `SR-26`（「`head -N` 之後不得下全稱結論」）**原地復發**。
+
+⚠ 其中第 (d) 項（不存在的 awk）性質最重：它把一個**不存在的東西**寫成 replay recipe，
+即 `GOV-EVIDENCE-001` 的定義本身。處置為補上兩支完整可執行指令（見 §14.10.3 之 `REPLAY-BASH-TALLY`），
+且**刻意置於 ` ```sh ` fence 而非 ` ```bash `** —— 母體定義只數 ` ```bash ` fence，
+故該指令自身不落入被量測母體 ⇒ **加入它不改變 420／421**（免自指回歸，同 npx 錨定之理由）。
+
+#### 14.13.3 本輪未動之處
+
+🚫 **`audit.ts` 仍一行未改**（blob 恆等 `379d2313`、sha256 `79792231…`）。
+🚫 不需重回 ① Architecture Gate 或 ② Plan Gate（③ R2 明示）。
+🚫 `CLEANUP_PLAN.md` 仍 untracked、out of scope。
+③ APPROVED **尚未取得**；④ faithfulness／merge／push／deploy **均未授權**，🚫 不得稱 `CLOSED`。
+
+⚠ **③ R2 亦重申之證據地位**：R2 未重跑完整 coverage／integration／build／browser stack
+（因 executable inputs 已證明不變）；**`test:int` 與 `npm audit` 仍不是本次之獨立證據**。
 
 ---
 
